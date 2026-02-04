@@ -1,0 +1,49 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: Duka
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT}:80"
+      - "443:443"
+      - "5173:5173"
+    volumes:
+      - .:/var/www/html:cached
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /etc/letsencrypt/live/mezgebedirijit.com/fullchain.pem:/etc/apache2/ssl/fullchain.pem:ro
+      - /etc/letsencrypt/live/mezgebedirijit.com/privkey.pem:/etc/apache2/ssl/privkey.pem:ro
+      - storage_data:/var/www/html/storage
+    depends_on:
+      - db
+    networks:
+      - duka-network
+
+  db:
+    image: mysql:8.0
+    container_name: Duka_props
+    restart: always
+    command: --binlog-expire-logs-seconds=259200 
+
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=${DB_DATABASE}
+    ports:
+      - "3310:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - duka-network
+
+networks:
+  duka-network:
+    driver: bridge
+
+volumes:
+  dbdata:
+  storage_data:
