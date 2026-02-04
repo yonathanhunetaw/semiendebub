@@ -20,12 +20,14 @@ Route::get('/dashboard', function () {
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::get('/home', function () {
-    return Inertia::render('Home');
+    return Inertia::render('Home', ['name' => 'Mike']); // We can send a second argument as props
 })->middleware(['auth', 'verified'])->name('home');
 
 Route::get('/about', function (){
     return inertia::render('About/About');
 })->middleware(['auth'], ['verified'])->name('about');
+
+// Route::inertia('/', 'Home'); //->>Also works
 
 Route::get('/homepage', function () {
     return Inertia::render('HomePage');
