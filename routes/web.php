@@ -23,6 +23,10 @@ Route::get('/home', function () {
     return Inertia::render('Home');
 })->middleware(['auth', 'verified'])->name('home');
 
+Route::get('/about', function (){
+    return inertia::render('About/About');
+})->middleware(['auth'], ['verified'])->name('about');
+
 Route::get('/homepage', function () {
     return Inertia::render('HomePage');
 })->middleware(['auth', 'verified'])->name('homepage');
