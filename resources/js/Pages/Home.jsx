@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Head } from '@inertiajs/react';
 
-export default function Home() {
+export default function Home({name}) {
     useEffect(() => {
         // 1. Create the script element
         const script = document.createElement('script');
@@ -35,6 +35,7 @@ export default function Home() {
                 <h1 className="text-4xl font-bold text-blue-600 underline mb-4">
                     Home - Duka 1.3.0
                 </h1>
+                <h1>Hello {name}</h1>
                 
                 <p className="text-slate-500 mb-6">
                     Inertia setup detected. vConsole is active only on this page.
