@@ -37,7 +37,7 @@ export default function HomePage({ auth }) {
 
             {/* Mobile Hamburger Button */}
             <div className="lg:hidden fixed top-4 left-4 z-50">
-                <button 
+                <button
                     onClick={() => setIsOpen(!isOpen)}
                     className="p-2 bg-blue-600 text-white rounded-md shadow-lg"
                 >
@@ -45,15 +45,15 @@ export default function HomePage({ auth }) {
                 </button>
             </div>
 
-            {/* Sidebar Overlay (Mobile) */}
+            {/* AdminSidebar Overlay (Mobile) */}
             {isOpen && (
-                <div 
+                <div
                     className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
                     onClick={() => setIsOpen(false)}
                 />
             )}
 
-            {/* Sidebar Container */}
+            {/* AdminSidebar Container */}
             <aside className={`
                 fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out
                 lg:translate-x-0 lg:static lg:inset-0

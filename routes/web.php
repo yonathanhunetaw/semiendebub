@@ -27,6 +27,14 @@ Route::get('/about', function (){
     return inertia::render('About/About');
 })->middleware(['auth'], ['verified'])->name('about');
 
+Route::get('/home2', function () {
+    return Inertia::render('Home2', ['name' => 'Mike']); // We can send a second argument as props
+})->middleware(['auth', 'verified'])->name('home2');
+
+Route::get('/contact', function () {
+//     sleep(3);
+    return Inertia::render('Contact');
+})->middleware(['auth', 'verified'])->name('contact');
 // Route::inertia('/', 'Home'); //->>Also works
 
 Route::get('/homepage', function () {
@@ -40,14 +48,14 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    
+
     // Put your Admin Group back here!
     Route::group([
         'prefix' => 'admin',
         'middleware' => 'check_role:Admin', // Ensure this middleware exists!
         'as' => 'admin.',
     ], function () {
-        
+
         // Session management routes
         Route::prefix('sessions')->group(function () {
             Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
@@ -56,6 +64,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Add your other admin routes (users, items, etc.) here later
     });
+
 });
 
 require __DIR__.'/auth.php';
