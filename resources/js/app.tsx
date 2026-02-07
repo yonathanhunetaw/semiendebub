@@ -11,12 +11,12 @@ createInertiaApp({
     title: (title) => `${title} - ${appName}`,
     resolve: (name) => {
         const pages = import.meta.glob('./Pages/**/*.{tsx,jsx}');
-        
+
         // Try to find the .tsx version first, then fallback to .jsx
-        const path = `./Pages/${name}.tsx` in pages 
-            ? `./Pages/${name}.tsx` 
+        const path = `./Pages/${name}.tsx` in pages
+            ? `./Pages/${name}.tsx`
             : `./Pages/${name}.jsx`;
-    
+
         return resolvePageComponent(path, pages);
     },
     setup({ el, App, props }) {
@@ -25,6 +25,6 @@ createInertiaApp({
         root.render(<App {...props} />);
     },
     progress: {
-        color: '#4B5563',
+        color: '#006630',
     },
 });

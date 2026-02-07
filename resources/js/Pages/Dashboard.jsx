@@ -17,7 +17,7 @@ export default function Dashboard() {
                     'https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true'
                 );
                 if (!response.ok) throw new Error('Weather data unavailable');
-                
+
                 const data = await response.json();
                 setWeather(data.current_weather);
             } catch (err) {
@@ -42,7 +42,7 @@ export default function Dashboard() {
 
             <div className="py-12">
                 <div className="mx-auto max-w-7xl sm:px-6 lg:px-8 space-y-6">
-                    
+
                     {/* Welcome Card */}
                     <div className="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                         <div className="p-6 text-gray-900">
@@ -53,7 +53,7 @@ export default function Dashboard() {
                     {/* Weather Service Card */}
                     <div className="overflow-hidden bg-white shadow-sm sm:rounded-lg p-6">
                         <h3 className="text-lg font-medium text-gray-900 mb-4">Live Weather Service</h3>
-                        
+
                         {loading && (
                             <div className="animate-pulse flex space-x-4">
                                 <div className="flex-1 space-y-4 py-1">
