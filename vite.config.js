@@ -10,7 +10,6 @@ export default defineConfig({
         }),
         react(),
     ],
-    // ADD THIS SECTION BELOW:
     server: {
         host: '0.0.0.0', // Necessary for Docker to expose the service
         port: 5174,
