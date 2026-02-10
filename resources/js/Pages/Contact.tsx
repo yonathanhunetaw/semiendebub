@@ -1,7 +1,46 @@
 // resources/js/Pages/Contact.tsx
 import AdminLayout from "@/Components/Admin/AdminLayout"; // Adjust path if needed
 import { Head } from "@inertiajs/react";
-import { Typography } from "@mui/material";
+import {CardMedia, IconButton, Stack, Typography} from "@mui/material";
+import { Card } from "@mui/material";
+import {FastForwardRounded, FastRewindRounded, PauseRounded, PlayArrowRounded} from "@mui/icons-material";
+
+function ShuffleRoundedIcon(props: { fontSize: string }) {
+    return null;
+}
+
+function setPaused(param: (val: any) => boolean) {
+
+}
+
+function LoopRoundedIcon(props: { fontSize: string }) {
+    return null;
+}
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Paper from '@mui/material/Paper';
+
+function createData(
+    name: string,
+    calories: number,
+    fat: number,
+    carbs: number,
+    protein: number,
+) {
+    return { name, calories, fat, carbs, protein };
+}
+
+const rows = [
+    createData('Frozen yoghurt', 159, 6.0, 24, 4.0),
+    createData('Ice cream sandwich', 237, 9.0, 37, 4.3),
+    createData('Eclair', 262, 16.0, 24, 6.0),
+    createData('Cupcake', 305, 3.7, 67, 4.3),
+    createData('Gingerbread', 356, 16.0, 49, 3.9),
+];
 
 export default function Contact() {
 
@@ -295,12 +334,14 @@ export default function Contact() {
         mountains: ["Freel", "Rose", "Tallac", "Rubicon", "Silver"],
         print: function(delay = 1000) {
             setTimeout(function() {
+                //@ts-ignore
                 console.log(this.mountains.join(", "));
             }, delay);
         }
     };
     tahoe.print(); // Uncaught TypeError: Cannot read property 'join' of undefined
 
+    //@ts-ignore
     console.log(this); // Window {}
 
     // Regular functions do not block this. For example, this becomes something else in
@@ -325,6 +366,7 @@ export default function Contact() {
         mountains: ["Freel", "Rose", "Tallac", "Rubicon", "Silver"],
         print: (delay = 1000) => {
             setTimeout(() => {
+                //@ts-ignore
                 console.log(this.mountains.join(", "));
             }, delay);
         }
@@ -586,6 +628,7 @@ export default function Contact() {
 
 
     // -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    let paused;
     return (
         // ----------------------------------------------------
         // ZONE B: JSX (The UI Blueprint)
@@ -612,7 +655,94 @@ export default function Contact() {
             <div>
                 <Typography variant="h6">{fullName}</Typography>
             </div>
-        </>
+
+            <Card
+                variant="outlined"
+                sx={{  p: 2,
+                    width: { xs: '100%', sm: 'auto' },
+                    display: 'flex',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    alignItems: 'center',
+                    gap: 2,
+                }}
+            >
+                <CardMedia
+                    component="img"
+                    width="100"
+                    height="100"
+                    alt="Contemplative Reptile album cover"
+                    src="/images/contemplative-reptile.jpg"
+                    sx={{    width: { xs: '100%', sm: 100 },
+                    }}
+                />
+                <Stack direction="column" alignItems="center" spacing={1} useFlexGap>
+                    <div>
+                        <Typography color="text.primary" fontWeight="semiBold">
+                            Contemplative Reptile
+                        </Typography>
+                        <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            fontWeight="medium"
+                            textAlign="center"
+                            sx={{ width: '100%' }}
+                        >
+                            Sounds of Nature
+                        </Typography>
+                    </div>
+                    <Stack direction="row" alignItems="center" spacing={1} useFlexGap>
+                        <IconButton aria-label="Shuffle" disabled size="small">
+                            <ShuffleRoundedIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton aria-label="Fast rewind" disabled size="small">
+                            <FastRewindRounded fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                            aria-label={paused ? 'Play music' : 'Pause music'}
+                            onClick={() => setPaused((val) => !val)}
+                            sx={{ mx: 1 }}
+                        >
+                            {paused ? <PlayArrowRounded /> : <PauseRounded />}
+                        </IconButton>
+                        <IconButton aria-label="Fast forward" disabled size="small">
+                            <FastForwardRounded fontSize="small" />
+                        </IconButton>
+                        <IconButton aria-label="Loop music" disabled size="small">
+                            <LoopRoundedIcon fontSize="small" />
+                        </IconButton>
+                    </Stack>
+                </Stack>
+            </Card>
+               <TableContainer component={Paper}>
+        <Table sx={{ minWidth: 650 }} aria-label="simple table">
+            <TableHead>
+                <TableRow>
+                    <TableCell>Dessert (100g serving)</TableCell>
+                    <TableCell align="right">Calories</TableCell>
+                    <TableCell align="right">Fat&nbsp;(g)</TableCell>
+                    <TableCell align="right">Carbs&nbsp;(g)</TableCell>
+                    <TableCell align="right">Protein&nbsp;(g)</TableCell>
+                </TableRow>
+            </TableHead>
+            <TableBody>
+                {rows.map((row) => (
+                    <TableRow
+                        key={row.name}
+                        sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                    >
+                        <TableCell component="th" scope="row">
+                            {row.name}
+                        </TableCell>
+                        <TableCell align="right">{row.calories}</TableCell>
+                        <TableCell align="right">{row.fat}</TableCell>
+                        <TableCell align="right">{row.carbs}</TableCell>
+                        <TableCell align="right">{row.protein}</TableCell>
+                    </TableRow>
+                ))}
+            </TableBody>
+        </Table>
+        </TableContainer>
+</>
     );
 }
 
