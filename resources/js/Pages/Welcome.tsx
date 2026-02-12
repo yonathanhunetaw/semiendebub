@@ -19,9 +19,7 @@ export default function Welcome({ auth }: PageProps) {
 
     return (
         <>
-
-            <Head title="SumerianIO"/>
-
+            <Head title="ሱሜሪያን"/>
 
             {/* Pass the auth prop here */}
             <AppNavbar auth={auth} />
