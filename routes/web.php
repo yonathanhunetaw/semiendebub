@@ -1,12 +1,17 @@
 <?php
 
+use App\Http\Controllers\Admin\ItemController;
+use App\Http\Controllers\Admin\SessionController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use App\Http\Controllers\Admin\SessionController;
 
 Route::get('/', function () {
+    if (auth()->check()) {
+        return redirect()->route('admin.dashboard');
+    }
+
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
@@ -15,15 +20,15 @@ Route::get('/', function () {
     ]);
 });
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+// Route::get('/dashboard', function () {
+//    return Inertia::render('Dashboard');
+// })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::get('/home', function () {
     return Inertia::render('Home', ['name' => 'Mike']); // We can send a second argument as props
 })->middleware(['auth', 'verified'])->name('home');
 
-Route::get('/about', function (){
+Route::get('/about', function () {
     return inertia::render('About/About');
 })->middleware(['auth'], ['verified'])->name('about');
 
@@ -32,7 +37,7 @@ Route::get('/home2', function () {
 })->middleware(['auth', 'verified'])->name('home2');
 
 Route::get('/contact', function () {
-//     sleep(3);
+    //     sleep(3);
     return Inertia::render('Contact');
 })->middleware(['auth', 'verified'])->name('contact');
 // Route::inertia('/', 'Home'); //->>Also works
@@ -49,12 +54,17 @@ Route::middleware('auth')->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
 
-    // Put your Admin Group back here!
     Route::group([
         'prefix' => 'admin',
         'middleware' => 'check_role:Admin', // Ensure this middleware exists!
         'as' => 'admin.',
     ], function () {
+
+        Route::get('/dashboard', function () {
+            return Inertia::render('Admin/Dashboard/index');
+        })->name('dashboard');
+
+        Route::resource('items', ItemController::class);
 
         // Session management routes
         Route::prefix('sessions')->group(function () {

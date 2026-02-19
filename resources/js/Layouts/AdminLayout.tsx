@@ -25,7 +25,10 @@ export default function AdminLayout({ header, children }: Props) {
                 </div>
             </nav>
 
-            <AdminSidebar />
+            // @ts-ignore
+            <AdminSidebar open={false} onClose={function(): void {
+                throw new Error("Function not implemented.");
+            } } variant={"temporary"} />
 
             {/* Main Content Area */}
             <main className="min-h-screen p-4 transition-all duration-300 ml-0 xl:ml-64">
