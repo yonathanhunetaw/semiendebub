@@ -1,3 +1,4 @@
+import {useState} from "react"; // 1. Added missing import
 import AdminLayout from "@/Components/Admin/AdminLayout";
 import {Head} from "@inertiajs/react";
 import {
@@ -31,8 +32,9 @@ interface Props {
 }
 
 export default function Show({item, variantData, allImages}: Props) {
-    // @ts-ignore
-    // @ts-ignore
+    // 2. Initialize state with the first image or default
+    const [selectedImage, setSelectedImage] = useState(allImages[0] || '/img/default.jpg');
+
     // @ts-ignore
     // @ts-ignore
     return (
@@ -40,28 +42,71 @@ export default function Show({item, variantData, allImages}: Props) {
             <Head title={`Item - ${item.product_name}`}/>
 
             <Grid container spacing={3}>
-                {/* Left: Images */}
-                <Grid size={{xs: 12, md: 4}}>
-                    <Paper sx={{p: 2}}>
-                        <Box
-                            component="img"
-                            src={allImages[0] || '/img/default.jpg'}
-                            sx={{width: '100%', borderRadius: 2}}
-                        />
-                        <Grid container spacing={1} mt={1}>
-                            {allImages.slice(1).map((img, i) => (
-                                <Grid size={{xs: 6}} key={i}>
-                                    {/*<Grid item xs={3} key={i}>*/}
-                                    <img src={img} style={{width: '100%', borderRadius: '4px'}}/>
-                                </Grid>
+                {/* LEFT: Enhanced Image Gallery */}
+                <Grid size={{xs: 12, md: 5}}>
+                    <Paper sx={{p: 2, display: 'flex', gap: 2, height: '500px'}}>
+
+                        {/* Vertical Thumbnail Chooser */}
+                        <Box sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 1,
+                            width: '80px',
+                            overflowY: 'auto',
+                            '&::-webkit-scrollbar': {display: 'none'},
+                            msOverflowStyle: 'none',
+                        }}>
+                            {allImages.map((img, i) => (
+                                <Box
+                                    key={i}
+                                    component="img"
+                                    src={img}
+                                    onMouseEnter={() => setSelectedImage(img)}
+                                    onClick={() => setSelectedImage(img)}
+                                    sx={{
+                                        width: '100%',
+                                        height: '70px',
+                                        objectFit: 'cover',
+                                        borderRadius: 1,
+                                        cursor: 'pointer',
+                                        border: selectedImage === img ? '2px solid #1976d2' : '2px solid transparent',
+                                        transition: '0.2s',
+                                        '&:hover': {opacity: 0.8}
+                                    }}
+                                />
                             ))}
-                        </Grid>
+                        </Box>
+
+                        {/* Main Image Viewer */}
+                        <Box sx={{
+                            flex: 1,
+                            position: 'relative',
+                            overflow: 'hidden',
+                            borderRadius: 2,
+                            bgcolor: '#f5f5f5',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            <Box
+                                component="img"
+                                src={selectedImage}
+                                sx={{
+                                    maxWidth: '100%',
+                                    maxHeight: '100%',
+                                    objectFit: 'contain',
+                                    transition: '0.3s ease-in-out'
+                                }}
+                            />
+                        </Box>
                     </Paper>
                 </Grid>
 
-                {/* Right: Details & Variants */}
-                <Grid size={{xs: 12, md: 8}}>
-                    <Typography variant="h4" gutterBottom>{item.product_name}</Typography>
+                {/* RIGHT: Details & Variants */}
+                <Grid size={{xs: 12, md: 7}}>
+                    <Typography variant="h4" fontWeight="bold" gutterBottom>
+                        {item.product_name}
+                    </Typography>
                     <Typography variant="body1" color="text.secondary" paragraph>
                         {item.product_description}
                     </Typography>
@@ -69,38 +114,50 @@ export default function Show({item, variantData, allImages}: Props) {
                     <Divider sx={{my: 3}}/>
 
                     <Typography variant="h6" gutterBottom>Variants & Inventory</Typography>
-                    <Table>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Preview</TableCell>
-                                <TableCell>Details</TableCell>
-                                <TableCell>Price</TableCell>
-                                <TableCell>Stock</TableCell>
-                                <TableCell>Status</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {variantData.map((variant, index) => (
-                                <TableRow key={index} sx={{opacity: variant.disabled ? 0.5 : 1}}>
-                                    <TableCell>
-                                        <img src={variant.img} width="50" style={{borderRadius: '4px'}}/>
-                                    </TableCell>
-                                    <TableCell>
-                                        {variant.color} / {variant.size} / {variant.packaging}
-                                    </TableCell>
-                                    <TableCell>${variant.price}</TableCell>
-                                    <TableCell>{variant.stock}</TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={variant.disabled ? 'Inactive' : 'Active'}
-                                            color={variant.disabled ? 'error' : 'success'}
-                                            size="small"
-                                        />
-                                    </TableCell>
+                    <Paper variant="outlined" sx={{overflow: 'hidden'}}>
+                        <Table>
+                            <TableHead sx={{bgcolor: 'action.hover'}}>
+                                <TableRow>
+                                    <TableCell>Preview</TableCell>
+                                    <TableCell>Details</TableCell>
+                                    <TableCell>Price</TableCell>
+                                    <TableCell>Stock</TableCell>
+                                    <TableCell>Status</TableCell>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                            </TableHead>
+                            <TableBody>
+                                {variantData.map((variant, index) => (
+                                    <TableRow
+                                        key={index}
+                                        sx={{
+                                            opacity: variant.disabled ? 0.5 : 1,
+                                            '&:hover': {bgcolor: 'action.hover', cursor: 'pointer'}
+                                        }}
+                                        onMouseEnter={() => variant.img && setSelectedImage(variant.img)}
+                                    >
+                                        <TableCell>
+                                            <img src={variant.img} width="50"
+                                                 style={{borderRadius: '4px', objectFit: 'cover'}}/>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography variant="body2" fontWeight="medium">
+                                                {variant.color} / {variant.size} / {variant.packaging}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell sx={{fontWeight: 'bold'}}>${variant.price}</TableCell>
+                                        <TableCell>{variant.stock}</TableCell>
+                                        <TableCell>
+                                            <Chip
+                                                label={variant.disabled ? 'Inactive' : 'Active'}
+                                                color={variant.disabled ? 'error' : 'success'}
+                                                size="small"
+                                            />
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </Paper>
                 </Grid>
             </Grid>
         </Box>

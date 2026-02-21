@@ -66,6 +66,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::resource('items', ItemController::class);
 
+        Route::get('/lessons4', function () {
+            return Inertia::render('Admin/Lessons/Lesson4');
+        })->name('lessons.lesson4');
+
+        Route::get('/lessons5', function () {
+            return Inertia::render('Admin/Lessons/Lesson5');
+        })->name('lessons.lesson5');
+
         // Session management routes
         Route::prefix('sessions')->group(function () {
             Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
