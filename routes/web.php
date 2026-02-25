@@ -1,5 +1,20 @@
 <?php
 
+require __DIR__.'/auth.php';
+require __DIR__.'/web/guest.php';
+require __DIR__.'/web/shared/profile.php';
+require __DIR__.'/web/staff/admin.php';
+require __DIR__.'/web/staff/delivery.php';
+require __DIR__.'/web/staff/finance.php';
+require __DIR__.'/web/staff/marketing.php';
+require __DIR__.'/web/staff/procurement.php';
+require __DIR__.'/web/staff/seller.php';
+require __DIR__.'/web/staff/stock_keeper.php';
+require __DIR__.'/web/client.php';
+require __DIR__.'/web/customer.php';
+require __DIR__.'/web/vendor.php';
+require __DIR__.'/web/dev/lessons/lesson4.php';
+require __DIR__.'/web/dev/lessons/lesson6.php';
 //
 // use App\Http\Controllers\Admin\ItemController;
 // use App\Http\Controllers\Admin\LessonController;
@@ -93,90 +108,88 @@
 //    });
 //
 // });
+//
+// use App\Http\Controllers\Admin\ItemController;
+// use App\Http\Controllers\Admin\LessonController;
+// use App\Http\Controllers\Admin\SessionController;
+// use App\Http\Controllers\ProfileController;
+// use Illuminate\Foundation\Application;
+// use Illuminate\Support\Facades\Route;
+// use Inertia\Inertia;
+//
+// Route::get('/', function () {
+//    if (auth()->check()) {
+//        return redirect()->route('admin.dashboard');
+//    }
+//
+//    return Inertia::render('Guest/Welcome', [
+//        'canLogin' => Route::has('login'),
+//        'canRegister' => Route::has('register'),
+//        'laravelVersion' => Application::VERSION,
+//        'phpVersion' => PHP_VERSION,
+//    ]);
+// });
+//
+// Route::middleware(['auth', 'verified'])->group(function () {
+//
+//    Route::get('/home', function () {
+//        return Inertia::render('Guest/Home', ['name' => 'Mike']);
+//    })->name('home');
+//
+//    Route::get('/home2', function () {
+//        return Inertia::render('Guest/Home2', ['name' => 'Mike']);
+//    })->name('home2');
+//
+//    Route::get('/contact', function () {
+//        return Inertia::render('Guest/Contact');
+//    })->name('contact');
+//
+//    Route::get('/about', function () {
+//        return Inertia::render('Guest/About');
+//    })->name('about');
+//
+//    Route::get('/homepage', function () {
+//        return Inertia::render('Guest/HomePage');
+//    })->name('homepage');
+//
+//    // Profile routes
+//    Route::prefix('profile')->group(function () {
+//        Route::get('/', [ProfileController::class, 'edit'])->name('profile.edit');
+//        Route::patch('/', [ProfileController::class, 'update'])->name('profile.update');
+//        Route::delete('/', [ProfileController::class, 'destroy'])->name('profile.destroy');
+//    });
+//
+//    // Admin routes
+//    Route::prefix('admin')->name('admin.')->middleware(['check_role:Admin'])->group(function () {
+//
+//        Route::get('/dashboard', function () {
+//            return Inertia::render('Staff/Admin/Dashboard/index');
+//        })->name('dashboard');
+//
+//        Route::resource('items', ItemController::class);
+//
+//        Route::get('/lessons4', function () {
+//            return Inertia::render('Dev/Lessons/Lesson4/index');
+//        })->name('lessons.lesson4');
+//
+//        Route::resource('lessons6', LessonController::class)->names([
+//            'index' => 'lessons.index',
+//            'create' => 'lessons.create',
+//            'store' => 'lessons.store',
+//            'show' => 'lessons.show',
+//            'edit' => 'lessons.edit',
+//            'update' => 'lessons.update',
+//            'destroy' => 'lessons.destroy',
+//        ]);
+//
+//        // Session management
+//        Route::prefix('sessions')->group(function () {
+//            Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
+//            Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
+//        });
+//
+//        // Add more admin routes (users, orders, etc.) here
+//    });
+// });
 
-require __DIR__.'/auth.php';
-
-use App\Http\Controllers\Admin\ItemController;
-use App\Http\Controllers\Admin\LessonController;
-use App\Http\Controllers\Admin\SessionController;
-use App\Http\Controllers\ProfileController;
-use Illuminate\Foundation\Application;
-use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
-
-Route::get('/', function () {
-    if (auth()->check()) {
-        return redirect()->route('admin.dashboard');
-    }
-
-    return Inertia::render('Guest/Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
-
-Route::middleware(['auth', 'verified'])->group(function () {
-
-    Route::get('/home', function () {
-        return Inertia::render('Guest/Home', ['name' => 'Mike']);
-    })->name('home');
-
-    Route::get('/home2', function () {
-        return Inertia::render('Guest/Home2', ['name' => 'Mike']);
-    })->name('home2');
-
-    Route::get('/contact', function () {
-        return Inertia::render('Guest/Contact');
-    })->name('contact');
-
-    Route::get('/about', function () {
-        return Inertia::render('Guest/About');
-    })->name('about');
-
-    Route::get('/homepage', function () {
-        return Inertia::render('Guest/HomePage');
-    })->name('homepage');
-
-    // Profile routes
-    Route::prefix('profile')->group(function () {
-        Route::get('/', [ProfileController::class, 'edit'])->name('profile.edit');
-        Route::patch('/', [ProfileController::class, 'update'])->name('profile.update');
-        Route::delete('/', [ProfileController::class, 'destroy'])->name('profile.destroy');
-    });
-
-    // Admin routes
-    Route::prefix('admin')->name('admin.')->middleware(['check_role:Admin'])->group(function () {
-
-        Route::get('/dashboard', function () {
-            return Inertia::render('Staff/Admin/Dashboard/index');
-        })->name('dashboard');
-
-        Route::resource('items', ItemController::class);
-
-        Route::get('/lessons4', function () {
-            return Inertia::render('Dev/Lessons/Lesson4/index');
-        })->name('lessons.lesson4');
-
-        Route::resource('lessons6', LessonController::class)->names([
-            'index' => 'lessons.index',
-            'create' => 'lessons.create',
-            'store' => 'lessons.store',
-            'show' => 'lessons.show',
-            'edit' => 'lessons.edit',
-            'update' => 'lessons.update',
-            'destroy' => 'lessons.destroy',
-        ]);
-
-        // Session management
-        Route::prefix('sessions')->group(function () {
-            Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
-            Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
-        });
-
-        // Add more admin routes (users, orders, etc.) here
-    });
-});
-
-require __DIR__.'/auth.php';
+// require __DIR__.'/auth.php';
