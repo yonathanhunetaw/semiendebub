@@ -1,0 +1,19 @@
+<?php
+.
+├── Auth/                # Breeze Auth (Login/Register)
+├── Shared/              # Breeze Profile + Global Components
+│   └── Profile/
+├── Staff/               # THE EMPLOYEES (Renamed & Organized)
+│   ├── Admin/           # (Lessons moved OUT of here)
+│   ├── SalesAssociate/  # (Renamed from Seller)
+│   │   └── LiveSessions/# For the "Cart Chat"
+│   ├── StockKeeper/
+│   ├── Procurement/
+│   ├── Finance/
+│   └── Marketing/
+├── Client/              # CUSTOMER ASSISTED (Floor created)
+│   └── Partials/        # For the "Ask about this item" chat bubble
+├── Customer/            # SELF-SIGNUP
+├── Dev/                 # YOUR LAB
+│   └── Lessons/         # (Lessons moved IN here)
+└── Errors/

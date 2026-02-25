@@ -2,7 +2,21 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
+use Database\Seeders\Auth\RolePermissionSeeder;
+use Database\Seeders\Auth\UserSeeder;
+use Database\Seeders\Catalog\ItemCategorySeeder;
+use Database\Seeders\Catalog\ItemColorSeeder;
+use Database\Seeders\Catalog\ItemImageSeeder;
+use Database\Seeders\Catalog\ItemPackagingTypeSeeder;
+use Database\Seeders\Catalog\ItemSeeder;
+use Database\Seeders\Catalog\ItemSizeSeeder;
+use Database\Seeders\Catalog\ItemVariantSeeder;
+use Database\Seeders\Entities\CustomerSeeder;
+use Database\Seeders\Inventory\ItemInventoryLocationSeeder;
+use Database\Seeders\Inventory\ItemOwnerSeeder;
+use Database\Seeders\Store\ItemStoreSeeder;
+use Database\Seeders\Store\StoreSeeder;
+use Database\Seeders\Store\StoreVariantSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -24,6 +38,7 @@ class DatabaseSeeder extends Seeder
 
         // Call other seeders here
         $this->call([
+            RolePermissionSeeder::class,
             StoreSeeder::class,
             ItemInventoryLocationSeeder::class,
             UserSeeder::class,
