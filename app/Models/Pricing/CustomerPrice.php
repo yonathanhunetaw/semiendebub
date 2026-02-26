@@ -3,7 +3,7 @@
 namespace App\Models\Pricing;
 
 use App\Models\Auth\User;
-use App\Models\Catalog\ItemVariant;
+use App\Models\Items\ItemVariant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 

@@ -1,20 +1,60 @@
 <?php
 
+/*-------------------------------------------------------------------------------------------------------------
+| Auth - ('guest') & ('auth') - -> routes/auth.php
+|-------------------------------------------------------------------------------------------------------------*/
+
 require __DIR__.'/auth.php';
-require __DIR__.'/web/guest.php';
-require __DIR__.'/web/shared/profile.php';
-require __DIR__.'/web/staff/admin.php';
-require __DIR__.'/web/staff/delivery.php';
-require __DIR__.'/web/staff/finance.php';
-require __DIR__.'/web/staff/marketing.php';
-require __DIR__.'/web/staff/procurement.php';
-require __DIR__.'/web/staff/seller.php';
-require __DIR__.'/web/staff/stock_keeper.php';
-require __DIR__.'/web/client.php';
-require __DIR__.'/web/customer.php';
-require __DIR__.'/web/vendor.php';
+
+/*-------------------------------------------------------------------------------------------------------------
+| CLIENT - ['auth', 'verified'] - -> routes/web/client/client.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/client/client.php';
+
+/*-------------------------------------------------------------------------------------------------------------
+| CUSTOMER - ['auth', 'verified'] - -> routes/web/customer/customer.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/customer/customer.php';
+
+/*-------------------------------------------------------------------------------------------------------------
+| DEV/LESSONS - ['auth', 'verified'] - -> routes/web/dev/lessons
+|-------------------------------------------------------------------------------------------------------------*/
+
 require __DIR__.'/web/dev/lessons/lesson4.php';
 require __DIR__.'/web/dev/lessons/lesson6.php';
+
+/*-------------------------------------------------------------------------------------------------------------
+| GUEST - ['auth', 'verified'] - -> routes/web/guest/guest.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/guest/guest.php';
+
+/*-------------------------------------------------------------------------------------------------------------
+| SHARED - ['auth', 'verified'] - -> routes/web/shared/profile.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/shared/profile.php';
+
+/*-------------------------------------------------------------------------------------------------------------
+| STAFF -> ADMIN - SELLER - STOCK_KEEPER - DELIVERY - FINANCE - MARKETING - PROCUREMENT -> routes/web/staff
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/staff/admin.php';            // ['auth', 'verified', 'check_role:Admin']
+require __DIR__.'/web/staff/delivery.php';         // ['auth', 'verified', 'check_role:Delivery']
+require __DIR__.'/web/staff/finance.php';          // ['auth', 'verified', 'check_role:Finance']
+require __DIR__.'/web/staff/marketing.php';        // ['auth', 'verified', 'check_role:Marketing']
+require __DIR__.'/web/staff/procurement.php';      // ['auth', 'verified', 'check_role:Procurement']
+require __DIR__.'/web/staff/seller.php';           // ['auth', 'verified', 'check_role:Seller']
+require __DIR__.'/web/staff/stock_keeper.php';     // ['auth', 'verified', 'check_role:StockKeeper']
+require __DIR__.'/web/staff/store.php';            // ['auth', 'verified', 'check_role:none']
+
+/*-------------------------------------------------------------------------------------------------------------
+| VENDOR - CLIENT - CUSTOMER -VENDOR -> routes/web/vendor/vendor.php
+|-------------------------------------------------------------------------------------------------------------*/
+require __DIR__.'/web/vendor/vendor.php';
+
 //
 // use App\Http\Controllers\Admin\ItemController;
 // use App\Http\Controllers\Admin\LessonController;

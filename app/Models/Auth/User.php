@@ -3,7 +3,7 @@
 namespace App\Models\Auth;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use App\Models\Entities\Customer;
+use App\Models\Customer\Customer;
 use App\Models\Sales\Cart;
 use App\Models\Store\Store;
 use Illuminate\Database\Eloquent\Factories\HasFactory;

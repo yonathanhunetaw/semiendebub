@@ -1,22 +1,24 @@
 import React from 'react';
 import AdminSidebar from '@/Components/Admin/AdminSidebar';
-import { Link } from '@inertiajs/react';
+import {Link} from '@inertiajs/react';
 
 interface Props {
     header?: React.ReactNode;
     children: React.ReactNode;
 }
 
-export default function AdminLayout({ header, children }: Props) {
+export default function AdminLayout({header, children}: Props) {
     return (
-        <div className="font-sans antialiased bg-gray-50 dark:bg-gray-900">
+        <div className="font-sans antialiased bg-gray-50 dark:bg-gray-900 min-h-screen">
             {/* Navigation Bar */}
-            <nav className="fixed top-0 z-50 w-full bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+            <nav
+                className="fixed top-0 z-50 w-full bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
                 <div className="px-3 py-3 lg:px-5 lg:pl-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center">
                             <Link href="/" className="flex ms-2 md:me-24">
-                                <span className="self-center text-xl font-semibold sm:text-2xl whitespace-nowrap dark:text-white">
+                                <span
+                                    className="self-center text-xl font-semibold sm:text-2xl whitespace-nowrap dark:text-white">
                                     Mezgebe Dirijit
                                 </span>
                             </Link>
@@ -26,13 +28,14 @@ export default function AdminLayout({ header, children }: Props) {
             </nav>
 
             // @ts-ignore
-            <AdminSidebar open={false} onClose={function(): void {
+            <AdminSidebar open={false} onClose={function (): void {
                 throw new Error("Function not implemented.");
-            } } variant={"temporary"} />
+            }} variant={"temporary"}/>
 
             {/* Main Content Area */}
             <main className="min-h-screen p-4 transition-all duration-300 ml-0 xl:ml-64">
-                <div className="mt-16 min-h-screen rounded-lg border-2 border-dashed border-gray-200 p-2 dark:border-gray-700">
+                <div
+                    className="mt-16 min-h-screen rounded-lg border-2 border-dashed border-gray-200 p-2 dark:border-gray-700">
                     {header && (
                         <header className="bg-white shadow dark:bg-gray-800 mb-4 rounded-lg">
                             <div className="px-4 py-4 sm:px-6 lg:px-8">

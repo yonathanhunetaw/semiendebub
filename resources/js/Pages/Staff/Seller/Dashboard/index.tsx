@@ -1,11 +1,11 @@
-import AdminLayout from "@/Components/Admin/AdminLayout";
-import {Head} from '@inertiajs/react'
-
 export default function index({}) {
+    // @ts-ignore
+    // @ts-ignore
     return (
-        <AdminLayout>
-            <Head title="index"/>
-
-        </AdminLayout>
+        // <AppNavbar auth={undefined}>
+        //     <Head title="index"/>
+        //
+        // </AppNavbar>
+        <h3>Seller</h3>
     )
 }

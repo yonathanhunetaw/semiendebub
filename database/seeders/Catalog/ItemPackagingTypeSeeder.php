@@ -2,7 +2,7 @@
 
 namespace Database\Seeders\Catalog;
 
-use App\Models\Catalog\ItemPackagingType;
+use App\Models\Items\ItemPackagingType;
 use Illuminate\Database\Seeder;
 
 class ItemPackagingTypeSeeder extends Seeder

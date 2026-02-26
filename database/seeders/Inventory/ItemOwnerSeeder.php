@@ -3,7 +3,7 @@
 namespace Database\Seeders\Inventory;
 
 use App\Models\Auth\User;
-use App\Models\Catalog\Item;
+use App\Models\Items\Item;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 

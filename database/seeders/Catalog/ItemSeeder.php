@@ -2,12 +2,12 @@
 
 namespace Database\Seeders\Catalog;
 
-use App\Models\Catalog\Item;
-use App\Models\Catalog\ItemColor;
-use App\Models\Catalog\ItemPackagingType;
-use App\Models\Catalog\ItemSize;
 use App\Models\Catalog\ItemStock;
-use App\Models\Catalog\ItemVariant;
+use App\Models\Items\Item;
+use App\Models\Items\ItemColor;
+use App\Models\Items\ItemPackagingType;
+use App\Models\Items\ItemSize;
+use App\Models\Items\ItemVariant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 

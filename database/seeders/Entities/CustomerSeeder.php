@@ -2,7 +2,7 @@
 
 namespace Database\Seeders\Entities;
 
-use App\Models\Entities\Customer;
+use App\Models\Customer\Customer;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 

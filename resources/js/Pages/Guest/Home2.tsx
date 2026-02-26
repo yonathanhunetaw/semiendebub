@@ -1,7 +1,8 @@
-import { useState } from "react";
+import {JSXElementConstructor, ReactElement, ReactNode, ReactPortal, useState} from "react";
 import AdminLayout from "../../Layouts/AdminLayout";
 
-function Home2({ name }) {
+// @ts-ignore
+function Home2({name}) {
     // Dice logic moved inside Home2
     const getRandomNumber = () => {
         return Math.ceil(Math.random() * 6);
@@ -31,7 +32,7 @@ function Home2({ name }) {
 }
 
 // Persistent Layout assignment
-Home2.layout = (page) => (
+Home2.layout = (page: string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<string | number | bigint | boolean | ReactPortal | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | null | undefined> | null | undefined) => (
     <AdminLayout
         header={<h2 className="font-semibold text-xl">Dashboard</h2>}
         children={page}

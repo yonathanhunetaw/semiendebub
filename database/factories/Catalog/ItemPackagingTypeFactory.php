@@ -2,7 +2,7 @@
 
 namespace Database\Factories\Catalog;
 
-use App\Models\Catalog\ItemPackagingType;
+use App\Models\Items\ItemPackagingType;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class ItemPackagingTypeFactory extends Factory

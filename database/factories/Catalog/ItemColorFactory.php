@@ -2,7 +2,7 @@
 
 namespace Database\Factories\Catalog;
 
-use App\Models\Catalog\ItemColor;
+use App\Models\Items\ItemColor;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class ItemColorFactory extends Factory

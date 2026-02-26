@@ -3,9 +3,9 @@
 namespace Database\Seeders\Store;
 
 use App\Models\Auth\User;
-use App\Models\Catalog\ItemVariant;
-use App\Models\Entities\Customer;
+use App\Models\Customer\Customer;
 use App\Models\Inventory\ItemStock;
+use App\Models\Items\ItemVariant;
 use App\Models\Store\Store;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
