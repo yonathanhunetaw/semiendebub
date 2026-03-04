@@ -4,19 +4,19 @@
 | Auth - ('guest') & ('auth') - -> routes/auth.php
 |-------------------------------------------------------------------------------------------------------------*/
 
-require __DIR__.'/auth.php';
+require __DIR__.'/auth.php';                                // ['auth', 'verified']
 
 /*-------------------------------------------------------------------------------------------------------------
-| CLIENT - ['auth', 'verified'] - -> routes/web/client/client.php
+| ADMIN - ['auth', 'verified'] - -> routes/web/admin/admin.php
 |-------------------------------------------------------------------------------------------------------------*/
 
-require __DIR__.'/web/client/client.php';
+require __DIR__.'/web/admin/admin.php';                     // ['auth', 'verified', 'check_role:Admin']
 
 /*-------------------------------------------------------------------------------------------------------------
-| CUSTOMER - ['auth', 'verified'] - -> routes/web/customer/customer.php
+| DELIVERY - ['auth', 'verified'] - -> routes/web/delivery/delivery.php
 |-------------------------------------------------------------------------------------------------------------*/
 
-require __DIR__.'/web/customer/customer.php';
+require __DIR__.'/web/delivery/delivery.php';               // ['auth', 'verified', 'check_role:Delivery']
 
 /*-------------------------------------------------------------------------------------------------------------
 | DEV/LESSONS - ['auth', 'verified'] - -> routes/web/dev/lessons
@@ -26,34 +26,58 @@ require __DIR__.'/web/dev/lessons/lesson4.php';
 require __DIR__.'/web/dev/lessons/lesson6.php';
 
 /*-------------------------------------------------------------------------------------------------------------
-| GUEST - ['auth', 'verified'] - -> routes/web/guest/guest.php
+| ERRORS -> routes/web/errors/error.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/errors/error.php';
+
+/*-------------------------------------------------------------------------------------------------------------
+| FINANCE -> routes/web/finance/finance.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/finance/finance.php';                    // ['auth', 'verified', 'check_role:Finance']
+
+/*-------------------------------------------------------------------------------------------------------------
+| GUEST -> routes/web/guest/guest.php
 |-------------------------------------------------------------------------------------------------------------*/
 
 require __DIR__.'/web/guest/guest.php';
 
 /*-------------------------------------------------------------------------------------------------------------
-| SHARED - ['auth', 'verified'] - -> routes/web/shared/profile.php
+| MARKETING -> routes/web/marketing/marketing.php
 |-------------------------------------------------------------------------------------------------------------*/
 
-require __DIR__.'/web/shared/profile.php';
+require __DIR__.'/web/marketing/marketing.php';                 // ['auth', 'verified', 'check_role:Marketing']
 
 /*-------------------------------------------------------------------------------------------------------------
-| STAFF -> ADMIN - SELLER - STOCK_KEEPER - DELIVERY - FINANCE - MARKETING - PROCUREMENT -> routes/web/staff
+| PROCUREMENT -> routes/web/procurement/procurement.php
 |-------------------------------------------------------------------------------------------------------------*/
 
-require __DIR__.'/web/staff/admin.php';            // ['auth', 'verified', 'check_role:Admin']
-require __DIR__.'/web/staff/delivery.php';         // ['auth', 'verified', 'check_role:Delivery']
-require __DIR__.'/web/staff/finance.php';          // ['auth', 'verified', 'check_role:Finance']
-require __DIR__.'/web/staff/marketing.php';        // ['auth', 'verified', 'check_role:Marketing']
-require __DIR__.'/web/staff/procurement.php';      // ['auth', 'verified', 'check_role:Procurement']
-require __DIR__.'/web/staff/seller.php';           // ['auth', 'verified', 'check_role:Seller']
-require __DIR__.'/web/staff/stock_keeper.php';     // ['auth', 'verified', 'check_role:StockKeeper']
-require __DIR__.'/web/staff/store.php';            // ['auth', 'verified', 'check_role:none']
+require __DIR__.'/web/procurement/procurement.php';             // ['auth', 'verified', 'check_role:Procurement']
 
 /*-------------------------------------------------------------------------------------------------------------
-| VENDOR - CLIENT - CUSTOMER -VENDOR -> routes/web/vendor/vendor.php
+| SELLER -> routes/web/seller/seller.php
 |-------------------------------------------------------------------------------------------------------------*/
-require __DIR__.'/web/vendor/vendor.php';
+
+require __DIR__.'/web/seller/seller.php';                        // ['auth', 'verified', 'check_role:Seller']
+
+/*-------------------------------------------------------------------------------------------------------------
+| SHARED -> routes/web/shared/shared.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/shared/shared.php';
+
+/*-------------------------------------------------------------------------------------------------------------
+| STOCK_KEEPER -> routes/web/stockkeeper/stockkeeper.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/stockkeeper/stockkeeper.php';              // ['auth', 'verified', 'check_role:StockKeeper']
+
+/*-------------------------------------------------------------------------------------------------------------
+| VENDOR -> routes/web/vendor/vendor.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/vendor/vendor.php';                        // ['auth', 'verified', 'check_role:Vendor']
 
 //
 // use App\Http\Controllers\Admin\ItemController;

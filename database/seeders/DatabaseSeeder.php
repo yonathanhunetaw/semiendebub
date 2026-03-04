@@ -2,21 +2,21 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Admin\ItemCategorySeeder;
+use Database\Seeders\Admin\ItemColorSeeder;
+use Database\Seeders\Admin\ItemImageSeeder;
+use Database\Seeders\Admin\ItemPackagingTypeSeeder;
+use Database\Seeders\Admin\ItemSeeder;
+use Database\Seeders\Admin\ItemSizeSeeder;
+use Database\Seeders\Admin\ItemVariantSeeder;
 use Database\Seeders\Auth\RolePermissionSeeder;
-use Database\Seeders\Auth\UserSeeder;
-use Database\Seeders\Catalog\ItemCategorySeeder;
-use Database\Seeders\Catalog\ItemColorSeeder;
-use Database\Seeders\Catalog\ItemImageSeeder;
-use Database\Seeders\Catalog\ItemPackagingTypeSeeder;
-use Database\Seeders\Catalog\ItemSeeder;
-use Database\Seeders\Catalog\ItemSizeSeeder;
-use Database\Seeders\Catalog\ItemVariantSeeder;
-use Database\Seeders\Entities\CustomerSeeder;
+use Database\Seeders\Customer\CustomerSeeder;
 use Database\Seeders\Inventory\ItemInventoryLocationSeeder;
 use Database\Seeders\Inventory\ItemOwnerSeeder;
 use Database\Seeders\Store\ItemStoreSeeder;
 use Database\Seeders\Store\StoreSeeder;
 use Database\Seeders\Store\StoreVariantSeeder;
+use Database\Seeders\User\UserSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 

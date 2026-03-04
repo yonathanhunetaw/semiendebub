@@ -4,14 +4,14 @@ set -e
 echo "🚀 Starting Smart Deployment..."
 
 # 1️⃣ Fetch changes without merging yet
-git fetch origin main
+# git fetch origin main
 
 # 2️⃣ Check for Docker-related changes
 # This compares your local code to the incoming Git changes
-DOCKER_CHANGES=$(git diff --name-only HEAD origin/main | grep -E 'docker|Dockerfile|docker-compose|.env' || true)
+# DOCKER_CHANGES=$(git diff --name-only HEAD origin/main | grep -E 'docker|Dockerfile|docker-compose|.env' || true)
 
 # 3️⃣ Pull the latest code
-git merge origin main
+# git merge origin main
 
 if [ -n "$DOCKER_CHANGES" ]; then
     echo "⚙️ Docker changes detected. Running Deep Build..."
@@ -38,6 +38,7 @@ echo "MySQL is ready!"
 
 # 4️⃣ Compile frontend assets
 echo "Compiling frontend assets..."
+sudo docker compose exec app npm ci --no-audit --no-fund
 sudo docker compose exec app npm run build
 
 # 5️⃣ Run Laravel migrations and seed

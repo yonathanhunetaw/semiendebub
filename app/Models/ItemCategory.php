@@ -30,8 +30,6 @@ class ItemCategory extends Model
     public function items()
     {
         return $this->hasMany(Item::class, 'category_id')
-                    ->where('status', 'active'); // only active items
+            ->where('status', 'active'); // only active items
     }
-
-
 }

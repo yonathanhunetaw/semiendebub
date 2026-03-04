@@ -6,6 +6,7 @@ WORKDIR /var/www/html
 # 2. Install system dependencies
 RUN apt-get update && apt-get install -y \
     git unzip zip curl npm \
+    default-mysql-client \
     libpng-dev libonig-dev libxml2-dev libzip-dev \
     libicu-dev libbz2-dev libgmp-dev libldap2-dev \
     libpq-dev libxslt1-dev libtidy-dev \

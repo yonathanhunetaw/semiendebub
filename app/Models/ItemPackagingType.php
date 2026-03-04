@@ -43,8 +43,6 @@ class ItemPackagingType extends Model
             ->withTimestamps();
     }
 
-
-
     public function variants()
     {
         return $this->hasMany(ItemVariant::class);

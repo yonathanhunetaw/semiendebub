@@ -50,7 +50,7 @@ class Cart extends Model
 
     public function seller()
     {
-        //return $this->belongsTo(User::class, 'seller_id'); // 'seller_id' associated with a user (seller)
+        // return $this->belongsTo(User::class, 'seller_id'); // 'seller_id' associated with a user (seller)
         return $this->belongsTo(User::class, 'seller_id')->where('role', 'seller');
     }
 
@@ -75,10 +75,10 @@ class Cart extends Model
     public function getNameAttribute()
     {
         if ($this->customer) {
-            return $this->customer->name . "'s Cart";
+            return $this->customer->name."'s Cart";
         }
 
-        return 'Cart ' . $this->id;
+        return 'Cart '.$this->id;
     }
 
     /**
@@ -108,7 +108,6 @@ class Cart extends Model
     /**
      * Assign the cart to a seller by an admin.
      *
-     * @param User $seller
      * @return void
      */
     public function assignToSeller(User $seller)
@@ -119,7 +118,6 @@ class Cart extends Model
     /**
      * Assign the cart to a customer.
      *
-     * @param Customer $customer
      * @return void
      */
     public function assignToCustomer(Customer $customer)
@@ -127,19 +125,6 @@ class Cart extends Model
         $this->update(['customer_id' => $customer->id]);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // namespace App\Models;
 
@@ -161,7 +146,6 @@ class Cart extends Model
 //         'customer_id',   // The customer associated with the cart
 //         // Add other attributes like 'status' or 'notes' if needed
 //     ];
-
 
 //     /**
 //      * Define the relationship to the user who owns the cart.
@@ -192,7 +176,6 @@ class Cart extends Model
 //             ->withPivot('quantity', 'price') // Include pivot attributes
 //             ->withTimestamps();
 //     }
-
 
 //     /**
 //      * Accessor to get the name of the cart.

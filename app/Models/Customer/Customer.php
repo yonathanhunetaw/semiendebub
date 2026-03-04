@@ -4,6 +4,7 @@ namespace App\Models\Customer;
 
 use App\Models\Auth\User;
 use App\Models\Sales\Cart;
+use Database\Factories\Customer\CustomerFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -34,6 +35,11 @@ class Customer extends Model
     // {
     //     return $this->belongsTo(User::class, 'created_by');
     // }
+
+    protected static function newFactory()
+    {
+        return CustomerFactory::new();
+    }
 
     /**
      * Get the creator (user) who created this customer.

@@ -6,10 +6,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasFactory, HasRoles, Notifiable;
+
+    // Explicitly set the guard name
+    protected $guard_name = 'web';
 
     /**
      * The attributes that are mass assignable.
@@ -39,19 +43,6 @@ class User extends Authenticatable
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
-    }
-
-    /**
      * Get the customers created by the user.
      */
     public function customers()
@@ -69,7 +60,7 @@ class User extends Authenticatable
      */
     public function setRoleAttribute($value)
     {
-        //$this->attributes['role'] = strtolower($value);
+        // $this->attributes['role'] = strtolower($value);
         // Store role as lowercase and underscore-separated format
         $this->attributes['role'] = strtolower(str_replace(' ', '_', $value));
     }
@@ -79,7 +70,7 @@ class User extends Authenticatable
      */
     public function getRoleAttribute($value)
     {
-        //return ucwords(str_replace('_', ' ', strtolower($value)));
+        // return ucwords(str_replace('_', ' ', strtolower($value)));
 
         // Format role for display purposes by replacing underscores with spaces and capitalizing the first letter
         return ucwords(str_replace('_', ' ', strtolower($value)));
@@ -94,10 +85,23 @@ class User extends Authenticatable
         return $this->hasMany(Cart::class);
     }
 
-    // In App\Models\User.php
     public function store()
     {
         return $this->belongsTo(Store::class);
     }
 
+    // In App\Models\User.php
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+        ];
+    }
 }

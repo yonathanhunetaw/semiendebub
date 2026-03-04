@@ -59,5 +59,4 @@ class ItemSize extends Model
     {
         return $this->hasMany(ItemVariant::class);
     }
-
 }

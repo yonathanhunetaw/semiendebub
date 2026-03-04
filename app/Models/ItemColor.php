@@ -44,13 +44,11 @@ class ItemColor extends Model
         // If you need to cast any columns to a specific type, put them here.
     ];
 
-
     // Relationships (if any)
     public function items()
     {
         return $this->belongsToMany(Item::class, 'item_color_item', 'item_color_id', 'item_id')->withTimestamps();
     }
-
 
     public function variants()
     {

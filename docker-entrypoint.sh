@@ -17,14 +17,42 @@ chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 echo "✅ Permissions OK"
 
+echo "Waiting for MySQL at $DB_HOST..."
+
+MAX_RETRIES=30
+COUNT=0
+
+until mysqladmin ping \
+    -h "$DB_HOST" \
+    -u "$DB_USERNAME" \
+    -p"$DB_PASSWORD" \
+    --ssl=0 \
+    --protocol=TCP \
+    --silent; do
+
+    COUNT=$((COUNT+1))
+    if [ $COUNT -ge $MAX_RETRIES ]; then
+        echo "❌ MySQL is not ready after $MAX_RETRIES attempts, exiting."
+        exit 1
+    fi
+    echo "Waiting for MySQL at $DB_HOST..."
+    sleep 2
+done
+
+echo "✅ MySQL is ready!"
+
 # --- NEW: Laravel Optimizations ---
 if [ "$APP_ENV" = "production" ]; then
     echo "🚀 Optimizing for Production..."
+    echo "🛠️ Running migrations and clearing caches..."
+    php artisan migrate --force
     php artisan config:cache
     php artisan route:cache
     php artisan view:cache
 else
     echo "🛠️ Clearing caches for Development..."
+    echo "🛠️ Running migrations and clearing caches for Development..."
+    php artisan migrate --force
     php artisan cache:clear
     php artisan config:clear
 fi

@@ -25,8 +25,6 @@ class Item extends Model
         'product_images' => 'array', // Cast JSON column to array
     ];
 
-
-
     // Item belongs to a main category
     // public function category()
     // {
@@ -79,9 +77,6 @@ class Item extends Model
             ->withTimestamps();
     }
 
-
-
-
     // Variants
     public function variants()
     {
@@ -130,7 +125,7 @@ class Item extends Model
                 }
                 $ancestorText = array_reverse($ancestorText);
 
-                $display = "{$pack->name}: " . implode(', ', $ancestorText) . " ({$totals[$pack->name]} pcs)";
+                $display = "{$pack->name}: ".implode(', ', $ancestorText)." ({$totals[$pack->name]} pcs)";
                 $result[] = $display;
             }
         }
@@ -145,21 +140,15 @@ class Item extends Model
             ->withTimestamps();
     }
 
-
-
     protected static function booted()
     {
         static::creating(function ($item) {
-            if (!$item->sku) {
+            if (! $item->sku) {
                 // Use first 3 letters of product name + random 3 digits
                 $namePart = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $item->product_name), 0, 3));
                 $randomPart = mt_rand(100, 999);
-                $item->sku = $namePart . $randomPart;
+                $item->sku = $namePart.$randomPart;
             }
         });
     }
-
-
 }
-
-
