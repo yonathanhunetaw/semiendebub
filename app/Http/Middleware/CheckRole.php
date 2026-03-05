@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
 
 class CheckRole
 {
@@ -24,22 +25,27 @@ class CheckRole
             return $next($request);
         }
 
-        // Redirect based on actual user role
-        if ($user->hasRole('admin')) {
-            return $request->path() !== 'admin/dashboard'
-                ? redirect()->route('admin.dashboard')
-                : abort(403);
-        }
-        if ($user->hasRole('seller')) {
-            return redirect()->route('seller.dashboard');
-        }
-        if ($user->hasRole('stock_keeper')) {
-            return redirect()->route('stock_keeper.dashboard');
-        }
-        if ($user->hasRole('user')) {
-            return redirect()->route('user.home');
+        $roleToRoute = [
+            'admin' => 'admin.dashboard',
+            'delivery' => 'delivery.dashboard',
+            'dev' => 'dev.dashboard',
+            'finance' => 'finance.dashboard',
+            'guest' => 'home',
+            'marketing' => 'marketing.dashboard',
+            'procurement' => 'procurement.dashboard',
+            'seller' => 'seller.dashboard',
+            'shared' => 'shared.dashboard',
+            'stock_keeper' => 'stock_keeper.dashboard',
+            'vendor' => 'vendor.dashboard',
+            'user' => 'user.home',
+        ];
+
+        $userRole = $user->roles->pluck('name')->first();
+
+        if ($userRole && isset($roleToRoute[$userRole]) && Route::has($roleToRoute[$userRole])) {
+            return redirect()->route($roleToRoute[$userRole]);
         }
 
-        return redirect()->route('welcome'); // fallback
+        return redirect()->to($request->getSchemeAndHttpHost().'/login');
     }
 }

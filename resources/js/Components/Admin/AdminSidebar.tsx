@@ -53,11 +53,11 @@ export default function AdminSidebar({
 }) {
     const {url} = usePage();
     const [productsOpen, setProductsOpen] = useState(
-        ['/admin/items', '/admin/variants', '/admin/stock', '/admin/transfers', '/admin/prices', '/admin/discounts']
+        ['/items', '/variants', '/stock', '/transfers', '/prices', '/discounts']
             .some((path) => url.includes(path))
     );
     const [moreOpen, setMoreOpen] = useState(
-        ['/admin/sales', '/admin/delivery', '/admin/purchase-orders', '/admin/balance', '/admin/documents', '/admin/calendar', '/admin/payments', '/admin/tasks', '/admin/sessions', '/admin/settings']
+        ['/sales', '/delivery', '/purchase-orders', '/balance', '/documents', '/calendar', '/payments', '/tasks', '/sessions', '/settings']
             .some((path) => url.includes(path))
     );
 
@@ -68,8 +68,8 @@ export default function AdminSidebar({
                 <ListItem disablePadding>
                     <ListItemButton
                         component={Link}
-                        href="/admin/dashboard"
-                        selected={url.startsWith('/admin/dashboard')}
+                        href="/dashboard"
+                        selected={url.startsWith('/dashboard')}
                         sx={{
                             borderRadius: 1,
                             mx: 1,
@@ -107,43 +107,43 @@ export default function AdminSidebar({
                 </ListItemButton>
                 <Collapse in={productsOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/items"
-                                        selected={url.includes('/admin/items')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/items"
+                                        selected={url.includes('/items')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <Inventory2 fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Items"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/variants"
-                                        selected={url.includes('/admin/variants')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/variants"
+                                        selected={url.includes('/variants')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <Layers fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Variations"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/stock"
-                                        selected={url.includes('/admin/stock')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/stock"
+                                        selected={url.includes('/stock')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <Inventory2 fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Stock"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/transfers"
-                                        selected={url.includes('/admin/transfers')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/transfers"
+                                        selected={url.includes('/transfers')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <SwapHoriz fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Transfers"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/prices"
-                                        selected={url.includes('/admin/prices')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/prices"
+                                        selected={url.includes('/prices')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <PriceCheck fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Prices"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/discounts"
-                                        selected={url.includes('/admin/discounts')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/discounts"
+                                        selected={url.includes('/discounts')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <LocalOffer fontSize="small"/>
                             </ListItemIcon>
@@ -199,8 +199,8 @@ export default function AdminSidebar({
                 <ListItem disablePadding>
                     <ListItemButton
                         component={Link}
-                        href="/admin/carts"
-                        selected={url.includes('/admin/carts')}
+                        href="/carts"
+                        selected={url.includes('/carts')}
                         sx={{
                             borderRadius: 1,
                             mx: 1,
@@ -239,64 +239,64 @@ export default function AdminSidebar({
                 </ListItemButton>
                 <Collapse in={moreOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/sales"
-                                        selected={url.includes('/admin/sales')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/sales"
+                                        selected={url.includes('/sales')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <PointOfSale fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Sales"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/delivery"
-                                        selected={url.includes('/admin/delivery')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/delivery"
+                                        selected={url.includes('/delivery')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <LocalShipping fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Delivery"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/purchase-orders"
-                                        selected={url.includes('/admin/purchase-orders')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/purchase-orders"
+                                        selected={url.includes('/purchase-orders')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <ReceiptLong fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Purchase Orders"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/balance"
-                                        selected={url.includes('/admin/balance')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/balance"
+                                        selected={url.includes('/balance')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <AccountBalance fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Balance"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/documents"
-                                        selected={url.includes('/admin/documents')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/documents"
+                                        selected={url.includes('/documents')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <Description fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Documents"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/calendar"
-                                        selected={url.includes('/admin/calendar')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/calendar"
+                                        selected={url.includes('/calendar')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <CalendarMonth fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Calendar"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/payments"
-                                        selected={url.includes('/admin/payments')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/payments"
+                                        selected={url.includes('/payments')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <Payments fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Payments"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/tasks"
-                                        selected={url.includes('/admin/tasks')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/tasks"
+                                        selected={url.includes('/tasks')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <TaskAlt fontSize="small"/>
                             </ListItemIcon>
                             <ListItemText primary="Tasks"/>
                         </ListItemButton>
-                        <ListItemButton sx={{pl: 9}} component={Link} href="/admin/sessions"
-                                        selected={url.includes('/admin/sessions')}>
+                        <ListItemButton sx={{pl: 9}} component={Link} href="/sessions"
+                                        selected={url.includes('/sessions')}>
                             <ListItemIcon sx={{minWidth: 36}}>
                                 <Badge fontSize="small"/>
                             </ListItemIcon>
@@ -310,8 +310,8 @@ export default function AdminSidebar({
                     <ListItem disablePadding>
                         <ListItemButton
                             component={Link}
-                            href="/admin/settings"
-                            selected={url.includes('/admin/settings')}
+                            href="/settings"
+                            selected={url.includes('/settings')}
                             sx={{
                                 borderRadius: 1,
                                 mx: 1,

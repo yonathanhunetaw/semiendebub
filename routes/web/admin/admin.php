@@ -36,7 +36,7 @@ use Inertia\Inertia;
 */
 
 Route::domain('admin.duka.local')
-    ->middleware(['auth', 'verified', 'role:admin'])
+    ->middleware(['auth', 'verified', 'role.subdomain:admin'])
     ->name('admin.')
     ->group(function () {
         Route::get('/dashboard', function () {

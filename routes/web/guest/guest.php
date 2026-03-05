@@ -20,37 +20,85 @@ use Inertia\Inertia;
 
 Route::get('/', function () {
     $user = Auth::user();
+    $host = request()->getHost();
 
-    if ($user) {
-        // Redirect based on role
-        if ($user->hasRole('admin')) {
-            return redirect()->route('admin.dashboard');
-        }
-        if ($user->hasRole('seller')) {
-            return redirect()->route('seller.dashboard');
-        }
-        if ($user->hasRole('stock_keeper')) {
-            return redirect()->route('stock_keeper.dashboard');
-        }
-        if ($user->hasRole('user')) {
-            return redirect()->route('user.home');
+    $hostToRole = [
+        'admin.duka.local' => 'admin',
+        'delivery.duka.local' => 'delivery',
+        'seller.duka.local' => 'seller',
+        'stock.duka.local' => 'stock_keeper',
+        'finance.duka.local' => 'finance',
+        'marketing.duka.local' => 'marketing',
+        'procurement.duka.local' => 'procurement',
+        'shared.duka.local' => 'shared',
+        'vendor.duka.local' => 'vendor',
+        'guest.duka.local' => 'guest',
+        'dev.duka.local' => 'dev',
+    ];
+
+    if (isset($hostToRole[$host])) {
+        $expectedRole = $hostToRole[$host];
+
+        if (! $user || ! $user->hasRole($expectedRole)) {
+            $hostToWelcome = [
+                'admin.duka.local' => 'Welcome/Admin',
+                'delivery.duka.local' => 'Welcome/Delivery',
+                'seller.duka.local' => 'Welcome/Seller',
+                'stock.duka.local' => 'Welcome/StockKeeper',
+                'finance.duka.local' => 'Welcome/Finance',
+                'marketing.duka.local' => 'Welcome/Marketing',
+                'procurement.duka.local' => 'Welcome/Procurement',
+                'shared.duka.local' => 'Welcome/Shared',
+                'vendor.duka.local' => 'Welcome/Vendor',
+                'guest.duka.local' => 'Welcome/Guest',
+                'dev.duka.local' => 'Welcome/Dev',
+            ];
+
+            $component = $hostToWelcome[$host] ?? 'Welcome/Guest';
+
+            return Inertia::render($component, [
+                'canLogin' => Route::has('login'),
+                'canRegister' => Route::has('register'),
+                'laravelVersion' => Application::VERSION,
+                'phpVersion' => PHP_VERSION,
+            ]);
         }
 
-        // fallback
-        return Inertia::render('Guest/Welcome');
-
+        return redirect()->to('/dashboard');
     }
 
-    // Guest view
+    if ($user) {
+        $roleRoutes = [
+            'admin' => 'admin.dashboard',
+            'delivery' => 'delivery.dashboard',
+            'finance' => 'finance.dashboard',
+            'marketing' => 'marketing.dashboard',
+            'procurement' => 'procurement.dashboard',
+            'seller' => 'seller.dashboard',
+            'shared' => 'shared.dashboard',
+            'stock_keeper' => 'stock_keeper.dashboard',
+            'vendor' => 'vendor.dashboard',
+            'user' => 'user.home',
+        ];
+
+        foreach ($roleRoutes as $role => $routeName) {
+            if ($user->hasRole($role)) {
+                return redirect()->route($routeName);
+            }
+        }
+
+        return redirect()->route('dashboard');
+    }
+
     return Inertia::render('Guest/Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
-        'laravelVersiostoresn' => Application::VERSION,
+        'laravelVersion' => Application::VERSION,
         'phpVersion' => PHP_VERSION,
     ]);
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
 
     Route::get('/home', function () {
         return Inertia::render('Guest/Home', ['name' => 'Mike']);

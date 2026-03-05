@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { Link } from '@inertiajs/react'; // Add this
-import { route } from 'ziggy-js';       // Add this
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Toolbar from '@mui/material/Toolbar';
@@ -114,20 +113,20 @@ function AppNavbar({ auth }: AppNavbarProps) {
                             {auth.user ? (
                                 // Logged In Links
                                 [
-                                    <MenuItem key="dash" onClick={handleCloseUserMenu} component={Link} href={route('dashboard')}>
+                                    <MenuItem key="dash" onClick={handleCloseUserMenu} component={Link} href="/dashboard">
                                         <Typography textAlign="center">Dashboard</Typography>
                                     </MenuItem>,
-                                    <MenuItem key="logout" onClick={handleCloseUserMenu} component={Link} href={route('logout')} method="post" as="button">
+                                    <MenuItem key="logout" onClick={handleCloseUserMenu} component={Link} href="/logout" method="post" as="button">
                                         <Typography textAlign="center">Logout</Typography>
                                     </MenuItem>
                                 ]
                             ) : (
                                 // Guest Links
                                 [
-                                    <MenuItem key="login" onClick={handleCloseUserMenu} component={Link} href={route('login')}>
+                                    <MenuItem key="login" onClick={handleCloseUserMenu} component={Link} href="/login">
                                         <Typography textAlign="center">Log In</Typography>
                                     </MenuItem>,
-                                    <MenuItem key="register" onClick={handleCloseUserMenu} component={Link} href={route('register')}>
+                                    <MenuItem key="register" onClick={handleCloseUserMenu} component={Link} href="/register">
                                         <Typography textAlign="center">Register</Typography>
                                     </MenuItem>
                                 ]

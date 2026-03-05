@@ -17,11 +17,11 @@ class UserSeeder extends Seeder
         $yonathan = User::create([
             'first_name' => 'Yonathan',
             'last_name' => 'Hunetaw',
-            'phone_number' => '1284587890',
-            'email' => 'yo@yo.com',
+            'phone_number' => '1282587890',
+            'email' => 'yonathan@mezgebedirijit.com',
             'email_verified_at' => now(),
             'role' => 'admin',
-            'password' => Hash::make('12345678'),
+            'password' => Hash::make('43295299'),
             'remember_token' => Str::random(10),
             'store_id' => null,
             'inventory_location_id' => null,
@@ -30,6 +30,40 @@ class UserSeeder extends Seeder
             'updated_at' => now(),
         ]);
         $yonathan->assignRole('admin');
+
+        $hulala = User::create([
+            'first_name' => 'Hulala',
+            'last_name' => 'Sinqe',
+            'phone_number' => '0922135623',
+            'email' => 'hulala@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'delivery',
+            'password' => Hash::make('79230274'),
+            'remember_token' => Str::random(10),
+            'store_id' => 1,
+            'inventory_location_id' => null,
+            'created_by' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $hulala->assignRole('delivery');
+
+        $emp10 = User::create([
+            'first_name' => 'Employee',
+            'last_name' => 'Number 10',
+            'phone_number' => '0972246474',
+            'email' => 'emp10@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'dev',
+            'password' => Hash::make('85652754'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $emp10->assignRole('dev');
 
         $gelila = User::create([
             'first_name' => 'Gelila',
@@ -46,7 +80,126 @@ class UserSeeder extends Seeder
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        $gelila->assignRole('seller');
+        $gelila->assignRole('finance');
+
+        $guest = User::create([
+            'first_name' => 'Guest',
+            'last_name' => 'User',
+            'phone_number' => '0972241474',
+            'email' => 'guest@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'dev',
+            'password' => Hash::make('97527534'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $guest->assignRole('guest');
+
+        $henok = User::create([
+            'first_name' => 'Henok',
+            'last_name' => 'Godiso',
+            'phone_number' => '0902246474',
+            'email' => 'henok@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'marketing',
+            'password' => Hash::make('65362453'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $henok->assignRole('marketing');
+
+        $lili = User::create([
+            'first_name' => 'Lili',
+            'last_name' => 'Hungrily',
+            'phone_number' => '0972206474',
+            'email' => 'lili@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'procurement',
+            'password' => Hash::make('97527534'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $lili->assignRole('procurement');
+
+        $roman = User::create([
+            'first_name' => 'Roman',
+            'last_name' => 'Tofa',
+            'phone_number' => '0972246874',
+            'email' => 'roman@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'seller',
+            'password' => Hash::make('97527534'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $roman->assignRole('seller');
+
+        $abebe = User::create([
+            'first_name' => 'Abebe',
+            'last_name' => 'Balcha',
+            'phone_number' => '0772206474',
+            'email' => 'abebe@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'dev',
+            'password' => Hash::make('97527534'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $abebe->assignRole('shared');
+
+        $sultan = User::create([
+            'first_name' => 'Sultan',
+            'last_name' => 'Sultan',
+            'phone_number' => '0986323593',
+            'email' => 'sultan@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'stock_keeper',
+            'password' => Hash::make('97527534'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $sultan->assignRole('stock_keeper');
+
+        $alem = User::create([
+            'first_name' => 'Alem',
+            'last_name' => 'setgid',
+            'phone_number' => '0994463386',
+            'email' => 'alem@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'vendor',
+            'password' => Hash::make('75369643'),
+            'remember_token' => Str::random(10),
+            'store_id' => 2,
+            'inventory_location_id' => null,
+            'created_by' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $alem->assignRole('vendor');
 
         $users = [
             [

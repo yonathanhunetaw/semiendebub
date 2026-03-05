@@ -3,8 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::middleware(['auth', 'verified', 'check_role:Procurement'])
-    ->prefix('procurement')
+Route::domain('procurement.duka.local')
+    ->middleware(['auth', 'verified', 'role.subdomain:procurement'])
     ->name('procurement.')
     ->group(function () {
 
