@@ -2,7 +2,7 @@
 
 namespace Database\Seeders\Admin;
 
-use App\Models\Items\ItemVariant;
+use App\Models\Item\ItemVariant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 

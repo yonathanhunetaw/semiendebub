@@ -22,6 +22,7 @@ require __DIR__.'/web/delivery/delivery.php';               // ['auth', 'verifie
 | DEV/LESSONS - ['auth', 'verified'] - -> routes/web/dev/lessons
 |-------------------------------------------------------------------------------------------------------------*/
 
+require __DIR__.'/web/dev/dev.php';
 require __DIR__.'/web/dev/lessons/lesson4.php';
 require __DIR__.'/web/dev/lessons/lesson6.php';
 

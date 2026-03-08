@@ -131,6 +131,9 @@ return [
         'SESSION_COOKIE',
         Str::slug((string) env('APP_NAME', 'laravel')).'-session'
     ),
+    //    'cookie' => Str::slug(env('APP_NAME', 'duka'), '_')
+    //        .'_'.str_replace('.', '_', $_SERVER['HTTP_HOST'] ?? 'app')
+    //        .'_session',
 
     /*
     |--------------------------------------------------------------------------

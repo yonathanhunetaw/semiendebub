@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Models\Customer;
+use App\Models\Auth\Customer;
 use App\Models\Item;
-use App\Models\ItemStock;
 use App\Models\ItemVariant;
+use App\Models\StockKeeper\ItemStock;
 use App\Models\Store;
+use App\Models\Store\StoreVariantCustomerPrice;
+use App\Models\Store\StoreVariantSellerPrice;
 use App\Models\StoreVariant;
-use App\Models\StoreVariantCustomerPrice;
-use App\Models\StoreVariantSellerPrice;
 use App\Models\User;
 use App\Services\PriceProvider;
 use Carbon\Carbon;
@@ -28,12 +28,7 @@ class StoreController extends Controller
     }
 
     // Show form to create a new store
-    public function create()
-    {
-        return view('admin.stores.create');
-    }
 
-    // Store a new store
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -47,7 +42,15 @@ class StoreController extends Controller
         return redirect()->route('admin.stores.index')->with('success', 'Store created successfully.');
     }
 
+    // Store a new store
+
+    public function create()
+    {
+        return view('admin.stores.create');
+    }
+
     // Show a single store
+
     public function show(Store $store)
     {
         return view('admin.stores.show', compact('store'));

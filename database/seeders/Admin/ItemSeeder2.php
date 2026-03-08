@@ -2,11 +2,11 @@
 
 namespace Database\Seeders\Admin;
 
-use App\Models\Items\Item;
-use App\Models\Items\ItemColor;
-use App\Models\Items\ItemPackagingType;
-use App\Models\Items\ItemSize;
-use App\Models\Items\ItemVariant;
+use App\Models\Item\Item;
+use App\Models\Item\ItemColor;
+use App\Models\Item\ItemPackagingType;
+use App\Models\Item\ItemSize;
+use App\Models\Item\ItemVariant;
 use Exception;
 use Illuminate\Database\Seeder;
 

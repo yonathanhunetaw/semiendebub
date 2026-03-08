@@ -2,7 +2,7 @@
 
 namespace Database\Seeders\Admin;
 
-use App\Models\Items\ItemSize;
+use App\Models\Item\ItemSize;
 use Illuminate\Database\Seeder;
 
 class ItemSizeSeeder extends Seeder

@@ -2,6 +2,8 @@
 
 namespace App\Models\Store;
 
+use App\Models\StoreVariant;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 

@@ -2,7 +2,7 @@
 
 namespace Database\Factories\Sales;
 
-use App\Models\Order;
+use App\Models\StockKeeper\Order;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class OrderFactory extends Factory

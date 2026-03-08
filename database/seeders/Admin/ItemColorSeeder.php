@@ -2,7 +2,7 @@
 
 namespace Database\Seeders\Admin;
 
-use App\Models\Items\ItemColor;
+use App\Models\Item\ItemColor;
 use Illuminate\Database\Seeder;
 
 class ItemColorSeeder extends Seeder

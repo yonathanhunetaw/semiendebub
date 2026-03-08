@@ -123,4 +123,8 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    // To make config('app.system_domain') work throughout all these middlewares without
+    // errors,
+    'system_domain' => env('APP_SYSTEM_DOMAIN', 'duka.local'),
+
 ];

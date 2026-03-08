@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Models\Customer;
+use App\Models\Auth\Customer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 //         GET /customers – index (list all customers)
 //         GET /customers/create – create (show form to create a new customer)
@@ -31,14 +32,6 @@ class CustomerController extends Controller
     }
 
     /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        return view('admin.customers.create');
-    }
-
-    /**
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
@@ -59,7 +52,7 @@ class CustomerController extends Controller
 
         // Capitalize the first letter of each word in the city (if provided)
         if (! empty($validatedCustomer['city'])) {
-            $validatedCustomer['city'] = \Illuminate\Support\Str::title($validatedCustomer['city']);
+            $validatedCustomer['city'] = Str::title($validatedCustomer['city']);
         }
 
         // Create the customer record using the validated data
@@ -74,6 +67,14 @@ class CustomerController extends Controller
         // ]);
 
         return redirect()->route('admin.customers.index')->with('success', 'Customer created successfully.');
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        return view('admin.customers.create');
     }
 
     /**

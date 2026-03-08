@@ -2,8 +2,8 @@
 
 namespace Database\Seeders\Admin;
 
-use App\Models\Items\Item;
-use App\Models\Items\ItemColor;
+use App\Models\Item\Item;
+use App\Models\Item\ItemColor;
 use Illuminate\Database\Seeder;
 
 class ItemColorSeeder1 extends Seeder

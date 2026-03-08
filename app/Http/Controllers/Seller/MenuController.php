@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
+use App\Models\Auth\Customer;
 use App\Models\Cart;
-use App\Models\Customer;
 use App\Models\Item;
 use App\Models\User;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -33,16 +33,9 @@ class MenuController extends Controller
         return view('seller.menu.index');
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function store(Request $request)
     {
-        $customers = Customer::all(); // Get all customers
-        $sellers = User::where('role', 'seller')->get(); // assuming sellers have 'seller' role
-
-        return view('seller.carts.create', compact('customers', 'sellers'));
-
+        //
     }
 
     /**
@@ -65,11 +58,6 @@ class MenuController extends Controller
     //     return redirect()->route('admin.carts.show', $cart->id)
     //                      ->with('success', 'Cart created successfully!');
     // }
-    public function store(Request $request)
-    {
-        //
-    }
-
     /**
      * Display the specified resource.
      */
@@ -95,6 +83,23 @@ class MenuController extends Controller
         return view('seller.carts.edit', compact('cart'));
     }
 
+    public function update(Request $request, Cart $cart)
+    {
+        // Validate input
+        $request->validate([
+            'customer_id' => 'required|exists:customers,id', // Ensure customer_id is provided and valid
+        ]);
+
+        // Update the cart
+        $cart->update([
+            'customer_id' => $request->customer_id, // Update the customer_id
+        ]);
+
+        // Redirect to the updated cart's details page with success message
+        return redirect()->route('seller.carts.show', $cart->id)
+            ->with('success', 'Cart updated successfully!');
+    }
+
     // /**
     //  * Update the specified resource in storage.
     //  */
@@ -115,23 +120,6 @@ class MenuController extends Controller
     //     return redirect()->route('admin.carts.index')->with('success', 'Cart updated successfully!');
     // }
 
-    public function update(Request $request, Cart $cart)
-    {
-        // Validate input
-        $request->validate([
-            'customer_id' => 'required|exists:customers,id', // Ensure customer_id is provided and valid
-        ]);
-
-        // Update the cart
-        $cart->update([
-            'customer_id' => $request->customer_id, // Update the customer_id
-        ]);
-
-        // Redirect to the updated cart's details page with success message
-        return redirect()->route('seller.carts.show', $cart->id)
-            ->with('success', 'Cart updated successfully!');
-    }
-
     /**
      * Remove the specified resource from storage.
      */
@@ -147,7 +135,6 @@ class MenuController extends Controller
         return redirect()->route('admin.seller.index')->with('success', 'Cart deleted successfully!');
     }
 
-    // Method to create a new cart or add an item to an existing cart
     public function addItem(Request $request, $itemId)
     {
         $item = Item::findOrFail($itemId);
@@ -180,7 +167,22 @@ class MenuController extends Controller
         return redirect()->route('admin.carts.show', $cart->id)->with('success', 'Item added to cart!');
     }
 
+    // Method to create a new cart or add an item to an existing cart
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        $customers = Customer::all(); // Get all customers
+        $sellers = User::where('role', 'seller')->get(); // assuming sellers have 'seller' role
+
+        return view('seller.carts.create', compact('customers', 'sellers'));
+
+    }
+
     // Store an item in the cart
+
     public function storeItem(Request $request, Cart $cart)
     {
         $request->validate([

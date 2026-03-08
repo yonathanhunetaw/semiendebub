@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Models\Customer;
+use App\Models\Auth\Customer;
 use App\Models\Item;
-use App\Models\ItemInventoryLocation;
-use App\Models\ItemStock;
 use App\Models\ItemVariant;
+use App\Models\StockKeeper\ItemInventoryLocation;
+use App\Models\StockKeeper\ItemStock;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -188,9 +188,9 @@ class VariantController extends Controller
     }
 
     /**
-     * Show the form for creating a new resource.
+     * Display the specified resource.
      */
-    public function create()
+    public function show(string $id)
     {
         //
     }
@@ -303,94 +303,6 @@ class VariantController extends Controller
     // return redirect()->back()->with('success', 'Variants saved successfully!');
 
     // Log the entire request
-
-    public function store(Request $request, $itemId)
-    {
-        Log::info('Variant store request:', $request->all());
-
-        if ($request->has('variants')) {
-            foreach ($request->variants as $index => $variantData) {
-
-                $images = [];
-
-                // 1. Direct file upload (multiple files)
-                if ($request->hasFile("variants.$index.image")) {
-                    Log::info("Direct upload detected for variant $index");
-
-                    foreach ($request->file("variants.$index.image") as $file) {
-                        $path = $file->store('images/variant_images', 'public');
-                        $images[] = $path;
-
-                        Log::info("Uploaded file for variant $index:", [
-                            'original_name' => $file->getClientOriginalName(),
-                            'stored_path' => $path,
-                            'size' => $file->getSize(),
-                            'mime' => $file->getClientMimeType(),
-                        ]);
-                    }
-                }
-
-                // 2. Already uploaded via Axios, paths in hidden input
-                if (! empty($variantData['image_paths'])) {
-                    Log::info("Axios-uploaded images for variant $index", $variantData['image_paths']);
-                    foreach ($variantData['image_paths'] as $path) {
-                        // Remove 'storage/' prefix if present
-                        $images[] = str_replace('storage/', '', $path);
-                    }
-                }
-
-                // Avoid duplicate barcode
-                $barcode = $variantData['barcode'] ?? null;
-                if ($barcode && ItemVariant::where('barcode', $barcode)->exists()) {
-                    $barcode = null; // or generate a unique one
-                    Log::warning("Duplicate barcode detected for variant $index, setting to null");
-                }
-
-                // Log final images array
-                Log::info("Final images array for variant $index:", $images);
-
-                // Create variant
-                $variant = ItemVariant::create([
-                    'item_id' => $itemId,
-                    'item_color_id' => $variantData['item_color_id'] ?? null,
-                    'item_size_id' => $variantData['item_size_id'] ?? null,
-                    'item_packaging_type_id' => $variantData['item_packaging_type_id'] ?? null,
-                    'price' => $variantData['price'] ?? 0,
-                    'discount_price' => $variantData['discount_price'] ?? null,
-                    'barcode' => $barcode,
-                    'images' => json_encode($images ?: []), // encode JSON
-                    'is_active' => true,
-                    'status' => 'active',
-                    // 'packaging_total_pieces' => $variantData['total_pieces'] ?? 1,
-                ]);
-
-                Log::info("Variant created with ID: {$variant->id}");
-
-                // Save stock
-                ItemStock::create([
-                    'item_variant_id' => $variant->id,
-                    'item_inventory_location_id' => $variantData['inventory_location_id'] ?? ItemInventoryLocation::first()->id,
-                    'quantity' => $variantData['stock'] ?? 0,
-                ]);
-
-            }
-
-            Log::info('Final images array:', $images);
-            Log::info('Variant created:', ['id' => $variant->id]);
-        }
-
-        return redirect()->back()->with('success', 'Variants saved successfully!');
-
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
-
     /**
      * Show the form for editing the specified resource.
      */
@@ -485,6 +397,26 @@ class VariantController extends Controller
         //
     }
 
+    public function itemsIndex()
+    {
+        $items = Item::with(['colors', 'sizes', 'packagingTypes', 'variants'])->get();
+        Log::info('Items loaded', $items->toArray());
+
+        return view('admin.variants.items_index', compact('items'));
+    }
+
+    public function updateStatus(Request $request, ItemVariant $variant)
+    {
+        $request->validate([
+            'status' => 'required|in:active,inactive,unavailable,out_of_stock',
+        ]);
+
+        $variant->status = $request->status;
+        $variant->save();
+
+        return redirect()->back()->with('success', 'Variant status updated successfully.');
+    }
+
     // public function itemsIndex()
     // {
     //     // Log the access
@@ -530,26 +462,6 @@ class VariantController extends Controller
     //     ));
     // }
 
-    public function itemsIndex()
-    {
-        $items = Item::with(['colors', 'sizes', 'packagingTypes', 'variants'])->get();
-        Log::info('Items loaded', $items->toArray());
-
-        return view('admin.variants.items_index', compact('items'));
-    }
-
-    public function updateStatus(Request $request, ItemVariant $variant)
-    {
-        $request->validate([
-            'status' => 'required|in:active,inactive,unavailable,out_of_stock',
-        ]);
-
-        $variant->status = $request->status;
-        $variant->save();
-
-        return redirect()->back()->with('success', 'Variant status updated successfully.');
-    }
-
     public function uploadImages(Request $request)
     {
         $request->validate([
@@ -567,5 +479,92 @@ class VariantController extends Controller
             'success' => true,
             'paths' => $paths,
         ]);
+    }
+
+    public function store(Request $request, $itemId)
+    {
+        Log::info('Variant store request:', $request->all());
+
+        if ($request->has('variants')) {
+            foreach ($request->variants as $index => $variantData) {
+
+                $images = [];
+
+                // 1. Direct file upload (multiple files)
+                if ($request->hasFile("variants.$index.image")) {
+                    Log::info("Direct upload detected for variant $index");
+
+                    foreach ($request->file("variants.$index.image") as $file) {
+                        $path = $file->store('images/variant_images', 'public');
+                        $images[] = $path;
+
+                        Log::info("Uploaded file for variant $index:", [
+                            'original_name' => $file->getClientOriginalName(),
+                            'stored_path' => $path,
+                            'size' => $file->getSize(),
+                            'mime' => $file->getClientMimeType(),
+                        ]);
+                    }
+                }
+
+                // 2. Already uploaded via Axios, paths in hidden input
+                if (! empty($variantData['image_paths'])) {
+                    Log::info("Axios-uploaded images for variant $index", $variantData['image_paths']);
+                    foreach ($variantData['image_paths'] as $path) {
+                        // Remove 'storage/' prefix if present
+                        $images[] = str_replace('storage/', '', $path);
+                    }
+                }
+
+                // Avoid duplicate barcode
+                $barcode = $variantData['barcode'] ?? null;
+                if ($barcode && ItemVariant::where('barcode', $barcode)->exists()) {
+                    $barcode = null; // or generate a unique one
+                    Log::warning("Duplicate barcode detected for variant $index, setting to null");
+                }
+
+                // Log final images array
+                Log::info("Final images array for variant $index:", $images);
+
+                // Create variant
+                $variant = ItemVariant::create([
+                    'item_id' => $itemId,
+                    'item_color_id' => $variantData['item_color_id'] ?? null,
+                    'item_size_id' => $variantData['item_size_id'] ?? null,
+                    'item_packaging_type_id' => $variantData['item_packaging_type_id'] ?? null,
+                    'price' => $variantData['price'] ?? 0,
+                    'discount_price' => $variantData['discount_price'] ?? null,
+                    'barcode' => $barcode,
+                    'images' => json_encode($images ?: []), // encode JSON
+                    'is_active' => true,
+                    'status' => 'active',
+                    // 'packaging_total_pieces' => $variantData['total_pieces'] ?? 1,
+                ]);
+
+                Log::info("Variant created with ID: {$variant->id}");
+
+                // Save stock
+                ItemStock::create([
+                    'item_variant_id' => $variant->id,
+                    'item_inventory_location_id' => $variantData['inventory_location_id'] ?? ItemInventoryLocation::first()->id,
+                    'quantity' => $variantData['stock'] ?? 0,
+                ]);
+
+            }
+
+            Log::info('Final images array:', $images);
+            Log::info('Variant created:', ['id' => $variant->id]);
+        }
+
+        return redirect()->back()->with('success', 'Variants saved successfully!');
+
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        //
     }
 }

@@ -2,7 +2,7 @@
 
 namespace Database\Seeders\Customer;
 
-use App\Models\Customer\Customer;
+use App\Models\Auth\Customer;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 

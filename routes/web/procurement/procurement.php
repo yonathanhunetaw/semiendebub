@@ -3,18 +3,33 @@
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::domain('procurement.duka.local')
-    ->middleware(['auth', 'verified', 'role.subdomain:procurement'])
+$baseDomain = config('app.system_domain', 'duka.local');
+
+Route::domain("procurement.{$baseDomain}")
     ->name('procurement.')
     ->group(function () {
 
-        Route::get('/dashboard', function () {
-            return Inertia::render('Staff/Procurement/Dashboard/index');
-        })->name('dashboard');
+        Route::middleware(['guest.subdomain.login'])->group(function () {
 
-        // Example future route
-        Route::get('/purchase-orders', function () {
-            return Inertia::render('Staff/Procurement/PurchaseOrders/index');
-        })->name('purchase_orders.index');
+            // Added a root route so typing the domain doesn't 404
+            Route::get('/', function () {
+                return Inertia::render('Procurement/Welcome/index');
+            })->name('welcome');
 
+            Route::get('/login', function () {
+                return Inertia::render('Procurement/Login/index');
+            })->name('login'); // CRITICAL: Laravel's 'auth' middleware needs this name
+        });
+
+        Route::middleware(['auth', 'verified', 'role.subdomain:procurement'])->group(function () {
+            Route::get('/dashboard', function () {
+                return Inertia::render('Procurement/Dashboard/index');
+            })->name('dashboard');
+
+            // Example future route
+            Route::get('/purchase-orders', function () {
+                return Inertia::render('Procurement/PurchaseOrders/index');
+            })->name('purchase_orders.index');
+
+        });
     });

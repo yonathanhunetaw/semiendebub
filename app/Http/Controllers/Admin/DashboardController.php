@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Models\Customer;
+use App\Models\Auth\Customer;
 use App\Models\Item;
 use App\Models\ItemVariant;
 use Illuminate\Support\Facades\Auth;

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AllowSubdomainLogin;
 use App\Http\Middleware\EnsureCorrectSubdomainRole;
 use App\Http\Middleware\EnsureGuestSubdomainRole;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'role.subdomain' => EnsureCorrectSubdomainRole::class,
             'guest.subdomain' => EnsureGuestSubdomainRole::class,
+            'guest.subdomain.login' => AllowSubdomainLogin::class,
         ]);
 
         $middleware->web(append: [

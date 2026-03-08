@@ -3,9 +3,9 @@
 namespace App\Models\Auth;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use App\Models\Customer\Customer;
-use App\Models\Sales\Cart;
+use App\Models\Seller\Cart;
 use App\Models\Store\Store;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -14,6 +14,9 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     use HasFactory, HasRoles, Notifiable;
+
+    // Explicitly set the guard name
+    protected $guard_name = 'web';
 
     /**
      * The attributes that are mass assignable.
@@ -34,6 +37,14 @@ class User extends Authenticatable
         'password',
         'remember_token',
     ];
+
+    /**
+     * Link this model to its factory.
+     */
+    protected static function newFactory()
+    {
+        return UserFactory::new();
+    }
 
     /**
      * Get the customers created by the user.
@@ -82,8 +93,6 @@ class User extends Authenticatable
     {
         return $this->belongsTo(Store::class);
     }
-
-    // In App\Models\User.php
 
     /**
      * Get the attributes that should be cast.

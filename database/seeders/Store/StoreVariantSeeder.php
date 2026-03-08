@@ -2,10 +2,10 @@
 
 namespace Database\Seeders\Store;
 
+use App\Models\Auth\Customer;
 use App\Models\Auth\User;
-use App\Models\Customer\Customer;
 use App\Models\Inventory\ItemStock;
-use App\Models\Items\ItemVariant;
+use App\Models\Item\ItemVariant;
 use App\Models\Store\Store;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Models\Order;
+use App\Models\StockKeeper\Order;
 use Illuminate\Http\Request;
 
 class OrderController extends Controller

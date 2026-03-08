@@ -4,28 +4,31 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 class EnsureGuestSubdomainRole
 {
     /**
      * Redirect guest pages on role subdomains to the correct login/dashboard.
      *
-     * @param  Closure(Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next)
     {
+        $baseDomain = config('app.system_domain', 'duka.local');
+
         $hostToRole = [
-            'admin.duka.local' => 'admin',
-            'delivery.duka.local' => 'delivery',
-            'seller.duka.local' => 'seller',
-            'stock.duka.local' => 'stock_keeper',
-            'finance.duka.local' => 'finance',
-            'marketing.duka.local' => 'marketing',
-            'procurement.duka.local' => 'procurement',
-            'shared.duka.local' => 'shared',
-            'vendor.duka.local' => 'vendor',
-            'guest.duka.local' => 'guest',
-            'dev.duka.local' => 'dev',
+            "admin.{$baseDomain}" => 'admin',
+            "delivery.{$baseDomain}" => 'delivery',
+            "seller.{$baseDomain}" => 'seller',
+            "stock.{$baseDomain}" => 'stock_keeper',
+            "finance.{$baseDomain}" => 'finance',
+            "marketing.{$baseDomain}" => 'marketing',
+            "procurement.{$baseDomain}" => 'procurement',
+            "shared.{$baseDomain}" => 'shared',
+            "vendor.{$baseDomain}" => 'vendor',
+            "guest.{$baseDomain}" => 'guest',
+            "dev.{$baseDomain}" => 'dev',
         ];
 
         $host = $request->getHost();

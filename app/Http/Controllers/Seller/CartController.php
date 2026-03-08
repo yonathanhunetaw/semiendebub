@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
+use App\Models\Auth\Customer;
 use App\Models\Cart;
-use App\Models\Customer;
 use App\Models\Item;
 use App\Models\User;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -48,38 +48,6 @@ class CartController extends Controller
         return view('seller.carts.index', compact('carts'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        $customers = Customer::all(); // Get all customers
-        $sellers = User::where('role', 'seller')->get(); // assuming sellers have 'seller' role
-
-        return view('seller.carts.create', compact('customers', 'sellers'));
-
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    // public function store(Request $request)
-    // {
-    //     // Validate input
-    //     $request->validate([
-    //         'customer_id' => 'nullable|exists:customers,id', // Ensure customer_id is valid if provided
-    //     ]);
-
-    //     // Create the cart
-    //     $cart = Cart::create([
-    //         'user_id' => auth()->id(), // Ensure the cart is created by the authenticated user
-    //         'customer_id' => $request->customer_id, // Store the customer_id if selected, otherwise it will be null
-    //     ]);
-
-    //     // Redirect to the created cart's details page with success message
-    //     return redirect()->route('admin.carts.show', $cart->id)
-    //                      ->with('success', 'Cart created successfully!');
-    // }
     public function store(Request $request)
     {
         // Validate input
@@ -103,6 +71,38 @@ class CartController extends Controller
         // return redirect()->route('admin.carts.index')->with('success', 'Cart created successfully!');
         // Redirect to the cart's detail page with a success message
         return redirect()->route('seller.carts.index')->with('success', 'Cart created successfully!');
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    // public function store(Request $request)
+    // {
+    //     // Validate input
+    //     $request->validate([
+    //         'customer_id' => 'nullable|exists:customers,id', // Ensure customer_id is valid if provided
+    //     ]);
+
+    //     // Create the cart
+    //     $cart = Cart::create([
+    //         'user_id' => auth()->id(), // Ensure the cart is created by the authenticated user
+    //         'customer_id' => $request->customer_id, // Store the customer_id if selected, otherwise it will be null
+    //     ]);
+
+    //     // Redirect to the created cart's details page with success message
+    //     return redirect()->route('admin.carts.show', $cart->id)
+    //                      ->with('success', 'Cart created successfully!');
+    // }
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        $customers = Customer::all(); // Get all customers
+        $sellers = User::where('role', 'seller')->get(); // assuming sellers have 'seller' role
+
+        return view('seller.carts.create', compact('customers', 'sellers'));
+
     }
 
     /**

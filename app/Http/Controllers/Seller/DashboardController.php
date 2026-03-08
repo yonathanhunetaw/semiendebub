@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Item;
-use App\Models\ItemStock;
+use App\Models\StockKeeper\ItemStock;
 use App\Services\PriceProvider;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;

@@ -2,7 +2,7 @@
 
 namespace Database\Seeders\Store;
 
-use App\Models\Items\Item;
+use App\Models\Item\Item;
 use App\Models\Store\Store;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;

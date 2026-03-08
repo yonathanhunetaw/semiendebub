@@ -2,7 +2,7 @@
 
 namespace Database\Seeders\Admin;
 
-use App\Models\Items\ItemCategory;
+use App\Models\Item\ItemCategory;
 use Illuminate\Database\Seeder;
 
 class ItemCategorySeeder extends Seeder
