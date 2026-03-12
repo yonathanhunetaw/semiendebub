@@ -58,6 +58,9 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # 7. Copy manifest files first (for better caching)
 COPY composer.json composer.lock package.json package-lock.json ./
 
+# Fix Git safety for Docker volume mounts
+RUN git config --global --add safe.directory /var/www/html
+
 # 8. Install dependencies
 RUN composer install --no-interaction --prefer-dist --no-scripts
 RUN npm install

@@ -18,7 +18,7 @@ echo "🚀 Starting Smart Deployment..."
 
 # 2️⃣ Check for Docker-related changes
 # This compares your local code to the incoming Git changes
- DOCKER_CHANGES=$(git diff --name-only HEAD origin/main | grep -E 'docker|Dockerfile|docker-compose|.env' || true)
+ DOCKER_CHANGES=$(git diff --name-only HEAD origin/main | grep -E 'ddocker|Dockerfile|docker-compose|.env' || true)
 
 # 3️⃣ Pull the latest code
  git merge origin main
