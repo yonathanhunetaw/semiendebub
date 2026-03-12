@@ -2,7 +2,7 @@
 
 namespace Database\Seeders\StockKeeper;
 
-use App\Models\Inventory\ItemInventoryLocation;
+use App\Models\StockKeeper\ItemInventoryLocation;
 use App\Models\Store\Store;
 use Illuminate\Database\Seeder;
 
