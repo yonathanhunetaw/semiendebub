@@ -5,7 +5,7 @@ namespace App\Models\Auth;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Models\Seller\Cart;
 use App\Models\Store\Store;
-use Database\Factories\UserFactory;
+use Database\Factories\User\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -15,9 +15,9 @@ class User extends Authenticatable
 {
     use HasFactory, HasRoles, Notifiable;
 
-    // Explicitly set the guard name
     protected $guard_name = 'web';
 
+    // Explicitly set the guard name
     /**
      * The attributes that are mass assignable.
      *
