@@ -69,7 +69,7 @@ COPY . .
 # We move chown to an entrypoint script or do it globally here
 # 10. Set default ownership (build-time)
 RUN mkdir -p storage bootstrap/cache \
-    && chown -R www-data:www-data /var/www/html
+    && chown -R www-data:www-data storage bootstrap/cache
 
 
 # EXPOSE MODIFIED: Added 443 for HTTPS traffic
