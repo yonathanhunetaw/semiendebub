@@ -19,7 +19,7 @@ services:
       - "${APP_PORT}:80"
       - "443:443"
     volumes:
-      - .:/var/www/html:cached
+      - ${APP_CODE_PATH:-.}:/var/www/html:cached
       - node_data:/var/www/html/node_modules
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /etc/letsencrypt/live/mezgebedirijit.com/fullchain.pem:/etc/apache2/ssl/fullchain.pem:ro
