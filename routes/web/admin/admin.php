@@ -38,16 +38,16 @@ Route::domain("admin.{$baseDomain}")
         });
     });
 
-Route::domain('/')
-    ->name('admin.')
-    ->group(function () {
-
-        // Added 'AllowSubdomainLogin' so logged-in users don't see the login form
-        Route::middleware(['auth', 'verified', 'role.subdomain:admin'])->group(function () {
-
-            Route::get('/', function () {
-                return Inertia::render('Admin/Dashboard/index');
-            })->name('dashboard');
-
-        });
-    });
+// Route::domain('/')
+//    ->name('admin.')
+//    ->group(function () {
+//
+//        // Added 'AllowSubdomainLogin' so logged-in users don't see the login form
+//        Route::middleware(['auth', 'verified', 'role.subdomain:admin'])->group(function () {
+//
+//            Route::get('/', function () {
+//                return Inertia::render('Admin/Dashboard/index');
+//            })->name('dashboard');
+//
+//        });
+//    });
