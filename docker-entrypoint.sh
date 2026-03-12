@@ -41,6 +41,13 @@ done
 
 echo "✅ MySQL is ready!"
 
+echo "Installing Composer dependencies..."
+sudo docker compose exec app composer install --no-dev --optimize-autoloader --no-interaction
+
+echo "Compiling frontend assets..."
+sudo docker compose exec app npm ci --no-audit --no-fund
+sudo docker compose exec app npm run build
+
 # --- NEW: Laravel Optimizations ---
 if [ "$APP_ENV" = "production" ]; then
     echo "🚀 Optimizing for Production..."
