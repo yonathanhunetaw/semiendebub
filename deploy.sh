@@ -4,16 +4,17 @@ set -e
 echo "🚀 Starting Smart Deployment..."
 
 # 1️⃣ Fetch changes without merging yet
-git pull origin main
-
-docker compose up -d --build
-
-docker compose exec app composer install --no-dev --optimize-autoloader --no-interaction
-docker compose exec app npm ci --no-audit --no-fund
-docker compose exec app npm run build
-
-docker compose exec app php artisan migrate --force
-docker compose exec app php artisan optimize
+#git pull origin main
+#
+#docker compose build --no-cache
+#docker compose up -d
+#
+#docker compose exec app composer install --no-dev --optimize-autoloader --no-interaction
+#docker compose exec app npm ci --no-audit --no-fund
+#docker compose exec app npm run build
+#
+#docker compose exec app php artisan migrate --force
+#docker compose exec app php artisan optimize
 
 # 2️⃣ Check for Docker-related changes
 # This compares your local code to the incoming Git changes
