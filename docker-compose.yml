@@ -23,9 +23,8 @@ services:
       - node_data:/var/www/html/node_modules
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-      - /etc/letsencrypt/live/mezgebedirijit.com/fullchain.pem:/etc/apache2/ssl/fullchain.pem:ro
-      - /etc/letsencrypt/live/mezgebedirijit.com/privkey.pem:/etc/apache2/ssl/privkey.pem:ro
+      - /etc/ssl/certs/mezgebedirijit-origin.pem:/etc/ssl/certs/mezgebedirijit-origin.pem:ro
+      - /etc/ssl/private/mezgebedirijit-origin.key:/etc/ssl/private/mezgebedirijit-origin.key:ro
       - storage_data:/var/www/html/storage
     depends_on:
       - db
