@@ -48,6 +48,8 @@ echo "MySQL is ready!"
 
 # 4️⃣ Compile frontend assets
 echo "Compiling frontend assets..."
+sudo docker compose exec app composer install --no-dev --optimize-autoloader --no-interaction
+
 sudo docker compose exec app npm ci --no-audit --no-fund
 sudo docker compose exec app npm run build
 
