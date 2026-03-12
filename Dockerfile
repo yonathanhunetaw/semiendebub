@@ -27,9 +27,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
     && apt-get install -y nodejs
 
 # 5. Clean Apache Config (Cloudflare / Proxy Friendly)
+# 5. Clean Apache Config (Cloudflare / Proxy Friendly)
 RUN a2enmod rewrite headers \
-    && sed -i 's|/var/www/html|/var/www/html/public|g' \
-       /etc/apache2/sites-available/000-default.conf
+    && sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf \
+    && sed -i '/DocumentRoot/a ServerName mezgebedirijit.com' /etc/apache2/sites-available/000-default.conf \
+    && sed -i '/ServerName/a ServerAlias *.mezgebedirijit.com' /etc/apache2/sites-available/000-default.conf
 
 # Prepare SSL vhost (disabled by default)
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' \
