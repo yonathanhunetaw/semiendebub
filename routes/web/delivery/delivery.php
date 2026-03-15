@@ -29,6 +29,10 @@ Route::domain("delivery.{$baseDomain}")
                 return Inertia::render('Delivery/Dashboard/index');
             })->name('dashboard');
 
+            Route::get('/delivery', function () {
+                return Inertia::render('Delivery/delivery/index');
+            })->name('shipments.index');
+
             Route::get('/shipments', function () {
                 return Inertia::render('Delivery/Shipments/index');
             })->name('shipments.index');
