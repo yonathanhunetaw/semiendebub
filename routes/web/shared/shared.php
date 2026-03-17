@@ -28,6 +28,10 @@ Route::domain("shared.$baseDomain")
             ];
         });
 
+        Route::get('/debug-middleware', function () {
+            return request()->route()->gatherMiddleware();
+        });
+
         Route::middleware(['auth', 'verified', 'role.subdomain:shared'])->group(function () {
             Route::get('/dashboard', function () {
                 return Inertia::render('Shared/Dashboard/index');
