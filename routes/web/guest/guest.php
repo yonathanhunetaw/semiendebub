@@ -23,41 +23,44 @@ Route::get('/', function () {
     $user = Auth::user();
     $host = request()->getHost();
 
+    $baseDomain = config('app.system_domain'); // mezgebedirijit.com
+    $subdomain = str_replace('.'.$baseDomain, '', $host);
+
     $hostToRole = [
-        'admin.duka.local' => 'admin',
-        'delivery.duka.local' => 'delivery',
-        'dev.duka.local' => 'dev',
-        'finance.duka.local' => 'finance',
-        'guest.duka.local' => 'guest',
-        'marketing.duka.local' => 'marketing',
-        'procurement.duka.local' => 'procurement',
-        'seller.duka.local' => 'seller',
-        'shared.duka.local' => 'shared',
-        'stockkeeper.duka.local' => 'stock_keeper',
-        'vendor.duka.local' => 'vendor',
+        'admin' => 'admin',
+        'delivery' => 'delivery',
+        'dev' => 'dev',
+        'finance' => 'finance',
+        'guest' => 'guest',
+        'marketing' => 'marketing',
+        'procurement' => 'procurement',
+        'seller' => 'seller',
+        'shared' => 'shared',
+        'stockkeeper' => 'stock_keeper',
+        'vendor' => 'vendor',
     ];
 
-    if (isset($hostToRole[$host])) {
+    if (isset($hostToRole[$subdomain])) {
 
-        $expectedRole = $hostToRole[$host];
+        $expectedRole = $hostToRole[$subdomain];
 
         if (! $user || ! $user->hasRole($expectedRole)) {
 
             $hostToWelcome = [
-                'admin.duka.local' => 'Welcome/Admin',
-                'delivery.duka.local' => 'Welcome/Delivery',
-                'dev.duka.local' => 'Welcome/Dev',
-                'finance.duka.local' => 'Welcome/Finance',
-                'guest.duka.local' => 'Welcome/Guest',
-                'marketing.duka.local' => 'Welcome/Marketing',
-                'procurement.duka.local' => 'Welcome/Procurement',
-                'seller.duka.local' => 'Welcome/Seller',
-                'shared.duka.local' => 'Welcome/Shared',
-                'stockkeeper.duka.local' => 'Welcome/StockKeeper',
-                'vendor.duka.local' => 'Welcome/Vendor',
+                'admin' => 'Welcome/Admin',
+                'delivery' => 'Welcome/Delivery',
+                'dev' => 'Welcome/Dev',
+                'finance' => 'Welcome/Finance',
+                'guest' => 'Welcome/Guest',
+                'marketing' => 'Welcome/Marketing',
+                'procurement' => 'Welcome/Procurement',
+                'seller' => 'Welcome/Seller',
+                'shared' => 'Welcome/Shared',
+                'stockkeeper' => 'Welcome/StockKeeper',
+                'vendor' => 'Welcome/Vendor',
             ];
 
-            return Inertia::render($hostToWelcome[$host]);
+            return Inertia::render($hostToWelcome[$subdomain]);
         }
 
         $roleDashboards = [
