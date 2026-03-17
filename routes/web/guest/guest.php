@@ -18,67 +18,69 @@ use Inertia\Inertia;
 //    ]);
 // });
 
-Route::get('/', function () {
+Route::domain(config('app.system_domain'))->group(function () {
+    Route::get('/', function () {
 
-    $user = Auth::user();
-    $host = request()->getHost();
+        $user = Auth::user();
+        $host = request()->getHost();
 
-    $baseDomain = config('app.system_domain'); // mezgebedirijit.com
-    $subdomain = str_replace('.'.$baseDomain, '', $host);
+        $baseDomain = config('app.system_domain'); // mezgebedirijit.com
+        $subdomain = str_replace('.'.$baseDomain, '', $host);
 
-    $hostToRole = [
-        'admin' => 'admin',
-        'delivery' => 'delivery',
-        'dev' => 'dev',
-        'finance' => 'finance',
-        'guest' => 'guest',
-        'marketing' => 'marketing',
-        'procurement' => 'procurement',
-        'seller' => 'seller',
-        'shared' => 'shared',
-        'stockkeeper' => 'stock_keeper',
-        'vendor' => 'vendor',
-    ];
-
-    if (isset($hostToRole[$subdomain])) {
-
-        $expectedRole = $hostToRole[$subdomain];
-
-        if (! $user || ! $user->hasRole($expectedRole)) {
-
-            $hostToWelcome = [
-                'admin' => 'Welcome/Admin',
-                'delivery' => 'Welcome/Delivery',
-                'dev' => 'Welcome/Dev',
-                'finance' => 'Welcome/Finance',
-                'guest' => 'Welcome/Guest',
-                'marketing' => 'Welcome/Marketing',
-                'procurement' => 'Welcome/Procurement',
-                'seller' => 'Welcome/Seller',
-                'shared' => 'Welcome/Shared',
-                'stockkeeper' => 'Welcome/StockKeeper',
-                'vendor' => 'Welcome/Vendor',
-            ];
-
-            return Inertia::render($hostToWelcome[$subdomain]);
-        }
-
-        $roleDashboards = [
-            'admin' => 'admin.dashboard',
-            'delivery' => 'delivery.dashboard',
-            'finance' => 'finance.dashboard',
-            'marketing' => 'marketing.dashboard',
-            'procurement' => 'procurement.dashboard',
-            'seller' => 'seller.dashboard',
-            'shared' => 'shared.dashboard',
-            'stock_keeper' => 'stock_keeper.dashboard',
-            'vendor' => 'vendor.dashboard',
+        $hostToRole = [
+            'admin' => 'admin',
+            'delivery' => 'delivery',
+            'dev' => 'dev',
+            'finance' => 'finance',
+            'guest' => 'guest',
+            'marketing' => 'marketing',
+            'procurement' => 'procurement',
+            'seller' => 'seller',
+            'shared' => 'shared',
+            'stockkeeper' => 'stock_keeper',
+            'vendor' => 'vendor',
         ];
 
-        return redirect()->route($roleDashboards[$expectedRole]);
-    }
+        if (isset($hostToRole[$subdomain])) {
 
-    return Inertia::render('Guest/Welcome');
+            $expectedRole = $hostToRole[$subdomain];
+
+            if (! $user || ! $user->hasRole($expectedRole)) {
+
+                $hostToWelcome = [
+                    'admin' => 'Welcome/Admin',
+                    'delivery' => 'Welcome/Delivery',
+                    'dev' => 'Welcome/Dev',
+                    'finance' => 'Welcome/Finance',
+                    'guest' => 'Welcome/Guest',
+                    'marketing' => 'Welcome/Marketing',
+                    'procurement' => 'Welcome/Procurement',
+                    'seller' => 'Welcome/Seller',
+                    'shared' => 'Welcome/Shared',
+                    'stockkeeper' => 'Welcome/StockKeeper',
+                    'vendor' => 'Welcome/Vendor',
+                ];
+
+                return Inertia::render($hostToWelcome[$subdomain]);
+            }
+
+            $roleDashboards = [
+                'admin' => 'admin.dashboard',
+                'delivery' => 'delivery.dashboard',
+                'finance' => 'finance.dashboard',
+                'marketing' => 'marketing.dashboard',
+                'procurement' => 'procurement.dashboard',
+                'seller' => 'seller.dashboard',
+                'shared' => 'shared.dashboard',
+                'stock_keeper' => 'stock_keeper.dashboard',
+                'vendor' => 'vendor.dashboard',
+            ];
+
+            return redirect()->route($roleDashboards[$expectedRole]);
+        }
+
+        return Inertia::render('Guest/Welcome');
+    });
 });
 
 Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
