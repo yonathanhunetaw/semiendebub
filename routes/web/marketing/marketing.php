@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\SessionController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -29,5 +30,10 @@ Route::domain("marketing.$baseDomain")
             Route::get('/campaigns', function () {
                 return Inertia::render('Marketing/Campaigns/index');
             })->name('campaigns.index');
+
+            Route::prefix('sessions')->group(function () {
+                Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
+                Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
+            });
         });
     });
