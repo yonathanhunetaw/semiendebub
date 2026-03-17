@@ -50,8 +50,7 @@ require __DIR__.'/web/marketing/marketing.php';                 // ['auth', 'ver
 
 require __DIR__.'/web/procurement/procurement.php';             // ['auth', 'verified', 'check_role:Procurement']
 
-/*-------------------------------------------------------------------------------------------------------------
-| SELLER -> routes/web/seller/seller.php
+/*--------------------------------------a
 |-------------------------------------------------------------------------------------------------------------*/
 
 require __DIR__.'/web/seller/seller.php';                        // ['auth', 'verified', 'check_role:Seller']

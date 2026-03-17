@@ -12,7 +12,7 @@ Route::domain("seller.$baseDomain")
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
             Route::get('/', function () {
-                return Inertia::render('Seller/Welcome/index');
+                return Inertia::render('Welcome/Seller');
             })->name('welcome');
 
             Route::get('/login', function () {
