@@ -12,9 +12,8 @@ Route::domain("stockkeeper.{$baseDomain}")
 
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
-            // Added a root route so typing the domain doesn't 404
             Route::get('/', function () {
-                return Inertia::render('StockKeeper/Welcome/index');
+                return Inertia::render('Welcome/StockKeeper');
             })->name('welcome');
 
             Route::get('/login', function () {

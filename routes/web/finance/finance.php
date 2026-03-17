@@ -14,7 +14,7 @@ Route::domain("finance.{$baseDomain}")
 
             // Added a root route so typing the domain doesn't 404
             Route::get('/', function () {
-                return Inertia::render('Finance/Welcome/index');
+                return Inertia::render('Welcome/Finance');
             })->name('welcome');
 
             Route::get('/login', function () {

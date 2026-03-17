@@ -1,22 +1,19 @@
 <?php
 
-// Empty for now, placeholder for Vendor pages
-
 use App\Http\Controllers\Stockkeeper\MenuController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 $baseDomain = config('app.system_domain', 'duka.local');
 
-Route::domain("vendor.{$baseDomain}")
+Route::domain("vendor.$baseDomain")
     ->name('vendor.')
     ->group(function () {
 
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
-            // Added a root route so typing the domain doesn't 404
             Route::get('/', function () {
-                return Inertia::render('Vendor/Welcome/index');
+                return Inertia::render('Welcome/Vendor');
             })->name('welcome');
 
             Route::get('/login', function () {

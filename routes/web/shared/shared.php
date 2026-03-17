@@ -6,14 +6,14 @@ use Inertia\Inertia;
 
 $baseDomain = config('app.system_domain', 'duka.local');
 
-Route::domain('shared.duka.local')
+Route::domain("shared.$baseDomain")
     ->name('shared.')
     ->group(function () {
 
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
             Route::get('/', function () {
-                return Inertia::render('Shared/Welcome/index');
+                return Inertia::render('Welcome/Shared');
             })->name('welcome');
 
             Route::get('/login', function () {

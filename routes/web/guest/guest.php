@@ -26,15 +26,15 @@ Route::get('/', function () {
     $hostToRole = [
         'admin.duka.local' => 'admin',
         'delivery.duka.local' => 'delivery',
-        'seller.duka.local' => 'seller',
-        'stock.duka.local' => 'stock_keeper',
+        'dev.duka.local' => 'dev',
         'finance.duka.local' => 'finance',
+        'guest.duka.local' => 'guest',
         'marketing.duka.local' => 'marketing',
         'procurement.duka.local' => 'procurement',
+        'seller.duka.local' => 'seller',
         'shared.duka.local' => 'shared',
+        'stockkeeper.duka.local' => 'stock_keeper',
         'vendor.duka.local' => 'vendor',
-        'guest.duka.local' => 'guest',
-        'dev.duka.local' => 'dev',
     ];
 
     if (isset($hostToRole[$host])) {
@@ -46,15 +46,15 @@ Route::get('/', function () {
             $hostToWelcome = [
                 'admin.duka.local' => 'Welcome/Admin',
                 'delivery.duka.local' => 'Welcome/Delivery',
-                'seller.duka.local' => 'Welcome/Seller',
-                'stock.duka.local' => 'Welcome/StockKeeper',
+                'dev.duka.local' => 'Welcome/Dev',
                 'finance.duka.local' => 'Welcome/Finance',
+                'guest.duka.local' => 'Welcome/Guest',
                 'marketing.duka.local' => 'Welcome/Marketing',
                 'procurement.duka.local' => 'Welcome/Procurement',
+                'seller.duka.local' => 'Welcome/Seller',
                 'shared.duka.local' => 'Welcome/Shared',
+                'stockkeeper.duka.local' => 'Welcome/StockKeeper',
                 'vendor.duka.local' => 'Welcome/Vendor',
-                'guest.duka.local' => 'Welcome/Guest',
-                'dev.duka.local' => 'Welcome/Dev',
             ];
 
             return Inertia::render($hostToWelcome[$host]);
@@ -63,12 +63,12 @@ Route::get('/', function () {
         $roleDashboards = [
             'admin' => 'admin.dashboard',
             'delivery' => 'delivery.dashboard',
-            'seller' => 'seller.dashboard',
-            'stock_keeper' => 'stock_keeper.dashboard',
             'finance' => 'finance.dashboard',
             'marketing' => 'marketing.dashboard',
             'procurement' => 'procurement.dashboard',
+            'seller' => 'seller.dashboard',
             'shared' => 'shared.dashboard',
+            'stock_keeper' => 'stock_keeper.dashboard',
             'vendor' => 'vendor.dashboard',
         ];
 
