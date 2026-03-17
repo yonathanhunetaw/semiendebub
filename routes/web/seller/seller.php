@@ -5,13 +5,12 @@ use Inertia\Inertia;
 
 $baseDomain = config('app.system_domain', 'duka.local');
 
-Route::domain("seller.{$baseDomain}")
+Route::domain("seller.$baseDomain")
     ->name('seller.')
     ->group(function () {
 
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
-            // Added a root route so typing the domain doesn't 404
             Route::get('/', function () {
                 return Inertia::render('Seller/Welcome/index');
             })->name('welcome');
