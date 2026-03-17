@@ -31,15 +31,15 @@ class AllowSubdomainLogin
         $hostToRole = [
             "admin.{$baseDomain}" => 'admin',
             "delivery.{$baseDomain}" => 'delivery',
-            "seller.{$baseDomain}" => 'seller',
-            "stock.{$baseDomain}" => 'stock_keeper',
+            "dev.{$baseDomain}" => 'dev',
             "finance.{$baseDomain}" => 'finance',
+            "guest.{$baseDomain}" => 'guest',
             "marketing.{$baseDomain}" => 'marketing',
             "procurement.{$baseDomain}" => 'procurement',
-            'shared.{$baseDomain}' => 'shared',
-            'vendor.{$baseDomain}' => 'vendor',
-            'guest.{$baseDomain}' => 'guest',
-            'dev.{$baseDomain}' => 'dev',
+            "seller.{$baseDomain}" => 'seller',
+            "shared.{$baseDomain}" => 'shared',
+            "stockkeeper.{$baseDomain}" => 'stock_keeper',
+            "vendor.{$baseDomain}" => 'vendor',
         ];
 
         $host = $request->getHost();
