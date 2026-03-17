@@ -1,7 +1,17 @@
 import Layout from '@/Layouts/Layout'
 import {Head, Link} from '@inertiajs/react'
+import {route} from 'ziggy-js'
 
-export default function Index({auth}) {
+type Props = {
+    auth?: {
+        user?: {
+            id: number
+            name: string
+            email: string
+        }
+    }
+}
+export default function Index({auth}: Props) {
     return (
         <Layout>
             <Head title="Welcome to Duka"/>

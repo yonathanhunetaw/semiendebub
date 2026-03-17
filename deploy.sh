@@ -18,10 +18,10 @@ echo "🚀 Starting Smart Deployment..."
 
 # 2️⃣ Check for Docker-related changes
 # This compares your local code to the incoming Git changes
- DOCKER_CHANGES=$(git diff --name-only HEAD origin/main | grep -E 'ddocker|Dockerfile|docker-compose|.env' || true)
+ DOCKER_CHANGES=$(git diff --name-only HEAD@{1} HEAD | grep -E 'Dockerfile|docker-compose|.env' || true)
 
 # 3️⃣ Pull the latest code
- git merge origin main
+# git merge origin main
 
 if [ -n "$DOCKER_CHANGES" ]; then
     echo "⚙️ Docker changes detected. Running Deep Build..."
@@ -30,7 +30,7 @@ if [ -n "$DOCKER_CHANGES" ]; then
     sudo docker compose up -d
 else
     echo "🏃 No Docker changes. Fast-tracking deployment..."
-    sudo docker compose up -d --build app
+    sudo docker compose up -d
 fi
 
 # 4️⃣ Wait for MySQL
@@ -50,8 +50,14 @@ echo "MySQL is ready!"
 echo "Compiling frontend assets..."
 sudo docker compose exec app composer install --no-dev --optimize-autoloader --no-interaction
 
-sudo docker compose exec app npm ci --no-audit --no-fund
-sudo docker compose exec app npm run build
+# Only build frontend if package.json changed
+if git diff --name-only HEAD@{1} HEAD | grep -q "package.json"; then
+    echo "Frontend changes detected..."
+    sudo docker compose exec app npm ci --no-audit --no-fund
+    sudo docker compose exec app npm run build
+else
+    echo "Skipping frontend build (no changes)"
+fi
 
 # 5️⃣ Run Laravel migrations and seed
 echo "Running migrations..."
