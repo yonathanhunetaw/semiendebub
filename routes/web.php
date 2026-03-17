@@ -39,12 +39,6 @@ require __DIR__.'/web/errors/error.php';
 require __DIR__.'/web/finance/finance.php';                    // ['auth', 'verified', 'check_role:Finance']
 
 /*-------------------------------------------------------------------------------------------------------------
-| GUEST -> routes/web/guest/guest.php
-|-------------------------------------------------------------------------------------------------------------*/
-
-require __DIR__.'/web/guest/guest.php';
-
-/*-------------------------------------------------------------------------------------------------------------
 | MARKETING -> routes/web/marketing/marketing.php
 |-------------------------------------------------------------------------------------------------------------*/
 
@@ -80,6 +74,11 @@ require __DIR__.'/web/stockkeeper/stockkeeper.php';              // ['auth', 've
 
 require __DIR__.'/web/vendor/vendor.php';                        // ['auth', 'verified', 'check_role:Vendor']
 
+/*-------------------------------------------------------------------------------------------------------------
+| GUEST -> routes/web/guest/guest.php
+|-------------------------------------------------------------------------------------------------------------*/
+
+require __DIR__.'/web/guest/guest.php';
 //
 // use App\Http\Controllers\Admin\ItemController;
 // use App\Http\Controllers\Admin\LessonController;
