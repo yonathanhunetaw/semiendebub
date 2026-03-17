@@ -36,10 +36,10 @@ class AllowSubdomainLogin
             "finance.{$baseDomain}" => 'finance',
             "marketing.{$baseDomain}" => 'marketing',
             "procurement.{$baseDomain}" => 'procurement',
-            'shared.duka.local' => 'shared',
-            'vendor.duka.local' => 'vendor',
-            'guest.duka.local' => 'guest',
-            'dev.duka.local' => 'dev',
+            'shared.{$baseDomain}' => 'shared',
+            'vendor.{$baseDomain}' => 'vendor',
+            'guest.{$baseDomain}' => 'guest',
+            'dev.{$baseDomain}' => 'dev',
         ];
 
         $host = $request->getHost();
