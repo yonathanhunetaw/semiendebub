@@ -11,7 +11,7 @@ Route::domain("admin.{$baseDomain}")
     ->name('admin.')
     ->group(function () {
 
-        // Added 'Allow Subdomain Login' so logged-in users don't see the login form
+        // Added 'Allow Subdomain  Login' so logged-in users don't see the login form
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
             Route::get('/', function () {
