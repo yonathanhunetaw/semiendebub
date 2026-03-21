@@ -56,9 +56,14 @@ echo "⚙️ Handling frontend based on environment..."
 if [ "$APP_ENV" = "production" ]; then
     echo "🚀 Production mode: building assets..."
 
-    if git diff --name-only HEAD@{1} HEAD | grep -q "package.json"; then
-        sudo docker compose exec app npm ci --no-audit --no-fund
+    echo "📦 Ensuring Node dependencies exist..."
+
+    sudo docker compose exec app sh -c "
+    if [ ! -f node_modules/.bin/vite ]; then
+        echo 'Installing dependencies...'
+        npm ci --no-audit --no-fund
     fi
+    "
 
     sudo docker compose exec app npm run build
 
