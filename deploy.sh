@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
-
-APP_ENV=$(sudo docker compose exec app printenv APP_ENV | tr -d '\r')
+APP_ENV=$(grep APP_ENV .env | cut -d '=' -f2)
 echo "Detected environment: $APP_ENV"
 
 echo "🚀 Starting Smart Deployment..."
@@ -67,13 +66,13 @@ echo "⚙️ Handling frontend based on environment..."
 if [ "$APP_ENV" = "production" ]; then
     echo "🚀 Production mode: building assets..."
 
-    sudo docker compose exec app sh -c "
-    if [ ! -f node_modules/.bin/vite ]; then
-        npm ci --no-audit --no-fund
-    fi
-    "
+    echo "📦 Installing Node dependencies..."
+    sudo docker compose exec app rm -rf node_modules package-lock.json
+    sudo docker compose exec app npm ci --no-audit --no-fund
 
+    echo "🏗️ Building assets..."
     sudo docker compose exec app npm run build
+
 else
     echo "🧪 Dev mode: starting Vite dev server..."
 
