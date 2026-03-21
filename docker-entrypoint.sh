@@ -68,14 +68,4 @@ else
     echo "🌐 Running HTTP only"
 fi
 
-# 🔥 DEV ONLY
-if [ "$APP_ENV" != "production" ]; then
-    echo "🧪 Starting Vite dev server..."
-
-    npm install
-    npm run dev -- --host &
-
-    echo "http://duka.local:5177" > public/hot
-fi
-
 exec apache2-foreground
