@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+APP_ENV=$(sudo docker compose exec app printenv APP_ENV | tr -d '\r')
+echo "Detected environment: $APP_ENV"
+
 echo "🚀 Starting Smart Deployment..."
 
 # 1️⃣ Fetch changes without merging yet
