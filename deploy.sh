@@ -51,7 +51,15 @@ echo "MySQL is ready!"
 
 # 4️⃣ Compile frontend assets
 echo "Compiling frontend assets..."
-sudo docker compose exec app composer install --no-dev --optimize-autoloader --no-interaction
+echo "📦 Installing PHP dependencies..."
+
+if [ "$APP_ENV" = "production" ]; then
+    echo "🚀 Production dependencies (no-dev)..."
+    sudo docker compose exec app composer install --no-dev --optimize-autoloader --no-interaction
+else
+    echo "🧪 Dev dependencies..."
+    sudo docker compose exec app composer install --optimize-autoloader --no-interaction
+fi
 
 # Only build frontend if package.json changed
 echo "⚙️ Handling frontend based on environment..."
