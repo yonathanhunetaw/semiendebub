@@ -68,4 +68,12 @@ else
     echo "🌐 Running HTTP only"
 fi
 
+# 🔥 START VITE ONLY IN DEV
+if [ "$APP_ENV" != "production" ]; then
+    echo "🧪 Starting Vite dev server inside container..."
+    npm install
+    npm run dev -- --host &
+fi
+
+# Start Apache
 exec apache2-foreground

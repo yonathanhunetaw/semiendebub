@@ -18,7 +18,7 @@ echo "🚀 Starting Smart Deployment..."
 
 # 2️⃣ Check for Docker-related changes
 # This compares your local code to the incoming Git changes
- DOCKER_CHANGES=$(git diff --name-only HEAD@{1} HEAD | grep -E 'Dockerfile|docker-compose|.env' || true)
+ DOCKER_CHANGES=$(git diff --name-only HEAD@{1} HEAD | grep -E 'Dockerfile|docker-compose' || true)
 
 # 3️⃣ Pull the latest code
 # git merge origin main
@@ -51,12 +51,21 @@ echo "Compiling frontend assets..."
 sudo docker compose exec app composer install --no-dev --optimize-autoloader --no-interaction
 
 # Only build frontend if package.json changed
-if git diff --name-only HEAD@{1} HEAD | grep -q "package.json"; then
-    echo "Frontend changes detected..."
-    sudo docker compose exec app npm ci --no-audit --no-fund
+echo "⚙️ Handling frontend based on environment..."
+
+if [ "$APP_ENV" = "production" ]; then
+    echo "🚀 Production mode: building assets..."
+
+    if git diff --name-only HEAD@{1} HEAD | grep -q "package.json"; then
+        sudo docker compose exec app npm ci --no-audit --no-fund
+    fi
+
     sudo docker compose exec app npm run build
+
 else
-    echo "Skipping frontend build (no changes)"
+    echo "🧪 Dev mode: starting Vite dev server..."
+
+    sudo docker compose exec -d app npm run dev -- --host
 fi
 
 # 5️⃣ Run Laravel migrations and seed

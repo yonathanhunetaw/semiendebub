@@ -15,7 +15,7 @@ Route::domain("admin.{$baseDomain}")
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
             Route::get('/', function () {
-                return Inertia::render('Admin/Welcome/index');
+                return Inertia::render('Welcome/index');
             })->name('welcome');
 
             Route::get('/login', function () {
