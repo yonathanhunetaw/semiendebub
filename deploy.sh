@@ -172,10 +172,10 @@ else
     node_changes=$(find "${NODE_FILES[@]}" -maxdepth 0 -type f 2>/dev/null || true)
 fi
 
-echo "Starting containers..."
-compose up -d
-
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
+    echo "Starting application database..."
+    compose up -d db
+
     echo "Starting observability services..."
     compose up -d lgtm glitchtip-postgres glitchtip-redis
 
@@ -199,6 +199,10 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
         ./manage.py shell -c "import os; from django.contrib.auth import get_user_model; User = get_user_model(); name = os.environ['DJANGO_SUPERUSER_USERNAME']; email = os.environ['DJANGO_SUPERUSER_EMAIL']; password = os.environ['DJANGO_SUPERUSER_PASSWORD']; exists = User.objects.filter(email=email).exists(); None if exists else User.objects.create_superuser(email=email, password=password, name=name)"
 
     compose up -d glitchtip-web glitchtip-worker
+    compose up -d app
+else
+    echo "Starting containers..."
+    compose up -d
 fi
 
 if [ "$APP_ENV" = "production" ]; then
