@@ -1,0 +1,107 @@
+x-loki-logging: &loki-logging
+  driver: loki
+  options:
+    loki-url: "${LOKI_PUSH_URL:-http://127.0.0.1:3100/loki/api/v1/push}"
+    loki-batch-size: "400"
+    loki-retries: "5"
+    loki-timeout: "1s"
+    keep-file: "true"
+    max-size: "50m"
+    max-file: "3"
+    labels: "compose_project={{.ComposeProject}},service={{.Name}},container={{.Name}}"
+
+services:
+  app:
+    environment:
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-duka-app}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://lgtm:4318}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+      LOG_CHANNEL: ${LOG_CHANNEL:-stack}
+      LOG_STACK: ${LOG_STACK:-single,stderr_json}
+      GLITCHTIP_DSN: ${GLITCHTIP_DSN:-}
+      GLITCHTIP_ENVIRONMENT: ${GLITCHTIP_ENVIRONMENT:-${APP_ENV:-local}}
+      GLITCHTIP_RELEASE: ${GLITCHTIP_RELEASE:-}
+    depends_on:
+      - lgtm
+      - glitchtip-web
+    logging: *loki-logging
+
+  db:
+    logging: *loki-logging
+
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: Duka_lgtm
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "3100:3100"
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+      - "9090:9090"
+    volumes:
+      - lgtm_data:/data
+    networks:
+      - duka-network
+
+  glitchtip-postgres:
+    image: postgres:16-alpine
+    container_name: Duka_glitchtip_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${GLITCHTIP_DB_NAME:-glitchtip}
+      POSTGRES_USER: ${GLITCHTIP_DB_USER:-glitchtip}
+      POSTGRES_PASSWORD: ${GLITCHTIP_DB_PASSWORD:-glitchtip}
+    volumes:
+      - glitchtip_postgres_data:/var/lib/postgresql/data
+    networks:
+      - duka-network
+    logging: *loki-logging
+
+  glitchtip-redis:
+    image: redis:7-alpine
+    container_name: Duka_glitchtip_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - glitchtip_redis_data:/data
+    networks:
+      - duka-network
+    logging: *loki-logging
+
+  glitchtip-web:
+    image: glitchtip/glitchtip:latest
+    container_name: Duka_glitchtip
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${GLITCHTIP_DB_USER:-glitchtip}:${GLITCHTIP_DB_PASSWORD:-glitchtip}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME:-glitchtip}
+      REDIS_URL: redis://glitchtip-redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:-change-this-secret}
+      PORT: 8000
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8080}
+      DEFAULT_FROM_EMAIL: ${GLITCHTIP_DEFAULT_FROM_EMAIL:-glitchtip@example.com}
+      EMAIL_URL: ${GLITCHTIP_EMAIL_URL:-consolemail://}
+      ENABLE_OPEN_USER_REGISTRATION: ${GLITCHTIP_ENABLE_OPEN_USER_REGISTRATION:-False}
+      DJANGO_SUPERUSER_USERNAME: ${GLITCHTIP_ADMIN_USERNAME:-admin}
+      DJANGO_SUPERUSER_EMAIL: ${GLITCHTIP_ADMIN_EMAIL:-admin@example.com}
+      DJANGO_SUPERUSER_PASSWORD: ${GLITCHTIP_ADMIN_PASSWORD:-change-this-password}
+    depends_on:
+      - glitchtip-postgres
+      - glitchtip-redis
+    ports:
+      - "8080:8000"
+    volumes:
+      - glitchtip_uploads:/code/uploads
+    networks:
+      - duka-network
+    logging: *loki-logging
+
+volumes:
+  lgtm_data:
+  glitchtip_postgres_data:
+  glitchtip_redis_data:
+  glitchtip_uploads:
