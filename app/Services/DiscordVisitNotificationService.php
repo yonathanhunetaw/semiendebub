@@ -16,10 +16,21 @@ class DiscordVisitNotificationService
     public function notify(Request $request): void
     {
         if ($request->user()) {
+            Log::channel('observability')->debug('Visit notification skipped for authenticated user', [
+                'host' => $request->getHost(),
+                'path' => '/'.ltrim($request->path(), '/'),
+            ]);
+
             return;
         }
 
         if (! $request->isMethod('GET') || ! $request->acceptsHtml()) {
+            Log::channel('observability')->debug('Visit notification skipped for non-HTML or non-GET request', [
+                'method' => $request->method(),
+                'host' => $request->getHost(),
+                'path' => '/'.ltrim($request->path(), '/'),
+            ]);
+
             return;
         }
 
@@ -73,11 +84,19 @@ class DiscordVisitNotificationService
         $webhookUrl = config('services.discord.visit_webhook_url');
 
         if (! $webhookUrl) {
+            Log::channel('observability')->warning('Visit webhook missing; skipping frequent visit alert');
+
             return;
         }
 
         // Suppress repeat alerts for the same IP + host + path for 10 minutes.
         if (! Cache::add($cacheKey, true, now()->addMinutes(10))) {
+            Log::channel('observability')->debug('Frequent visit alert throttled', [
+                'host' => $host,
+                'path' => $path,
+                'ip' => $ip,
+            ]);
+
             return;
         }
 
@@ -96,6 +115,13 @@ class DiscordVisitNotificationService
                 'timestamp' => now()->toIso8601String(),
             ]],
         ]);
+
+        Log::channel('observability')->info('Frequent visit alert sent', [
+            'host' => $host,
+            'path' => $path,
+            'ip' => $ip,
+            'location' => $location,
+        ]);
     }
 
     private function recordDailyVisit(string $host, string $path, string $ip, string $location, Request $request): void
@@ -103,6 +129,8 @@ class DiscordVisitNotificationService
         $dailyWebhookUrl = config('services.discord.daily_visit_webhook_url');
 
         if (! $dailyWebhookUrl) {
+            Log::channel('observability')->warning('Daily visit webhook missing; skipping daily visit buffering');
+
             return;
         }
 
@@ -130,6 +158,8 @@ class DiscordVisitNotificationService
         $dailyWebhookUrl = config('services.discord.daily_visit_webhook_url');
 
         if (! $dailyWebhookUrl) {
+            Log::channel('observability')->warning('Daily visit webhook missing; skipping daily digest send');
+
             return;
         }
 
@@ -199,6 +229,10 @@ class DiscordVisitNotificationService
                 'footer' => ['text' => config('app.name').' Daily Visit Monitoring'],
                 'timestamp' => now()->toIso8601String(),
             ]],
+        ]);
+
+        Log::channel('observability')->info('Daily visit digest sent', [
+            'visit_count' => count($visits),
         ]);
 
         Cache::put(self::DAILY_DIGEST_SENT_AT_KEY, now()->toIso8601String(), now()->addDays(2));
