@@ -191,7 +191,12 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     compose run --rm glitchtip-web ./manage.py migrate
 
     echo "Ensuring GlitchTip admin user exists..."
-    compose run --rm glitchtip-web ./manage.py createsuperuser --noinput || true
+    compose run --rm \
+        -e DJANGO_SUPERUSER_USERNAME="${GLITCHTIP_ADMIN_USERNAME:-admin}" \
+        -e DJANGO_SUPERUSER_EMAIL="${GLITCHTIP_ADMIN_EMAIL:-admin@example.com}" \
+        -e DJANGO_SUPERUSER_PASSWORD="${GLITCHTIP_ADMIN_PASSWORD:-change-this-password}" \
+        glitchtip-web \
+        python -c "import os; from django.contrib.auth import get_user_model; User = get_user_model(); username = os.environ['DJANGO_SUPERUSER_USERNAME']; email = os.environ['DJANGO_SUPERUSER_EMAIL']; password = os.environ['DJANGO_SUPERUSER_PASSWORD']; exists = User.objects.filter(username=username).exists(); None if exists else User.objects.create_superuser(username=username, email=email, password=password)"
 
     compose up -d glitchtip-web glitchtip-worker
 fi
