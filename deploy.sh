@@ -28,6 +28,25 @@ DOCKER_FILES=(
     docker-entrypoint.sh
 )
 
+APP_BUILD_FILES=(
+    app
+    bootstrap
+    config
+    public
+    resources
+    routes
+    artisan
+    composer.json
+    composer.lock
+    package.json
+    package-lock.json
+    vite.config.js
+    tsconfig.json
+    jsconfig.json
+    tailwind.config.js
+    postcss.config.js
+)
+
 NODE_FILES=(
     package.json
     package-lock.json
@@ -63,6 +82,7 @@ echo "FORCE_BUILD=$FORCE_BUILD"
 echo "Starting deployment..."
 
 docker_changes=""
+app_build_changes=""
 node_changes=""
 
 if [ "$FORCE_BUILD" = "1" ]; then
@@ -75,12 +95,24 @@ else
     docker_changes=$(find "${DOCKER_FILES[@]}" -maxdepth 0 -type f 2>/dev/null || true)
 fi
 
-if [ "$APP_ENV" = "production" ]; then
-    echo "Production deploy: rebuilding app image to include latest application code..."
+if [ "$FORCE_BUILD" = "1" ]; then
+    app_build_changes="forced"
+elif git rev-parse --verify HEAD >/dev/null 2>&1; then
+    tracked_app_changes=$(git diff --name-only HEAD -- "${APP_BUILD_FILES[@]}" || true)
+    untracked_app_changes=$(git ls-files --others --exclude-standard -- "${APP_BUILD_FILES[@]}" || true)
+    app_build_changes="${tracked_app_changes}${untracked_app_changes}"
+else
+    app_build_changes=$(find "${APP_BUILD_FILES[@]}" -maxdepth 0 2>/dev/null || true)
+fi
+
+if [ "$APP_ENV" = "production" ] && [ -n "$app_build_changes" ]; then
+    echo "Production code/config changes detected. Rebuilding app image..."
     compose build --no-cache app
     echo "Cleaning Docker build cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -f >/dev/null 2>&1 || true
+elif [ "$APP_ENV" = "production" ]; then
+    echo "No production code/config changes detected. Skipping image rebuild."
 elif [ -n "$docker_changes" ]; then
     echo "Docker-related changes detected. Rebuilding app image..."
     compose build --no-cache app
