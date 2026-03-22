@@ -75,7 +75,13 @@ else
     docker_changes=$(find "${DOCKER_FILES[@]}" -maxdepth 0 -type f 2>/dev/null || true)
 fi
 
-if [ -n "$docker_changes" ]; then
+if [ "$APP_ENV" = "production" ]; then
+    echo "Production deploy: rebuilding app image to include latest application code..."
+    compose build --no-cache app
+    echo "Cleaning Docker build cache..."
+    docker_raw builder prune -af >/dev/null 2>&1 || true
+    docker_raw image prune -f >/dev/null 2>&1 || true
+elif [ -n "$docker_changes" ]; then
     echo "Docker-related changes detected. Rebuilding app image..."
     compose build --no-cache app
     echo "Cleaning Docker build cache..."
