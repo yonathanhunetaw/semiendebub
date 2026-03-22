@@ -17,6 +17,16 @@ if [ -z "${APP_ENV:-}" ]; then
 fi
 
 RESET_DB="${RESET_DB:-0}"
+FORCE_BUILD="${FORCE_BUILD:-0}"
+
+DOCKER_FILES=(
+    Dockerfile
+    Dockerfile.dev
+    docker-compose.yml
+    docker-compose.dev.yml
+    docker-compose.prod.yml
+    docker-entrypoint.sh
+)
 
 if [ "$APP_ENV" = "production" ]; then
     COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
@@ -34,16 +44,40 @@ compose() {
     "${DOCKER_CMD[@]}" compose "${COMPOSE_FILES[@]}" "$@"
 }
 
+docker_raw() {
+    "${DOCKER_CMD[@]}" "$@"
+}
+
 exec_in_app() {
     compose exec -T app "$@"
 }
 
 echo "Detected environment: $APP_ENV"
 echo "RESET_DB=$RESET_DB"
+echo "FORCE_BUILD=$FORCE_BUILD"
 echo "Starting deployment..."
 
-echo "Building app image..."
-compose build app
+docker_changes=""
+
+if [ "$FORCE_BUILD" = "1" ]; then
+    docker_changes="forced"
+elif git rev-parse --verify HEAD >/dev/null 2>&1; then
+    tracked_changes=$(git diff --name-only HEAD -- "${DOCKER_FILES[@]}" || true)
+    untracked_changes=$(git ls-files --others --exclude-standard -- "${DOCKER_FILES[@]}" || true)
+    docker_changes="${tracked_changes}${untracked_changes}"
+else
+    docker_changes=$(find "${DOCKER_FILES[@]}" -maxdepth 0 -type f 2>/dev/null || true)
+fi
+
+if [ -n "$docker_changes" ]; then
+    echo "Docker-related changes detected. Rebuilding app image..."
+    compose build --no-cache app
+    echo "Cleaning Docker build cache..."
+    docker_raw builder prune -af >/dev/null 2>&1 || true
+    docker_raw image prune -f >/dev/null 2>&1 || true
+else
+    echo "No Docker-related changes detected. Skipping image rebuild."
+fi
 
 echo "Starting containers..."
 compose up -d
@@ -70,14 +104,24 @@ echo "Handling frontend..."
 if [ "$APP_ENV" = "production" ]; then
     echo "Building production assets..."
     exec_in_app rm -f public/hot
-    exec_in_app npm ci --no-audit --no-fund
+    if ! exec_in_app test -x node_modules/.bin/vite; then
+        echo "Installing Node dependencies..."
+        exec_in_app npm ci --no-audit --no-fund
+    fi
     exec_in_app npm run build
 else
     echo "Starting Vite dev server..."
     exec_in_app rm -rf public/build
-    exec_in_app npm ci --no-audit --no-fund
-    exec_in_app sh -lc 'pkill -f "vite --host" || true'
-    compose exec -d app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
+    if ! exec_in_app test -x node_modules/.bin/vite; then
+        echo "Installing Node dependencies..."
+        exec_in_app npm ci --no-audit --no-fund
+    fi
+    if exec_in_app sh -lc 'curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1'; then
+        echo "Vite is already running."
+    else
+        echo "Launching Vite..."
+        compose exec -d app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
+    fi
 
     echo "Waiting for Vite..."
     if ! exec_in_app sh -lc '
