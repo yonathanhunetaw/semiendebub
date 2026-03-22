@@ -108,42 +108,12 @@ class AuthenticatedSessionController extends Controller
 
     private function expectedRoleForHost(string $host): ?string
     {
-        $hostToRole = [
-            'admin.duka.local' => 'admin',
-            'delivery.duka.local' => 'delivery',
-            'dev.duka.local' => 'dev',
-            'finance.duka.local' => 'finance',
-            'guest.duka.local' => 'guest',
-            'marketing.duka.local' => 'marketing',
-            'procurement.duka.local' => 'procurement',
-            'seller.duka.local' => 'seller',
-            'shared.duka.local' => 'shared',
-            'stock.duka.local' => 'stock_keeper',
-            'stockkeeper.duka.local' => 'stock_keeper',
-            'vendor.duka.local' => 'vendor',
-        ];
-
-        return $hostToRole[$host] ?? null;
+        return config("subdomains.host_role_map.{$host}");
     }
 
     private function loginComponentForHost(string $host): string
     {
-        $hostToComponent = [
-            'admin.duka.local' => 'Admin/Login/index',
-            'delivery.duka.local' => 'Delivery/Login/index',
-            'dev.duka.local' => 'Dev/Login/index',
-            'finance.duka.local' => 'Finance/Login/index',
-            'guest.duka.local' => 'Guest/Login/index',
-            'marketing.duka.local' => 'Marketing/Login/index',
-            'procurement.duka.local' => 'Procurement/Login/index',
-            'seller.duka.local' => 'Seller/Login/index',
-            'shared.duka.local' => 'Shared/Login/index',
-            'stock.duka.local' => 'StockKeeper/Login/index',
-            'stockkeeper.duka.local' => 'StockKeeper/Login/index',
-            'vendor.duka.local' => 'Vendor/Login/index',
-        ];
-
-        return $hostToComponent[$host] ?? 'Auth/Login';
+        return config("subdomains.host_component_map.{$host}", 'Auth/Login');
     }
 
     private function loginUrl(Request $request): string

@@ -28,9 +28,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
 
 # 4. Apache config (KEEP THIS 🔥)
 RUN a2enmod rewrite headers ssl \
-    && sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf \
-    && sed -i '/DocumentRoot/a ServerName mezgebedirijit.com' /etc/apache2/sites-available/000-default.conf \
-    && sed -i '/ServerName/a ServerAlias *.mezgebedirijit.com' /etc/apache2/sites-available/000-default.conf
+    && sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
 
 # SSL vhost setup
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' \

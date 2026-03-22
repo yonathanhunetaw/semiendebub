@@ -15,23 +15,8 @@ class EnsureGuestSubdomainRole
      */
     public function handle(Request $request, Closure $next)
     {
-        $baseDomain = config('app.system_domain', 'duka.local');
-
-        $hostToRole = [
-            "admin.{$baseDomain}" => 'admin',
-            "delivery.{$baseDomain}" => 'delivery',
-            "seller.{$baseDomain}" => 'seller',
-            "stock.{$baseDomain}" => 'stock_keeper',
-            "finance.{$baseDomain}" => 'finance',
-            "marketing.{$baseDomain}" => 'marketing',
-            "procurement.{$baseDomain}" => 'procurement',
-            "shared.{$baseDomain}" => 'shared',
-            "vendor.{$baseDomain}" => 'vendor',
-            "guest.{$baseDomain}" => 'guest',
-            "dev.{$baseDomain}" => 'dev',
-        ];
-
         $host = $request->getHost();
+        $hostToRole = config('subdomains.host_role_map', []);
 
         if (! isset($hostToRole[$host])) {
             return $next($request);

@@ -28,6 +28,13 @@ done
 
 echo "✅ MySQL is ready!"
 
+BASE_DOMAIN="${APP_SYSTEM_DOMAIN:-duka.local}"
+
+sed -i "/ServerName/d" /etc/apache2/sites-available/000-default.conf
+sed -i "/ServerAlias \\*\\./d" /etc/apache2/sites-available/000-default.conf
+sed -i "/DocumentRoot/a ServerName ${BASE_DOMAIN}" /etc/apache2/sites-available/000-default.conf
+sed -i "/ServerName/a ServerAlias *.${BASE_DOMAIN}" /etc/apache2/sites-available/000-default.conf
+
 # Laravel setup
 if [ "$APP_ENV" = "production" ]; then
     echo "🚀 Production mode..."

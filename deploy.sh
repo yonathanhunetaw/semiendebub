@@ -64,7 +64,7 @@ fi
 # Database
 echo "🛠️ Running migrations..."
 if [ "$APP_ENV" = "production" ]; then
-    sudo docker compose $COMPOSE_FILES exec app php artisan migrate:fresh --force
+    sudo docker compose $COMPOSE_FILES exec app php artisan migrate --force
 else
     sudo docker compose $COMPOSE_FILES exec app php artisan migrate:fresh --seed
 fi

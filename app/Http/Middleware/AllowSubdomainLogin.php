@@ -20,30 +20,14 @@ class AllowSubdomainLogin
         // a session for this specific island. If they don't, it shows the login form.
         // If they do (and they have the right role), it sends them to the dashboard.
 
-        $baseDomain = config('app.system_domain', 'duka.local');
-
         $user = Auth::user();
 
         if (! $user) {
             return $next($request);
         }
 
-        $hostToRole = [
-            "admin.{$baseDomain}" => 'admin',
-            "delivery.{$baseDomain}" => 'delivery',
-            "dev.{$baseDomain}" => 'dev',
-            "finance.{$baseDomain}" => 'finance',
-            "guest.{$baseDomain}" => 'guest',
-            "marketing.{$baseDomain}" => 'marketing',
-            "procurement.{$baseDomain}" => 'procurement',
-            "seller.{$baseDomain}" => 'seller',
-            "shared.{$baseDomain}" => 'shared',
-            "stockkeeper.{$baseDomain}" => 'stock_keeper',
-            "vendor.{$baseDomain}" => 'vendor',
-        ];
-
         $host = $request->getHost();
-        $expectedRole = $hostToRole[$host] ?? null;
+        $expectedRole = config("subdomains.host_role_map.{$host}");
 
         // If the host matches a role and the user has it, send them to dashboard.
         if ($expectedRole && $user->hasRole($expectedRole)) {
