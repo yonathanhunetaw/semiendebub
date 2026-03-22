@@ -1,7 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 //@ts-ignore
 import { PageProps } from '@/types';
-import { route } from 'ziggy-js';
 import AppNavbar from "@/Components/AppNavbar";
 import React from "react";
 

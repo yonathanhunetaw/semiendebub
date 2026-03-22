@@ -17,7 +17,6 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import {route} from 'ziggy-js';
 
 interface Item {
     id: number;
