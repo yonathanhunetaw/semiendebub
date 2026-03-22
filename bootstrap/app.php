@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureCorrectSubdomainRole;
 use App\Http\Middleware\EnsureGuestSubdomainRole;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\NotifyPublicVisit;
+use App\Providers\AuthEventServiceProvider;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,6 +16,9 @@ use Sentry\State\Scope;
 use Spatie\Permission\Middleware\RoleMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
+    ->withProviders([
+        AuthEventServiceProvider::class,
+    ])
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
@@ -41,7 +45,13 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         Integration::handles($exceptions);
 
-        $exceptions->context(function (Request $request): array {
+        $exceptions->context(function (): array {
+            $request = request();
+
+            if (! $request instanceof Request) {
+                return [];
+            }
+
             $host = (string) $request->getHost();
             $systemDomain = (string) config('app.system_domain');
             $subdomain = 'root';
