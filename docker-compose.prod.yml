@@ -4,6 +4,8 @@ services:
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
       - node_modules_data:/var/www/html/node_modules
+      - /etc/docker-ssl/mezgebedirijit-origin.pem:/etc/apache2/ssl/fullchain.pem:ro
+      - /etc/docker-ssl/mezgebedirijit-origin.key:/etc/apache2/ssl/privkey.pem:ro
 
     # Only expose HTTP/HTTPS
     ports:
