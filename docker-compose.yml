@@ -21,7 +21,7 @@ services:
       - "5177:5177"   # Added this to expose vite dev server
     volumes:
       - ${APP_CODE_PATH:-.}:/var/www/html:cached
-      - node_data:/var/www/html/node_modules
+      #      - node_data:/var/www/html/node_modules
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
       - /etc/docker-ssl/mezgebedirijit-origin.pem:/etc/apache2/ssl/fullchain.pem:ro

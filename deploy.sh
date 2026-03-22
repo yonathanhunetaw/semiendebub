@@ -67,7 +67,6 @@ if [ "$APP_ENV" = "production" ]; then
     echo "🚀 Production mode: building assets..."
 
     echo "📦 Installing Node dependencies..."
-    sudo docker compose exec app rm -rf node_modules package-lock.json
     sudo docker compose exec app npm ci --no-audit --no-fund
 
     echo "🏗️ Building assets..."
