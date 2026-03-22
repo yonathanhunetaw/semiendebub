@@ -93,7 +93,7 @@ services:
       - glitchtip-postgres
       - glitchtip-redis
     ports:
-      - "8080:8000"
+      - "18080:8000"
     volumes:
       - glitchtip_uploads:/code/uploads
     networks:
