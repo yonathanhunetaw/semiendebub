@@ -171,6 +171,11 @@ fi
 echo "Starting containers..."
 compose up -d
 
+if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
+    echo "Starting observability services..."
+    compose up -d lgtm glitchtip-postgres glitchtip-redis glitchtip-web
+fi
+
 if [ "$APP_ENV" = "production" ]; then
     echo "Ensuring Apache SSL site is enabled..."
     compose exec -T app bash -lc 'a2enmod ssl >/dev/null 2>&1 || true && a2ensite default-ssl >/dev/null 2>&1 || true && apachectl -k graceful'
