@@ -12,7 +12,7 @@ Route::domain("dev.{$baseDomain}")
 
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
-            Route::get('/', function () {
+            Route::middleware('notify.public.visit')->get('/', function () {
                 return Inertia::render('Welcome/Dev');
             })->name('welcome');
 

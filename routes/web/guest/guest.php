@@ -18,7 +18,7 @@ use Inertia\Inertia;
 //    ]);
 // });
 
-Route::get('/', function () {
+Route::middleware('notify.public.visit')->get('/', function () {
 
     $user = Auth::user();
     $host = request()->getHost();

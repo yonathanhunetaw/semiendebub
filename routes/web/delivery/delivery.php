@@ -13,7 +13,7 @@ Route::domain("delivery.{$baseDomain}")
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
             // Added a root route so typing the domain doesn't 404
-            Route::get('/', function () {
+            Route::middleware('notify.public.visit')->get('/', function () {
                 return Inertia::render('Welcome/Delivery');
             })->name('welcome');
 

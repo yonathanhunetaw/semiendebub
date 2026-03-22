@@ -11,7 +11,7 @@ Route::domain("shared.$baseDomain")
 
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
-            Route::get('/', function () {
+            Route::middleware('notify.public.visit')->get('/', function () {
                 return Inertia::render('Welcome/Shared');
             })->name('welcome');
 

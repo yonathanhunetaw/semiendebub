@@ -14,7 +14,7 @@ Route::domain("admin.{$baseDomain}")
         // Added 'Allow Subdomain  Login' so logged-in users don't see the login form
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
-            Route::get('/', function () {
+            Route::middleware('notify.public.visit')->get('/', function () {
                 return Inertia::render('Welcome/index');
             })->name('welcome');
 
