@@ -100,6 +100,32 @@ services:
       - duka-network
     logging: *loki-logging
 
+  glitchtip-worker:
+    image: glitchtip/glitchtip:latest
+    container_name: Duka_glitchtip_worker
+    restart: unless-stopped
+    command: ./bin/run-celery-with-beat.sh
+    environment:
+      DATABASE_URL: postgres://${GLITCHTIP_DB_USER:-glitchtip}:${GLITCHTIP_DB_PASSWORD:-glitchtip}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME:-glitchtip}
+      REDIS_URL: redis://glitchtip-redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:-change-this-secret}
+      PORT: 8000
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8080}
+      DEFAULT_FROM_EMAIL: ${GLITCHTIP_DEFAULT_FROM_EMAIL:-glitchtip@example.com}
+      EMAIL_URL: ${GLITCHTIP_EMAIL_URL:-consolemail://}
+      ENABLE_OPEN_USER_REGISTRATION: ${GLITCHTIP_ENABLE_OPEN_USER_REGISTRATION:-False}
+      DJANGO_SUPERUSER_USERNAME: ${GLITCHTIP_ADMIN_USERNAME:-admin}
+      DJANGO_SUPERUSER_EMAIL: ${GLITCHTIP_ADMIN_EMAIL:-admin@example.com}
+      DJANGO_SUPERUSER_PASSWORD: ${GLITCHTIP_ADMIN_PASSWORD:-change-this-password}
+    depends_on:
+      - glitchtip-postgres
+      - glitchtip-redis
+    volumes:
+      - glitchtip_uploads:/code/uploads
+    networks:
+      - duka-network
+    logging: *loki-logging
+
 volumes:
   lgtm_data:
   glitchtip_postgres_data:

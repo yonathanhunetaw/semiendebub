@@ -33,10 +33,14 @@ fi
 RESET_DB="${RESET_DB:-$(env_value RESET_DB)}"
 FORCE_BUILD="${FORCE_BUILD:-$(env_value FORCE_BUILD)}"
 ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY:-$(env_value ENABLE_OBSERVABILITY)}"
+GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-$(env_value GLITCHTIP_DB_USER)}"
+GLITCHTIP_DB_NAME="${GLITCHTIP_DB_NAME:-$(env_value GLITCHTIP_DB_NAME)}"
 
 RESET_DB="${RESET_DB:-0}"
 FORCE_BUILD="${FORCE_BUILD:-0}"
 ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY:-0}"
+GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-glitchtip}"
+GLITCHTIP_DB_NAME="${GLITCHTIP_DB_NAME:-glitchtip}"
 
 DOCKER_FILES=(
     Dockerfile
@@ -173,7 +177,23 @@ compose up -d
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     echo "Starting observability services..."
-    compose up -d lgtm glitchtip-postgres glitchtip-redis glitchtip-web
+    compose up -d lgtm glitchtip-postgres glitchtip-redis
+
+    echo "Waiting for GlitchTip Postgres..."
+    until compose exec -T glitchtip-postgres pg_isready -U "$GLITCHTIP_DB_USER" -d "$GLITCHTIP_DB_NAME" >/dev/null 2>&1; do
+        echo -n "."
+        sleep 1
+    done
+    echo
+    echo "GlitchTip Postgres is ready."
+
+    echo "Running GlitchTip migrations..."
+    compose run --rm glitchtip-web ./manage.py migrate
+
+    echo "Ensuring GlitchTip admin user exists..."
+    compose run --rm glitchtip-web ./manage.py createsuperuser --noinput || true
+
+    compose up -d glitchtip-web glitchtip-worker
 fi
 
 if [ "$APP_ENV" = "production" ]; then
