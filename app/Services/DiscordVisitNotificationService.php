@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\Log;
 
 class DiscordVisitNotificationService
 {
+    private const DAILY_DIGEST_BUFFER_KEY = 'discord_daily_visit_buffer';
+
+    private const DAILY_DIGEST_SENT_AT_KEY = 'discord_daily_visit_sent_at';
+
     public function notify(Request $request): void
     {
         if ($request->user()) {
@@ -39,7 +43,8 @@ class DiscordVisitNotificationService
             }
 
             $this->sendFrequentVisitAlert($cacheKey, $host, $path, $ip, $location, $request);
-            $this->sendDailyVisitAlert($host, $path, $ip, $location, $request);
+            $this->recordDailyVisit($host, $path, $ip, $location, $request);
+            $this->sendDailyVisitAlertIfDue();
         } catch (\Throwable $e) {
             Log::error('Discord visit notification failed', [
                 'message' => $e->getMessage(),
@@ -80,7 +85,7 @@ class DiscordVisitNotificationService
         ]);
     }
 
-    private function sendDailyVisitAlert(string $host, string $path, string $ip, string $location, Request $request): void
+    private function recordDailyVisit(string $host, string $path, string $ip, string $location, Request $request): void
     {
         $dailyWebhookUrl = config('services.discord.daily_visit_webhook_url');
 
@@ -88,28 +93,103 @@ class DiscordVisitNotificationService
             return;
         }
 
-        $dailyCacheKey = 'discord_daily_visit:'.sha1(now()->toDateString());
+        $visits = Cache::get(self::DAILY_DIGEST_BUFFER_KEY, []);
+        $visits[] = [
+            'time' => now()->toDateTimeString(),
+            'host' => $host,
+            'path' => $path,
+            'ip' => $ip,
+            'location' => $location,
+            'user_agent' => substr((string) $request->userAgent(), 0, 180) ?: 'Unknown',
+        ];
 
-        if (! Cache::add($dailyCacheKey, true, now()->addDay())) {
+        // Keep the digest bounded so it cannot grow without limit.
+        if (count($visits) > 200) {
+            $visits = array_slice($visits, -200);
+        }
+
+        Cache::put(self::DAILY_DIGEST_BUFFER_KEY, $visits, now()->addDays(2));
+        Cache::add(self::DAILY_DIGEST_SENT_AT_KEY, now()->toIso8601String(), now()->addDays(2));
+    }
+
+    private function sendDailyVisitAlertIfDue(): void
+    {
+        $dailyWebhookUrl = config('services.discord.daily_visit_webhook_url');
+
+        if (! $dailyWebhookUrl) {
             return;
+        }
+
+        $lastSentAt = Cache::get(self::DAILY_DIGEST_SENT_AT_KEY);
+
+        if (! $lastSentAt) {
+            Cache::put(self::DAILY_DIGEST_SENT_AT_KEY, now()->toIso8601String(), now()->addDays(2));
+
+            return;
+        }
+
+        if (now()->diffInHours($lastSentAt) < 24) {
+            return;
+        }
+
+        $visits = Cache::get(self::DAILY_DIGEST_BUFFER_KEY, []);
+
+        if ($visits === []) {
+            Cache::put(self::DAILY_DIGEST_SENT_AT_KEY, now()->toIso8601String(), now()->addDays(2));
+
+            return;
+        }
+
+        $lines = [];
+
+        foreach ($visits as $visit) {
+            $lines[] = sprintf(
+                '%s | %s%s | %s | %s',
+                $visit['time'],
+                $visit['host'],
+                $visit['path'],
+                $visit['location'],
+                $visit['ip']
+            );
+        }
+
+        $description = "Visits collected since the last 24-hour digest.\n\n";
+        $maxLength = 3800;
+        $appended = 0;
+
+        foreach ($lines as $line) {
+            $candidate = $description.'- '.$line."\n";
+
+            if (strlen($candidate) > $maxLength) {
+                break;
+            }
+
+            $description = $candidate;
+            $appended++;
+        }
+
+        $remaining = count($lines) - $appended;
+
+        if ($remaining > 0) {
+            $description .= "\n...and {$remaining} more visits.";
         }
 
         Http::timeout(5)->post($dailyWebhookUrl, [
             'embeds' => [[
-                'title' => '📬 Daily Visit Alert',
+                'title' => '📬 24-Hour Visit Digest',
                 'color' => 10181046,
-                'description' => 'At least one public visit was recorded in the last 24 hours.',
+                'description' => trim($description),
                 'fields' => [
-                    ['name' => 'First Host', 'value' => $host, 'inline' => true],
-                    ['name' => 'First Path', 'value' => $path, 'inline' => true],
-                    ['name' => 'First IP', 'value' => "`{$ip}`", 'inline' => true],
-                    ['name' => 'Location', 'value' => $location, 'inline' => true],
-                    ['name' => 'User Agent', 'value' => substr((string) $request->userAgent(), 0, 1024) ?: 'Unknown', 'inline' => false],
+                    ['name' => 'Visit Count', 'value' => (string) count($visits), 'inline' => true],
+                    ['name' => 'Window', 'value' => 'Last 24 hours', 'inline' => true],
                 ],
                 'footer' => ['text' => config('app.name').' Daily Visit Monitoring'],
                 'timestamp' => now()->toIso8601String(),
             ]],
         ]);
+
+        Cache::put(self::DAILY_DIGEST_SENT_AT_KEY, now()->toIso8601String(), now()->addDays(2));
+        Cache::forget(self::DAILY_DIGEST_BUFFER_KEY);
     }
 
     private function flagEmoji(string $countryCode): string
