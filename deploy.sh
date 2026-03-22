@@ -65,14 +65,24 @@ fi
 
 echo "Handling frontend..."
 if [ "$APP_ENV" = "production" ]; then
+    echo "Building production assets..."
     exec_in_app rm -f public/hot
     exec_in_app npm ci --no-audit --no-fund
     exec_in_app npm run build
 else
+    echo "Starting Vite dev server..."
     exec_in_app rm -rf public/build
     exec_in_app npm ci --no-audit --no-fund
     exec_in_app sh -lc 'pkill -f "vite --host" || true'
-    compose exec -d app npm run dev -- --host 0.0.0.0
+    exec_in_app sh -lc 'nohup npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1 &'
+
+    echo "Waiting for Vite..."
+    until exec_in_app curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; do
+        echo -n "."
+        sleep 1
+    done
+    echo
+    echo "Vite is ready."
 fi
 
 echo "Running database setup..."

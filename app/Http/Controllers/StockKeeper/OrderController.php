@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Stockkeeper;
+namespace App\Http\Controllers\StockKeeper;
 
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Item;
