@@ -43,12 +43,15 @@ RUN sed -i 's|/var/www/html|/var/www/html/public|g' \
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # 6. Copy only manifests first (cache optimization)
-COPY composer.json composer.lock package.json package-lock.json ./
+COPY composer.json composer.lock package*.json ./
 
 RUN git config --global --add safe.directory /var/www/html
 
 # 7. Install dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Install PHP deps
+RUN composer install --no-interaction --prefer-dist --no-scripts
+
+# Install Node deps
 RUN npm ci
 
 # 8. Copy full project
