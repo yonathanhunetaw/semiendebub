@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Stockkeeper\MenuController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -36,7 +35,5 @@ Route::domain("shared.$baseDomain")
             Route::get('/dashboard', function () {
                 return Inertia::render('Shared/Dashboard/index');
             })->name('dashboard');
-
-            Route::get('/', [MenuController::class, 'index'])->name('sessions.index');
         });
     });

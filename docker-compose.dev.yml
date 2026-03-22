@@ -2,6 +2,11 @@ services:
   app:
     build:
       dockerfile: Dockerfile.dev
+    volumes:
+      - .:/var/www/html
+      - storage_data:/var/www/html/storage
+      - vendor_data:/var/www/html/vendor
+      - node_modules_data:/var/www/html/node_modules
     ports:
       - "8095:80"
       - "5177:5177"

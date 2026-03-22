@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Stockkeeper\MenuController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -25,7 +24,5 @@ Route::domain("stockkeeper.{$baseDomain}")
             Route::get('/dashboard', function () {
                 return Inertia::render('StockKeeper/Dashboard/index');
             })->name('dashboard');
-
-            Route::get('/', [MenuController::class, 'index'])->name('sessions.index');
         });
     });

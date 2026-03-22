@@ -1,82 +1,102 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-APP_ENV=$(grep APP_ENV .env | cut -d '=' -f2)
+APP_ENV=$(
+    awk -F= '
+        $1 == "APP_ENV" {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+            print $2
+            exit
+        }
+    ' .env
+)
+
+if [ -z "${APP_ENV:-}" ]; then
+    echo "APP_ENV is not set in .env"
+    exit 1
+fi
+
+RESET_DB="${RESET_DB:-0}"
+
+if [ "$APP_ENV" = "production" ]; then
+    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+else
+    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.dev.yml)
+fi
+
+if docker info >/dev/null 2>&1; then
+    DOCKER_CMD=(docker)
+else
+    DOCKER_CMD=(sudo docker)
+fi
+
+compose() {
+    "${DOCKER_CMD[@]}" compose "${COMPOSE_FILES[@]}" "$@"
+}
+
+exec_in_app() {
+    compose exec -T app "$@"
+}
+
 echo "Detected environment: $APP_ENV"
+echo "RESET_DB=$RESET_DB"
+echo "Starting deployment..."
 
-# Select compose files
-if [ "$APP_ENV" = "production" ]; then
-    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.prod.yml"
-else
-    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.dev.yml"
-fi
+echo "Building app image..."
+compose build app
 
-echo "🚀 Starting Smart Deployment..."
+echo "Starting containers..."
+compose up -d
 
-DOCKER_CHANGES=$(git diff --name-only HEAD@{1} HEAD | grep -E 'Dockerfile|docker-compose' || true)
-
-if [ -n "$DOCKER_CHANGES" ]; then
-    echo "⚙️ Docker changes detected. Running Deep Build..."
-    sudo docker compose $COMPOSE_FILES down --remove-orphans
-    sudo docker compose $COMPOSE_FILES build --no-cache
-    sudo docker compose $COMPOSE_FILES up -d
-else
-    echo "🏃 No Docker changes. Fast-tracking deployment..."
-    sudo docker compose $COMPOSE_FILES up -d
-fi
-
-# Wait for MySQL
 echo "Waiting for MySQL..."
-until sudo docker compose $COMPOSE_FILES exec db mysqladmin ping -h "localhost" --silent; do
-    echo -n "."; sleep 1
+until compose exec -T db mysqladmin ping -h "localhost" --silent >/dev/null 2>&1; do
+    echo -n "."
+    sleep 1
 done
-echo "✅ MySQL is ready!"
+echo
+echo "MySQL is ready."
 
-# Composer
-echo "📦 Installing PHP dependencies..."
+echo "Installing PHP dependencies..."
 if [ "$APP_ENV" = "production" ]; then
-    sudo docker compose $COMPOSE_FILES exec app composer install --no-dev --optimize-autoloader --no-interaction
+    exec_in_app composer install --no-dev --optimize-autoloader --no-interaction
 else
-    sudo docker compose $COMPOSE_FILES exec app composer install --optimize-autoloader --no-interaction
+    exec_in_app composer install --optimize-autoloader --no-interaction
 fi
 
-# Frontend
-echo "⚙️ Handling frontend..."
-
+echo "Handling frontend..."
 if [ "$APP_ENV" = "production" ]; then
-    echo "🚀 Production build..."
+    exec_in_app rm -f public/hot
+    exec_in_app npm ci --no-audit --no-fund
+    exec_in_app npm run build
+else
+    exec_in_app rm -rf public/build
+    exec_in_app npm ci --no-audit --no-fund
+    exec_in_app sh -lc 'pkill -f "vite --host" || true'
+    compose exec -d app npm run dev -- --host 0.0.0.0
+fi
 
-    sudo docker compose $COMPOSE_FILES exec app rm -f public/hot
-
-    sudo docker compose $COMPOSE_FILES exec app sh -c "
-    if [ ! -f node_modules/.bin/vite ]; then
-        npm ci --no-audit --no-fund
+echo "Running database setup..."
+if [ "$RESET_DB" = "1" ]; then
+    if [ "$APP_ENV" = "production" ]; then
+        echo "RESET_DB=1 is not allowed in production."
+        exit 1
     fi
-    "
 
-    sudo docker compose $COMPOSE_FILES exec app npm run build
-
+    exec_in_app php artisan migrate:fresh --seed --force
 else
-    echo "🧪 Dev mode..."
-
-    sudo docker compose $COMPOSE_FILES exec app rm -rf public/build
-    sudo docker compose $COMPOSE_FILES exec app pkill -f vite || true
-    sudo docker compose $COMPOSE_FILES exec -d app npm run dev -- --host
+    exec_in_app php artisan migrate --force
 fi
 
-# Database
-echo "🛠️ Running migrations..."
+echo "Refreshing Laravel caches..."
+exec_in_app php artisan optimize:clear
+exec_in_app php artisan storage:link --force
+
 if [ "$APP_ENV" = "production" ]; then
-    sudo docker compose $COMPOSE_FILES exec app php artisan migrate --force
+    exec_in_app php artisan optimize
 else
-    sudo docker compose $COMPOSE_FILES exec app php artisan migrate:fresh --seed
+    exec_in_app php artisan config:clear
+    exec_in_app php artisan route:clear
+    exec_in_app php artisan view:clear
 fi
 
-# Storage
-sudo docker compose $COMPOSE_FILES exec app php artisan storage:link --force
-
-# Optimize
-sudo docker compose $COMPOSE_FILES exec app php artisan optimize:clear
-sudo docker compose $COMPOSE_FILES exec app php artisan optimize
-
-echo "✅ Deployment complete!"
+echo "Deployment complete."

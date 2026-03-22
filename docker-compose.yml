@@ -7,10 +7,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    volumes:
-      - .:/var/www/html
-      - storage_data:/var/www/html/storage
-      - vendor_data:/var/www/html/vendor
     depends_on:
       - db
     networks:
@@ -37,3 +33,4 @@ volumes:
   database_data:
   vendor_data:
   storage_data:
+  node_modules_data:

@@ -1,8 +1,9 @@
 services:
   app:
-    # ❌ NO code mount in production
     volumes:
       - storage_data:/var/www/html/storage
+      - vendor_data:/var/www/html/vendor
+      - node_modules_data:/var/www/html/node_modules
 
     # Only expose HTTP/HTTPS
     ports:
