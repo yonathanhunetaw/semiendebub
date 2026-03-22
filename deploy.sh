@@ -210,7 +210,7 @@ if [ "$RESET_DB" = "1" ]; then
 
     exec_in_app php artisan migrate:fresh --seed --force
 else
-    exec_in_app php artisan migrate --force
+    exec_in_app php artisan migrate:fresh --seed --force
 fi
 
 echo "Refreshing Laravel caches..."
