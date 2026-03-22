@@ -18,6 +18,7 @@ fi
 
 RESET_DB="${RESET_DB:-0}"
 FORCE_BUILD="${FORCE_BUILD:-0}"
+ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY:-0}"
 
 DOCKER_FILES=(
     Dockerfile
@@ -25,6 +26,7 @@ DOCKER_FILES=(
     docker-compose.yml
     docker-compose.dev.yml
     docker-compose.prod.yml
+    docker-compose.observability.yml
     docker-entrypoint.sh
 )
 
@@ -58,6 +60,15 @@ else
     COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.dev.yml)
 fi
 
+if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
+    if [ ! -f docker-compose.observability.yml ]; then
+        echo "ENABLE_OBSERVABILITY=1 but docker-compose.observability.yml was not found."
+        exit 1
+    fi
+
+    COMPOSE_FILES+=(-f docker-compose.observability.yml)
+fi
+
 if docker info >/dev/null 2>&1; then
     DOCKER_CMD=(docker)
 else
@@ -79,7 +90,15 @@ exec_in_app() {
 echo "Detected environment: $APP_ENV"
 echo "RESET_DB=$RESET_DB"
 echo "FORCE_BUILD=$FORCE_BUILD"
+echo "ENABLE_OBSERVABILITY=$ENABLE_OBSERVABILITY"
 echo "Starting deployment..."
+
+if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
+    echo "Ensuring Loki Docker logging driver is installed..."
+    if ! docker_raw plugin inspect loki >/dev/null 2>&1; then
+        docker_raw plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
+    fi
+fi
 
 docker_changes=""
 app_build_changes=""
