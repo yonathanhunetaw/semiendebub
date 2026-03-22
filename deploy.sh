@@ -28,6 +28,11 @@ DOCKER_FILES=(
     docker-entrypoint.sh
 )
 
+NODE_FILES=(
+    package.json
+    package-lock.json
+)
+
 if [ "$APP_ENV" = "production" ]; then
     COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
 else
@@ -58,6 +63,7 @@ echo "FORCE_BUILD=$FORCE_BUILD"
 echo "Starting deployment..."
 
 docker_changes=""
+node_changes=""
 
 if [ "$FORCE_BUILD" = "1" ]; then
     docker_changes="forced"
@@ -77,6 +83,14 @@ if [ -n "$docker_changes" ]; then
     docker_raw image prune -f >/dev/null 2>&1 || true
 else
     echo "No Docker-related changes detected. Skipping image rebuild."
+fi
+
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+    tracked_node_changes=$(git diff --name-only HEAD -- "${NODE_FILES[@]}" || true)
+    untracked_node_changes=$(git ls-files --others --exclude-standard -- "${NODE_FILES[@]}" || true)
+    node_changes="${tracked_node_changes}${untracked_node_changes}"
+else
+    node_changes=$(find "${NODE_FILES[@]}" -maxdepth 0 -type f 2>/dev/null || true)
 fi
 
 echo "Starting containers..."
@@ -104,7 +118,7 @@ echo "Handling frontend..."
 if [ "$APP_ENV" = "production" ]; then
     echo "Building production assets..."
     exec_in_app rm -f public/hot
-    if ! exec_in_app test -x node_modules/.bin/vite; then
+    if [ -n "$node_changes" ] || ! exec_in_app test -x node_modules/.bin/vite; then
         echo "Installing Node dependencies..."
         exec_in_app npm ci --no-audit --no-fund
     fi
@@ -112,7 +126,7 @@ if [ "$APP_ENV" = "production" ]; then
 else
     echo "Starting Vite dev server..."
     exec_in_app rm -rf public/build
-    if ! exec_in_app test -x node_modules/.bin/vite; then
+    if [ -n "$node_changes" ] || ! exec_in_app test -x node_modules/.bin/vite; then
         echo "Installing Node dependencies..."
         exec_in_app npm ci --no-audit --no-fund
     fi
