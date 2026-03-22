@@ -80,20 +80,22 @@ else
     compose exec -d app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
 
     echo "Waiting for Vite..."
-    vite_wait_seconds=60
-    vite_elapsed=0
-    until exec_in_app curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; do
-        if [ "$vite_elapsed" -ge "$vite_wait_seconds" ]; then
-            echo
-            echo "Vite failed to become ready within ${vite_wait_seconds}s."
-            echo "Last Vite log output:"
-            exec_in_app sh -lc 'tail -n 100 /tmp/vite.log 2>/dev/null || echo "No /tmp/vite.log found."'
-            exit 1
-        fi
-        echo -n "."
-        sleep 1
-        vite_elapsed=$((vite_elapsed + 1))
-    done
+    if ! exec_in_app sh -lc '
+        for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
+                exit 0
+            fi
+            printf "."
+            sleep 1
+        done
+        exit 1
+    '; then
+        echo
+        echo "Vite failed to become ready within 60s."
+        echo "Last Vite log output:"
+        exec_in_app sh -lc 'tail -n 100 /tmp/vite.log 2>/dev/null || echo "No /tmp/vite.log found."'
+        exit 1
+    fi
     echo
     echo "Vite is ready."
 fi
