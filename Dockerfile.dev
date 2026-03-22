@@ -24,4 +24,6 @@ RUN a2enmod rewrite headers ssl \
 # Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
+RUN git config --global --add safe.directory /var/www/html
+
 CMD ["apache2-foreground"]

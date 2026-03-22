@@ -56,6 +56,9 @@ done
 echo
 echo "MySQL is ready."
 
+echo "Configuring git safe directory..."
+exec_in_app git config --global --add safe.directory /var/www/html || true
+
 echo "Installing PHP dependencies..."
 if [ "$APP_ENV" = "production" ]; then
     exec_in_app composer install --no-dev --optimize-autoloader --no-interaction
@@ -74,12 +77,22 @@ else
     exec_in_app rm -rf public/build
     exec_in_app npm ci --no-audit --no-fund
     exec_in_app sh -lc 'pkill -f "vite --host" || true'
-    exec_in_app sh -lc 'nohup npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1 &'
+    compose exec -d app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
 
     echo "Waiting for Vite..."
+    vite_wait_seconds=60
+    vite_elapsed=0
     until exec_in_app curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; do
+        if [ "$vite_elapsed" -ge "$vite_wait_seconds" ]; then
+            echo
+            echo "Vite failed to become ready within ${vite_wait_seconds}s."
+            echo "Last Vite log output:"
+            exec_in_app sh -lc 'tail -n 100 /tmp/vite.log 2>/dev/null || echo "No /tmp/vite.log found."'
+            exit 1
+        fi
         echo -n "."
         sleep 1
+        vite_elapsed=$((vite_elapsed + 1))
     done
     echo
     echo "Vite is ready."
