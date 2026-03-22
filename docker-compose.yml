@@ -5,28 +5,12 @@ services:
       dockerfile: Dockerfile
     container_name: Duka_app
     restart: unless-stopped
-    platform: linux/amd64
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "3"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     env_file:
       - .env
-    ports:
-      - "${APP_PORT}:80"
-      - "443:443"
-      - "5177:5177"   # Added this to expose vite dev server
     volumes:
-      - ${APP_CODE_PATH:-.}:/var/www/html:cached
-      #      - node_data:/var/www/html/node_modules
+      - .:/var/www/html
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
-      - /etc/docker-ssl/mezgebedirijit-origin.pem:/etc/apache2/ssl/fullchain.pem:ro
-      - /etc/docker-ssl/mezgebedirijit-origin.key:/etc/apache2/ssl/privkey.pem:ro
-      - storage_data:/var/www/html/storage
     depends_on:
       - db
     networks:
@@ -36,19 +20,11 @@ services:
     image: mysql:8.0
     container_name: Duka_db
     restart: always
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "3"
-    command: [ "mysqld", "--binlog-expire-logs-seconds=259200", "--max-binlog-size=100M" ]
     environment:
       MYSQL_ROOT_PASSWORD: dukapass
       MYSQL_DATABASE: duka
       MYSQL_USER: dukauser
       MYSQL_PASSWORD: dukapass
-    ports:
-      - "3310:3306"
     volumes:
       - database_data:/var/lib/mysql
     networks:
@@ -56,10 +32,8 @@ services:
 
 networks:
   duka-network:
-    driver: bridge
 
 volumes:
   database_data:
   vendor_data:
-  node_data:
   storage_data:

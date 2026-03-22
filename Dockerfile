@@ -1,11 +1,10 @@
 FROM php:8.4-apache
 
-# 1. Set working directory
 WORKDIR /var/www/html
 
-# 2. Install system dependencies
+# 1. System deps
 RUN apt-get update && apt-get install -y \
-    git unzip zip curl npm \
+    git unzip zip curl \
     default-mysql-client \
     libpng-dev libonig-dev libxml2-dev libzip-dev \
     libicu-dev libbz2-dev libgmp-dev libldap2-dev \
@@ -15,25 +14,24 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 3. Configure and Install PHP extensions
+# 2. PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
     bcmath bz2 calendar exif gd gettext gmp intl \
     mysqli opcache pcntl pdo_mysql pdo_pgsql \
     shmop snmp soap sockets sodium tidy xsl zip
 
-# 4. Install Node.js 23.x
+# 3. Install Node (ONLY for build step)
 RUN curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
     && apt-get install -y nodejs
 
-# 5. Clean Apache Config (Cloudflare / Proxy Friendly)
-# 5. Clean Apache Config (Cloudflare / Proxy Friendly)
-RUN a2enmod rewrite headers \
+# 4. Apache config (KEEP THIS 🔥)
+RUN a2enmod rewrite headers ssl \
     && sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf \
     && sed -i '/DocumentRoot/a ServerName mezgebedirijit.com' /etc/apache2/sites-available/000-default.conf \
     && sed -i '/ServerName/a ServerAlias *.mezgebedirijit.com' /etc/apache2/sites-available/000-default.conf
 
-# Prepare SSL vhost (disabled by default)
+# SSL vhost setup
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' \
        /etc/apache2/sites-available/default-ssl.conf \
  && sed -i 's|/etc/ssl/certs/ssl-cert-snakeoil.pem|/etc/apache2/ssl/fullchain.pem|g' \
@@ -41,47 +39,32 @@ RUN sed -i 's|/var/www/html|/var/www/html/public|g' \
  && sed -i 's|/etc/ssl/private/ssl-cert-snakeoil.key|/etc/apache2/ssl/privkey.pem|g' \
        /etc/apache2/sites-available/default-ssl.conf
 
-
-
-# 5. Clean Apache Config (Cloudflare Friendly)
-#RUN a2enmod rewrite ssl headers \
-#    && a2ensite default-ssl \
-#    && sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf \
-#    && sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/default-ssl.conf
-
-# 5b. FIX: Point to /etc/apache2/ssl/ instead of hardcoded Let's Encrypt paths
-# This allows us to mount whatever certs we have into a standard folder
-#RUN sed -i 's|/etc/ssl/certs/ssl-cert-snakeoil.pem|/etc/apache2/ssl/fullchain.pem|g' /etc/apache2/sites-available/default-ssl.conf \
-#    && sed -i 's|/etc/ssl/private/ssl-cert-snakeoil.key|/etc/apache2/ssl/privkey.pem|g' /etc/apache2/sites-available/default-ssl.conf
-
-# 6. Get Composer from official image
+# 5. Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# 7. Copy manifest files first (for better caching)
+# 6. Copy only manifests first (cache optimization)
 COPY composer.json composer.lock package.json package-lock.json ./
 
-# Fix Git safety for Docker volume mounts
 RUN git config --global --add safe.directory /var/www/html
 
-# 8. Install dependencies
-RUN composer install --no-interaction --prefer-dist --no-scripts
-RUN npm install
+# 7. Install dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN npm ci
 
-# 9. Copy the rest of the app
+# 8. Copy full project
 COPY . .
 
-# 10. FINAL FIX: Permission handling
-# We move chown to an entrypoint script or do it globally here
-# 10. Set default ownership (build-time)
+# 9. Build frontend (🔥 THIS FIXES YOUR ERROR)
+RUN npm run build
+
+# 10. Permissions
 RUN mkdir -p storage bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
-
-# EXPOSE MODIFIED: Added 443 for HTTPS traffic
-EXPOSE 80 443
-
-# SSL related
+# 11. SSL entrypoint
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+EXPOSE 80 443
 
 ENTRYPOINT ["docker-entrypoint.sh"]

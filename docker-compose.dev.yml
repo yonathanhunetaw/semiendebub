@@ -1,0 +1,7 @@
+services:
+  app:
+    build:
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8095:80"
+      - "5177:5177"
