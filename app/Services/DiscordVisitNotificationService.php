@@ -15,7 +15,7 @@ class DiscordVisitNotificationService
             return;
         }
 
-        if (! $request->isMethod('GET') || ! $request->expectsHtml()) {
+        if (! $request->isMethod('GET') || ! $request->acceptsHtml()) {
             return;
         }
 
