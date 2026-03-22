@@ -1,15 +1,15 @@
-import { defineConfig } from 'vite';
+import {defineConfig} from 'vite';
 import laravel from 'laravel-vite-plugin';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
     server: {
-        host: 'duka.local',   // 🔥 critical
+        host: '0.0.0.0', // 🔥 IMPORTANT (not duka.local)
         port: 5177,
         strictPort: true,
         hmr: {
-            host: 'duka.local',
-            clientPort: 5177,
+            host: 'duka.local', // 🔥 what browser connects to
+            protocol: 'ws',
         },
         watch: {
             usePolling: true,
