@@ -53,7 +53,7 @@ RUN git config --global --add safe.directory /var/www/html
 RUN composer install --no-interaction --prefer-dist --no-scripts
 
 # Install Node deps
-RUN npm ci
+RUN npm install
 
 # 8. Copy full project
 COPY . .
