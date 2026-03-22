@@ -12,7 +12,9 @@
 
         <!-- Scripts -->
         @routes
-        @viteReactRefresh
+        @if (file_exists(public_path('hot')))
+            @viteReactRefresh
+        @endif
         @vite(['resources/js/app.tsx'])
         @inertiaHead
     </head>

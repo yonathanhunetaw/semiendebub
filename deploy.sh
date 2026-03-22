@@ -46,6 +46,8 @@ echo "⚙️ Handling frontend..."
 if [ "$APP_ENV" = "production" ]; then
     echo "🚀 Production build..."
 
+    sudo docker compose $COMPOSE_FILES exec app rm -f public/hot
+
     sudo docker compose $COMPOSE_FILES exec app sh -c "
     if [ ! -f node_modules/.bin/vite ]; then
         npm ci --no-audit --no-fund
@@ -57,6 +59,7 @@ if [ "$APP_ENV" = "production" ]; then
 else
     echo "🧪 Dev mode..."
 
+    sudo docker compose $COMPOSE_FILES exec app rm -rf public/build
     sudo docker compose $COMPOSE_FILES exec app pkill -f vite || true
     sudo docker compose $COMPOSE_FILES exec -d app npm run dev -- --host
 fi
