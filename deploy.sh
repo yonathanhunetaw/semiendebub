@@ -11,10 +11,28 @@ APP_ENV=$(
     ' .env
 )
 
+env_value() {
+    local key="$1"
+
+    awk -F= -v target="$key" '
+        $1 == target {
+            value=$0
+            sub(/^[^=]*=/, "", value)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            print value
+            exit
+        }
+    ' .env
+}
+
 if [ -z "${APP_ENV:-}" ]; then
     echo "APP_ENV is not set in .env"
     exit 1
 fi
+
+RESET_DB="${RESET_DB:-$(env_value RESET_DB)}"
+FORCE_BUILD="${FORCE_BUILD:-$(env_value FORCE_BUILD)}"
+ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY:-$(env_value ENABLE_OBSERVABILITY)}"
 
 RESET_DB="${RESET_DB:-0}"
 FORCE_BUILD="${FORCE_BUILD:-0}"
