@@ -32,8 +32,16 @@ BASE_DOMAIN="${APP_SYSTEM_DOMAIN:-duka.local}"
 
 sed -i "/ServerName/d" /etc/apache2/sites-available/000-default.conf
 sed -i "/ServerAlias \\*\\./d" /etc/apache2/sites-available/000-default.conf
+sed -i "/RewriteEngine On/d" /etc/apache2/sites-available/000-default.conf
+sed -i "/RewriteCond %{HTTPS} !=on/d" /etc/apache2/sites-available/000-default.conf
+sed -i "/RewriteRule \\^ https:\\/\\/%{HTTP_HOST}%{REQUEST_URI} \\[L,R=301\\]/d" /etc/apache2/sites-available/000-default.conf
 sed -i "/DocumentRoot/a ServerName ${BASE_DOMAIN}" /etc/apache2/sites-available/000-default.conf
 sed -i "/ServerName/a ServerAlias *.${BASE_DOMAIN}" /etc/apache2/sites-available/000-default.conf
+
+sed -i "/ServerName/d" /etc/apache2/sites-available/default-ssl.conf
+sed -i "/ServerAlias \\*\\./d" /etc/apache2/sites-available/default-ssl.conf
+sed -i "/DocumentRoot/a ServerName ${BASE_DOMAIN}" /etc/apache2/sites-available/default-ssl.conf
+sed -i "/ServerName/a ServerAlias *.${BASE_DOMAIN}" /etc/apache2/sites-available/default-ssl.conf
 
 # Laravel setup
 if [ "$APP_ENV" = "production" ]; then
@@ -56,6 +64,11 @@ if [ "$APP_ENV" = "production" ] \
    && [ -f /etc/apache2/ssl/fullchain.pem ] \
    && [ -f /etc/apache2/ssl/privkey.pem ]; then
     echo "🔒 Enabling Apache SSL"
+    cat <<'EOF' >> /etc/apache2/sites-available/000-default.conf
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+EOF
     a2enmod ssl
     a2ensite default-ssl
 else

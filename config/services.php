@@ -40,4 +40,10 @@ return [
         'daily_visit_webhook_url' => env('DISCORD_DAILY_VISIT_WEBHOOK_URL'),
     ],
 
+    'glitchtip' => [
+        'dsn' => env('GLITCHTIP_DSN'),
+        'environment' => env('GLITCHTIP_ENVIRONMENT', env('APP_ENV', 'production')),
+        'release' => env('GLITCHTIP_RELEASE'),
+    ],
+
 ];

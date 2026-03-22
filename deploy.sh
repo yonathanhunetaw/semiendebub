@@ -105,7 +105,7 @@ else
     app_build_changes=$(find "${APP_BUILD_FILES[@]}" -maxdepth 0 2>/dev/null || true)
 fi
 
-if [ "$APP_ENV" = "production" ] && [ -n "$app_build_changes" ]; then
+if [ "$APP_ENV" = "production" ] && { [ -n "$app_build_changes" ] || [ -n "$docker_changes" ]; }; then
     echo "Production code/config changes detected. Rebuilding app image..."
     compose build --no-cache app
     echo "Cleaning Docker build cache..."

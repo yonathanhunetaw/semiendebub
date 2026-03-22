@@ -1,5 +1,6 @@
 <?php
 
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -103,6 +104,35 @@ return [
             ],
             'formatter' => env('LOG_STDERR_FORMATTER'),
             'processors' => [PsrLogMessageProcessor::class],
+        ],
+
+        'stderr_json' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'debug'),
+            'handler' => StreamHandler::class,
+            'handler_with' => [
+                'stream' => 'php://stderr',
+            ],
+            'formatter' => JsonFormatter::class,
+            'formatter_with' => [
+                'batchMode' => JsonFormatter::BATCH_MODE_JSON,
+                'appendNewline' => true,
+            ],
+            'processors' => [PsrLogMessageProcessor::class],
+        ],
+
+        'auth' => [
+            'driver' => 'stack',
+            'channels' => explode(',', (string) env('AUTH_LOG_STACK', 'auth_daily,stderr_json')),
+            'ignore_exceptions' => false,
+        ],
+
+        'auth_daily' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/auth.log'),
+            'level' => env('AUTH_LOG_LEVEL', env('LOG_LEVEL', 'info')),
+            'days' => env('AUTH_LOG_DAILY_DAYS', 30),
+            'replace_placeholders' => true,
         ],
 
         'syslog' => [

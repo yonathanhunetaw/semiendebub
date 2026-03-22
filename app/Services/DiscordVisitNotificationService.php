@@ -29,18 +29,7 @@ class DiscordVisitNotificationService
         $cacheKey = 'discord_visit:'.sha1("{$ip}|{$host}|{$path}");
 
         try {
-            $geo = Cache::remember("geo_ip_{$ip}", now()->addDay(), function () use ($ip) {
-                $response = Http::timeout(5)->get("http://ip-api.com/json/{$ip}?fields=status,country,countryCode,city");
-
-                return $response->successful() ? $response->json() : null;
-            });
-
-            $location = 'Unknown';
-
-            if (is_array($geo) && ($geo['status'] ?? null) === 'success') {
-                $flag = $this->flagEmoji((string) ($geo['countryCode'] ?? ''));
-                $location = trim("{$flag} ".($geo['city'] ?? '').', '.($geo['country'] ?? ''), ' ,');
-            }
+            $location = $this->resolveLocation($ip);
 
             $this->sendFrequentVisitAlert($cacheKey, $host, $path, $ip, $location, $request);
             $this->recordDailyVisit($host, $path, $ip, $location, $request);
@@ -53,6 +42,30 @@ class DiscordVisitNotificationService
                 'ip' => $ip,
             ]);
         }
+    }
+
+    private function resolveLocation(string $ip): string
+    {
+        try {
+            $geo = Cache::remember("geo_ip_{$ip}", now()->addDay(), function () use ($ip) {
+                $response = Http::timeout(5)->get("http://ip-api.com/json/{$ip}?fields=status,country,countryCode,city");
+
+                return $response->successful() ? $response->json() : null;
+            });
+
+            if (is_array($geo) && ($geo['status'] ?? null) === 'success') {
+                $flag = $this->flagEmoji((string) ($geo['countryCode'] ?? ''));
+
+                return trim("{$flag} ".($geo['city'] ?? '').', '.($geo['country'] ?? ''), ' ,');
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Discord visit geolocation lookup failed', [
+                'message' => $e->getMessage(),
+                'ip' => $ip,
+            ]);
+        }
+
+        return 'Unknown';
     }
 
     private function sendFrequentVisitAlert(string $cacheKey, string $host, string $path, string $ip, string $location, Request $request): void
