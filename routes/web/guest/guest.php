@@ -58,6 +58,12 @@ Route::middleware('notify.public.visit')->get('/', function () {
     return Inertia::render('Guest/Welcome');
 });
 
+if (app()->environment('local')) {
+    Route::get('/glitchtip-test', function () {
+        throw new \Exception('GlitchTip test error');
+    })->name('glitchtip.test');
+}
+
 Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
 
     Route::get('/home', function () {
