@@ -1,5 +1,6 @@
 <?php
 
+use Felipeteko\MonologLoki\LokiHandler;
 use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
@@ -163,6 +164,27 @@ return [
 
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
+        ],
+
+        // Loki Channel
+        'loki' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'info'),
+            'handler' => LokiHandler::class,
+            'formatter' => Monolog\Formatter\JsonFormatter::class,
+            'with' => [
+                'url' => env('LOKI_PUSH_URL', 'http://127.0.0.1:3100/loki/api/v1/push'),
+                'labels' => [
+                    'job' => 'laravel',   // This is the label you use in Grafana queries
+                    'env' => env('APP_ENV', 'production'),
+                    'app' => env('APP_NAME', 'Duka'),
+                ],
+            ],
+        ],
+
+        'null' => [
+            'driver' => 'monolog',
+            'handler' => NullHandler::class,
         ],
 
     ],
