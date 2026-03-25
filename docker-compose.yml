@@ -8,7 +8,8 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - duka-network
 
@@ -25,6 +26,11 @@ services:
       - database_data:/var/lib/mysql
     networks:
       - duka-network
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 networks:
   duka-network:
