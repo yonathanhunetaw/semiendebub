@@ -176,6 +176,9 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     echo "Starting application database..."
     compose up -d db
 
+    echo "Removing stale observability containers..."
+    compose rm -fsv lgtm glitchtip-web glitchtip-worker >/dev/null 2>&1 || true
+
     echo "Starting observability services..."
     compose up -d lgtm glitchtip-postgres glitchtip-redis
 
