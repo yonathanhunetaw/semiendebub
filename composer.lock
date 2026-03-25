@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4de6f153255f24d42df1f35aab24e596",
+    "content-hash": "78c9f243b2259003d41385ac08c570c6",
     "packages": [
         {
             "name": "brick/math",
@@ -570,6 +570,44 @@
                 "source": "https://github.com/FakerPHP/Faker/tree/v1.24.1"
             },
             "time": "2024-11-21T13:46:39+00:00"
+        },
+        {
+            "name": "felipeteko/monolog-loki",
+            "version": "v1.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/felipeteko/Monolog-Loki.git",
+                "reference": "a6d0a1b13d8b8e0571926f7fe3dd6ccb17f5815b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/felipeteko/Monolog-Loki/zipball/a6d0a1b13d8b8e0571926f7fe3dd6ccb17f5815b",
+                "reference": "a6d0a1b13d8b8e0571926f7fe3dd6ccb17f5815b",
+                "shasum": ""
+            },
+            "require": {
+                "monolog/monolog": "^2.0 || ^3.0"
+            },
+            "require-dev": {
+                "pestphp/pest": "^2.0",
+                "phpunit/phpunit": "^9.5 || ^10.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "TekoEstudio\\Loki\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "Monolog handler to send logs directly to Grafana Loki",
+            "support": {
+                "issues": "https://github.com/felipeteko/Monolog-Loki/issues",
+                "source": "https://github.com/felipeteko/Monolog-Loki/tree/v1.0.0"
+            },
+            "time": "2025-06-05T21:47:11+00:00"
         },
         {
             "name": "fruitcake/php-cors",
@@ -9521,7 +9559,7 @@
         }
     ],
     "aliases": [],
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
     "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
