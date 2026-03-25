@@ -21,6 +21,7 @@ until mysqladmin ping \
     -h "$DB_HOST" \
     -u "$DB_USERNAME" \
     -p"$DB_PASSWORD" \
+    --ssl-mode=DISABLED \
     --silent; do
     echo "Waiting for MySQL..."
     sleep 2
