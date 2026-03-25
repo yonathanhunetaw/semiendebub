@@ -1,11 +1,11 @@
 <?php
 
-use Felipeteko\MonologLoki\LokiHandler;
 use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
+use TekoEstudio\Loki\LokiHandler;
 
 return [
 
@@ -181,12 +181,6 @@ return [
                 ],
             ],
         ],
-
-        'null' => [
-            'driver' => 'monolog',
-            'handler' => NullHandler::class,
-        ],
-
     ],
 
 ];
