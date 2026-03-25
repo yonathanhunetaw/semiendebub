@@ -37,12 +37,12 @@ services:
     container_name: Duka_lgtm
     restart: unless-stopped
     ports:
-      - "3000:3000"
-      - "3100:3100"
-      - "3200:3200"
-      - "4317:4317"
-      - "4318:4318"
-      - "9090:9090"
+      - "${LGTM_GRAFANA_PORT:-3000}:3000"
+      - "${LGTM_LOKI_PORT:-3100}:3100"
+      - "${LGTM_TEMPO_PORT:-3200}:3200"
+      - "${LGTM_OTLP_GRPC_PORT:-4317}:4317"
+      - "${LGTM_OTLP_HTTP_PORT:-4318}:4318"
+      - "${LGTM_PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - lgtm_data:/data
     networks:
