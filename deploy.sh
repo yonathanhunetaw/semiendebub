@@ -25,6 +25,22 @@ env_value() {
     ' .env
 }
 
+has_git_path_changes() {
+    if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
+        return 1
+    fi
+
+    if ! git diff --quiet HEAD -- "$@"; then
+        return 0
+    fi
+
+    if git ls-files --others --exclude-standard -- "$@" | grep -q .; then
+        return 0
+    fi
+
+    return 1
+}
+
 if [ -z "${APP_ENV:-}" ]; then
     echo "APP_ENV is not set in .env"
     exit 1
@@ -122,39 +138,39 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     fi
 fi
 
-docker_changes=""
-app_build_changes=""
-node_changes=""
+docker_changes=0
+app_build_changes=0
+node_changes=0
 
 if [ "$FORCE_BUILD" = "1" ]; then
-    docker_changes="forced"
-elif git rev-parse --verify HEAD >/dev/null 2>&1; then
-    tracked_changes=$(git diff --name-only HEAD -- "${DOCKER_FILES[@]}" || true)
-    untracked_changes=$(git ls-files --others --exclude-standard -- "${DOCKER_FILES[@]}" || true)
-    docker_changes="${tracked_changes}${untracked_changes}"
+    docker_changes=1
+elif has_git_path_changes "${DOCKER_FILES[@]}"; then
+    docker_changes=1
 else
-    docker_changes=$(find "${DOCKER_FILES[@]}" -maxdepth 0 -type f 2>/dev/null || true)
+    docker_changes=0
 fi
 
 if [ "$FORCE_BUILD" = "1" ]; then
-    app_build_changes="forced"
-elif git rev-parse --verify HEAD >/dev/null 2>&1; then
-    tracked_app_changes=$(git diff --name-only HEAD -- "${APP_BUILD_FILES[@]}" || true)
-    untracked_app_changes=$(git ls-files --others --exclude-standard -- "${APP_BUILD_FILES[@]}" || true)
-    app_build_changes="${tracked_app_changes}${untracked_app_changes}"
+    app_build_changes=1
+elif has_git_path_changes "${APP_BUILD_FILES[@]}"; then
+    app_build_changes=1
 else
-    app_build_changes=$(find "${APP_BUILD_FILES[@]}" -maxdepth 0 2>/dev/null || true)
+    app_build_changes=0
 fi
 
-if [ "$APP_ENV" = "production" ] && { [ -n "$app_build_changes" ] || [ -n "$docker_changes" ]; }; then
-    echo "Production code/config changes detected. Rebuilding app image..."
+if [ "$APP_ENV" = "production" ] && { [ "$app_build_changes" -eq 1 ] || [ "$docker_changes" -eq 1 ]; }; then
+    if [ "$docker_changes" -eq 1 ]; then
+        echo "Docker-related changes detected. Rebuilding app image..."
+    else
+        echo "Application code/config changes detected. Rebuilding app image with cache..."
+    fi
     compose build app
     echo "Cleaning Docker build cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -af >/dev/null 2>&1 || true
 elif [ "$APP_ENV" = "production" ]; then
     echo "No production code/config changes detected. Skipping image rebuild."
-elif [ -n "$docker_changes" ]; then
+elif [ "$docker_changes" -eq 1 ]; then
     echo "Docker-related changes detected. Rebuilding app image..."
     compose build app
     echo "Cleaning Docker build cache..."
@@ -164,12 +180,8 @@ else
     echo "No Docker-related changes detected. Skipping image rebuild."
 fi
 
-if git rev-parse --verify HEAD >/dev/null 2>&1; then
-    tracked_node_changes=$(git diff --name-only HEAD -- "${NODE_FILES[@]}" || true)
-    untracked_node_changes=$(git ls-files --others --exclude-standard -- "${NODE_FILES[@]}" || true)
-    node_changes="${tracked_node_changes}${untracked_node_changes}"
-else
-    node_changes=$(find "${NODE_FILES[@]}" -maxdepth 0 -type f 2>/dev/null || true)
+if has_git_path_changes "${NODE_FILES[@]}"; then
+    node_changes=1
 fi
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
@@ -235,7 +247,7 @@ echo "Handling frontend..."
 if [ "$APP_ENV" = "production" ]; then
     echo "Building production assets..."
     exec_in_app rm -f public/hot
-    if [ -n "$node_changes" ] || ! exec_in_app test -x node_modules/.bin/vite; then
+    if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
         echo "Installing Node dependencies..."
         exec_in_app npm ci --no-audit --no-fund
     fi
@@ -243,7 +255,7 @@ if [ "$APP_ENV" = "production" ]; then
 else
     echo "Starting Vite dev server..."
     exec_in_app rm -rf public/build
-    if [ -n "$node_changes" ] || ! exec_in_app test -x node_modules/.bin/vite; then
+    if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
         echo "Installing Node dependencies..."
         exec_in_app npm ci --no-audit --no-fund
     fi
