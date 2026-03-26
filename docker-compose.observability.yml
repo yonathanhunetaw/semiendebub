@@ -1,14 +1,14 @@
 x-loki-logging: &loki-logging
   driver: loki
   options:
-    loki-url: "${LOKI_PUSH_URL:-http://127.0.0.1:3100/loki/api/v1/push}"
+    loki-url: "http://lgtm:3100/loki/api/v1/push"
     loki-batch-size: "400"
     loki-retries: "5"
     loki-timeout: "1s"
     keep-file: "true"
     max-size: "50m"
     max-file: "3"
-    labels: "compose_project={{.ComposeProject}},service={{.Name}},container={{.Name}}"
+    labels: "job={{.Name}},container={{.Name}}"
 
 services:
   app:
