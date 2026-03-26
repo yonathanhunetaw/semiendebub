@@ -189,7 +189,7 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     compose up -d db
 
     echo "Removing stale observability containers..."
-    compose rm -fsv lgtm glitchtip-web glitchtip-worker >/dev/null 2>&1 || true
+    timeout 20s compose rm -fsv lgtm glitchtip-web glitchtip-worker || docker rm -f lgtm glitchtip-web glitchtip-worker 2>/dev/null || true
 
     echo "Starting observability services..."
     compose up -d lgtm glitchtip-postgres glitchtip-redis
