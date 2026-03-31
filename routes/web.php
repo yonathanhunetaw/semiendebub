@@ -84,10 +84,7 @@ require __DIR__.'/web/guest/guest.php';
 
 
 Route::get('/downloads', function () {
-    // Get files from storage/app/public/downloads
     $files = Storage::disk('public')->files('downloads');
-
-    // Map them to include a clean name and the full URL
     $fileData = array_map(function ($path) {
         return [
             'name' => basename($path),
