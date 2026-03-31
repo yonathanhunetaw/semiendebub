@@ -1,0 +1,7 @@
+tunnel: b183bb79-05c0-49b1-a30f-08dbbabc3b64
+credentials-file: /home/nonroot/.cloudflared/credentials.json
+
+ingress:
+  - hostname: mezgebedirijit.com
+    service: http://app:80     # Points to the 'app' service on port 80
+  - service: http_status:404

@@ -32,6 +32,19 @@ services:
       timeout: 3s
       retries: 10
 
+  tunnel:
+      image: cloudflare/cloudflared:latest
+      container_name: Duka_tunnel
+      restart: always
+      # Force IPv4 inside the container to avoid the network unreachable error
+      command: tunnel --config /home/nonroot/.cloudflared/config.yml --no-autoupdate --edge-ip-version 4 run
+      volumes:
+        - ./config/cloudflared:/home/nonroot/.cloudflared
+      networks:
+        - duka-network
+      depends_on:
+        - app
+
 networks:
   duka-network:
 
