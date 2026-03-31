@@ -3,5 +3,30 @@ credentials-file: /home/nonroot/.cloudflared/credentials.json
 
 ingress:
   - hostname: mezgebedirijit.com
-    service: http://app:80     # Points to the 'app' service on port 80
+    service: http://Duka_app:80
+  - hostname: www.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: admin.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: delivery.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: dev.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: finance.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: guest.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: marketing.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: procurement.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: seller.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: shared.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: stockkeeper.mezgebedirijit.com
+    service: http://Duka_app:80
+  - hostname: vendor.mezgebedirijit.com
+    service: http://Duka_app:80
+  # The "Catch-All" must be at the very bottom
   - service: http_status:404
