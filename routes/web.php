@@ -1,5 +1,8 @@
 <?php
 
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
+
 /*-------------------------------------------------------------------------------------------------------------
 | Auth - ('guest') & ('auth') - -> routes/auth.php
 |-------------------------------------------------------------------------------------------------------------*/
@@ -78,6 +81,25 @@ require __DIR__.'/web/vendor/vendor.php';                        // ['auth', 've
 |-------------------------------------------------------------------------------------------------------------*/
 
 require __DIR__.'/web/guest/guest.php';
+
+
+Route::get('/downloads', function () {
+    // Get files from storage/app/public/downloads
+    $files = Storage::disk('public')->files('downloads');
+
+    // Map them to include a clean name and the full URL
+    $fileData = array_map(function ($path) {
+        return [
+            'name' => basename($path),
+            'url' => asset('storage/' . $path),
+            'size' => round(Storage::disk('public')->size($path) / 1024 / 1024, 2) . ' MB'
+        ];
+    }, $files);
+
+    return Inertia::render('Downloads', [
+        'files' => $fileData
+    ]);
+});
 //
 // use App\Http\Controllers\Admin\ItemController;
 // use App\Http\Controllers\Admin\LessonController;
