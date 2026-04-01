@@ -121,8 +121,34 @@ docker_raw() {
     "${DOCKER_CMD[@]}" "$@"
 }
 
+has_command() {
+    command -v "$1" >/dev/null 2>&1
+}
+
 exec_in_app() {
     compose exec -T app "$@"
+}
+
+exec_in_app_as_root() {
+    compose exec -T -u root app "$@"
+}
+
+compose_rm_services() {
+    if has_command timeout; then
+        timeout 20s compose rm -fsv "$@"
+    else
+        compose rm -fsv "$@"
+    fi
+}
+
+install_node_dependencies() {
+    exec_in_app npm ci --no-audit --no-fund
+}
+
+reset_node_dependencies() {
+    echo "Resetting Node dependencies inside the app container..."
+    exec_in_app_as_root sh -lc 'find node_modules -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true'
+    install_node_dependencies
 }
 
 echo "Detected environment: $APP_ENV"
@@ -189,7 +215,7 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     compose up -d db
 
     echo "Removing stale observability containers..."
-    timeout 20s compose rm -fsv lgtm glitchtip-web glitchtip-worker || docker rm -f lgtm glitchtip-web glitchtip-worker 2>/dev/null || true
+    compose_rm_services lgtm glitchtip-web glitchtip-worker || docker rm -f lgtm glitchtip-web glitchtip-worker 2>/dev/null || true
 
     echo "Starting observability services..."
     compose up -d lgtm glitchtip-postgres glitchtip-redis
@@ -249,7 +275,7 @@ if [ "$APP_ENV" = "production" ]; then
     exec_in_app rm -f public/hot
     if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
         echo "Installing Node dependencies..."
-        exec_in_app npm ci --no-audit --no-fund
+        install_node_dependencies
     fi
     exec_in_app npm run build
 else
@@ -257,7 +283,7 @@ else
     exec_in_app rm -rf public/build
     if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
         echo "Installing Node dependencies..."
-        exec_in_app npm ci --no-audit --no-fund
+        install_node_dependencies
     fi
     if exec_in_app sh -lc 'curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1'; then
         echo "Vite is already running."
@@ -281,7 +307,33 @@ else
         echo "Vite failed to become ready within 60s."
         echo "Last Vite log output:"
         exec_in_app sh -lc 'tail -n 100 /tmp/vite.log 2>/dev/null || echo "No /tmp/vite.log found."'
-        exit 1
+        if exec_in_app sh -lc 'grep -q "@rollup/rollup-linux-arm64-gnu" /tmp/vite.log 2>/dev/null'; then
+            echo "Detected a stale Rollup optional dependency set. Reinstalling Node dependencies for this container architecture..."
+            reset_node_dependencies
+            echo "Relaunching Vite..."
+            compose exec -d app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
+            echo "Waiting for Vite after dependency reset..."
+            if ! exec_in_app sh -lc '
+                for i in $(seq 1 60); do
+                    if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
+                        exit 0
+                    fi
+                    printf "."
+                    sleep 1
+                done
+                exit 1
+            '; then
+                echo
+                echo "Vite still failed after reinstalling Node dependencies."
+                echo "Last Vite log output:"
+                exec_in_app sh -lc 'tail -n 100 /tmp/vite.log 2>/dev/null || echo "No /tmp/vite.log found."'
+                exit 1
+            fi
+            echo
+            echo "Vite is ready after dependency reset."
+        else
+            exit 1
+        fi
     fi
     echo
     echo "Vite is ready."
