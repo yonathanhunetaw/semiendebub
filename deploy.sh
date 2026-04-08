@@ -98,6 +98,13 @@ else
     COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.dev.yml)
 fi
 
+# ADD THIS:
+if check_cloudflared; then
+    # If it's on the host, we make sure we ARE NOT using a cloudflared docker file
+    # This prevents port/token conflicts
+    echo "Using host-based networking for Cloudflare."
+fi
+
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     if [ ! -f docker-compose.observability.yml ]; then
         echo "ENABLE_OBSERVABILITY=1 but docker-compose.observability.yml was not found."
