@@ -18,10 +18,10 @@ services:
     container_name: Duka_db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: dukapass
-      MYSQL_DATABASE: duka
-      MYSQL_USER: dukauser
-      MYSQL_PASSWORD: dukapass
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - database_data:/var/lib/mysql
     networks:
@@ -31,19 +31,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
-  tunnel:
-      image: cloudflare/cloudflared:latest
-      container_name: Duka_tunnel
-      restart: always
-      # Force IPv4 inside the container to avoid the network unreachable error
-      command: tunnel --config /home/nonroot/.cloudflared/config.yml --no-autoupdate --edge-ip-version 4 run
-      volumes:
-        - ./config/cloudflared:/home/nonroot/.cloudflared
-      networks:
-        - duka-network
-      depends_on:
-        - app
 
 networks:
   duka-network:
