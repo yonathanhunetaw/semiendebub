@@ -253,10 +253,11 @@ else
     compose up -d
 fi
 
-if [ "$APP_ENV" = "production" ]; then
-    echo "Ensuring Apache SSL site is enabled..."
-    compose exec -T app bash -lc 'a2enmod ssl >/dev/null 2>&1 || true && a2ensite default-ssl >/dev/null 2>&1 || true && apachectl -k graceful'
-fi
+# Commented it out as certificats are now handedled by cloudflare
+# if [ "$APP_ENV" = "production" ]; then
+#     echo "Ensuring Apache SSL site is enabled..."
+#     compose exec -T app bash -lc 'a2enmod ssl >/dev/null 2>&1 || true && a2ensite default-ssl >/dev/null 2>&1 || true && apachectl -k graceful'
+# fi
 
 echo "Waiting for MySQL..."
 until compose exec -T db mysqladmin ping -h "localhost" --silent >/dev/null 2>&1; do
