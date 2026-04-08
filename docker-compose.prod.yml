@@ -5,8 +5,6 @@ services:
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
       - node_modules_data:/var/www/html/node_modules
-      - ./certs/fullchain.pem:/etc/apache2/ssl/fullchain.pem:ro
-      - ./certs/privkey.pem:/etc/apache2/ssl/privkey.pem:ro
 
     # Only expose HTTP/HTTPS
     ports:
