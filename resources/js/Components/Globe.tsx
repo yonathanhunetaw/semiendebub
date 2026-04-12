@@ -11,16 +11,17 @@ export default function Globe() {
         // 1. Setup Scene, Camera, Renderer
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // alpha allows background to show
+
+        // Alpha true allows the CSS background of the parent div to show through
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 
         renderer.setSize(window.innerWidth, window.innerHeight);
         mountRef.current.appendChild(renderer.domElement);
 
-        // 2. Create Earth
+        // 2. Create Earth (Radius is 5)
         const geometry = new THREE.SphereGeometry(5, 32, 32);
         const textureLoader = new THREE.TextureLoader();
         const material = new THREE.MeshStandardMaterial({
-            // Using updated valid texture paths
             map: textureLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
             bumpScale: 0.05,
         });
@@ -33,16 +34,23 @@ export default function Globe() {
         directionalLight.position.set(10, 10, 10);
         scene.add(ambientLight, directionalLight);
 
-        // 4. Camera Controls
+        // 4. Camera & Zoom Controls
         camera.position.z = 12;
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
+
+        // --- ZOOM LIMITS ---
+        // Since Earth radius is 5, we stop at 7 so we don't hit the surface
+        controls.minDistance = 7;
+        // Stop at 20 so the earth stays large enough to see
+        controls.maxDistance = 20;
+        // --------------------
 
         // 5. Animation Loop
         let animationFrameId: number;
         const animate = () => {
             animationFrameId = requestAnimationFrame(animate);
-            earth.rotation.y += 0.001; // Spin effect
+            earth.rotation.y += 0.001;
             controls.update();
             renderer.render(scene, camera);
         };
@@ -56,7 +64,7 @@ export default function Globe() {
         };
         window.addEventListener('resize', handleResize);
 
-        // 7. Cleanup on Unmount (Crucial for React!)
+        // 7. Cleanup
         return () => {
             window.removeEventListener('resize', handleResize);
             cancelAnimationFrame(animationFrameId);
@@ -69,5 +77,6 @@ export default function Globe() {
         };
     }, []);
 
-    return <div ref={mountRef} className="absolute inset-0 bg-black -z-10" />;
+    // Changed bg-black to your Deep Truffle brown #38240d
+    return <div ref={mountRef} className="fixed inset-0 bg-[#38240d] -z-10" />;
 }
