@@ -3,133 +3,110 @@ import { Head, Link } from "@inertiajs/react";
 //@ts-ignore
 import { PageProps } from "@/types";
 import Globe from "@/Components/Globe";
-import Navbar from '@/Components/WelcomeNavbar';
 import WelcomeNavbar from "@/Components/WelcomeNavbar";
-
-// pUt cUrsER iNside cUrly bRAcES AND pRESs sHIft + s -> fOR trIggeR suggEStION
-
-// import {  } from "react";
-// import {  } from "@inertiajs/react";
-// import {  } from "@/types";
-// import  from "@/Components/Globe";
-
-
-// ---------------------------------------------------------------------------------------------
-// 1. The "Big Three" (You'll use these 90% of the time)
-// These are the most common things people "destructure" from React:
-
-// useState: For storing data that changes (like a counter or form input).
-
-// useEffect: For "side effects" like fetching data from an API or setting a timer.
-
-// useContext: For sharing data globally across your app without passing props manually.
-
-// ---------------------------------------------------------------------------------------------
-// -----Without Destructuring-----:
-
-// const inertia = { Head: "I am Head", Link: "I am Link" };
-
-// const Head = inertia.Head;
-// const Link = inertia.Link;
-
-// -----With Destructuring-----:
-
-// const { Head, Link } = { Head: "I am Head", Link: "I am Link" };
+import WelcomeFooter from "@/Components/WelcomeFooter";
 
 export default function Welcome({ auth }: PageProps) {
-    // React State for Dropdowns
-    const [cartOpen, setCartOpen] = useState(false);
-    const [userMenuOpen, setUserMenuOpen] = useState(false);
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
     return (
-        /* ADDED pt-[72px] here to push everything down exactly 72px */
-        <div className="relative flex flex-col min-h-screen overflow-hidden pt-[72px]">
-            <Head title="Sumerian - Welcome" />
+        <div className="relative flex flex-col min-h-screen overflow-x-hidden bg-zinc-950 pt-[72px]">
+            <Head title="Semien Debube - Imperial Commerce" />
 
-            {/* --- NAVBAR --- */}
             <WelcomeNavbar />
 
-            {/* --- 3D BACKGROUND --- */}
-            {/* Use absolute inset-0 to ensure it stays behind the pushed-down content */}
-            <div className="absolute inset-0 z-0">
-                <Globe />
-            </div>
+            {/* --- HERO SECTION --- */}
+            <section className="relative h-[90vh] flex items-center justify-center overflow-hidden">
+                {/* 3D Globe Background */}
+                <div className="absolute inset-0 z-0">
+                    <Globe />
+                    {/* VIGNETTE/OVERLAY: This separates the navbar/text from the 3D globe */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/80 via-transparent to-zinc-950" />
+                </div>
 
-            {/* Overlay Text over the Globe (Optional) */}
-            <div className="z-10 flex items-center justify-center py-20 pointer-events-none">
-                <h1 className="px-6 py-4 text-5xl font-bold text-white shadow-2xl md:text-7xl bg-black/30 rounded-xl backdrop-blur-sm">
-                    Welcome to Sumerian
-                </h1>
-            </div>
+                <div className="z-10 px-4 text-center">
+                    <h1 className="mb-6 text-6xl font-extrabold tracking-tighter text-white md:text-8xl drop-shadow-2xl">
+                        SEMIEN <span className="text-orange-500">DEBUB</span>
+                    </h1>
+                    <p className="max-w-xl p-4 mx-auto text-lg rounded-lg text-zinc-300 md:text-xl backdrop-blur-sm bg-black/20">
+                        The world's first digital ledger for the modern merchant-king.
+                        Legacy meets high-performance logistics.
+                    </p>
+                </div>
+            </section>
 
-            <main className="relative z-20 px-6 pb-24 mx-auto max-w-7xl">
-                {/* Section Header */}
-                <div className="mb-16 text-center">
-                    <h2 className="mb-4 font-serif text-3xl font-bold text-orange-200 md:text-5xl drop-shadow-md">
+            {/* --- MAIN CONTENT (SCROLLABLE) --- */}
+            <main className="relative z-20 px-6 py-24 mx-auto max-w-7xl">
+
+                {/* Intro Section */}
+                <div className="mb-24 text-center">
+                    <h2 className="mb-6 font-serif text-4xl font-bold text-orange-200 md:text-6xl">
                         The Foundation of Commerce
                     </h2>
-                    <p className="max-w-2xl mx-auto italic text-zinc-400">
+                    <p className="max-w-3xl mx-auto text-xl italic text-zinc-400">
                         "What was written on clay 5,000 years ago is now forged
                         in code. Manage your empire with the weight of history."
                     </p>
                 </div>
 
                 {/* The "Tablet" Grid */}
-                <div className="grid grid-cols-1 gap-10 md:grid-cols-3">
-                    {/* Tablet 1: Ledger/Inventory */}
-                    <div className="group relative bg-zinc-900/80 border-l-4 border-t-4 border-zinc-700 p-8 rounded-tr-3xl rounded-bl-3xl shadow-[10px_10px_0px_0px_rgba(39,39,42,1)] hover:translate-x-1 hover:-translate-y-1 transition-all duration-300 backdrop-blur-md">
-                        <div className="absolute transition-opacity top-4 right-4 opacity-10 group-hover:opacity-30">
-                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                            </svg>
-                        </div>
-                        <h3 className="mb-3 text-xl font-bold tracking-widest text-orange-400 uppercase">
-                            Inventory Ledger
-                        </h3>
-                        <p className="font-serif leading-relaxed text-zinc-400">
-                            From grain silos to digital assets. Track every unit
-                            with the precision of a Sumerian scribe. Real-time
-                            stock alerts carved in digital stone.
-                        </p>
-                        <div className="pt-4 mt-6 font-mono text-xs border-t border-zinc-800 text-zinc-600">
-                            DOCUMENT_REF: UR-NAMMU-2026
-                        </div>
-                    </div>
+                <div className="grid grid-cols-1 gap-12 mb-32 md:grid-cols-3">
+                    <FeatureCard
+                        title="Inventory Ledger"
+                        refNum="UR-NAMMU-2026"
+                        desc="From grain silos to digital assets. Track every unit with the precision of a Sumerian scribe."
+                    />
+                    <FeatureCard
+                        title="Trade Routes"
+                        refNum="ENSI_VALIDATED"
+                        desc="Manage shipments across the Fertile Crescent or the Global Market with real-time automation."
+                    />
+                    <FeatureCard
+                        title="Imperial Governance"
+                        refNum="ROYAL_SEAL_01"
+                        desc="Full-suite ERP. Human resources, payroll, and compliance modernized for ambitious merchants."
+                    />
+                </div>
 
-                    {/* Tablet 2: Logistics/Trade */}
-                    <div className="group relative bg-zinc-900/80 border-l-4 border-t-4 border-zinc-700 p-8 rounded-tr-3xl rounded-bl-3xl shadow-[10px_10px_0px_0px_rgba(39,39,42,1)] hover:translate-x-1 hover:-translate-y-1 transition-all duration-300 backdrop-blur-md">
-                        <h3 className="mb-3 text-xl font-bold tracking-widest text-orange-400 uppercase">
-                            Trade Routes
-                        </h3>
-                        <p className="font-serif leading-relaxed text-zinc-400">
-                            Manage shipments across the Fertile Crescent or the
-                            Global Market. Logistics automation that connects
-                            your suppliers and merchants instantly.
+                {/* ADDED SECTION: Long-form content to trigger scrolling */}
+                <div className="grid items-center grid-cols-1 gap-20 mb-32 md:grid-cols-2">
+                    <div className="space-y-6">
+                        <h3 className="text-3xl font-bold text-white">Forged in Digital Bronze</h3>
+                        <p className="leading-relaxed text-zinc-400">
+                            Our architecture isn't just built for today; it's designed for the next era of commerce.
+                            By combining high-throughput database structures with intuitive merchant interfaces,
+                            Semien Debub provides a level of stability previously reserved for empires.
                         </p>
-                        <div className="pt-4 mt-6 font-mono text-xs border-t border-zinc-800 text-zinc-600">
-                            ENSI_VALIDATED: TRUE
-                        </div>
+                        <ul className="space-y-4 font-mono text-sm text-orange-200/80">
+                            <li>▷ 99.99% Uptime (Imperial Guarantee)</li>
+                            <li>▷ End-to-end Encrypted Ledgers</li>
+                            <li>▷ Multi-Warehouse Synchronization</li>
+                        </ul>
                     </div>
-
-                    {/* Tablet 3: Governance/ERP */}
-                    <div className="group relative bg-zinc-900/80 border-l-4 border-t-4 border-zinc-700 p-8 rounded-tr-3xl rounded-bl-3xl shadow-[10px_10px_0px_0px_rgba(39,39,42,1)] hover:translate-x-1 hover:-translate-y-1 transition-all duration-300 backdrop-blur-md">
-                        <h3 className="mb-3 text-xl font-bold tracking-widest text-orange-400 uppercase">
-                            Imperial Governance
-                        </h3>
-                        <p className="font-serif leading-relaxed text-zinc-400">
-                            Full-suite ERP. Human resources, payroll, and tax
-                            compliance—modernized for the ambitious
-                            merchant-king. Control your enterprise from one
-                            seat.
-                        </p>
-                        <div className="pt-4 mt-6 font-mono text-xs border-t border-zinc-800 text-zinc-600">
-                            STAMP: ROYAL_SEAL_01
-                        </div>
+                    <div className="flex items-center justify-center h-64 italic border bg-zinc-900 border-zinc-800 rounded-3xl text-zinc-700">
+                        [ Interactive Data Visualization Placeholder ]
                     </div>
                 </div>
             </main>
+
+            <WelcomeFooter />
+
+
+        </div>
+    );
+}
+
+/* Helper Component for the Grid Items to keep code clean */
+function FeatureCard({ title, desc, refNum }: { title: string, desc: string, refNum: string }) {
+    return (
+        <div className="relative p-8 transition-all duration-500 border group bg-zinc-900/60 border-zinc-800 rounded-2xl hover:border-orange-500/50 backdrop-blur-md">
+            <h3 className="mb-3 text-xl font-bold tracking-widest text-orange-400 uppercase">
+                {title}
+            </h3>
+            <p className="font-serif leading-relaxed text-zinc-400">
+                {desc}
+            </p>
+            <div className="pt-4 mt-6 font-mono text-[10px] border-t border-zinc-800 text-zinc-600">
+                REF: {refNum}
+            </div>
         </div>
     );
 }
