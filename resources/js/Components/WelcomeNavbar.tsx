@@ -45,17 +45,17 @@ export default function WelcomeNavbar() {
     };
 
     return (
-        <AppBar
-                position="fixed"
-                sx={{
-                    bgcolor: 'rgba(56, 36, 13, 0.9)', // Added transparency
-                    backdropFilter: 'blur(10px)',     // Added blur
-                    height: 72,
-                    justifyContent: 'center',
-                    borderBottom: '2px solid #c05800',
-                    boxShadow: '0 4px 30px rgba(0, 0, 0, 0.5)'
-                }}
-            >
+<AppBar
+    position="fixed"
+    sx={{
+        bgcolor: 'rgba(0, 0, 0, 0.8)', // Deep black with slight transparency
+        backdropFilter: 'blur(10px)',   // Keeps the "glass" effect
+        height: 72,
+        justifyContent: 'center',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.12)', // Subtle border for definition
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.8)'           // Darker shadow
+    }}
+>
             <Container sx={{ maxWidth: 1337 }}>
                 <Toolbar sx={{ justifyContent: 'space-between' }}>
                     <Typography variant="h5" component={Link} href="/" sx={{ fontWeight: 900, color: '#fdfbd4', textDecoration: 'none' }}>

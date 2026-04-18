@@ -20,18 +20,22 @@ export default function AdminNav({ onMenuClick }: { onMenuClick?: () => void }) 
     const menuOpen = Boolean(anchorEl);
 
     return (
-        <AppBar
-            position="fixed"
-            color="default"
-            elevation={0}
-            sx={{
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-                width: { xl: `calc(100% - ${drawerWidth}px)` },
-                ml: { xl: `${drawerWidth}px` },
-                backgroundColor: 'background.paper',
-            }}
-        >
+            <AppBar
+                position="fixed"
+                color="default"
+                elevation={0}
+                sx={{
+                    borderBottom: '1px solid',
+                    // Changed to a subtle gray so it's visible against the black
+                    borderColor: 'rgba(255, 255, 255, 0.12)',
+                    width: { xl: `calc(100% - ${drawerWidth}px)` },
+                    ml: { xl: `${drawerWidth}px` },
+                    // Set to solid black
+                    backgroundColor: '#000000',
+                    // Optional: ensures icons/text automatically turn white
+                    color: '#ffffff',
+                }}
+            >
             <Toolbar>
                 <IconButton
                     color="inherit"
@@ -49,14 +53,25 @@ export default function AdminNav({ onMenuClick }: { onMenuClick?: () => void }) 
                 </Box>
                 <Box sx={{ flexGrow: 1 }} />
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
-                        <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
-                            {auth?.user?.first_name || auth?.user?.name || 'User'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            {auth?.user?.email || ''}
-                        </Typography>
-                    </Box>
+                <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
+                    <Typography
+                        variant="subtitle2"
+                        sx={{
+                            lineHeight: 1.2,
+                            color: '#ffffff' // Pure white for the name
+                        }}
+                    >
+                        {auth?.user?.first_name || auth?.user?.name || 'User'}
+                    </Typography>
+                    <Typography
+                        variant="caption"
+                        sx={{
+                            color: 'rgba(255, 255, 255, 0.7)' // Softened white for the email
+                        }}
+                    >
+                        {auth?.user?.email || ''}
+                    </Typography>
+                </Box>
                     <IconButton
                         onClick={(e) => setAnchorEl(e.currentTarget)}
                         size="small"

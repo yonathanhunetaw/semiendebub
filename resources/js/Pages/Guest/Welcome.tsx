@@ -5,11 +5,16 @@ import { PageProps } from "@/types";
 import Globe from "@/Components/Globe";
 import WelcomeNavbar from "@/Components/WelcomeNavbar";
 import WelcomeFooter from "@/Components/WelcomeFooter";
+// import Nani from "@/Components/Nani";
 
 export default function Welcome({ auth }: PageProps) {
     return (
         <div className="relative flex flex-col min-h-screen overflow-x-hidden bg-zinc-950 pt-[72px]">
-            <Head title="Semien Debube - Imperial Commerce" />
+            <Head>
+                <title>Semien Debub - Imperial Commerce</title>
+                {/* Option 1: Account Balance in your Bronze color (#c05800) */}
+                <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%23c05800%22><path d=%22M4 10h3v7H4zm6.5 0h3v7h-3zM2 19h20v3H2zm15-9h3v7h-3zm-5-9L2 6v2h20V6z%22/></svg>" />
+            </Head>
 
             <WelcomeNavbar />
 
@@ -32,6 +37,8 @@ export default function Welcome({ auth }: PageProps) {
                     </p>
                 </div>
             </section>
+
+            {/* <Nani /> */}
 
             {/* --- MAIN CONTENT (SCROLLABLE) --- */}
             <main className="relative z-20 px-6 py-24 mx-auto max-w-7xl">
