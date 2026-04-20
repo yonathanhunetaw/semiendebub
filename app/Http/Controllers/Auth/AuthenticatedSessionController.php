@@ -27,83 +27,115 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    public function store(LoginRequest $request)
-    {
-        \Log::info('Login attempt started', [
-            'email' => $request->email,
-            'ip' => $request->ip(),
-            'host' => $request->getHost(),
-            'request_cookies' => $request->cookies->all(),
-        ]);
+public function store(LoginRequest $request)
+{
+    // LOG: Trace the entry point and capture the incoming port
+    \Log::info('Login attempt started', [
+        'email' => $request->email,
+        'ip' => $request->ip(),
+        'host' => $request->getHost(),
+        'port' => $request->getPort(), // ADDED: To track if 8095 is being passed
+        'request_cookies' => $request->cookies->all(),
+    ]);
 
-        $request->authenticate();
-        \Log::info('Authentication successful', [
-            'user_id' => auth()->id(),
-            'roles' => auth()->user()->roles->pluck('name'),
-            'host' => $request->getHost(),
-            'request_cookies' => $request->cookies->all(),
-        ]);
+    $request->authenticate();
 
-        $request->session()->regenerate();
-        \Log::info('Session regenerated', [
-            'session_id' => $request->session()->getId(),
-            'request_cookies' => $request->cookies->all(),
-            'set_cookie' => $request->session()->getName().'='.$request->session()->getId(),
-        ]);
+    // LOG: Confirm user identity and roles after authentication
+    \Log::info('Authentication successful', [
+        'user_id' => auth()->id(),
+        'roles' => auth()->user()->roles->pluck('name'),
+        'host' => $request->getHost(),
+        'request_cookies' => $request->cookies->all(),
+    ]);
 
-        $user = auth()->user();
-        $role = $user->roles->pluck('name')->first() ?? 'user';
-        session(['role' => $role]);
+    $request->session()->regenerate();
 
-        \Log::info('User role set in session', [
-            'role' => $role,
-            'session_id' => $request->session()->getId(),
-            'request_cookies' => $request->cookies->all(),
-        ]);
+    // LOG: Trace the new session ID and cookie state
+    \Log::info('Session regenerated', [
+        'session_id' => $request->session()->getId(),
+        'request_cookies' => $request->cookies->all(),
+        'set_cookie' => $request->session()->getName().'='.$request->session()->getId(),
+    ]);
 
-        if (config('session.driver') === 'database') {
-            $request->session()->put('user_id', $user->id);
-            \Log::info('User ID stored in database session', [
-                'user_id' => $user->id,
-                'session_id' => $request->session()->getId(),
-                'request_cookies' => $request->cookies->all(),
-            ]);
-        }
+    $user = auth()->user();
+    $role = $user->roles->pluck('name')->first() ?? 'user';
+    session(['role' => $role]);
 
-        $expectedRole = $this->expectedRoleForHost($request->getHost());
-        \Log::info('Expected role for current host', [
-            'host' => $request->getHost(),
-            'expected_role' => $expectedRole,
-            'user_role' => $role,
-            'request_cookies' => $request->cookies->all(),
-        ]);
+    // LOG: Confirm the role is stored in the session
+    \Log::info('User role set in session', [
+        'role' => $role,
+        'session_id' => $request->session()->getId(),
+        'request_cookies' => $request->cookies->all(),
+    ]);
 
-        if ($expectedRole && $expectedRole !== $role) {
-            \Log::warning('Role mismatch, logging out user', [
-                'user_id' => $user->id,
-                'user_role' => $role,
-                'expected_role' => $expectedRole,
-                'host' => $request->getHost(),
-                'request_cookies' => $request->cookies->all(),
-            ]);
+    if (config('session.driver') === 'database') {
+        $request->session()->put('user_id', $user->id);
 
-            Auth::guard('web')->logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-
-            return redirect()
-                ->to($this->loginUrl($request))
-                ->withErrors(['email' => 'This account does not have access to this subdomain.']);
-        }
-
-        \Log::info('Login process complete, redirecting', [
-            'redirect_to' => '/dashboard',
+        // LOG: Database-specific session tracking
+        \Log::info('User ID stored in database session', [
             'user_id' => $user->id,
             'session_id' => $request->session()->getId(),
             'request_cookies' => $request->cookies->all(),
         ]);
+    }
 
-        return redirect()->intended('/dashboard');
+    // Determine target host based on config/subdomains.php
+    $currentHost = $request->getHost();
+    $targetHost = $this->getHostForRole($role);
+
+    // LOG: Detailed routing decision
+    \Log::info('Expected role for current host check', [
+        'current_host' => $currentHost,
+        'target_host' => $targetHost,
+        'user_role' => $role,
+        'request_cookies' => $request->cookies->all(),
+    ]);
+
+    // REDIRECT LOGIC: Handle cross-subdomain jumps with custom ports
+    if ($targetHost && $targetHost !== $currentHost) {
+
+        // CHANGE: Build the URL specifically for your port (8095)
+        $protocol = $request->isSecure() ? 'https://' : 'http://';
+        $port = $request->getPort();
+        $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
+        $url = $protocol . $targetHost . $portSuffix . '/dashboard';
+
+        // LOG: Specifically trace the redirection to the new domain
+        \Log::warning('Subdomain mismatch - Redirecting user', [
+            'user_id' => $user->id,
+            'from' => $currentHost,
+            'to' => $targetHost,
+            'full_url' => $url, // ADDED: To see exactly where the user is sent
+            'request_cookies' => $request->cookies->all(),
+        ]);
+
+        // CHANGE: Use Inertia::location for hard window redirect
+        return Inertia::location($url);
+    }
+
+    // LOG: Fallback for when the user is already on the correct subdomain
+    \Log::info('Login process complete, redirecting', [
+        'redirect_to' => '/dashboard',
+        'user_id' => $user->id,
+        'session_id' => $request->session()->getId(),
+        'request_cookies' => $request->cookies->all(),
+    ]);
+
+    return redirect()->intended('/dashboard');
+}
+
+    /**
+     * Helper to find the primary host for a specific role.
+     */
+    private function getHostForRole(string $role): ?string
+    {
+        // This looks at your config/subdomains.php host_role_map
+        $map = config('subdomains.host_role_map');
+
+        // We flip the map to find the host (key) based on the role (value)
+        $roleToHostMap = array_flip($map);
+
+        return $roleToHostMap[$role] ?? null;
     }
 
     private function expectedRoleForHost(string $host): ?string
