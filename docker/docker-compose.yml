@@ -1,12 +1,14 @@
+name: duka
+
 services:
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: Duka_app
     restart: unless-stopped
     env_file:
-      - .env
+      - ../.env
     depends_on:
       db:
         condition: service_healthy

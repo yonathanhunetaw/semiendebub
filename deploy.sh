@@ -59,13 +59,13 @@ GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-glitchtip}"
 GLITCHTIP_DB_NAME="${GLITCHTIP_DB_NAME:-glitchtip}"
 
 DOCKER_FILES=(
-    Dockerfile
-    Dockerfile.dev
-    docker-compose.yml
-    docker-compose.dev.yml
-    docker-compose.prod.yml
-    docker-compose.observability.yml
-    docker-entrypoint.sh
+    docker/Dockerfile
+    docker/Dockerfile.dev
+    docker/docker-compose.yml
+    docker/docker-compose.dev.yml
+    docker/docker-compose.prod.yml
+    docker/docker-compose.observability.yml
+    docker/docker-entrypoint.sh
 )
 
 APP_BUILD_FILES=(
@@ -93,9 +93,9 @@ NODE_FILES=(
 )
 
 if [ "$APP_ENV" = "production" ]; then
-    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+    COMPOSE_FILES=(-f docker/docker-compose.yml -f docker/docker-compose.prod.yml)
 else
-    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.dev.yml)
+    COMPOSE_FILES=(-f docker/docker-compose.yml -f docker/docker-compose.dev.yml)
 fi
 
 # ADD THIS:
@@ -106,12 +106,12 @@ if check_cloudflared; then
 fi
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
-    if [ ! -f docker-compose.observability.yml ]; then
-        echo "ENABLE_OBSERVABILITY=1 but docker-compose.observability.yml was not found."
+    if [ ! -f docker/docker-compose.observability.yml ]; then
+        echo "ENABLE_OBSERVABILITY=1 but docker/docker-compose.observability.yml was not found."
         exit 1
     fi
 
-    COMPOSE_FILES+=(-f docker-compose.observability.yml)
+    COMPOSE_FILES+=(-f docker/docker-compose.observability.yml)
 fi
 
 if docker info >/dev/null 2>&1; then
@@ -121,7 +121,7 @@ else
 fi
 
 compose() {
-    "${DOCKER_CMD[@]}" compose "${COMPOSE_FILES[@]}" "$@"
+    "${DOCKER_CMD[@]}" compose --env-file .env "${COMPOSE_FILES[@]}" "$@"
 }
 
 docker_raw() {

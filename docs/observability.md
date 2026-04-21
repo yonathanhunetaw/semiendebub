@@ -4,13 +4,14 @@ This project can run Grafana LGTM and GlitchTip alongside the existing Docker Co
 
 ```bash
 docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.prod.yml \
-  -f docker-compose.observability.yml \
+  --env-file .env \
+  -f docker/docker-compose.yml \
+  -f docker/docker-compose.prod.yml \
+  -f docker/docker-compose.observability.yml \
   up -d
 ```
 
-For local development, replace `docker-compose.prod.yml` with `docker-compose.dev.yml`.
+For local development, replace `docker/docker-compose.prod.yml` with `docker/docker-compose.dev.yml`.
 
 ## Services
 
@@ -29,7 +30,7 @@ The Compose override uses Docker's Loki logging driver for container logs. Insta
 docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
 ```
 
-If you do not want to use the Docker logging driver, remove the `logging:` blocks from `docker-compose.observability.yml` and ship logs with Promtail instead.
+If you do not want to use the Docker logging driver, remove the `logging:` blocks from `docker/docker-compose.observability.yml` and ship logs with Promtail instead.
 
 ## Laravel Logs
 
