@@ -1,6 +1,15 @@
 <?php
 
-$baseDomain = env('APP_SYSTEM_DOMAIN', 'duka.local');
+$appEnv = env('APP_ENV', 'production');
+
+$baseDomain = env('SYSTEM_DOMAIN') ?: (
+    ($appEnv === 'local' || $appEnv === 'testing')
+        ? 'duka.local'
+        : 'mezgebedirijit.com'
+);
+
+$separatedSessionHosts = in_array($appEnv, ['local', 'testing'], true)
+    && env('SESSION_DOMAIN') === null;
 
 $subdomains = [
     'admin' => [
@@ -81,6 +90,7 @@ foreach ($aliases as $alias => $target) {
 
 return [
     'base_domain' => $baseDomain,
+    'separated_session_hosts' => $separatedSessionHosts,
     'subdomains' => $subdomains,
     'aliases' => $aliases,
     'host_role_map' => $hostRoleMap,

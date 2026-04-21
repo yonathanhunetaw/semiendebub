@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureCorrectSubdomainRole;
 use App\Http\Middleware\EnsureGuestSubdomainRole;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\NotifyPublicVisit;
+use App\Http\Middleware\ScopeSessionToHost;
 use App\Providers\AuthEventServiceProvider;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -26,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
+        $middleware->prepend(ScopeSessionToHost::class);
         $middleware->alias([
             'role' => RoleMiddleware::class,
             'role.subdomain' => EnsureCorrectSubdomainRole::class,

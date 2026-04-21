@@ -34,7 +34,7 @@ class AuthenticatedSessionController extends Controller
             'email' => $request->email,
             'ip' => $request->ip(),
             'host' => $request->getHost(),
-            'port' => $request->getPort(), // ADDED: To track if 8095 is being passed
+            'port' => $request->getPort(),
             'request_cookies' => $request->cookies->all(),
         ]);
 
@@ -82,22 +82,31 @@ class AuthenticatedSessionController extends Controller
         // Determine target host based on config/subdomains.php
         $currentHost = $request->getHost();
         $targetHost = $this->getHostForRole($role);
+        $separatedSessionHosts = $this->separatedSessionHosts();
 
         // LOG: Detailed routing decision
         \Log::info('Expected role for current host check', [
             'current_host' => $currentHost,
             'target_host' => $targetHost,
             'user_role' => $role,
+            'separated_session_hosts' => $separatedSessionHosts,
             'request_cookies' => $request->cookies->all(),
         ]);
 
-        // REDIRECT LOGIC: Handle cross-subdomain jumps with custom ports
-        if ($targetHost && $targetHost !== $currentHost) {
+        // REDIRECT LOGIC: Handle cross-subdomain jumps
+        if ($separatedSessionHosts) {
+            \Log::info('Cross-subdomain login redirect disabled for separated session hosts', [
+                'current_host' => $currentHost,
+                'target_host' => $targetHost,
+                'user_role' => $role,
+            ]);
+        } elseif ($targetHost && $targetHost !== $currentHost) {
 
-            // CHANGE: Build the URL specifically for your port (8095)
             $protocol = $request->isSecure() ? 'https://' : 'http://';
             $port = $request->getPort();
             $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
+
+            // Build the absolute URL for the correct subdomain
             $url = $protocol . $targetHost . $portSuffix . '/dashboard';
 
             // LOG: Specifically trace the redirection to the new domain
@@ -105,11 +114,18 @@ class AuthenticatedSessionController extends Controller
                 'user_id' => $user->id,
                 'from' => $currentHost,
                 'to' => $targetHost,
-                'full_url' => $url, // ADDED: To see exactly where the user is sent
+                'full_url' => $url,
                 'request_cookies' => $request->cookies->all(),
             ]);
 
-            // CHANGE: Use Inertia::location for hard window redirect
+            // Inside the 'if ($targetHost && $targetHost !== $currentHost)' block:
+
+            \Log::error('CONTROLLER REDIRECT: Sending user to target host', [
+                'target_host' => $targetHost,
+                'current_host' => $currentHost,
+                'url' => $url
+            ]);
+
             return Inertia::location($url);
         }
 
@@ -129,12 +145,15 @@ class AuthenticatedSessionController extends Controller
      */
     private function getHostForRole(string $role): ?string
     {
-        $map = config('subdomains.host_role_map');
+        $map = config('subdomains.host_role_map', []);
 
-        // array_search looks for the value ($role) and returns the first key it finds.
-        // Since 'stockkeeper.duka.local' is added to the map before 'stock.duka.local',
-        // it will return the correct "three-k" version.
-        return array_search($role, $map) ?: null;
+        foreach ($map as $host => $mappedRole) {
+            if ($mappedRole === $role) {
+                return $host;
+            }
+        }
+
+        return null;
     }
 
     private function expectedRoleForHost(string $host): ?string
@@ -150,6 +169,11 @@ class AuthenticatedSessionController extends Controller
     private function loginUrl(Request $request): string
     {
         return $request->getSchemeAndHttpHost() . '/login';
+    }
+
+    private function separatedSessionHosts(): bool
+    {
+        return (bool) config('subdomains.separated_session_hosts', false);
     }
 
     /**
