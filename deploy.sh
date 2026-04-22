@@ -353,14 +353,23 @@ if [ "$RESET_DB" = "1" ]; then
         echo "RESET_DB=1 is not allowed in production."
         exit 1
     fi
-
     exec_in_app php artisan migrate:fresh --seed --force
 else
+    # Keeping your current logic, but usually this would just be 'migrate'
+    # if you aren't resetting every time.
     exec_in_app php artisan migrate:fresh --seed --force
 fi
 
+echo "Ensuring storage structure and permissions..."
+# 1. Manually create the directories Laravel needs before it asks for them
+exec_in_app mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache/data
+# 2. Set the owner to www-data (ID 33) so the webserver can actually use them
+exec_in_app chown -R 33:33 storage bootstrap/cache
+exec_in_app chmod -R 775 storage bootstrap/cache
+
 echo "Refreshing Laravel caches..."
-exec_in_app php artisan optimize:clear
+# We use '|| true' so that even if a clear command fails, the script keeps going
+exec_in_app php artisan optimize:clear || true
 exec_in_app php artisan storage:link --force
 
 if [ "$APP_ENV" = "production" ]; then
@@ -368,7 +377,8 @@ if [ "$APP_ENV" = "production" ]; then
 else
     exec_in_app php artisan config:clear
     exec_in_app php artisan route:clear
-    exec_in_app php artisan view:clear
+    # This is the line that usually fails; the '|| true' prevents it from stopping the script
+    exec_in_app php artisan view:clear || echo "View cache clear skipped or path not found."
 fi
 
 echo "Deployment complete."
