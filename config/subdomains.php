@@ -1,14 +1,8 @@
 <?php
 
-$appEnv = env('APP_ENV', 'production');
+$baseDomain = env('APP_SYSTEM_DOMAIN', 'duka.local');
 
-$baseDomain = env('SYSTEM_DOMAIN') ?: (
-    ($appEnv === 'local' || $appEnv === 'testing')
-        ? 'duka.local'
-        : 'mezgebedirijit.com'
-);
-
-$separatedSessionHosts = in_array($appEnv, ['local', 'testing'], true)
+$separatedSessionHosts = in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)
     && env('SESSION_DOMAIN') === null;
 
 $subdomains = [

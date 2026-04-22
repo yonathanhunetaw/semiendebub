@@ -3,7 +3,9 @@
 use App\Http\Controllers\Admin\Store\StoreController;
 use Illuminate\Support\Facades\Route;
 
-Route::domain('admin.duka.local')
+$baseDomain = config('app.system_domain', 'duka.local');
+
+Route::domain("admin.{$baseDomain}")
     ->middleware(['auth', 'verified', 'role.subdomain:admin'])
     ->prefix('stores')
     ->group(function () {

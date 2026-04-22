@@ -27,7 +27,7 @@ export default function Index({auth}: Props) {
                     </p>
 
                     <div className="mt-10 flex items-center justify-center gap-x-6">
-                        {/* If we are on admin.duka.local, this "/" points to the root.
+                        {/* If we are on the admin subdomain, this "/" points to the root.
                            We use Link for SPA navigation so the page doesn't reload.
                         */}
                         <Link
