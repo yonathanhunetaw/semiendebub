@@ -1,14 +1,20 @@
-import { createTheme } from '@mui/material/styles';
+import { createTheme, colors, PaletteMode } from '@mui/material';
 
-const theme = createTheme({
-    palette: {
-        primary: {
-            main: '#f57c00', // Your orange color
-        },
-        secondary: {
-            main: '#333',
-        },
+// Define the tokens with the proper type for mode
+export const getDesignTokens = (mode: PaletteMode) => ({
+  palette: {
+    mode,
+    primary: {
+        main: '#006630',
     },
+    secondary: {
+        main: colors.orange[500],
+    },
+    ...(mode === 'dark' && {
+        background: {
+            default: '#0f0f0f',
+            paper: '#272727',
+        },
+    }),
+  },
 });
-
-export default theme;

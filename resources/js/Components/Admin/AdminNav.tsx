@@ -46,7 +46,7 @@ export default function AdminNav({ onMenuClick }: { onMenuClick?: () => void }) 
                 >
                     <MenuIcon />
                 </IconButton>
-                <Box component={Link} href="/admin/dashboard" sx={{ textDecoration: 'none', color: 'inherit' }}>
+                <Box component={Link} href="/dashboard" sx={{ textDecoration: 'none', color: 'inherit' }}>
                     <Typography variant="h6" noWrap component="div">
                         Mezgebe Dirijit
                     </Typography>

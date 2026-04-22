@@ -9,14 +9,13 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "bundler", // 👈 Changed from 'Node' to 'bundler'
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,              // Vite handles the building, not the TS compiler
     "jsx": "react-jsx",          // Tells TS how to handle React
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["resources/js/*"]   // This makes your Laravel imports work (e.g., import X from '@/Pages/...')
+      "@/*": ["./resources/js/*"]   // This makes your Laravel imports work (e.g., import X from '@/Pages/...')
     }
   },
   "include": ["resources/js/**/*.ts", "resources/js/**/*.tsx", "resources/js/**/*.d.ts"]
