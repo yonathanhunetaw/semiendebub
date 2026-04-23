@@ -27,9 +27,6 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    /**
-     * Handle an incoming authentication request.
-     */
     public function store(LoginRequest $request)
     {
         // LOG: Trace the entry point and capture the incoming port
@@ -88,13 +85,14 @@ class AuthenticatedSessionController extends Controller
         $targetHost = $this->getHostForRole($role);
         $separatedSessionHosts = $this->separatedSessionHosts();
 
-        // LOG: Detailed routing decision
-        \Log::info('Expected role for current host check', [
+        // --- CRITICAL DIAGNOSTIC LOG ---
+        // This will tell us exactly why the next "if" block might be skipped
+        \Log::debug('ROUTING DIAGNOSIS', [
+            'detected_role' => $role,
             'current_host' => $currentHost,
-            'target_host' => $targetHost,
-            'user_role' => $role,
-            'separated_session_hosts' => $separatedSessionHosts,
-            'request_cookies' => $request->cookies->all(),
+            'found_target_host' => $targetHost,
+            'hosts_match' => ($targetHost === $currentHost) ? 'YES' : 'NO',
+            'separated_session_enabled' => $separatedSessionHosts,
         ]);
 
         // REDIRECT LOGIC: Handle cross-subdomain jumps
@@ -128,8 +126,8 @@ class AuthenticatedSessionController extends Controller
                 'url' => $url
             ]);
 
-            // IMPORTANT: If you want isolated sessions, we kill the session on the current domain
-            // because the user is leaving to log in elsewhere.
+            // IMPORTANT: Log out of the CURRENT host before leaving
+            // This ensures sessions remain isolated as requested
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -145,7 +143,10 @@ class AuthenticatedSessionController extends Controller
             'request_cookies' => $request->cookies->all(),
         ]);
 
-        return redirect()->intended('/dashboard');
+        // Clear intended to avoid being pulled back to a previous attempt's URL
+        $request->session()->forget('url.intended');
+
+        return redirect('/dashboard');
     }
 
     /**
@@ -156,11 +157,11 @@ class AuthenticatedSessionController extends Controller
         $map = config('subdomains.host_role_map', []);
 
         foreach ($map as $host => $mappedRole) {
-            if ($mappedRole === $role) {
+            // Use strtolower to ensure "Admin" matches "admin"
+            if (strtolower($mappedRole) === strtolower($role)) {
                 return $host;
             }
         }
-
         return null;
     }
 
