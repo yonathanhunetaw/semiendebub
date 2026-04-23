@@ -123,8 +123,7 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
-    // To make config('app.system_domain') work throughout all these middlewares without
-    // errors,
+    // Shared base domain for subdomain-aware routing and middleware.
     'system_domain' => env('APP_SYSTEM_DOMAIN', 'duka.local'),
 
 ];
