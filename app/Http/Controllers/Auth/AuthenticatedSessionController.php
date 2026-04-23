@@ -27,6 +27,9 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
+    /**
+     * Handle an incoming authentication request.
+     */
     public function store(LoginRequest $request)
     {
         // LOG: Trace the entry point and capture the incoming port
@@ -59,6 +62,7 @@ class AuthenticatedSessionController extends Controller
 
         $user = auth()->user();
         $role = $user->roles->pluck('name')->first() ?? 'user';
+
         session(['role' => $role]);
 
         // LOG: Confirm the role is stored in the session
@@ -102,47 +106,35 @@ class AuthenticatedSessionController extends Controller
             ]);
         } elseif ($targetHost && $targetHost !== $currentHost) {
 
-            // $protocol = $request->isSecure() ? 'https://' : 'http://';
-            // $port = $request->getPort();
-            // $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
-
-            // // Build the absolute URL for the correct subdomain
-            // $url = $protocol . $targetHost . $portSuffix . '/dashboard';
-
-            // // LOG: Specifically trace the redirection to the new domain
-            // \Log::warning('Subdomain mismatch - Redirecting user', [
-            //     'user_id' => $user->id,
-            //     'from' => $currentHost,
-            //     'to' => $targetHost,
-            //     'full_url' => $url,
-            //     'request_cookies' => $request->cookies->all(),
-            // ]);
-
-            // // Inside the 'if ($targetHost && $targetHost !== $currentHost)' block:
-
-            // \Log::error('CONTROLLER REDIRECT: Sending user to target host', [
-            //     'target_host' => $targetHost,
-            //     'current_host' => $currentHost,
-            //     'url' => $url
-            // ]);
-
-            // return Inertia::location($url);
-
-            // the Absolute URL
             $protocol = $request->isSecure() ? 'https://' : 'http://';
             $port = $request->getPort();
             $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
 
-            // Force the browser to jump domains
+            // Build the absolute URL for the correct subdomain
             $url = $protocol . $targetHost . $portSuffix . '/dashboard';
 
-            // IMPORTANT: Log out of the CURRENT host before leaving
-            // if you want sessions to be truly isolated and not linger.
+            // LOG: Specifically trace the redirection to the new domain
+            \Log::warning('Subdomain mismatch - Redirecting user', [
+                'user_id' => $user->id,
+                'from' => $currentHost,
+                'to' => $targetHost,
+                'full_url' => $url,
+                'request_cookies' => $request->cookies->all(),
+            ]);
+
+            \Log::error('CONTROLLER REDIRECT: Sending user to target host', [
+                'target_host' => $targetHost,
+                'current_host' => $currentHost,
+                'url' => $url
+            ]);
+
+            // IMPORTANT: If you want isolated sessions, we kill the session on the current domain
+            // because the user is leaving to log in elsewhere.
             Auth::guard('web')->logout();
             $request->session()->invalidate();
+            $request->session()->regenerateToken();
 
             return Inertia::location($url);
-
         }
 
         // LOG: Fallback for when the user is already on the correct subdomain
