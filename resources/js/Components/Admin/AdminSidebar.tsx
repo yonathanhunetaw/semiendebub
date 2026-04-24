@@ -93,6 +93,32 @@ export default function AdminSidebar({
             onClick={variant === "temporary" ? onClose : undefined}
         >
             <List sx={{ flexGrow: 1 }}>
+                {/* Carts */}
+                <ListItemButton
+                    component={Link}
+                    href="/carts"
+                    selected={url.includes("/carts")}
+                    sx={mainItemStyle}
+                >
+                    <ListItemIcon>
+                        <ShoppingCart />
+                    </ListItemIcon>
+                    <ListItemText primary="Carts" />
+                </ListItemButton>
+
+                {/* Customers */}
+                <ListItemButton
+                    component={Link}
+                    href="/customers"
+                    selected={url.includes("/customers")}
+                    sx={mainItemStyle}
+                >
+                    <ListItemIcon>
+                        <People />
+                    </ListItemIcon>
+                    <ListItemText primary="Customers" />
+                </ListItemButton>
+
                 {/* Dashboard */}
                 <ListItemButton
                     component={Link}
@@ -124,6 +150,17 @@ export default function AdminSidebar({
                 {/* Deeply Indented Product Items */}
                 <Collapse in={productsOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
+                        <ListItemButton
+                            sx={indentedItemStyle}
+                            component={Link}
+                            href="/discounts"
+                            selected={url.includes("/discounts")}
+                        >
+                            <ListItemIcon sx={{ minWidth: 36 }}>
+                                <LocalOffer fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary="Discounts" />
+                        </ListItemButton>
                         <ListItemButton
                             sx={indentedItemStyle}
                             component={Link}
@@ -160,17 +197,6 @@ export default function AdminSidebar({
                         <ListItemButton
                             sx={indentedItemStyle}
                             component={Link}
-                            href="/transfers"
-                            selected={url.includes("/transfers")}
-                        >
-                            <ListItemIcon sx={{ minWidth: 36 }}>
-                                <SwapHoriz fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText primary="Transfers" />
-                        </ListItemButton>
-                        <ListItemButton
-                            sx={indentedItemStyle}
-                            component={Link}
                             href="/prices"
                             selected={url.includes("/prices")}
                         >
@@ -182,18 +208,29 @@ export default function AdminSidebar({
                         <ListItemButton
                             sx={indentedItemStyle}
                             component={Link}
-                            href="/discounts"
-                            selected={url.includes("/discounts")}
+                            href="/stock"
+                            selected={url.includes("/stock")}
                         >
                             <ListItemIcon sx={{ minWidth: 36 }}>
-                                <LocalOffer fontSize="small" />
+                                <Inventory2 fontSize="small" />
                             </ListItemIcon>
-                            <ListItemText primary="Discounts" />
+                            <ListItemText primary="Stock" />
+                        </ListItemButton>
+                        <ListItemButton
+                            sx={indentedItemStyle}
+                            component={Link}
+                            href="/transfers"
+                            selected={url.includes("/transfers")}
+                        >
+                            <ListItemIcon sx={{ minWidth: 36 }}>
+                                <SwapHoriz fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary="Transfers" />
                         </ListItemButton>
                     </List>
                 </Collapse>
 
-                {/* Main Icons */}
+                {/* Store */}
                 <ListItemButton
                     component={Link}
                     href="/stores"
@@ -205,65 +242,10 @@ export default function AdminSidebar({
                     </ListItemIcon>
                     <ListItemText primary="Store" />
                 </ListItemButton>
-                <ListItemButton
-                    component={Link}
-                    href="/customers"
-                    selected={url.includes("/customers")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon>
-                        <People />
-                    </ListItemIcon>
-                    <ListItemText primary="Customers" />
-                </ListItemButton>
-                <ListItemButton
-                    component={Link}
-                    href="/carts"
-                    selected={url.includes("/carts")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon>
-                        <ShoppingCart />
-                    </ListItemIcon>
-                    <ListItemText primary="Carts" />
-                </ListItemButton>
 
                 {/* The "More" Hidden List - NOT Indented */}
                 <Collapse in={moreOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
-                        <ListItemButton
-                            sx={mainItemStyle}
-                            component={Link}
-                            href="/sales"
-                            selected={url.includes("/sales")}
-                        >
-                            <ListItemIcon>
-                                <PointOfSale fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText primary="Sales" />
-                        </ListItemButton>
-                        <ListItemButton
-                            sx={mainItemStyle}
-                            component={Link}
-                            href="/delivery"
-                            selected={url.includes("/delivery")}
-                        >
-                            <ListItemIcon>
-                                <LocalShipping fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText primary="Delivery" />
-                        </ListItemButton>
-                        <ListItemButton
-                            sx={mainItemStyle}
-                            component={Link}
-                            href="/purchase-orders"
-                            selected={url.includes("/purchase-orders")}
-                        >
-                            <ListItemIcon>
-                                <ReceiptLong fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText primary="Purchase Orders" />
-                        </ListItemButton>
                         <ListItemButton
                             sx={mainItemStyle}
                             component={Link}
@@ -274,17 +256,6 @@ export default function AdminSidebar({
                                 <AccountBalance fontSize="small" />
                             </ListItemIcon>
                             <ListItemText primary="Balance" />
-                        </ListItemButton>
-                        <ListItemButton
-                            sx={mainItemStyle}
-                            component={Link}
-                            href="/documents"
-                            selected={url.includes("/documents")}
-                        >
-                            <ListItemIcon>
-                                <Description fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText primary="Documents" />
                         </ListItemButton>
                         <ListItemButton
                             sx={mainItemStyle}
@@ -300,6 +271,28 @@ export default function AdminSidebar({
                         <ListItemButton
                             sx={mainItemStyle}
                             component={Link}
+                            href="/delivery"
+                            selected={url.includes("/delivery")}
+                        >
+                            <ListItemIcon>
+                                <LocalShipping fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary="Delivery" />
+                        </ListItemButton>
+                        <ListItemButton
+                            sx={mainItemStyle}
+                            component={Link}
+                            href="/documents"
+                            selected={url.includes("/documents")}
+                        >
+                            <ListItemIcon>
+                                <Description fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary="Documents" />
+                        </ListItemButton>
+                        <ListItemButton
+                            sx={mainItemStyle}
+                            component={Link}
                             href="/payments"
                             selected={url.includes("/payments")}
                         >
@@ -307,6 +300,39 @@ export default function AdminSidebar({
                                 <Payments fontSize="small" />
                             </ListItemIcon>
                             <ListItemText primary="Payments" />
+                        </ListItemButton>
+                        <ListItemButton
+                            sx={mainItemStyle}
+                            component={Link}
+                            href="/purchase-orders"
+                            selected={url.includes("/purchase-orders")}
+                        >
+                            <ListItemIcon>
+                                <ReceiptLong fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary="Purchase Orders" />
+                        </ListItemButton>
+                        <ListItemButton
+                            sx={mainItemStyle}
+                            component={Link}
+                            href="/sales"
+                            selected={url.includes("/sales")}
+                        >
+                            <ListItemIcon>
+                                <PointOfSale fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary="Sales" />
+                        </ListItemButton>
+                        <ListItemButton
+                            sx={mainItemStyle}
+                            component={Link}
+                            href="/sessions"
+                            selected={url.includes("/sessions")}
+                        >
+                            <ListItemIcon>
+                                <Badge fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary="Sessions" />
                         </ListItemButton>
                         <ListItemButton
                             sx={mainItemStyle}
@@ -330,17 +356,6 @@ export default function AdminSidebar({
                                 <Person fontSize="small" />
                             </ListItemIcon>
                             <ListItemText primary="Users" />
-                        </ListItemButton>
-                        <ListItemButton
-                            sx={mainItemStyle}
-                            component={Link}
-                            href="/sessions"
-                            selected={url.includes("/sessions")}
-                        >
-                            <ListItemIcon>
-                                <Badge fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText primary="Sessions" />
                         </ListItemButton>
                     </List>
                 </Collapse>
