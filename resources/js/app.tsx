@@ -19,10 +19,26 @@ export const ThemeContext = React.createContext({
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
     resolve: (name) => {
-        // 1. Find the page component
+        // 1. Find the page component (case-insensitive fallback for Linux hosts)
         const pages = import.meta.glob('./Pages/**/*.{tsx,jsx}');
-        const page = resolvePageComponent(`./Pages/${name}.tsx`, pages)
-            .catch(() => resolvePageComponent(`./Pages/${name}.jsx`, pages));
+        const base = `./Pages/${name}`;
+        const requestedTsx = `${base}.tsx`;
+        const requestedJsx = `${base}.jsx`;
+
+        const exactPath = pages[requestedTsx]
+            ? requestedTsx
+            : pages[requestedJsx]
+              ? requestedJsx
+              : undefined;
+
+        const ciPath =
+            Object.keys(pages).find((key) => key.toLowerCase() === requestedTsx.toLowerCase()) ??
+            Object.keys(pages).find((key) => key.toLowerCase() === requestedJsx.toLowerCase());
+
+        const resolvedPath = exactPath ?? ciPath;
+        const page = resolvedPath
+            ? resolvePageComponent(resolvedPath, pages)
+            : resolvePageComponent(requestedTsx, pages).catch(() => resolvePageComponent(requestedJsx, pages));
 
         // 2. Apply the persistent layout logic
         return page.then((module: any) => {
@@ -67,6 +83,6 @@ createInertiaApp({
         createRoot(el).render(<Root />);
     },
     progress: {
-        color: '#006630',
+        color: '#ff9800',
     },
 });
