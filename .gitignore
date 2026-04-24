@@ -6,6 +6,7 @@
 .env.production
 .phpactor.json
 .phpunit.result.cache
+smart_context.txt
 /.fleet
 /.idea
 /.nova
@@ -30,3 +31,4 @@ note.md
 resources/js/Pages/Errors
 certs/
 config/cloudflared/*.json
+.cursorignore

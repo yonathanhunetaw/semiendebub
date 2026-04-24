@@ -1,14 +1,18 @@
 import React from 'react';
 import DeliveryLayout from '@/Layouts/DeliveryLayout';
-import { Typography, Box, Paper, Card, CardContent } from '@mui/material';
+import { Typography, Box, Paper } from '@mui/material';
 import { Grid } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
 import { LocalShipping, PendingActions, CheckCircle } from '@mui/icons-material';
 
 export default function Index() {
+    const theme = useTheme();
+    // TEMP DEBUG: set false after contrast issue is identified.
+    const debugContrastTest = true;
     const stats = [
-        { label: 'Active', value: '12', icon: <LocalShipping color="primary" />, color: '#e8f5e9' },
-        { label: 'Pending', value: '3', icon: <PendingActions color="warning" />, color: '#fff3e0' },
-        { label: 'Completed', value: '145', icon: <CheckCircle color="success" />, color: '#f1f8e9' },
+        { label: 'Active', value: '12', Icon: LocalShipping, palette: theme.palette.primary.main },
+        { label: 'Pending', value: '3', Icon: PendingActions, palette: theme.palette.warning.main },
+        { label: 'Completed', value: '145', Icon: CheckCircle, palette: theme.palette.success.main },
     ];
 
     return (
@@ -22,10 +26,47 @@ export default function Index() {
             <Grid container spacing={2}>
                 {stats.map((stat, i) => (
                     <Grid size={{ xs: 4 }} key={i}> {/* No 'item', use 'size' instead */}
-                        <Paper elevation={0} sx={{ p: 2, textAlign: 'center', bgcolor: stat.color, borderRadius: 2 }}>
-                            {stat.icon}
-                            <Typography variant="h6" fontWeight="bold">{stat.value}</Typography>
-                            <Typography variant="caption" sx={{ display: 'block' }}>{stat.label}</Typography>
+                        <Paper
+                            elevation={0}
+                            sx={{
+                                p: 2,
+                                textAlign: 'center',
+                                bgcolor: debugContrastTest ? '#ffe082' : alpha(stat.palette, 0.12),
+                                borderRadius: 2,
+                                border: '1px solid',
+                                borderColor: debugContrastTest ? '#e65100' : alpha(stat.palette, 0.3),
+                            }}
+                        >
+                            <Box
+                                sx={{
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: '50%',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    bgcolor: debugContrastTest ? '#ffcc80' : alpha(stat.palette, 0.18),
+                                    color: debugContrastTest ? '#111111' : stat.palette,
+                                    mb: 0.5,
+                                }}
+                            >
+                                <stat.Icon fontSize="small" />
+                            </Box>
+                            <Typography
+                                variant="h6"
+                                fontWeight="bold"
+                                sx={{ color: 'text.primary' }}
+                                style={debugContrastTest ? { color: '#111111', background: '#fff59d' } : undefined}
+                            >
+                                {stat.value}
+                            </Typography>
+                            <Typography
+                                variant="caption"
+                                sx={{ display: 'block', color: 'text.secondary' }}
+                                style={debugContrastTest ? { color: '#111111' } : undefined}
+                            >
+                                {stat.label}
+                            </Typography>
                         </Paper>
                     </Grid>
                 ))}
