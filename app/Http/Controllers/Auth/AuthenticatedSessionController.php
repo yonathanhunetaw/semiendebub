@@ -27,6 +27,9 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
+    /**
+     * Handle an incoming authentication request.
+     */
     public function store(LoginRequest $request)
     {
         // LOG: Trace the entry point and capture the incoming port
@@ -83,26 +86,18 @@ class AuthenticatedSessionController extends Controller
         // Determine target host based on config/subdomains.php
         $currentHost = $request->getHost();
         $targetHost = $this->getHostForRole($role);
-        $separatedSessionHosts = $this->separatedSessionHosts();
 
         // --- CRITICAL DIAGNOSTIC LOG ---
-        // This will tell us exactly why the next "if" block might be skipped
         \Log::debug('ROUTING DIAGNOSIS', [
             'detected_role' => $role,
-            'current_host' => $currentHost,
-            'found_target_host' => $targetHost,
-            'hosts_match' => ($targetHost === $currentHost) ? 'YES' : 'NO',
-            'separated_session_enabled' => $separatedSessionHosts,
+            'current_host_string' => $currentHost,
+            'target_host_string' => $targetHost,
+            'hosts_match_exactly' => ($targetHost === $currentHost) ? 'YES' : 'NO',
         ]);
 
         // REDIRECT LOGIC: Handle cross-subdomain jumps
-        if ($separatedSessionHosts) {
-            \Log::info('Cross-subdomain login redirect disabled for separated session hosts', [
-                'current_host' => $currentHost,
-                'target_host' => $targetHost,
-                'user_role' => $role,
-            ]);
-        } elseif ($targetHost && $targetHost !== $currentHost) {
+        // We removed the 'separatedSessionHosts' check here to force the jump
+        if ($targetHost && $targetHost !== $currentHost) {
 
             $protocol = $request->isSecure() ? 'https://' : 'http://';
             $port = $request->getPort();
@@ -126,8 +121,7 @@ class AuthenticatedSessionController extends Controller
                 'url' => $url
             ]);
 
-            // IMPORTANT: Log out of the CURRENT host before leaving
-            // This ensures sessions remain isolated as requested
+            // Clean up session before leaving for isolated domains
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -143,7 +137,7 @@ class AuthenticatedSessionController extends Controller
             'request_cookies' => $request->cookies->all(),
         ]);
 
-        // Clear intended to avoid being pulled back to a previous attempt's URL
+        // Prevent "intended" logic from hijacking the final destination
         $request->session()->forget('url.intended');
 
         return redirect('/dashboard');
