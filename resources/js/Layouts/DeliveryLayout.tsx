@@ -28,8 +28,17 @@ export default function DeliveryLayout({
     };
 
     return (
-        <Box sx={{ pb: 7, minHeight: "100vh" }}>
-            <Box component="main">{children}</Box>
+        <Box
+            sx={{
+                pb: 7,
+                minHeight: "100vh",
+                bgcolor: "background.default",
+                color: "text.primary",
+            }}
+        >
+            <Box component="main" sx={{ bgcolor: "background.default", minHeight: "100vh" }}>
+                {children}
+            </Box>
 
             <Paper
                 sx={{
@@ -38,6 +47,7 @@ export default function DeliveryLayout({
                     left: 0,
                     right: 0,
                     zIndex: 1000,
+                    bgcolor: "background.paper",
                 }}
                 elevation={3}
             >
