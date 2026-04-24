@@ -23,6 +23,7 @@ import {
     Store,
     SwapHoriz,
     TaskAlt,
+    Person,
 } from "@mui/icons-material";
 import { Link, usePage } from "@inertiajs/react";
 import {
@@ -325,7 +326,8 @@ export default function AdminSidebar({
                             selected={url.includes("/users")}
                         >
                             <ListItemIcon>
-                                <TaskAlt fontSize="small" />
+                                {/* Changed from TaskAlt to Person */}
+                                <Person fontSize="small" />
                             </ListItemIcon>
                             <ListItemText primary="Users" />
                         </ListItemButton>
