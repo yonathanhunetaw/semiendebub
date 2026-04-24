@@ -93,6 +93,19 @@ export default function AdminSidebar({
             onClick={variant === "temporary" ? onClose : undefined}
         >
             <List sx={{ flexGrow: 1 }}>
+                {/* Dashboard */}
+                <ListItemButton
+                    component={Link}
+                    href="/dashboard"
+                    selected={url.startsWith("/dashboard")}
+                    sx={mainItemStyle}
+                >
+                    <ListItemIcon>
+                        <Dashboard />
+                    </ListItemIcon>
+                    <ListItemText primary="Dashboard" />
+                </ListItemButton>
+
                 {/* Carts */}
                 <ListItemButton
                     component={Link}
@@ -117,19 +130,6 @@ export default function AdminSidebar({
                         <People />
                     </ListItemIcon>
                     <ListItemText primary="Customers" />
-                </ListItemButton>
-
-                {/* Dashboard */}
-                <ListItemButton
-                    component={Link}
-                    href="/dashboard"
-                    selected={url.startsWith("/dashboard")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon>
-                        <Dashboard />
-                    </ListItemIcon>
-                    <ListItemText primary="Dashboard" />
                 </ListItemButton>
 
                 {/* Products Parent */}
@@ -175,28 +175,6 @@ export default function AdminSidebar({
                         <ListItemButton
                             sx={indentedItemStyle}
                             component={Link}
-                            href="/variants"
-                            selected={url.includes("/variants")}
-                        >
-                            <ListItemIcon sx={{ minWidth: 36 }}>
-                                <Layers fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText primary="Variations" />
-                        </ListItemButton>
-                        <ListItemButton
-                            sx={indentedItemStyle}
-                            component={Link}
-                            href="/stock"
-                            selected={url.includes("/stock")}
-                        >
-                            <ListItemIcon sx={{ minWidth: 36 }}>
-                                <Inventory2 fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText primary="Stock" />
-                        </ListItemButton>
-                        <ListItemButton
-                            sx={indentedItemStyle}
-                            component={Link}
                             href="/prices"
                             selected={url.includes("/prices")}
                         >
@@ -226,6 +204,17 @@ export default function AdminSidebar({
                                 <SwapHoriz fontSize="small" />
                             </ListItemIcon>
                             <ListItemText primary="Transfers" />
+                        </ListItemButton>
+                        <ListItemButton
+                            sx={indentedItemStyle}
+                            component={Link}
+                            href="/variants"
+                            selected={url.includes("/variants")}
+                        >
+                            <ListItemIcon sx={{ minWidth: 36 }}>
+                                <Layers fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary="Variations" />
                         </ListItemButton>
                     </List>
                 </Collapse>
