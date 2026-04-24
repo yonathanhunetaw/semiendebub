@@ -15,6 +15,7 @@ import {
     LocalShipping,
     Payments,
     People,
+    Person,
     PointOfSale,
     PriceCheck,
     ReceiptLong,
@@ -23,7 +24,6 @@ import {
     Store,
     SwapHoriz,
     TaskAlt,
-    Person,
 } from "@mui/icons-material";
 import { Link, usePage } from "@inertiajs/react";
 import {
