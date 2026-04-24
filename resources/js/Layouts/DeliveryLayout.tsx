@@ -20,10 +20,10 @@ export default function DeliveryLayout({
     // Inside DeliveryLayout.tsx
 
     const getActiveValue = () => {
-        if (url.includes("dashboard")) return 0;
-        if (url.includes("delivery")) return 1;
+        if (url.includes("/dashboard")) return 0;
+        if (url.includes("/delivery")) return 1;
         // Highlight Profile (2) if we are on profile OR sessions
-        if (url.includes("profile") || url.includes("sessions")) return 2;
+        if (url.includes("/profile") || url.includes("/sessions")) return 2;
         return 0;
     };
 
@@ -53,7 +53,7 @@ export default function DeliveryLayout({
                         label="My Delivery"
                         icon={<CiDeliveryTruck size={24} />}
                         component={Link}
-                        href={route("delivery.delivery.index")}
+                        href={route("delivery.index")}
                     />
                     <BottomNavigationAction
                         label="Profile"

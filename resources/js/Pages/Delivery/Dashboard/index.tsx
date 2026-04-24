@@ -8,7 +8,7 @@ import { LocalShipping, PendingActions, CheckCircle } from '@mui/icons-material'
 export default function Index() {
     const theme = useTheme();
     const stats = [
-        { label: 'Active', value: '12', Icon: LocalShipping, palette: theme.palette.primary.main },
+        { label: 'Active', value: '12', Icon: LocalShipping, palette: theme.palette.info.main },
         { label: 'Pending', value: '3', Icon: PendingActions, palette: theme.palette.warning.main },
         { label: 'Completed', value: '145', Icon: CheckCircle, palette: theme.palette.success.main },
     ];
