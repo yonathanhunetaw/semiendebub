@@ -13,7 +13,7 @@ const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 // 1. Create a Context so child pages (like Profile) can change the theme
 export const ThemeContext = React.createContext({
     toggleTheme: (newMode: 'light' | 'dark' | 'system') => {},
-    currentSetting: 'system'
+    currentSetting: 'dark'
 });
 
 createInertiaApp({
@@ -37,7 +37,7 @@ createInertiaApp({
     setup({ el, App, props }) {
         const Root = () => {
             // 2. These hooks MUST be inside the component
-            const [setting, setSetting] = React.useState<'light' | 'dark' | 'system'>('system');
+            const [setting, setSetting] = React.useState<'light' | 'dark' | 'system'>('dark');
             const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
 
             // 3. Determine if we should actually render light or dark

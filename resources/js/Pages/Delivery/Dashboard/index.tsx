@@ -7,8 +7,6 @@ import { LocalShipping, PendingActions, CheckCircle } from '@mui/icons-material'
 
 export default function Index() {
     const theme = useTheme();
-    // TEMP DEBUG: set false after contrast issue is identified.
-    const debugContrastTest = true;
     const stats = [
         { label: 'Active', value: '12', Icon: LocalShipping, palette: theme.palette.primary.main },
         { label: 'Pending', value: '3', Icon: PendingActions, palette: theme.palette.warning.main },
@@ -31,10 +29,10 @@ export default function Index() {
                             sx={{
                                 p: 2,
                                 textAlign: 'center',
-                                bgcolor: debugContrastTest ? '#ffe082' : alpha(stat.palette, 0.12),
+                                bgcolor: alpha(stat.palette, 0.12),
                                 borderRadius: 2,
                                 border: '1px solid',
-                                borderColor: debugContrastTest ? '#e65100' : alpha(stat.palette, 0.3),
+                                borderColor: alpha(stat.palette, 0.3),
                             }}
                         >
                             <Box
@@ -45,26 +43,17 @@ export default function Index() {
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    bgcolor: debugContrastTest ? '#ffcc80' : alpha(stat.palette, 0.18),
-                                    color: debugContrastTest ? '#111111' : stat.palette,
+                                    bgcolor: alpha(stat.palette, 0.18),
+                                    color: stat.palette,
                                     mb: 0.5,
                                 }}
                             >
                                 <stat.Icon fontSize="small" />
                             </Box>
-                            <Typography
-                                variant="h6"
-                                fontWeight="bold"
-                                sx={{ color: 'text.primary' }}
-                                style={debugContrastTest ? { color: '#111111', background: '#fff59d' } : undefined}
-                            >
+                            <Typography variant="h6" fontWeight="bold" sx={{ color: 'text.primary' }}>
                                 {stat.value}
                             </Typography>
-                            <Typography
-                                variant="caption"
-                                sx={{ display: 'block', color: 'text.secondary' }}
-                                style={debugContrastTest ? { color: '#111111' } : undefined}
-                            >
+                            <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
                                 {stat.label}
                             </Typography>
                         </Paper>
