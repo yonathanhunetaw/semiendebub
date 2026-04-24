@@ -63,7 +63,7 @@ export default function DeliveryLayout({
                         label="My Delivery"
                         icon={<CiDeliveryTruck size={24} />}
                         component={Link}
-                        href={route("delivery.index")}
+                        href={route("delivery.delivery.index")}
                     />
                     <BottomNavigationAction
                         label="Profile"
