@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Controller;
 use App\Models\Auth\Customer;
 use App\Models\Item;
 use App\Models\ItemVariant;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
+use Inertia\Response;
+
 
 class DashboardController extends Controller
 {
@@ -75,19 +79,18 @@ class DashboardController extends Controller
                     'is_low' => $totalStock <= 5, // or any threshold you want
                 ];
             })
-            ->filter(fn ($item) => $item['low_stock_total'] > 0);
+            ->filter(fn($item) => $item['low_stock_total'] > 0);
 
-        return view('admin.dashboard.index', compact(
-            'sessionsCount',
-            'customersCount',
-            'productsCount',
-            'activeVariants',
-            'groupedProducts',
-            // 'itemsCount',
-            'activeVariantsCount',
-            'lowStockItems',
+        // DashboardController.php
 
-        ));
+        return Inertia::render('Admin/Dashboard/Index', [
+            'sessionsCount' => $sessionsCount,
+            'customersCount' => $customersCount,
+            'productsCount' => $productsCount,
+            'activeVariantsCount' => $activeVariantsCount,
+            'lowStockItems' => $lowStockItems->values(), // values() resets keys for JSON
+            'groupedProducts' => $groupedProducts,
+        ]);
 
     }
 }
