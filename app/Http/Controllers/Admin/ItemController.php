@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Item;
-use App\Models\ItemCategory;
-use App\Models\ItemColor;
-use App\Models\ItemPackagingType;
-use App\Models\ItemSize;
+use App\Models\Auth\User;
+use App\Models\Item\Item;
+use App\Models\Item\ItemCategory;
+use App\Models\Item\ItemColor;
+use App\Models\Item\ItemPackagingType;
+use App\Models\Item\ItemSize;
 use App\Models\StockKeeper\ItemInventoryLocation;
-use App\Models\Store;
-use App\Models\User;
+use App\Models\Store\Store;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
