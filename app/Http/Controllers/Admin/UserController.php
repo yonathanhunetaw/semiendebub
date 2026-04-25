@@ -31,7 +31,7 @@ class UserController extends Controller
      */
     public function create()
     {
-        return view('admin.users.create');
+        return Inertia::render('Admin/Users/Create');
     }
 
     /**
@@ -74,7 +74,9 @@ class UserController extends Controller
     {
         $users = User::with('creator')->get();
 
-        return view('admin.users.show', compact('user'));
+        return Inertia::render('Admin/Users/Show', [
+            'user' => $users->load('creator')
+        ]);
     }
 
     /**
@@ -87,7 +89,9 @@ class UserController extends Controller
         Log::info('Raw Role Value:', ['role' => $user->role]);
         Log::info('Old Role Value in Form:', ['old_role' => old('role', $user->role)]);
 
-        return view('admin.users.edit', compact('user'));
+        return Inertia::render('Admin/Users/Edit', [
+            'user' => $user
+        ]);
     }
 
     /**
