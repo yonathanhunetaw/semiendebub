@@ -403,9 +403,10 @@ export default function AdminSidebar({
                 "& .MuiDrawer-paper": {
                     width: drawerWidth,
                     boxSizing: "border-box",
-                    backgroundColor: "#000000",
-                    color: "#ffffff",
-                    borderRight: "1px solid rgba(255, 255, 255, 0.12)",
+                    bgcolor: "background.paper",
+                    color: "text.primary",
+                    borderRight: "1px solid",
+                    borderColor: "divider",
                     "&::-webkit-scrollbar": { width: "8px" },
                     "&::-webkit-scrollbar-track": { background: "transparent" },
                     "&::-webkit-scrollbar-thumb": {

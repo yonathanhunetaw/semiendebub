@@ -1,4 +1,4 @@
-import {useState} from "react"; // 1. Added missing import
+import {useState} from "react";
 import AdminLayout from "@/Components/Admin/AdminLayout";
 import {Head} from "@inertiajs/react";
 import {
@@ -83,7 +83,7 @@ export default function Show({item, variantData, allImages}: Props) {
                             position: 'relative',
                             overflow: 'hidden',
                             borderRadius: 2,
-                            bgcolor: '#f5f5f5',
+                            bgcolor: 'background.default',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'

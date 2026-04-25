@@ -30,10 +30,10 @@ export default function SettingsIndex() {
             <Head title="Settings" />
 
             <Stack spacing={1} mb={3}>
-                <Typography variant="h5" fontWeight={800} sx={{ color: "#fff" }}>
+                <Typography variant="h5" fontWeight={800} sx={{ color: "text.primary" }}>
                     Settings
                 </Typography>
-                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.72)" }}>
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
                     Layout for now. Theme settings are live so you can keep every page looking good in both modes.
                 </Typography>
             </Stack>
@@ -43,23 +43,24 @@ export default function SettingsIndex() {
                 <Card
                     elevation={0}
                     sx={{
-                        backgroundColor: "#272727",
+                        bgcolor: "background.paper",
                         borderRadius: "12px",
-                        border: "1px solid rgba(255, 255, 255, 0.10)",
+                        border: "1px solid",
+                        borderColor: "divider",
                     }}
                 >
                     <CardContent>
                         <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-                            <Typography fontWeight={800} sx={{ color: "#fff" }}>
+                            <Typography fontWeight={800} sx={{ color: "text.primary" }}>
                                 Appearance
                             </Typography>
                             <Chip size="small" label="Active" color="success" />
                         </Stack>
 
-                        <Divider sx={{ borderColor: "rgba(255,255,255,0.08)", mb: 2 }} />
+                        <Divider sx={{ borderColor: "divider", mb: 2 }} />
 
                         <Stack spacing={1.5}>
-                            <Typography variant="subtitle2" sx={{ color: "rgba(255,255,255,0.72)" }}>
+                            <Typography variant="subtitle2" sx={{ color: "text.secondary" }}>
                                 Theme mode
                             </Typography>
 
@@ -71,22 +72,22 @@ export default function SettingsIndex() {
                                     <FormControlLabel
                                         value="dark"
                                         control={<Radio />}
-                                        label={<Typography sx={{ color: "#fff" }}>Dark</Typography>}
+                                        label={<Typography sx={{ color: "text.primary" }}>Dark</Typography>}
                                     />
                                     <FormControlLabel
                                         value="light"
                                         control={<Radio />}
-                                        label={<Typography sx={{ color: "#fff" }}>Light</Typography>}
+                                        label={<Typography sx={{ color: "text.primary" }}>Light</Typography>}
                                     />
                                     <FormControlLabel
                                         value="system"
                                         control={<Radio />}
-                                        label={<Typography sx={{ color: "#fff" }}>System</Typography>}
+                                        label={<Typography sx={{ color: "text.primary" }}>System</Typography>}
                                     />
                                 </RadioGroup>
                             </FormControl>
 
-                            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.60)" }}>
+                            <Typography variant="caption" sx={{ color: "text.secondary" }}>
                                 “System” follows your device preference automatically.
                             </Typography>
                         </Stack>
@@ -99,20 +100,21 @@ export default function SettingsIndex() {
                         elevation={0}
                         sx={{
                             flex: 1,
-                            backgroundColor: "#272727",
+                            bgcolor: "background.paper",
                             borderRadius: "12px",
-                            border: "1px solid rgba(255, 255, 255, 0.10)",
+                            border: "1px solid",
+                            borderColor: "divider",
                         }}
                     >
                         <CardContent>
                             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-                                <Typography fontWeight={800} sx={{ color: "#fff" }}>
+                                <Typography fontWeight={800} sx={{ color: "text.primary" }}>
                                     Notifications
                                 </Typography>
-                                <Chip size="small" label="Layout" variant="outlined" sx={{ color: "#fff" }} />
+                                <Chip size="small" label="Layout" variant="outlined" />
                             </Stack>
-                            <Divider sx={{ borderColor: "rgba(255,255,255,0.08)", mb: 2 }} />
-                            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.72)" }}>
+                            <Divider sx={{ borderColor: "divider", mb: 2 }} />
+                            <Typography variant="body2" sx={{ color: "text.secondary" }}>
                                 Placeholder for delivery / payments / low-stock alerts, and admin notifications.
                             </Typography>
                             <Button disabled sx={{ mt: 2 }} variant="contained">
@@ -125,20 +127,21 @@ export default function SettingsIndex() {
                         elevation={0}
                         sx={{
                             flex: 1,
-                            backgroundColor: "#272727",
+                            bgcolor: "background.paper",
                             borderRadius: "12px",
-                            border: "1px solid rgba(255, 255, 255, 0.10)",
+                            border: "1px solid",
+                            borderColor: "divider",
                         }}
                     >
                         <CardContent>
                             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-                                <Typography fontWeight={800} sx={{ color: "#fff" }}>
+                                <Typography fontWeight={800} sx={{ color: "text.primary" }}>
                                     Admin preferences
                                 </Typography>
-                                <Chip size="small" label="Layout" variant="outlined" sx={{ color: "#fff" }} />
+                                <Chip size="small" label="Layout" variant="outlined" />
                             </Stack>
-                            <Divider sx={{ borderColor: "rgba(255,255,255,0.08)", mb: 2 }} />
-                            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.72)" }}>
+                            <Divider sx={{ borderColor: "divider", mb: 2 }} />
+                            <Typography variant="body2" sx={{ color: "text.secondary" }}>
                                 Placeholder for defaults used across sidebar pages (tables density, currency, date format, etc.).
                             </Typography>
                             <Button disabled sx={{ mt: 2 }} variant="contained">

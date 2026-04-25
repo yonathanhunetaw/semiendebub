@@ -1,4 +1,4 @@
-import { createTheme, colors, PaletteMode } from '@mui/material';
+import { colors, PaletteMode } from '@mui/material';
 
 // Define the tokens with the proper type for mode
 export const getDesignTokens = (mode: PaletteMode) => ({
@@ -10,11 +10,18 @@ export const getDesignTokens = (mode: PaletteMode) => ({
     secondary: {
         main: colors.orange[500],
     },
-    ...(mode === 'dark' && {
-        background: {
-            default: '#0f0f0f',
-            paper: '#272727',
-        },
-    }),
+    ...(mode === 'dark'
+        ? {
+              background: {
+                  default: '#0f0f0f',
+                  paper: '#272727',
+              },
+          }
+        : {
+              background: {
+                  default: '#f6f7f9',
+                  paper: '#ffffff',
+              },
+          }),
   },
 });

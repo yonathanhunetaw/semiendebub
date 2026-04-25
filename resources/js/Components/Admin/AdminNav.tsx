@@ -26,14 +26,11 @@ export default function AdminNav({ onMenuClick }: { onMenuClick?: () => void }) 
                 elevation={0}
                 sx={{
                     borderBottom: '1px solid',
-                    // Changed to a subtle gray so it's visible against the black
-                    borderColor: 'rgba(255, 255, 255, 0.12)',
+                    borderColor: 'divider',
                     width: { xl: `calc(100% - ${drawerWidth}px)` },
                     ml: { xl: `${drawerWidth}px` },
-                    // Set to solid black
-                    backgroundColor: '#000000',
-                    // Optional: ensures icons/text automatically turn white
-                    color: '#ffffff',
+                    bgcolor: 'background.paper',
+                    color: 'text.primary',
                 }}
             >
             <Toolbar>
@@ -58,7 +55,7 @@ export default function AdminNav({ onMenuClick }: { onMenuClick?: () => void }) 
                         variant="subtitle2"
                         sx={{
                             lineHeight: 1.2,
-                            color: '#ffffff' // Pure white for the name
+                            color: 'text.primary'
                         }}
                     >
                         {auth?.user?.first_name || auth?.user?.name || 'User'}
@@ -66,7 +63,7 @@ export default function AdminNav({ onMenuClick }: { onMenuClick?: () => void }) 
                     <Typography
                         variant="caption"
                         sx={{
-                            color: 'rgba(255, 255, 255, 0.7)' // Softened white for the email
+                            color: 'text.secondary'
                         }}
                     >
                         {auth?.user?.email || ''}

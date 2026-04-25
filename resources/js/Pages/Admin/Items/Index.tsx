@@ -85,7 +85,7 @@ export default function ItemIndex({items, filters}: Props) {
             {/* Items Table */}
             <TableContainer component={Paper} sx={{boxShadow: 3}}>
                 <Table>
-                    <TableHead sx={{backgroundColor: '#f5f5f5'}}>
+                    <TableHead sx={{bgcolor: 'background.default'}}>
                         <TableRow>
                             <TableCell>
                                 <Stack

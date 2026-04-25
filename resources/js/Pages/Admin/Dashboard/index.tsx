@@ -9,7 +9,7 @@ export default function Dashboard() {
             <Typography
                 variant="h5"
                 sx={{
-                    color: '#ffffff',
+                    color: 'text.primary',
                     fontWeight: 700,
                     mb: 3,
                     letterSpacing: '-0.2px',
@@ -23,14 +23,15 @@ export default function Dashboard() {
                 elevation={0}
                 sx={{
                     p: 3,
-                    backgroundColor: '#272727', // YouTube Card color
+                    bgcolor: 'background.paper',
                     borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    border: '1px solid',
+                    borderColor: 'divider',
                 }}
             >
                 <Typography
                     sx={{
-                        color: '#f1f1f1',
+                        color: 'text.secondary',
                         fontSize: '0.95rem',
                         fontWeight: 400
                     }}

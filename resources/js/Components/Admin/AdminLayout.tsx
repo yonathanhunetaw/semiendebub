@@ -8,7 +8,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const [mobileOpen, setMobileOpen] = useState(false);
 
     return (
-        <Box sx={{ display: 'flex', backgroundColor: '#0f0f0f', minHeight: '100vh' }}>
+        <Box sx={{ display: 'flex', bgcolor: 'background.default', minHeight: '100vh' }}>
             <CssBaseline />
             <AdminNav onMenuClick={() => setMobileOpen(!mobileOpen)} />
 
@@ -32,7 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 component="main"
                 sx={{
                     flexGrow: 1,
-                    backgroundColor: '#0f0f0f', // YouTube Black
+                    bgcolor: 'background.default',
                     minHeight: '100vh',
                     width: { xl: `calc(100% - 260px)` }
                 }}
