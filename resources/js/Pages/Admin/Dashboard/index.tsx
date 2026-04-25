@@ -1,6 +1,6 @@
 import AdminLayout from "@/Components/Admin/AdminLayout";
 import { Head } from "@inertiajs/react";
-import { Box, Paper, Typography, Card, CardContent, Divider, Chip } from "@mui/material";
+import { Box, Paper, Typography, Divider, Chip, Stack } from "@mui/material"; // Put Stack here
 import PeopleIcon from '@mui/icons-material/People';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
@@ -26,8 +26,9 @@ export default function Dashboard({
     customersCount,
     productsCount,
     activeVariantsCount,
-    lowStockItems
+    lowStockItems = [] // Add default value to prevent map errors
 }: Props) {
+    // ... rest of your code
 
     // Helper for Stat Cards
     const StatCard = ({ title, value, icon, color }: any) => (
