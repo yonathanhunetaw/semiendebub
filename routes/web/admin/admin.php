@@ -29,6 +29,15 @@ Route::domain("admin.{$baseDomain}")
                 return Inertia::render('Admin/Dashboard/index');
             })->name('dashboard');
 
+            Route::get('/settings', function () {
+                return Inertia::render('Admin/Settings/Index');
+            })->name('settings');
+
+            // Backwards-compatible URL (if you navigate to /admin/settings on the admin subdomain)
+            Route::get('/admin/settings', function () {
+                return redirect()->route('admin.settings');
+            });
+
             Route::resource('items', ItemController::class);
 
             Route::prefix('sessions')->group(function () {

@@ -16,6 +16,8 @@ export const ThemeContext = React.createContext({
     currentSetting: 'dark'
 });
 
+const THEME_STORAGE_KEY = 'duka.theme.mode';
+
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
     resolve: (name) => {
@@ -53,8 +55,25 @@ createInertiaApp({
     setup({ el, App, props }) {
         const Root = () => {
             // 2. These hooks MUST be inside the component
-            const [setting, setSetting] = React.useState<'light' | 'dark' | 'system'>('dark');
+            const [setting, setSetting] = React.useState<'light' | 'dark' | 'system'>(() => {
+                try {
+                    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+                    if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+                } catch {
+                    // ignore storage errors
+                }
+                return 'system';
+            });
             const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
+
+            const setThemeSetting = React.useCallback((newSetting: 'light' | 'dark' | 'system') => {
+                setSetting(newSetting);
+                try {
+                    window.localStorage.setItem(THEME_STORAGE_KEY, newSetting);
+                } catch {
+                    // ignore storage errors
+                }
+            }, []);
 
             // 3. Determine if we should actually render light or dark
             const mode = React.useMemo<PaletteMode>(() => {
@@ -71,7 +90,7 @@ createInertiaApp({
             );
 
             return (
-                <ThemeContext.Provider value={{ toggleTheme: setSetting, currentSetting: setting }}>
+                <ThemeContext.Provider value={{ toggleTheme: setThemeSetting, currentSetting: setting }}>
                     <ThemeProvider theme={theme}>
                         <CssBaseline />
                         <App {...props} />
