@@ -182,7 +182,7 @@ class ItemController extends Controller
         //            'filters' => request()->only(['filter', 'sort', 'direction']), // Pass these for your React logic
         //        ]);
         // 6️⃣ Return Inertia Render
-        return Inertia::render('Staff/Admin/Items/Show', [
+        return Inertia::render('Admin/Items/Show', [
             'item' => $item,
             'colors' => $colors,
             'sizes' => $sizes,
@@ -198,7 +198,9 @@ class ItemController extends Controller
 
     public function edit(Item $item)
     {
-        return view('admin.items.edit', compact('item'));
+        return Inertia::render('Admin/Items/Edit', [
+            'item' => $item,
+        ]);
     }
 
     // Show the details of a specific item
@@ -424,7 +426,7 @@ class ItemController extends Controller
 
     public function create()
     {
-        return view('admin.items.create', [
+        return Inertia::render('Admin/Items/Create', [
             'categories' => ItemCategory::all(),
             'colors' => ItemColor::all(),
             'sizes' => ItemSize::all(),
