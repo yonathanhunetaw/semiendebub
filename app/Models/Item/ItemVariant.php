@@ -2,12 +2,12 @@
 
 namespace App\Models\Item;
 
-use App\Models\Catalog\ItemStock;
-use App\Models\Catalog\Store;
-use App\Models\Catalog\StoreVariant;
-use App\Models\Catalog\StoreVariantCustomerPrice;
-use App\Models\Catalog\StoreVariantSellerPrice;
-use App\Models\Catalog\User;
+use App\Models\Auth\User;
+use App\Models\StockKeeper\ItemStock;
+use App\Models\Store\Store;
+use App\Models\Store\StoreVariant;
+use App\Models\Store\StoreVariantCustomerPrice;
+use App\Models\Store\StoreVariantSellerPrice;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
