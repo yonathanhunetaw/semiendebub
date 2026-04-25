@@ -131,9 +131,6 @@ export default function Dashboard({
     );
 }
 
-// Adding Stack to the import at the top
-import { Stack } from "@mui/material";
-
 Dashboard.layout = (page: React.ReactNode) => (
     <AdminLayout>
         <Head title="Admin Dashboard"/>
