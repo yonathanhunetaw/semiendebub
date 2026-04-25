@@ -1,8 +1,9 @@
 import AdminLayout from "@/Components/Admin/AdminLayout";
 import { Head, Link } from "@inertiajs/react";
-import { Box, Button, Paper, Stack, Typography, Divider, Grid, Chip } from "@mui/material";
+import { Box, Button, Paper, Stack, Typography, Divider, Chip } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
+import Grid from '@mui/material/Grid';
 
 interface User {
     id: number;

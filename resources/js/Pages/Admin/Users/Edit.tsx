@@ -1,8 +1,9 @@
 import AdminLayout from "@/Components/Admin/AdminLayout";
 import { Head, useForm, Link } from "@inertiajs/react";
-import { Box, Button, Paper, Stack, TextField, Typography, MenuItem, Grid, Alert } from "@mui/material";
+import { Box, Button, Paper, Stack, TextField, Typography, MenuItem, Alert } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UpdateIcon from '@mui/icons-material/Update';
+import Grid from '@mui/material/Grid';
 
 interface User {
     id: number;
