@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Events\UserCreated;
-use App\Models\User;
+use App\Models\Auth\User;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 
 class UserController extends Controller
 {
@@ -20,7 +21,9 @@ class UserController extends Controller
         // Fetch all users and include the user who created them
         $users = User::with('creator')->get();
 
-        return view('admin.users.index', compact('users'));
+        return Inertia::render('Admin/Users/Index', [
+            'users' => $users,
+        ]);
     }
 
     /**

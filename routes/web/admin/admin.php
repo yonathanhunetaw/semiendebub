@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\SessionController;
+use App\Http\Controllers\Admin\UserController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -39,6 +40,8 @@ Route::domain("admin.{$baseDomain}")
             });
 
             Route::resource('items', ItemController::class);
+
+            Route::resource('users', UserController::class);
 
             Route::prefix('sessions')->group(function () {
                 Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
