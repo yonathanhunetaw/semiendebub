@@ -1,4 +1,3 @@
-import { SellerCard, SellerHeader, SELLER_BRAND_DARK, sellerHeaderButtonSx } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
 import CategoryRoundedIcon from "@mui/icons-material/CategoryRounded";
@@ -15,77 +14,39 @@ import {
     IconButton,
     Stack,
     Typography,
+    useTheme,
 } from "@mui/material";
 import React from "react";
 
 const menuCards = [
-    {
-        label: "Dashboard",
-        href: route("seller.dashboard"),
-        icon: DashboardRoundedIcon,
-    },
-    {
-        label: "Catalog",
-        href: route("seller.items.index"),
-        icon: Inventory2RoundedIcon,
-    },
-    {
-        label: "Customers",
-        href: route("seller.customers.index"),
-        icon: GroupsRoundedIcon,
-    },
-    {
-        label: "Carts",
-        href: route("seller.carts.index"),
-        icon: PointOfSaleRoundedIcon,
-    },
-    {
-        label: "Categories",
-        href: route("seller.categories.index"),
-        icon: CategoryRoundedIcon,
-    },
-    {
-        label: "Settings",
-        href: route("seller.settings.index"),
-        icon: SettingsRoundedIcon,
-    },
-    {
-        label: "Balance",
-        icon: WalletRoundedIcon,
-        soon: true,
-    },
-    {
-        label: "Documents",
-        icon: ReceiptLongRoundedIcon,
-        soon: true,
-    },
+    { label: "Dashboard", href: route("seller.dashboard"), icon: DashboardRoundedIcon },
+    { label: "Catalog", href: route("seller.items.index"), icon: Inventory2RoundedIcon },
+    { label: "Customers", href: route("seller.customers.index"), icon: GroupsRoundedIcon },
+    { label: "Carts", href: route("seller.carts.index"), icon: PointOfSaleRoundedIcon },
+    { label: "Categories", href: route("seller.categories.index"), icon: CategoryRoundedIcon },
+    { label: "Settings", href: route("seller.settings.index"), icon: SettingsRoundedIcon },
+    { label: "Balance", icon: WalletRoundedIcon, soon: true },
+    { label: "Documents", icon: ReceiptLongRoundedIcon, soon: true },
 ];
 
-export default function Index({
-    stats,
-}: {
-    stats?: {
-        customers?: number;
-        carts?: number;
-        items?: number;
-    };
-}) {
+export default function Index({ stats }: { stats?: { customers?: number; carts?: number; items?: number; }; }) {
+    const theme = useTheme();
+
     return (
-        <>
+        <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', color: 'text.primary' }}>
             <Head title="Seller Menu" />
 
-            <SellerHeader
-                title="More"
-                action={(
-                    <IconButton
-                        component={Link}
-                        href={route("seller.settings.index")}
-                        sx={sellerHeaderButtonSx}
-                    >
-                        <SettingsRoundedIcon />
-                    </IconButton>
-                )}
-            />
+            {/* Clean Header replacing SellerHeader */}
+            <Box sx={{ px: 2, pt: 4, pb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h4" sx={{ fontWeight: 900 }}>More</Typography>
+                <IconButton
+                    component={Link}
+                    href={route("seller.settings.index")}
+                    sx={{ bgcolor: 'primary.main', color: '#000000', '&:hover': { bgcolor: 'primary.dark' } }}
+                >
+                    <SettingsRoundedIcon />
+                </IconButton>
+            </Box>
 
             <Box sx={{ px: 2, pt: 2 }}>
                 <Box
@@ -97,38 +58,49 @@ export default function Index({
                 >
                     {menuCards.map((card) => {
                         const Icon = card.icon;
-                        const badge =
-                            card.label === "Customers"
-                                ? stats?.customers
-                                : card.label === "Carts"
-                                  ? stats?.carts
-                                  : card.label === "Catalog"
-                                    ? stats?.items
+                        const badge = card.label === "Customers" ? stats?.customers
+                                    : card.label === "Carts" ? stats?.carts
+                                    : card.label === "Catalog" ? stats?.items
                                     : undefined;
 
-                        const cardProps = card.href
-                            ? { component: Link, href: card.href, sx: { textDecoration: "none", color: "inherit" } }
-                            : {};
-
                         return (
-                            <SellerCard key={card.label} {...cardProps}>
-                                <Stack spacing={1.5}>
+                            <Box
+                                key={card.label}
+                                component={card.href ? Link : 'div'}
+                                href={card.href}
+                                sx={{
+                                    textDecoration: "none",
+                                    bgcolor: "#1e293b", // Deep Dark Navy background
+                                    p: 2.5,
+                                    borderRadius: 4,
+                                    border: '1px solid rgba(255,255,255,0.05)',
+                                    display: 'block',
+                                    transition: '0.2s',
+                                    '&:active': { transform: 'scale(0.95)' }
+                                }}
+                            >
+                                <Stack spacing={2}>
                                     <Stack direction="row" alignItems="center" justifyContent="space-between">
-                                        <Icon sx={{ color: SELLER_BRAND_DARK }} />
+                                        {/* Icon uses the Orange Brand Color */}
+                                        <Icon sx={{ color: "primary.main", fontSize: '1.8rem' }} />
+
                                         {card.soon ? (
-                                            <Chip label="Soon" size="small" variant="outlined" />
+                                            <Chip label="Soon" size="small" variant="outlined" sx={{ color: 'text.secondary', borderColor: 'rgba(255,255,255,0.2)' }} />
                                         ) : badge != null ? (
-                                            <Chip label={badge} size="small" sx={{ fontWeight: 700 }} />
+                                            <Chip label={badge} size="small" sx={{ bgcolor: 'primary.main', color: '#000000', fontWeight: 900 }} />
                                         ) : null}
                                     </Stack>
-                                    <Typography sx={{ fontWeight: 700 }}>{card.label}</Typography>
+
+                                    <Typography sx={{ fontWeight: 800, color: '#ffffff', fontSize: '1rem' }}>
+                                        {card.label}
+                                    </Typography>
                                 </Stack>
-                            </SellerCard>
+                            </Box>
                         );
                     })}
                 </Box>
             </Box>
-        </>
+        </Box>
     );
 }
 
