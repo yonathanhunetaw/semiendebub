@@ -55,7 +55,7 @@ Route::middleware('notify.public.visit')->get('/', function () {
         return redirect()->route($roleDashboards[$expectedRole]);
     }
 
-    return Inertia::render('Guest/Welcome');
+    return Inertia::render('Guest/Welcome/index');
 });
 
 if (app()->environment('local')) {
@@ -67,24 +67,28 @@ if (app()->environment('local')) {
 Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
 
     Route::get('/home', function () {
-        return Inertia::render('Guest/Home', ['name' => 'Mike']);
+        return Inertia::render('Guest/Home/index', ['name' => 'Mike']);
     })->name('home');
 
     Route::get('/home2', function () {
-        return Inertia::render('Guest/Home2', ['name' => 'Mike']);
+        return Inertia::render('Guest/Home2/index', ['name' => 'Mike']);
     })->name('home2');
 
     Route::get('/contact', function () {
-        return Inertia::render('Guest/Contact');
+        return Inertia::render('Guest/Contact/index');
     })->name('contact');
 
     Route::get('/about', function () {
-        return Inertia::render('Guest/About');
+        return Inertia::render('Guest/About/index');
     })->name('about');
 
     Route::get('/homepage', function () {
-        return Inertia::render('Guest/HomePage');
+        return Inertia::render('Guest/HomePage/index');
     })->name('homepage');
+
+    Route::get('/dashboard', function () {
+        return Inertia::render('Guest/Dashboard/index');
+    })->name('guest.dashboard');
 
     Route::prefix('sessions')->group(function () {
         Route::get('/', [SessionController::class, 'index'])->name('sessions.index');

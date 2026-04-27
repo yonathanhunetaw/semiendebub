@@ -166,7 +166,7 @@ class AuthenticatedSessionController extends Controller
 
     private function loginComponentForHost(string $host): string
     {
-        return config("subdomains.host_component_map.{$host}", 'Auth/Login');
+        return config("subdomains.host_component_map.{$host}", 'Auth/Login/index');
     }
 
     private function loginUrl(Request $request): string

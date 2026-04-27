@@ -16,7 +16,7 @@ Route::domain("admin.{$baseDomain}")
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
             Route::middleware('notify.public.visit')->get('/', function () {
-                return Inertia::render('Welcome/index');
+                return Inertia::render('Admin/Welcome/index');
             })->name('welcome');
 
             Route::get('/login', function () {
@@ -31,7 +31,7 @@ Route::domain("admin.{$baseDomain}")
             })->name('dashboard');
 
             Route::get('/settings', function () {
-                return Inertia::render('Admin/Settings/Index');
+                return Inertia::render('Admin/Settings/index');
             })->name('settings');
 
             // Backwards-compatible URL (if you navigate to /admin/settings on the admin subdomain)

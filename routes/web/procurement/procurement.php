@@ -12,7 +12,7 @@ Route::domain("procurement.$baseDomain")
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
             Route::middleware('notify.public.visit')->get('/', function () {
-                return Inertia::render('Welcome/Procurement');
+                return Inertia::render('Procurement/Welcome/index');
             })->name('welcome');
 
             Route::get('/login', function () {

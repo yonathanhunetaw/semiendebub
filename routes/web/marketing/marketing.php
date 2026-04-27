@@ -13,7 +13,7 @@ Route::domain("marketing.$baseDomain")
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
             Route::middleware('notify.public.visit')->get('/', function () {
-                return Inertia::render('Welcome/Marketing');
+                return Inertia::render('Marketing/Welcome/index');
             })->name('welcome');
 
             Route::get('/login', function () {

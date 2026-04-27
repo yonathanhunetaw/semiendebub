@@ -32,7 +32,7 @@ class SessionController extends Controller
                 ];
             });
 
-        return inertia('Delivery/Sessions/Index', [
+        return inertia('Delivery/Sessions/index', [
             'sessions' => $sessions,
         ]);
     }

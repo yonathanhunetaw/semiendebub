@@ -13,11 +13,11 @@ Route::domain("delivery.{$baseDomain}")
         // Guest Routes
         Route::middleware(['guest.subdomain.login'])->group(function () {
             Route::middleware('notify.public.visit')->get('/', function () {
-                return Inertia::render('Welcome/Delivery');
+                return Inertia::render('Delivery/Welcome/index');
             })->name('welcome');
 
             Route::get('/login', function () {
-                return Inertia::render('Delivery/Login/Index');
+                return Inertia::render('Delivery/Login/index');
             })->name('login');
         });
 
@@ -35,16 +35,16 @@ Route::domain("delivery.{$baseDomain}")
             });
 
             Route::get('/delivery', function () {
-                return Inertia::render('Delivery/Delivery/Index');
+                return Inertia::render('Delivery/Delivery/index');
             })->name('delivery.index');
 
             Route::get('/shipments', function () {
-                return Inertia::render('Delivery/Shipments/Index');
+                return Inertia::render('Delivery/Shipments/index');
             })->name('shipments.index');
 
             // Added this so your Profile button has a destination!
             Route::get('/profile', function () {
-                return Inertia::render('Delivery/Profile/Index');
+                return Inertia::render('Delivery/Profile/index');
             })->name('profile.index');
         });
     });

@@ -50,7 +50,7 @@ class SessionController extends Controller
             ];
         });
 
-        return Inertia::render('Admin/Sessions/Index', [
+        return Inertia::render('Admin/Sessions/index', [
             'sessions' => $mappedSessions,
         ]);
     }

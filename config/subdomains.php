@@ -9,57 +9,57 @@ $subdomains = [
     'admin' => [
         'role' => 'admin',
         'login_component' => 'Admin/Login/index',
-        'welcome_component' => 'Welcome/Admin',
+        'welcome_component' => 'Admin/Welcome/index',
     ],
     'delivery' => [
         'role' => 'delivery',
         'login_component' => 'Delivery/Login/index',
-        'welcome_component' => 'Welcome/Delivery',
+        'welcome_component' => 'Delivery/Welcome/index',
     ],
     'dev' => [
         'role' => 'dev',
         'login_component' => 'Dev/Login/index',
-        'welcome_component' => 'Welcome/Dev',
+        'welcome_component' => 'Dev/Welcome/index',
     ],
     'finance' => [
         'role' => 'finance',
         'login_component' => 'Finance/Login/index',
-        'welcome_component' => 'Welcome/Finance',
+        'welcome_component' => 'Finance/Welcome/index',
     ],
     'guest' => [
         'role' => 'guest',
         'login_component' => 'Guest/Login/index',
-        'welcome_component' => 'Welcome/Guest',
+        'welcome_component' => 'Guest/Welcome/index',
     ],
     'marketing' => [
         'role' => 'marketing',
         'login_component' => 'Marketing/Login/index',
-        'welcome_component' => 'Welcome/Marketing',
+        'welcome_component' => 'Marketing/Welcome/index',
     ],
     'procurement' => [
         'role' => 'procurement',
         'login_component' => 'Procurement/Login/index',
-        'welcome_component' => 'Welcome/Procurement',
+        'welcome_component' => 'Procurement/Welcome/index',
     ],
     'seller' => [
         'role' => 'seller',
         'login_component' => 'Seller/Login/index',
-        'welcome_component' => 'Welcome/Seller',
+        'welcome_component' => 'Seller/Welcome/index',
     ],
     'shared' => [
         'role' => 'shared',
         'login_component' => 'Shared/Login/index',
-        'welcome_component' => 'Welcome/Shared',
+        'welcome_component' => 'Shared/Welcome/index',
     ],
     'stockkeeper' => [
         'role' => 'stock_keeper',
         'login_component' => 'StockKeeper/Login/index',
-        'welcome_component' => 'Welcome/StockKeeper',
+        'welcome_component' => 'StockKeeper/Welcome/index',
     ],
     'vendor' => [
         'role' => 'vendor',
         'login_component' => 'Vendor/Login/index',
-        'welcome_component' => 'Welcome/Vendor',
+        'welcome_component' => 'Vendor/Welcome/index',
     ],
 ];
 

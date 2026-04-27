@@ -12,7 +12,7 @@ Route::domain("stockkeeper.{$baseDomain}")
         Route::middleware(['guest.subdomain.login'])->group(function () {
 
             Route::middleware('notify.public.visit')->get('/', function () {
-                return Inertia::render('Welcome/StockKeeper');
+                return Inertia::render('StockKeeper/Welcome/index');
             })->name('welcome');
 
             Route::get('/login', function () {
