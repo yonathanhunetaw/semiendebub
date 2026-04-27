@@ -1,27 +1,29 @@
 import { colors, PaletteMode } from '@mui/material';
 
-// Define the tokens with the proper type for mode
-export const getDesignTokens = (mode: PaletteMode) => ({
+export const getDesignTokens = (mode: PaletteMode, isAdmin: boolean = false) => ({
   palette: {
     mode,
     primary: {
-        main: '#006630',
+      // Logic: Admin gets Slate, App gets Duka Green
+      main: isAdmin ? '#1e293b' : '#006630',
     },
     secondary: {
-        main: colors.orange[500],
+      // Logic: Admin gets Indigo, App gets Duka Orange
+      main: isAdmin ? '#6366f1' : colors.orange[500],
     },
+    // The conditional spread: ensures the objects are merged correctly
     ...(mode === 'dark'
-        ? {
-              background: {
-                  default: '#0f0f0f',
-                  paper: '#272727',
-              },
-          }
-        : {
-              background: {
-                  default: '#f6f7f9',
-                  paper: '#ffffff',
-              },
-          }),
+      ? {
+          background: {
+            default: isAdmin ? '#0f172a' : '#0f0f0f',
+            paper: isAdmin ? '#1e293b' : '#272727',
+          },
+        }
+      : {
+          background: {
+            default: isAdmin ? '#f1f5f9' : '#f6f7f9',
+            paper: '#ffffff',
+          },
+        }), // Ensure this closing parenthesis is here
   },
 });
