@@ -29,7 +29,7 @@ export default function AdminNav({ onMenuClick }: { onMenuClick?: () => void }) 
                     borderColor: 'divider',
                     width: { xl: `calc(100% - ${drawerWidth}px)` },
                     ml: { xl: `${drawerWidth}px` },
-                    bgcolor: 'background.paper',
+                    bgcolor: 'primary.main',
                     color: 'primary.contrastText',
                 }}
             >
