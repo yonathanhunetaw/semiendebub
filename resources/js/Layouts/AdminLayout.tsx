@@ -1,54 +1,121 @@
-import React from 'react';
-import AdminSidebar from '@/Components/Admin/AdminSidebar';
-import {Link} from '@inertiajs/react';
+import React, { useState } from "react";
+import {
+    Box,
+    CssBaseline,
+    AppBar,
+    Toolbar,
+    Typography,
+    useTheme,
+} from "@mui/material";
+import AdminSidebar from "@/Components/Admin/AdminSidebar";
+import { Link, Head } from "@inertiajs/react";
+import { subdomainConfigs, SubdomainType } from "@/theme";
 
 interface Props {
     header?: React.ReactNode;
     children: React.ReactNode;
 }
 
-export default function AdminLayout({header, children}: Props) {
+export default function AdminLayout({ header, children }: Props) {
+    const theme = useTheme();
+    const [mobileOpen, setMobileOpen] = useState(false);
+
+    // Dynamic Subdomain Detection with TS Safety
+    const host = window.location.hostname.split(".")[0].toLowerCase();
+    const isKnownSubdomain = host in subdomainConfigs;
+    const activeKey: SubdomainType = isKnownSubdomain
+        ? (host as SubdomainType)
+        : "admin";
+    const config = subdomainConfigs[activeKey];
+
     return (
-        <div className="font-sans antialiased bg-gray-50 dark:bg-gray-900 min-h-screen">
-            {/* Navigation Bar */}
-            <nav
-                className="fixed top-0 z-50 w-full bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-                <div className="px-3 py-3 lg:px-5 lg:pl-3">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                            <Link href="/" className="flex ms-2 md:me-24">
-                                <span
-                                    className="self-center text-xl font-semibold sm:text-2xl whitespace-nowrap dark:text-white">
-                                    Mezgebe Dirijit
-                                </span>
-                            </Link>
-                        </div>
-                    </div>
-                </div>
-            </nav>
+        <Box
+            sx={{
+                display: "flex",
+                minHeight: "100vh",
+                bgcolor: "background.default",
+            }}
+        >
+            <CssBaseline />
 
-            // @ts-ignore
-            <AdminSidebar open={false} onClose={function (): void {
-                throw new Error("Function not implemented.");
-            }} variant={"temporary"}/>
+            {/* 1. DYNAMIC BROWSER TAB (The "Clear Tab" Goal) */}
+            <Head>
+                <title>{`${config.label} | Duka`}</title>
+                <link
+                    rel="icon"
+                    href={`data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22${encodeURIComponent(theme.palette.primary.main)}%22/><text y=%22.9em%22 font-size=%2270%22 x=%2215%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22bold%22>${config.label.charAt(0)}</text></svg>`}
+                />
+            </Head>
 
-            {/* Main Content Area */}
-            <main className="min-h-screen p-4 transition-all duration-300 ml-0 xl:ml-64">
-                <div
-                    className="mt-16 min-h-screen rounded-lg border-2 border-dashed border-gray-200 p-2 dark:border-gray-700">
-                    {header && (
-                        <header className="bg-white shadow dark:bg-gray-800 mb-4 rounded-lg">
-                            <div className="px-4 py-4 sm:px-6 lg:px-8">
-                                {header}
-                            </div>
-                        </header>
-                    )}
+            {/* 2. DYNAMIC NAVIGATION BAR */}
+            <AppBar
+                position="fixed"
+                elevation={0}
+                sx={{
+                    zIndex: (theme) => theme.zIndex.drawer + 1,
+                    bgcolor: "primary.main", // This uses your Subdomain Color!
+                    borderBottom: "1px solid",
+                    borderColor: "divider",
+                }}
+            >
+                <Toolbar>
+                    <Box
+                        component={Link}
+                        href="/"
+                        sx={{
+                            textDecoration: "none",
+                            color: "primary.contrastText",
+                        }}
+                    >
+                        <Typography variant="h6" fontWeight="bold">
+                            Mezgebe Dirijit — {config.label}
+                        </Typography>
+                    </Box>
+                </Toolbar>
+            </AppBar>
 
-                    <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                        {children}
-                    </section>
-                </div>
-            </main>
-        </div>
+            {/* 3. SIDEBAR */}
+            <AdminSidebar
+                open={mobileOpen}
+                onClose={() => setMobileOpen(false)}
+                variant="permanent"
+            />
+
+            {/* 4. MAIN CONTENT AREA */}
+            <Box
+                component="main"
+                sx={{
+                    flexGrow: 1,
+                    p: 3,
+                    width: { xl: `calc(100% - 260px)` },
+                    mt: 8, // Offsets the fixed AppBar
+                }}
+            >
+                {header && (
+                    <Box
+                        sx={{
+                            mb: 3,
+                            p: 2,
+                            bgcolor: "background.paper",
+                            borderRadius: 2,
+                            boxShadow: 1,
+                        }}
+                    >
+                        {header}
+                    </Box>
+                )}
+
+                <Box
+                    sx={{
+                        p: 3,
+                        bgcolor: "background.paper",
+                        borderRadius: 2,
+                        boxShadow: 1,
+                    }}
+                >
+                    {children}
+                </Box>
+            </Box>
+        </Box>
     );
 }

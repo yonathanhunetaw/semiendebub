@@ -6,7 +6,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
-import { getDesignTokens } from './theme';
+import { getDesignTokens, SubdomainType } from './theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -54,7 +54,17 @@ createInertiaApp({
     },
     setup({ el, App, props }) {
         const Root = () => {
-            // 2. These hooks MUST be inside the component
+            // --- SUBDOMAIN DETECTION ---
+            // Extracts 'admin' from 'admin.duka.test' or 'finance' from 'finance.duka.com'
+            const subdomain = React.useMemo(() => {
+                const host = window.location.hostname;
+                const parts = host.split('.');
+                // If localhost or single-word host, default to 'admin' or 'duka'
+                if (parts.length <= 1) return 'admin';
+                return parts[0].toLowerCase() as SubdomainType;
+            }, []);
+
+            // --- THEME STATE LOGIC ---
             const [setting, setSetting] = React.useState<'light' | 'dark' | 'system'>(() => {
                 try {
                     const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -64,6 +74,7 @@ createInertiaApp({
                 }
                 return 'system';
             });
+
             const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
 
             const setThemeSetting = React.useCallback((newSetting: 'light' | 'dark' | 'system') => {
@@ -83,10 +94,10 @@ createInertiaApp({
                 return setting;
             }, [setting, prefersDarkMode]);
 
-            // 4. Generate the theme
+            // 4. Generate the theme dynamically using the detected subdomain
             const theme = React.useMemo(
-                () => createTheme(getDesignTokens(mode)),
-                [mode]
+                () => createTheme(getDesignTokens(mode, subdomain)),
+                [mode, subdomain]
             );
 
             return (
