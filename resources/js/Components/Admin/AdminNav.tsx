@@ -30,7 +30,7 @@ export default function AdminNav({ onMenuClick }: { onMenuClick?: () => void }) 
                     width: { xl: `calc(100% - ${drawerWidth}px)` },
                     ml: { xl: `${drawerWidth}px` },
                     bgcolor: 'background.paper',
-                    color: 'text.primary',
+                    color: 'primary.contrastText',
                 }}
             >
             <Toolbar>
