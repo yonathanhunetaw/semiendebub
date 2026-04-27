@@ -1,257 +1,255 @@
-import React, { useState } from "react";
-import { Head, Link } from "@inertiajs/react";
+import { SELLER_BRAND_DARK, SellerCard, SellerHeader, sellerImage, sellerPrice } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { SELLER_BRAND_DARK, sellerPrice } from "@/Components/Seller/sellerUi";
+import { Head, Link, router, useForm } from "@inertiajs/react";
+import QrCodeScannerRoundedIcon from "@mui/icons-material/QrCodeScannerRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import LocalOfferRoundedIcon from "@mui/icons-material/LocalOfferRounded";
-import CheckroomRoundedIcon from "@mui/icons-material/CheckroomRounded";
-import WatchRoundedIcon from "@mui/icons-material/WatchRounded";
-import DiamondRoundedIcon from "@mui/icons-material/DiamondRounded";
 import {
     Box,
     Chip,
+    IconButton,
+    InputBase,
     Stack,
     Typography,
-    TextField,
-    InputAdornment,
-    Card,
-    CardContent,
-    CardMedia,
-    IconButton,
 } from "@mui/material";
+import React from "react";
 
-interface SellerVariant {
-    id: number;
-    final_price?: number | null;
-    store_discount_price?: number | null;
-    store_price?: number | null;
+interface StoreVariant {
     price?: number | null;
+    discount_price?: number | null;
+}
+
+interface ItemVariant {
+    price?: number | null;
+    store_variants?: StoreVariant[];
+    storeVariants?: StoreVariant[];
 }
 
 interface SellerItem {
     id: number;
     product_name: string;
-    product_images?: string | string[];
-    category?: { id: number; name: string };
-    variants?: SellerVariant[];
+    product_images?: string[] | string | null;
+    sold_count?: number | null;
+    category?: {
+        category_name?: string;
+    } | null;
+    variants?: ItemVariant[];
 }
 
-interface SellerStore {
-    store_name?: string;
-    name?: string;
+interface SellerItemFilters {
+    search?: string;
+    cart_id?: number | null;
 }
 
-// Extract base/old price
-function getOldPrice(item: SellerItem) {
-    const prices = (item.variants ?? [])
-        .map((v) => v.store_price ?? v.price)
-        .filter((p): p is number => p != null);
-    return prices.length ? Math.max(...prices) : null;
-}
-
-// Extract active/discount price
-function getNewPrice(item: SellerItem) {
-    const prices = (item.variants ?? [])
-        .map((v) => v.final_price ?? v.store_discount_price ?? v.store_price ?? v.price)
-        .filter((p): p is number => p != null);
-    return prices.length ? Math.min(...prices) : null;
-}
-
-// Extract Images safely
-function getImages(item: SellerItem): string[] {
-    if (!item.product_images) return ["/img/default.jpg"];
-    if (Array.isArray(item.product_images)) return item.product_images;
-    try {
-        const parsed = JSON.parse(item.product_images);
-        return Array.isArray(parsed) && parsed.length > 0 ? parsed : ["/img/default.jpg"];
-    } catch {
-        return ["/img/default.jpg"];
+function itemImage(item: SellerItem) {
+    if (Array.isArray(item.product_images)) {
+        return sellerImage(item.product_images[0] ?? null);
     }
+    return sellerImage(item.product_images ?? null);
+}
+
+function variantStorePrices(variant: ItemVariant) {
+    const storeVariants = variant.storeVariants ?? variant.store_variants ?? [];
+    const prices = storeVariants
+        .map((storeVariant) => storeVariant.discount_price ?? storeVariant.price)
+        .filter((price): price is number => price != null);
+
+    return prices.length ? prices : [variant.price].filter((price): price is number => price != null);
+}
+
+function itemPrice(item: SellerItem) {
+    const prices = (item.variants ?? []).flatMap(variantStorePrices);
+    return prices.length ? Math.min(...prices) : null;
 }
 
 export default function Index({
     items = [],
-    store,
+    filters = {},
 }: {
     items?: SellerItem[];
-    store?: SellerStore | null;
+    filters?: SellerItemFilters;
 }) {
-    const [searchQuery, setSearchQuery] = useState("");
+    const { data, setData } = useForm({
+        search: filters.search ?? "",
+    });
 
-    // Mock categories based on your catalog structure
-    const categories = [
-        { id: 1, name: "All", icon: <LocalOfferRoundedIcon fontSize="small" /> },
-        { id: 2, name: "Apparel", icon: <CheckroomRoundedIcon fontSize="small" /> },
-        { id: 3, name: "Accessories", icon: <WatchRoundedIcon fontSize="small" /> },
-        { id: 4, name: "Jewelry", icon: <DiamondRoundedIcon fontSize="small" /> },
-    ];
+    const submit = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        router.get(
+            route("seller.items.index"),
+            {
+                search: data.search,
+                cart_id: filters.cart_id || undefined,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            },
+        );
+    };
+
+    // Shared style for cards and inputs to prevent white-on-white
+    const darkCardStyle = {
+        bgcolor: "#1e293b",
+        color: "#ffffff",
+        border: "1px solid rgba(255,255,255,0.05)",
+        textDecoration: "none",
+        "& .MuiTypography-root": { color: "#ffffff" },
+    };
 
     return (
-        <Box
-            sx={{
-                minHeight: "100vh",
-                bgcolor: "#0f172a", // surface-canvas-dark fixes the white-on-white bug
-                color: "#ffffff",
-                pb: 10
-            }}
-        >
-            <Head title="Home | Seller" />
+        <Box sx={{ bgcolor: "#0f172a", minHeight: "100vh", pb: 5 }}>
+            <Head title="Seller Catalog" />
 
-            {/* Topbar / Header */}
-            <Box sx={{ px: 2, pt: 4, pb: 2, position: "sticky", top: 0, bgcolor: "#0f172a", zIndex: 10 }}>
-                <Typography variant="h4" sx={{ fontWeight: 900, mb: 1, letterSpacing: "-0.02em" }}>
-                    Home
-                </Typography>
+            <SellerHeader title="Catalog">
+                <Box component="form" onSubmit={submit} sx={{ mt: 1 }}>
+                    <Stack direction="row" spacing={1}>
+                        <Box
+                            sx={{
+                                flex: 1,
+                                display: "flex",
+                                alignItems: "center",
+                                px: 1.5,
+                                borderRadius: 3,
+                                backgroundColor: "#1e293b", // Dark input background
+                                border: "1px solid rgba(255,255,255,0.1)",
+                            }}
+                        >
+                            <SearchRoundedIcon sx={{ color: "#94a3b8", mr: 1 }} />
+                            <InputBase
+                                fullWidth
+                                placeholder="Search items"
+                                value={data.search}
+                                onChange={(event) => setData("search", event.target.value)}
+                                sx={{ fontSize: 15, color: "#ffffff" }}
+                            />
+                        </Box>
+                        <IconButton
+                            type="submit"
+                            sx={{
+                                width: 44,
+                                height: 44,
+                                color: "#000000",
+                                bgcolor: "primary.main", // Orange brand color
+                                "&:hover": { bgcolor: "primary.dark" }
+                            }}
+                        >
+                            <SearchRoundedIcon />
+                        </IconButton>
+                        <IconButton
+                            sx={{
+                                width: 44,
+                                height: 44,
+                                color: "#ffffff",
+                                border: "1px solid rgba(255,255,255,0.2)",
+                                backgroundColor: "rgba(255,255,255,0.05)",
+                            }}
+                        >
+                            <QrCodeScannerRoundedIcon />
+                        </IconButton>
+                    </Stack>
+                </Box>
+            </SellerHeader>
 
-                {/* Search Bar */}
-                <TextField
-                    fullWidth
-                    placeholder="Search your catalog..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    variant="outlined"
+            <Box sx={{ px: 2, pt: 2 }}>
+                {filters.cart_id ? (
+                    <Chip
+                        component={Link}
+                        href={route("seller.carts.show", filters.cart_id)}
+                        clickable
+                        label={`Adding into Cart #${filters.cart_id}`}
+                        sx={{
+                            mb: 2,
+                            bgcolor: "primary.main",
+                            color: "#000000",
+                            fontWeight: 800,
+                            borderRadius: 2
+                        }}
+                    />
+                ) : null}
+
+                <Box
                     sx={{
-                        "& .MuiOutlinedInput-root": {
-                            bgcolor: "#1e293b", // surface-panel-dark
-                            color: "#ffffff",
-                            borderRadius: "12px",
-                            "& fieldset": { borderColor: "#ffffff1f" },
-                            "&:hover fieldset": { borderColor: SELLER_BRAND_DARK },
-                            "&.Mui-focused fieldset": { borderColor: SELLER_BRAND_DARK },
-                        },
-                    }}
-                    InputProps={{
-                        startAdornment: (
-                            <InputAdornment position="start">
-                                <SearchRoundedIcon sx={{ color: "#a1a1aa" }} />
-                            </InputAdornment>
-                        ),
-                    }}
-                />
-            </Box>
-
-            {/* Horizontal Categories */}
-            <Box sx={{ px: 2, mb: 3 }}>
-                <Stack
-                    direction="row"
-                    spacing={1.5}
-                    sx={{
-                        overflowX: "auto",
-                        pb: 1,
-                        "&::-webkit-scrollbar": { display: "none" } // Hide scrollbar for clean UI
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: 1.5,
                     }}
                 >
-                    {categories.map((cat) => (
-                        <Chip
-                            key={cat.id}
-                            icon={cat.icon}
-                            label={cat.name}
-                            clickable
+                    {items.map((item) => (
+                        <SellerCard
+                            key={item.id}
+                            component={Link}
+                            href={route("seller.items.show", {
+                                item: item.id,
+                                cart_id: filters.cart_id || undefined,
+                            })}
                             sx={{
-                                bgcolor: cat.name === "All" ? SELLER_BRAND_DARK : "#1e293b",
-                                color: "#ffffff",
-                                fontWeight: 700,
-                                px: 1,
-                                py: 2.5,
-                                borderRadius: "12px",
-                                "& .MuiChip-icon": { color: "inherit" },
-                                "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                                ...darkCardStyle,
+                                p: 0,
+                                overflow: "hidden",
                             }}
-                        />
-                    ))}
-                </Stack>
-            </Box>
-
-            {/* Product Grid */}
-            <Box sx={{ px: 2 }}>
-                <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
-                    Your Items
-                </Typography>
-
-                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 2 }}>
-                    {items.map((item) => {
-                        const oldPrice = getOldPrice(item);
-                        const newPrice = getNewPrice(item);
-                        const images = getImages(item);
-
-                        // Calculate % drop
-                        let dropPercent = 0;
-                        if (oldPrice && newPrice && oldPrice > newPrice) {
-                            dropPercent = Math.round(((oldPrice - newPrice) / oldPrice) * 100);
-                        }
-
-                        return (
-                            <Card
-                                key={item.id}
-                                component={Link}
-                                href={route("seller.items.show", item.id)}
+                        >
+                            <Box
                                 sx={{
-                                    bgcolor: "#1e293b",
-                                    borderRadius: "12px",
-                                    textDecoration: "none",
-                                    border: "1px solid #ffffff1f",
-                                    overflow: "hidden"
+                                    height: 140,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    backgroundColor: "#f8fafc", // Keep a light bg for product images to pop
                                 }}
                             >
-                                {/* Horizontal Image Carousel */}
-                                <Box
-                                    sx={{
-                                        display: "flex",
-                                        overflowX: "auto",
-                                        scrollSnapType: "x mandatory",
-                                        "&::-webkit-scrollbar": { display: "none" }
-                                    }}
-                                >
-                                    {images.map((img, idx) => (
-                                        <CardMedia
-                                            key={idx}
-                                            component="img"
-                                            height="160"
-                                            image={img}
-                                            alt={item.product_name}
-                                            sx={{
-                                                width: "100%",
-                                                flexShrink: 0,
-                                                scrollSnapAlign: "center",
-                                                objectFit: "cover"
-                                            }}
-                                        />
-                                    ))}
-                                </Box>
+                                {itemImage(item) ? (
+                                    <Box
+                                        component="img"
+                                        src={itemImage(item)!}
+                                        alt={item.product_name}
+                                        sx={{ width: "100%", height: "100%", objectFit: "contain" }}
+                                    />
+                                ) : (
+                                    <Typography variant="body2" sx={{ color: "#64748b !important" }}>
+                                        No image
+                                    </Typography>
+                                )}
+                            </Box>
 
-                                <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-                                    <Typography
-                                        variant="body2"
-                                        sx={{ fontWeight: 700, color: "#ffffff", mb: 1, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
-                                    >
+                            <Box sx={{ p: 1.5 }}>
+                                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                                    <Typography sx={{ fontWeight: 800 }} noWrap>
                                         {item.product_name}
                                     </Typography>
+                                    <Chip
+                                        label="NEW"
+                                        size="small"
+                                        sx={{
+                                            bgcolor: "primary.main",
+                                            color: "#000000",
+                                            fontWeight: 900,
+                                            height: 18,
+                                            fontSize: '0.6rem'
+                                        }}
+                                    />
+                                </Stack>
 
-                                    {/* Pricing Layout */}
-                                    <Stack spacing={0.5}>
-                                        <Stack direction="row" alignItems="center" spacing={1}>
-                                            <Typography variant="subtitle1" sx={{ fontWeight: 900, color: SELLER_BRAND_DARK }}>
-                                                {sellerPrice(newPrice)}
-                                            </Typography>
-                                            {dropPercent > 0 && (
-                                                <Chip
-                                                    label={`-${dropPercent}%`}
-                                                    size="small"
-                                                    sx={{ bgcolor: "#dc2626", color: "#ffffff", fontWeight: 800, height: 20, fontSize: "0.7rem" }}
-                                                />
-                                            )}
-                                        </Stack>
+                                <Typography sx={{ mt: 1, fontWeight: 900, color: "primary.main !important" }}>
+                                    {sellerPrice(itemPrice(item))}
+                                </Typography>
 
-                                        {dropPercent > 0 && oldPrice && (
-                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "#71717a", fontWeight: 600 }}>
-                                                {sellerPrice(oldPrice)}
-                                            </Typography>
-                                        )}
-                                    </Stack>
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
+                                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
+                                    <Typography variant="caption" sx={{ color: "#94a3b8 !important", fontWeight: 600 }}>
+                                        {item.sold_count ?? 0} sold
+                                    </Typography>
+                                    {item.category?.category_name && (
+                                        <Chip
+                                            label={item.category.category_name}
+                                            size="small"
+                                            variant="outlined"
+                                            sx={{ color: '#94a3b8', borderColor: 'rgba(255,255,255,0.1)', height: 20, fontSize: '0.65rem' }}
+                                        />
+                                    )}
+                                </Stack>
+                            </Box>
+                        </SellerCard>
+                    ))}
                 </Box>
             </Box>
         </Box>
