@@ -4,18 +4,18 @@ import { colors, PaletteMode } from '@mui/material';
 // theme.ts
 
 export const subdomainConfigs = {
-    admin: { color: '#1e293b', label: 'Admin' },
-    auth: { color: '#4338ca', label: 'Auth' },
-    dev: { color: '#064e3b', label: 'Dev' },
-    finance: { color: '#15803d', label: 'Finance' },
-    marketing: { color: '#be185d', label: 'Marketing' },
-    seller: { color: '#7c3aed', label: 'Seller' },
-    guest: { color: '#64748b', label: 'Guest' },
-    delivery: { color: '#c2410c', label: 'Delivery' },
-    procurement: { color: '#0e7490', label: 'Procure' },
-    stockkeeper: { color: '#92400e', label: 'Stock' },
-    vendor: { color: '#1d4ed8', label: 'Vendor' },
-    shared: { color: '#475569', label: 'Shared' },
+    admin: { color: '#1e293b', icon: 'ShieldCheck', label: 'Admin' },
+    auth: { color: '#4338ca', icon: 'Lock', label: 'Auth' },
+    dev: { color: '#064e3b', icon: 'Terminal', label: 'Dev' },
+    finance: { color: '#15803d', icon: 'Landmark', label: 'Finance' },
+    marketing: { color: '#be185d', icon: 'Megaphone', label: 'Marketing' },
+    seller: { color: '#7c3aed', icon: 'Store', label: 'Seller' },
+    guest: { color: '#64748b', icon: 'UserCircle', label: 'Guest' },
+    delivery: { color: '#c2410c', icon: 'Truck', label: 'Delivery' },
+    procurement: { color: '#0e7490', icon: 'ShoppingCart', label: 'Procure' },
+    stockkeeper: { color: '#92400e', icon: 'Package', label: 'Stock' },
+    vendor: { color: '#1d4ed8', icon: 'Building2', label: 'Vendor' },
+    shared: { color: '#475569', icon: 'Share2', label: 'Shared' },
 };
 
 export type SubdomainType = keyof typeof subdomainConfigs;

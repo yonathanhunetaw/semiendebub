@@ -10,6 +10,8 @@ import {
 import AdminSidebar from "@/Components/Admin/AdminSidebar";
 import { Link, Head } from "@inertiajs/react";
 import { subdomainConfigs, SubdomainType } from "@/theme";
+import * as LucideIcons from "lucide-react";
+import { LucideIcon } from "lucide-react";
 
 interface Props {
     header?: React.ReactNode;
@@ -53,7 +55,7 @@ export default function AdminLayout({ header, children }: Props) {
                 elevation={0}
                 sx={{
                     zIndex: (theme) => theme.zIndex.drawer + 1,
-                    bgcolor: "primary.main", // This uses your Subdomain Color!
+                    bgcolor: "primary.main",
                     borderBottom: "1px solid",
                     borderColor: "divider",
                 }}
@@ -65,8 +67,32 @@ export default function AdminLayout({ header, children }: Props) {
                         sx={{
                             textDecoration: "none",
                             color: "primary.contrastText",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1.5,
                         }}
                     >
+                        {/* --- THE FIX --- */}
+                        {(() => {
+                            // 1. Get the name, providing a fallback string if it's missing
+                            const iconName = config.icon || "Shield";
+
+                            // 2. Cast to any then to LucideIcon to satisfy the JSX checker
+                            const Icon = (LucideIcons as any)[
+                                iconName
+                            ] as LucideIcons.LucideIcon;
+
+                            // 3. Return the component
+                            return Icon ? (
+                                <Icon size={24} strokeWidth={2.5} />
+                            ) : (
+                                <LucideIcons.Shield
+                                    size={24}
+                                    strokeWidth={2.5}
+                                />
+                            );
+                        })()}
+
                         <Typography variant="h6" fontWeight="bold">
                             Mezgebe Dirijit — {config.label}
                         </Typography>
