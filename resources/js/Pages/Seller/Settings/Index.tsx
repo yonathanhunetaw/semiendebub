@@ -9,12 +9,14 @@ import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link, useForm, usePage } from "@inertiajs/react";
 import {
     Avatar, Box, Button, FormControlLabel, Stack, Switch,
-    TextField, Typography, ToggleButtonGroup, ToggleButton
+    TextField, Typography, ToggleButtonGroup, ToggleButton,
+    useTheme
 } from "@mui/material";
 import React from "react";
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import SettingsBrightnessRoundedIcon from '@mui/icons-material/SettingsBrightnessRounded';
+import { ThemeContext } from "@/app";
 
 interface AuthUser {
     id: number;
@@ -25,14 +27,14 @@ interface AuthUser {
 export default function Index() {
     const { auth } = usePage().props as { auth?: { user?: AuthUser } };
     const user = auth?.user;
+    const theme = useTheme();
+    const { toggleTheme, currentSetting } = React.useContext(ThemeContext);
 
-    // Added 'theme' to the form data
     const { data, setData, patch, processing } = useForm({
         notification_email: user?.email ?? "",
         notes: "",
         email_notifications: true,
         push_notifications: false,
-        theme: 'system', // Default option
     });
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -40,18 +42,18 @@ export default function Index() {
         patch(route("seller.settings.update"));
     };
 
-    // Style override to fix the visibility of SellerCard
+    // Style override to adapt to theme
     const cardStyle = {
-        bgcolor: "#1e293b", // Deep Navy
-        color: "#ffffff",    // White Text
-        border: "1px solid rgba(255,255,255,0.05)",
-        "& .MuiTypography-root": { color: "#ffffff" },
-        "& .MuiTypography-body2": { color: "#94a3b8" },
-        "& .MuiSwitch-track": { bgcolor: "#64748b" },
+        bgcolor: "background.paper",
+        color: "text.primary",
+        border: "1px solid",
+        borderColor: "divider",
+        "& .MuiTypography-root": { color: "text.primary" },
+        "& .MuiTypography-body2": { color: "text.secondary" },
     };
 
     return (
-        <Box sx={{ bgcolor: "#0f172a", minHeight: "100vh", pb: 5 }}>
+        <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pb: 5 }}>
             <Head title="Seller Settings" />
 
             <SellerHeader title="Settings" />
@@ -59,21 +61,27 @@ export default function Index() {
             <Box component="form" onSubmit={submit} sx={{ px: 2, pt: 2 }}>
                 <Stack spacing={1.5}>
 
-                    {/* 1. Theme Selection (NEW) */}
+                    {/* 1. Theme Selection */}
                     <SellerCard sx={cardStyle}>
                         <Typography sx={{ fontWeight: 800, mb: 2 }}>Appearance</Typography>
                         <ToggleButtonGroup
-                            value={data.theme}
+                            value={currentSetting}
                             exclusive
-                            onChange={(e, next) => next && setData("theme", next)}
+                            onChange={(e, next) => next && toggleTheme(next as 'light' | 'dark' | 'system')}
                             fullWidth
                             sx={{
-                                bgcolor: "rgba(0,0,0,0.2)",
+                                bgcolor: "rgba(0,0,0,0.05)",
                                 borderRadius: 2,
                                 "& .MuiToggleButton-root": {
-                                    color: "#94a3b8",
+                                    color: "text.secondary",
                                     border: "none",
-                                    "&.Mui-selected": { bgcolor: "primary.main", color: "#000000" }
+                                    "&.Mui-selected": {
+                                        bgcolor: "primary.main",
+                                        color: theme.palette.mode === 'dark' ? "#000" : "#fff",
+                                        "&:hover": {
+                                            bgcolor: "primary.dark",
+                                        }
+                                    }
                                 }
                             }}
                         >
@@ -92,7 +100,12 @@ export default function Index() {
                     {/* 2. User Profile */}
                     <SellerCard sx={cardStyle}>
                         <Stack direction="row" spacing={2} alignItems="center">
-                            <Avatar sx={{ width: 52, height: 52, bgcolor: "primary.main", color: "#000000" }}>
+                            <Avatar sx={{
+                                width: 52,
+                                height: 52,
+                                bgcolor: "primary.main",
+                                color: theme.palette.mode === 'dark' ? "#000" : "#fff"
+                            }}>
                                 {sellerAvatarText(user?.first_name)}
                             </Avatar>
                             <Box>
@@ -138,7 +151,6 @@ export default function Index() {
                                 label="Notification email"
                                 value={data.notification_email}
                                 onChange={(event) => setData("notification_email", event.target.value)}
-                                sx={{ "& .MuiInputBase-input": { color: "#fff" }, "& .MuiInputLabel-root": { color: "#94a3b8" } }}
                             />
                             <TextField
                                 fullWidth
@@ -148,7 +160,6 @@ export default function Index() {
                                 value={data.notes}
                                 onChange={(event) => setData("notes", event.target.value)}
                                 placeholder="Opening notes..."
-                                sx={{ "& .MuiInputBase-input": { color: "#fff" }, "& .MuiInputLabel-root": { color: "#94a3b8" } }}
                             />
                             <Button
                                 type="submit"
@@ -160,7 +171,7 @@ export default function Index() {
                                     textTransform: "none",
                                     fontWeight: 800,
                                     bgcolor: "primary.main",
-                                    color: "#000000",
+                                    color: theme.palette.mode === 'dark' ? "#000" : "#fff",
                                     "&:hover": { bgcolor: "primary.dark" },
                                 }}
                             >

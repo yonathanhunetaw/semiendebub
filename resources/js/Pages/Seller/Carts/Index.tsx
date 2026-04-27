@@ -76,7 +76,7 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                     href={route("seller.carts.create")}
                     sx={{
                         bgcolor: "primary.main",
-                        color: "#000000", // Black icon on Orange background
+                        color: theme.palette.mode === 'dark' ? "#000" : "#fff",
                         "&:hover": { bgcolor: "primary.dark" },
                     }}
                 >
@@ -106,7 +106,7 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                                     display: "block",
                                     p: 2,
                                     borderRadius: 4,
-                                    bgcolor: "primary.main", // Forces the Orange brand color
+                                    bgcolor: "primary.main",
                                     border: "1px solid rgba(0,0,0,0.05)",
                                     transition: "transform 0.1s active",
                                     "&:active": { transform: "scale(0.98)" },
@@ -117,11 +117,11 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                                     spacing={2}
                                     alignItems="center"
                                 >
-                                    {/* Avatar with Black background and Orange initials */}
+                                    {/* Avatar with dynamic contrast background */}
                                     <Avatar
                                         sx={{
-                                            bgcolor: "#000000",
-                                            color: "primary.main",
+                                            bgcolor: theme.palette.mode === 'dark' ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.4)",
+                                            color: theme.palette.mode === 'dark' ? "#fff" : "#000",
                                             fontWeight: 900,
                                             fontSize: "0.875rem",
                                         }}
@@ -136,7 +136,7 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                                         <Typography
                                             sx={{
                                                 fontWeight: 900,
-                                                color: "#000000", // Forced Black
+                                                color: theme.palette.mode === 'dark' ? "#000" : "#fff",
                                                 fontSize: "1rem",
                                                 lineHeight: 1.2,
                                             }}
@@ -151,7 +151,7 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                                         <Typography
                                             variant="body2"
                                             sx={{
-                                                color: "rgba(0, 0, 0, 0.7)", // Forced Dark Grey/Black
+                                                color: theme.palette.mode === 'dark' ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.7)",
                                                 fontWeight: 600,
                                                 mt: 0.2,
                                             }}
@@ -167,15 +167,15 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                                             label={`${cart.items?.length ?? 0} items`}
                                             size="small"
                                             sx={{
-                                                bgcolor: "rgba(0,0,0,0.15)", // Subtle dark transparent chip
-                                                color: "#000000",
+                                                bgcolor: "rgba(0,0,0,0.15)",
+                                                color: theme.palette.mode === 'dark' ? "#000" : "#fff",
                                                 fontWeight: 800,
                                                 fontSize: "0.7rem",
                                             }}
                                         />
                                         <ChevronRightRoundedIcon
                                             sx={{
-                                                color: "#000000",
+                                                color: theme.palette.mode === 'dark' ? "#000" : "#fff",
                                                 opacity: 0.5,
                                             }}
                                         />

@@ -1,6 +1,6 @@
 import { Link } from "@inertiajs/react";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
-import { Box, IconButton, Paper, type PaperProps, Stack, Typography } from "@mui/material";
+import { Box, IconButton, Paper, type PaperProps, Stack, Typography, useTheme } from "@mui/material";
 import React from "react";
 
 export const SELLER_BRAND = "#f6a45d";
@@ -36,6 +36,9 @@ export function SellerHeader({
     subtitle,
     children,
 }: SellerHeaderProps) {
+    const theme = useTheme();
+    const brandColor = theme.palette.primary.main;
+
     return (
         <Box
             sx={{
@@ -43,10 +46,10 @@ export function SellerHeader({
                 pt: "calc(16px + env(safe-area-inset-top))",
                 pb: children ? 2.5 : 2,
                 color: "#fff",
-                background: `linear-gradient(180deg, ${SELLER_BRAND} 0%, #ee9552 100%)`,
+                background: `linear-gradient(180deg, ${brandColor} 0%, ${brandColor}dd 100%)`,
                 borderBottomLeftRadius: 24,
                 borderBottomRightRadius: 24,
-                boxShadow: "0 18px 40px rgba(217, 119, 6, 0.22)",
+                boxShadow: `0 18px 40px ${brandColor}33`,
             }}
         >
             <Stack spacing={children || subtitle ? 2 : 0}>
@@ -105,15 +108,18 @@ type SellerCardProps = PaperProps & {
 };
 
 export function SellerCard({ children, sx, ...props }: SellerCardProps) {
+    const theme = useTheme();
     return (
         <Paper
             elevation={0}
             sx={{
                 p: 2,
                 borderRadius: 3,
-                border: "1px solid rgba(148, 163, 184, 0.18)",
-                backgroundColor: SELLER_SURFACE,
-                boxShadow: "0 10px 30px rgba(15, 23, 42, 0.05)",
+                border: "1px solid",
+                borderColor: theme.palette.mode === 'dark' ? "rgba(255, 255, 255, 0.05)" : "rgba(148, 163, 184, 0.18)",
+                backgroundColor: "background.paper",
+                boxShadow: theme.palette.mode === 'dark' ? "none" : "0 10px 30px rgba(15, 23, 42, 0.05)",
+                backgroundImage: "none",
                 ...sx,
             }}
             {...props}

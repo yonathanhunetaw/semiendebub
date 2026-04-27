@@ -42,7 +42,11 @@ export default function Index({ stats }: { stats?: { customers?: number; carts?:
                 <IconButton
                     component={Link}
                     href={route("seller.settings.index")}
-                    sx={{ bgcolor: 'primary.main', color: '#000000', '&:hover': { bgcolor: 'primary.dark' } }}
+                    sx={{
+                        bgcolor: 'primary.main',
+                        color: theme.palette.mode === 'dark' ? "#000" : "#fff",
+                        '&:hover': { bgcolor: 'primary.dark' }
+                    }}
                 >
                     <SettingsRoundedIcon />
                 </IconButton>
@@ -70,10 +74,11 @@ export default function Index({ stats }: { stats?: { customers?: number; carts?:
                                 href={card.href}
                                 sx={{
                                     textDecoration: "none",
-                                    bgcolor: "#1e293b", // Deep Dark Navy background
+                                    bgcolor: "background.paper",
                                     p: 2.5,
                                     borderRadius: 4,
-                                    border: '1px solid rgba(255,255,255,0.05)',
+                                    border: '1px solid',
+                                    borderColor: 'divider',
                                     display: 'block',
                                     transition: '0.2s',
                                     '&:active': { transform: 'scale(0.95)' }
@@ -85,13 +90,21 @@ export default function Index({ stats }: { stats?: { customers?: number; carts?:
                                         <Icon sx={{ color: "primary.main", fontSize: '1.8rem' }} />
 
                                         {card.soon ? (
-                                            <Chip label="Soon" size="small" variant="outlined" sx={{ color: 'text.secondary', borderColor: 'rgba(255,255,255,0.2)' }} />
+                                            <Chip label="Soon" size="small" variant="outlined" sx={{ color: 'text.secondary', borderColor: 'divider' }} />
                                         ) : badge != null ? (
-                                            <Chip label={badge} size="small" sx={{ bgcolor: 'primary.main', color: '#000000', fontWeight: 900 }} />
+                                            <Chip
+                                                label={badge}
+                                                size="small"
+                                                sx={{
+                                                    bgcolor: 'primary.main',
+                                                    color: theme.palette.mode === 'dark' ? "#000" : "#fff",
+                                                    fontWeight: 900
+                                                }}
+                                            />
                                         ) : null}
                                     </Stack>
 
-                                    <Typography sx={{ fontWeight: 800, color: '#ffffff', fontSize: '1rem' }}>
+                                    <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: '1rem' }}>
                                         {card.label}
                                     </Typography>
                                 </Stack>

@@ -2,7 +2,7 @@ import { SellerCard, SellerHeader, sellerImage, sellerPrice } from "@/Components
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
-import { Box, Chip, Stack, Typography } from "@mui/material";
+import { Box, Chip, Stack, Typography, useTheme } from "@mui/material";
 import React from "react";
 
 interface Category {

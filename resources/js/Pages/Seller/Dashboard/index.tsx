@@ -10,6 +10,7 @@ import {
     InputBase,
     Stack,
     Typography,
+    useTheme
 } from "@mui/material";
 import React from "react";
 
@@ -71,6 +72,7 @@ export default function Index({
     const { data, setData } = useForm({
         search: filters.search ?? "",
     });
+    const theme = useTheme();
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -88,17 +90,18 @@ export default function Index({
         );
     };
 
-    // Shared style for cards and inputs to prevent white-on-white
-    const darkCardStyle = {
-        bgcolor: "#1e293b",
-        color: "#ffffff",
-        border: "1px solid rgba(255,255,255,0.05)",
+    // Shared style for cards and inputs to adapt to theme
+    const cardStyle = {
+        bgcolor: "background.paper",
+        color: "text.primary",
+        border: "1px solid",
+        borderColor: "divider",
         textDecoration: "none",
-        "& .MuiTypography-root": { color: "#ffffff" },
+        "& .MuiTypography-root": { color: "text.primary" },
     };
 
     return (
-        <Box sx={{ bgcolor: "#0f172a", minHeight: "100vh", pb: 5 }}>
+        <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pb: 5 }}>
             <Head title="Seller Catalog" />
 
             <SellerHeader title="Catalog">
@@ -111,17 +114,18 @@ export default function Index({
                                 alignItems: "center",
                                 px: 1.5,
                                 borderRadius: 3,
-                                backgroundColor: "#1e293b", // Dark input background
-                                border: "1px solid rgba(255,255,255,0.1)",
+                                backgroundColor: theme.palette.mode === 'dark' ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+                                border: "1px solid",
+                                borderColor: "divider",
                             }}
                         >
-                            <SearchRoundedIcon sx={{ color: "#94a3b8", mr: 1 }} />
+                            <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
                             <InputBase
                                 fullWidth
                                 placeholder="Search items"
                                 value={data.search}
                                 onChange={(event) => setData("search", event.target.value)}
-                                sx={{ fontSize: 15, color: "#ffffff" }}
+                                sx={{ fontSize: 15, color: "text.primary" }}
                             />
                         </Box>
                         <IconButton
@@ -129,8 +133,8 @@ export default function Index({
                             sx={{
                                 width: 44,
                                 height: 44,
-                                color: "#000000",
-                                bgcolor: "primary.main", // Orange brand color
+                                color: theme.palette.mode === 'dark' ? "#000" : "#fff",
+                                bgcolor: "primary.main",
                                 "&:hover": { bgcolor: "primary.dark" }
                             }}
                         >
@@ -140,9 +144,10 @@ export default function Index({
                             sx={{
                                 width: 44,
                                 height: 44,
-                                color: "#ffffff",
-                                border: "1px solid rgba(255,255,255,0.2)",
-                                backgroundColor: "rgba(255,255,255,0.05)",
+                                color: "text.primary",
+                                border: "1px solid",
+                                borderColor: "divider",
+                                backgroundColor: "background.paper",
                             }}
                         >
                             <QrCodeScannerRoundedIcon />
@@ -161,7 +166,7 @@ export default function Index({
                         sx={{
                             mb: 2,
                             bgcolor: "primary.main",
-                            color: "#000000",
+                            color: theme.palette.mode === 'dark' ? "#000" : "#fff",
                             fontWeight: 800,
                             borderRadius: 2
                         }}
@@ -184,7 +189,7 @@ export default function Index({
                                 cart_id: filters.cart_id || undefined,
                             })}
                             sx={{
-                                ...darkCardStyle,
+                                ...cardStyle,
                                 p: 0,
                                 overflow: "hidden",
                             }}
@@ -195,7 +200,7 @@ export default function Index({
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    backgroundColor: "#f8fafc", // Keep a light bg for product images to pop
+                                    backgroundColor: theme.palette.mode === 'dark' ? "rgba(255,255,255,0.02)" : "#f8fafc",
                                 }}
                             >
                                 {itemImage(item) ? (
@@ -206,7 +211,7 @@ export default function Index({
                                         sx={{ width: "100%", height: "100%", objectFit: "contain" }}
                                     />
                                 ) : (
-                                    <Typography variant="body2" sx={{ color: "#64748b !important" }}>
+                                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
                                         No image
                                     </Typography>
                                 )}
@@ -222,7 +227,7 @@ export default function Index({
                                         size="small"
                                         sx={{
                                             bgcolor: "primary.main",
-                                            color: "#000000",
+                                            color: theme.palette.mode === 'dark' ? "#000" : "#fff",
                                             fontWeight: 900,
                                             height: 18,
                                             fontSize: '0.6rem'
@@ -230,12 +235,12 @@ export default function Index({
                                     />
                                 </Stack>
 
-                                <Typography sx={{ mt: 1, fontWeight: 900, color: "primary.main !important" }}>
+                                <Typography sx={{ mt: 1, fontWeight: 900, color: "primary.main" }}>
                                     {sellerPrice(itemPrice(item))}
                                 </Typography>
 
                                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
-                                    <Typography variant="caption" sx={{ color: "#94a3b8 !important", fontWeight: 600 }}>
+                                    <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
                                         {item.sold_count ?? 0} sold
                                     </Typography>
                                     {item.category?.category_name && (
@@ -243,7 +248,7 @@ export default function Index({
                                             label={item.category.category_name}
                                             size="small"
                                             variant="outlined"
-                                            sx={{ color: '#94a3b8', borderColor: 'rgba(255,255,255,0.1)', height: 20, fontSize: '0.65rem' }}
+                                            sx={{ color: 'text.secondary', borderColor: 'divider', height: 20, fontSize: '0.65rem' }}
                                         />
                                     )}
                                 </Stack>

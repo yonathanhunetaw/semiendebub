@@ -1,10 +1,9 @@
-import { SELLER_BRAND_DARK } from "@/Components/Seller/sellerUi";
 import { Link, usePage } from "@inertiajs/react";
 import AppsRoundedIcon from "@mui/icons-material/AppsRounded";
 import CategoryRoundedIcon from "@mui/icons-material/CategoryRounded";
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import ShoppingCartRoundedIcon from "@mui/icons-material/ShoppingCartRounded";
-import { BottomNavigation, BottomNavigationAction, Paper } from "@mui/material";
+import { BottomNavigation, BottomNavigationAction, Paper, useTheme } from "@mui/material";
 import React from "react";
 
 const navItems = [
@@ -54,6 +53,7 @@ function currentTab(url: string) {
 
 export default function SellerBottomNav() {
     const { url } = usePage();
+    const theme = useTheme();
 
     return (
         <Paper
@@ -61,9 +61,11 @@ export default function SellerBottomNav() {
             sx={{
                 borderRadius: 999,
                 overflow: "hidden",
-                border: "1px solid rgba(148, 163, 184, 0.24)",
-                boxShadow: "0 20px 48px rgba(15, 23, 42, 0.18)",
+                border: "1px solid",
+                borderColor: "divider",
+                boxShadow: theme.palette.mode === 'dark' ? "none" : "0 20px 48px rgba(15, 23, 42, 0.18)",
                 backdropFilter: "blur(16px)",
+                bgcolor: "background.paper",
             }}
         >
             <BottomNavigation
@@ -71,14 +73,14 @@ export default function SellerBottomNav() {
                 value={currentTab(url)}
                 sx={{
                     height: 68,
-                    backgroundColor: "rgba(255,255,255,0.95)",
+                    backgroundColor: "transparent",
                     "& .MuiBottomNavigationAction-root": {
                         minWidth: 0,
                         color: "text.secondary",
                         fontFamily: "Figtree, sans-serif",
                     },
                     "& .Mui-selected": {
-                        color: SELLER_BRAND_DARK,
+                        color: "primary.main",
                     },
                     "& .MuiBottomNavigationAction-label": {
                         fontSize: 12,
