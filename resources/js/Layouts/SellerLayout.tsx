@@ -1,7 +1,6 @@
 import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
-import { SELLER_BG, SELLER_BRAND_DARK } from "@/Components/Seller/sellerUi";
 import { Head, usePage } from "@inertiajs/react";
-import { Alert, Box, CssBaseline } from "@mui/material";
+import { Alert, Box, CssBaseline, useTheme } from "@mui/material";
 import React from "react";
 
 export default function SellerLayout({
@@ -9,29 +8,33 @@ export default function SellerLayout({
 }: {
     children: React.ReactNode;
 }) {
+    const theme = useTheme();
     const { flash } = usePage().props as {
-        flash?: {
-            success?: string;
-            error?: string;
-        };
+        flash?: { success?: string; error?: string; };
     };
+
+    // This dynamically pulls '#7c3aed' (Purple) from your theme.ts!
+    const brandColor = theme.palette.primary.main;
 
     return (
         <Box
             sx={{
                 minHeight: "100vh",
-                bgcolor: SELLER_BG,
-                backgroundImage:
-                    "radial-gradient(circle at top, rgba(246, 164, 93, 0.2), transparent 32%)",
+                // Uses your theme's default background (#0f172a in dark mode)
+                bgcolor: "background.default",
+                color: "text.primary",
                 fontFamily: "Figtree, sans-serif",
+                // Replaces the hardcoded orange glow with a dynamic brand-colored glow
+                backgroundImage: `radial-gradient(circle at top, ${brandColor}25, transparent 32%)`,
             }}
         >
             <CssBaseline />
             <Head>
-                <title>Seller</title>
+                <title>Seller | Duka</title>
+                {/* Dynamically uses the purple brand color for the favicon */}
                 <link
                     rel="icon"
-                    href={`data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22${encodeURIComponent(SELLER_BRAND_DARK)}%22/><text y=%2258%22 x=%2223%22 font-size=%2250%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22900%22>S</text></svg>`}
+                    href={`data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22${encodeURIComponent(brandColor)}%22/><text y=%2258%22 x=%2223%22 font-size=%2250%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22900%22>S</text></svg>`}
                 />
             </Head>
 
@@ -42,22 +45,23 @@ export default function SellerLayout({
                     minHeight: "100vh",
                     position: "relative",
                     pb: "calc(96px + env(safe-area-inset-bottom))",
-                    backgroundColor: "rgba(248, 250, 252, 0.9)",
+                    // Removed the hardcoded light rgba background here
+                    bgcolor: "transparent",
                     boxShadow: {
-                        md: "0 28px 80px rgba(15, 23, 42, 0.16)",
+                        md: "0 28px 80px rgba(0, 0, 0, 0.4)",
                     },
                 }}
             >
-                {flash?.success ? (
+                {flash?.success && (
                     <Alert severity="success" sx={{ m: 2, mb: 0, borderRadius: 3 }}>
                         {flash.success}
                     </Alert>
-                ) : null}
-                {flash?.error ? (
+                )}
+                {flash?.error && (
                     <Alert severity="error" sx={{ m: 2, mb: 0, borderRadius: 3 }}>
                         {flash.error}
                     </Alert>
-                ) : null}
+                )}
 
                 <Box component="main" sx={{ minHeight: "100vh", width: "100%" }}>
                     {children}
@@ -74,9 +78,35 @@ export default function SellerLayout({
                     px: 2,
                     pb: "calc(12px + env(safe-area-inset-bottom))",
                     pointerEvents: "none",
+                    zIndex: 50,
                 }}
             >
-                <Box sx={{ pointerEvents: "auto" }}>
+                <Box
+                    sx={{
+                        pointerEvents: "auto",
+                        // THE FIX: This forces the text and icons inside your BottomNav to be white
+                        // so they are readable against your new theme's purple `background.paper`
+                        "& .MuiBottomNavigationAction-label": {
+                            color: "#ffffff",
+                            opacity: 0.7,
+                            transition: "all 0.2s ease-in-out"
+                        },
+                        "& .Mui-selected .MuiBottomNavigationAction-label": {
+                            color: "#ffffff",
+                            opacity: 1,
+                            fontWeight: 800
+                        },
+                        "& .MuiSvgIcon-root": {
+                            color: "#ffffff",
+                            opacity: 0.7,
+                            transition: "all 0.2s ease-in-out"
+                        },
+                        "& .Mui-selected .MuiSvgIcon-root": {
+                            color: "#ffffff",
+                            opacity: 1,
+                        }
+                    }}
+                >
                     <SellerBottomNav />
                 </Box>
             </Box>
