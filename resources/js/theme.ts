@@ -5,7 +5,7 @@ export const getDesignTokens = (mode: PaletteMode, isAdmin: boolean = false) => 
     mode,
     primary: {
       // Logic: Admin gets Slate, App gets Duka Green
-      main: isAdmin ? '#1e293b' : '#006630',
+      main: isAdmin ? '#1e293b' : '#0073AA',
     },
     secondary: {
       // Logic: Admin gets Indigo, App gets Duka Orange
