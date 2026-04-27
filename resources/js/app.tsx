@@ -55,13 +55,28 @@ createInertiaApp({
     setup({ el, App, props }) {
         const Root = () => {
             // --- SUBDOMAIN DETECTION ---
-            // Extracts 'admin' from 'admin.duka.test' or 'finance' from 'finance.duka.com'
             const subdomain = React.useMemo(() => {
                 const host = window.location.hostname;
                 const parts = host.split('.');
-                // If localhost or single-word host, default to 'admin' or 'duka'
-                if (parts.length <= 1) return 'admin';
-                return parts[0].toLowerCase() as SubdomainType;
+
+                // 1. Root domain handling (e.g., duka.pi, localhost, mysite.com)
+                // If parts length is 2 or less, we are at the root, so default to admin.
+                if (parts.length <= 2) return 'admin' as SubdomainType;
+
+                // 2. Subdomain handling (e.g., dev.duka.pi, admin.mysite.com)
+                const detected = parts[0].toLowerCase();
+
+                // 3. Fallback: If the detected string isn't a valid module, return 'admin'
+                // This prevents the app from crashing if someone types a fake subdomain.
+                const validSubdomains = [
+                    'admin', 'auth', 'dev', 'finance', 'marketing',
+                    'seller', 'guest', 'delivery', 'procurement',
+                    'stockkeeper', 'vendor', 'shared'
+                ];
+
+                return validSubdomains.includes(detected)
+                    ? (detected as SubdomainType)
+                    : 'admin';
             }, []);
 
             // --- THEME STATE LOGIC ---
