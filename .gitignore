@@ -32,3 +32,6 @@ resources/js/Pages/Errors
 certs/
 config/cloudflared/*.json
 .cursorignore
+backend_map.txt
+DESIGN.md
+frontend_map.txt

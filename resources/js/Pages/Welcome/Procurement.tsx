@@ -1,5 +1,5 @@
 import {Head} from '@inertiajs/react';
-import AppNavbar from '@/Components/AppNavbar';
+import AppNavbar from '@/Components/Navigation/Global/AppNavbar';
 import React from 'react';
 // @ts-ignore
 import {PageProps} from '@/types';

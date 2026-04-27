@@ -1,38 +1,67 @@
-import AdminLayout from "@/Layouts/AppLayout";
+import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
+import { Head } from "@inertiajs/react";
+import {
+    Box,
+    Chip,
+    Paper,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableRow,
+    Typography,
+} from "@mui/material";
 import React from "react";
-import {Head, Link} from "@inertiajs/react";
 
-export default function Index() {
+interface StockItem {
+    id: number;
+    product_name: string;
+    status?: string;
+}
+
+export default function Index({ items = [] }: { items?: StockItem[] }) {
     return (
-        <AdminLayout>
-            <Head title="Seller Orders"/>
+        <>
+            <Head title="StockKeeper Orders" />
 
-            {/* Breadcrumbs */}
-            <nav className="text-sm text-gray-600 mb-4">
-                <ol className="flex space-x-2">
-                    <li>
-                        <Link href="/admin/dashboard" className="hover:underline">
-                            Home
-                        </Link>
-                    </li>
-                    <li>
-                        <span>/</span>
-                        <Link href="/seller/dashboard" className="hover:underline">
-                            Seller
-                        </Link>
-                    </li>
-                    <li>
-                        <span>/</span>
-                        <span className="font-semibold text-gray-900">
-                            Orders
-                        </span>
-                    </li>
-                </ol>
-            </nav>
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h4" sx={{ fontWeight: 800 }}>
+                    Order Flow
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                    Outbound work queue for stock handling and fulfillment preparation.
+                </Typography>
+            </Box>
 
-            {/* Page content */}
-            <h1 className="text-xl font-bold mb-4">Orders List</h1>
-            {/* ... your table / orders content ... */}
-        </AdminLayout>
+            <Paper elevation={0} sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
+                <Table>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>Item</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align="right">Queue Slot</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {items.slice(0, 12).map((item, index) => (
+                            <TableRow key={item.id} hover>
+                                <TableCell>{item.product_name}</TableCell>
+                                <TableCell>
+                                    <Chip
+                                        size="small"
+                                        label={item.status ?? "pending"}
+                                        color={item.status === "active" ? "success" : "default"}
+                                        variant={item.status === "active" ? "filled" : "outlined"}
+                                    />
+                                </TableCell>
+                                <TableCell align="right">#{index + 1}</TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </Paper>
+        </>
     );
 }
+
+Index.layout = (page: React.ReactNode) => <StockKeeperLayout>{page}</StockKeeperLayout>;

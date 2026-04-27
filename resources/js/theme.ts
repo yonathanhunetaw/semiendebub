@@ -12,8 +12,8 @@ export const subdomainConfigs = {
     seller: { color: '#7c3aed', icon: 'Store', label: 'Seller' },
     guest: { color: '#64748b', icon: 'UserCircle', label: 'Guest' },
     delivery: { color: '#c2410c', icon: 'Truck', label: 'Delivery' },
-    procurement: { color: '#0e7490', icon: 'ShoppingCart', label: 'Procure' },
-    stockkeeper: { color: '#92400e', icon: 'Package', label: 'Stock' },
+    procurement: { color: '#0e7490', icon: 'ShoppingCart', label: 'Procurement' },
+    stockkeeper: { color: '#c2410c', icon: 'Package', label: 'StockKeeper' },
     vendor: { color: '#1d4ed8', icon: 'Building2', label: 'Vendor' },
     shared: { color: '#475569', icon: 'Share2', label: 'Shared' },
 };

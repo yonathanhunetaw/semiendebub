@@ -3,7 +3,7 @@ import { Head, Link } from "@inertiajs/react";
 //@ts-ignore
 import { PageProps } from "@/types";
 import Globe from "@/Components/Globe";
-import WelcomeNavbar from "@/Components/WelcomeNavbar";
+import WelcomeNavbar from "@/Components/Navigation/Global/WelcomeNavbar";
 import WelcomeFooter from "@/Components/WelcomeFooter";
 // import Nani from "@/Components/Nani";
 

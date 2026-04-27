@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\StockKeeper;
 
 use App\Http\Controllers\Admin\Controller;
-use App\Models\Item;
+use App\Models\Item\Item;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class DashboardController extends Controller
 {
@@ -15,7 +16,7 @@ class DashboardController extends Controller
     {
         $items = Item::all();
 
-        return view('stock_keeper.inventorys.index', compact('items'));
+        return Inertia::render('StockKeeper/Dashboard/index', compact('items'));
     }
 
     /**

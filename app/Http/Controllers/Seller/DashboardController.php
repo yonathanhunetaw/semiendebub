@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
-use App\Models\Item;
+use App\Models\Item\Item;
 use App\Models\StockKeeper\ItemStock;
 use App\Services\PriceProvider;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 
 // Models
 
@@ -92,7 +93,7 @@ class DashboardController extends Controller
             'variants_count' => $items->sum(fn ($i) => $i->variants->count()),
         ]);
 
-        return view('seller.items.index', compact('items', 'store'));
+        return Inertia::render('Seller/Dashboard/index', compact('items', 'store'));
     }
 
     /**

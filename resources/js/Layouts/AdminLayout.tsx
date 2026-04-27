@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { Box, CssBaseline, Toolbar, useTheme } from "@mui/material";
+import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
+import {
+    Box,
+    Button,
+    CssBaseline,
+    Menu,
+    MenuItem,
+    Toolbar,
+    useTheme,
+} from "@mui/material";
 import { Head } from "@inertiajs/react";
 import { subdomainConfigs, SubdomainType } from "@/theme";
 
@@ -21,6 +30,9 @@ interface Props {
  */
 export default function AdminLayout({ children }: Props) {
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [roleMenuAnchor, setRoleMenuAnchor] = useState<null | HTMLElement>(
+        null,
+    );
     const theme = useTheme();
 
     // --- 1. SUBDOMAIN & IDENTITY DETECTION ---
@@ -36,6 +48,70 @@ export default function AdminLayout({ children }: Props) {
         ? (host as SubdomainType)
         : "admin";
     const config = subdomainConfigs[activeKey];
+
+    const buildRoleUrl = (subdomain: "finance" | "procurement" | "stockkeeper") => {
+        if (typeof window === "undefined") {
+            return "#";
+        }
+
+        const { protocol, hostname, port } = window.location;
+        const hostParts = hostname.split(".");
+        const baseDomain =
+            hostParts.length > 1 ? hostParts.slice(1).join(".") : hostname;
+        const portSuffix = port ? `:${port}` : "";
+
+        return `${protocol}//${subdomain}.${baseDomain}${portSuffix}/dashboard`;
+    };
+
+    const roleSwitcher = (
+        <>
+            <Button
+                size="small"
+                variant="outlined"
+                color="primary"
+                startIcon={<SwapHorizRoundedIcon />}
+                onClick={(event) => setRoleMenuAnchor(event.currentTarget)}
+                sx={{
+                    borderRadius: 3,
+                    textTransform: "none",
+                    fontWeight: 700,
+                    fontFamily: "Figtree, sans-serif",
+                    display: { xs: "none", sm: "inline-flex" },
+                }}
+            >
+                Role Switcher
+            </Button>
+            <Menu
+                anchorEl={roleMenuAnchor}
+                open={Boolean(roleMenuAnchor)}
+                onClose={() => setRoleMenuAnchor(null)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                transformOrigin={{ vertical: "top", horizontal: "left" }}
+            >
+                <MenuItem
+                    component="a"
+                    href={buildRoleUrl("finance")}
+                    onClick={() => setRoleMenuAnchor(null)}
+                >
+                    Finance
+                </MenuItem>
+                <MenuItem
+                    component="a"
+                    href={buildRoleUrl("procurement")}
+                    onClick={() => setRoleMenuAnchor(null)}
+                >
+                    Procurement
+                </MenuItem>
+                <MenuItem
+                    component="a"
+                    href={buildRoleUrl("stockkeeper")}
+                    onClick={() => setRoleMenuAnchor(null)}
+                >
+                    StockKeeper
+                </MenuItem>
+            </Menu>
+        </>
+    );
 
     return (
         <Box
@@ -80,7 +156,10 @@ export default function AdminLayout({ children }: Props) {
             </Head>
 
             {/* --- 3. TOP NAVIGATION BAR --- */}
-            <AdminNav onMenuClick={() => setMobileOpen(!mobileOpen)} />
+            <AdminNav
+                onMenuClick={() => setMobileOpen(!mobileOpen)}
+                toolbarActions={roleSwitcher}
+            />
 
             {/* --- 4. SIDEBAR NAVIGATION --- */}
             <Box

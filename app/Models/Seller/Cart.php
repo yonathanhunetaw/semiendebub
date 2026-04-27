@@ -2,6 +2,9 @@
 
 namespace App\Models\Seller;
 
+use App\Models\Auth\Customer;
+use App\Models\Auth\User;
+use App\Models\Item\Item;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 

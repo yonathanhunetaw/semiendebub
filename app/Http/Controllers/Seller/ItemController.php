@@ -4,12 +4,13 @@ namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Auth\Customer;
-use App\Models\Item;
-use App\Models\User;
+use App\Models\Auth\User;
+use App\Models\Item\Item;
 use App\Services\PriceProvider;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 
 class ItemController extends Controller
 {
@@ -71,7 +72,7 @@ class ItemController extends Controller
             }
         }
 
-        return view('seller.items.index', compact('items'));
+        return Inertia::render('Seller/Items/Index', compact('items'));
 
     }
 
@@ -356,7 +357,7 @@ class ItemController extends Controller
             ->min('final_price') ?? $variantData->min('price');
 
         // 🔹 Return view with everything ready
-        return view('seller.items.show', compact(
+        return Inertia::render('Seller/Items/Show', compact(
             'item',
             'sellers',
             'customersWithOpenCarts',

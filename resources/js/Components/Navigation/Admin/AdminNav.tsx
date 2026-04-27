@@ -16,8 +16,10 @@ const drawerWidth = 260;
 
 export default function AdminNav({
     onMenuClick,
+    toolbarActions,
 }: {
     onMenuClick?: () => void;
+    toolbarActions?: React.ReactNode;
 }) {
     const { auth } = usePage().props as any;
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -60,6 +62,7 @@ export default function AdminNav({
                 </Box>
                 <Box sx={{ flexGrow: 1 }} />
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    {toolbarActions}
                     <Box
                         sx={{
                             textAlign: "right",

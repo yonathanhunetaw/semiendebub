@@ -4,12 +4,13 @@ namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Auth\Customer;
-use App\Models\Cart;
-use App\Models\Item;
-use App\Models\User;
+use App\Models\Auth\User;
+use App\Models\Item\Item;
+use App\Models\Seller\Cart;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 
 // HTTP Verb	URI	                    Action	  Route Name
 
@@ -30,7 +31,7 @@ class MenuController extends Controller
      */
     public function index()
     {
-        return view('seller.menu.index');
+        return Inertia::render('Seller/Menu/Index');
     }
 
     public function store(Request $request)
@@ -67,9 +68,9 @@ class MenuController extends Controller
         $this->authorize('view', $cart);
 
         // Eager load the items related to this cart
-        $cart->load('items');
+        $cart->load(['items', 'customer', 'seller']);
 
-        return view('seller.carts.show', compact('cart'));
+        return Inertia::render('Seller/Carts/Show', compact('cart'));
     }
 
     /**
@@ -80,7 +81,11 @@ class MenuController extends Controller
         // Ensure the authenticated user owns the cart
         $this->authorize('update', $cart);
 
-        return view('seller.carts.edit', compact('cart'));
+        $customers = Customer::all();
+        $sellers = User::where('role', 'seller')->get();
+        $cart->load(['customer', 'seller']);
+
+        return Inertia::render('Seller/Carts/Edit', compact('cart', 'customers', 'sellers'));
     }
 
     public function update(Request $request, Cart $cart)
@@ -88,11 +93,13 @@ class MenuController extends Controller
         // Validate input
         $request->validate([
             'customer_id' => 'required|exists:customers,id', // Ensure customer_id is provided and valid
+            'seller_id' => 'nullable|exists:users,id',
         ]);
 
         // Update the cart
         $cart->update([
             'customer_id' => $request->customer_id, // Update the customer_id
+            'seller_id' => $request->seller_id,
         ]);
 
         // Redirect to the updated cart's details page with success message
@@ -132,7 +139,7 @@ class MenuController extends Controller
         $cart->delete();
 
         // Redirect back to the cart index page with a success message
-        return redirect()->route('admin.seller.index')->with('success', 'Cart deleted successfully!');
+        return redirect()->route('seller.orders.index')->with('success', 'Cart deleted successfully!');
     }
 
     public function addItem(Request $request, $itemId)
@@ -164,7 +171,7 @@ class MenuController extends Controller
         ]);
 
         // Redirect back to the cart or item list
-        return redirect()->route('admin.carts.show', $cart->id)->with('success', 'Item added to cart!');
+        return redirect()->route('seller.carts.show', $cart->id)->with('success', 'Item added to cart!');
     }
 
     // Method to create a new cart or add an item to an existing cart
@@ -177,7 +184,7 @@ class MenuController extends Controller
         $customers = Customer::all(); // Get all customers
         $sellers = User::where('role', 'seller')->get(); // assuming sellers have 'seller' role
 
-        return view('seller.carts.create', compact('customers', 'sellers'));
+        return Inertia::render('Seller/Carts/Create', compact('customers', 'sellers'));
 
     }
 

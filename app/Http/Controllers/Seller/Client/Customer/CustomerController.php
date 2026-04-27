@@ -31,7 +31,7 @@ class CustomerController extends Controller
 
         // $customers = Customer::all();
         //        return view('admin.customers.index', compact('customers'));
-        return Inertia::render('Customer/Index', compact('customers'));
+        return Inertia::render('Seller/Customers/Index', compact('customers'));
     }
 
     /**
@@ -69,7 +69,7 @@ class CustomerController extends Controller
         //     'created_by' => auth()->id(),
         // ]);
 
-        return redirect()->route('admin.customers.index')->with('success', 'Customer created successfully.');
+        return redirect()->route('seller.customers.index')->with('success', 'Customer created successfully.');
     }
 
     /**
@@ -77,7 +77,7 @@ class CustomerController extends Controller
      */
     public function create()
     {
-        return view('admin.customers.create');
+        return Inertia::render('Seller/Customers/Create');
     }
 
     /**
@@ -87,9 +87,9 @@ class CustomerController extends Controller
     {
         // $customers = Customer::with('user')->get(); // Retrieve all customers with the 'user' relationship
         // $customer = Customer::with('user')->findOrFail($id); // Load a single customer with the 'user' relationship
-        $customers = Customer::with('creator')->get();
+        $customer->load(['creator', 'carts']);
 
-        return view('admin.customers.show', compact('customer'));
+        return Inertia::render('Seller/Customers/Show', compact('customer'));
     }
 
     /**
@@ -99,7 +99,7 @@ class CustomerController extends Controller
     {
         $customer = Customer::findOrFail($id);
 
-        return view('admin.customers.edit', compact('customer'));
+        return Inertia::render('Seller/Customers/Edit', compact('customer'));
     }
 
     /**
@@ -118,7 +118,7 @@ class CustomerController extends Controller
         $customer = Customer::findOrFail($id);
         $customer->update($validated);
 
-        return redirect()->route('admin.customers.index')->with('success', 'Customer updated successfully.');
+        return redirect()->route('seller.customers.index')->with('success', 'Customer updated successfully.');
     }
 
     /**
@@ -136,6 +136,6 @@ class CustomerController extends Controller
 
         $customer->delete();
 
-        return redirect()->route('admin.customers.index')->with('success', 'Customer deleted successfully.');
+        return redirect()->route('seller.customers.index')->with('success', 'Customer deleted successfully.');
     }
 }

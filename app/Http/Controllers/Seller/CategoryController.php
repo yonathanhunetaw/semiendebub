@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
-use App\Models\ItemCategory;
+use App\Models\Item\ItemCategory;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class CategoryController extends Controller
 {
@@ -42,7 +43,7 @@ class CategoryController extends Controller
             }
         }
 
-        return view('seller.categories.index', compact('mainCategories', 'selectedCategory', 'subcategories'));
+        return Inertia::render('Seller/Categories/Index', compact('mainCategories', 'selectedCategory', 'subcategories'));
     }
 
     /**
@@ -62,7 +63,7 @@ class CategoryController extends Controller
         // Get only active items in this category
         $items = $category->items()->where('status', 'active')->orderBy('product_name')->get();
 
-        return view('seller.categories.show', compact('category', 'subcategories', 'items'));
+        return Inertia::render('Seller/Categories/Show', compact('category', 'subcategories', 'items'));
     }
 
     // The remaining resource methods (create, store, edit, update, destroy)

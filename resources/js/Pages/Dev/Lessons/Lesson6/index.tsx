@@ -5,10 +5,17 @@ import StarRating from "@/Pages/Dev/Lessons/Lesson6/StarRating";
 
 import Box from '@mui/material/Box';
 
-import {Props} from "@headlessui/react/dist/types";
+interface Lesson6Props {
+    initialColors: {
+        id: string;
+        title: string;
+        color: string;
+        rating: number;
+    }[];
+}
 
 // @ts-ignore
-export default function Index({initialColors}: Props<object>) {
+export default function Index({initialColors}: Lesson6Props) {
     console.log("Page 97");
     console.log("------------------------------ CHAPTER 6 -------------------------------");
     console.log("---------------------------- React State Management ---------------------------");

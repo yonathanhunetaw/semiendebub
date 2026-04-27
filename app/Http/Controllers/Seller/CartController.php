@@ -4,12 +4,13 @@ namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Auth\Customer;
-use App\Models\Cart;
-use App\Models\Item;
-use App\Models\User;
+use App\Models\Auth\User;
+use App\Models\Item\Item;
+use App\Models\Seller\Cart;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 
 // HTTP Verb	URI	                    Action	  Route Name
 
@@ -30,22 +31,15 @@ class CartController extends Controller
      */
     public function index()
     {
-        // Fetch all carts for the authenticated user
-        // $carts = auth()->user()->carts; // assuming relationship is defined in User model
-        // Fetch all carts along with their associated customer
-        // Check if the authenticated user is an admin
+        $carts = Cart::with(['customer', 'seller', 'items'])
+            ->where(function ($query) {
+                $query->where('seller_id', auth()->id())
+                    ->orWhere('user_id', auth()->id());
+            })
+            ->latest()
+            ->get();
 
-        // if (auth()->user()->role === 'admin') {
-        //     // If the user is an admin, fetch all carts for all users
-        //     $carts = Cart::with('customer')->get(); // Assuming Cart has a relationship with Customer
-        // } else {
-        //     // If the user is not an admin, fetch only the carts of the authenticated user
-        //     $carts = auth()->user()->carts()->with('customer')->get();
-        // }
-
-        $carts = Cart::with('customer')->get();
-
-        return view('seller.carts.index', compact('carts'));
+        return Inertia::render('Seller/Orders/index', compact('carts'));
     }
 
     public function store(Request $request)
@@ -70,7 +64,7 @@ class CartController extends Controller
         // Redirect or return response
         // return redirect()->route('admin.carts.index')->with('success', 'Cart created successfully!');
         // Redirect to the cart's detail page with a success message
-        return redirect()->route('seller.carts.index')->with('success', 'Cart created successfully!');
+        return redirect()->route('seller.orders.index')->with('success', 'Cart created successfully!');
     }
 
     /**
@@ -101,7 +95,7 @@ class CartController extends Controller
         $customers = Customer::all(); // Get all customers
         $sellers = User::where('role', 'seller')->get(); // assuming sellers have 'seller' role
 
-        return view('seller.carts.create', compact('customers', 'sellers'));
+        return Inertia::render('Seller/Carts/Create', compact('customers', 'sellers'));
 
     }
 
@@ -114,9 +108,9 @@ class CartController extends Controller
         $this->authorize('view', $cart);
 
         // Eager load the items related to this cart
-        $cart->load('items');
+        $cart->load(['items', 'customer', 'seller']);
 
-        return view('seller.carts.show', compact('cart'));
+        return Inertia::render('Seller/Carts/Show', compact('cart'));
     }
 
     /**
@@ -127,7 +121,11 @@ class CartController extends Controller
         // Ensure the authenticated user owns the cart
         $this->authorize('update', $cart);
 
-        return view('seller.carts.edit', compact('cart'));
+        $customers = Customer::all();
+        $sellers = User::where('role', 'seller')->get();
+        $cart->load(['customer', 'seller']);
+
+        return Inertia::render('Seller/Carts/Edit', compact('cart', 'customers', 'sellers'));
     }
 
     // /**
@@ -155,11 +153,13 @@ class CartController extends Controller
         // Validate input
         $request->validate([
             'customer_id' => 'required|exists:customers,id', // Ensure customer_id is provided and valid
+            'seller_id' => 'nullable|exists:users,id',
         ]);
 
         // Update the cart
         $cart->update([
             'customer_id' => $request->customer_id, // Update the customer_id
+            'seller_id' => $request->seller_id,
         ]);
 
         // Redirect to the updated cart's details page with success message
@@ -179,7 +179,7 @@ class CartController extends Controller
         $cart->delete();
 
         // Redirect back to the cart index page with a success message
-        return redirect()->route('admin.seller.index')->with('success', 'Cart deleted successfully!');
+        return redirect()->route('seller.orders.index')->with('success', 'Cart deleted successfully!');
     }
 
     // Method to create a new cart or add an item to an existing cart
@@ -212,7 +212,7 @@ class CartController extends Controller
         ]);
 
         // Redirect back to the cart or item list
-        return redirect()->route('admin.carts.show', $cart->id)->with('success', 'Item added to cart!');
+        return redirect()->route('seller.carts.show', $cart->id)->with('success', 'Item added to cart!');
     }
 
     // Store an item in the cart

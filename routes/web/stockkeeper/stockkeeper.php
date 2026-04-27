@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\StockKeeper\DashboardController;
+use App\Http\Controllers\StockKeeper\InventoryController;
+use App\Http\Controllers\StockKeeper\OrderController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -21,8 +24,11 @@ Route::domain("stockkeeper.{$baseDomain}")
         });
 
         Route::middleware(['auth', 'verified', 'role.subdomain:stock_keeper'])->group(function () {
-            Route::get('/dashboard', function () {
-                return Inertia::render('StockKeeper/Dashboard/index');
-            })->name('dashboard');
+            Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+            Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory.index');
+            Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
+            Route::get('/stock-alerts', function () {
+                return Inertia::render('StockKeeper/StockAlerts/index');
+            })->name('alerts.index');
         });
     });

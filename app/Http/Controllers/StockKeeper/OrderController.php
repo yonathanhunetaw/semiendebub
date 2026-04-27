@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\StockKeeper;
 
 use App\Http\Controllers\Admin\Controller;
-use App\Models\Item;
+use App\Models\Item\Item;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class OrderController extends Controller
 {
@@ -13,11 +14,9 @@ class OrderController extends Controller
      */
     public function index()
     {
-        // $items = Item::all();
-        // return view('stock_keeper.items.index', compact('items'));
-        $items = Item::all(); // Fetch all items
+        $items = Item::all();
 
-        return view('stock_keeper.orders.index', compact('items')); // Pass $items to the view
+        return Inertia::render('StockKeeper/Orders/index', compact('items'));
     }
 
     /**
