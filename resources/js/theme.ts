@@ -20,9 +20,7 @@ export const subdomainConfigs = {
 
 export type SubdomainType = keyof typeof subdomainConfigs;
 
-// 2. Updated dynamic function
 export const getDesignTokens = (mode: PaletteMode, subdomain: SubdomainType = 'admin') => {
-    // Get the color for the specific module, fallback to admin if not found
     const brandColor = subdomainConfigs[subdomain]?.color || subdomainConfigs.admin.color;
 
     return {
@@ -30,26 +28,39 @@ export const getDesignTokens = (mode: PaletteMode, subdomain: SubdomainType = 'a
             mode,
             primary: {
                 main: brandColor,
-                contrastText: '#ffffff', // Ensures text on headers is always white
+                contrastText: '#ffffff',
             },
-            secondary: {
-                // Indigo remains a clean accent for buttons across most themes
-                main: '#6366f1',
-            },
-            ...(mode === 'dark'
-                ? {
-                    background: {
-                        // Admin-style subdomains look better with a slightly navy-dark bg
-                        default: '#0f172a',
-                        paper: brandColor, // Sidebar/Nav can match brand in dark mode
-                    },
-                }
-                : {
-                    background: {
+            background: {
+                ...(mode === 'dark'
+                    ? {
+                        default: '#0f172a', // Deep Navy
+                        paper: '#1e293b',   // Slightly lighter navy for cards
+                      }
+                    : {
                         default: '#f1f5f9',
                         paper: '#ffffff',
+                      }),
+            },
+            text: {
+                ...(mode === 'dark'
+                    ? {
+                        primary: '#ffffff',
+                        secondary: '#94a3b8', // Light grey for sub-labels
+                      }
+                    : {
+                        primary: '#1e293b',
+                        secondary: '#64748b',
+                      }),
+            },
+        },
+        components: {
+            MuiTypography: {
+                styleOverrides: {
+                    root: {
+                        fontFamily: 'Figtree, sans-serif',
                     },
-                }),
+                },
+            },
         },
     };
 };

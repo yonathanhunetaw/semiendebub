@@ -93,36 +93,29 @@ export default function SellerLayout({
                 <Box
                     sx={{
                         pointerEvents: "auto",
-                        // THE FIX: Forces labels and icons to be Black to stand out against
-                        // the background.paper (Purple #7c3aed)
+                        "& .MuiBottomNavigation-root": {
+                            bgcolor: "primary.main", // This turns Orange (#c2410c)
+                            borderRadius: 4,
+                            height: 70,
+                        },
+                        // Force ALL text/icons inside the Orange bar to be BLACK
                         "& .MuiBottomNavigationAction-label": {
-                            color: "#000000", // Full black for visibility
-                            opacity: 0.6,
-                            fontSize: "0.75rem",
-                            transition: "all 0.2s ease-in-out",
+                            color: "#000000 !important",
+                            fontWeight: 600,
+                            opacity: 0.8,
                         },
                         "& .Mui-selected .MuiBottomNavigationAction-label": {
-                            color: "#000000", // Keep it black when selected
-                            opacity: 1,
+                            color: "#000000 !important",
                             fontWeight: 900,
-                            fontSize: "0.85rem",
+                            opacity: 1,
                         },
                         "& .MuiSvgIcon-root": {
-                            color: "#000000",
-                            opacity: 0.6,
-                            transition: "all 0.2s ease-in-out",
+                            color: "#000000 !important",
+                            opacity: 0.8,
                         },
                         "& .Mui-selected .MuiSvgIcon-root": {
-                            color: "#000000",
+                            color: "#000000 !important",
                             opacity: 1,
-                            transform: "scale(1.1)", // Subtle pop effect
-                        },
-                        // Ensures the actual bar itself doesn't fight these styles
-                        "& .MuiBottomNavigation-root": {
-                            bgcolor: "primary.main", // Uses the Purple #7c3aed from your theme
-                            borderRadius: 4,
-                            height: 64,
-                            boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
                         },
                     }}
                 >
