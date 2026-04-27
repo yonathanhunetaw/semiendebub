@@ -9,9 +9,9 @@ export default function DevSidebar({ variant, open, onClose, sx }: any) {
     const { url } = usePage();
 
     const menuItems = [
-        { label: 'Dashboard', icon: <TerminalIcon />, href: '/dev/dashboard' },
-        { label: 'ML Lessons', icon: <PsychologyIcon />, href: '/dev/lessons' },
-        { label: 'System Lab', icon: <StorageIcon />, href: '/dev/shipments' },
+        { label: 'Dashboard', icon: <TerminalIcon />, href: '/dashboard' },
+        { label: 'ML Lessons', icon: <PsychologyIcon />, href: '/lessons' },
+        { label: 'System Lab', icon: <StorageIcon />, href: '/shipments' },
     ];
 
     return (
