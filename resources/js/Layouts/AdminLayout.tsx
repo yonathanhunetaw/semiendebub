@@ -7,7 +7,7 @@ import {
     Typography,
     useTheme,
 } from "@mui/material";
-import AdminSidebar from "@/Components/Admin/AdminSidebar";
+import AdminSidebar from "@/Components/Navigation/Admin/AdminSidebar";
 import { Link, Head } from "@inertiajs/react";
 import { subdomainConfigs, SubdomainType } from "@/theme";
 import * as LucideIcons from "lucide-react";

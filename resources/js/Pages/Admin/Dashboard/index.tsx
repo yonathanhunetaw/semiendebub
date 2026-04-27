@@ -1,4 +1,4 @@
-import AdminLayout from "@/Components/Admin/AdminLayout";
+import AdminLayout from "@/Layouts/AppLayout";
 import { Head } from "@inertiajs/react";
 import { Box, Paper, Typography, Divider, Chip, Stack } from "@mui/material"; // Put Stack here
 import PeopleIcon from '@mui/icons-material/People';

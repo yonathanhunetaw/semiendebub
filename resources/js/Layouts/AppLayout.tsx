@@ -1,8 +1,8 @@
 // resources/js/Components/Admin/AdminLayout.tsx
 import React, { useState } from 'react';
 import { Box, CssBaseline, Toolbar } from '@mui/material';
-import AdminNav from './AdminNav';
-import AdminSidebar from './AdminSidebar';
+import AdminNav from '../Components/Navigation/Admin/AdminNav';
+import AdminSidebar from '../Components/Navigation/Admin/AdminSidebar';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const [mobileOpen, setMobileOpen] = useState(false);

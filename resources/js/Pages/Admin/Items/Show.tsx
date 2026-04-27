@@ -1,5 +1,5 @@
 import {useState} from "react";
-import AdminLayout from "@/Components/Admin/AdminLayout";
+import AdminLayout from "@/Layouts/AppLayout";
 import {Head} from "@inertiajs/react";
 import {
     Box,

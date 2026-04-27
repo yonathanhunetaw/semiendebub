@@ -1,4 +1,4 @@
-import AdminLayout from "@/Components/Admin/AdminLayout";
+import AdminLayout from "@/Layouts/AppLayout";
 import React from "react";
 import {Head, Link} from "@inertiajs/react";
 

@@ -1,5 +1,5 @@
 // resources/js/Pages/Contact.tsx
-import AdminLayout from "@/Components/Admin/AdminLayout"; // Adjust path if needed
+import AdminLayout from "@/Layouts/AppLayout"; // Adjust path if needed
 import { Head } from "@inertiajs/react";
 import {CardMedia, IconButton, Stack, Typography} from "@mui/material";
 import { Card } from "@mui/material";

@@ -1,4 +1,4 @@
-import AdminLayout from "@/Components/Admin/AdminLayout";
+import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import {
     Box,

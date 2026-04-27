@@ -1,4 +1,4 @@
-import AdminLayout from "@/Components/Admin/AdminLayout";
+import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm, Link } from "@inertiajs/react";
 import { Box, Button, Paper, Stack, TextField, Typography, MenuItem, Alert } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';

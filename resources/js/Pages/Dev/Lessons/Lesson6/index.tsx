@@ -1,4 +1,4 @@
-import AdminLayout from "@/Components/Admin/AdminLayout";
+import AdminLayout from "@/Layouts/AppLayout";
 import {Head} from "@inertiajs/react";
 import React, {useState} from "react";
 import StarRating from "@/Pages/Dev/Lessons/Lesson6/StarRating";
