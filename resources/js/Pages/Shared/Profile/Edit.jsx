@@ -1,19 +1,27 @@
-import {Head} from '@inertiajs/react';
-import AdminLayout from "@/Components/Admin/AdminLayout";
+import { Head } from '@inertiajs/react';
+import SellerLayout from "@/Layouts/SellerLayout"; // Changed from Admin to Seller
 import DeleteUserForm from './Partials/DeleteUserForm';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
+import { Box, Typography } from "@mui/material";
 
-export default function Edit({mustVerifyEmail, status}) {
+export default function Edit({ mustVerifyEmail, status }) {
     return (
-        <AdminLayout header={<h2 className="text-xl font-semibold">Profile</h2>}>
-            <Head title="Profile"/>
+        <>
+            <Head title="Profile" />
 
-            <div className="py-6">
-                <div className="mx-auto max-w-4xl space-y-6">
+            {/* Header section matching your Seller UI style */}
+            <Box sx={{ px: 2, pt: 4, pb: 2 }}>
+                <Typography variant="h4" sx={{ fontWeight: 900, color: "#ffffff" }}>
+                    Profile
+                </Typography>
+            </Box>
+
+            <div className="px-4 py-2">
+                <div className="max-w-4xl mx-auto space-y-4">
 
                     {/* Update Profile Information */}
-                    <div className="bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 p-6 shadow rounded-lg">
+                    <div className="bg-[#1e293b] text-white p-6 shadow-sm rounded-2xl border border-white/5">
                         <UpdateProfileInformationForm
                             mustVerifyEmail={mustVerifyEmail}
                             status={status}
@@ -21,17 +29,20 @@ export default function Edit({mustVerifyEmail, status}) {
                     </div>
 
                     {/* Update Password */}
-                    <div className="bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 p-6 shadow rounded-lg">
-                        <UpdatePasswordForm/>
+                    <div className="bg-[#1e293b] text-white p-6 shadow-sm rounded-2xl border border-white/5">
+                        <UpdatePasswordForm />
                     </div>
 
                     {/* Delete User */}
-                    <div className="bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 p-6 shadow rounded-lg">
-                        <DeleteUserForm/>
+                    <div className="bg-[#1e293b] text-white p-6 shadow-sm rounded-2xl border border-white/5">
+                        <DeleteUserForm />
                     </div>
 
                 </div>
             </div>
-        </AdminLayout>
+        </>
     );
 }
+
+// Fixed the layout assignment to use SellerLayout
+Edit.layout = (page) => <SellerLayout>{page}</SellerLayout>;
