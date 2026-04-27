@@ -133,7 +133,7 @@ export default function Dashboard({
 
 Dashboard.layout = (page: React.ReactNode) => (
     <AdminLayout>
-        <Head title="Admin Dashboard"/>
+        <Head title="index"/>
         {page}
     </AdminLayout>
 );

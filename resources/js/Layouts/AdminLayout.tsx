@@ -11,7 +11,6 @@ import AdminSidebar from "@/Components/Admin/AdminSidebar";
 import { Link, Head } from "@inertiajs/react";
 import { subdomainConfigs, SubdomainType } from "@/theme";
 import * as LucideIcons from "lucide-react";
-import { LucideIcon } from "lucide-react";
 
 interface Props {
     header?: React.ReactNode;
