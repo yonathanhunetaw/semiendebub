@@ -53,120 +53,78 @@ function itemPrice(item: Item) {
     return prices.length ? Math.min(...prices) : null;
 }
 
-export default function Show({
-    category,
-    subcategories = [],
-    items = [],
-}: {
-    category: Category;
-    subcategories?: Category[];
-    items?: Item[];
-}) {
-    return (
-        <>
-            <Head title={category.category_name} />
 
-            <SellerHeader
-                title={category.category_name}
-                backHref={route("seller.categories.index")}
-            />
+export default function Show({ category, subcategories = [], items = [] }: { category: Category; subcategories?: Category[]; items?: Item[]; }) {
+    const cardStyle = {
+        bgcolor: "#1e293b",
+        color: "#ffffff",
+        border: "1px solid rgba(255,255,255,0.05)",
+        textDecoration: "none",
+        "& .MuiTypography-root": { color: "#ffffff" },
+    };
+
+    return (
+        <Box sx={{ bgcolor: "#0f172a", minHeight: "100vh" }}>
+            <Head title={category.category_name} />
+            <SellerHeader title={category.category_name} backHref={route("seller.categories.index")} />
 
             <Box sx={{ px: 2, pt: 2 }}>
-                {subcategories.length > 0 ? (
+                {subcategories.length > 0 && (
                     <>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mb: 1 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mb: 1, color: "#ffffff" }}>
                             Subcategories
                         </Typography>
-                        <Box
-                            sx={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                                gap: 1.5,
-                            }}
-                        >
+                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1.5 }}>
                             {subcategories.map((subcategory) => (
-                                <SellerCard
-                                    key={subcategory.id}
-                                    component={Link}
-                                    href={route("seller.categories.show", subcategory.id)}
-                                    sx={{ textDecoration: "none", color: "inherit" }}
-                                >
+                                <SellerCard key={subcategory.id} component={Link} href={route("seller.categories.show", subcategory.id)} sx={cardStyle}>
                                     <Stack spacing={1.5}>
                                         <Typography sx={{ fontWeight: 700 }}>{subcategory.category_name}</Typography>
-                                        <ChevronRightRoundedIcon sx={{ color: "text.secondary", alignSelf: "flex-end" }} />
+                                        <ChevronRightRoundedIcon sx={{ color: "primary.main", alignSelf: "flex-end" }} />
                                     </Stack>
                                 </SellerCard>
                             ))}
                         </Box>
                     </>
-                ) : null}
+                )}
 
-                {items.length > 0 ? (
+                {items.length > 0 && (
                     <>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mt: subcategories.length ? 2 : 0, mb: 1 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mt: subcategories.length ? 2 : 0, mb: 1, color: "#ffffff" }}>
                             Items
                         </Typography>
-                        <Box
-                            sx={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                                gap: 1.5,
-                            }}
-                        >
+                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1.5 }}>
                             {items.map((item) => (
-                                <SellerCard
-                                    key={item.id}
-                                    component={Link}
-                                    href={route("seller.items.show", item.id)}
-                                    sx={{ p: 0, overflow: "hidden", textDecoration: "none", color: "inherit" }}
-                                >
-                                    <Box
-                                        sx={{
-                                            height: 132,
-                                            backgroundColor: "#fff7ed",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            overflow: "hidden",
-                                        }}
-                                    >
+                                <SellerCard key={item.id} component={Link} href={route("seller.items.show", item.id)} sx={{ ...cardStyle, p: 0, overflow: "hidden" }}>
+                                    <Box sx={{ height: 132, bgcolor: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                                         {itemImage(item) ? (
-                                            <Box
-                                                component="img"
-                                                src={itemImage(item)!}
-                                                alt={item.product_name}
-                                                sx={{ width: "100%", height: "100%", objectFit: "contain" }}
-                                            />
+                                            <Box component="img" src={itemImage(item)!} alt={item.product_name} sx={{ width: "100%", height: "100%", objectFit: "contain" }} />
                                         ) : (
-                                            <Typography variant="body2" color="text.secondary">
-                                                No image
-                                            </Typography>
+                                            <Typography variant="body2" sx={{ color: "text.secondary !important" }}>No image</Typography>
                                         )}
                                     </Box>
                                     <Box sx={{ p: 1.5 }}>
-                                        <Typography sx={{ fontWeight: 700 }} noWrap>
-                                            {item.product_name}
-                                        </Typography>
-                                        <Typography sx={{ mt: 0.75, fontWeight: 800, color: "error.main" }}>
+                                        <Typography sx={{ fontWeight: 700, mb: 0.5 }} noWrap>{item.product_name}</Typography>
+                                        <Typography sx={{ fontWeight: 900, color: "primary.main !important" }}>
                                             {sellerPrice(itemPrice(item))}
                                         </Typography>
                                         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
-                                            <Typography variant="caption" color="text.secondary">
-                                                {item.sold_count ?? 0} sold
-                                            </Typography>
-                                            {item.category?.category_name ? (
-                                                <Chip label={item.category.category_name} size="small" variant="outlined" />
-                                            ) : null}
+                                            <Typography variant="caption" sx={{ color: "#94a3b8 !important" }}>{item.sold_count ?? 0} sold</Typography>
+                                            {item.category?.category_name && (
+                                                <Chip
+                                                    label={item.category.category_name}
+                                                    size="small"
+                                                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff', border: 'none' }}
+                                                />
+                                            )}
                                         </Stack>
                                     </Box>
                                 </SellerCard>
                             ))}
                         </Box>
                     </>
-                ) : null}
+                )}
             </Box>
-        </>
+        </Box>
     );
 }
-
 Show.layout = (page: React.ReactNode) => <SellerLayout>{page}</SellerLayout>;
