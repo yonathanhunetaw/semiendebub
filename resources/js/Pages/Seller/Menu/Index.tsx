@@ -1,91 +1,133 @@
+import { SellerCard, SellerHeader, SELLER_BRAND_DARK, sellerHeaderButtonSx } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
 import CategoryRoundedIcon from "@mui/icons-material/CategoryRounded";
+import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
+import GroupsRoundedIcon from "@mui/icons-material/GroupsRounded";
 import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
-import PeopleRoundedIcon from "@mui/icons-material/PeopleRounded";
+import PointOfSaleRoundedIcon from "@mui/icons-material/PointOfSaleRounded";
+import ReceiptLongRoundedIcon from "@mui/icons-material/ReceiptLongRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
-import ShoppingCartRoundedIcon from "@mui/icons-material/ShoppingCartRounded";
-import { Box, Grid, Paper, Stack, Typography } from "@mui/material";
+import WalletRoundedIcon from "@mui/icons-material/WalletRounded";
+import {
+    Box,
+    Chip,
+    IconButton,
+    Stack,
+    Typography,
+} from "@mui/material";
 import React from "react";
 
 const menuCards = [
     {
-        title: "Catalog",
-        description: "Browse active items and pricing ladders.",
-        icon: <Inventory2RoundedIcon color="primary" />,
+        label: "Dashboard",
+        href: route("seller.dashboard"),
+        icon: DashboardRoundedIcon,
+    },
+    {
+        label: "Catalog",
         href: route("seller.items.index"),
+        icon: Inventory2RoundedIcon,
     },
     {
-        title: "Orders",
-        description: "Review carts and active order assignments.",
-        icon: <ShoppingCartRoundedIcon color="primary" />,
-        href: route("seller.orders.index"),
-    },
-    {
-        title: "Customers",
-        description: "Manage customer records and sales relationships.",
-        icon: <PeopleRoundedIcon color="primary" />,
+        label: "Customers",
         href: route("seller.customers.index"),
+        icon: GroupsRoundedIcon,
     },
     {
-        title: "Categories",
-        description: "Navigate the catalog tree quickly.",
-        icon: <CategoryRoundedIcon color="primary" />,
+        label: "Carts",
+        href: route("seller.carts.index"),
+        icon: PointOfSaleRoundedIcon,
+    },
+    {
+        label: "Categories",
         href: route("seller.categories.index"),
+        icon: CategoryRoundedIcon,
     },
     {
-        title: "Settings",
-        description: "Update seller preferences and working defaults.",
-        icon: <SettingsRoundedIcon color="primary" />,
+        label: "Settings",
         href: route("seller.settings.index"),
+        icon: SettingsRoundedIcon,
+    },
+    {
+        label: "Balance",
+        icon: WalletRoundedIcon,
+        soon: true,
+    },
+    {
+        label: "Documents",
+        icon: ReceiptLongRoundedIcon,
+        soon: true,
     },
 ];
 
-export default function Index() {
+export default function Index({
+    stats,
+}: {
+    stats?: {
+        customers?: number;
+        carts?: number;
+        items?: number;
+    };
+}) {
     return (
         <>
             <Head title="Seller Menu" />
 
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                    Seller Menu
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                    Quick access to the core workflows used during a selling shift.
-                </Typography>
-            </Box>
+            <SellerHeader
+                title="More"
+                action={(
+                    <IconButton
+                        component={Link}
+                        href={route("seller.settings.index")}
+                        sx={sellerHeaderButtonSx}
+                    >
+                        <SettingsRoundedIcon />
+                    </IconButton>
+                )}
+            />
 
-            <Grid container spacing={3}>
-                {menuCards.map((card) => (
-                    <Grid key={card.title} size={{ xs: 12, md: 6, xl: 4 }}>
-                        <Paper
-                            component={Link}
-                            href={card.href}
-                            elevation={0}
-                            sx={{
-                                display: "block",
-                                p: 3,
-                                borderRadius: 3,
-                                border: "1px solid",
-                                borderColor: "divider",
-                                textDecoration: "none",
-                                color: "inherit",
-                                "&:hover": { borderColor: "primary.main", transform: "translateY(-1px)" },
-                            }}
-                        >
-                            <Stack spacing={1.5}>
-                                {card.icon}
-                                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                                    {card.title}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    {card.description}
-                                </Typography>
-                            </Stack>
-                        </Paper>
-                    </Grid>
-                ))}
-            </Grid>
+            <Box sx={{ px: 2, pt: 2 }}>
+                <Box
+                    sx={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: 1.5,
+                    }}
+                >
+                    {menuCards.map((card) => {
+                        const Icon = card.icon;
+                        const badge =
+                            card.label === "Customers"
+                                ? stats?.customers
+                                : card.label === "Carts"
+                                  ? stats?.carts
+                                  : card.label === "Catalog"
+                                    ? stats?.items
+                                    : undefined;
+
+                        const cardProps = card.href
+                            ? { component: Link, href: card.href, sx: { textDecoration: "none", color: "inherit" } }
+                            : {};
+
+                        return (
+                            <SellerCard key={card.label} {...cardProps}>
+                                <Stack spacing={1.5}>
+                                    <Stack direction="row" alignItems="center" justifyContent="space-between">
+                                        <Icon sx={{ color: SELLER_BRAND_DARK }} />
+                                        {card.soon ? (
+                                            <Chip label="Soon" size="small" variant="outlined" />
+                                        ) : badge != null ? (
+                                            <Chip label={badge} size="small" sx={{ fontWeight: 700 }} />
+                                        ) : null}
+                                    </Stack>
+                                    <Typography sx={{ fontWeight: 700 }}>{card.label}</Typography>
+                                </Stack>
+                            </SellerCard>
+                        );
+                    })}
+                </Box>
+            </Box>
         </>
     );
 }

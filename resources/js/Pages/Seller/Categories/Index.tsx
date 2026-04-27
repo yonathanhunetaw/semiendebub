@@ -1,14 +1,8 @@
+import { SellerCard, SellerHeader, SELLER_BRAND_DARK } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
-import {
-    Box,
-    Grid,
-    List,
-    ListItemButton,
-    ListItemText,
-    Paper,
-    Typography,
-} from "@mui/material";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
+import { Box, Chip, Stack, Typography } from "@mui/material";
 import React from "react";
 
 interface Category {
@@ -29,67 +23,56 @@ export default function Index({
         <>
             <Head title="Categories" />
 
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                    Categories
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                    Explore the catalog tree from parent categories into sellable branches.
-                </Typography>
-            </Box>
+            <SellerHeader title="Categories" />
 
-            <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, px: 1, py: 1 }}>
-                            Main Categories
-                        </Typography>
-                        <List>
-                            {mainCategories.map((category) => (
-                                <ListItemButton
-                                    key={category.id}
-                                    component={Link}
-                                    href={`${route("seller.categories.index")}?category_id=${category.id}`}
-                                    selected={selectedCategory?.id === category.id}
-                                    sx={{ borderRadius: 3 }}
-                                >
-                                    <ListItemText primary={category.category_name} />
-                                </ListItemButton>
-                            ))}
-                        </List>
-                    </Paper>
-                </Grid>
-                <Grid size={{ xs: 12, md: 8 }}>
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                            {selectedCategory?.category_name || "Subcategories"}
-                        </Typography>
-                        <Grid container spacing={2}>
-                            {subcategories.map((subcategory) => (
-                                <Grid key={subcategory.id} size={{ xs: 12, sm: 6 }}>
-                                    <Paper
-                                        component={Link}
-                                        href={route("seller.categories.show", subcategory.id)}
-                                        elevation={0}
-                                        sx={{
-                                            p: 2,
-                                            borderRadius: 3,
-                                            border: "1px solid",
-                                            borderColor: "divider",
-                                            textDecoration: "none",
-                                            color: "inherit",
-                                        }}
-                                    >
-                                        <Typography sx={{ fontWeight: 700 }}>
-                                            {subcategory.category_name}
-                                        </Typography>
-                                    </Paper>
-                                </Grid>
-                            ))}
-                        </Grid>
-                    </Paper>
-                </Grid>
-            </Grid>
+            <Box sx={{ px: 2, pt: 2 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mb: 1 }}>
+                    Main Categories
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ overflowX: "auto", pb: 0.5 }}>
+                    {mainCategories.map((category) => (
+                        <Chip
+                            key={category.id}
+                            component={Link}
+                            href={`${route("seller.categories.index")}?category_id=${category.id}`}
+                            clickable
+                            label={category.category_name}
+                            color={selectedCategory?.id === category.id ? "primary" : "default"}
+                            sx={{
+                                borderRadius: 999,
+                                bgcolor: selectedCategory?.id === category.id ? SELLER_BRAND_DARK : undefined,
+                                color: selectedCategory?.id === category.id ? "#fff" : undefined,
+                                "& .MuiChip-label": { px: 1.25, fontWeight: 700 },
+                            }}
+                        />
+                    ))}
+                </Stack>
+
+                <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mt: 2, mb: 1 }}>
+                    {selectedCategory?.category_name || "Subcategories"}
+                </Typography>
+                <Box
+                    sx={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: 1.5,
+                    }}
+                >
+                    {subcategories.map((subcategory) => (
+                        <SellerCard
+                            key={subcategory.id}
+                            component={Link}
+                            href={route("seller.categories.show", subcategory.id)}
+                            sx={{ textDecoration: "none", color: "inherit" }}
+                        >
+                            <Stack spacing={1.5}>
+                                <Typography sx={{ fontWeight: 700 }}>{subcategory.category_name}</Typography>
+                                <ChevronRightRoundedIcon sx={{ color: "text.secondary", alignSelf: "flex-end" }} />
+                            </Stack>
+                        </SellerCard>
+                    ))}
+                </Box>
+            </Box>
         </>
     );
 }

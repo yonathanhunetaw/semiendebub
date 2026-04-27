@@ -39,7 +39,7 @@ class CartController extends Controller
             ->latest()
             ->get();
 
-        return Inertia::render('Seller/Orders/index', compact('carts'));
+        return Inertia::render('Seller/Carts/Index', compact('carts'));
     }
 
     public function store(Request $request)
@@ -64,7 +64,7 @@ class CartController extends Controller
         // Redirect or return response
         // return redirect()->route('admin.carts.index')->with('success', 'Cart created successfully!');
         // Redirect to the cart's detail page with a success message
-        return redirect()->route('seller.orders.index')->with('success', 'Cart created successfully!');
+        return redirect()->route('seller.carts.index')->with('success', 'Cart created successfully!');
     }
 
     /**
@@ -108,7 +108,7 @@ class CartController extends Controller
         $this->authorize('view', $cart);
 
         // Eager load the items related to this cart
-        $cart->load(['items', 'customer', 'seller']);
+        $cart->load(['items.category', 'customer', 'seller']);
 
         return Inertia::render('Seller/Carts/Show', compact('cart'));
     }
@@ -179,7 +179,7 @@ class CartController extends Controller
         $cart->delete();
 
         // Redirect back to the cart index page with a success message
-        return redirect()->route('seller.orders.index')->with('success', 'Cart deleted successfully!');
+        return redirect()->route('seller.carts.index')->with('success', 'Cart deleted successfully!');
     }
 
     // Method to create a new cart or add an item to an existing cart
@@ -221,6 +221,7 @@ class CartController extends Controller
         $request->validate([
             'item_id' => 'required|exists:items,id',
             'quantity' => 'required|integer|min:1',
+            'price' => 'nullable|numeric|min:0',
         ]);
 
         // Find the item
@@ -229,7 +230,7 @@ class CartController extends Controller
         // Add the item to the cart with its quantity and price
         $cart->items()->attach($item->id, [
             'quantity' => $request->quantity,
-            'price' => $item->price, // Store the price of the item in the pivot table
+            'price' => $request->input('price', $item->price), // Store the selected price in the pivot table
         ]);
 
         // Redirect back to the cart show page with a success message

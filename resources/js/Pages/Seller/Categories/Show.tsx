@@ -1,14 +1,8 @@
+import { SellerCard, SellerHeader, sellerImage, sellerPrice } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
-import {
-    Box,
-    Grid,
-    List,
-    ListItem,
-    ListItemText,
-    Paper,
-    Typography,
-} from "@mui/material";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
+import { Box, Chip, Stack, Typography } from "@mui/material";
 import React from "react";
 
 interface Category {
@@ -16,9 +10,47 @@ interface Category {
     category_name: string;
 }
 
+interface StoreVariant {
+    price?: number | null;
+    discount_price?: number | null;
+}
+
+interface ItemVariant {
+    price?: number | null;
+    store_variants?: StoreVariant[];
+}
+
 interface Item {
     id: number;
     product_name: string;
+    product_images?: string[] | string | null;
+    sold_count?: number | null;
+    category?: {
+        category_name?: string;
+    } | null;
+    variants?: ItemVariant[];
+}
+
+function itemImage(item: Item) {
+    if (Array.isArray(item.product_images)) {
+        return sellerImage(item.product_images[0] ?? null);
+    }
+
+    return sellerImage(item.product_images ?? null);
+}
+
+function itemPrice(item: Item) {
+    const prices = (item.variants ?? [])
+        .flatMap((variant) => {
+            const storePrices = (variant.store_variants ?? [])
+                .map((storeVariant) => storeVariant.discount_price ?? storeVariant.price)
+                .filter((price): price is number => price != null);
+
+            return storePrices.length ? storePrices : [variant.price];
+        })
+        .filter((price): price is number => price != null);
+
+    return prices.length ? Math.min(...prices) : null;
 }
 
 export default function Show({
@@ -34,51 +66,105 @@ export default function Show({
         <>
             <Head title={category.category_name} />
 
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                    {category.category_name}
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                    Active sellable branches and items inside this category.
-                </Typography>
-            </Box>
+            <SellerHeader
+                title={category.category_name}
+                backHref={route("seller.categories.index")}
+            />
 
-            <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 5 }}>
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+            <Box sx={{ px: 2, pt: 2 }}>
+                {subcategories.length > 0 ? (
+                    <>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mb: 1 }}>
                             Subcategories
                         </Typography>
-                        <List disablePadding>
+                        <Box
+                            sx={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                                gap: 1.5,
+                            }}
+                        >
                             {subcategories.map((subcategory) => (
-                                <ListItem
+                                <SellerCard
                                     key={subcategory.id}
-                                    disableGutters
                                     component={Link}
                                     href={route("seller.categories.show", subcategory.id)}
                                     sx={{ textDecoration: "none", color: "inherit" }}
                                 >
-                                    <ListItemText primary={subcategory.category_name} />
-                                </ListItem>
+                                    <Stack spacing={1.5}>
+                                        <Typography sx={{ fontWeight: 700 }}>{subcategory.category_name}</Typography>
+                                        <ChevronRightRoundedIcon sx={{ color: "text.secondary", alignSelf: "flex-end" }} />
+                                    </Stack>
+                                </SellerCard>
                             ))}
-                        </List>
-                    </Paper>
-                </Grid>
-                <Grid size={{ xs: 12, md: 7 }}>
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                            Active Items
+                        </Box>
+                    </>
+                ) : null}
+
+                {items.length > 0 ? (
+                    <>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mt: subcategories.length ? 2 : 0, mb: 1 }}>
+                            Items
                         </Typography>
-                        <List disablePadding>
+                        <Box
+                            sx={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                                gap: 1.5,
+                            }}
+                        >
                             {items.map((item) => (
-                                <ListItem key={item.id} disableGutters>
-                                    <ListItemText primary={item.product_name} />
-                                </ListItem>
+                                <SellerCard
+                                    key={item.id}
+                                    component={Link}
+                                    href={route("seller.items.show", item.id)}
+                                    sx={{ p: 0, overflow: "hidden", textDecoration: "none", color: "inherit" }}
+                                >
+                                    <Box
+                                        sx={{
+                                            height: 132,
+                                            backgroundColor: "#fff7ed",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            overflow: "hidden",
+                                        }}
+                                    >
+                                        {itemImage(item) ? (
+                                            <Box
+                                                component="img"
+                                                src={itemImage(item)!}
+                                                alt={item.product_name}
+                                                sx={{ width: "100%", height: "100%", objectFit: "contain" }}
+                                            />
+                                        ) : (
+                                            <Typography variant="body2" color="text.secondary">
+                                                No image
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                    <Box sx={{ p: 1.5 }}>
+                                        <Typography sx={{ fontWeight: 700 }} noWrap>
+                                            {item.product_name}
+                                        </Typography>
+                                        <Typography sx={{ mt: 0.75, fontWeight: 800, color: "error.main" }}>
+                                            {sellerPrice(itemPrice(item))}
+                                        </Typography>
+                                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
+                                            <Typography variant="caption" color="text.secondary">
+                                                {item.sold_count ?? 0} sold
+                                            </Typography>
+                                            {item.category?.category_name ? (
+                                                <Chip label={item.category.category_name} size="small" variant="outlined" />
+                                            ) : null}
+                                        </Stack>
+                                    </Box>
+                                </SellerCard>
                             ))}
-                        </List>
-                    </Paper>
-                </Grid>
-            </Grid>
+                        </Box>
+                    </>
+                ) : null}
+            </Box>
         </>
     );
 }

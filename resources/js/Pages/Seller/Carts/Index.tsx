@@ -3,28 +3,37 @@ import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
-import { Avatar, Box, IconButton, Stack, Typography } from "@mui/material";
+import { Avatar, Box, Chip, IconButton, Stack, Typography } from "@mui/material";
 import React from "react";
 
-interface Customer {
+interface CartItem {
     id: number;
-    first_name?: string;
-    last_name?: string;
-    phone_number?: string;
-    city?: string;
 }
 
-export default function Index({ customers = [] }: { customers?: Customer[] }) {
+interface SellerCart {
+    id: number;
+    customer?: {
+        first_name?: string;
+        last_name?: string;
+    } | null;
+    seller?: {
+        first_name?: string;
+        last_name?: string;
+    } | null;
+    items?: CartItem[];
+}
+
+export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
     return (
         <>
-            <Head title="Customers" />
+            <Head title="Seller Carts" />
 
             <SellerHeader
-                title="Customers"
+                title="Carts"
                 action={(
                     <IconButton
                         component={Link}
-                        href={route("seller.customers.create")}
+                        href={route("seller.carts.create")}
                         sx={sellerHeaderButtonSx}
                     >
                         <AddRoundedIcon />
@@ -34,29 +43,39 @@ export default function Index({ customers = [] }: { customers?: Customer[] }) {
 
             <Box sx={{ px: 2, pt: 2 }}>
                 <Stack spacing={1.5}>
-                    {customers.map((customer) => {
-                        const fullName = sellerName([customer.first_name, customer.last_name]);
+                    {carts.map((cart) => {
+                        const customerName = sellerName([
+                            cart.customer?.first_name,
+                            cart.customer?.last_name,
+                        ]);
+                        const sellerLabel = sellerName([
+                            cart.seller?.first_name,
+                            cart.seller?.last_name,
+                        ]);
 
                         return (
                             <SellerCard
-                                key={customer.id}
+                                key={cart.id}
                                 component={Link}
-                                href={route("seller.customers.show", customer.id)}
+                                href={route("seller.carts.show", cart.id)}
                                 sx={{ textDecoration: "none", color: "inherit" }}
                             >
                                 <Stack direction="row" spacing={2} alignItems="center">
                                     <Avatar sx={{ bgcolor: SELLER_BRAND_DARK }}>
-                                        {sellerAvatarText(fullName)}
+                                        {sellerAvatarText(customerName || `Cart ${cart.id}`)}
                                     </Avatar>
                                     <Box sx={{ flex: 1, minWidth: 0 }}>
                                         <Typography sx={{ fontWeight: 700 }} noWrap>
-                                            {fullName || `Customer #${customer.id}`}
+                                            {customerName ? `${customerName}'s Cart` : `Cart #${cart.id}`}
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary" noWrap>
-                                            {[customer.phone_number, customer.city].filter(Boolean).join(" • ") || "No phone or city yet"}
+                                            {sellerLabel || "Seller not assigned"}
                                         </Typography>
                                     </Box>
-                                    <ChevronRightRoundedIcon sx={{ color: "text.secondary" }} />
+                                    <Stack alignItems="flex-end" spacing={0.5}>
+                                        <Chip label={`${cart.items?.length ?? 0} items`} size="small" />
+                                        <ChevronRightRoundedIcon sx={{ color: "text.secondary" }} />
+                                    </Stack>
                                 </Stack>
                             </SellerCard>
                         );
@@ -64,7 +83,7 @@ export default function Index({ customers = [] }: { customers?: Customer[] }) {
                 </Stack>
 
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", py: 2 }}>
-                    Total {customers.length}
+                    Total {carts.length}
                 </Typography>
             </Box>
         </>

@@ -1,17 +1,14 @@
+import { SellerCard, SellerHeader, SELLER_BRAND_DARK, sellerPrice } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
 import PointOfSaleRoundedIcon from "@mui/icons-material/PointOfSaleRounded";
 import StorefrontRoundedIcon from "@mui/icons-material/StorefrontRounded";
 import {
     Box,
     Button,
-    Divider,
-    Grid,
-    List,
-    ListItem,
-    ListItemText,
-    Paper,
+    Chip,
     Stack,
     Typography,
 } from "@mui/material";
@@ -19,19 +16,29 @@ import React from "react";
 
 interface SellerVariant {
     id: number;
+    final_price?: number | null;
+    store_discount_price?: number | null;
+    store_price?: number | null;
+    price?: number | null;
 }
 
 interface SellerItem {
     id: number;
     product_name: string;
-    status?: string;
     variants?: SellerVariant[];
 }
 
 interface SellerStore {
-    id?: number;
     store_name?: string;
     name?: string;
+}
+
+function itemPrice(item: SellerItem) {
+    const prices = (item.variants ?? [])
+        .map((variant) => variant.final_price ?? variant.store_discount_price ?? variant.store_price ?? variant.price)
+        .filter((price): price is number => price != null);
+
+    return prices.length ? Math.min(...prices) : null;
 }
 
 export default function Index({
@@ -41,109 +48,123 @@ export default function Index({
     items?: SellerItem[];
     store?: SellerStore | null;
 }) {
-    const activeItems = items.filter((item) => item.status === "active").length;
-    const totalVariants = items.reduce(
-        (count, item) => count + (item.variants?.length ?? 0),
-        0,
-    );
+    const totalVariants = items.reduce((count, item) => count + (item.variants?.length ?? 0), 0);
+    const lowestPrice = items
+        .map(itemPrice)
+        .filter((price): price is number => price != null)
+        .sort((left, right) => left - right)[0] ?? null;
 
     return (
         <>
             <Head title="Seller Dashboard" />
 
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                    Seller Dashboard
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                    {store?.store_name || store?.name || "Your store"} catalog, pricing, and order flow at a glance.
-                </Typography>
-            </Box>
+            <SellerHeader
+                title="Dashboard"
+                subtitle={store?.store_name || store?.name || "Your store at a glance"}
+            />
 
-            <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
-                        <Stack direction="row" spacing={1.5} alignItems="center">
-                            <StorefrontRoundedIcon color="primary" />
-                            <Typography variant="overline" color="text.secondary">
-                                Live Catalog
+            <Box sx={{ px: 2, pt: 2 }}>
+                <Box
+                    sx={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: 1.5,
+                    }}
+                >
+                    <SellerCard>
+                        <Stack spacing={1}>
+                            <StorefrontRoundedIcon sx={{ color: SELLER_BRAND_DARK }} />
+                            <Typography variant="body2" color="text.secondary">
+                                Live Items
+                            </Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                                {items.length}
                             </Typography>
                         </Stack>
-                        <Typography variant="h4" sx={{ mt: 2, fontWeight: 800 }}>
-                            {items.length}
-                        </Typography>
-                    </Paper>
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
-                        <Stack direction="row" spacing={1.5} alignItems="center">
-                            <Inventory2RoundedIcon color="primary" />
-                            <Typography variant="overline" color="text.secondary">
-                                Active Listings
+                    </SellerCard>
+                    <SellerCard>
+                        <Stack spacing={1}>
+                            <Inventory2RoundedIcon sx={{ color: SELLER_BRAND_DARK }} />
+                            <Typography variant="body2" color="text.secondary">
+                                Ready Variants
+                            </Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                                {totalVariants}
                             </Typography>
                         </Stack>
-                        <Typography variant="h4" sx={{ mt: 2, fontWeight: 800 }}>
-                            {activeItems}
-                        </Typography>
-                    </Paper>
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
-                        <Stack direction="row" spacing={1.5} alignItems="center">
-                            <PointOfSaleRoundedIcon color="primary" />
-                            <Typography variant="overline" color="text.secondary">
-                                Variants Ready
-                            </Typography>
-                        </Stack>
-                        <Typography variant="h4" sx={{ mt: 2, fontWeight: 800 }}>
-                            {totalVariants}
-                        </Typography>
-                    </Paper>
-                </Grid>
-
-                <Grid size={{ xs: 12, lg: 7 }}>
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                                Catalog Snapshot
-                            </Typography>
-                            <Button component={Link} href={route("seller.items.index")} variant="outlined" sx={{ borderRadius: 3, textTransform: "none" }}>
+                    </SellerCard>
+                    <SellerCard sx={{ gridColumn: "1 / -1" }}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+                            <Stack spacing={0.5}>
+                                <PointOfSaleRoundedIcon sx={{ color: SELLER_BRAND_DARK }} />
+                                <Typography variant="body2" color="text.secondary">
+                                    Lowest visible price
+                                </Typography>
+                                <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                                    {sellerPrice(lowestPrice)}
+                                </Typography>
+                            </Stack>
+                            <Button
+                                component={Link}
+                                href={route("seller.items.index")}
+                                variant="contained"
+                                sx={{
+                                    borderRadius: 3,
+                                    textTransform: "none",
+                                    bgcolor: SELLER_BRAND_DARK,
+                                    "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                                }}
+                            >
                                 Open Catalog
                             </Button>
                         </Stack>
-                        <Divider sx={{ mb: 2 }} />
-                        <List disablePadding>
-                            {items.slice(0, 8).map((item) => (
-                                <ListItem key={item.id} disableGutters divider>
-                                    <ListItemText
-                                        primary={item.product_name}
-                                        secondary={`${item.variants?.length ?? 0} variants`}
-                                    />
-                                </ListItem>
-                            ))}
-                        </List>
-                    </Paper>
-                </Grid>
+                    </SellerCard>
+                </Box>
 
-                <Grid size={{ xs: 12, lg: 5 }}>
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                            Quick Actions
-                        </Typography>
-                        <Stack spacing={1.5}>
-                            <Button component={Link} href={route("seller.orders.index")} variant="contained" sx={{ borderRadius: 3, textTransform: "none" }}>
-                                Review Orders
-                            </Button>
-                            <Button component={Link} href={route("seller.customers.index")} variant="outlined" sx={{ borderRadius: 3, textTransform: "none" }}>
-                                View Customers
-                            </Button>
-                            <Button component={Link} href={route("seller.settings.index")} variant="outlined" sx={{ borderRadius: 3, textTransform: "none" }}>
-                                Seller Settings
-                            </Button>
-                        </Stack>
-                    </Paper>
-                </Grid>
-            </Grid>
+                <Stack spacing={1.5} sx={{ mt: 2 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5 }}>
+                        Quick Actions
+                    </Typography>
+
+                    {[
+                        { label: "Browse catalog", href: route("seller.items.index"), note: "Search products and pricing." },
+                        { label: "Review carts", href: route("seller.carts.index"), note: "Open active customer carts." },
+                        { label: "View customers", href: route("seller.customers.index"), note: "Call, edit, and manage buyers." },
+                    ].map((action) => (
+                        <SellerCard key={action.label} component={Link} href={action.href} sx={{ textDecoration: "none", color: "inherit" }}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+                                <Box>
+                                    <Typography sx={{ fontWeight: 700 }}>{action.label}</Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {action.note}
+                                    </Typography>
+                                </Box>
+                                <ChevronRightRoundedIcon sx={{ color: "text.secondary" }} />
+                            </Stack>
+                        </SellerCard>
+                    ))}
+                </Stack>
+
+                <Stack spacing={1.5} sx={{ mt: 2 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5 }}>
+                        Catalog Highlights
+                    </Typography>
+
+                    {items.slice(0, 5).map((item) => (
+                        <SellerCard key={item.id} component={Link} href={route("seller.items.show", item.id)} sx={{ textDecoration: "none", color: "inherit" }}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+                                <Box>
+                                    <Typography sx={{ fontWeight: 700 }}>{item.product_name}</Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Starting at {sellerPrice(itemPrice(item))}
+                                    </Typography>
+                                </Box>
+                                <Chip label="View" size="small" />
+                            </Stack>
+                        </SellerCard>
+                    ))}
+                </Stack>
+            </Box>
         </>
     );
 }

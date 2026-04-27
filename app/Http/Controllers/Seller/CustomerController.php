@@ -15,7 +15,10 @@ class CustomerController extends Controller
      */
     public function index()
     {
-        $customers = Customer::with('creator')->latest()->get();
+        $customers = Customer::with('creator')
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
 
         return Inertia::render('Seller/Customers/Index', compact('customers'));
     }

@@ -1,6 +1,7 @@
+import { SELLER_BRAND_DARK, SELLER_CITY_OPTIONS, SellerCard, SellerHeader } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { Head, Link, useForm } from "@inertiajs/react";
-import { Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Head, useForm } from "@inertiajs/react";
+import { Box, Button, MenuItem, Stack, TextField } from "@mui/material";
 import React from "react";
 
 export default function Create() {
@@ -19,43 +20,28 @@ export default function Create() {
 
     return (
         <>
-            <Head title="Create Customer" />
+            <Head title="Add Customer" />
 
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                    Create Customer
-                </Typography>
-            </Box>
+            <SellerHeader title="Add Customer" backHref={route("seller.customers.index")} />
 
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider", maxWidth: 760 }}>
-                <Box component="form" onSubmit={submit}>
-                    <Stack spacing={2.5}>
-                        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                            <TextField
-                                fullWidth
-                                label="First name"
-                                value={data.first_name}
-                                onChange={(event) => setData("first_name", event.target.value)}
-                                helperText={errors.first_name}
-                                error={Boolean(errors.first_name)}
-                            />
-                            <TextField
-                                fullWidth
-                                label="Last name"
-                                value={data.last_name}
-                                onChange={(event) => setData("last_name", event.target.value)}
-                                helperText={errors.last_name}
-                                error={Boolean(errors.last_name)}
-                            />
-                        </Stack>
+            <Box component="form" onSubmit={submit} sx={{ px: 2, pt: 2 }}>
+                <SellerCard>
+                    <Stack spacing={2}>
                         <TextField
                             fullWidth
-                            label="Email"
-                            type="email"
-                            value={data.email}
-                            onChange={(event) => setData("email", event.target.value)}
-                            helperText={errors.email}
-                            error={Boolean(errors.email)}
+                            label="First name"
+                            value={data.first_name}
+                            onChange={(event) => setData("first_name", event.target.value)}
+                            helperText={errors.first_name}
+                            error={Boolean(errors.first_name)}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Last name"
+                            value={data.last_name}
+                            onChange={(event) => setData("last_name", event.target.value)}
+                            helperText={errors.last_name}
+                            error={Boolean(errors.last_name)}
                         />
                         <TextField
                             fullWidth
@@ -67,23 +53,44 @@ export default function Create() {
                         />
                         <TextField
                             fullWidth
+                            type="email"
+                            label="Email"
+                            value={data.email}
+                            onChange={(event) => setData("email", event.target.value)}
+                            helperText={errors.email}
+                            error={Boolean(errors.email)}
+                        />
+                        <TextField
+                            select
+                            fullWidth
                             label="City"
                             value={data.city}
                             onChange={(event) => setData("city", event.target.value)}
                             helperText={errors.city}
                             error={Boolean(errors.city)}
-                        />
-                        <Stack direction="row" spacing={2} justifyContent="flex-end">
-                            <Button component={Link} href={route("seller.customers.index")} sx={{ textTransform: "none" }}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" variant="contained" disabled={processing} sx={{ borderRadius: 3, textTransform: "none" }}>
-                                Save Customer
-                            </Button>
-                        </Stack>
+                        >
+                            {SELLER_CITY_OPTIONS.map((city) => (
+                                <MenuItem key={city} value={city}>
+                                    {city}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                        <Button
+                            type="submit"
+                            variant="contained"
+                            disabled={processing}
+                            sx={{
+                                borderRadius: 3,
+                                textTransform: "none",
+                                bgcolor: SELLER_BRAND_DARK,
+                                "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                            }}
+                        >
+                            Save Customer
+                        </Button>
                     </Stack>
-                </Box>
-            </Paper>
+                </SellerCard>
+            </Box>
         </>
     );
 }

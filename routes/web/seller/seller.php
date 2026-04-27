@@ -31,6 +31,7 @@ Route::domain("seller.$baseDomain")
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
             Route::get('/menu', [MenuController::class, 'index'])->name('menu.index');
             Route::get('/orders', [CartController::class, 'index'])->name('orders.index');
+            Route::get('/carts', [CartController::class, 'index'])->name('carts.index');
             Route::get('/items', [ItemController::class, 'index'])->name('items.index');
             Route::get('/items/{item}', [ItemController::class, 'show'])->name('items.show');
             Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);

@@ -61,7 +61,11 @@ class CategoryController extends Controller
             ->get();
 
         // Get only active items in this category
-        $items = $category->items()->where('status', 'active')->orderBy('product_name')->get();
+        $items = $category->items()
+            ->with(['category', 'variants.storeVariants'])
+            ->where('status', 'active')
+            ->orderBy('product_name')
+            ->get();
 
         return Inertia::render('Seller/Categories/Show', compact('category', 'subcategories', 'items'));
     }

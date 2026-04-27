@@ -1,6 +1,7 @@
+import { SellerCard, SellerHeader, SELLER_BRAND_DARK, sellerName } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { Head, Link, useForm } from "@inertiajs/react";
-import { Box, Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Head, useForm, usePage } from "@inertiajs/react";
+import { Box, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import React from "react";
 
 interface Person {
@@ -15,21 +16,26 @@ interface Cart {
     seller_id?: number | null;
 }
 
+interface AuthUser {
+    id: number;
+    first_name?: string;
+}
+
 const label = (person: Person) =>
-    [person.first_name, person.last_name].filter(Boolean).join(" ") || `#${person.id}`;
+    sellerName([person.first_name, person.last_name]) || `#${person.id}`;
 
 export default function Edit({
     cart,
     customers = [],
-    sellers = [],
 }: {
     cart: Cart;
     customers?: Person[];
-    sellers?: Person[];
 }) {
+    const { auth } = usePage().props as { auth?: { user?: AuthUser } };
+    const currentUser = auth?.user;
     const { data, setData, put, processing, errors } = useForm({
         customer_id: cart.customer_id ? String(cart.customer_id) : "",
-        seller_id: cart.seller_id ? String(cart.seller_id) : "",
+        seller_id: cart.seller_id ? String(cart.seller_id) : currentUser?.id ? String(currentUser.id) : "",
     });
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -41,15 +47,14 @@ export default function Edit({
         <>
             <Head title={`Edit Cart #${cart.id}`} />
 
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                    Edit Cart #{cart.id}
-                </Typography>
-            </Box>
+            <SellerHeader title={`Edit Cart #${cart.id}`} backHref={route("seller.carts.show", cart.id)} />
 
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider", maxWidth: 760 }}>
-                <Box component="form" onSubmit={submit}>
-                    <Stack spacing={2.5}>
+            <Box component="form" onSubmit={submit} sx={{ px: 2, pt: 2 }}>
+                <SellerCard>
+                    <Stack spacing={2}>
+                        <Typography variant="body2" color="text.secondary">
+                            Update the customer tied to this cart.
+                        </Typography>
                         <TextField
                             select
                             fullWidth
@@ -67,30 +72,28 @@ export default function Edit({
                         </TextField>
 
                         <TextField
-                            select
                             fullWidth
                             label="Seller"
-                            value={data.seller_id}
-                            onChange={(event) => setData("seller_id", event.target.value)}
-                        >
-                            {sellers.map((seller) => (
-                                <MenuItem key={seller.id} value={seller.id}>
-                                    {label(seller)}
-                                </MenuItem>
-                            ))}
-                        </TextField>
+                            value={currentUser?.first_name || "Current seller"}
+                            InputProps={{ readOnly: true }}
+                        />
 
-                        <Stack direction="row" spacing={2} justifyContent="flex-end">
-                            <Button component={Link} href={route("seller.carts.show", cart.id)} sx={{ textTransform: "none" }}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" variant="contained" disabled={processing} sx={{ borderRadius: 3, textTransform: "none" }}>
-                                Save Cart
-                            </Button>
-                        </Stack>
+                        <Button
+                            type="submit"
+                            variant="contained"
+                            disabled={processing}
+                            sx={{
+                                borderRadius: 3,
+                                textTransform: "none",
+                                bgcolor: SELLER_BRAND_DARK,
+                                "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                            }}
+                        >
+                            Save Cart
+                        </Button>
                     </Stack>
-                </Box>
-            </Paper>
+                </SellerCard>
+            </Box>
         </>
     );
 }

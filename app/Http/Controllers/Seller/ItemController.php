@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\Controller;
 use App\Models\Auth\Customer;
 use App\Models\Auth\User;
 use App\Models\Item\Item;
+use App\Models\Seller\Cart;
 use App\Services\PriceProvider;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,60 +20,38 @@ class ItemController extends Controller
      */
     public function index(Request $request)
     {
-        // // ✅ Only show active items
-        // $query = Item::with('categories')
-        //     ->where('status', 'active');
-
-        // // ✅ Search logic (product name)
-        // if ($request->filled('search')) {
-        //     $query->where('product_name', 'LIKE', '%' . $request->search . '%');
-        // }
-
-        // // ✅ Sorting
-        // if ($request->has('sort')) {
-        //     switch ($request->sort) {
-        //         case 'price_asc':
-        //             $query->orderBy('price', 'asc');
-        //             break;
-        //         case 'price_desc':
-        //             $query->orderBy('price', 'desc');
-        //             break;
-        //         case 'sold_asc':
-        //             $query->orderBy('sold_count', 'asc');
-        //             break;
-        //         case 'sold_desc':
-        //             $query->orderBy('sold_count', 'desc');
-        //             break;
-        //         case 'name_asc':
-        //             $query->orderBy('product_name', 'asc');
-        //             break;
-        //         case 'name_desc':
-        //             $query->orderBy('product_name', 'desc');
-        //             break;
-        //     }
-        // }
-
-        // // ✅ Paginate results
-        // $items = $query->paginate(300);
-
-        // return view('seller.items.index', compact('items'));
-
         $storeId = Auth::user()->store?->id;
-        Log::info('Seller Store ID: '.$storeId);
+        $search = trim((string) $request->input('search', ''));
+        $cartId = $request->integer('cart_id') ?: null;
 
-        $items = Item::where('status', 'active')
-            ->with('variants.storeVariants')
-            ->get();
+        $query = Item::where('status', 'active')
+            ->with([
+                'category',
+                'variants.storeVariants' => function ($query) use ($storeId) {
+                    if ($storeId) {
+                        $query->where('store_id', $storeId);
+                    }
+                },
+            ])
+            ->orderBy('product_name');
 
-        foreach ($items as $item) {
-            $variants = $item->variants;
-            foreach ($variants as $variant) {
-                $storeVariants = $variant->storeVariants;
-                Log::info("Item {$item->id} - Variant {$variant->id} | Store Variants: ".$storeVariants->count());
-            }
+        if ($storeId) {
+            $query->whereHas('variants.storeVariants', function ($query) use ($storeId) {
+                $query->where('store_id', $storeId);
+            });
         }
 
-        return Inertia::render('Seller/Items/Index', compact('items'));
+        if ($search !== '') {
+            $query->where('product_name', 'LIKE', '%'.$search.'%');
+        }
+
+        $items = $query->get();
+        $filters = [
+            'search' => $search,
+            'cart_id' => $cartId,
+        ];
+
+        return Inertia::render('Seller/Items/Index', compact('items', 'filters'));
 
     }
 
@@ -224,6 +203,7 @@ class ItemController extends Controller
 
         $sellerId = request('seller_id');      // optional
         $customerId = request('customer_id');  // optional
+        $selectedCartId = request('cart_id');
 
         // Load variants with all needed relations
         $item->load([
@@ -350,7 +330,20 @@ class ItemController extends Controller
 
         // 🔹 Sellers and customers with open carts
         $sellers = User::where('role', 'seller')->get();
-        $customersWithOpenCarts = Customer::whereHas('carts', fn ($q) => $q->where('status', 'open'))->get();
+        $customersWithOpenCarts = Customer::whereHas('carts', function ($query) {
+            $query->where('status', 'open');
+        })->with(['carts' => function ($query) {
+            $query->where('status', 'open');
+        }])->get();
+
+        $openCarts = Cart::with('customer')
+            ->where(function ($query) {
+                $query->where('seller_id', auth()->id())
+                    ->orWhere('user_id', auth()->id());
+            })
+            ->where('status', 'open')
+            ->latest()
+            ->get();
 
         $displayPrice = $variantData
             ->where('status', 'active')
@@ -361,10 +354,12 @@ class ItemController extends Controller
             'item',
             'sellers',
             'customersWithOpenCarts',
+            'openCarts',
             'allImages',
             'variantData',
             'minStoreVariant',
-            'displayPrice'
+            'displayPrice',
+            'selectedCartId'
         ));
     }
 

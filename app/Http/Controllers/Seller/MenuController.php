@@ -31,7 +31,16 @@ class MenuController extends Controller
      */
     public function index()
     {
-        return Inertia::render('Seller/Menu/Index');
+        $stats = [
+            'customers' => Customer::count(),
+            'carts' => Cart::where(function ($query) {
+                $query->where('seller_id', auth()->id())
+                    ->orWhere('user_id', auth()->id());
+            })->count(),
+            'items' => Item::where('status', 'active')->count(),
+        ];
+
+        return Inertia::render('Seller/Menu/Index', compact('stats'));
     }
 
     public function store(Request $request)
@@ -139,7 +148,7 @@ class MenuController extends Controller
         $cart->delete();
 
         // Redirect back to the cart index page with a success message
-        return redirect()->route('seller.orders.index')->with('success', 'Cart deleted successfully!');
+        return redirect()->route('seller.carts.index')->with('success', 'Cart deleted successfully!');
     }
 
     public function addItem(Request $request, $itemId)
