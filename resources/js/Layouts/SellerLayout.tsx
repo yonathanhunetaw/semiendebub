@@ -10,7 +10,7 @@ export default function SellerLayout({
 }) {
     const theme = useTheme();
     const { flash } = usePage().props as {
-        flash?: { success?: string; error?: string; };
+        flash?: { success?: string; error?: string };
     };
 
     // This dynamically pulls '#7c3aed' (Purple) from your theme.ts!
@@ -53,17 +53,26 @@ export default function SellerLayout({
                 }}
             >
                 {flash?.success && (
-                    <Alert severity="success" sx={{ m: 2, mb: 0, borderRadius: 3 }}>
+                    <Alert
+                        severity="success"
+                        sx={{ m: 2, mb: 0, borderRadius: 3 }}
+                    >
                         {flash.success}
                     </Alert>
                 )}
                 {flash?.error && (
-                    <Alert severity="error" sx={{ m: 2, mb: 0, borderRadius: 3 }}>
+                    <Alert
+                        severity="error"
+                        sx={{ m: 2, mb: 0, borderRadius: 3 }}
+                    >
                         {flash.error}
                     </Alert>
                 )}
 
-                <Box component="main" sx={{ minHeight: "100vh", width: "100%" }}>
+                <Box
+                    component="main"
+                    sx={{ minHeight: "100vh", width: "100%" }}
+                >
                     {children}
                 </Box>
             </Box>
@@ -84,27 +93,37 @@ export default function SellerLayout({
                 <Box
                     sx={{
                         pointerEvents: "auto",
-                        // THE FIX: This forces the text and icons inside your BottomNav to be white
-                        // so they are readable against your new theme's purple `background.paper`
+                        // THE FIX: Forces labels and icons to be Black to stand out against
+                        // the background.paper (Purple #7c3aed)
                         "& .MuiBottomNavigationAction-label": {
-                            color: "#ffffff",
-                            opacity: 0.7,
-                            transition: "all 0.2s ease-in-out"
+                            color: "#000000", // Full black for visibility
+                            opacity: 0.6,
+                            fontSize: "0.75rem",
+                            transition: "all 0.2s ease-in-out",
                         },
                         "& .Mui-selected .MuiBottomNavigationAction-label": {
-                            color: "#ffffff",
+                            color: "#000000", // Keep it black when selected
                             opacity: 1,
-                            fontWeight: 800
+                            fontWeight: 900,
+                            fontSize: "0.85rem",
                         },
                         "& .MuiSvgIcon-root": {
-                            color: "#ffffff",
-                            opacity: 0.7,
-                            transition: "all 0.2s ease-in-out"
+                            color: "#000000",
+                            opacity: 0.6,
+                            transition: "all 0.2s ease-in-out",
                         },
                         "& .Mui-selected .MuiSvgIcon-root": {
-                            color: "#ffffff",
+                            color: "#000000",
                             opacity: 1,
-                        }
+                            transform: "scale(1.1)", // Subtle pop effect
+                        },
+                        // Ensures the actual bar itself doesn't fight these styles
+                        "& .MuiBottomNavigation-root": {
+                            bgcolor: "primary.main", // Uses the Purple #7c3aed from your theme
+                            borderRadius: 4,
+                            height: 64,
+                            boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+                        },
                     }}
                 >
                     <SellerBottomNav />
