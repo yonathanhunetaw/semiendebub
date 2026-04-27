@@ -1,4 +1,4 @@
-import AdminLayout from "@/Layouts/AppLayout";
+import AdminLayout from '@/Layouts/AdminLayout';
 import { Head } from "@inertiajs/react";
 import { Box, Paper, Typography, Divider, Chip, Stack } from "@mui/material"; // Put Stack here
 import PeopleIcon from '@mui/icons-material/People';
@@ -133,7 +133,6 @@ export default function Dashboard({
 
 Dashboard.layout = (page: React.ReactNode) => (
     <AdminLayout>
-        <Head title="index"/>
         {page}
     </AdminLayout>
 );
