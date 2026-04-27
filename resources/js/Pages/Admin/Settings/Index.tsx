@@ -71,17 +71,17 @@ export default function SettingsIndex() {
                                 >
                                     <FormControlLabel
                                         value="dark"
-                                        control={<Radio />}
+                                        control={<Radio color="secondary" />}
                                         label={<Typography sx={{ color: "text.primary" }}>Dark</Typography>}
                                     />
                                     <FormControlLabel
                                         value="light"
-                                        control={<Radio />}
+                                        control={<Radio color="secondary" />}
                                         label={<Typography sx={{ color: "text.primary" }}>Light</Typography>}
                                     />
                                     <FormControlLabel
                                         value="system"
-                                        control={<Radio />}
+                                        control={<Radio color="secondary" />}
                                         label={<Typography sx={{ color: "text.primary" }}>System</Typography>}
                                     />
                                 </RadioGroup>
