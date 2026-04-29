@@ -143,6 +143,7 @@ export default function Show({
     const initialVariant = firstVariant(variantData) as
         | SellerVariantData
         | undefined;
+
     const [pricingMode, setPricingMode] = React.useState<"normal" | "seller">(
         "normal",
     );
@@ -156,10 +157,7 @@ export default function Show({
         initialVariant?.packaging ?? "",
     );
 
-    // 🔹 Initialize as null, useEffect will handle the sync
-    const [selectedImage, setSelectedImage] = React.useState<string | null>(
-        null,
-    );
+    const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
 
     const [sheetOpen, setSheetOpen] = React.useState(false);
     const [selectedCart, setSelectedCart] = React.useState(
@@ -176,9 +174,18 @@ export default function Show({
         selectedSize,
         selectedPackaging,
     );
+
+    // 🔹 CALCULATE ACTIVE IMAGE (Prevents the flash/disappear effect)
+    const activeImage = React.useMemo(() => {
+        if (selectedImage) return selectedImage;
+        const source = variant?.images?.[0] || allImages[0] || null;
+        return sellerImage(source);
+    }, [selectedImage, variant?.id, allImages]);
+
     const images = (variant?.images ?? allImages)
         .map((image) => sellerImage(image))
         .filter(Boolean) as string[];
+
     const selectedPrice = visiblePrice(variant, pricingMode);
     const perPiece =
         variant?.quantity && selectedPrice != null && variant.quantity > 0
@@ -194,25 +201,6 @@ export default function Show({
     React.useEffect(() => {
         setData("price", selectedPrice ?? displayPrice ?? 0);
     }, [displayPrice, selectedPrice, setData]);
-
-    // 🔹 REPLACED: Enhanced Sync for selectedImage
-    // Replace your image useEffect with this:
-    React.useEffect(() => {
-        // 1. Try to get the variant-specific image first
-        const variantImg = variant?.images?.[0];
-
-        // 2. If the variant has an image, use it.
-        // 3. If not, use the first image from the general gallery (allImages).
-        const source = variantImg || allImages[0] || null;
-
-        const processed = sellerImage(source);
-
-        // 🔥 THE FIX: Only update if we actually got a valid URL back.
-        // This prevents the "flash and disappear" if the variant is null for a split second.
-        if (processed) {
-            setSelectedImage(processed);
-        }
-    }, [variant?.id, allImages]);
 
     const colors = uniqueValues(variantData.map((entry) => entry.color));
     const sizes = availableSizes(variantData, selectedColor);
@@ -230,6 +218,7 @@ export default function Show({
         setSelectedColor(color);
         setSelectedSize(nextSize);
         setSelectedPackaging(nextPackaging);
+        setSelectedImage(null); // Reset manual choice to snap to new variant image
     };
 
     const chooseSize = (size: string) => {
@@ -280,15 +269,10 @@ export default function Show({
                                 backgroundColor: "#fff7ed",
                             }}
                         >
-                            {/* 🔹 Logic: Use state first, fallback to first available image directly */}
-                            {selectedImage || sellerImage(allImages[0]) ? (
+                            {activeImage ? (
                                 <Box
                                     component="img"
-                                    src={
-                                        selectedImage ||
-                                        sellerImage(allImages[0]) ||
-                                        ""
-                                    }
+                                    src={activeImage}
                                     alt={item.product_name}
                                     sx={{
                                         width: "100%",
@@ -320,7 +304,7 @@ export default function Show({
                                             height: 64,
                                             p: 0,
                                             border:
-                                                selectedImage === image
+                                                activeImage === image
                                                     ? `2px solid ${SELLER_BRAND_DARK}`
                                                     : "1px solid rgba(148, 163, 184, 0.24)",
                                             borderRadius: 2,
@@ -331,13 +315,9 @@ export default function Show({
                                     >
                                         <Box
                                             component="img"
-                                            src={
-                                                selectedImage ||
-                                                sellerImage(allImages[0]) ||
-                                                ""
-                                            }
+                                            src={image}
                                             alt={item.product_name}
-                                            loading="eager" // Add this
+                                            loading="eager"
                                             sx={{
                                                 width: "100%",
                                                 height: "100%",
@@ -772,17 +752,13 @@ export default function Show({
                                     </Stack>
                                 </SellerCard>
 
-                                {errors.quantity ? (
-                                    <Typography variant="body2" color="error">
-                                        {errors.quantity}
-                                    </Typography>
-                                ) : null}
-
                                 <Button
-                                    variant="contained"
-                                    disabled={processing || !selectedCart}
+                                    fullWidth
+                                    disabled={processing}
                                     onClick={addToCart}
+                                    variant="contained"
                                     sx={{
+                                        py: 1.5,
                                         borderRadius: 3,
                                         textTransform: "none",
                                         bgcolor: SELLER_BRAND_DARK,
@@ -791,7 +767,7 @@ export default function Show({
                                         },
                                     }}
                                 >
-                                    Confirm Add
+                                    {processing ? "Adding..." : "Add Item"}
                                 </Button>
                             </>
                         )}
@@ -802,4 +778,4 @@ export default function Show({
     );
 }
 
-Show.layout = (page: React.ReactNode) => <SellerLayout>{page}</SellerLayout>;
+Show.layout = (page: React.ReactNode) => <SellerLayout children={page} />;
