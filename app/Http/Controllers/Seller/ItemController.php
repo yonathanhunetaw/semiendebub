@@ -233,14 +233,12 @@ class ItemController extends Controller
         // 🔹 Build item images
         $itemImages = collect();
         $rawImages = $item->product_images;
-
         if (!empty($rawImages)) {
             $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
-
             if (is_array($imagesArray)) {
                 $itemImages = collect($imagesArray)
                     ->filter(fn($img) => !empty($img))
-                    ->map(fn($img) => str_starts_with($img, 'http') ? $img : asset('storage/' . ltrim($img, '/')));
+                    ->map(fn($img) => str_starts_with($img, 'http') ? $img : asset(ltrim($img, '/')));
             }
         }
 
@@ -304,25 +302,20 @@ class ItemController extends Controller
                 $rawVarImages = is_array($decoded) ? $decoded : [];
             }
 
-            // Process URLs with storage prefix and null-safety
             $variantImages = collect($rawVarImages)
                 ->filter(fn($img) => !empty($img))
                 ->map(function ($img) {
-                    if (str_starts_with($img, 'http')) {
+                    if (str_starts_with($img, 'http'))
                         return $img;
-                    }
 
-                    // Clean up accidental double slashes or literal "null" strings
-                    $cleanPath = ltrim($img, '/');
+                    // IMPORTANT: Your disk has "blue/null/piece"
+                    // If the database string is "blue/piece", we MUST add the null back.
+                    // If the database string is "blue/null/piece", we just leave it.
+                    $path = ltrim($img, '/');
 
-                    if (str_contains($cleanPath, '/null/')) {
-                        // If your terminal showed the folder exists WITHOUT 'null',
-                        // this line fixes the URL.
-                        $cleanPath = str_replace('/null/', '/', $cleanPath);
-                    }
-
-                    return asset('storage/' . $cleanPath);
+                    return asset($path);
                 });
+
 
             $seller_price_record = $storeVariant
                 ? $storeVariant->sellerPrices()
@@ -335,9 +328,10 @@ class ItemController extends Controller
 
             $payload = [
                 'id' => $variant->id,
+                // ... (other fields)
+                'img' => $variantImages->first() ?: ($variant->itemColor ? asset(ltrim($variant->itemColor->image_path, '/')) : '/img/default.jpg'),
+                'images' => $variantImages->toArray(),
                 'color' => $variant->itemColor?->name,
-                // Fallback to default if no images found
-                'img' => $variantImages->first() ?: ($variant->itemColor ? asset('storage/' . ltrim($variant->itemColor->image_path, '/')) : '/img/default.jpg'),
                 'size' => $variant->itemSize?->name,
                 'packaging' => $variant->itemPackagingType?->name,
                 'price' => $price,
@@ -345,7 +339,6 @@ class ItemController extends Controller
                 'stock' => $store_stock,
                 'status' => $status,
                 'store_active' => $store_active,
-                'images' => $variantImages->toArray(),
                 'quantity' => $variant->calculateTotalPieces(),
                 'price_ladder' => $price_ladder,
                 'final_price' => $final_price,
@@ -355,8 +348,7 @@ class ItemController extends Controller
 
             // 🚀 LOG 2: Variant Image Debug
             Log::info("INERTIA_DEBUG: Variant {$variant->id}", [
-                'primary' => $payload['img'],
-                'count' => count($payload['images'])
+                'url' => $payload['img']
             ]);
 
             return $payload;
