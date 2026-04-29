@@ -162,6 +162,17 @@ export default function Show({
     );
 
     const [sheetOpen, setSheetOpen] = React.useState(false);
+    const [priceTapCount, setPriceTapCount] = React.useState(0);
+
+    const priceTapped = () => {
+        const next = priceTapCount + 1;
+        if (next >= 3) {
+            setPricingMode((m) => (m === "normal" ? "seller" : "normal"));
+            setPriceTapCount(0);
+        } else {
+            setPriceTapCount(next);
+        }
+    };
     const [selectedCart, setSelectedCart] = React.useState(
         selectedCartId
             ? String(selectedCartId)
@@ -208,6 +219,8 @@ export default function Show({
         variant?.quantity && selectedPrice != null && variant.quantity > 0
             ? selectedPrice / variant.quantity
             : null;
+    const isCartoon = (variant?.packaging ?? "").toLowerCase().includes("cartoon");
+    const perPacket = isCartoon && selectedPrice != null ? selectedPrice : null;
 
     const { data, setData, post, processing, errors } = useForm({
         item_id: item.id,
@@ -277,18 +290,6 @@ export default function Show({
             <Box sx={{ px: 2, pt: 2 }}>
                 <Stack spacing={1.5}>
                     <SellerCard sx={{ p: 0, overflow: "hidden" }}>
-                        {/* Temporary Debug Text */}
-                        <Typography
-                            variant="caption"
-                            sx={{
-                                display: "block",
-                                p: 1,
-                                bgcolor: "#eee",
-                                wordBreak: "break-all",
-                            }}
-                        >
-                            Current Path: {activeImage || "NULL"}
-                        </Typography>
                         <Box
                             sx={{
                                 height: 280,
@@ -371,73 +372,74 @@ export default function Show({
                                 {item.product_description ||
                                     "Choose a variant and add it to a customer cart."}
                             </Typography>
-                            <Typography
+                            <Box
+                                onClick={priceTapped}
                                 sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 1.5,
                                     mt: 0.5,
-                                    fontWeight: 800,
-                                    color: "error.main",
-                                    fontSize: 28,
+                                    cursor: "pointer",
+                                    userSelect: "none",
                                 }}
                             >
-                                {sellerPrice(
-                                    selectedPrice ?? displayPrice ?? null,
-                                )}
-                            </Typography>
-                        </Stack>
-                    </SellerCard>
+                                <Typography
+                                    sx={{
+                                        fontWeight: 800,
+                                        color: "error.main",
+                                        fontSize: 28,
+                                    }}
+                                >
+                                    {sellerPrice(
+                                        selectedPrice ?? displayPrice ?? null,
+                                    )}
+                                </Typography>
 
-                    <SellerCard>
-                        <Stack direction="row" spacing={1}>
-                            <Button
-                                variant={
-                                    pricingMode === "normal"
-                                        ? "contained"
-                                        : "outlined"
-                                }
-                                onClick={() => setPricingMode("normal")}
-                                sx={{
-                                    flex: 1,
-                                    borderRadius: 3,
-                                    textTransform: "none",
-                                    bgcolor:
-                                        pricingMode === "normal"
-                                            ? SELLER_BRAND_DARK
-                                            : undefined,
-                                    "&:hover": {
-                                        bgcolor:
-                                            pricingMode === "normal"
-                                                ? SELLER_BRAND_DARK
-                                                : undefined,
-                                    },
-                                }}
-                            >
-                                Customer Price
-                            </Button>
-                            <Button
-                                variant={
-                                    pricingMode === "seller"
-                                        ? "contained"
-                                        : "outlined"
-                                }
-                                onClick={() => setPricingMode("seller")}
-                                sx={{
-                                    flex: 1,
-                                    borderRadius: 3,
-                                    textTransform: "none",
-                                    bgcolor:
-                                        pricingMode === "seller"
-                                            ? SELLER_BRAND_DARK
-                                            : undefined,
-                                    "&:hover": {
-                                        bgcolor:
-                                            pricingMode === "seller"
-                                                ? SELLER_BRAND_DARK
-                                                : undefined,
-                                    },
-                                }}
-                            >
-                                Seller Price
-                            </Button>
+                                {/* Strikethrough original price when there's a discount */}
+                                {variant?.discount_price != null &&
+                                    variant?.price != null &&
+                                    variant.price !== variant.discount_price && (
+                                        <Typography
+                                            variant="body2"
+                                            sx={{
+                                                color: "text.disabled",
+                                                textDecoration: "line-through",
+                                            }}
+                                        >
+                                            {sellerPrice(variant.price)}
+                                        </Typography>
+                                    )}
+
+                                {/* Discount % badge */}
+                                {variant?.discount_price != null &&
+                                    variant?.price != null &&
+                                    variant.price !== variant.discount_price && (
+                                        <Chip
+                                            label={`-${Math.round(((variant.price - variant.discount_price) / variant.price) * 100)}%`}
+                                            size="small"
+                                            sx={{
+                                                bgcolor: "#EAB308",
+                                                color: "#fff",
+                                                fontWeight: 700,
+                                                fontSize: "0.7rem",
+                                            }}
+                                        />
+                                    )}
+
+                                {/* Subtle indicator when seller mode is active */}
+                                {pricingMode === "seller" && (
+                                    <Chip
+                                        label="Seller"
+                                        size="small"
+                                        sx={{
+                                            bgcolor: SELLER_BRAND_DARK,
+                                            color: "#fff",
+                                            fontWeight: 700,
+                                            fontSize: "0.7rem",
+                                        }}
+                                    />
+                                )}
+                            </Box>
                         </Stack>
                     </SellerCard>
 
@@ -610,6 +612,19 @@ export default function Show({
                                     {sellerPrice(perPiece)}
                                 </Typography>
                             </Box>
+                            {perPacket != null && (
+                                <Box>
+                                    <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                    >
+                                        Per packet
+                                    </Typography>
+                                    <Typography sx={{ fontWeight: 700 }}>
+                                        {sellerPrice(perPacket)}
+                                    </Typography>
+                                </Box>
+                            )}
                         </Stack>
                     </SellerCard>
 
