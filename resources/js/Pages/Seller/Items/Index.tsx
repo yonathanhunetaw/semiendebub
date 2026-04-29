@@ -1,4 +1,11 @@
-import { SELLER_BRAND_DARK, SellerCard, SellerHeader, sellerImage, sellerPrice } from "@/Components/Seller/sellerUi";
+import {
+    SELLER_BRAND_DARK,
+    SellerCard,
+    SellerHeader,
+    sellerHeaderButtonSx,
+    sellerImage,
+    sellerPrice,
+} from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import QrCodeScannerRoundedIcon from "@mui/icons-material/QrCodeScannerRounded";
@@ -41,10 +48,6 @@ interface SellerItemFilters {
 }
 
 function itemImage(item: SellerItem) {
-    if (Array.isArray(item.product_images)) {
-        return sellerImage(item.product_images[0] ?? null);
-    }
-
     return sellerImage(item.product_images ?? null);
 }
 
@@ -73,6 +76,7 @@ export default function Index({
     const { data, setData } = useForm({
         search: filters.search ?? "",
     });
+    const hasSearch = data.search.trim() !== "";
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -104,40 +108,32 @@ export default function Index({
                                 alignItems: "center",
                                 px: 1.5,
                                 borderRadius: 999,
-                                backgroundColor: "rgba(255,255,255,0.94)",
-                                color: "text.primary",
+                                backgroundColor: "rgba(255,255,255,0.14)",
+                                color: "#fff",
+                                border: "1px solid rgba(255,255,255,0.44)",
+                                backdropFilter: "blur(8px)",
                             }}
                         >
-                            <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
+                            <SearchRoundedIcon sx={{ color: "#fff", mr: 1 }} />
                             <InputBase
                                 fullWidth
                                 placeholder="Search items"
                                 value={data.search}
                                 onChange={(event) => setData("search", event.target.value)}
-                                sx={{ fontSize: 15 }}
+                                sx={{
+                                    fontSize: 15,
+                                    color: "#fff",
+                                    "& input::placeholder": {
+                                        color: "rgba(255,255,255,0.9)",
+                                        opacity: 1,
+                                    },
+                                }}
                             />
                         </Box>
-                        <IconButton
-                            type="submit"
-                            sx={{
-                                width: 44,
-                                height: 44,
-                                color: "#fff",
-                                border: "1px solid rgba(255,255,255,0.44)",
-                                backgroundColor: "rgba(255,255,255,0.14)",
-                            }}
-                        >
+                        <IconButton type="submit" sx={sellerHeaderButtonSx}>
                             <SearchRoundedIcon />
                         </IconButton>
-                        <IconButton
-                            sx={{
-                                width: 44,
-                                height: 44,
-                                color: "#fff",
-                                border: "1px solid rgba(255,255,255,0.44)",
-                                backgroundColor: "rgba(255,255,255,0.14)",
-                            }}
-                        >
+                        <IconButton sx={sellerHeaderButtonSx}>
                             <QrCodeScannerRoundedIcon />
                         </IconButton>
                     </Stack>
@@ -155,75 +151,85 @@ export default function Index({
                     />
                 ) : null}
 
-                <Box
-                    sx={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                        gap: 1.5,
-                    }}
-                >
-                    {items.map((item) => (
-                        <SellerCard
-                            key={item.id}
-                            component={Link}
-                            href={route("seller.items.show", {
-                                item: item.id,
-                                cart_id: filters.cart_id || undefined,
-                            })}
-                            sx={{
-                                p: 0,
-                                overflow: "hidden",
-                                textDecoration: "none",
-                                color: "inherit",
-                            }}
-                        >
-                            <Box
+                {!hasSearch ? (
+                    <SellerCard sx={{ textAlign: "center", py: 4 }}>
+                        <Typography sx={{ fontWeight: 700 }}>Search for an item to see results.</Typography>
+                    </SellerCard>
+                ) : items.length === 0 ? (
+                    <SellerCard sx={{ textAlign: "center", py: 4 }}>
+                        <Typography sx={{ fontWeight: 700 }}>No items found.</Typography>
+                    </SellerCard>
+                ) : (
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                            gap: 1.5,
+                        }}
+                    >
+                        {items.map((item) => (
+                            <SellerCard
+                                key={item.id}
+                                component={Link}
+                                href={route("seller.items.show", {
+                                    item: item.id,
+                                    cart_id: filters.cart_id || undefined,
+                                })}
                                 sx={{
-                                    height: 140,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    backgroundColor: "#fff7ed",
+                                    p: 0,
+                                    overflow: "hidden",
+                                    textDecoration: "none",
+                                    color: "inherit",
                                 }}
                             >
-                                {itemImage(item) ? (
-                                    <Box
-                                        component="img"
-                                        src={itemImage(item)!}
-                                        alt={item.product_name}
-                                        sx={{ width: "100%", height: "100%", objectFit: "contain" }}
-                                    />
-                                ) : (
-                                    <Typography variant="body2" color="text.secondary">
-                                        No image
-                                    </Typography>
-                                )}
-                            </Box>
+                                <Box
+                                    sx={{
+                                        height: 140,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        backgroundColor: "#fff7ed",
+                                    }}
+                                >
+                                    {itemImage(item) ? (
+                                        <Box
+                                            component="img"
+                                            src={itemImage(item)!}
+                                            alt={item.product_name}
+                                            sx={{ width: "100%", height: "100%", objectFit: "contain" }}
+                                        />
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary">
+                                            No image
+                                        </Typography>
+                                    )}
+                                </Box>
 
-                            <Box sx={{ p: 1.5 }}>
-                                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-                                    <Typography sx={{ fontWeight: 700 }} noWrap>
-                                        {item.product_name}
-                                    </Typography>
-                                    <Chip label="NEW" size="small" color="warning" />
-                                </Stack>
+                                <Box sx={{ p: 1.5 }}>
+                                    <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                                        <Typography sx={{ fontWeight: 700 }} noWrap>
+                                            {item.product_name}
+                                        </Typography>
+                                        <Chip label="NEW" size="small" color="warning" />
+                                    </Stack>
 
-                                <Typography sx={{ mt: 1, fontWeight: 800, color: "error.main" }}>
-                                    {sellerPrice(itemPrice(item))}
-                                </Typography>
-
-                                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {item.sold_count ?? 0} sold
+                                    <Typography sx={{ mt: 1, fontWeight: 800, color: "error.main" }}>
+                                        {sellerPrice(itemPrice(item))}
                                     </Typography>
-                                    {item.category?.category_name ? (
-                                        <Chip label={item.category.category_name} size="small" variant="outlined" />
-                                    ) : null}
-                                </Stack>
-                            </Box>
-                        </SellerCard>
-                    ))}
-                </Box>
+
+                                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {item.sold_count ?? 0} sold
+                                        </Typography>
+                                        {item.category?.category_name ? (
+                                            <Chip label={item.category.category_name} size="small" variant="outlined" />
+                                        ) : null}
+                                    </Stack>
+                                </Box>
+                            </SellerCard>
+                        ))}
+                    </Box>
+                )}
             </Box>
         </>
     );

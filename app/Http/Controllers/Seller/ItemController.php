@@ -45,7 +45,10 @@ class ItemController extends Controller
             $query->where('product_name', 'LIKE', '%'.$search.'%');
         }
 
-        $items = $query->get();
+        $items = $search !== ''
+            ? $query->get()
+            : collect();
+
         $filters = [
             'search' => $search,
             'cart_id' => $cartId,

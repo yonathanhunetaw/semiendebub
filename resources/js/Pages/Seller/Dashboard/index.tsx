@@ -1,4 +1,11 @@
-import { SELLER_BRAND_DARK, SellerCard, SellerHeader, sellerImage, sellerPrice } from "@/Components/Seller/sellerUi";
+import {
+    SELLER_BRAND_DARK,
+    SellerCard,
+    SellerHeader,
+    sellerHeaderButtonSx,
+    sellerImage,
+    sellerPrice,
+} from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import QrCodeScannerRoundedIcon from "@mui/icons-material/QrCodeScannerRounded";
@@ -42,9 +49,6 @@ interface SellerItemFilters {
 }
 
 function itemImage(item: SellerItem) {
-    if (Array.isArray(item.product_images)) {
-        return sellerImage(item.product_images[0] ?? null);
-    }
     return sellerImage(item.product_images ?? null);
 }
 
@@ -113,43 +117,33 @@ export default function Index({
                                 display: "flex",
                                 alignItems: "center",
                                 px: 1.5,
-                                borderRadius: 3,
-                                backgroundColor: theme.palette.mode === 'dark' ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
-                                border: "1px solid",
-                                borderColor: "divider",
+                                borderRadius: 999,
+                                backgroundColor: "rgba(255,255,255,0.14)",
+                                color: "#fff",
+                                border: "1px solid rgba(255,255,255,0.44)",
+                                backdropFilter: "blur(8px)",
                             }}
                         >
-                            <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
+                            <SearchRoundedIcon sx={{ color: "#fff", mr: 1 }} />
                             <InputBase
                                 fullWidth
                                 placeholder="Search items"
                                 value={data.search}
                                 onChange={(event) => setData("search", event.target.value)}
-                                sx={{ fontSize: 15, color: "text.primary" }}
+                                sx={{
+                                    fontSize: 15,
+                                    color: "#fff",
+                                    "& input::placeholder": {
+                                        color: "rgba(255,255,255,0.9)",
+                                        opacity: 1,
+                                    },
+                                }}
                             />
                         </Box>
-                        <IconButton
-                            type="submit"
-                            sx={{
-                                width: 44,
-                                height: 44,
-                                color: theme.palette.mode === 'dark' ? "#000" : "#fff",
-                                bgcolor: "primary.main",
-                                "&:hover": { bgcolor: "primary.dark" }
-                            }}
-                        >
+                        <IconButton type="submit" sx={sellerHeaderButtonSx}>
                             <SearchRoundedIcon />
                         </IconButton>
-                        <IconButton
-                            sx={{
-                                width: 44,
-                                height: 44,
-                                color: "text.primary",
-                                border: "1px solid",
-                                borderColor: "divider",
-                                backgroundColor: "background.paper",
-                            }}
-                        >
+                        <IconButton sx={sellerHeaderButtonSx}>
                             <QrCodeScannerRoundedIcon />
                         </IconButton>
                     </Stack>

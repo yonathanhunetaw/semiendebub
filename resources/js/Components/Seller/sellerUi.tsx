@@ -157,20 +157,53 @@ export function sellerPrice(value?: number | null) {
     }).format(value);
 }
 
-export function sellerImage(src?: string | null) {
-    if (!src) {
+export function sellerImage(src?: string | string[] | null) {
+    const rawSrc = Array.isArray(src) ? src[0] ?? null : src;
+
+    if (!rawSrc) {
         return null;
     }
 
-    if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("data:")) {
-        return src;
+    const normalizedSrc = rawSrc.trim();
+
+    if (!normalizedSrc) {
+        return null;
     }
 
-    if (src.startsWith("/")) {
-        return src;
+    if (normalizedSrc.startsWith("[")) {
+        try {
+            const parsed = JSON.parse(normalizedSrc);
+            return sellerImage(Array.isArray(parsed) ? parsed[0] ?? null : null);
+        } catch {
+            return null;
+        }
     }
 
-    return `/${src.replace(/^\/+/, "")}`;
+    if (
+        normalizedSrc.startsWith("http://") ||
+        normalizedSrc.startsWith("https://") ||
+        normalizedSrc.startsWith("data:")
+    ) {
+        return normalizedSrc;
+    }
+
+    if (normalizedSrc.startsWith("/storage/") || normalizedSrc.startsWith("/images/")) {
+        return normalizedSrc;
+    }
+
+    if (normalizedSrc.startsWith("storage/")) {
+        return `/${normalizedSrc}`;
+    }
+
+    if (normalizedSrc.startsWith("images/")) {
+        return `/${normalizedSrc}`;
+    }
+
+    if (normalizedSrc.startsWith("/")) {
+        return `/storage${normalizedSrc}`;
+    }
+
+    return `/storage/${normalizedSrc.replace(/^\/+/, "")}`;
 }
 
 export const sellerHeaderButtonSx = {
