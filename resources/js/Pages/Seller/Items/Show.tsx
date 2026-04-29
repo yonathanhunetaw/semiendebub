@@ -183,21 +183,26 @@ export default function Show({
 
         const source = variant?.images?.[0] || allImages[0] || null;
 
-        // If it's already a full URL, don't run it through sellerImage
+        // DEBUG: Log what the source is before processing
+        console.log("DEBUG: Image Source Raw:", source);
+
+        // If it's already a full URL, return it directly
         if (typeof source === "string" && source.startsWith("http")) {
             return source;
         }
 
-        return sellerImage(source);
+        const processed = sellerImage(source);
+        console.log("DEBUG: Image Source Processed:", processed);
+        return processed;
     }, [selectedImage, variant?.id, allImages]);
     const images = (variant?.images ?? allImages)
-    .map((image) => {
-        if (typeof image === 'string' && image.startsWith('http')) {
-            return image;
-        }
-        return sellerImage(image);
-    })
-    .filter(Boolean) as string[];
+        .map((image) => {
+            if (typeof image === "string" && image.startsWith("http")) {
+                return image;
+            }
+            return sellerImage(image);
+        })
+        .filter(Boolean) as string[];
 
     const selectedPrice = visiblePrice(variant, pricingMode);
     const perPiece =
@@ -273,6 +278,18 @@ export default function Show({
             <Box sx={{ px: 2, pt: 2 }}>
                 <Stack spacing={1.5}>
                     <SellerCard sx={{ p: 0, overflow: "hidden" }}>
+                        {/* Temporary Debug Text */}
+                        <Typography
+                            variant="caption"
+                            sx={{
+                                display: "block",
+                                p: 1,
+                                bgcolor: "#eee",
+                                wordBreak: "break-all",
+                            }}
+                        >
+                            Current Path: {activeImage || "NULL"}
+                        </Typography>
                         <Box
                             sx={{
                                 height: 280,
