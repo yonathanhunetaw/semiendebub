@@ -42,7 +42,7 @@ class ItemController extends Controller
         }
 
         if ($search !== '') {
-            $query->where('product_name', 'LIKE', '%'.$search.'%');
+            $query->where('product_name', 'LIKE', '%' . $search . '%');
         }
 
         $items = $search !== ''
@@ -50,6 +50,16 @@ class ItemController extends Controller
             : collect();
 
         $items = $query->get();
+
+        if ($items->isEmpty()) {
+            dd([
+                'store_id' => $storeId,
+                'search_term' => $search,
+                'total_items_in_db' => \App\Models\Item\Item::count(),
+                'sql' => $query->toSql(),
+                'bindings' => $query->getBindings()
+            ]);
+        }
 
         $filters = [
             'search' => $search,
@@ -224,11 +234,11 @@ class ItemController extends Controller
         ]);
 
         $storeVariants = $item->variants
-            ->flatMap(fn ($v) => $v->storeVariants); // only one per variant now
+            ->flatMap(fn($v) => $v->storeVariants); // only one per variant now
 
         $minStoreVariant = $storeVariants
-            ->filter(fn ($sv) => $sv->computed_status === 'active')
-            ->sortBy(fn ($sv) => $sv->discount_price ?? $sv->price)
+            ->filter(fn($sv) => $sv->computed_status === 'active')
+            ->sortBy(fn($sv) => $sv->discount_price ?? $sv->price)
             ->first();
 
         // 🔹 Build item images
@@ -237,31 +247,31 @@ class ItemController extends Controller
             $decodedImages = json_decode($item->product_images, true);
             if (is_array($decodedImages)) {
                 $itemImages = collect($decodedImages)
-                    ->filter(fn ($img) => ! empty($img))
-                    ->map(fn ($img) => asset($img));
+                    ->filter(fn($img) => !empty($img))
+                    ->map(fn($img) => asset($img));
             }
         }
 
         $variantColorImages = $item->variants
-            ->map(fn ($v) => $v->itemColor?->image_path ? asset($v->itemColor->image_path) : null)
-            ->filter(fn ($img) => ! empty($img) && $img !== url('/'))
+            ->map(fn($v) => $v->itemColor?->image_path ? asset($v->itemColor->image_path) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/'))
             ->unique();
 
         $sizeImages = $item->variants
-            ->map(fn ($v) => $v->itemSize?->image_path ? asset($v->itemSize->image_path) : null)
-            ->filter(fn ($img) => ! empty($img) && $img !== url('/'))
+            ->map(fn($v) => $v->itemSize?->image_path ? asset($v->itemSize->image_path) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/'))
             ->unique();
 
         $packagingImages = $item->variants
-            ->map(fn ($v) => $v->itemPackagingType?->image_path ? asset($v->itemPackagingType->image_path) : null)
-            ->filter(fn ($img) => ! empty($img) && $img !== url('/'))
+            ->map(fn($v) => $v->itemPackagingType?->image_path ? asset($v->itemPackagingType->image_path) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/'))
             ->unique();
 
         $allImages = $itemImages
             ->merge($variantColorImages)
             ->merge($sizeImages)
             ->merge($packagingImages)
-            ->filter(fn ($img) => ! empty($img))
+            ->filter(fn($img) => !empty($img))
             ->unique()
             ->values();
 
@@ -300,7 +310,7 @@ class ItemController extends Controller
                 $rawImages = is_array($decoded) ? $decoded : [];
             }
 
-            $variantImages = collect($rawImages)->map(fn ($img) => str_starts_with($img, 'http') ? $img : asset($img));
+            $variantImages = collect($rawImages)->map(fn($img) => str_starts_with($img, 'http') ? $img : asset($img));
 
             $seller_price_record = $storeVariant
                 ? $storeVariant->sellerPrices()
@@ -337,9 +347,11 @@ class ItemController extends Controller
         $sellers = User::where('role', 'seller')->get();
         $customersWithOpenCarts = Customer::whereHas('carts', function ($query) {
             $query->where('status', 'open');
-        })->with(['carts' => function ($query) {
-            $query->where('status', 'open');
-        }])->get();
+        })->with([
+                    'carts' => function ($query) {
+                        $query->where('status', 'open');
+                    }
+                ])->get();
 
         $openCarts = Cart::with('customer')
             ->where(function ($query) {
