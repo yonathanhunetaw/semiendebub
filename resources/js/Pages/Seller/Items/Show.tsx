@@ -178,25 +178,24 @@ export default function Show({
     );
 
     // 🔹 CALCULATE ACTIVE IMAGE (Prevents the flash/disappear effect)
+    // 🔹 Update activeImage
     const activeImage = React.useMemo(() => {
         if (selectedImage) return selectedImage;
 
         const source = variant?.images?.[0] || allImages[0] || null;
 
-        // DEBUG: Log what the source is before processing
-        console.log("DEBUG: Image Source Raw:", source);
-
-        // If it's already a full URL, return it directly
+        // IF THE SOURCE IS ALREADY A FULL URL, DON'T USE THE HELPER
         if (typeof source === "string" && source.startsWith("http")) {
             return source;
         }
 
-        const processed = sellerImage(source);
-        console.log("DEBUG: Image Source Processed:", processed);
-        return processed;
+        return sellerImage(source);
     }, [selectedImage, variant?.id, allImages]);
+
+    // 🔹 Update thumbnails mapping
     const images = (variant?.images ?? allImages)
         .map((image) => {
+            // IF THE IMAGE IS ALREADY A FULL URL, RETURN IT AS IS
             if (typeof image === "string" && image.startsWith("http")) {
                 return image;
             }
