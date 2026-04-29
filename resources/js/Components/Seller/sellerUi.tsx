@@ -187,41 +187,45 @@ export function sellerPrice(value?: number | null) {
 }
 
 export function sellerImage(src?: string | string[] | null) {
-    // 1. Extract the actual string from the input
-    let rawSrc: string | null = null;
+    // 1. Get a single string out of whatever was passed
+    let path: string | null = null;
 
     if (Array.isArray(src)) {
-        rawSrc = src[0] ?? null;
-    } else {
-        rawSrc = src ?? null;
+        path = src[0] || null;
+    } else if (typeof src === "string") {
+        // If it's a JSON string like '["img.jpg"]', clean it up
+        if (src.startsWith("[") && src.endsWith("]")) {
+            try {
+                const parsed = JSON.parse(src);
+                path = Array.isArray(parsed) ? parsed[0] : parsed;
+            } catch {
+                path = src;
+            }
+        } else {
+            path = src;
+        }
     }
 
-    if (!rawSrc) return null;
+    if (!path || path === "null") return null;
 
-    const normalizedSrc = rawSrc.trim();
+    const cleanPath = path.trim();
 
-    // 2. If it's already a full URL (from Controller's asset() call), return it immediately
-    if (
-        normalizedSrc.startsWith("http://") ||
-        normalizedSrc.startsWith("https://") ||
-        normalizedSrc.startsWith("data:")
-    ) {
-        return normalizedSrc;
+    // 2. If it's ALREADY a full URL (like your log shows), return it as is
+    if (cleanPath.startsWith("http") || cleanPath.startsWith("data:")) {
+        return cleanPath;
     }
 
-    // 3. Handle relative paths (for Index page or raw DB strings)
-    if (
-        normalizedSrc.startsWith("/storage/") ||
-        normalizedSrc.startsWith("/images/")
-    ) {
-        return normalizedSrc;
+    // 3. Handle relative paths
+    if (cleanPath.startsWith("/storage/") || cleanPath.startsWith("/images/")) {
+        return cleanPath;
     }
 
-    if (normalizedSrc.startsWith("storage/")) {
-        return `/${normalizedSrc}`;
+    if (cleanPath.startsWith("storage/") || cleanPath.startsWith("images/")) {
+        return `/${cleanPath}`;
     }
 
-    return `/storage/${normalizedSrc.replace(/^\/+/, "")}`;
+    // 4. Default fallback for everything else
+    return `/storage/${cleanPath.replace(/^\/+/, "")}`;
 }
 
 export const sellerHeaderButtonSx = {
