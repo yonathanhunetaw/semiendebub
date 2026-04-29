@@ -157,7 +157,9 @@ export default function Show({
         initialVariant?.packaging ?? "",
     );
 
-    const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
+    const [selectedImage, setSelectedImage] = React.useState<string | null>(
+        null,
+    );
 
     const [sheetOpen, setSheetOpen] = React.useState(false);
     const [selectedCart, setSelectedCart] = React.useState(
@@ -178,13 +180,24 @@ export default function Show({
     // 🔹 CALCULATE ACTIVE IMAGE (Prevents the flash/disappear effect)
     const activeImage = React.useMemo(() => {
         if (selectedImage) return selectedImage;
+
         const source = variant?.images?.[0] || allImages[0] || null;
+
+        // If it's already a full URL, don't run it through sellerImage
+        if (typeof source === "string" && source.startsWith("http")) {
+            return source;
+        }
+
         return sellerImage(source);
     }, [selectedImage, variant?.id, allImages]);
-
     const images = (variant?.images ?? allImages)
-        .map((image) => sellerImage(image))
-        .filter(Boolean) as string[];
+    .map((image) => {
+        if (typeof image === 'string' && image.startsWith('http')) {
+            return image;
+        }
+        return sellerImage(image);
+    })
+    .filter(Boolean) as string[];
 
     const selectedPrice = visiblePrice(variant, pricingMode);
     const perPiece =
