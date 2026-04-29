@@ -230,10 +230,11 @@ class ItemController extends Controller
             ->first();
 
         // 🔹 Build item images
+        // 🔹 Build item images
         $itemImages = collect();
         $rawImages = $item->product_images;
+
         if (!empty($rawImages)) {
-            // Ensure we have an array (decode if string, otherwise use as is)
             $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
 
             if (is_array($imagesArray)) {
@@ -243,28 +244,20 @@ class ItemController extends Controller
             }
         }
 
-        if (!empty($rawImages)) {
-            $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
-            if (is_array($imagesArray)) {
-                $itemImages = collect($imagesArray)
-                    ->filter(fn($img) => !empty($img))
-                    ->map(fn($img) => (str_starts_with($img, 'http')) ? $img : asset($img));
-            }
-        }
-
+        // 🔹 Process related attribute images (Color, Size, Packaging)
         $variantColorImages = $item->variants
-            ->map(fn($v) => $v->itemColor?->image_path ? asset($v->itemColor->image_path) : null)
-            ->filter(fn($img) => !empty($img) && $img !== url('/'))
+            ->map(fn($v) => $v->itemColor?->image_path ? asset('storage/' . ltrim($v->itemColor->image_path, '/')) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/storage'))
             ->unique();
 
         $sizeImages = $item->variants
-            ->map(fn($v) => $v->itemSize?->image_path ? asset($v->itemSize->image_path) : null)
-            ->filter(fn($img) => !empty($img) && $img !== url('/'))
+            ->map(fn($v) => $v->itemSize?->image_path ? asset('storage/' . ltrim($v->itemSize->image_path, '/')) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/storage'))
             ->unique();
 
         $packagingImages = $item->variants
-            ->map(fn($v) => $v->itemPackagingType?->image_path ? asset($v->itemPackagingType->image_path) : null)
-            ->filter(fn($img) => !empty($img) && $img !== url('/'))
+            ->map(fn($v) => $v->itemPackagingType?->image_path ? asset('storage/' . ltrim($v->itemPackagingType->image_path, '/')) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/storage'))
             ->unique();
 
         $allImages = $itemImages
