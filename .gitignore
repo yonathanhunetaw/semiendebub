@@ -35,3 +35,4 @@ config/cloudflared/*.json
 backend_map.txt
 DESIGN.md
 frontend_map.txt
+docs/item.excalidraw.png
