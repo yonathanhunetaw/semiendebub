@@ -243,19 +243,20 @@ class ItemController extends Controller
         }
 
         // 🔹 Process related attribute images (Color, Size, Packaging)
+        // 🔹 Process related attribute images (Color, Size, Packaging)
         $variantColorImages = $item->variants
-            ->map(fn($v) => $v->itemColor?->image_path ? asset('storage/' . ltrim($v->itemColor->image_path, '/')) : null)
-            ->filter(fn($img) => !empty($img) && $img !== url('/storage'))
+            ->map(fn($v) => $v->itemColor?->image_path ? asset(ltrim($v->itemColor->image_path, '/')) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/'))
             ->unique();
 
         $sizeImages = $item->variants
-            ->map(fn($v) => $v->itemSize?->image_path ? asset('storage/' . ltrim($v->itemSize->image_path, '/')) : null)
-            ->filter(fn($img) => !empty($img) && $img !== url('/storage'))
+            ->map(fn($v) => $v->itemSize?->image_path ? asset(ltrim($v->itemSize->image_path, '/')) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/'))
             ->unique();
 
         $packagingImages = $item->variants
-            ->map(fn($v) => $v->itemPackagingType?->image_path ? asset('storage/' . ltrim($v->itemPackagingType->image_path, '/')) : null)
-            ->filter(fn($img) => !empty($img) && $img !== url('/storage'))
+            ->map(fn($v) => $v->itemPackagingType?->image_path ? asset(ltrim($v->itemPackagingType->image_path, '/')) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/'))
             ->unique();
 
         $allImages = $itemImages
