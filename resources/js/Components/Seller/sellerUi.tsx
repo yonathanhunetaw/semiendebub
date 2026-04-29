@@ -1,6 +1,14 @@
 import { Link } from "@inertiajs/react";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
-import { Box, IconButton, Paper, type PaperProps, Stack, Typography, useTheme } from "@mui/material";
+import {
+    Box,
+    IconButton,
+    Paper,
+    type PaperProps,
+    Stack,
+    Typography,
+    useTheme,
+} from "@mui/material";
 import React from "react";
 
 export const SELLER_BRAND = "#f6a45d";
@@ -53,9 +61,18 @@ export function SellerHeader({
             }}
         >
             <Stack spacing={children || subtitle ? 2 : 0}>
-                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    spacing={1}
+                >
                     {backHref ? (
-                        <IconButton component={Link} href={backHref} sx={sellerHeaderButtonSx}>
+                        <IconButton
+                            component={Link}
+                            href={backHref}
+                            sx={sellerHeaderButtonSx}
+                        >
                             <ArrowBackRoundedIcon />
                         </IconButton>
                     ) : (
@@ -88,7 +105,13 @@ export function SellerHeader({
                     </Box>
 
                     {action ? (
-                        <Box sx={{ minWidth: 40, display: "flex", justifyContent: "flex-end" }}>
+                        <Box
+                            sx={{
+                                minWidth: 40,
+                                display: "flex",
+                                justifyContent: "flex-end",
+                            }}
+                        >
                             {action}
                         </Box>
                     ) : (
@@ -116,9 +139,15 @@ export function SellerCard({ children, sx, ...props }: SellerCardProps) {
                 p: 2,
                 borderRadius: 3,
                 border: "1px solid",
-                borderColor: theme.palette.mode === 'dark' ? "rgba(255, 255, 255, 0.05)" : "rgba(148, 163, 184, 0.18)",
+                borderColor:
+                    theme.palette.mode === "dark"
+                        ? "rgba(255, 255, 255, 0.05)"
+                        : "rgba(148, 163, 184, 0.18)",
                 backgroundColor: "background.paper",
-                boxShadow: theme.palette.mode === 'dark' ? "none" : "0 10px 30px rgba(15, 23, 42, 0.05)",
+                boxShadow:
+                    theme.palette.mode === "dark"
+                        ? "none"
+                        : "0 10px 30px rgba(15, 23, 42, 0.05)",
                 backgroundImage: "none",
                 ...sx,
             }}
@@ -158,27 +187,20 @@ export function sellerPrice(value?: number | null) {
 }
 
 export function sellerImage(src?: string | string[] | null) {
-    const rawSrc = Array.isArray(src) ? src[0] ?? null : src;
+    // 1. Extract the actual string from the input
+    let rawSrc: string | null = null;
 
-    if (!rawSrc) {
-        return null;
+    if (Array.isArray(src)) {
+        rawSrc = src[0] ?? null;
+    } else {
+        rawSrc = src ?? null;
     }
+
+    if (!rawSrc) return null;
 
     const normalizedSrc = rawSrc.trim();
 
-    if (!normalizedSrc) {
-        return null;
-    }
-
-    if (normalizedSrc.startsWith("[")) {
-        try {
-            const parsed = JSON.parse(normalizedSrc);
-            return sellerImage(Array.isArray(parsed) ? parsed[0] ?? null : null);
-        } catch {
-            return null;
-        }
-    }
-
+    // 2. If it's already a full URL (from Controller's asset() call), return it immediately
     if (
         normalizedSrc.startsWith("http://") ||
         normalizedSrc.startsWith("https://") ||
@@ -187,20 +209,16 @@ export function sellerImage(src?: string | string[] | null) {
         return normalizedSrc;
     }
 
-    if (normalizedSrc.startsWith("/storage/") || normalizedSrc.startsWith("/images/")) {
+    // 3. Handle relative paths (for Index page or raw DB strings)
+    if (
+        normalizedSrc.startsWith("/storage/") ||
+        normalizedSrc.startsWith("/images/")
+    ) {
         return normalizedSrc;
     }
 
     if (normalizedSrc.startsWith("storage/")) {
         return `/${normalizedSrc}`;
-    }
-
-    if (normalizedSrc.startsWith("images/")) {
-        return `/${normalizedSrc}`;
-    }
-
-    if (normalizedSrc.startsWith("/")) {
-        return `/storage${normalizedSrc}`;
     }
 
     return `/storage/${normalizedSrc.replace(/^\/+/, "")}`;
