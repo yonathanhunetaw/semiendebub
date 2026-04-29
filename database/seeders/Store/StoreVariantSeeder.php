@@ -45,14 +45,14 @@ class StoreVariantSeeder extends Seeder
                 $priceFactor = rand(95, 105) / 100;
                 $basePrice = round($variant->price * $priceFactor, 2);
 
-                // Insert store_variant row and get ID immediately
+                // FIX: We must insert immediately to get the ID for the relations below
                 $storeVariantId = DB::table('store_variants')->insertGetId([
                     'store_id' => $store->id,
                     'item_variant_id' => $variant->id,
                     'price' => $basePrice,
                     'discount_price' => rand(0, 1) ? round($basePrice * (rand(90, 99) / 100), 2) : null,
                     'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
-                    'active' => rand(0, 100) < 90,
+                    'active' => true, // Set to true to ensure they show up in your catalog
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
@@ -60,7 +60,7 @@ class StoreVariantSeeder extends Seeder
                 // <<< ADD ITEM STOCK HERE >>>
                 ItemStock::create([
                     'store_variant_id' => $storeVariantId,
-                    'quantity' => rand(0, 20),
+                    'quantity' => rand(5, 50),
                     'item_inventory_location_id' => 1,
                 ]);
 
@@ -75,7 +75,7 @@ class StoreVariantSeeder extends Seeder
                         'price' => $sellerPrice,
                         'discount_price' => rand(0, 1) ? round($sellerPrice * (rand(90, 99) / 100), 2) : null,
                         'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
-                        'active' => rand(0, 100) < 90,
+                        'active' => true,
                         'created_at' => $now,
                         'updated_at' => $now,
                     ]);
@@ -92,46 +92,27 @@ class StoreVariantSeeder extends Seeder
                         'price' => $customerPrice,
                         'discount_price' => rand(0, 1) ? round($customerPrice * (rand(90, 99) / 100), 2) : null,
                         'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
-                        'active' => rand(0, 100) < 90,
+                        'active' => true,
                         'created_at' => $now,
                         'updated_at' => $now,
                     ]);
                 }
             }
 
+            /* NOTE: The block below in your original code was redundant because
+               we are now inserting inside the loop to get the IDs required
+               for Stock and Prices. I've left the logic flow intact.
+            */
             if (! empty($storeVariantRows)) {
                 DB::table('store_variants')->insert($storeVariantRows);
 
-                // Retrieve the IDs of inserted store_variants to update seller/customer rows
                 $insertedStoreVariants = DB::table('store_variants')
                     ->where('store_id', $store->id)
                     ->whereIn('item_variant_id', $variants->pluck('id'))
                     ->get()
                     ->keyBy('item_variant_id');
 
-                $storeVariantId = $insertedStoreVariants[$variant->id]->id;
-
-                // Assign to all seller rows for this variant
-                foreach ($sellerPriceRows as &$row) {
-                    if (! isset($row['store_variant_id'])) {
-                        $row['store_variant_id'] = $storeVariantId;
-                    }
-                }
-
-                // Assign to all customer rows for this variant
-                foreach ($customerPriceRows as &$row) {
-                    if (! isset($row['store_variant_id'])) {
-                        $row['store_variant_id'] = $storeVariantId;
-                    }
-                }
-
-                if (! empty($sellerPriceRows)) {
-                    DB::table('store_variants_seller_prices')->insert($sellerPriceRows);
-                }
-
-                if (! empty($customerPriceRows)) {
-                    DB::table('store_variants_customer_prices')->insert($customerPriceRows);
-                }
+                // This logic is now handled inside the variant loop for reliability
             }
         }
     }
