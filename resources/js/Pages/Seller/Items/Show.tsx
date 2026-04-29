@@ -8,14 +8,19 @@ import {
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link, useForm } from "@inertiajs/react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import RemoveRoundedIcon from "@mui/icons-material/RemoveRounded";
 import ShoppingBagRoundedIcon from "@mui/icons-material/ShoppingBagRounded";
+import ZoomInRoundedIcon from "@mui/icons-material/ZoomInRounded";
+import ZoomOutRoundedIcon from "@mui/icons-material/ZoomOutRounded";
 import {
     Box,
     Button,
     Chip,
+    Dialog,
     Divider,
     Drawer,
+    IconButton,
     MenuItem,
     Stack,
     TextField,
@@ -163,6 +168,8 @@ export default function Show({
 
     const [sheetOpen, setSheetOpen] = React.useState(false);
     const [priceTapCount, setPriceTapCount] = React.useState(0);
+    const [imageViewerOpen, setImageViewerOpen] = React.useState(false);
+    const [viewerZoom, setViewerZoom] = React.useState(1);
 
     const priceTapped = () => {
         const next = priceTapCount + 1;
@@ -172,6 +179,11 @@ export default function Show({
         } else {
             setPriceTapCount(next);
         }
+    };
+
+    const openImageViewer = () => {
+        setViewerZoom(1);
+        setImageViewerOpen(true);
     };
     const [selectedCart, setSelectedCart] = React.useState(
         selectedCartId
@@ -297,7 +309,9 @@ export default function Show({
                                 alignItems: "center",
                                 justifyContent: "center",
                                 backgroundColor: "#fff7ed",
+                                cursor: activeImage ? "zoom-in" : "default",
                             }}
+                            onClick={() => activeImage && openImageViewer()}
                         >
                             {activeImage ? (
                                 <Box
@@ -390,53 +404,32 @@ export default function Show({
                                         fontSize: 28,
                                     }}
                                 >
-                                    {sellerPrice(
-                                        selectedPrice ?? displayPrice ?? null,
-                                    )}
+                                    {sellerPrice(selectedPrice ?? displayPrice ?? null)}
                                 </Typography>
-
-                                {/* Strikethrough original price when there's a discount */}
                                 {variant?.discount_price != null &&
                                     variant?.price != null &&
                                     variant.price !== variant.discount_price && (
                                         <Typography
                                             variant="body2"
-                                            sx={{
-                                                color: "text.disabled",
-                                                textDecoration: "line-through",
-                                            }}
+                                            sx={{ color: "text.disabled", textDecoration: "line-through" }}
                                         >
                                             {sellerPrice(variant.price)}
                                         </Typography>
                                     )}
-
-                                {/* Discount % badge */}
                                 {variant?.discount_price != null &&
                                     variant?.price != null &&
                                     variant.price !== variant.discount_price && (
                                         <Chip
                                             label={`-${Math.round(((variant.price - variant.discount_price) / variant.price) * 100)}%`}
                                             size="small"
-                                            sx={{
-                                                bgcolor: "#EAB308",
-                                                color: "#fff",
-                                                fontWeight: 700,
-                                                fontSize: "0.7rem",
-                                            }}
+                                            sx={{ bgcolor: "#EAB308", color: "#fff", fontWeight: 700, fontSize: "0.7rem" }}
                                         />
                                     )}
-
-                                {/* Subtle indicator when seller mode is active */}
                                 {pricingMode === "seller" && (
                                     <Chip
                                         label="Seller"
                                         size="small"
-                                        sx={{
-                                            bgcolor: SELLER_BRAND_DARK,
-                                            color: "#fff",
-                                            fontWeight: 700,
-                                            fontSize: "0.7rem",
-                                        }}
+                                        sx={{ bgcolor: SELLER_BRAND_DARK, color: "#fff", fontWeight: 700, fontSize: "0.7rem" }}
                                     />
                                 )}
                             </Box>
@@ -614,10 +607,7 @@ export default function Show({
                             </Box>
                             {perPacket != null && (
                                 <Box>
-                                    <Typography
-                                        variant="body2"
-                                        color="text.secondary"
-                                    >
+                                    <Typography variant="body2" color="text.secondary">
                                         Per packet
                                     </Typography>
                                     <Typography sx={{ fontWeight: 700 }}>
@@ -656,167 +646,389 @@ export default function Show({
                 </Stack>
             </Box>
 
+            {/* ── Image Viewer Dialog ── */}
+            <Dialog
+                open={imageViewerOpen}
+                onClose={() => setImageViewerOpen(false)}
+                fullScreen
+                PaperProps={{ sx: { bgcolor: "#000", display: "flex", flexDirection: "column" } }}
+            >
+                {/* Toolbar */}
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 1.5 }}>
+                    <Stack direction="row" spacing={1}>
+                        <IconButton
+                            onClick={() => setViewerZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))}
+                            sx={{ color: "#fff", bgcolor: "rgba(255,255,255,0.1)", borderRadius: 2 }}
+                        >
+                            <ZoomOutRoundedIcon />
+                        </IconButton>
+                        <IconButton
+                            onClick={() => setViewerZoom((z) => Math.min(4, +(z + 0.25).toFixed(2)))}
+                            sx={{ color: "#fff", bgcolor: "rgba(255,255,255,0.1)", borderRadius: 2 }}
+                        >
+                            <ZoomInRoundedIcon />
+                        </IconButton>
+                        <Box sx={{ display: "flex", alignItems: "center", px: 1 }}>
+                            <Typography sx={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>
+                                {Math.round(viewerZoom * 100)}%
+                            </Typography>
+                        </Box>
+                    </Stack>
+                    <IconButton
+                        onClick={() => setImageViewerOpen(false)}
+                        sx={{ color: "#fff", bgcolor: "rgba(255,255,255,0.1)", borderRadius: 2 }}
+                    >
+                        <CloseRoundedIcon />
+                    </IconButton>
+                </Box>
+
+                {/* Zoomable image */}
+                <Box
+                    sx={{
+                        flex: 1,
+                        overflow: "auto",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                    onDoubleClick={() => setViewerZoom((z) => z < 2 ? 2 : 1)}
+                >
+                    {activeImage && (
+                        <Box
+                            component="img"
+                            src={activeImage}
+                            alt={item.product_name}
+                            sx={{
+                                maxWidth: "none",
+                                width: `${viewerZoom * 100}%`,
+                                maxHeight: viewerZoom === 1 ? "100%" : "none",
+                                objectFit: "contain",
+                                transition: "width 0.2s ease",
+                            }}
+                        />
+                    )}
+                </Box>
+
+                {/* Thumbnail strip */}
+                {images.length > 1 && (
+                    <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ p: 1.5, overflowX: "auto", bgcolor: "rgba(255,255,255,0.05)" }}
+                    >
+                        {images.map((img) => (
+                            <Box
+                                key={img}
+                                component="button"
+                                type="button"
+                                onClick={() => { setSelectedImage(img); }}
+                                sx={{
+                                    width: 56,
+                                    height: 56,
+                                    flexShrink: 0,
+                                    p: 0,
+                                    border: activeImage === img ? "2px solid #fff" : "2px solid transparent",
+                                    borderRadius: 1.5,
+                                    overflow: "hidden",
+                                    background: "#111",
+                                    cursor: "pointer",
+                                    opacity: activeImage === img ? 1 : 0.55,
+                                    transition: "opacity 0.15s, border-color 0.15s",
+                                }}
+                            >
+                                <Box component="img" src={img} sx={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                            </Box>
+                        ))}
+                    </Stack>
+                )}
+            </Dialog>
+
+            {/* ── Taobao-style Add-to-Cart Bottom Sheet ── */}
             <Drawer
                 anchor="bottom"
                 open={sheetOpen}
                 onClose={() => setSheetOpen(false)}
                 PaperProps={{
                     sx: {
-                        borderTopLeftRadius: 24,
-                        borderTopRightRadius: 24,
+                        borderTopLeftRadius: 20,
+                        borderTopRightRadius: 20,
                         width: "min(100%, 480px)",
                         mx: "auto",
-                        pb: "calc(16px + env(safe-area-inset-bottom))",
+                        maxHeight: "90dvh",
+                        display: "flex",
+                        flexDirection: "column",
+                        pb: "calc(0px + env(safe-area-inset-bottom))",
+                        overflow: "hidden",
                     },
                 }}
             >
-                <Box sx={{ p: 2 }}>
-                    <Stack spacing={2}>
-                        <Box>
-                            <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                                Add to Cart
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                {item.product_name} ·{" "}
-                                {sellerPrice(selectedPrice)}
-                            </Typography>
-                        </Box>
-
-                        {openCarts.length === 0 ? (
-                            <SellerCard>
-                                <Typography sx={{ fontWeight: 700 }}>
-                                    No open carts yet.
-                                </Typography>
-                                <Typography
-                                    variant="body2"
-                                    color="text.secondary"
-                                    sx={{ mt: 0.5 }}
-                                >
-                                    Create a cart first, then come back to add
-                                    this item.
-                                </Typography>
-                                <Button
-                                    component={Link}
-                                    href={route("seller.carts.create")}
-                                    variant="contained"
-                                    sx={{
-                                        mt: 2,
-                                        borderRadius: 3,
-                                        textTransform: "none",
-                                        bgcolor: SELLER_BRAND_DARK,
-                                        "&:hover": {
-                                            bgcolor: SELLER_BRAND_DARK,
-                                        },
-                                    }}
-                                >
-                                    Create Cart
-                                </Button>
-                            </SellerCard>
+                {/* Header row: image + price + close */}
+                <Box
+                    sx={{
+                        display: "flex",
+                        alignItems: "flex-end",
+                        gap: 1.5,
+                        p: 2,
+                        pb: 1.5,
+                        bgcolor: "#fff7ed",
+                        position: "relative",
+                    }}
+                >
+                    {/* Variant thumbnail — tappable to open viewer */}
+                    <Box
+                        component="button"
+                        type="button"
+                        onClick={() => activeImage && openImageViewer()}
+                        sx={{
+                            width: 88,
+                            height: 88,
+                            flexShrink: 0,
+                            border: "none",
+                            borderRadius: 2,
+                            overflow: "hidden",
+                            background: "#fff",
+                            p: 0,
+                            cursor: activeImage ? "zoom-in" : "default",
+                            boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
+                            mb: -2, // overlap the white body below
+                        }}
+                    >
+                        {activeImage ? (
+                            <Box
+                                component="img"
+                                src={activeImage}
+                                alt={item.product_name}
+                                sx={{ width: "100%", height: "100%", objectFit: "contain" }}
+                            />
                         ) : (
-                            <>
-                                <TextField
-                                    select
-                                    fullWidth
-                                    label="Cart"
-                                    value={selectedCart}
-                                    onChange={(event) =>
-                                        setSelectedCart(event.target.value)
-                                    }
-                                >
-                                    {openCarts.map((cart) => (
-                                        <MenuItem key={cart.id} value={cart.id}>
-                                            Cart #{cart.id} ·{" "}
-                                            {[
-                                                cart.customer?.first_name,
-                                                cart.customer?.last_name,
-                                            ]
-                                                .filter(Boolean)
-                                                .join(" ") || "No customer"}
-                                        </MenuItem>
-                                    ))}
-                                </TextField>
+                            <Box sx={{ width: "100%", height: "100%", bgcolor: "#f0f0f0" }} />
+                        )}
+                    </Box>
 
-                                <SellerCard>
-                                    <Stack
-                                        direction="row"
-                                        alignItems="center"
-                                        justifyContent="space-between"
+                    {/* Price + name */}
+                    <Box sx={{ flex: 1, pb: 2 }}>
+                        <Typography
+                            sx={{ fontWeight: 800, color: "error.main", fontSize: 22, lineHeight: 1.2 }}
+                        >
+                            {sellerPrice(selectedPrice ?? displayPrice ?? null)}
+                        </Typography>
+                        {variant?.discount_price != null &&
+                            variant?.price != null &&
+                            variant.price !== variant.discount_price && (
+                                <Typography variant="caption" sx={{ color: "text.disabled", textDecoration: "line-through" }}>
+                                    {sellerPrice(variant.price)}
+                                </Typography>
+                            )}
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, fontSize: 12 }}>
+                            {[selectedColor, selectedSize, selectedPackaging].filter(Boolean).join(" · ") || item.product_name}
+                        </Typography>
+                        {variant?.stock != null && (
+                            <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                                Stock: {variant.stock}
+                            </Typography>
+                        )}
+                    </Box>
+
+                    {/* Close button */}
+                    <IconButton
+                        onClick={() => setSheetOpen(false)}
+                        size="small"
+                        sx={{
+                            position: "absolute",
+                            top: 10,
+                            right: 10,
+                            bgcolor: "rgba(0,0,0,0.06)",
+                            "&:hover": { bgcolor: "rgba(0,0,0,0.12)" },
+                        }}
+                    >
+                        <CloseRoundedIcon fontSize="small" />
+                    </IconButton>
+                </Box>
+
+                {/* Scrollable body */}
+                <Box sx={{ overflowY: "auto", flex: 1 }}>
+                    <Box sx={{ p: 2, pt: 3 }}>
+                        <Stack spacing={2}>
+
+                            {openCarts.length === 0 ? (
+                                <Box>
+                                    <Typography sx={{ fontWeight: 700 }}>No open carts yet.</Typography>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                        Create a cart first, then come back to add this item.
+                                    </Typography>
+                                    <Button
+                                        component={Link}
+                                        href={route("seller.carts.create")}
+                                        variant="contained"
+                                        sx={{
+                                            mt: 2,
+                                            borderRadius: 3,
+                                            textTransform: "none",
+                                            bgcolor: SELLER_BRAND_DARK,
+                                            "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                                        }}
                                     >
-                                        <Typography sx={{ fontWeight: 700 }}>
-                                            Quantity
-                                        </Typography>
-                                        <Stack
-                                            direction="row"
-                                            spacing={1}
-                                            alignItems="center"
-                                        >
-                                            <Button
-                                                variant="outlined"
-                                                onClick={() =>
-                                                    setData(
-                                                        "quantity",
-                                                        Math.max(
-                                                            1,
-                                                            data.quantity - 1,
-                                                        ),
-                                                    )
-                                                }
-                                                sx={{
-                                                    minWidth: 40,
-                                                    borderRadius: 2,
-                                                }}
+                                        Create Cart
+                                    </Button>
+                                </Box>
+                            ) : (
+                                <>
+                                    {/* Color */}
+                                    {uniqueValues(variantData.map((e) => e.color)).length > 0 && (
+                                        <Box>
+                                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+                                                Color
+                                            </Typography>
+                                            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                                                {uniqueValues(variantData.map((e) => e.color)).map((color) => (
+                                                    <Chip
+                                                        key={color}
+                                                        label={color}
+                                                        clickable
+                                                        onClick={() => chooseColor(color)}
+                                                        sx={{
+                                                            bgcolor: selectedColor === color ? SELLER_BRAND_DARK : "#f5f5f5",
+                                                            color: selectedColor === color ? "#fff" : "text.primary",
+                                                            fontWeight: 700,
+                                                            border: selectedColor === color ? `1.5px solid ${SELLER_BRAND_DARK}` : "1.5px solid transparent",
+                                                        }}
+                                                    />
+                                                ))}
+                                            </Stack>
+                                        </Box>
+                                    )}
+
+                                    {/* Size */}
+                                    {availableSizes(variantData, selectedColor).length > 0 && (
+                                        <Box>
+                                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+                                                Size
+                                            </Typography>
+                                            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                                                {availableSizes(variantData, selectedColor).map((size) => (
+                                                    <Chip
+                                                        key={size}
+                                                        label={size}
+                                                        clickable
+                                                        onClick={() => chooseSize(size)}
+                                                        sx={{
+                                                            bgcolor: selectedSize === size ? SELLER_BRAND_DARK : "#f5f5f5",
+                                                            color: selectedSize === size ? "#fff" : "text.primary",
+                                                            fontWeight: 700,
+                                                            border: selectedSize === size ? `1.5px solid ${SELLER_BRAND_DARK}` : "1.5px solid transparent",
+                                                        }}
+                                                    />
+                                                ))}
+                                            </Stack>
+                                        </Box>
+                                    )}
+
+                                    {/* Packaging */}
+                                    {availablePackaging(variantData, selectedColor, selectedSize).length > 0 && (
+                                        <Box>
+                                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+                                                Packaging
+                                            </Typography>
+                                            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                                                {availablePackaging(variantData, selectedColor, selectedSize).map((pack) => (
+                                                    <Chip
+                                                        key={pack}
+                                                        label={pack}
+                                                        clickable
+                                                        onClick={() => setSelectedPackaging(pack)}
+                                                        sx={{
+                                                            bgcolor: selectedPackaging === pack ? SELLER_BRAND_DARK : "#f5f5f5",
+                                                            color: selectedPackaging === pack ? "#fff" : "text.primary",
+                                                            fontWeight: 700,
+                                                            border: selectedPackaging === pack ? `1.5px solid ${SELLER_BRAND_DARK}` : "1.5px solid transparent",
+                                                        }}
+                                                    />
+                                                ))}
+                                            </Stack>
+                                        </Box>
+                                    )}
+
+                                    <Divider />
+
+                                    {/* Cart selector */}
+                                    <TextField
+                                        select
+                                        fullWidth
+                                        label="Cart"
+                                        value={selectedCart}
+                                        onChange={(e) => setSelectedCart(e.target.value)}
+                                        size="small"
+                                    >
+                                        {openCarts.map((cart) => (
+                                            <MenuItem key={cart.id} value={cart.id}>
+                                                Cart #{cart.id} ·{" "}
+                                                {[cart.customer?.first_name, cart.customer?.last_name]
+                                                    .filter(Boolean)
+                                                    .join(" ") || "No customer"}
+                                            </MenuItem>
+                                        ))}
+                                    </TextField>
+
+                                    {/* Quantity */}
+                                    <Stack direction="row" alignItems="center" justifyContent="space-between">
+                                        <Typography sx={{ fontWeight: 700 }}>Quantity</Typography>
+                                        <Stack direction="row" spacing={1} alignItems="center">
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => setData("quantity", Math.max(1, data.quantity - 1))}
+                                                sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}
                                             >
                                                 <RemoveRoundedIcon fontSize="small" />
-                                            </Button>
-                                            <Typography
-                                                sx={{
-                                                    minWidth: 24,
-                                                    textAlign: "center",
-                                                    fontWeight: 700,
-                                                }}
-                                            >
+                                            </IconButton>
+                                            <Typography sx={{ minWidth: 28, textAlign: "center", fontWeight: 700 }}>
                                                 {data.quantity}
                                             </Typography>
-                                            <Button
-                                                variant="outlined"
-                                                onClick={() =>
-                                                    setData(
-                                                        "quantity",
-                                                        data.quantity + 1,
-                                                    )
-                                                }
-                                                sx={{
-                                                    minWidth: 40,
-                                                    borderRadius: 2,
-                                                }}
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => setData("quantity", data.quantity + 1)}
+                                                sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}
                                             >
                                                 <AddRoundedIcon fontSize="small" />
-                                            </Button>
+                                            </IconButton>
                                         </Stack>
                                     </Stack>
-                                </SellerCard>
-
-                                <Button
-                                    fullWidth
-                                    disabled={processing}
-                                    onClick={addToCart}
-                                    variant="contained"
-                                    sx={{
-                                        py: 1.5,
-                                        borderRadius: 3,
-                                        textTransform: "none",
-                                        bgcolor: SELLER_BRAND_DARK,
-                                        "&:hover": {
-                                            bgcolor: SELLER_BRAND_DARK,
-                                        },
-                                    }}
-                                >
-                                    {processing ? "Adding..." : "Add Item"}
-                                </Button>
-                            </>
-                        )}
-                    </Stack>
+                                </>
+                            )}
+                        </Stack>
+                    </Box>
                 </Box>
+
+                {/* Sticky footer CTA */}
+                {openCarts.length > 0 && (
+                    <Box
+                        sx={{
+                            p: 2,
+                            pt: 1,
+                            borderTop: "1px solid",
+                            borderColor: "divider",
+                            bgcolor: "#fff",
+                            pb: "calc(16px + env(safe-area-inset-bottom))",
+                        }}
+                    >
+                        <Button
+                            fullWidth
+                            disabled={processing}
+                            onClick={addToCart}
+                            variant="contained"
+                            sx={{
+                                py: 1.5,
+                                borderRadius: 3,
+                                textTransform: "none",
+                                fontSize: 16,
+                                fontWeight: 700,
+                                bgcolor: SELLER_BRAND_DARK,
+                                "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                            }}
+                        >
+                            {processing ? "Adding..." : "Add to Cart"}
+                        </Button>
+                    </Box>
+                )}
             </Drawer>
         </>
     );
