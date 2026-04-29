@@ -235,16 +235,25 @@ class ItemController extends Controller
             ->first();
 
         // 🔹 Build item images
+        // 🔹 Build item images
+        // 🔹 Build item images
         $itemImages = collect();
-        if ($item->product_images) {
-            $decodedImages = json_decode($item->product_images, true);
-            if (is_array($decodedImages)) {
-                $itemImages = collect($decodedImages)
+
+        // Check if it's already an array (Laravel Casts) or a JSON string
+        $rawImages = $item->product_images;
+
+        if (!empty($rawImages)) {
+            // If it's a string, decode it. If it's already an array, just use it.
+            $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
+
+            if (is_array($imagesArray)) {
+                $itemImages = collect($imagesArray)
                     ->filter(fn($img) => !empty($img))
-                    ->map(fn($img) => asset($img));
+                    ->map(fn($img) => (str_starts_with($img, 'http')) ? $img : asset($img));
             }
         }
 
+        // ... rest of your code (variantColorImages, sizeImages, etc.)
         $variantColorImages = $item->variants
             ->map(fn($v) => $v->itemColor?->image_path ? asset($v->itemColor->image_path) : null)
             ->filter(fn($img) => !empty($img) && $img !== url('/'))
