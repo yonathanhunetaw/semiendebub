@@ -24,20 +24,23 @@ class ItemController extends Controller
         $search = trim((string) $request->input('search', ''));
         $cartId = $request->integer('cart_id') ?: null;
 
-        $query = Item::where('status', 'active')
+        $query = Item::query()
+            ->where('status', 'active')
             ->with([
                 'category',
-                'variants.storeVariants' => function ($query) use ($storeId) {
+                'variants.storeVariants' => function ($q) use ($storeId) {
                     if ($storeId) {
-                        $query->where('store_id', $storeId);
+                        $q->where('store_id', $storeId);
                     }
                 },
             ])
             ->orderBy('product_name');
 
+        // If this is active and items aren't showing,
+        // it means your items aren't linked to this storeId yet.
         if ($storeId) {
-            $query->whereHas('variants.storeVariants', function ($query) use ($storeId) {
-                $query->where('store_id', $storeId);
+            $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
+                $q->where('store_id', $storeId);
             });
         }
 
@@ -45,29 +48,15 @@ class ItemController extends Controller
             $query->where('product_name', 'LIKE', '%' . $search . '%');
         }
 
-        $items = $search !== ''
-            ? $query->get()
-            : collect();
-
         $items = $query->get();
 
-        if ($items->isEmpty()) {
-            dd([
-                'store_id' => $storeId,
-                'search_term' => $search,
-                'total_items_in_db' => \App\Models\Item\Item::count(),
-                'sql' => $query->toSql(),
-                'bindings' => $query->getBindings()
-            ]);
-        }
-
-        $filters = [
-            'search' => $search,
-            'cart_id' => $cartId,
-        ];
-
-        return Inertia::render('Seller/Items/Index', compact('items', 'filters'));
-
+        return Inertia::render('Seller/Items/Index', [
+            'items' => $items,
+            'filters' => [
+                'search' => $search,
+                'cart_id' => $cartId,
+            ],
+        ]);
     }
 
     /**
