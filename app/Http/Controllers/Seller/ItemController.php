@@ -205,155 +205,177 @@ class ItemController extends Controller
     // }
 
     public function show(Item $item)
-{
-    $store = Auth::user()->store;
-    $storeId = $store?->id;
+    {
+        $store = Auth::user()->store;
+        $storeId = $store?->id;
 
-    $sellerId = request('seller_id');
-    $customerId = request('customer_id');
-    $selectedCartId = request('cart_id');
+        $sellerId = request('seller_id');
+        $customerId = request('customer_id');
+        $selectedCartId = request('cart_id');
 
-    // Load variants with all needed relations
-    $item->load([
-        'variants.itemColor',
-        'variants.itemSize',
-        'variants.itemPackagingType',
-        'variants.storeVariants',
-        'variants.owner',
-    ]);
-
-    $storeVariants = $item->variants->flatMap(fn($v) => $v->storeVariants);
-
-    $minStoreVariant = $storeVariants
-        ->filter(fn($sv) => $sv->computed_status === 'active')
-        ->sortBy(fn($sv) => $sv->discount_price ?? $sv->price)
-        ->first();
-
-    // 🔹 Build item images
-    $itemImages = collect();
-    $rawImages = $item->product_images;
-
-    if (!empty($rawImages)) {
-        $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
-        if (is_array($imagesArray)) {
-            $itemImages = collect($imagesArray)
-                ->filter(fn($img) => !empty($img))
-                ->map(fn($img) => (str_starts_with($img, 'http')) ? $img : asset($img));
-        }
-    }
-
-    $variantColorImages = $item->variants
-        ->map(fn($v) => $v->itemColor?->image_path ? asset($v->itemColor->image_path) : null)
-        ->filter(fn($img) => !empty($img) && $img !== url('/'))
-        ->unique();
-
-    $sizeImages = $item->variants
-        ->map(fn($v) => $v->itemSize?->image_path ? asset($v->itemSize->image_path) : null)
-        ->filter(fn($img) => !empty($img) && $img !== url('/'))
-        ->unique();
-
-    $packagingImages = $item->variants
-        ->map(fn($v) => $v->itemPackagingType?->image_path ? asset($v->itemPackagingType->image_path) : null)
-        ->filter(fn($img) => !empty($img) && $img !== url('/'))
-        ->unique();
-
-    $allImages = $itemImages
-        ->merge($variantColorImages)
-        ->merge($sizeImages)
-        ->merge($packagingImages)
-        ->filter(fn($img) => !empty($img))
-        ->unique()
-        ->values();
-
-    // 🚀 LOG 1: Main Gallery Images
-    Log::info('INERTIA_DEBUG: Main Gallery (allImages)', [
-        'item_id' => $item->id,
-        'count' => $allImages->count(),
-        'urls' => $allImages->toArray(),
-    ]);
-
-    // 🔹 Build enriched variant data
-    $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId) {
-        $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
-
-        $store_stock = $storeVariant?->stock ?? 0;
-        $price = $storeVariant?->price ?? $variant->price;
-        $discount_price = $storeVariant?->discount_price;
-        $status = $storeVariant?->computed_status ?? 'inactive';
-        $store_active = $status === 'active';
-
-        // Price ladder via Service Provider
-        $price_ladder = $storeVariant
-            ? \App\Services\PriceProvider::getPriceLadder(
-                storeVariantId: $storeVariant->id,
-                storeId: $storeId,
-                sellerId: $sellerId,
-                customerId: $customerId
-            )
-            : [];
-        $final_price = $storeVariant ? \App\Services\PriceProvider::getFinalPrice($price_ladder) : null;
-
-        // Handle Variant Images
-        $rawVarImages = $variant->images;
-        if (is_string($rawVarImages)) {
-            $decoded = json_decode($rawVarImages, true);
-            $rawVarImages = is_array($decoded) ? $decoded : [];
-        }
-        $variantImages = collect($rawVarImages)->map(fn($img) => str_starts_with($img, 'http') ? $img : asset($img));
-
-        $seller_price_record = $storeVariant
-            ? $storeVariant->sellerPrices()
-                ->where('seller_id', auth()->id())
-                ->where('active', true)
-                ->first()
-            : null;
-
-        $seller_price = $seller_price_record?->price ?? null;
-
-        $payload = [
-            'id' => $variant->id,
-            'color' => $variant->itemColor?->name,
-            'img' => $variantImages->first() ?: ($variant->itemColor ? asset($variant->itemColor->image_path) : '/img/default.jpg'),
-            'size' => $variant->itemSize?->name,
-            'packaging' => $variant->itemPackagingType?->name,
-            'price' => $price,
-            'discount_price' => $discount_price,
-            'stock' => $store_stock,
-            'status' => $status,
-            'store_active' => $store_active,
-            'images' => $variantImages->toArray(),
-            'quantity' => $variant->calculateTotalPieces(),
-            'price_ladder' => $price_ladder,
-            'final_price' => $final_price,
-            'seller_price' => $seller_price,
-            'seller_discount_price' => $seller_price_record?->discount_price ?? null,
-        ];
-
-        // 🚀 LOG 2: Variant Image Debug
-        Log::info("INERTIA_DEBUG: Variant {$variant->id}", [
-            'primary' => $payload['img'],
-            'count' => count($payload['images'])
+        // Load variants with all needed relations
+        $item->load([
+            'variants.itemColor',
+            'variants.itemSize',
+            'variants.itemPackagingType',
+            'variants.storeVariants',
+            'variants.owner',
         ]);
 
-        return $payload;
-    });
+        $storeVariants = $item->variants->flatMap(fn($v) => $v->storeVariants);
 
-    // ... (Your existing Cart/Seller retrieval logic)
-    $sellers = User::where('role', 'seller')->get();
-    $customersWithOpenCarts = Customer::whereHas('carts', fn($q) => $q->where('status', 'open'))
-        ->with(['carts' => fn($q) => $q->where('status', 'open')])->get();
+        $minStoreVariant = $storeVariants
+            ->filter(fn($sv) => $sv->computed_status === 'active')
+            ->sortBy(fn($sv) => $sv->discount_price ?? $sv->price)
+            ->first();
 
-    $openCarts = Cart::with('customer')
-        ->where(fn($q) => $q->where('seller_id', auth()->id())->orWhere('user_id', auth()->id()))
-        ->where('status', 'open')->latest()->get();
+        // 🔹 Build item images
+        $itemImages = collect();
+        $rawImages = $item->product_images;
 
-    $displayPrice = $variantData->where('status', 'active')->min('final_price') ?? $variantData->min('price');
+        if (!empty($rawImages)) {
+            $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
+            if (is_array($imagesArray)) {
+                $itemImages = collect($imagesArray)
+                    ->filter(fn($img) => !empty($img))
+                    ->map(fn($img) => (str_starts_with($img, 'http')) ? $img : asset($img));
+            }
+        }
 
-    return Inertia::render('Seller/Items/Show', compact(
-        'item', 'sellers', 'customersWithOpenCarts', 'openCarts',
-        'allImages', 'variantData', 'minStoreVariant', 'displayPrice', 'selectedCartId'
-    ));
-}
+        $variantColorImages = $item->variants
+            ->map(fn($v) => $v->itemColor?->image_path ? asset($v->itemColor->image_path) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/'))
+            ->unique();
+
+        $sizeImages = $item->variants
+            ->map(fn($v) => $v->itemSize?->image_path ? asset($v->itemSize->image_path) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/'))
+            ->unique();
+
+        $packagingImages = $item->variants
+            ->map(fn($v) => $v->itemPackagingType?->image_path ? asset($v->itemPackagingType->image_path) : null)
+            ->filter(fn($img) => !empty($img) && $img !== url('/'))
+            ->unique();
+
+        $allImages = $itemImages
+            ->merge($variantColorImages)
+            ->merge($sizeImages)
+            ->merge($packagingImages)
+            ->filter(fn($img) => !empty($img))
+            ->unique()
+            ->values();
+
+        // 🚀 LOG 1: Main Gallery Images
+        Log::info('INERTIA_DEBUG: Main Gallery (allImages)', [
+            'item_id' => $item->id,
+            'count' => $allImages->count(),
+            'urls' => $allImages->toArray(),
+        ]);
+
+        // 🔹 Build enriched variant data
+        $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId) {
+            $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
+
+            $store_stock = $storeVariant?->stock ?? 0;
+            $price = $storeVariant?->price ?? $variant->price;
+            $discount_price = $storeVariant?->discount_price;
+            $status = $storeVariant?->computed_status ?? 'inactive';
+            $store_active = $status === 'active';
+
+            // Price ladder via Service Provider
+            $price_ladder = $storeVariant
+                ? \App\Services\PriceProvider::getPriceLadder(
+                    storeVariantId: $storeVariant->id,
+                    storeId: $storeId,
+                    sellerId: $sellerId,
+                    customerId: $customerId
+                )
+                : [];
+            $final_price = $storeVariant ? \App\Services\PriceProvider::getFinalPrice($price_ladder) : null;
+
+            // Handle Variant Images
+            $rawVarImages = $variant->images;
+            if (is_string($rawVarImages)) {
+                $decoded = json_decode($rawVarImages, true);
+                $rawVarImages = is_array($decoded) ? $decoded : [];
+            }
+            $variantImages = collect($rawVarImages)->map(function ($img) {
+                if (str_starts_with($img, 'http'))
+                    return $img;
+
+                // Check if the path contains the literal word "null"
+                // This happens if $variant->itemSize->name was null during creation
+                if (str_contains($img, '/null/')) {
+                    // Option A: Strip the null out
+                    $img = str_replace('/null/', '/', $img);
+
+                    // Option B: If the folder actually exists on your Pi without the 'null'
+                    // we leave it. But usually, this means the path is broken.
+                }
+
+                return asset($img);
+            });
+
+            $seller_price_record = $storeVariant
+                ? $storeVariant->sellerPrices()
+                    ->where('seller_id', auth()->id())
+                    ->where('active', true)
+                    ->first()
+                : null;
+
+            $seller_price = $seller_price_record?->price ?? null;
+
+            $payload = [
+                'id' => $variant->id,
+                'color' => $variant->itemColor?->name,
+                'img' => $variantImages->first() ?: ($variant->itemColor ? asset($variant->itemColor->image_path) : '/img/default.jpg'),
+                'size' => $variant->itemSize?->name,
+                'packaging' => $variant->itemPackagingType?->name,
+                'price' => $price,
+                'discount_price' => $discount_price,
+                'stock' => $store_stock,
+                'status' => $status,
+                'store_active' => $store_active,
+                'images' => $variantImages->toArray(),
+                'quantity' => $variant->calculateTotalPieces(),
+                'price_ladder' => $price_ladder,
+                'final_price' => $final_price,
+                'seller_price' => $seller_price,
+                'seller_discount_price' => $seller_price_record?->discount_price ?? null,
+            ];
+
+            // 🚀 LOG 2: Variant Image Debug
+            Log::info("INERTIA_DEBUG: Variant {$variant->id}", [
+                'primary' => $payload['img'],
+                'count' => count($payload['images'])
+            ]);
+
+            return $payload;
+        });
+
+        // ... (Your existing Cart/Seller retrieval logic)
+        $sellers = User::where('role', 'seller')->get();
+        $customersWithOpenCarts = Customer::whereHas('carts', fn($q) => $q->where('status', 'open'))
+            ->with(['carts' => fn($q) => $q->where('status', 'open')])->get();
+
+        $openCarts = Cart::with('customer')
+            ->where(fn($q) => $q->where('seller_id', auth()->id())->orWhere('user_id', auth()->id()))
+            ->where('status', 'open')->latest()->get();
+
+        $displayPrice = $variantData->where('status', 'active')->min('final_price') ?? $variantData->min('price');
+
+        return Inertia::render('Seller/Items/Show', compact(
+            'item',
+            'sellers',
+            'customersWithOpenCarts',
+            'openCarts',
+            'allImages',
+            'variantData',
+            'minStoreVariant',
+            'displayPrice',
+            'selectedCartId'
+        ));
+    }
 
     /**
      * Show the form for editing the specified resource.
