@@ -368,6 +368,13 @@ class ItemController extends Controller
             ->where('status', 'active')
             ->min('final_price') ?? $variantData->min('price');
 
+        Log::info('DEBUG SHOW PAGE IMAGES', [
+            'item_id' => $item->id,
+            'allImages_count' => count($allImages),
+            'allImages_sample' => $allImages[0] ?? 'EMPTY',
+            'variantData_sample_images' => isset($variantData[0]) ? $variantData[0]['images'] : 'NO VARIANTS',
+        ]);
+
         // 🔹 Return view with everything ready
         return Inertia::render('Seller/Items/Show', compact(
             'item',
