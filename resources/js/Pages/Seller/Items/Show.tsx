@@ -58,7 +58,9 @@ function firstVariant(variants: SellerVariantData[]) {
 }
 
 function uniqueValues(values: Array<string | null | undefined>) {
-    return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+    return Array.from(
+        new Set(values.filter((value): value is string => Boolean(value))),
+    );
 }
 
 function availableSizes(variants: SellerVariantData[], color: string) {
@@ -69,10 +71,16 @@ function availableSizes(variants: SellerVariantData[], color: string) {
     );
 }
 
-function availablePackaging(variants: SellerVariantData[], color: string, size: string) {
+function availablePackaging(
+    variants: SellerVariantData[],
+    color: string,
+    size: string,
+) {
     return uniqueValues(
         variants
-            .filter((variant) => variant.color === color && variant.size === size)
+            .filter(
+                (variant) => variant.color === color && variant.size === size,
+            )
             .map((variant) => variant.packaging),
     );
 }
@@ -93,16 +101,28 @@ function findVariant(
     );
 }
 
-function visiblePrice(variant?: SellerVariantData, mode: "normal" | "seller" = "normal") {
+function visiblePrice(
+    variant?: SellerVariantData,
+    mode: "normal" | "seller" = "normal",
+) {
     if (!variant) {
         return null;
     }
 
     if (mode === "seller") {
-        return variant.seller_discount_price ?? variant.seller_price ?? variant.final_price ?? variant.discount_price ?? variant.price ?? null;
+        return (
+            variant.seller_discount_price ??
+            variant.seller_price ??
+            variant.final_price ??
+            variant.discount_price ??
+            variant.price ??
+            null
+        );
     }
 
-    return variant.final_price ?? variant.discount_price ?? variant.price ?? null;
+    return (
+        variant.final_price ?? variant.discount_price ?? variant.price ?? null
+    );
 }
 
 export default function Show({
@@ -120,21 +140,45 @@ export default function Show({
     openCarts?: OpenCart[];
     selectedCartId?: number | string | null;
 }) {
-    const initialVariant = firstVariant(variantData) as SellerVariantData | undefined;
-    const [pricingMode, setPricingMode] = React.useState<"normal" | "seller">("normal");
-    const [selectedColor, setSelectedColor] = React.useState(initialVariant?.color ?? "");
-    const [selectedSize, setSelectedSize] = React.useState(initialVariant?.size ?? "");
-    const [selectedPackaging, setSelectedPackaging] = React.useState(initialVariant?.packaging ?? "");
-    const [selectedImage, setSelectedImage] = React.useState(
-        sellerImage(initialVariant?.images?.[0] ?? allImages[0] ?? null),
+    const initialVariant = firstVariant(variantData) as
+        | SellerVariantData
+        | undefined;
+    const [pricingMode, setPricingMode] = React.useState<"normal" | "seller">(
+        "normal",
     );
-    const [sheetOpen, setSheetOpen] = React.useState(false);
-    const [selectedCart, setSelectedCart] = React.useState(
-        selectedCartId ? String(selectedCartId) : openCarts[0]?.id ? String(openCarts[0].id) : "",
+    const [selectedColor, setSelectedColor] = React.useState(
+        initialVariant?.color ?? "",
+    );
+    const [selectedSize, setSelectedSize] = React.useState(
+        initialVariant?.size ?? "",
+    );
+    const [selectedPackaging, setSelectedPackaging] = React.useState(
+        initialVariant?.packaging ?? "",
     );
 
-    const variant = findVariant(variantData, selectedColor, selectedSize, selectedPackaging);
-    const images = (variant?.images ?? allImages).map((image) => sellerImage(image)).filter(Boolean) as string[];
+    // 🔹 Initialize as null, useEffect will handle the sync
+    const [selectedImage, setSelectedImage] = React.useState<string | null>(
+        null,
+    );
+
+    const [sheetOpen, setSheetOpen] = React.useState(false);
+    const [selectedCart, setSelectedCart] = React.useState(
+        selectedCartId
+            ? String(selectedCartId)
+            : openCarts[0]?.id
+              ? String(openCarts[0].id)
+              : "",
+    );
+
+    const variant = findVariant(
+        variantData,
+        selectedColor,
+        selectedSize,
+        selectedPackaging,
+    );
+    const images = (variant?.images ?? allImages)
+        .map((image) => sellerImage(image))
+        .filter(Boolean) as string[];
     const selectedPrice = visiblePrice(variant, pricingMode);
     const perPiece =
         variant?.quantity && selectedPrice != null && variant.quantity > 0
@@ -151,26 +195,38 @@ export default function Show({
         setData("price", selectedPrice ?? displayPrice ?? 0);
     }, [displayPrice, selectedPrice, setData]);
 
+    // 🔹 REPLACED: Enhanced Sync for selectedImage
     React.useEffect(() => {
-        const nextImage = sellerImage(variant?.images?.[0] ?? allImages[0] ?? null);
-        setSelectedImage(nextImage);
+        // Try current variant image, fallback to first item image
+        const rawSource = variant?.images?.[0] ?? allImages[0] ?? null;
+        const processed = sellerImage(rawSource);
+
+        if (processed) {
+            setSelectedImage(processed);
+        }
     }, [allImages, variant?.id, variant?.images]);
 
     const colors = uniqueValues(variantData.map((entry) => entry.color));
     const sizes = availableSizes(variantData, selectedColor);
-    const packaging = availablePackaging(variantData, selectedColor, selectedSize);
+    const packaging = availablePackaging(
+        variantData,
+        selectedColor,
+        selectedSize,
+    );
 
     const chooseColor = (color: string) => {
         const nextSizes = availableSizes(variantData, color);
         const nextSize = nextSizes[0] ?? "";
-        const nextPackaging = availablePackaging(variantData, color, nextSize)[0] ?? "";
+        const nextPackaging =
+            availablePackaging(variantData, color, nextSize)[0] ?? "";
         setSelectedColor(color);
         setSelectedSize(nextSize);
         setSelectedPackaging(nextPackaging);
     };
 
     const chooseSize = (size: string) => {
-        const nextPackaging = availablePackaging(variantData, selectedColor, size)[0] ?? "";
+        const nextPackaging =
+            availablePackaging(variantData, selectedColor, size)[0] ?? "";
         setSelectedSize(size);
         setSelectedPackaging(nextPackaging);
     };
@@ -197,7 +253,11 @@ export default function Show({
                         ? route("seller.carts.show", selectedCart)
                         : route("seller.items.index")
                 }
-                subtitle={selectedCart ? `Adding into Cart #${selectedCart}` : undefined}
+                subtitle={
+                    selectedCart
+                        ? `Adding into Cart #${selectedCart}`
+                        : undefined
+                }
             />
 
             <Box sx={{ px: 2, pt: 2 }}>
@@ -212,20 +272,35 @@ export default function Show({
                                 backgroundColor: "#fff7ed",
                             }}
                         >
-                            {selectedImage ? (
+                            {/* 🔹 Logic: Use state first, fallback to first available image directly */}
+                            {selectedImage || sellerImage(allImages[0]) ? (
                                 <Box
                                     component="img"
-                                    src={selectedImage}
+                                    src={
+                                        selectedImage ||
+                                        sellerImage(allImages[0]) ||
+                                        ""
+                                    }
                                     alt={item.product_name}
-                                    sx={{ width: "100%", height: "100%", objectFit: "contain" }}
+                                    sx={{
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "contain",
+                                    }}
                                 />
                             ) : (
-                                <Typography color="text.secondary">No images available.</Typography>
+                                <Typography color="text.secondary">
+                                    No images available.
+                                </Typography>
                             )}
                         </Box>
 
                         {images.length > 1 ? (
-                            <Stack direction="row" spacing={1} sx={{ p: 1.5, overflowX: "auto" }}>
+                            <Stack
+                                direction="row"
+                                spacing={1}
+                                sx={{ p: 1.5, overflowX: "auto" }}
+                            >
                                 {images.map((image) => (
                                     <Box
                                         key={image}
@@ -236,7 +311,10 @@ export default function Show({
                                             width: 64,
                                             height: 64,
                                             p: 0,
-                                            border: selectedImage === image ? `2px solid ${SELLER_BRAND_DARK}` : "1px solid rgba(148, 163, 184, 0.24)",
+                                            border:
+                                                selectedImage === image
+                                                    ? `2px solid ${SELLER_BRAND_DARK}`
+                                                    : "1px solid rgba(148, 163, 184, 0.24)",
                                             borderRadius: 2,
                                             overflow: "hidden",
                                             background: "#fff",
@@ -247,7 +325,11 @@ export default function Show({
                                             component="img"
                                             src={image}
                                             alt=""
-                                            sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                            sx={{
+                                                width: "100%",
+                                                height: "100%",
+                                                objectFit: "cover",
+                                            }}
                                         />
                                     </Box>
                                 ))}
@@ -264,10 +346,20 @@ export default function Show({
                                 {item.product_name}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                {item.product_description || "Choose a variant and add it to a customer cart."}
+                                {item.product_description ||
+                                    "Choose a variant and add it to a customer cart."}
                             </Typography>
-                            <Typography sx={{ mt: 0.5, fontWeight: 800, color: "error.main", fontSize: 28 }}>
-                                {sellerPrice(selectedPrice ?? displayPrice ?? null)}
+                            <Typography
+                                sx={{
+                                    mt: 0.5,
+                                    fontWeight: 800,
+                                    color: "error.main",
+                                    fontSize: 28,
+                                }}
+                            >
+                                {sellerPrice(
+                                    selectedPrice ?? displayPrice ?? null,
+                                )}
                             </Typography>
                         </Stack>
                     </SellerCard>
@@ -275,27 +367,51 @@ export default function Show({
                     <SellerCard>
                         <Stack direction="row" spacing={1}>
                             <Button
-                                variant={pricingMode === "normal" ? "contained" : "outlined"}
+                                variant={
+                                    pricingMode === "normal"
+                                        ? "contained"
+                                        : "outlined"
+                                }
                                 onClick={() => setPricingMode("normal")}
                                 sx={{
                                     flex: 1,
                                     borderRadius: 3,
                                     textTransform: "none",
-                                    bgcolor: pricingMode === "normal" ? SELLER_BRAND_DARK : undefined,
-                                    "&:hover": { bgcolor: pricingMode === "normal" ? SELLER_BRAND_DARK : undefined },
+                                    bgcolor:
+                                        pricingMode === "normal"
+                                            ? SELLER_BRAND_DARK
+                                            : undefined,
+                                    "&:hover": {
+                                        bgcolor:
+                                            pricingMode === "normal"
+                                                ? SELLER_BRAND_DARK
+                                                : undefined,
+                                    },
                                 }}
                             >
                                 Customer Price
                             </Button>
                             <Button
-                                variant={pricingMode === "seller" ? "contained" : "outlined"}
+                                variant={
+                                    pricingMode === "seller"
+                                        ? "contained"
+                                        : "outlined"
+                                }
                                 onClick={() => setPricingMode("seller")}
                                 sx={{
                                     flex: 1,
                                     borderRadius: 3,
                                     textTransform: "none",
-                                    bgcolor: pricingMode === "seller" ? SELLER_BRAND_DARK : undefined,
-                                    "&:hover": { bgcolor: pricingMode === "seller" ? SELLER_BRAND_DARK : undefined },
+                                    bgcolor:
+                                        pricingMode === "seller"
+                                            ? SELLER_BRAND_DARK
+                                            : undefined,
+                                    "&:hover": {
+                                        bgcolor:
+                                            pricingMode === "seller"
+                                                ? SELLER_BRAND_DARK
+                                                : undefined,
+                                    },
                                 }}
                             >
                                 Seller Price
@@ -306,20 +422,38 @@ export default function Show({
                     <SellerCard>
                         <Stack spacing={1.5}>
                             <Box>
-                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                    sx={{ mb: 1 }}
+                                >
                                     Color
                                 </Typography>
-                                <Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
+                                <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ overflowX: "auto" }}
+                                >
                                     {colors.map((color) => (
                                         <Chip
                                             key={color}
                                             label={color}
                                             clickable
                                             onClick={() => chooseColor(color)}
-                                            color={selectedColor === color ? "primary" : "default"}
+                                            color={
+                                                selectedColor === color
+                                                    ? "primary"
+                                                    : "default"
+                                            }
                                             sx={{
-                                                bgcolor: selectedColor === color ? SELLER_BRAND_DARK : undefined,
-                                                color: selectedColor === color ? "#fff" : undefined,
+                                                bgcolor:
+                                                    selectedColor === color
+                                                        ? SELLER_BRAND_DARK
+                                                        : undefined,
+                                                color:
+                                                    selectedColor === color
+                                                        ? "#fff"
+                                                        : undefined,
                                                 fontWeight: 700,
                                             }}
                                         />
@@ -330,20 +464,38 @@ export default function Show({
                             <Divider />
 
                             <Box>
-                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                    sx={{ mb: 1 }}
+                                >
                                     Size
                                 </Typography>
-                                <Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
+                                <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ overflowX: "auto" }}
+                                >
                                     {sizes.map((size) => (
                                         <Chip
                                             key={size}
                                             label={size}
                                             clickable
                                             onClick={() => chooseSize(size)}
-                                            color={selectedSize === size ? "primary" : "default"}
+                                            color={
+                                                selectedSize === size
+                                                    ? "primary"
+                                                    : "default"
+                                            }
                                             sx={{
-                                                bgcolor: selectedSize === size ? SELLER_BRAND_DARK : undefined,
-                                                color: selectedSize === size ? "#fff" : undefined,
+                                                bgcolor:
+                                                    selectedSize === size
+                                                        ? SELLER_BRAND_DARK
+                                                        : undefined,
+                                                color:
+                                                    selectedSize === size
+                                                        ? "#fff"
+                                                        : undefined,
                                                 fontWeight: 700,
                                             }}
                                         />
@@ -354,20 +506,40 @@ export default function Show({
                             <Divider />
 
                             <Box>
-                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                    sx={{ mb: 1 }}
+                                >
                                     Packaging
                                 </Typography>
-                                <Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
+                                <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ overflowX: "auto" }}
+                                >
                                     {packaging.map((pack) => (
                                         <Chip
                                             key={pack}
                                             label={pack}
                                             clickable
-                                            onClick={() => setSelectedPackaging(pack)}
-                                            color={selectedPackaging === pack ? "primary" : "default"}
+                                            onClick={() =>
+                                                setSelectedPackaging(pack)
+                                            }
+                                            color={
+                                                selectedPackaging === pack
+                                                    ? "primary"
+                                                    : "default"
+                                            }
                                             sx={{
-                                                bgcolor: selectedPackaging === pack ? SELLER_BRAND_DARK : undefined,
-                                                color: selectedPackaging === pack ? "#fff" : undefined,
+                                                bgcolor:
+                                                    selectedPackaging === pack
+                                                        ? SELLER_BRAND_DARK
+                                                        : undefined,
+                                                color:
+                                                    selectedPackaging === pack
+                                                        ? "#fff"
+                                                        : undefined,
                                                 fontWeight: 700,
                                             }}
                                         />
@@ -378,24 +550,43 @@ export default function Show({
                     </SellerCard>
 
                     <SellerCard>
-                        <Stack direction="row" justifyContent="space-between" spacing={2}>
+                        <Stack
+                            direction="row"
+                            justifyContent="space-between"
+                            spacing={2}
+                        >
                             <Box>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                >
                                     Stock
                                 </Typography>
-                                <Typography sx={{ fontWeight: 700 }}>{variant?.stock ?? 0}</Typography>
+                                <Typography sx={{ fontWeight: 700 }}>
+                                    {variant?.stock ?? 0}
+                                </Typography>
                             </Box>
                             <Box>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                >
                                     Units in pack
                                 </Typography>
-                                <Typography sx={{ fontWeight: 700 }}>{variant?.quantity ?? 1}</Typography>
+                                <Typography sx={{ fontWeight: 700 }}>
+                                    {variant?.quantity ?? 1}
+                                </Typography>
                             </Box>
                             <Box>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                >
                                     Per unit
                                 </Typography>
-                                <Typography sx={{ fontWeight: 700 }}>{sellerPrice(perPiece)}</Typography>
+                                <Typography sx={{ fontWeight: 700 }}>
+                                    {sellerPrice(perPiece)}
+                                </Typography>
                             </Box>
                         </Stack>
                     </SellerCard>
@@ -449,15 +640,23 @@ export default function Show({
                                 Add to Cart
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                {item.product_name} · {sellerPrice(selectedPrice)}
+                                {item.product_name} ·{" "}
+                                {sellerPrice(selectedPrice)}
                             </Typography>
                         </Box>
 
                         {openCarts.length === 0 ? (
                             <SellerCard>
-                                <Typography sx={{ fontWeight: 700 }}>No open carts yet.</Typography>
-                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                    Create a cart first, then come back to add this item.
+                                <Typography sx={{ fontWeight: 700 }}>
+                                    No open carts yet.
+                                </Typography>
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                    sx={{ mt: 0.5 }}
+                                >
+                                    Create a cart first, then come back to add
+                                    this item.
                                 </Typography>
                                 <Button
                                     component={Link}
@@ -468,7 +667,9 @@ export default function Show({
                                         borderRadius: 3,
                                         textTransform: "none",
                                         bgcolor: SELLER_BRAND_DARK,
-                                        "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                                        "&:hover": {
+                                            bgcolor: SELLER_BRAND_DARK,
+                                        },
                                     }}
                                 >
                                     Create Cart
@@ -481,36 +682,76 @@ export default function Show({
                                     fullWidth
                                     label="Cart"
                                     value={selectedCart}
-                                    onChange={(event) => setSelectedCart(event.target.value)}
+                                    onChange={(event) =>
+                                        setSelectedCart(event.target.value)
+                                    }
                                 >
                                     {openCarts.map((cart) => (
                                         <MenuItem key={cart.id} value={cart.id}>
-                                            Cart #{cart.id} · {[
+                                            Cart #{cart.id} ·{" "}
+                                            {[
                                                 cart.customer?.first_name,
                                                 cart.customer?.last_name,
-                                            ].filter(Boolean).join(" ") || "No customer"}
+                                            ]
+                                                .filter(Boolean)
+                                                .join(" ") || "No customer"}
                                         </MenuItem>
                                     ))}
                                 </TextField>
 
                                 <SellerCard>
-                                    <Stack direction="row" alignItems="center" justifyContent="space-between">
-                                        <Typography sx={{ fontWeight: 700 }}>Quantity</Typography>
-                                        <Stack direction="row" spacing={1} alignItems="center">
+                                    <Stack
+                                        direction="row"
+                                        alignItems="center"
+                                        justifyContent="space-between"
+                                    >
+                                        <Typography sx={{ fontWeight: 700 }}>
+                                            Quantity
+                                        </Typography>
+                                        <Stack
+                                            direction="row"
+                                            spacing={1}
+                                            alignItems="center"
+                                        >
                                             <Button
                                                 variant="outlined"
-                                                onClick={() => setData("quantity", Math.max(1, data.quantity - 1))}
-                                                sx={{ minWidth: 40, borderRadius: 2 }}
+                                                onClick={() =>
+                                                    setData(
+                                                        "quantity",
+                                                        Math.max(
+                                                            1,
+                                                            data.quantity - 1,
+                                                        ),
+                                                    )
+                                                }
+                                                sx={{
+                                                    minWidth: 40,
+                                                    borderRadius: 2,
+                                                }}
                                             >
                                                 <RemoveRoundedIcon fontSize="small" />
                                             </Button>
-                                            <Typography sx={{ minWidth: 24, textAlign: "center", fontWeight: 700 }}>
+                                            <Typography
+                                                sx={{
+                                                    minWidth: 24,
+                                                    textAlign: "center",
+                                                    fontWeight: 700,
+                                                }}
+                                            >
                                                 {data.quantity}
                                             </Typography>
                                             <Button
                                                 variant="outlined"
-                                                onClick={() => setData("quantity", data.quantity + 1)}
-                                                sx={{ minWidth: 40, borderRadius: 2 }}
+                                                onClick={() =>
+                                                    setData(
+                                                        "quantity",
+                                                        data.quantity + 1,
+                                                    )
+                                                }
+                                                sx={{
+                                                    minWidth: 40,
+                                                    borderRadius: 2,
+                                                }}
                                             >
                                                 <AddRoundedIcon fontSize="small" />
                                             </Button>
@@ -532,7 +773,9 @@ export default function Show({
                                         borderRadius: 3,
                                         textTransform: "none",
                                         bgcolor: SELLER_BRAND_DARK,
-                                        "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                                        "&:hover": {
+                                            bgcolor: SELLER_BRAND_DARK,
+                                        },
                                     }}
                                 >
                                     Confirm Add
