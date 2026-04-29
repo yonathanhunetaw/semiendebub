@@ -232,6 +232,16 @@ class ItemController extends Controller
         // 🔹 Build item images
         $itemImages = collect();
         $rawImages = $item->product_images;
+        if (!empty($rawImages)) {
+            // Ensure we have an array (decode if string, otherwise use as is)
+            $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
+
+            if (is_array($imagesArray)) {
+                $itemImages = collect($imagesArray)
+                    ->filter(fn($img) => !empty($img))
+                    ->map(fn($img) => str_starts_with($img, 'http') ? $img : asset('storage/' . ltrim($img, '/')));
+            }
+        }
 
         if (!empty($rawImages)) {
             $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
@@ -294,27 +304,32 @@ class ItemController extends Controller
             $final_price = $storeVariant ? \App\Services\PriceProvider::getFinalPrice($price_ladder) : null;
 
             // Handle Variant Images
+            // Handle Variant Images
             $rawVarImages = $variant->images;
             if (is_string($rawVarImages)) {
                 $decoded = json_decode($rawVarImages, true);
                 $rawVarImages = is_array($decoded) ? $decoded : [];
             }
-            $variantImages = collect($rawVarImages)->map(function ($img) {
-                if (str_starts_with($img, 'http'))
-                    return $img;
 
-                // Check if the path contains the literal word "null"
-                // This happens if $variant->itemSize->name was null during creation
-                if (str_contains($img, '/null/')) {
-                    // Option A: Strip the null out
-                    $img = str_replace('/null/', '/', $img);
+            // Process URLs with storage prefix and null-safety
+            $variantImages = collect($rawVarImages)
+                ->filter(fn($img) => !empty($img))
+                ->map(function ($img) {
+                    if (str_starts_with($img, 'http')) {
+                        return $img;
+                    }
 
-                    // Option B: If the folder actually exists on your Pi without the 'null'
-                    // we leave it. But usually, this means the path is broken.
-                }
+                    // Clean up accidental double slashes or literal "null" strings
+                    $cleanPath = ltrim($img, '/');
 
-                return asset($img);
-            });
+                    if (str_contains($cleanPath, '/null/')) {
+                        // If your terminal showed the folder exists WITHOUT 'null',
+                        // this line fixes the URL.
+                        $cleanPath = str_replace('/null/', '/', $cleanPath);
+                    }
+
+                    return asset('storage/' . $cleanPath);
+                });
 
             $seller_price_record = $storeVariant
                 ? $storeVariant->sellerPrices()
@@ -328,7 +343,8 @@ class ItemController extends Controller
             $payload = [
                 'id' => $variant->id,
                 'color' => $variant->itemColor?->name,
-                'img' => $variantImages->first() ?: ($variant->itemColor ? asset($variant->itemColor->image_path) : '/img/default.jpg'),
+                // Fallback to default if no images found
+                'img' => $variantImages->first() ?: ($variant->itemColor ? asset('storage/' . ltrim($variant->itemColor->image_path, '/')) : '/img/default.jpg'),
                 'size' => $variant->itemSize?->name,
                 'packaging' => $variant->itemPackagingType?->name,
                 'price' => $price,
@@ -352,7 +368,6 @@ class ItemController extends Controller
 
             return $payload;
         });
-
         // ... (Your existing Cart/Seller retrieval logic)
         $sellers = User::where('role', 'seller')->get();
         $customersWithOpenCarts = Customer::whereHas('carts', fn($q) => $q->where('status', 'open'))
