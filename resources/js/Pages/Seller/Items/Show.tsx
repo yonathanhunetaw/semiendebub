@@ -196,15 +196,23 @@ export default function Show({
     }, [displayPrice, selectedPrice, setData]);
 
     // 🔹 REPLACED: Enhanced Sync for selectedImage
+    // Replace your image useEffect with this:
     React.useEffect(() => {
-        // Try current variant image, fallback to first item image
-        const rawSource = variant?.images?.[0] ?? allImages[0] ?? null;
-        const processed = sellerImage(rawSource);
+        // 1. Try to get the variant-specific image first
+        const variantImg = variant?.images?.[0];
 
+        // 2. If the variant has an image, use it.
+        // 3. If not, use the first image from the general gallery (allImages).
+        const source = variantImg || allImages[0] || null;
+
+        const processed = sellerImage(source);
+
+        // 🔥 THE FIX: Only update if we actually got a valid URL back.
+        // This prevents the "flash and disappear" if the variant is null for a split second.
         if (processed) {
             setSelectedImage(processed);
         }
-    }, [allImages, variant?.id, variant?.images]);
+    }, [variant?.id, allImages]);
 
     const colors = uniqueValues(variantData.map((entry) => entry.color));
     const sizes = availableSizes(variantData, selectedColor);
