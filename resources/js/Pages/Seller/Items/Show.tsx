@@ -331,12 +331,17 @@ export default function Show({
                                     >
                                         <Box
                                             component="img"
-                                            src={image}
-                                            alt=""
+                                            src={
+                                                selectedImage ||
+                                                sellerImage(allImages[0]) ||
+                                                ""
+                                            }
+                                            alt={item.product_name}
+                                            loading="eager" // Add this
                                             sx={{
                                                 width: "100%",
                                                 height: "100%",
-                                                objectFit: "cover",
+                                                objectFit: "contain",
                                             }}
                                         />
                                     </Box>
