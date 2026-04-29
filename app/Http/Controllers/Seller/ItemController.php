@@ -49,6 +49,8 @@ class ItemController extends Controller
             ? $query->get()
             : collect();
 
+        $items = $query->get();
+
         $filters = [
             'search' => $search,
             'cart_id' => $cartId,
