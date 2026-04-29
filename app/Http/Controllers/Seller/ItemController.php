@@ -21,11 +21,11 @@ class ItemController extends Controller
     public function index(Request $request)
     {
         $storeId = Auth::user()->store?->id;
-        $search = trim((string) $request->input('search', ''));
+        // Ensure we have a string, default to empty
+        $search = $request->filled('search') ? trim($request->search) : null;
         $cartId = $request->integer('cart_id') ?: null;
 
-        $query = Item::query()
-            ->where('status', 'active')
+        $query = Item::where('status', 'active')
             ->with([
                 'category',
                 'variants.storeVariants' => function ($q) use ($storeId) {
@@ -33,27 +33,31 @@ class ItemController extends Controller
                         $q->where('store_id', $storeId);
                     }
                 },
-            ])
-            ->orderBy('product_name');
+            ]);
 
-        // If this is active and items aren't showing,
-        // it means your items aren't linked to this storeId yet.
+        // 1. Only filter by store if storeId exists
         if ($storeId) {
             $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
                 $q->where('store_id', $storeId);
             });
         }
 
-        if ($search !== '') {
+        // 2. Only apply search if there is actually a search term
+        if ($search) {
             $query->where('product_name', 'LIKE', '%' . $search . '%');
         }
 
-        $items = $query->get();
+        // 3. Get the results (No more ternary check here!)
+        $items = $query->orderBy('product_name')->get();
 
+        // Temporary debug
+        if ($items->isEmpty()) {
+            Log::info("No items found for store: " . ($storeId ?? 'N/A'));
+        }
         return Inertia::render('Seller/Items/Index', [
             'items' => $items,
             'filters' => [
-                'search' => $search,
+                'search' => $search ?? '',
                 'cart_id' => $cartId,
             ],
         ]);
