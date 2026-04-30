@@ -97,6 +97,12 @@ class ItemController extends Controller
             }
         ]);
 
+        // Log the current session's cart specifically here
+        logger('Cart check in ItemController', [
+            'session_cart' => session('cart'),
+            'db_cart' => auth()->user()?->cart
+        ]);
+
         logger('Step 1 & 2: Relations loaded via lazy-eager loading', ['item_id' => $item->id]);
 
         // 2️⃣ Use the already loaded relations (No extra queries triggered here)

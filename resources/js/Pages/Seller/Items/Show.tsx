@@ -26,6 +26,11 @@ import {
     TextField,
     Typography,
 } from "@mui/material";
+import { usePage } from '@inertiajs/react';
+
+const { cart, auth } = usePage().props;
+
+console.log('Frontend Cart Check:', cart);
 import React from "react";
 
 interface SellerVariantData {
