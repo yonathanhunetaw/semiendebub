@@ -81,29 +81,32 @@ class ItemController extends Controller
 
     public function show(Item $item)
     {
-        // 1️⃣ Eager load relations
+        // 1️⃣ Eager load EVERYTHING in one go
+        // Use 'load' because Laravel already gave us the $item instance
         $item->load([
-            'variants.itemColor',
-            'variants.itemSize',
-            'variants.itemPackagingType',
+            'category.parent',
             'colors',
             'sizes',
             'packagingTypes',
-            'category.parent', // <-- load the parent of the assigned category
+            'variants.itemColor',
+            'variants.itemSize',
+            'variants.itemPackagingType',
+            // If you have store variants linked to the item:
+            'storeVariants.sellerPrices' => function ($query) {
+                $query->where('seller_id', auth()->id())->where('active', 1);
+            }
         ]);
-        logger('Step 1: Loaded item relations', ['item_id' => $item->id]);
 
-        // 2️⃣ Get related data
+        logger('Step 1 & 2: Relations loaded via lazy-eager loading', ['item_id' => $item->id]);
+
+        // 2️⃣ Use the already loaded relations (No extra queries triggered here)
         $colors = $item->colors;
         $sizes = $item->sizes;
         $packagingTypes = $item->packagingTypes;
+
+        // These still need their own queries as they aren't directly tied to this $item
         $inventoryLocations = ItemInventoryLocation::all();
         $sellers = User::where('role', 'seller')->get();
-        logger('Step 2: Retrieved related collections', [
-            'colors' => $colors->pluck('name'),
-            'sizes' => $sizes->pluck('name'),
-            'packagingTypes' => $packagingTypes->pluck('name'),
-        ]);
 
         // 3️⃣ Decode item images
         $itemImages = [];
