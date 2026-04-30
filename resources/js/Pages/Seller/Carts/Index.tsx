@@ -30,12 +30,14 @@ interface SellerCart {
     items?: CartItem[];
 }
 
-// Utility to handle names without importing old UI files
+// Utility to handle names safely
 const formatName = (first?: string, last?: string) => {
-    return [first, last].filter(Boolean).join(" ");
+    const name = [first, last].filter(Boolean).join(" ");
+    return name.length > 0 ? name : null;
 };
 
 const getInitials = (name: string) => {
+    if (!name) return "??";
     return name
         .split(" ")
         .map((n) => n[0])
@@ -44,8 +46,16 @@ const getInitials = (name: string) => {
         .substring(0, 2);
 };
 
-export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
+export default function Index({ carts }: { carts: any }) {
     const theme = useTheme();
+
+    // Fix: Ensure we extract data correctly from Laravel Paginator or raw Array
+    const cartList: SellerCart[] = Array.isArray(carts) ? carts : (carts.data || []);
+
+    // Helper for contrast colors
+    const isDark = theme.palette.mode === 'dark';
+    const contrastText = isDark ? "#000" : "#fff";
+    const subtextOpacity = isDark ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.7)";
 
     return (
         <Box
@@ -57,7 +67,7 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
         >
             <Head title="Seller Carts" />
 
-            {/* Simple, High-Contrast Header */}
+            {/* Header Section */}
             <Box
                 sx={{
                     px: 2,
@@ -76,7 +86,7 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                     href={route("seller.carts.create")}
                     sx={{
                         bgcolor: "primary.main",
-                        color: theme.palette.mode === 'dark' ? "#000" : "#fff",
+                        color: contrastText,
                         "&:hover": { bgcolor: "primary.dark" },
                     }}
                 >
@@ -86,14 +96,14 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
 
             <Box sx={{ px: 2 }}>
                 <Stack spacing={1.5}>
-                    {carts.map((cart) => {
+                    {cartList.map((cart) => {
                         const customerName = formatName(
                             cart.customer?.first_name,
-                            cart.customer?.last_name,
+                            cart.customer?.last_name
                         );
                         const sellerLabel = formatName(
                             cart.seller?.first_name,
-                            cart.seller?.last_name,
+                            cart.seller?.last_name
                         );
 
                         return (
@@ -108,7 +118,7 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                                     borderRadius: 4,
                                     bgcolor: "primary.main",
                                     border: "1px solid rgba(0,0,0,0.05)",
-                                    transition: "transform 0.1s active",
+                                    transition: "transform 0.1s ease",
                                     "&:active": { transform: "scale(0.98)" },
                                 }}
                             >
@@ -117,48 +127,41 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                                     spacing={2}
                                     alignItems="center"
                                 >
-                                    {/* Avatar with dynamic contrast background */}
+                                    {/* Avatar */}
                                     <Avatar
                                         sx={{
-                                            bgcolor: theme.palette.mode === 'dark' ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.4)",
-                                            color: theme.palette.mode === 'dark' ? "#fff" : "#000",
+                                            bgcolor: isDark ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.2)",
+                                            color: contrastText,
                                             fontWeight: 900,
                                             fontSize: "0.875rem",
                                         }}
                                     >
-                                        {getInitials(
-                                            customerName || `C${cart.id}`,
-                                        )}
+                                        {getInitials(customerName || `C${cart.id}`)}
                                     </Avatar>
 
                                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                                        {/* The Title: Isabelle Crona's Cart */}
                                         <Typography
                                             sx={{
                                                 fontWeight: 900,
-                                                color: theme.palette.mode === 'dark' ? "#000" : "#fff",
+                                                color: contrastText,
                                                 fontSize: "1rem",
                                                 lineHeight: 1.2,
                                             }}
                                             noWrap
                                         >
-                                            {customerName
-                                                ? `${customerName}'s Cart`
-                                                : `Cart #${cart.id}`}
+                                            {customerName ? `${customerName}'s Cart` : `Cart #${cart.id}`}
                                         </Typography>
 
-                                        {/* The Subtitle: Morris Bartoletti (Fixed Visibility) */}
                                         <Typography
                                             variant="body2"
                                             sx={{
-                                                color: theme.palette.mode === 'dark' ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.7)",
+                                                color: subtextOpacity,
                                                 fontWeight: 600,
                                                 mt: 0.2,
                                             }}
                                             noWrap
                                         >
-                                            {sellerLabel ||
-                                                "Seller not assigned"}
+                                            {sellerLabel || "Unassigned Seller"}
                                         </Typography>
                                     </Box>
 
@@ -167,15 +170,15 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                                             label={`${cart.items?.length ?? 0} items`}
                                             size="small"
                                             sx={{
-                                                bgcolor: "rgba(0,0,0,0.15)",
-                                                color: theme.palette.mode === 'dark' ? "#000" : "#fff",
+                                                bgcolor: "rgba(0,0,0,0.1)",
+                                                color: contrastText,
                                                 fontWeight: 800,
                                                 fontSize: "0.7rem",
                                             }}
                                         />
                                         <ChevronRightRoundedIcon
                                             sx={{
-                                                color: theme.palette.mode === 'dark' ? "#000" : "#fff",
+                                                color: contrastText,
                                                 opacity: 0.5,
                                             }}
                                         />
@@ -186,23 +189,22 @@ export default function Index({ carts = [] }: { carts?: SellerCart[] }) {
                     })}
                 </Stack>
 
-                {carts.length === 0 && (
-                    <Typography
-                        sx={{ textAlign: "center", mt: 10, opacity: 0.5 }}
-                    >
-                        No active carts found.
-                    </Typography>
+                {/* Empty State */}
+                {cartList.length === 0 && (
+                    <Box sx={{ textAlign: "center", mt: 10, opacity: 0.5 }}>
+                        <Typography variant="body1">No active carts found.</Typography>
+                    </Box>
                 )}
 
                 <Typography
                     variant="body2"
                     sx={{ textAlign: "center", py: 4, opacity: 0.7 }}
                 >
-                    Total {carts.length}
+                    Total: {cartList.length}
                 </Typography>
             </Box>
         </Box>
     );
 }
 
-Index.layout = (page: React.ReactNode) => <SellerLayout>{page}</SellerLayout>;
+Index.layout = (page: React.ReactNode) => <SellerLayout children={page} />;
