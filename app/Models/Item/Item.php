@@ -7,128 +7,127 @@ use App\Models\Store\Store;
 use Database\Factories\Item\ItemFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Item extends Model
 {
     use HasFactory;
 
+    /**
+     * The attributes that are mass assignable.
+     * Matches your 'items' migration exactly.
+     */
     protected $fillable = [
         'product_name',
         'product_description',
         'packaging_details',
-        'variation',
-        'price',
-        'product_images',
+        'general_images',
         'status',
-        'category_id',
-        'sold_count',
+        'item_category_id',
+        'is_incomplete',
     ];
 
+    /**
+     * Cast JSON columns to arrays automatically.
+     */
     protected $casts = [
-        'product_images' => 'array', // Cast JSON column to array
+        'general_images' => 'array',
+        'is_incomplete' => 'boolean',
     ];
 
+    /**
+     * Link to the new modular factory location.
+     */
     protected static function newFactory()
     {
-        // Points to the new modular factory location
         return ItemFactory::new();
     }
 
-    // Item belongs to a main category
-    // public function category()
-    // {
-    //     return $this->belongsTo(ItemCategory::class);
-    // }
+    /*
+    |--------------------------------------------------------------------------
+    | Relationships
+    |--------------------------------------------------------------------------
+    */
 
-    // // Many-to-many categories
-    // public function categories()
-    // {
-    //     return $this->belongsToMany(
-    //         ItemCategory::class,
-    //         'item_category_item',
-    //         'item_id',
-    //         'category_id'
-    //     );
-    // }
-
-    // Item.php
-
-    protected static function booted()
+    /**
+     * Item belongs to a main category.
+     */
+    public function category(): BelongsTo
     {
-        static::creating(function ($item) {
-            if (! $item->sku) {
-                // Use first 3 letters of product name + random 3 digits
-                $namePart = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $item->product_name), 0, 3));
-                $randomPart = mt_rand(100, 999);
-                $item->sku = $namePart.$randomPart;
-            }
-        });
+        return $this->belongsTo(ItemCategory::class, 'item_category_id');
     }
 
-    // Many-to-many with colors
-
-    public function category()
+    /**
+     * Many-to-many with colors.
+     */
+    public function colors(): BelongsToMany
     {
-        return $this->belongsTo(ItemCategory::class, 'category_id');
+        return $this->belongsToMany(ItemColor::class, 'item_color_item', 'item_id', 'item_color_id')
+                    ->withTimestamps();
     }
 
-    // Many-to-many with sizes
-
-    public function colors()
+    /**
+     * Many-to-many with sizes.
+     */
+    public function sizes(): BelongsToMany
     {
-        return $this->belongsToMany(ItemColor::class, 'item_color_item', 'item_id', 'item_color_id')->withTimestamps();
+        return $this->belongsToMany(ItemSize::class, 'item_item_size', 'item_id', 'item_size_id')
+                    ->withTimestamps();
     }
 
-    // Many-to-many with packaging types
-    // public function packagingTypes()
-    // {
-    //     return $this->belongsToMany(ItemPackagingType::class, 'item_packaging_type_item', 'item_id', 'item_packaging_type_id')->withTimestamps();
-    // }
-
-    public function sizes()
+    /**
+     * Many-to-many with packaging types (Piece, Box, Carton, etc.).
+     * Includes the multiplier quantity in the pivot table.
+     */
+    public function packagingTypes(): BelongsToMany
     {
-        return $this->belongsToMany(ItemSize::class, 'item_item_size', 'item_id', 'item_size_id')->withTimestamps();
+        return $this->belongsToMany(ItemPackagingType::class, 'item_packaging_type_item', 'item_id', 'item_packaging_type_id')
+                    ->withPivot('quantity')
+                    ->withTimestamps();
     }
 
-    // Variants
-
-    public function packagingTypes()
-    {
-        return $this->belongsToMany(
-            ItemPackagingType::class,
-            'item_packaging_type_item',
-            'item_id',
-            'item_packaging_type_id'
-        )
-            ->withPivot('quantity')   // add this line
-            ->withTimestamps();
-    }
-
-    // Carts
-
-    public function variants()
+    /**
+     * Get all physical variants (SKUs) associated with this item template.
+     */
+    public function variants(): HasMany
     {
         return $this->hasMany(ItemVariant::class);
     }
 
-    // Images
-
-    public function carts()
-    {
-        return $this->belongsToMany(Cart::class, 'cart_items')
-            ->withPivot('quantity', 'price')
-            ->withTimestamps();
-    }
-
-    public function images()
+    /**
+     * Legacy/Optional: Relationship to images table if not using JSON general_images.
+     */
+    public function images(): HasMany
     {
         return $this->hasMany(ItemImage::class);
     }
 
+    /**
+     * Marketplace integration: Which stores carry this item template.
+     */
+    public function stores(): BelongsToMany
+    {
+        return $this->belongsToMany(Store::class)
+                    ->withPivot('active')
+                    ->withTimestamps();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Business Logic / Helpers
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * Generates a display-friendly list of the packaging hierarchy.
+     * Example: ["Piece: 1 pcs", "Box: 12 Piece (12 pcs)", "Carton: 20 Box (240 pcs)"]
+     */
     public function getPackagingDisplay(): array
     {
-        // Sort packages by pivot_id to maintain hierarchy
-        $packs = $this->packagingTypes->sortBy('pivot_id')->values();
+        // Sort packages by ID to ensure smallest (Piece) to largest (Carton)
+        $packs = $this->packagingTypes()->orderBy('item_packaging_type_id')->get();
 
         $result = [];
         $totals = [];
@@ -137,15 +136,15 @@ class Item extends Model
             $qty = $pack->pivot->quantity ?? 1;
 
             if ($index === 0) {
-                // Base level (Piece or smallest pack)
+                // Base level (e.g., Piece)
                 $totals[$pack->name] = $qty;
                 $result[] = "{$pack->name}: {$qty} pcs";
             } else {
-                // Total pieces = current quantity * previous total
+                // Higher levels (e.g., Box, Carton)
                 $prevPack = $packs[$index - 1];
                 $totals[$pack->name] = $qty * $totals[$prevPack->name];
 
-                // Build display text showing parent quantities
+                // Build text like "12 Piece"
                 $ancestorText = [];
                 for ($i = $index - 1; $i >= 0; $i--) {
                     $childQty = $packs[$i + 1]->pivot->quantity ?? 1;
@@ -153,18 +152,11 @@ class Item extends Model
                 }
                 $ancestorText = array_reverse($ancestorText);
 
-                $display = "{$pack->name}: ".implode(', ', $ancestorText)." ({$totals[$pack->name]} pcs)";
+                $display = "{$pack->name}: " . implode(', ', $ancestorText) . " ({$totals[$pack->name]} pcs)";
                 $result[] = $display;
             }
         }
 
         return $result;
-    }
-
-    public function stores()
-    {
-        return $this->belongsToMany(Store::class)
-            ->withPivot('active')
-            ->withTimestamps();
     }
 }
