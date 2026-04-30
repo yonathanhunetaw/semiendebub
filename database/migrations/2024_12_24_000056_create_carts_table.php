@@ -5,38 +5,40 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('carts', function (Blueprint $table) {
-            $table->id();  // Auto-incrementing primary key
+            $table->id();
 
-            // Add user_id column to associate the cart with a user (seller)
+            // The Store that owns this transaction
+            $table->foreignId('store_id')
+                ->constrained()
+                ->onDelete('cascade');
+
+            // The person who created/owns the session (likely the Seller)
             $table->foreignId('user_id')
-                ->constrained()  // Automatically references the 'users' table
-                ->onDelete('cascade');  // Delete cart if user is deleted
+                ->nullable()
+                ->constrained()
+                ->onDelete('cascade');
 
-            // Add customer_id column to associate the cart with a customer (nullable)
+            // The specific Customer this cart is being built for
             $table->foreignId('customer_id')
-                ->nullable()  // Customer can be null
-                ->constrained()  // Automatically references the 'customers' table
-                ->onDelete('set null');  // Set customer_id to null if customer is deleted
+                ->nullable()
+                ->constrained()
+                ->onDelete('set null');
 
-            // Add seller_id column to explicitly associate the cart with a seller (nullable)
+            // Explicit Seller ID (Useful if the 'user_id' is a staff member acting for a seller)
             $table->foreignId('seller_id')
-                ->nullable()  // Seller can be null, only if needed
-                ->constrained('users')  // Reference users table for sellers
-                ->onDelete('set null');  // Set seller_id to null if seller is deleted
+                ->nullable()
+                ->constrained('users')
+                ->onDelete('set null');
 
-            $table->timestamps();  // Created and updated timestamps
+            $table->string('session_id')->nullable()->index()->after('user_id');
+
+            $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('carts');

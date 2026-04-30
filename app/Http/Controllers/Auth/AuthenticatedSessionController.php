@@ -32,6 +32,9 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request)
     {
+        // 1. CAPTURE THE GUEST SESSION ID BEFORE IT CHANGES
+        $guestSessionId = $request->session()->getId();
+
         // LOG: Trace the entry point and capture the incoming port
         \Log::info('Login attempt started', [
             'email' => $request->email,
@@ -64,6 +67,11 @@ class AuthenticatedSessionController extends Controller
         $role = $user->roles->pluck('name')->first() ?? 'user';
 
         session(['role' => $role]);
+
+        // We pass the guestSessionId we captured at the very beginning
+        if ($user->store_id) {
+            app(\App\Services\CartService::class)->mergeGuestCart($user, $user->store_id, $guestSessionId);
+        }
 
         // LOG: Confirm the role is stored in the session
         \Log::info('User role set in session', [

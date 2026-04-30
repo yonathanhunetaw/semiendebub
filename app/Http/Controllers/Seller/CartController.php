@@ -5,98 +5,96 @@ namespace App\Http\Controllers\Seller;
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Auth\Customer;
 use App\Models\Auth\User;
-use App\Models\Item\Item;
+use App\Models\Item\ItemVariant;
 use App\Models\Seller\Cart;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
+use App\Services\CartService;
 
-// HTTP Verb	URI	                    Action	  Route Name
+// HTTP Verb    URI                     Action    Route Name
 
-// GET	        /carts	                index	  carts.index
-// GET	        /carts/create        	create	  carts.create
-// POST	        /carts	                store	  carts.store
-// GET	        /carts/{cart}	        show	  carts.show
-// GET	        /carts/{cart}/edit	    edit	  carts.edit
-// PUT/PATCH	/carts/{cart}	        update	  carts.update
-// DELETE	    /carts/{carts}	        destroy   carts.destroy
+// GET          /carts                  index     carts.index
+// GET          /carts/create           create    carts.create
+// POST         /carts                  store     carts.store
+// GET          /carts/{cart}           show      carts.show
+// GET          /carts/{cart}/edit      edit      carts.edit
+// PUT/PATCH    /carts/{cart}           update    carts.update
+// DELETE       /carts/{carts}          destroy   carts.destroy
+
 
 class CartController extends Controller
 {
+    protected $cartService;
     use AuthorizesRequests;
+
+    public function __construct(CartService $cartService)
+    {
+        $this->cartService = $cartService;
+    }
 
     /**
      * Display a listing of the resource.
      */
     public function index()
     {
-        $carts = Cart::with(['customer', 'seller', 'items'])
-            ->where(function ($query) {
-                $query->where('seller_id', auth()->id())
-                    ->orWhere('user_id', auth()->id());
+        $user = auth()->user();
+
+        $carts = Cart::with(['customer', 'seller'])
+            ->withCount('variants') // Adds 'variants_count' to the result automatically
+            ->where('store_id', $user->store_id)
+            ->where(function ($query) use ($user) {
+                // Sellers see carts they are assigned to OR carts they created
+                $query->where('seller_id', $user->id)
+                    ->orWhere('user_id', $user->id)
+                    // If it's a Guest cart with no user_id, but it's in their store
+                    ->orWhereNull('user_id');
             })
             ->latest()
-            ->get();
+            ->paginate(15) // Senior dev move: never use get() for lists
+            ->withQueryString();
 
-        return Inertia::render('Seller/Carts/Index', compact('carts'));
+        return Inertia::render('Seller/Carts/Index', [
+            'carts' => $carts,
+        ]);
     }
 
-    public function store(Request $request)
-    {
-        // Validate input
-        $request->validate([
-            'customer_id' => 'required|exists:customers,id', // Ensure customer_id is provided and valid
-            // 'seller_id'=> 'required|exists:sellers,id',
-            'seller_id' => 'required|exists:users,id,role,seller', // Ensure seller_id is valid and belongs to a seller
-        ]);
-
-        // Create the cart
-        $cart = Cart::create([
-            'user_id' => auth()->id(), // Ensure the cart is created by the authenticated user
-            'customer_id' => $request->customer_id, // Set customer_id if provided
-            'seller_id' => $request->seller_id, // Set seller_id if provided
-        ]);
-
-        // Redirect to the created cart's details page with success message
-        // return redirect()->route('admin.carts.show', $cart->id)
-        //                  ->with('success', 'Cart created successfully!');
-        // Redirect or return response
-        // return redirect()->route('admin.carts.index')->with('success', 'Cart created successfully!');
-        // Redirect to the cart's detail page with a success message
-        return redirect()->route('seller.carts.index')->with('success', 'Cart created successfully!');
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    // public function store(Request $request)
-    // {
-    //     // Validate input
-    //     $request->validate([
-    //         'customer_id' => 'nullable|exists:customers,id', // Ensure customer_id is valid if provided
-    //     ]);
-
-    //     // Create the cart
-    //     $cart = Cart::create([
-    //         'user_id' => auth()->id(), // Ensure the cart is created by the authenticated user
-    //         'customer_id' => $request->customer_id, // Store the customer_id if selected, otherwise it will be null
-    //     ]);
-
-    //     // Redirect to the created cart's details page with success message
-    //     return redirect()->route('admin.carts.show', $cart->id)
-    //                      ->with('success', 'Cart created successfully!');
-    // }
     /**
      * Show the form for creating a new resource.
      */
     public function create()
     {
-        $customers = Customer::all(); // Get all customers
-        $sellers = User::where('role', 'seller')->get(); // assuming sellers have 'seller' role
+        // Only show customers and sellers relevant to the current user's store context
+        $storeId = auth()->user()->store_id;
+
+        $customers = Customer::all();
+        $sellers = User::where('role', 'seller')
+            ->where('store_id', $storeId)
+            ->get();
 
         return Inertia::render('Seller/Carts/Create', compact('customers', 'sellers'));
+    }
 
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'customer_id' => 'required|exists:customers,id',
+            'seller_id' => 'required|exists:users,id',
+        ]);
+
+        $cart = Cart::create([
+            'store_id' => auth()->user()->store_id, // Mandatory for our new schema
+            'user_id' => auth()->id(),
+            'customer_id' => $request->customer_id,
+            'seller_id' => $request->seller_id,
+            'status' => 'pending',
+        ]);
+
+        return redirect()->route('seller.carts.index')->with('success', 'Cart created successfully!');
     }
 
     /**
@@ -104,11 +102,16 @@ class CartController extends Controller
      */
     public function show(Cart $cart)
     {
-        // Ensure the authenticated user owns the cart
         $this->authorize('view', $cart);
 
-        // Eager load the items related to this cart
-        $cart->load(['items.category', 'customer', 'seller']);
+        // Load variants, reach through to parent Item, and include attributes like Size/Color
+        $cart->load([
+            'variants.item.category',
+            'variants.itemImage', // Assuming you have a relationship for specific variant images
+            'customer',
+            'seller',
+            'store'
+        ]);
 
         return Inertia::render('Seller/Carts/Show', compact('cart'));
     }
@@ -118,51 +121,36 @@ class CartController extends Controller
      */
     public function edit(Cart $cart)
     {
-        // Ensure the authenticated user owns the cart
         $this->authorize('update', $cart);
+        $storeId = auth()->user()->store_id;
 
         $customers = Customer::all();
-        $sellers = User::where('role', 'seller')->get();
+        $sellers = User::where('role', 'seller')->where('store_id', $storeId)->get();
+
         $cart->load(['customer', 'seller']);
 
         return Inertia::render('Seller/Carts/Edit', compact('cart', 'customers', 'sellers'));
     }
 
-    // /**
-    //  * Update the specified resource in storage.
-    //  */
-    // public function update(Request $request, Cart $cart)
-    // {
-    //     $request->validate([
-    //         'name' => 'required|string|max:255',
-    //         'status' => 'required|in:pending,completed,canceled',
-    //     ]);
-
-    //     // Update the cart details
-    //     $cart->update([
-    //         'name' => $request->name,
-    //         'status' => $request->status,
-    //     ]);
-
-    //     // Redirect back to the cart index page with a success message
-    //     return redirect()->route('admin.carts.index')->with('success', 'Cart updated successfully!');
-    // }
-
+    /**
+     * Update the specified resource in storage.
+     */
     public function update(Request $request, Cart $cart)
     {
-        // Validate input
+        $this->authorize('update', $cart);
+
         $request->validate([
-            'customer_id' => 'required|exists:customers,id', // Ensure customer_id is provided and valid
+            'customer_id' => 'required|exists:customers,id',
             'seller_id' => 'nullable|exists:users,id',
+            'status' => 'required|in:pending,processing,completed,canceled',
         ]);
 
-        // Update the cart
         $cart->update([
-            'customer_id' => $request->customer_id, // Update the customer_id
+            'customer_id' => $request->customer_id,
             'seller_id' => $request->seller_id,
+            'status' => $request->status,
         ]);
 
-        // Redirect to the updated cart's details page with success message
         return redirect()->route('seller.carts.show', $cart->id)
             ->with('success', 'Cart updated successfully!');
     }
@@ -172,90 +160,65 @@ class CartController extends Controller
      */
     public function destroy(Cart $cart)
     {
-        // Ensure the authenticated user owns the cart
         $this->authorize('delete', $cart);
 
-        // Delete the cart
         $cart->delete();
 
-        // Redirect back to the cart index page with a success message
         return redirect()->route('seller.carts.index')->with('success', 'Cart deleted successfully!');
     }
 
-    // Method to create a new cart or add an item to an existing cart
-    public function addItem(Request $request, $itemId)
+    /**
+     * Add a variant to the cart.
+     * This replaces the old "addItem" and "storeItem" methods to be variant-aware.
+     */
+    /**
+     * Add a variant to the cart (Works for Sellers, Customers, and Guests).
+     */
+    public function addVariant(Request $request, $variantId)
     {
-        $item = Item::findOrFail($itemId);
+        $variant = ItemVariant::findOrFail($variantId);
 
-        // Check if the user selected an existing cart or want to create a new one
-        if ($request->filled('cart_id')) {
-            // Add item to an existing cart
-            $cart = Cart::findOrFail($request->input('cart_id'));
-        } else {
-            // If no cart selected, create a new cart
-            $cart = Cart::create([
+        $request->validate([
+            'store_id' => 'required|exists:stores,id',
+            'quantity' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0',
+        ]);
+
+        // 1. FIND OR CREATE THE CART
+        if (auth()->check()) {
+            // Logged in: Find their active cart for this store
+            $cart = Cart::firstOrCreate([
                 'user_id' => auth()->id(),
+                'store_id' => $request->store_id,
+                'status' => 'pending',
+            ]);
+        } else {
+            // Guest: Use the Session to identify them
+            $sessionId = session()->getId();
+
+            $cart = Cart::firstOrCreate([
+                'session_id' => $sessionId, // You'll need to add this column to migrations
+                'user_id' => null,
+                'store_id' => $request->store_id,
+                'status' => 'pending',
             ]);
         }
 
-        // Add the item to the cart (using the pivot table)
-        $cart->items()->attach($item->id, [
-            'quantity' => $request->input('quantity'),
-            'price' => $item->price,
-        ]);
+        // 2. ADD THE VARIANT TO THE PIVOT (cart_items)
+        $existing = $cart->variants()->where('item_variant_id', $variant->id)->first();
 
-        // Optionally, log the action
-        Log::info('Item added to cart', [
-            'cart_id' => $cart->id,
-            'item_id' => $item->id,
-            'quantity' => $request->input('quantity'),
-        ]);
-
-        // Redirect back to the cart or item list
-        return redirect()->route('seller.carts.show', $cart->id)->with('success', 'Item added to cart!');
-    }
-
-    // Store an item in the cart
-    public function storeItem(Request $request, Cart $cart)
-    {
-        $request->validate([
-            'item_id' => 'required|exists:items,id',
-            'quantity' => 'required|integer|min:1',
-            'price' => 'nullable|numeric|min:0',
-        ]);
-
-        // Find the item
-        $item = Item::findOrFail($request->item_id);
-
-        // Add the item to the cart with its quantity and price
-        $cart->items()->attach($item->id, [
-            'quantity' => $request->quantity,
-            'price' => $request->input('price', $item->price), // Store the selected price in the pivot table
-        ]);
-
-        // Redirect back to the cart show page with a success message
-        return redirect()->route('seller.carts.show', $cart->id)->with('success', 'Item added to cart!');
-    }
-
-    public function add(Request $request)
-    {
-
-        $request->validate([
-            'item_id' => 'required|exists:items,id',
-            'quantity' => 'required|integer|min:1',
-            'size' => 'nullable|string',
-        ]);
-
-        $cart = auth()->user()->currentCart(); // however you get the current cart
-
-        $cart->items()->create([
-            'item_id' => $request->item_id,
-            'quantity' => $request->quantity,
-            'price' => Item::find($request->item_id)->price,
-            'options' => json_encode([
-                'size' => $request->size,
-            ]),
-        ]);
+        if ($existing) {
+            $cart->variants()->updateExistingPivot($variant->id, [
+                'quantity' => $existing->pivot->quantity + $request->quantity,
+                'price' => $request->price,
+            ]);
+        } else {
+            $cart->variants()->attach($variant->id, [
+                'quantity' => $request->quantity,
+                'price' => $request->price,
+                'store_id' => $cart->store_id,
+            ]);
+        }
 
         return redirect()->back()->with('success', 'Item added to cart!');
     }

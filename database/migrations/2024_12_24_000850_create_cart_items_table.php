@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -13,10 +12,18 @@ return new class extends Migration
     {
         Schema::create('cart_items', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('cart_id')->constrained()->onDelete('cascade'); // Links to carts table
-            $table->foreignId('item_id')->constrained()->onDelete('cascade'); // Links to items table
-            $table->integer('quantity')->default(1); // Quantity of the item
-            $table->decimal('price', 10, 2); // Price at the time of addition
+            $table->foreignId('cart_id')->constrained()->onDelete('cascade');
+            $table->foreignId('item_variant_id')->constrained()->onDelete('cascade');
+            $table->foreignId('store_id')->constrained()->onDelete('cascade');
+
+            // Who gets the credit/commission?
+            $table->foreignId('seller_id')->nullable()->constrained('users')->onDelete('set null');
+
+            $table->integer('quantity')->default(1);
+
+            // Snapshot of the price from seller_prices or customer_prices
+            $table->decimal('price', 15, 2);
+
             $table->timestamps();
         });
     }

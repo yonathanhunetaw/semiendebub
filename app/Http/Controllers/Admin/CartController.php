@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Models\Auth\Customer;
-use App\Models\Cart;
+use App\Models\Seller\Cart;
+use Inertia\Inertia;
 use App\Models\Item;
 use App\Models\User;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 // HTTP Verb	URI	                    Action	  Route Name
 
@@ -29,21 +31,31 @@ class CartController extends Controller
      */
     public function index()
     {
-        // Fetch all carts for the authenticated user
-        // $carts = auth()->user()->carts; // assuming relationship is defined in User model
-        // Fetch all carts along with their associated customer
-        // Check if the authenticated user is an admin
-        if (auth()->user()->role === 'admin') {
-            // If the user is an admin, fetch all carts for all users
-            $carts = Cart::with('customer')->get(); // Assuming Cart has a relationship with Customer
-        } else {
-            // If the user is not an admin, fetch only the carts of the authenticated user
-            $carts = auth()->user()->carts()->with('customer')->get();
+        // 1. Start the query with global relationships
+        $query = Cart::with(['customer', 'seller', 'store'])
+            ->withCount('variants');
+
+        // 2. Role-Based Scoping
+        if (auth()->user()->role !== 'admin') {
+            // If they aren't global admin, restrict to their store and their assigned carts
+            $query->where('store_id', auth()->user()->store_id)
+                ->where(function ($q) {
+                    $q->where('seller_id', auth()->id())
+                        ->orWhere('user_id', auth()->id())
+                        ->orWhereNull('user_id'); // Capture guest carts for their store
+                });
         }
 
-        return view('admin.carts.index', compact('carts'));
-    }
+        // 3. Execution (Using Pagination for high-volume ERP performance)
+        $carts = $query->latest()
+            ->paginate(15)
+            ->withQueryString();
 
+        // 4. Return to your new React Index
+        return Inertia::render('Admin/Carts/Index', [
+            'carts' => $carts,
+        ]);
+    }
     public function store(Request $request)
     {
         // Validate input
@@ -166,16 +178,29 @@ class CartController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Cart $cart)
+    public function destroy($id)
     {
-        // Ensure the authenticated user owns the cart
-        $this->authorize('delete', $cart);
+        try {
+            DB::transaction(function () use ($id) {
+                $cart = Cart::findOrFail($id);
 
-        // Delete the cart
-        $cart->delete();
+                // 1. Clear the pivot table items first (detach variants)
+                // This assumes your relationship is named 'variants'
+                if (method_exists($cart, 'variants')) {
+                    $cart->variants()->detach();
+                }
 
-        // Redirect back to the cart index page with a success message
-        return redirect()->route('admin.carts.index')->with('success', 'Cart deleted successfully!');
+                // 2. Delete the actual cart record
+                $cart->delete();
+            });
+
+            return redirect()->back()->with('message', 'Cart and its items were successfully removed.');
+
+        } catch (\Exception $e) {
+            Log::error("Failed to delete cart {$id}: " . $e->getMessage());
+
+            return redirect()->back()->with('error', 'Failed to delete the cart. Please try again.');
+        }
     }
 
     // Method to create a new cart or add an item to an existing cart

@@ -75,7 +75,7 @@ class ItemVariant extends Model
         });
 
         static::created(function ($variant) {
-            if (! $variant->sku) {
+            if (!$variant->sku) {
                 $itemSku = $variant->item?->sku ?? 'ITEM';
                 $colorCode = $variant->item_color?->code ?? 'X';
                 $sizeCode = $variant->item_size?->code ?? 'X';
@@ -140,6 +140,16 @@ class ItemVariant extends Model
         return $this->hasMany(StoreVariant::class, 'item_variant_id');
     }
 
+    /**
+     * Get all physical variants (SKUs) associated with this item template.
+     * This is your link to the actual prices and stock.
+     */
+    public function variants()
+    {
+        // Ensure this matches the 'item_id' in your item_variants migration
+        return $this->hasMany(ItemVariant::class, 'item_id');
+    }
+
     public function totalStock()
     {
         return $this->stocks()->sum('quantity');
@@ -196,7 +206,7 @@ class ItemVariant extends Model
 
     public function calculateTotalPieces(): int
     {
-        if (! $this->item_packaging_type_id) {
+        if (!$this->item_packaging_type_id) {
             return 1;
         }
 
