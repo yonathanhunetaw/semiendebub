@@ -2,38 +2,36 @@ import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, useForm } from "@inertiajs/react";
 import {
     Box, Button, Paper, Stack, TextField, Typography,
-    Autocomplete, Chip, IconButton, Divider, Grid as Grid,
-    MenuItem, Checkbox, ListItemText
+    Autocomplete, Chip, IconButton, Divider, Grid as Grid
 } from "@mui/material";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 
+interface BaseOption {
+    id: number;
+    name?: string;
+    category_name?: string;
+}
+
 interface Props {
-    categories: any[];
-    colors: any[];
-    sizes: any[];
-    packagingTypes: any[];
+    categories: BaseOption[];
+    colors: BaseOption[];
+    sizes: BaseOption[];
+    packagingTypes: BaseOption[];
 }
 
 export default function Create({ categories, colors, sizes, packagingTypes }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         product_name: "",
         product_description: "",
-        packaging_details: "",
         item_category_id: "" as string | number,
         status: "active",
         color_ids: [] as (string | number)[],
         size_ids: [] as (string | number)[],
-        packaging: [{ item_packaging_type_id: "", quantity: 1 }],
+        packaging: [{ item_packaging_type_id: "" as string | number, quantity: 1 }],
         images: [] as File[],
     });
 
-    const submit = (e: React.FormEvent) => {
-        e.preventDefault();
-        post(route("admin.items.store"));
-    };
-
-    // YouTube Dark style visibility fix
     const inputStyle = {
         '& .MuiInputLabel-root': { color: '#aaaaaa' },
         '& .MuiInputLabel-root.Mui-focused': { color: '#3ea6ff' },
@@ -45,122 +43,107 @@ export default function Create({ categories, colors, sizes, packagingTypes }: Pr
         },
     };
 
+    // Helper to resolve the label safely
+    const getOptionLabel = (option: string | number | BaseOption, source: BaseOption[]) => {
+        if (typeof option === 'object') return option.name || option.category_name || "";
+        if (typeof option === 'number') {
+            const found = source.find(i => i.id === option);
+            return found ? (found.name || found.category_name || option.toString()) : option.toString();
+        }
+        return option;
+    };
+
     return (
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ p: 3, bgcolor: '#0f0f0f', minHeight: '100vh' }}>
             <Head title="Create Item" />
 
             <Stack direction="row" justifyContent="space-between" mb={4}>
-                <Typography variant="h4" fontWeight="bold">Create Item Blueprint</Typography>
-                <Button component={Link} href={route('admin.items.index')} variant="outlined">Cancel</Button>
+                <Typography variant="h4" fontWeight="bold" color="white">New Item Blueprint</Typography>
+                <Button component={Link} href={route('admin.items.index')} variant="outlined" sx={{ color: '#aaa', borderColor: '#444' }}>Cancel</Button>
             </Stack>
 
-            <Paper sx={{ p: 4, boxShadow: 3, bgcolor: 'background.paper' }}>
-                <form onSubmit={submit}>
+            <Paper sx={{ p: 4, bgcolor: '#1e1e1e', border: '1px solid #333', backgroundImage: 'none' }}>
+                <form onSubmit={(e) => { e.preventDefault(); post(route('admin.items.store')); }}>
                     <Grid container spacing={4}>
-                        {/* Core Details */}
                         <Grid size={{ xs: 12, md: 7 }}>
                             <Stack spacing={3}>
-                                <TextField
-                                    fullWidth label="Product Name"
-                                    value={data.product_name}
-                                    onChange={e => setData('product_name', e.target.value)}
-                                    error={!!errors.product_name} helperText={errors.product_name}
-                                    sx={inputStyle}
-                                />
+                                <TextField fullWidth label="Product Name" value={data.product_name} onChange={e => setData('product_name', e.target.value)} sx={inputStyle} />
 
                                 <Autocomplete
                                     freeSolo
                                     options={categories}
-                                    getOptionLabel={(o) => o.category_name || o.name || o}
-                                    onChange={(e, val: any) => setData('item_category_id', val?.id || val)}
-                                    renderInput={(params) => (
-                                        <TextField {...params} label="Category (Select or Type New)" sx={inputStyle} />
-                                    )}
+                                    getOptionLabel={(o) => getOptionLabel(o, categories)}
+                                    // FIX: Ensure value is string or object, never number
+                                    value={categories.find(c => c.id === data.item_category_id) || (typeof data.item_category_id === 'number' ? data.item_category_id.toString() : data.item_category_id) || null}
+                                    onChange={(_, val: any) => setData('item_category_id', val?.id || val)}
+                                    renderInput={(p) => <TextField {...p} label="Category" sx={inputStyle} />}
                                 />
 
-                                <TextField
-                                    fullWidth multiline rows={3} label="Description"
-                                    value={data.product_description}
-                                    onChange={e => setData('product_description', e.target.value)}
-                                    sx={inputStyle}
-                                />
+                                <TextField fullWidth multiline rows={3} label="Description" value={data.product_description} onChange={e => setData('product_description', e.target.value)} sx={inputStyle} />
 
-                                <Divider />
+                                <Divider sx={{ borderColor: '#333' }} />
 
                                 <Autocomplete
                                     multiple freeSolo options={colors}
-                                    getOptionLabel={(o) => o.name || o}
-                                    value={data.color_ids.map(id => colors.find(c => c.id === id) || id)}
-                                    onChange={(e, val) => setData('color_ids', val.map((v: any) => v.id || v))}
-                                    renderInput={(params) => <TextField {...params} label="Colors" sx={inputStyle} />}
-                                    renderTags={(val, getTagProps) => val.map((o, i) => (
-                                        <Chip label={o.name || o} {...getTagProps({ index: i })} size="small" />
+                                    getOptionLabel={(o) => getOptionLabel(o, colors)}
+                                    // FIX: Map numbers to objects or strings
+                                    value={data.color_ids.map(id => colors.find(c => c.id === id) || (typeof id === 'number' ? id.toString() : id))}
+                                    onChange={(_, val) => setData('color_ids', val.map((v: any) => v.id || v))}
+                                    renderInput={(p) => <TextField {...p} label="Colors" sx={inputStyle} />}
+                                    renderTags={(val, getTagProps) => val.map((o: any, i: number) => (
+                                        <Chip label={typeof o === 'object' ? o.name : o} {...getTagProps({ index: i })} size="small" />
                                     ))}
                                 />
 
                                 <Autocomplete
                                     multiple freeSolo options={sizes}
-                                    getOptionLabel={(o) => o.name || o}
-                                    value={data.size_ids.map(id => sizes.find(s => s.id === id) || id)}
-                                    onChange={(e, val) => setData('size_ids', val.map((v: any) => v.id || v))}
-                                    renderInput={(params) => <TextField {...params} label="Sizes" sx={inputStyle} />}
-                                    renderTags={(val, getTagProps) => val.map((o, i) => (
-                                        <Chip label={o.name || o} {...getTagProps({ index: i })} size="small" />
+                                    getOptionLabel={(o) => getOptionLabel(o, sizes)}
+                                    // FIX: Map numbers to objects or strings
+                                    value={data.size_ids.map(id => sizes.find(s => s.id === id) || (typeof id === 'number' ? id.toString() : id))}
+                                    onChange={(_, val) => setData('size_ids', val.map((v: any) => v.id || v))}
+                                    renderInput={(p) => <TextField {...p} label="Sizes" sx={inputStyle} />}
+                                    renderTags={(val, getTagProps) => val.map((o: any, i: number) => (
+                                        <Chip label={typeof o === 'object' ? o.name : o} {...getTagProps({ index: i })} size="small" />
                                     ))}
                                 />
                             </Stack>
                         </Grid>
 
-                        {/* Packaging & Media */}
                         <Grid size={{ xs: 12, md: 5 }}>
                             <Stack spacing={3}>
-                                <Typography variant="subtitle2" color="primary" fontWeight="bold">PACKAGING HIERARCHY</Typography>
+                                <Typography variant="subtitle2" color="primary">PACKAGING LEVELS</Typography>
                                 {data.packaging.map((row, i) => (
-                                    <Stack key={i} direction="row" spacing={1} alignItems="center">
-                                        <TextField
-                                            select fullWidth label="Type" size="small"
-                                            value={row.item_packaging_type_id}
-                                            onChange={e => {
+                                    <Stack key={i} direction="row" spacing={1}>
+                                        <Autocomplete
+                                            freeSolo fullWidth options={packagingTypes}
+                                            getOptionLabel={(o) => getOptionLabel(o, packagingTypes)}
+                                            // FIX: Ensure value is string or object
+                                            value={packagingTypes.find(t => t.id === row.item_packaging_type_id) || (typeof row.item_packaging_type_id === 'number' ? row.item_packaging_type_id.toString() : row.item_packaging_type_id) || null}
+                                            onChange={(_, val: any) => {
                                                 const pkg = [...data.packaging];
-                                                pkg[i].item_packaging_type_id = e.target.value;
+                                                pkg[i].item_packaging_type_id = val?.id || val;
                                                 setData('packaging', pkg);
                                             }}
-                                            sx={inputStyle}
-                                        >
-                                            {packagingTypes.map(t => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
-                                        </TextField>
-                                        <TextField
-                                            label="Qty" size="small" type="number" sx={{...inputStyle, width: '100px'}}
-                                            value={row.quantity}
-                                            onChange={e => {
-                                                const pkg = [...data.packaging];
-                                                pkg[i].quantity = parseInt(e.target.value);
-                                                setData('packaging', pkg);
-                                            }}
+                                            renderInput={(p) => <TextField {...p} label="Type" size="small" sx={inputStyle} />}
                                         />
-                                        <IconButton onClick={() => setData('packaging', data.packaging.filter((_, idx) => idx !== i))} disabled={data.packaging.length === 1} color="error">
-                                            <DeleteIcon />
-                                        </IconButton>
+                                        <TextField label="Qty" type="number" size="small" sx={{...inputStyle, width: 80}} value={row.quantity} onChange={e => {
+                                            const pkg = [...data.packaging];
+                                            pkg[i].quantity = parseInt(e.target.value) || 0;
+                                            setData('packaging', pkg);
+                                        }} />
+                                        <IconButton onClick={() => setData('packaging', data.packaging.filter((_, idx) => idx !== i))} color="error" disabled={data.packaging.length === 1}><DeleteIcon /></IconButton>
                                     </Stack>
                                 ))}
-                                <Button startIcon={<AddCircleIcon />} sx={{alignSelf: 'start', color: '#3ea6ff'}} onClick={() => setData('packaging', [...data.packaging, { item_packaging_type_id: "", quantity: 1 }])}>
+                                <Button startIcon={<AddCircleIcon />} onClick={() => setData('packaging', [...data.packaging, { item_packaging_type_id: "", quantity: 1 }])} sx={{ color: '#3ea6ff' }}>
                                     Add Level
                                 </Button>
-
-                                <Divider />
-
-                                <Button variant="outlined" component="label" fullWidth sx={{ py: 2, borderStyle: 'dashed' }}>
-                                    Upload Photos
-                                    <input type="file" hidden multiple onChange={e => setData('images', Array.from(e.target.files || []))} />
-                                </Button>
-                                {data.images.length > 0 && <Typography variant="caption">{data.images.length} files picked</Typography>}
                             </Stack>
                         </Grid>
                     </Grid>
 
-                    <Box mt={6} display="flex" justifyContent="flex-end">
-                        <Button type="submit" variant="contained" disabled={processing} sx={{ px: 8, borderRadius: '24px', fontWeight: 'bold', bgcolor: 'white', color: 'black', '&:hover': { bgcolor: '#ccc' } }}>
-                            {processing ? "Saving..." : "Create Template"}
+                    <Box mt={4} display="flex" justifyContent="flex-end">
+                        <Button type="submit" variant="contained" disabled={processing} sx={{ px: 8, borderRadius: 20, bgcolor: 'white', color: 'black', fontWeight: 'bold' }}>
+                            Save Template
                         </Button>
                     </Box>
                 </form>

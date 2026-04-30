@@ -385,84 +385,77 @@ class ItemController extends Controller
     // Update the specified item
 
     public function store(Request $request)
-{
-    // 1. Validate - Note: we remove 'exists' for Category/Color/Size
-    // to allow new strings to pass through.
-    $validated = $request->validate([
-        'product_name'        => 'required|string|max:255',
-        'product_description' => 'nullable|string',
-        'packaging_details'   => 'nullable|string',
-        'item_category_id'    => 'required', // Removed exists:item_categories,id
-        'status'              => 'required|in:draft,active,inactive,archived',
-        'color_ids'           => 'nullable|array',
-        'size_ids'            => 'nullable|array',
-        'packaging'           => 'nullable|array', // {item_packaging_type_id, quantity}
-        'images.*'            => 'image|mimes:jpeg,png,jpg|max:5120',
-    ]);
-
-    return \DB::transaction(function () use ($request, $validated) {
-
-        // 2. Resolve Category (Numeric ID or New String)
-        $categoryId = $validated['item_category_id'];
-        if (!is_numeric($categoryId)) {
-            $category = \App\Models\Item\ItemCategory::firstOrCreate(
-                ['name' => $categoryId] // Assuming column name is 'name'
-            );
-            $categoryId = $category->id;
-        }
-
-        // 3. Handle Image Uploads
-        $imagePaths = [];
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $image) {
-                $imagePaths[] = $image->store('uploads/items', 'public');
-            }
-        }
-
-        // 4. Create the Item Blueprint
-        $item = Item::create([
-            'product_name'        => $validated['product_name'],
-            'product_description' => $validated['product_description'],
-            'packaging_details'   => $validated['packaging_details'],
-            'item_category_id'    => $categoryId,
-            'status'              => $validated['status'],
-            'general_images'      => $imagePaths,
-            'is_incomplete'       => false,
+    {
+        $validated = $request->validate([
+            'product_name' => 'required|string|max:255',
+            'item_category_id' => 'required', // Can be ID or String
+            'status' => 'required',
+            'color_ids' => 'nullable|array',
+            'size_ids' => 'nullable|array',
+            'packaging' => 'nullable|array',
         ]);
 
-        // 5. Handle Colors (firstOrCreate for new strings)
-        if ($request->filled('color_ids')) {
-            $colorIds = collect($request->color_ids)->map(function ($value) {
-                if (is_numeric($value)) return $value;
-                return ItemColor::firstOrCreate(['name' => $value])->id;
-            });
-            $item->colors()->sync($colorIds);
-        }
+        return DB::transaction(function () use ($request, $validated) {
+            // 1. Resolve Category
+            $categoryId = $validated['item_category_id'];
+            if (!is_numeric($categoryId)) {
+                $category = ItemCategory::firstOrCreate(['category_name' => $categoryId]);
+                $categoryId = $category->id;
+            }
 
-        // 6. Handle Sizes (firstOrCreate for new strings)
-        if ($request->filled('size_ids')) {
-            $sizeIds = collect($request->size_ids)->map(function ($value) {
-                if (is_numeric($value)) return $value;
-                return ItemSize::firstOrCreate(['name' => $value])->id;
-            });
-            $item->sizes()->sync($sizeIds);
-        }
+            // 2. Create Parent Item
+            $item = Item::create([
+                'product_name' => $validated['product_name'],
+                'item_category_id' => $categoryId,
+                'status' => $validated['status'],
+                'general_images' => $this->handleUploads($request),
+                'is_incomplete' => false,
+            ]);
 
-        // 7. Sync Packaging Hierarchy
-        if ($request->filled('packaging')) {
-            $packagingData = collect($request->packaging)
-                ->filter(fn($pkg) => !empty($pkg['item_packaging_type_id']))
-                ->mapWithKeys(function ($pkg) {
-                    return [$pkg['item_packaging_type_id'] => ['quantity' => $pkg['quantity']]];
+            // 3. Resolve Colors (IDs or New Names)
+            if ($request->filled('color_ids')) {
+                $colorIds = collect($request->color_ids)->map(
+                    fn($val) =>
+                    is_numeric($val) ? $val : ItemColor::firstOrCreate(['name' => $val])->id
+                );
+                $item->colors()->sync($colorIds);
+            }
+
+            // 4. Resolve Sizes (IDs or New Names)
+            if ($request->filled('size_ids')) {
+                $sizeIds = collect($request->size_ids)->map(
+                    fn($val) =>
+                    is_numeric($val) ? $val : ItemSize::firstOrCreate(['name' => $val])->id
+                );
+                $item->sizes()->sync($sizeIds);
+            }
+
+            // 5. Packaging Hierarchy
+            if ($request->filled('packaging')) {
+                $pkgData = collect($request->packaging)->mapWithKeys(function ($p) {
+                    $typeId = $p['item_packaging_type_id'];
+                    if (!is_numeric($typeId)) {
+                        $typeId = ItemPackagingType::firstOrCreate(['name' => $typeId])->id;
+                    }
+                    return [$typeId => ['quantity' => $p['quantity']]];
                 });
+                $item->packagingTypes()->sync($pkgData);
+            }
 
-            $item->packagingTypes()->sync($packagingData);
+            return redirect()->route('admin.items.index');
+        });
+    }
+
+    private function handleUploads($request)
+    {
+        $paths = [];
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                $paths[] = $image->store('uploads/items', 'public');
+            }
         }
-
-        return redirect()->route('admin.items.index')
-            ->with('success', "Item '{$item->product_name}' registered successfully!");
-    });
-}
+        return $paths;
+    }
 
     // Remove the specified item
 
