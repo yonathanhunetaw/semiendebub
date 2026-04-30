@@ -30,7 +30,22 @@ class Cart extends Model
     | Relationships
     |--------------------------------------------------------------------------
     */
+    protected static function booted()
+    {
+        static::creating(function ($cart) {
+            if (auth()->check()) {
+                $cart->store_id = $cart->store_id ?? auth()->user()->store_id;
+                $cart->seller_id = $cart->seller_id ?? auth()->id();
+            }
+        });
 
+        // ADD THIS: Automatically filters every query by the user's store
+        static::addGlobalScope('store', function ($builder) {
+            if (auth()->check()) {
+                $builder->where('store_id', auth()->user()->store_id);
+            }
+        });
+    }
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
