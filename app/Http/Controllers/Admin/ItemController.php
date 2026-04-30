@@ -124,7 +124,7 @@ class ItemController extends Controller
                     $images = $variant->images;
                 } elseif (is_string($variant->images)) {
                     $images = json_decode($variant->images, true);
-                    if (! is_array($images)) {
+                    if (!is_array($images)) {
                         $images = [];
                     }
                 }
@@ -134,9 +134,9 @@ class ItemController extends Controller
                 'color' => $variant->itemColor->name ?? null,
                 'size' => $variant->itemSize->name ?? null,
                 'packaging' => $variant->itemPackagingType->name ?? null,
-                'img' => ! empty($images) ? asset('storage/'.$images[0]) : '/img/default.jpg',
+                'img' => !empty($images) ? asset('storage/' . $images[0]) : '/img/default.jpg',
                 'images' => array_map(
-                    fn ($i) => asset('storage/'.ltrim($i, '/')),
+                    fn($i) => asset('storage/' . ltrim($i, '/')),
                     $images
                 ),
 
@@ -190,7 +190,7 @@ class ItemController extends Controller
             'sellers' => $sellers,
             'inventoryLocations' => $inventoryLocations,
             'variantData' => $variantData,
-            'allImages' => array_map(fn ($img) => asset('storage/'.$img), $allImages),
+            'allImages' => array_map(fn($img) => asset('storage/' . $img), $allImages),
         ]);
     }
 
@@ -253,7 +253,7 @@ class ItemController extends Controller
                     $isComplete = false;
                     break;
                 }
-                if ($field === 'product_images' && ! $request->hasFile('product_images')) {
+                if ($field === 'product_images' && !$request->hasFile('product_images')) {
                     $isComplete = false;
                     break;
                 }
@@ -271,7 +271,7 @@ class ItemController extends Controller
 
             // Status always inactive initially
             $item->status = 'inactive';
-            $item->incomplete = ! $isComplete; // true if incomplete, false if complete
+            $item->incomplete = !$isComplete; // true if incomplete, false if complete
 
             // Handle images
 
@@ -280,7 +280,7 @@ class ItemController extends Controller
                 foreach ($request->file('product_images') as $file) {
                     // Store file in public disk
                     $path = $file->store('images/product_images', 'public');
-                    $paths[] = 'storage/'.$path; // relative path for Blade asset()
+                    $paths[] = 'storage/' . $path; // relative path for Blade asset()
                 }
                 // Save JSON array of paths
                 $item->product_images = json_encode($paths);
@@ -302,14 +302,14 @@ class ItemController extends Controller
 
             // ✅ Create new categories and collect IDs
             foreach ($newCategoryNames as $name) {
-                if (! empty($name)) {
+                if (!empty($name)) {
                     $cat = ItemCategory::firstOrCreate(['category_name' => $name]);
                     $existingCategoryIds[] = $cat->id;
                 }
             }
 
             // ✅ Attach all category IDs to item
-            if (! empty($existingCategoryIds)) {
+            if (!empty($existingCategoryIds)) {
                 $item->categories()->sync($existingCategoryIds);
             }
 
@@ -320,7 +320,7 @@ class ItemController extends Controller
             $newColorNames = $request->input('newColors', []); // new color names
 
             foreach ($newColorNames as $name) {
-                if (! empty($name)) {
+                if (!empty($name)) {
                     $color = ItemColor::firstOrCreate(['name' => $name]);
                     $colorIds[] = $color->id;
                 }
@@ -332,7 +332,7 @@ class ItemController extends Controller
             $newSizeNames = $request->input('newSizes', []);
 
             foreach ($newSizeNames as $name) {
-                if (! empty($name)) {
+                if (!empty($name)) {
                     $size = ItemSize::firstOrCreate(['name' => $name]);
                     $sizeIds[] = $size->id;
                 }
@@ -386,40 +386,45 @@ class ItemController extends Controller
 
     public function store(Request $request)
     {
-        $item = new Item;
-
-        $validatedItem = $request->validate([
-
+        // 1. Validate - Add all the fields your form is sending
+        $validated = $request->validate([
+            'product_name' => 'required|string|max:255',
+            'product_description' => 'nullable|string',
             'item_category_id' => 'required|exists:item_categories,id',
+            'status' => 'required|in:active,inactive',
+            'images.*' => 'image|mimes:jpeg,png,jpg|max:2048', // Validate each file
         ]);
 
-        $item = Item::create([
-
-            'category_id' => $validatedItem['item_category_id'], // Assuming you're passing the category ID
-        ]);
-
-        // Create a new Item and assign validated data
-        $item = new Item;
-
-        $item->save(); // Save the item
-
-        // Handle image uploads
-        $imagePaths = []; // Create an array to store image paths
+        // 2. Handle Image Uploads First
+        $imagePaths = [];
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
-                $filename = time().'_'.$image->getClientOriginalName(); // Create a unique filename
-                // Store image in public disk (storage/app/public)
-                $image->storeAs('uploads', $filename, 'public');
-
-                // Add the image path to the array
-                $imagePaths[] = 'uploads/'.$filename;
+                // Store in public/uploads/items and get the path
+                $path = $image->store('uploads/items', 'public');
+                $imagePaths[] = $path;
             }
-
-            // Store the image paths as a JSON array in the images column
-            $item->update(['images' => json_encode($imagePaths)]);
         }
 
-        return redirect()->route('admin.items.index')->with('success', 'item registered successfully!');
+        // 3. Create the Item (One single time)
+        $item = Item::create([
+            'product_name' => $validated['product_name'],
+            'product_description' => $validated['product_description'],
+            'item_category_id' => $validated['item_category_id'],
+            'status' => $validated['status'],
+            'general_images' => $imagePaths, // Eloquent casts this to JSON automatically
+            'is_incomplete' => false,
+        ]);
+
+        // 4. Sync Relationships (If your form sends these)
+        if ($request->has('color_ids')) {
+            $item->colors()->sync($request->color_ids);
+        }
+        if ($request->has('size_ids')) {
+            $item->sizes()->sync($request->size_ids);
+        }
+
+        return redirect()->route('admin.items.index')
+            ->with('success', 'Item registered successfully!');
     }
 
     // Remove the specified item
@@ -485,7 +490,7 @@ class ItemController extends Controller
         $paths = [];
         foreach ($request->file('product_images') as $file) {
             $path = $file->store('images/product_images', 'public');
-            $paths[] = 'storage/'.$path; // store relative path
+            $paths[] = 'storage/' . $path; // store relative path
         }
 
         // Here, instead of returning JSON, we return JS to redirect with a popup
@@ -510,7 +515,7 @@ class ItemController extends Controller
         if ($newStatus === 'active') {
             $hasActiveVariants = $item->variants()->where('status', 'active')->exists();
 
-            if (! $hasActiveVariants) {
+            if (!$hasActiveVariants) {
                 return back()->withErrors(['status' => 'Cannot set item to active because it has no active variants.']);
             }
         }
@@ -519,6 +524,6 @@ class ItemController extends Controller
         $item->save();
 
         // Send a success message for all four statuses
-        return back()->with('success', 'Item status updated to '.ucfirst($newStatus).' successfully.');
+        return back()->with('success', 'Item status updated to ' . ucfirst($newStatus) . ' successfully.');
     }
 }
