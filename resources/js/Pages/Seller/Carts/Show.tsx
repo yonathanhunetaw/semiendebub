@@ -1,146 +1,206 @@
-import { SellerCard, SellerHeader, SELLER_BRAND_DARK, sellerHeaderButtonSx, sellerName, sellerPrice } from "@/Components/Seller/sellerUi";
+import {
+    SellerCard,
+    SellerHeader,
+    SELLER_BRAND_DARK,
+    sellerName,
+} from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { Head, Link } from "@inertiajs/react";
-import EditRoundedIcon from "@mui/icons-material/EditRounded";
-import ShoppingBagRoundedIcon from "@mui/icons-material/ShoppingBagRounded";
-import { Box, Button, Chip, IconButton, Stack, Typography } from "@mui/material";
+import { Head, Link, router } from "@inertiajs/react";
+import {
+    Avatar,
+    Box,
+    Button,
+    Divider,
+    IconButton,
+    List,
+    ListItem,
+    ListItemAvatar,
+    ListItemText,
+    Stack,
+    Typography,
+    useTheme,
+    Chip,
+} from "@mui/material";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import AddIcon from "@mui/icons-material/Add";
+import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import React from "react";
 
-interface CartRowItem {
+interface CartItem {
     id: number;
-    product_name?: string;
-    category?: {
-        category_name?: string;
-    } | null;
-    pivot?: {
-        quantity?: number;
-        price?: number;
-    };
+    product_name: string;
+    quantity: number;
+    price: number;
 }
 
 interface Cart {
     id: number;
+    status: string;
+    session_id: string;
     customer?: {
-        first_name?: string;
-        last_name?: string;
-    } | null;
-    seller?: {
-        first_name?: string;
-        last_name?: string;
-    } | null;
-    items?: CartRowItem[];
+        first_name: string;
+        last_name: string;
+        phone_number?: string;
+    };
+    items: CartItem[];
 }
 
 export default function Show({ cart }: { cart: Cart }) {
-    const total = (cart.items ?? []).reduce(
-        (sum, item) => sum + (item.pivot?.quantity ?? 0) * (item.pivot?.price ?? 0),
-        0,
-    );
+    const theme = useTheme();
+    const isDark = theme.palette.mode === "dark";
+
+    const customerFullname = cart.customer
+        ? sellerName([cart.customer.first_name, cart.customer.last_name])
+        : "Guest Customer";
+
+    const totalAmount = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+    const handleRemoveItem = (itemId: number) => {
+        if (confirm("Remove this item from cart?")) {
+            router.delete(route("seller.carts.items.destroy", [cart.id, itemId]));
+        }
+    };
 
     return (
-        <>
-            <Head title={`Cart #${cart.id}`} />
+        <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: "background.default", minHeight: "100vh" }}>
+            <Head title={`Cart #${cart.id} - ${customerFullname}`} />
+
+            <Button
+                component={Link}
+                href={route("seller.carts.index")}
+                startIcon={<ArrowBackIcon />}
+                sx={{ mb: 3, color: "text.secondary" }}
+            >
+                Back to Carts
+            </Button>
 
             <SellerHeader
-                title={`Cart #${cart.id}`}
-                backHref={route("seller.carts.index")}
-                action={(
-                    <IconButton
-                        component={Link}
-                        href={route("seller.carts.edit", cart.id)}
-                        sx={sellerHeaderButtonSx}
-                    >
-                        <EditRoundedIcon />
-                    </IconButton>
-                )}
-                subtitle={sellerName([
-                    cart.customer?.first_name,
-                    cart.customer?.last_name,
-                ]) || "No customer assigned"}
+                title={customerFullname}
+                subtitle={`Session ID: ${cart.session_id}`}
             />
 
-            <Box sx={{ px: 2, pt: 2 }}>
-                <Stack spacing={1.5}>
-                    <SellerCard>
-                        <Stack spacing={1}>
-                            <Typography variant="body2" color="text.secondary">
-                                Seller
-                            </Typography>
-                            <Typography sx={{ fontWeight: 700 }}>
-                                {sellerName([cart.seller?.first_name, cart.seller?.last_name]) || "Not assigned"}
-                            </Typography>
-                            <Chip label={`${cart.items?.length ?? 0} line items`} size="small" sx={{ alignSelf: "flex-start" }} />
-                        </Stack>
-                    </SellerCard>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} mt={4}>
 
+                {/* Left Side: Items List */}
+                <Box sx={{ flex: 2 }}>
                     <SellerCard>
-                        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
-                            <Box>
-                                <Typography sx={{ fontWeight: 700 }}>Add more items</Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    Continue shopping into this same cart.
-                                </Typography>
-                            </Box>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                            <Typography variant="h6" fontWeight={900}>
+                                Current Items ({cart.items.length})
+                            </Typography>
                             <Button
-                                component={Link}
-                                href={route("seller.items.index", { cart_id: cart.id })}
-                                variant="contained"
-                                startIcon={<ShoppingBagRoundedIcon />}
-                                sx={{
-                                    borderRadius: 3,
-                                    textTransform: "none",
-                                    bgcolor: SELLER_BRAND_DARK,
-                                    "&:hover": { bgcolor: SELLER_BRAND_DARK },
-                                }}
+                                variant="outlined"
+                                startIcon={<AddIcon />}
+                                size="small"
+                                sx={{ borderRadius: 2 }}
                             >
-                                Browse
+                                Add Product
                             </Button>
                         </Stack>
-                    </SellerCard>
 
-                    {(cart.items ?? []).length === 0 ? (
-                        <SellerCard>
-                            <Typography sx={{ fontWeight: 700 }}>This cart is empty.</Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                Start by adding products from the catalog.
-                            </Typography>
-                        </SellerCard>
-                    ) : (
-                        (cart.items ?? []).map((item) => (
-                            <SellerCard key={item.id}>
-                                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
-                                    <Box sx={{ minWidth: 0 }}>
-                                        <Typography sx={{ fontWeight: 700 }} noWrap>
-                                            {item.product_name || `Item #${item.id}`}
+                        <Divider sx={{ mb: 2 }} />
+
+                        {cart.items.length > 0 ? (
+                            <List disablePadding>
+                                {cart.items.map((item) => (
+                                    <ListItem
+                                        key={item.id}
+                                        secondaryAction={
+                                            <IconButton edge="end" onClick={() => handleRemoveItem(item.id)} color="error">
+                                                <DeleteOutlineIcon />
+                                            </IconButton>
+                                        }
+                                        sx={{
+                                            bgcolor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                                            borderRadius: 2,
+                                            mb: 1
+                                        }}
+                                    >
+                                        <ListItemAvatar>
+                                            <Avatar sx={{ bgcolor: SELLER_BRAND_DARK }}>
+                                                <ShoppingCartIcon fontSize="small" />
+                                            </Avatar>
+                                        </ListItemAvatar>
+                                        <ListItemText
+                                            primary={<Typography fontWeight={700}>{item.product_name}</Typography>}
+                                            secondary={`Qty: ${item.quantity} × $${item.price}`}
+                                        />
+                                        <Typography fontWeight={900} sx={{ mr: 2 }}>
+                                            ${(item.price * item.quantity).toFixed(2)}
                                         </Typography>
-                                        <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                                            <Typography variant="body2" color="text.secondary">
-                                                Qty {item.pivot?.quantity ?? 0}
-                                            </Typography>
-                                            {item.category?.category_name ? (
-                                                <Chip label={item.category.category_name} size="small" variant="outlined" />
-                                            ) : null}
-                                        </Stack>
-                                    </Box>
-                                    <Typography sx={{ fontWeight: 800 }}>
-                                        {sellerPrice(item.pivot?.price ?? 0)}
+                                    </ListItem>
+                                ))}
+                            </List>
+                        ) : (
+                            <Box sx={{ py: 6, textAlign: 'center', opacity: 0.5 }}>
+                                <ShoppingCartIcon sx={{ fontSize: 48, mb: 1 }} />
+                                <Typography>This cart is empty</Typography>
+                            </Box>
+                        )}
+                    </SellerCard>
+                </Box>
+
+                {/* Right Side: Summary & Customer Info */}
+                <Box sx={{ flex: 1 }}>
+                    <Stack spacing={3}>
+                        <SellerCard>
+                            <Typography variant="h6" fontWeight={900} mb={2}>
+                                Summary
+                            </Typography>
+                            <Stack spacing={2}>
+                                <Stack direction="row" justifyContent="space-between">
+                                    <Typography color="text.secondary">Status</Typography>
+                                    <Chip
+                                        label={cart.status.toUpperCase()}
+                                        size="small"
+                                        color="success"
+                                        sx={{ fontWeight: 900, borderRadius: 1 }}
+                                    />
+                                </Stack>
+                                <Stack direction="row" justifyContent="space-between">
+                                    <Typography color="text.secondary">Subtotal</Typography>
+                                    <Typography fontWeight={700}>${totalAmount.toFixed(2)}</Typography>
+                                </Stack>
+                                <Divider />
+                                <Stack direction="row" justifyContent="space-between">
+                                    <Typography variant="h5" fontWeight={900}>Total</Typography>
+                                    <Typography variant="h5" fontWeight={900} color={SELLER_BRAND_DARK}>
+                                        ${totalAmount.toFixed(2)}
                                     </Typography>
                                 </Stack>
-                            </SellerCard>
-                        ))
-                    )}
+                                <Button
+                                    variant="contained"
+                                    fullWidth
+                                    size="large"
+                                    sx={{
+                                        mt: 2,
+                                        bgcolor: SELLER_BRAND_DARK,
+                                        fontWeight: 900,
+                                        py: 1.5
+                                    }}
+                                >
+                                    Checkout
+                                </Button>
+                            </Stack>
+                        </SellerCard>
 
-                    <SellerCard>
-                        <Stack direction="row" alignItems="center" justifyContent="space-between">
-                            <Typography sx={{ fontWeight: 700 }}>Cart total</Typography>
-                            <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                                {sellerPrice(total)}
-                            </Typography>
-                        </Stack>
-                    </SellerCard>
-                </Stack>
-            </Box>
-        </>
+                        {cart.customer && (
+                            <SellerCard>
+                                <Typography variant="h6" fontWeight={900} mb={2}>
+                                    Customer Contact
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">Phone</Typography>
+                                <Typography fontWeight={700} mb={2}>{cart.customer.phone_number || "No phone listed"}</Typography>
+                                <Button variant="text" fullWidth color="inherit">
+                                    View Full Profile
+                                </Button>
+                            </SellerCard>
+                        )}
+                    </Stack>
+                </Box>
+            </Stack>
+        </Box>
     );
 }
 
