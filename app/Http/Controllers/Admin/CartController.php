@@ -58,27 +58,28 @@ class CartController extends Controller
     }
     public function store(Request $request)
     {
-        // Validate input
+        // 1. Validate - Note the use of 'seller' role check
         $request->validate([
-            'customer_id' => 'required|exists:customers,id', // Ensure customer_id is provided and valid
-            // 'seller_id'=> 'required|exists:sellers,id',
-            'seller_id' => 'required|exists:users,id,role,seller', // Ensure seller_id is valid and belongs to a seller
+            'customer_id' => 'nullable|exists:customers,id',
+            'seller_id' => 'nullable|exists:users,id,role,seller',
+            'status' => 'nullable|string',
         ]);
 
-        // Create the cart
+        // 2. Create the Cart
+        // We use the Seller namespace Model to match your logic
         $cart = Cart::create([
-            'user_id' => auth()->id(), // Ensure the cart is created by the authenticated user
-            'customer_id' => $request->customer_id, // Set customer_id if provided
-            'seller_id' => $request->seller_id, // Set seller_id if provided
+            'store_id' => 1, // Temporarily hardcoded; eventually use auth()->user()->store_id
+            'user_id' => auth()->id(), // The Admin/Staff who clicked "Create"
+            'customer_id' => $request->customer_id,
+            'seller_id' => $request->seller_id,
+            'status' => $request->status ?? 'active',
+            'session_id' => \Illuminate\Support\Str::uuid(), // Required for your migration logic
         ]);
 
-        // Redirect to the created cart's details page with success message
-        // return redirect()->route('admin.carts.show', $cart->id)
-        //                  ->with('success', 'Cart created successfully!');
-        // Redirect or return response
-        // return redirect()->route('admin.carts.index')->with('success', 'Cart created successfully!');
-        // Redirect to the cart's detail page with a success message
-        return redirect()->route('admin.carts.index')->with('success', 'Cart created successfully!');
+        // 3. Redirect
+        // Use 'message' or 'success' depending on what your Inertia layout expects
+        return redirect()->route('admin.carts.index')
+            ->with('message', 'Global cart initialized successfully!');
     }
 
     /**
