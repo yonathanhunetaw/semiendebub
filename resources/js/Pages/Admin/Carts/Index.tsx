@@ -48,7 +48,7 @@ interface Props {
 }
 
 export default function CartsIndex({ carts }: Props) {
-    const cartList = carts.data || [];
+    const cartList = Array.isArray(carts) ? carts : (carts.data || []);
 
     const handleDelete = (cartId: number) => {
         if (
