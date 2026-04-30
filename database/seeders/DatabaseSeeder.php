@@ -52,7 +52,7 @@ class DatabaseSeeder extends Seeder
             ItemImageSeeder::class,
             ItemOwnerSeeder::class,
             ItemStoreSeeder::class,
-            StoreVariantSeeder::class,
+            // StoreVariantSeeder::class,
         ]);
     }
 }
