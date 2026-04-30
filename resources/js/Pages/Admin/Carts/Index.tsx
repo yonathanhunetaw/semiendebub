@@ -1,231 +1,184 @@
-import AdminLayout from "@/Layouts/AdminLayout";
+import AdminLayout from "@/Layouts/AppLayout";
+import { Head, Link, router } from "@inertiajs/react";
+import {
+    Box,
+    Button,
+    Chip,
+    Paper,
+    Stack,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Typography,
+    IconButton,
+    Tooltip
+} from "@mui/material";
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
-import { Head, router, usePage, Link } from "@inertiajs/react";
-
-import { Typography, Paper } from "@mui/material";
-
-import { ReactNode } from "react";
-
-// 1. Define the Cart structure
-
-interface CartItem {
+interface Cart {
     id: number;
-
-    status: string;
-
-    session_id?: string;
-
-    user_id?: number;
-
+    status: string | null;
+    session_id: string | null;
+    created_at: string;
     updated_at: string;
-
-    variants_count?: number;
-
-    customer?: { name: string };
-
-    store?: { store_name: string };
+    customer?: {
+        id: number;
+        name: string;
+    };
+    store?: {
+        id: number;
+        store_name: string;
+    };
+    seller?: {
+        id: number;
+        first_name: string;
+        last_name: string | null;
+    };
 }
 
-// 2. Define the Pagination structure
-
-interface CartsData {
-    data: CartItem[];
-
-    total: number;
-
-    from: number;
-
-    to: number;
-
-    links: any[];
+interface Props {
+    carts: {
+        data: Cart[];
+    };
 }
 
-// 3. Apply types to the component
-
-export default function Index({ carts }: { carts: CartsData }) {
-    const { flash = {} } = usePage().props as any;
-
+export default function CartsIndex({ carts }: Props) {
     const cartList = carts.data || [];
 
-    // Fix 'any' type for id
+    const handleDelete = (cartId: number) => {
+        if (confirm('Are you sure you want to delete this cart? This will remove all items associated with it.')) {
+            router.delete(route('admin.carts.destroy', cartId), {
+                preserveScroll: true,
+            });
+        }
+    };
 
-    const handleDelete = (id: number) => {
-        if (
-            confirm(
-                "Are you sure you want to delete this cart? This cannot be undone.",
-            )
-        ) {
-            router.delete(route("admin.carts.destroy", id));
+    const getStatusColor = (status: string | null): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
+        switch (status?.toLowerCase()) {
+            case 'active':
+                return 'success';
+            case 'pending':
+                return 'warning';
+            case 'abandoned':
+                return 'error';
+            default:
+                return 'default';
         }
     };
 
     return (
-        <>
-            {/* ... keep the rest of the JSX the same ... */}
+        <Box sx={{ p: 3 }}>
+            <Head title="Carts Management" />
 
-            <div className="flex flex-col gap-2 mb-6 sm:flex-row sm:items-center sm:justify-between">
-                <Typography
-                    variant="h5"
-                    sx={{ color: "#ffffff", fontWeight: 700 }}
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
+                <Typography variant="h4" fontWeight="bold">Carts</Typography>
+                <Button
+                    component={Link}
+                    href={route('admin.carts.store')} // Or your creation route
+                    variant="contained"
+                    method="post"
+                    startIcon={<AddIcon />}
                 >
-                    Global Cart Management
-                </Typography>
+                    New Cart
+                </Button>
+            </Stack>
 
-                <span className="font-mono text-sm text-gray-400">
-                    Total active: {carts.total}
-                </span>
-            </div>
-
-            {/* Flash Messages */}
-            {flash?.message && (
-                <div className="p-4 mb-6 text-green-400 border rounded-lg bg-green-500/10 border-green-500/20">
-                    {flash.message}
-                </div>
-            )}
-
-            {/* Table Container - YouTube Dark Aesthetic */}
-            <Paper
-                elevation={0}
-                sx={{
-                    backgroundColor: "#272727",
-                    borderRadius: "12px",
-                    border: "1px solid rgba(255, 255, 255, 0.1)",
-                    overflow: "hidden",
-                }}
-            >
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="text-xs tracking-wider text-gray-400 uppercase border-b border-white/10 bg-white/5">
-                                <th className="p-4 font-semibold">Status</th>
-                                <th className="p-4 font-semibold">
-                                    Customer / Session
-                                </th>
-                                <th className="hidden p-4 font-semibold sm:table-cell">
-                                    Store Location
-                                </th>
-                                <th className="hidden p-4 font-semibold md:table-cell">
-                                    Items
-                                </th>
-                                <th className="p-4 font-semibold text-right">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {cartList.map((cart) => (
-                                <tr
-                                    key={cart.id}
-                                    className="transition-colors hover:bg-white/5"
-                                >
-                                    {/* Status Column */}
-                                    <td className="p-4">
-                                        <div className="flex items-center text-sm font-medium text-blue-400">
-                                            <span className="relative flex w-2 h-2 mr-2">
-                                                <span className="absolute inline-flex w-full h-full bg-blue-400 rounded-full opacity-75 animate-pulse"></span>
-                                                <span className="relative inline-flex w-2 h-2 bg-blue-500 rounded-full"></span>
-                                            </span>
-                                            <span className="capitalize">
-                                                {cart.status || "Pending"}
-                                            </span>
-                                        </div>
-                                    </td>
-
-                                    {/* User / ID Column */}
-                                    <td className="p-4">
-                                        <div className="text-sm font-bold text-gray-200 sm:text-base">
-                                            {cart.customer?.name ||
-                                                (cart.user_id
-                                                    ? "Auth User"
-                                                    : "Guest Visitor")}
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                                            <span className="text-[10px] sm:text-xs text-gray-500 font-mono">
-                                                ID:{" "}
-                                                {String(cart.id).substring(
-                                                    0,
-                                                    8,
-                                                )}
-                                            </span>
-                                            {cart.session_id && (
-                                                <span className="text-[10px] uppercase px-1.5 py-0.5 bg-white/10 border border-white/10 rounded text-gray-400 font-mono">
-                                                    SES:{" "}
-                                                    {cart.session_id.substring(
-                                                        0,
-                                                        5,
-                                                    )}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </td>
-
-                                    {/* Store Name - Vital for Admin View */}
-                                    <td className="hidden p-4 sm:table-cell">
-                                        <div className="inline-block px-2 py-1 font-mono text-xs text-purple-400 border rounded bg-purple-400/10 border-purple-500/20">
-                                            {cart.store?.store_name ||
-                                                "Main Warehouse"}
-                                        </div>
-                                    </td>
-
-                                    {/* Items Count */}
-                                    <td className="hidden p-4 md:table-cell">
-                                        <div className="text-sm text-gray-300">
-                                            {cart.variants_count || 0} items
-                                        </div>
-                                        <div className="text-[10px] text-gray-500 uppercase">
-                                            Updated:{" "}
-                                            {new Date(
-                                                cart.updated_at,
-                                            ).toLocaleDateString()}
-                                        </div>
-                                    </td>
-
-                                    {/* Action Buttons */}
-                                    <td className="p-4 text-right">
-                                        <div className="flex items-center justify-end gap-2 sm:gap-3">
-                                            <Link
-                                                href={route(
-                                                    "admin.carts.show",
-                                                    cart.id,
-                                                )}
-                                                className="bg-white/5 hover:bg-white/10 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs font-bold transition-all border border-white/10"
+            {/* Carts Table */}
+            <TableContainer component={Paper} sx={{ boxShadow: 3 }}>
+                <Table>
+                    <TableHead sx={{ bgcolor: 'background.default' }}>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Cart Info</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Store</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Customer</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Seller/Staff</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {cartList.length > 0 ? cartList.map((cart) => (
+                            <TableRow key={cart.id} hover>
+                                <TableCell>
+                                    <Typography variant="body1" fontWeight="medium">
+                                        ID: {cart.id}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                                        SES: {cart.session_id?.substring(0, 8) || 'N/A'}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2">
+                                        {cart.store?.store_name || 'Main Branch'}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" fontWeight="medium">
+                                        {cart.customer?.name || 'Guest'}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {cart.seller
+                                            ? `${cart.seller.first_name} ${cart.seller.last_name || ''}`
+                                            : 'Unassigned'
+                                        }
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Chip
+                                        label={cart.status || 'Active'}
+                                        size="small"
+                                        color={getStatusColor(cart.status)}
+                                    />
+                                </TableCell>
+                                <TableCell align="right">
+                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                        <Tooltip title="View Items">
+                                            <IconButton
+                                                component={Link}
+                                                href={route('admin.carts.show', cart.id)}
+                                                size="small"
+                                                color="info"
                                             >
-                                                Manage
-                                            </Link>
-                                            <button
-                                                onClick={() =>
-                                                    handleDelete(cart.id)
-                                                }
-                                                className="bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs font-bold transition-all border border-red-500/20"
+                                                <VisibilityIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Delete">
+                                            <IconButton
+                                                onClick={() => handleDelete(cart.id)}
+                                                size="small"
+                                                color="error"
                                             >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Simple Pagination Footer Info */}
-                {carts.links && (
-                    <div className="p-4 border-t border-white/10 bg-white/5">
-                        <div className="text-xs text-gray-500">
-                            Showing {carts.from} to {carts.to} of {carts.total}{" "}
-                            carts
-                        </div>
-                    </div>
-                )}
-            </Paper>
-        </>
+                                                <DeleteIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Stack>
+                                </TableCell>
+                            </TableRow>
+                        )) : (
+                            <TableRow>
+                                <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                                    <Typography variant="body1" color="text.secondary">
+                                        No active carts found.
+                                    </Typography>
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
     );
 }
 
-// 4. Fix 'any' type for page
-Index.layout = (page: ReactNode) => (
+CartsIndex.layout = (page: React.ReactNode) => (
     <AdminLayout>
-        <Head title="Admin | Cart Management" />
         {page}
     </AdminLayout>
 );
