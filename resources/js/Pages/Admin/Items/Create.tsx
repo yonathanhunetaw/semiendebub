@@ -2,8 +2,8 @@ import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm } from "@inertiajs/react";
 import {
     Box, Button, Paper, Stack, TextField, Typography,
-    Autocomplete, Chip, IconButton, Divider, Grid as Grid,
-    Alert, Collapse, Fade
+    Autocomplete, Chip, IconButton, Divider, Grid2 as Grid,
+    Alert, Fade
 } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/Delete';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -23,7 +23,6 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
         images: [] as File[],
     });
 
-    // States for the inline "Quick Create" UI
     const [activeCreator, setActiveCreator] = useState<string | null>(null);
     const [tempValue, setTempValue] = useState("");
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -37,77 +36,65 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
         },
     };
 
-    const handleInlineSave = (field: string) => {
+    const handleInlineSave = (field: string, index?: number) => {
         if (!tempValue.trim()) return;
 
-        if (Array.isArray(data[field as keyof typeof data])) {
+        if (field === 'packaging_type' && index !== undefined) {
+            // Special handling for nested packaging array
+            const newPkg = [...data.packaging];
+            newPkg[index].item_packaging_type_id = tempValue;
+            setData('packaging', newPkg);
+        } else if (Array.isArray(data[field as keyof typeof data])) {
             const currentArr = data[field as keyof typeof data] as any[];
             setData(field as any, [...currentArr, tempValue]);
         } else {
             setData(field as any, tempValue);
         }
 
-        setSuccessMsg(`"${tempValue}" added to selection!`);
+        setSuccessMsg(`"${tempValue}" added!`);
         setTempValue("");
         setActiveCreator(null);
-
-        // Hide success message after 3 seconds
         setTimeout(() => setSuccessMsg(null), 3000);
     };
 
-    // Helper component for the "Create New" section
-    const InlineCreator = ({ field, label }: { field: string, label: string }) => (
-        <Box sx={{ mt: 1 }}>
-            {activeCreator !== field ? (
-                <Button
-                    startIcon={<AddIcon />}
-                    size="small"
-                    onClick={() => setActiveCreator(field)}
-                    sx={{ color: '#3ea6ff', textTransform: 'none', fontSize: '0.8rem' }}
-                >
-                    Create New {label}
-                </Button>
-            ) : (
-                <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                    <TextField
-                        size="small"
-                        placeholder={`New ${label}...`}
-                        value={tempValue}
-                        onChange={(e) => setTempValue(e.target.value)}
-                        autoFocus
-                        sx={{ ...inputStyle, bgcolor: '#111', flex: 1 }}
-                    />
+    const InlineCreator = ({ field, label, index }: { field: string, label: string, index?: number }) => {
+        const uniqueId = index !== undefined ? `${field}-${index}` : field;
+
+        return (
+            <Box sx={{ mt: 1 }}>
+                {activeCreator !== uniqueId ? (
                     <Button
-                        variant="contained"
+                        startIcon={<AddIcon />}
                         size="small"
-                        onClick={() => handleInlineSave(field)}
-                        sx={{ bgcolor: '#3ea6ff', color: 'white', fontWeight: 'bold' }}
+                        onClick={() => setActiveCreator(uniqueId)}
+                        sx={{ color: '#3ea6ff', textTransform: 'none', fontSize: '0.75rem' }}
                     >
-                        Save
+                        Create New {label}
                     </Button>
-                    <Button
-                        size="small"
-                        onClick={() => setActiveCreator(null)}
-                        sx={{ color: '#aaa' }}
-                    >
-                        Cancel
-                    </Button>
-                </Stack>
-            )}
-        </Box>
-    );
+                ) : (
+                    <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                        <TextField
+                            size="small"
+                            placeholder={`New ${label}...`}
+                            value={tempValue}
+                            onChange={(e) => setTempValue(e.target.value)}
+                            autoFocus
+                            sx={{ ...inputStyle, bgcolor: '#111', flex: 1 }}
+                        />
+                        <Button variant="contained" size="small" onClick={() => handleInlineSave(field, index)} sx={{ bgcolor: '#3ea6ff' }}>Save</Button>
+                        <Button size="small" onClick={() => setActiveCreator(null)} sx={{ color: '#aaa' }}>Cancel</Button>
+                    </Stack>
+                )}
+            </Box>
+        );
+    };
 
     return (
         <Box sx={{ p: 3, bgcolor: '#0f0f0f', minHeight: '100vh', color: 'white' }}>
             <Head title="Create Item" />
 
-            {/* Success Toast */}
             <Box sx={{ position: 'fixed', top: 20, right: 20, zIndex: 9999 }}>
-                <Fade in={!!successMsg}>
-                    <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ bgcolor: '#1e3a1e', color: '#8dfb8d', border: '1px solid #2d5a2d' }}>
-                        {successMsg}
-                    </Alert>
-                </Fade>
+                <Fade in={!!successMsg}><Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ bgcolor: '#1e3a1e', color: '#8dfb8d' }}>{successMsg}</Alert></Fade>
             </Box>
 
             <Typography variant="h5" fontWeight="bold" mb={3}>Register New Item</Typography>
@@ -120,11 +107,8 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
                                 <TextField fullWidth label="Product Name" value={data.product_name} onChange={e => setData('product_name', e.target.value)} sx={inputStyle} />
                                 <TextField fullWidth multiline rows={3} label="Product Description" value={data.product_description} onChange={e => setData('product_description', e.target.value)} sx={inputStyle} />
 
-                                {/* CATEGORY */}
                                 <Box>
-                                    <Autocomplete
-                                        fullWidth freeSolo
-                                        options={categories}
+                                    <Autocomplete fullWidth freeSolo options={categories}
                                         getOptionLabel={(o: any) => o.category_name || o.name || o.toString()}
                                         value={categories.find((c: any) => c.id === data.item_category_id) || data.item_category_id || null}
                                         onChange={(_, val: any) => setData('item_category_id', val?.id || val)}
@@ -133,11 +117,8 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
                                     <InlineCreator field="item_category_id" label="Category" />
                                 </Box>
 
-                                {/* COLORS */}
                                 <Box>
-                                    <Autocomplete
-                                        multiple fullWidth freeSolo
-                                        options={colors}
+                                    <Autocomplete multiple fullWidth freeSolo options={colors}
                                         getOptionLabel={(o: any) => o.name || o.toString()}
                                         value={data.color_ids.map(id => colors.find((c: any) => c.id === id) || id)}
                                         onChange={(_, val) => setData('color_ids', val.map((v: any) => v.id || v))}
@@ -149,11 +130,8 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
                                     <InlineCreator field="color_ids" label="Color" />
                                 </Box>
 
-                                {/* SIZES */}
                                 <Box>
-                                    <Autocomplete
-                                        multiple fullWidth freeSolo
-                                        options={sizes}
+                                    <Autocomplete multiple fullWidth freeSolo options={sizes}
                                         getOptionLabel={(o: any) => o.name || o.toString()}
                                         value={data.size_ids.map(id => sizes.find((s: any) => s.id === id) || id)}
                                         onChange={(_, val) => setData('size_ids', val.map((v: any) => v.id || v))}
@@ -173,11 +151,9 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
 
                                 <Typography variant="subtitle2" color="primary" fontWeight="bold">PACKAGING LEVELS</Typography>
                                 {data.packaging.map((row, i) => (
-                                    <Box key={i} sx={{ mb: 2 }}>
+                                    <Box key={i} sx={{ mb: 3, p: 2, borderRadius: 1, border: '1px solid #333', bgcolor: '#161616' }}>
                                         <Stack direction="row" spacing={1} alignItems="center">
-                                            <Autocomplete
-                                                freeSolo sx={{ flex: 3, ...inputStyle }}
-                                                options={packagingTypes}
+                                            <Autocomplete freeSolo sx={{ flex: 3, ...inputStyle }} options={packagingTypes}
                                                 getOptionLabel={(o: any) => o.name || o.toString()}
                                                 value={packagingTypes.find((t: any) => t.id === row.item_packaging_type_id) || row.item_packaging_type_id || null}
                                                 onChange={(_, val: any) => {
@@ -194,17 +170,13 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
                                             }} />
                                             <IconButton onClick={() => setData('packaging', data.packaging.filter((_, idx) => idx !== i))} color="error" disabled={data.packaging.length === 1}><DeleteIcon /></IconButton>
                                         </Stack>
+                                        <InlineCreator field="packaging_type" label="Type" index={i} />
                                     </Box>
                                 ))}
-                                <Button startIcon={<AddIcon />} onClick={() => setData('packaging', [...data.packaging, { item_packaging_type_id: "", quantity: 1 }])} sx={{ alignSelf: 'flex-start', color: '#3ea6ff' }}>
-                                    Add Level
-                                </Button>
+                                <Button startIcon={<AddIcon />} onClick={() => setData('packaging', [...data.packaging, { item_packaging_type_id: "", quantity: 1 }])} sx={{ color: '#3ea6ff' }}>Add Level</Button>
 
                                 <Divider sx={{ my: 2, borderColor: '#333' }} />
-                                <Box
-                                    sx={{ border: '2px dashed #444', borderRadius: 2, p: 3, textAlign: 'center', cursor: 'pointer', '&:hover': { borderColor: '#3ea6ff' } }}
-                                    component="label"
-                                >
+                                <Box sx={{ border: '2px dashed #444', borderRadius: 2, p: 3, textAlign: 'center', cursor: 'pointer', '&:hover': { borderColor: '#3ea6ff' } }} component="label">
                                     <input type="file" hidden multiple accept="image/*" onChange={e => setData('images', [...data.images, ...Array.from(e.target.files || [])])} />
                                     <CloudUploadIcon sx={{ fontSize: 35, color: '#aaa', mb: 1 }} />
                                     <Typography variant="body2" color="#aaa">Click to upload images</Typography>
@@ -215,10 +187,7 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
                     </Grid>
 
                     <Box mt={6} display="flex" justifyContent="flex-end">
-                        <Button type="submit" variant="contained" disabled={processing}
-                            sx={{ px: 10, py: 1.5, borderRadius: 20, bgcolor: 'white', color: 'black', fontWeight: 'bold', '&:hover': { bgcolor: '#ccc' } }}>
-                            Save Everything
-                        </Button>
+                        <Button type="submit" variant="contained" disabled={processing} sx={{ px: 10, py: 1.5, borderRadius: 20, bgcolor: 'white', color: 'black', fontWeight: 'bold' }}>Save Everything</Button>
                     </Box>
                 </form>
             </Paper>
