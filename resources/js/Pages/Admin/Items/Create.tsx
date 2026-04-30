@@ -1,41 +1,29 @@
 import AdminLayout from "@/Layouts/AppLayout";
-import { Head, Link, useForm } from "@inertiajs/react";
+import { Head, useForm } from "@inertiajs/react";
 import {
     Box, Button, Paper, Stack, TextField, Typography,
-    Autocomplete, Chip, IconButton, Divider, Grid as Grid
+    Autocomplete, Chip, IconButton, Divider, Grid as Grid,
+    InputAdornment
 } from "@mui/material";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 
-interface BaseOption {
-    id: number;
-    name?: string;
-    category_name?: string;
-}
+interface BaseOption { id: number; name?: string; category_name?: string; }
 
-interface Props {
-    categories: BaseOption[];
-    colors: BaseOption[];
-    sizes: BaseOption[];
-    packagingTypes: BaseOption[];
-}
-
-export default function Create({ categories, colors, sizes, packagingTypes }: Props) {
+export default function Create({ categories, colors, sizes, packagingTypes }: any) {
     const { data, setData, post, processing, errors } = useForm({
         product_name: "",
-        product_description: "",
-        item_category_id: "" as string | number,
-        status: "active",
-        color_ids: [] as (string | number)[],
-        size_ids: [] as (string | number)[],
-        packaging: [{ item_packaging_type_id: "" as string | number, quantity: 1 }],
+        item_category_id: "" as any,
+        color_ids: [] as any[],
+        size_ids: [] as any[],
+        packaging: [{ item_packaging_type_id: "" as any, quantity: 1 }],
         images: [] as File[],
+        status: "active"
     });
 
     const inputStyle = {
-        '& .MuiInputLabel-root': { color: '#aaaaaa' },
-        '& .MuiInputLabel-root.Mui-focused': { color: '#3ea6ff' },
-        '& .MuiInputLabel-root.MuiFormLabel-filled': { color: '#ffffff' },
+        '& .MuiInputLabel-root': { color: '#aaa' },
         '& .MuiOutlinedInput-root': {
             '& fieldset': { borderColor: '#444' },
             '&:hover fieldset': { borderColor: '#fff' },
@@ -43,107 +31,145 @@ export default function Create({ categories, colors, sizes, packagingTypes }: Pr
         },
     };
 
-    // Helper to resolve the label safely
-    const getOptionLabel = (option: string | number | BaseOption, source: BaseOption[]) => {
-        if (typeof option === 'object') return option.name || option.category_name || "";
-        if (typeof option === 'number') {
-            const found = source.find(i => i.id === option);
-            return found ? (found.name || found.category_name || option.toString()) : option.toString();
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setData('images', [...data.images, ...Array.from(e.target.files)]);
         }
-        return option;
     };
 
     return (
-        <Box sx={{ p: 3, bgcolor: '#0f0f0f', minHeight: '100vh' }}>
+        <Box sx={{ p: 3, bgcolor: '#0f0f0f', color: 'white' }}>
             <Head title="Create Item" />
 
-            <Stack direction="row" justifyContent="space-between" mb={4}>
-                <Typography variant="h4" fontWeight="bold" color="white">New Item Blueprint</Typography>
-                <Button component={Link} href={route('admin.items.index')} variant="outlined" sx={{ color: '#aaa', borderColor: '#444' }}>Cancel</Button>
-            </Stack>
+            <Typography variant="h5" fontWeight="bold" mb={3}>Create New Item Blueprint</Typography>
 
-            <Paper sx={{ p: 4, bgcolor: '#1e1e1e', border: '1px solid #333', backgroundImage: 'none' }}>
+            <Paper sx={{ p: 4, bgcolor: '#1e1e1e', backgroundImage: 'none', border: '1px solid #333' }}>
                 <form onSubmit={(e) => { e.preventDefault(); post(route('admin.items.store')); }}>
-                    <Grid container spacing={4}>
-                        <Grid size={{ xs: 12, md: 7 }}>
+                    <Grid container spacing={5}>
+
+                        {/* LEFT COLUMN: IDENTIFIERS */}
+                        <Grid size={{ xs: 12, md: 6 }}>
                             <Stack spacing={3}>
                                 <TextField fullWidth label="Product Name" value={data.product_name} onChange={e => setData('product_name', e.target.value)} sx={inputStyle} />
 
+                                {/* CATEGORY WITH "ADD" LOGIC */}
                                 <Autocomplete
                                     freeSolo
                                     options={categories}
-                                    getOptionLabel={(o) => getOptionLabel(o, categories)}
-                                    // FIX: Ensure value is string or object, never number
-                                    value={categories.find(c => c.id === data.item_category_id) || (typeof data.item_category_id === 'number' ? data.item_category_id.toString() : data.item_category_id) || null}
+                                    getOptionLabel={(o) => o.category_name || o.name || o}
                                     onChange={(_, val: any) => setData('item_category_id', val?.id || val)}
-                                    renderInput={(p) => <TextField {...p} label="Category" sx={inputStyle} />}
+                                    renderInput={(params) => (
+                                        <TextField {...params} label="Category" sx={inputStyle}
+                                            placeholder="Select or type to add new..."
+                                        />
+                                    )}
                                 />
 
-                                <TextField fullWidth multiline rows={3} label="Description" value={data.product_description} onChange={e => setData('product_description', e.target.value)} sx={inputStyle} />
-
-                                <Divider sx={{ borderColor: '#333' }} />
-
                                 <Autocomplete
-                                    multiple freeSolo options={colors}
-                                    getOptionLabel={(o) => getOptionLabel(o, colors)}
-                                    // FIX: Map numbers to objects or strings
-                                    value={data.color_ids.map(id => colors.find(c => c.id === id) || (typeof id === 'number' ? id.toString() : id))}
+                                    multiple freeSolo
+                                    options={colors}
+                                    getOptionLabel={(o) => o.name || o}
+                                    value={data.color_ids.map((id:any) => colors.find((c:any) => c.id === id) || id)}
                                     onChange={(_, val) => setData('color_ids', val.map((v: any) => v.id || v))}
-                                    renderInput={(p) => <TextField {...p} label="Colors" sx={inputStyle} />}
-                                    renderTags={(val, getTagProps) => val.map((o: any, i: number) => (
-                                        <Chip label={typeof o === 'object' ? o.name : o} {...getTagProps({ index: i })} size="small" />
+                                    renderInput={(params) => <TextField {...params} label="Colors" sx={inputStyle} />}
+                                    renderTags={(value, getTagProps) => value.map((option: any, index: number) => (
+                                        <Chip label={option.name || option} {...getTagProps({ index })} size="small" sx={{ bgcolor: '#333', color: 'white' }} />
                                     ))}
                                 />
 
                                 <Autocomplete
-                                    multiple freeSolo options={sizes}
-                                    getOptionLabel={(o) => getOptionLabel(o, sizes)}
-                                    // FIX: Map numbers to objects or strings
-                                    value={data.size_ids.map(id => sizes.find(s => s.id === id) || (typeof id === 'number' ? id.toString() : id))}
+                                    multiple freeSolo
+                                    options={sizes}
+                                    getOptionLabel={(o) => o.name || o}
+                                    value={data.size_ids.map((id:any) => sizes.find((s:any) => s.id === id) || id)}
                                     onChange={(_, val) => setData('size_ids', val.map((v: any) => v.id || v))}
-                                    renderInput={(p) => <TextField {...p} label="Sizes" sx={inputStyle} />}
-                                    renderTags={(val, getTagProps) => val.map((o: any, i: number) => (
-                                        <Chip label={typeof o === 'object' ? o.name : o} {...getTagProps({ index: i })} size="small" />
+                                    renderInput={(params) => <TextField {...params} label="Sizes" sx={inputStyle} />}
+                                    renderTags={(value, getTagProps) => value.map((option: any, index: number) => (
+                                        <Chip label={option.name || option} {...getTagProps({ index })} size="small" sx={{ bgcolor: '#333', color: 'white' }} />
                                     ))}
                                 />
                             </Stack>
                         </Grid>
 
-                        <Grid size={{ xs: 12, md: 5 }}>
-                            <Stack spacing={3}>
-                                <Typography variant="subtitle2" color="primary">PACKAGING LEVELS</Typography>
-                                {data.packaging.map((row, i) => (
-                                    <Stack key={i} direction="row" spacing={1}>
-                                        <Autocomplete
-                                            freeSolo fullWidth options={packagingTypes}
-                                            getOptionLabel={(o) => getOptionLabel(o, packagingTypes)}
-                                            // FIX: Ensure value is string or object
-                                            value={packagingTypes.find(t => t.id === row.item_packaging_type_id) || (typeof row.item_packaging_type_id === 'number' ? row.item_packaging_type_id.toString() : row.item_packaging_type_id) || null}
-                                            onChange={(_, val: any) => {
-                                                const pkg = [...data.packaging];
-                                                pkg[i].item_packaging_type_id = val?.id || val;
-                                                setData('packaging', pkg);
-                                            }}
-                                            renderInput={(p) => <TextField {...p} label="Type" size="small" sx={inputStyle} />}
-                                        />
-                                        <TextField label="Qty" type="number" size="small" sx={{...inputStyle, width: 80}} value={row.quantity} onChange={e => {
+                        {/* RIGHT COLUMN: PACKAGING */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Typography variant="subtitle2" color="primary" mb={2} fontWeight="bold">PACKAGING HIERARCHY</Typography>
+                            {data.packaging.map((row, i) => (
+                                <Stack key={i} direction="row" spacing={1} mb={2} alignItems="center">
+                                    <Autocomplete
+                                        freeSolo sx={{ flex: 3, ...inputStyle }}
+                                        options={packagingTypes}
+                                        getOptionLabel={(o) => o.name || o}
+                                        value={packagingTypes.find((t:any) => t.id === row.item_packaging_type_id) || row.item_packaging_type_id}
+                                        onChange={(_, val: any) => {
                                             const pkg = [...data.packaging];
-                                            pkg[i].quantity = parseInt(e.target.value) || 0;
+                                            pkg[i].item_packaging_type_id = val?.id || val;
                                             setData('packaging', pkg);
-                                        }} />
-                                        <IconButton onClick={() => setData('packaging', data.packaging.filter((_, idx) => idx !== i))} color="error" disabled={data.packaging.length === 1}><DeleteIcon /></IconButton>
-                                    </Stack>
-                                ))}
-                                <Button startIcon={<AddCircleIcon />} onClick={() => setData('packaging', [...data.packaging, { item_packaging_type_id: "", quantity: 1 }])} sx={{ color: '#3ea6ff' }}>
-                                    Add Level
-                                </Button>
-                            </Stack>
+                                        }}
+                                        renderInput={(params) => <TextField {...params} label="Type (Box, Pallet...)" size="small" />}
+                                    />
+                                    <TextField
+                                        label="Qty" size="small" type="number" sx={{ flex: 1, ...inputStyle }}
+                                        value={row.quantity}
+                                        onChange={e => {
+                                            const pkg = [...data.packaging];
+                                            pkg[i].quantity = parseInt(e.target.value);
+                                            setData('packaging', pkg);
+                                        }}
+                                    />
+                                    <IconButton onClick={() => setData('packaging', data.packaging.filter((_, idx) => idx !== i))} color="error" disabled={data.packaging.length === 1}>
+                                        <DeleteIcon />
+                                    </IconButton>
+                                </Stack>
+                            ))}
+                            <Button startIcon={<AddCircleIcon />} onClick={() => setData('packaging', [...data.packaging, { item_packaging_type_id: "", quantity: 1 }])} sx={{ color: '#3ea6ff' }}>
+                                Add Packaging Level
+                            </Button>
+                        </Grid>
+
+                        {/* BOTTOM AREA: IMAGE UPLOAD */}
+                        <Grid size={12}>
+                            <Divider sx={{ my: 2, borderColor: '#333' }} />
+                            <Typography variant="subtitle2" color="primary" mb={2} fontWeight="bold">PRODUCT IMAGES</Typography>
+
+                            <Box
+                                sx={{
+                                    border: '2px dashed #444',
+                                    borderRadius: 2,
+                                    p: 4,
+                                    textAlign: 'center',
+                                    cursor: 'pointer',
+                                    '&:hover': { borderColor: '#3ea6ff', bgcolor: '#252525' }
+                                }}
+                                component="label"
+                            >
+                                <input type="file" hidden multiple onChange={handleFileChange} accept="image/*" />
+                                <CloudUploadIcon sx={{ fontSize: 40, color: '#aaa', mb: 1 }} />
+                                <Typography color="#aaa">Click or Drag images here to upload</Typography>
+                                {data.images.length > 0 && (
+                                    <Typography color="primary" fontWeight="bold" mt={1}>
+                                        {data.images.length} images staged for upload
+                                    </Typography>
+                                )}
+                            </Box>
                         </Grid>
                     </Grid>
 
-                    <Box mt={4} display="flex" justifyContent="flex-end">
-                        <Button type="submit" variant="contained" disabled={processing} sx={{ px: 8, borderRadius: 20, bgcolor: 'white', color: 'black', fontWeight: 'bold' }}>
-                            Save Template
+                    <Box mt={6} display="flex" justifyContent="flex-end">
+                        <Button
+                            type="submit"
+                            variant="contained"
+                            disabled={processing}
+                            sx={{
+                                px: 10, py: 1.5,
+                                borderRadius: '30px',
+                                bgcolor: 'white',
+                                color: 'black',
+                                fontWeight: 'bold',
+                                '&:hover': { bgcolor: '#ccc' }
+                            }}
+                        >
+                            {processing ? "Saving..." : "Create Product"}
                         </Button>
                     </Box>
                 </form>
@@ -152,4 +178,4 @@ export default function Create({ categories, colors, sizes, packagingTypes }: Pr
     );
 }
 
-Create.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
+Create.layout = (page: any) => <AdminLayout>{page}</AdminLayout>;
