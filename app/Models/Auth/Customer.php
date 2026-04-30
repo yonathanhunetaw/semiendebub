@@ -3,9 +3,11 @@
 namespace App\Models\Auth;
 
 use App\Models\Seller\Cart;
+use App\Models\Auth\User; // Ensure this import exists
 use Database\Factories\Customer\CustomerFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Casts\Attribute; // 1. Add this for modern Accessors
 
 class Customer extends Model
 {
@@ -22,45 +24,37 @@ class Customer extends Model
         'tin_number',
     ];
 
-    //     public function user()
-    // {
-    //     return $this->belongsTo(User::class, 'created_by');
-    // }
+    /**
+     * 2. The attributes that should be appended to the model's array form.
+     * This makes 'name' visible to Inertia/React.
+     */
+    protected $appends = ['name'];
 
     /**
-     * Get the user that created the customer.
+     * 3. Define the 'name' accessor.
      */
-    // public function createdBy()
-    // {
-    //     return $this->belongsTo(User::class, 'created_by');
-    // }
+    protected function name(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => trim("{$this->first_name} {$this->last_name}"),
+        );
+    }
 
     protected static function newFactory()
     {
         return CustomerFactory::new();
     }
 
-    /**
-     * Get the creator (user) who created this customer.
-     */
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    /**
-     * Define the relationship to the user.
-     * A customer is created by a user.
-     */
     public function user()
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    /**
-     * Define the relationship to carts.
-     * A customer can have multiple carts associated with them.
-     */
     public function carts()
     {
         return $this->hasMany(Cart::class);

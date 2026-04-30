@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
+
 // HTTP Verb	URI	                    Action	  Route Name
 
 // GET	        /carts	                index	  carts.index
@@ -82,44 +83,30 @@ class CartController extends Controller
             ->with('message', 'Global cart initialized successfully!');
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    // public function store(Request $request)
-    // {
-    //     // Validate input
-    //     $request->validate([
-    //         'customer_id' => 'nullable|exists:customers,id', // Ensure customer_id is valid if provided
-    //     ]);
 
-    //     // Create the cart
-    //     $cart = Cart::create([
-    //         'user_id' => auth()->id(), // Ensure the cart is created by the authenticated user
-    //         'customer_id' => $request->customer_id, // Store the customer_id if selected, otherwise it will be null
-    //     ]);
-
-    //     // Redirect to the created cart's details page with success message
-    //     return redirect()->route('admin.carts.show', $cart->id)
-    //                      ->with('success', 'Cart created successfully!');
-    // }
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
-    {
-        // Use the specific models from your domain folders
-        $customers = Customer::select('id', 'name')->get();
+public function create()
+{
+    $customers = Customer::select('id', 'first_name', 'last_name')
+        ->get()
+        ->map(function ($customer) {
+            return [
+                'id' => $customer->id,
+                'name' => trim($customer->first_name . ' ' . $customer->last_name),
+            ];
+        });
 
-        // Pulling users with the 'seller' role
-        $sellers = User::where('role', 'seller')
-            ->select('id', 'first_name', 'last_name')
-            ->get();
+    $sellers = User::where('role', 'seller')
+        ->select('id', 'first_name', 'last_name')
+        ->get();
 
-        return Inertia::render('Admin/Carts/Create', [
-            'customers' => $customers,
-            'sellers' => $sellers,
-        ]);
-    }
+    return inertia('Admin/Carts/Create', [
+        'customers' => $customers,
+        'sellers' => $sellers,
+    ]);
+}
 
     /**
      * Display the specified resource.

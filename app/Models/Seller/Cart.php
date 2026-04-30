@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
+
 class Cart extends Model
 {
     use HasFactory;
@@ -47,7 +48,13 @@ class Cart extends Model
 
     public function seller(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'seller_id')->where('role', 'seller');
+        // Point explicitly to the Auth folder model
+        return $this->belongsTo(User::class, 'seller_id')
+            ->where('role', 'seller')
+            ->withDefault([
+                'first_name' => 'Deleted',
+                'last_name' => 'User'
+            ]);
     }
 
     /**

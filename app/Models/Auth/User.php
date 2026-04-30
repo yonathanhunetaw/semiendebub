@@ -24,8 +24,15 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
-        'first_name', 'last_name', 'phone_number', 'email', 'role', 'password',
-        'store_id', 'inventory_location_id', 'created_by',
+        'first_name',
+        'last_name',
+        'phone_number',
+        'email',
+        'role',
+        'password',
+        'store_id',
+        'inventory_location_id',
+        'created_by',
     ];
 
     /**
@@ -86,7 +93,8 @@ class User extends Authenticatable
      */
     public function carts()
     {
-        return $this->hasMany(Cart::class);
+        // A seller/staff member manages many carts
+        return $this->hasMany(Cart::class, 'seller_id');
     }
 
     public function store()
