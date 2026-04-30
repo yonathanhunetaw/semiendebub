@@ -106,34 +106,29 @@ class CartController extends Controller
      */
     public function show(Cart $cart)
     {
-        // 1. Authorization (Keep this! It's good practice)
+        // Authorization check
         $this->authorize('view', $cart);
 
-        // 2. Eager load everything needed for the UI
-        // We load 'customer' for the header and 'items.product' to get names/prices
-        $cart->load([
-            'customer',
-            'items.product' // Assuming items belong to a product
-        ]);
+        // Load 'variants' and the 'item' they belong to
+        $cart->load(['customer', 'variants.item']);
 
-        // 3. Map items to match your React Interface
-        // This ensures your frontend doesn't have to guess where 'price' or 'name' is.
         $cartData = [
             'id' => $cart->id,
             'status' => $cart->status,
             'session_id' => $cart->session_id,
             'customer' => $cart->customer,
-            'items' => $cart->items->map(function ($item) {
+            'items' => $cart->variants->map(function ($variant) {
                 return [
-                    'id' => $item->id,
-                    'product_name' => $item->product?->name ?? 'Unknown Product',
-                    'price' => $item->price, // Usually stored on the pivot/item table
-                    'quantity' => $item->quantity,
+                    'id' => $variant->id,
+                    // Accessing name from the Item through the Variant
+                    'product_name' => $variant->item?->name ?? 'Unknown Item',
+                    // Getting price and quantity from the cart_items pivot table
+                    'price' => $variant->pivot->price,
+                    'quantity' => $variant->pivot->quantity,
                 ];
             }),
         ];
 
-        // 4. Render with Inertia (Not the blade view)
         return Inertia::render('Seller/Carts/Show', [
             'cart' => $cartData
         ]);
