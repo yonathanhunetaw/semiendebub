@@ -106,11 +106,18 @@ class CartController extends Controller
      */
     public function create()
     {
-        $customers = Customer::all(); // Get all customers
-        $sellers = User::where('role', 'seller')->get(); // assuming sellers have 'seller' role
+        // Use the specific models from your domain folders
+        $customers = Customer::select('id', 'name')->get();
 
-        return view('admin.carts.create', compact('customers', 'sellers'));
+        // Pulling users with the 'seller' role
+        $sellers = User::where('role', 'seller')
+            ->select('id', 'first_name', 'last_name')
+            ->get();
 
+        return Inertia::render('Admin/Carts/Create', [
+            'customers' => $customers,
+            'sellers' => $sellers,
+        ]);
     }
 
     /**
