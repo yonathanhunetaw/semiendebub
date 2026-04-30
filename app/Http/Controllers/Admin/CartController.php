@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Auth\User;
 
 
+
 // HTTP Verb	URI	                    Action	  Route Name
 
 // GET	        /carts	                index	  carts.index
@@ -87,39 +88,65 @@ class CartController extends Controller
     /**
      * Show the form for creating a new resource.
      */
-public function create()
-{
-    $customers = Customer::select('id', 'first_name', 'last_name')
-        ->get()
-        ->map(function ($customer) {
-            return [
-                'id' => $customer->id,
-                'name' => trim($customer->first_name . ' ' . $customer->last_name),
-            ];
-        });
+    public function create()
+    {
+        $customers = Customer::select('id', 'first_name', 'last_name')
+            ->get()
+            ->map(function ($customer) {
+                return [
+                    'id' => $customer->id,
+                    'name' => trim($customer->first_name . ' ' . $customer->last_name),
+                ];
+            });
 
-    $sellers = User::where('role', 'seller')
-        ->select('id', 'first_name', 'last_name')
-        ->get();
+        $sellers = User::where('role', 'seller')
+            ->select('id', 'first_name', 'last_name')
+            ->get();
 
-    return inertia('Admin/Carts/Create', [
-        'customers' => $customers,
-        'sellers' => $sellers,
-    ]);
-}
+        return inertia('Admin/Carts/Create', [
+            'customers' => $customers,
+            'sellers' => $sellers,
+        ]);
+    }
 
     /**
      * Display the specified resource.
      */
+
+
     public function show(Cart $cart)
     {
-        // Ensure the authenticated user owns the cart
+        // 1. Authorization (Keep this! It's good practice)
         $this->authorize('view', $cart);
 
-        // Eager load the items related to this cart
-        $cart->load('items');
+        // 2. Eager load everything needed for the UI
+        // We load 'customer' for the header and 'items.product' to get names/prices
+        $cart->load([
+            'customer',
+            'items.product' // Assuming items belong to a product
+        ]);
 
-        return view('admin.carts.show', compact('cart'));
+        // 3. Map items to match your React Interface
+        // This ensures your frontend doesn't have to guess where 'price' or 'name' is.
+        $cartData = [
+            'id' => $cart->id,
+            'status' => $cart->status,
+            'session_id' => $cart->session_id,
+            'customer' => $cart->customer,
+            'items' => $cart->items->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'product_name' => $item->product?->name ?? 'Unknown Product',
+                    'price' => $item->price, // Usually stored on the pivot/item table
+                    'quantity' => $item->quantity,
+                ];
+            }),
+        ];
+
+        // 4. Render with Inertia (Not the blade view)
+        return Inertia::render('Seller/Carts/Show', [
+            'cart' => $cartData
+        ]);
     }
 
     /**
