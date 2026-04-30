@@ -82,19 +82,23 @@ class CartController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'customer_id' => 'required|exists:customers,id',
-            'seller_id' => 'required|exists:users,id',
+            'customer_id' => 'nullable|exists:customers,id',
+            'seller_id' => 'nullable|exists:users,id,role,seller',
         ]);
 
         $cart = Cart::create([
-            'store_id' => auth()->user()->store_id, // Mandatory for our new schema
+            'store_id' => auth()->user()->store_id ?? 1,
             'user_id' => auth()->id(),
             'customer_id' => $request->customer_id,
-            'seller_id' => $request->seller_id,
-            'status' => 'pending',
+            'seller_id' => $request->seller_id ?? (auth()->user()->role === 'seller' ? auth()->id() : null),
+            'status' => 'active',
+            // Generate a simple numeric session ID instead of a UUID
+            'session_id' => (string) mt_rand(100000, 999999),
         ]);
 
-        return redirect()->route('seller.carts.index')->with('success', 'Cart created successfully!');
+        $routeName = auth()->user()->role === 'admin' ? 'admin.carts.index' : 'seller.carts.index';
+
+        return redirect()->route($routeName)->with('message', 'Cart #' . $cart->session_id . ' created.');
     }
 
     /**

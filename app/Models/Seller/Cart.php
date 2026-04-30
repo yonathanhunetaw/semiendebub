@@ -20,6 +20,7 @@ class Cart extends Model
         'user_id',
         'seller_id',
         'customer_id',
+        'session_id',
         'status',
     ];
 

@@ -1,5 +1,6 @@
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm, Link } from "@inertiajs/react";
+import { usePage } from "@inertiajs/react";
 import {
     Box,
     Button,
@@ -11,10 +12,10 @@ import {
     FormControl,
     InputLabel,
     Select,
-    FormHelperText
+    FormHelperText,
 } from "@mui/material";
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import SaveIcon from '@mui/icons-material/Save';
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import SaveIcon from "@mui/icons-material/Save";
 
 interface Customer {
     id: number;
@@ -33,16 +34,26 @@ interface Props {
 }
 
 export default function Create({ customers, sellers }: Props) {
-    // Inertia form helper
+    const { url, props } = usePage();
+    const auth = props.auth as any;
+
+    // 1. Determine context once
+    const isAdmin = url.startsWith("/admin") || auth.user.role === "admin";
+
     const { data, setData, post, processing, errors } = useForm({
-        customer_id: '',
-        seller_id: '',
-        status: 'active',
+        customer_id: "",
+        // Pre-fill seller_id if the user is a seller, otherwise leave empty for Admin selection
+        seller_id: isAdmin ? "" : auth.user.id,
+        status: "active",
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post(route('admin.carts.store'));
+        // 2. Dynamic route targeting
+        const targetRoute = isAdmin
+            ? "admin.carts.store"
+            : "seller.carts.store";
+        post(route(targetRoute));
     };
 
     return (
@@ -52,71 +63,84 @@ export default function Create({ customers, sellers }: Props) {
             <Stack direction="row" alignItems="center" spacing={2} mb={4}>
                 <Button
                     component={Link}
-                    href={route('admin.carts.index')}
+                    // 3. Dynamic Back Button
+                    href={route(
+                        isAdmin ? "admin.carts.index" : "seller.carts.index",
+                    )}
                     startIcon={<ArrowBackIcon />}
                     variant="text"
                     color="inherit"
                 >
                     Back to Carts
                 </Button>
-                <Typography variant="h4" fontWeight="bold">Create New Cart</Typography>
+                <Typography variant="h4" fontWeight="bold">
+                    Create New Cart
+                </Typography>
             </Stack>
 
-            <Paper sx={{ p: 4, maxWidth: 600, mx: 'auto', boxShadow: 3 }}>
+            <Paper sx={{ p: 4, maxWidth: 600, mx: "auto", boxShadow: 3 }}>
                 <form onSubmit={handleSubmit}>
                     <Stack spacing={3}>
-
                         {/* Customer Selection */}
                         <FormControl fullWidth error={!!errors.customer_id}>
-                            <InputLabel id="customer-label">Select Customer</InputLabel>
+                            <InputLabel>Select Customer</InputLabel>
                             <Select
-                                labelId="customer-label"
                                 value={data.customer_id}
                                 label="Select Customer"
-                                onChange={e => setData('customer_id', e.target.value)}
+                                onChange={(e) =>
+                                    setData("customer_id", e.target.value)
+                                }
                             >
-                                <MenuItem value=""><em>None (Guest Cart)</em></MenuItem>
-                                {customers.map(customer => (
-                                    <MenuItem key={customer.id} value={customer.id}>
+                                <MenuItem value="">
+                                    <em>None (Guest Cart)</em>
+                                </MenuItem>
+                                {customers.map((customer) => (
+                                    <MenuItem
+                                        key={customer.id}
+                                        value={customer.id}
+                                    >
                                         {customer.name}
                                     </MenuItem>
                                 ))}
                             </Select>
-                            {errors.customer_id && <FormHelperText>{errors.customer_id}</FormHelperText>}
+                            {errors.customer_id && (
+                                <FormHelperText>
+                                    {errors.customer_id}
+                                </FormHelperText>
+                            )}
                         </FormControl>
 
-                        {/* Seller/Staff Selection */}
-                        <FormControl fullWidth error={!!errors.seller_id}>
-                            <InputLabel id="seller-label">Assigned Seller</InputLabel>
-                            <Select
-                                labelId="seller-label"
-                                value={data.seller_id}
-                                label="Assigned Seller"
-                                onChange={e => setData('seller_id', e.target.value)}
-                            >
-                                <MenuItem value=""><em>Unassigned</em></MenuItem>
-                                {sellers.map(seller => (
-                                    <MenuItem key={seller.id} value={seller.id}>
-                                        {seller.first_name} {seller.last_name || ''}
+                        {/* 4. Only show Seller selection if User is Admin */}
+                        {isAdmin && (
+                            <FormControl fullWidth error={!!errors.seller_id}>
+                                <InputLabel>Assigned Seller</InputLabel>
+                                <Select
+                                    value={data.seller_id}
+                                    label="Assigned Seller"
+                                    onChange={(e) =>
+                                        setData("seller_id", e.target.value)
+                                    }
+                                >
+                                    <MenuItem value="">
+                                        <em>Unassigned</em>
                                     </MenuItem>
-                                ))}
-                            </Select>
-                            {errors.seller_id && <FormHelperText>{errors.seller_id}</FormHelperText>}
-                        </FormControl>
-
-                        {/* Status Selection */}
-                        <FormControl fullWidth>
-                            <InputLabel id="status-label">Initial Status</InputLabel>
-                            <Select
-                                labelId="status-label"
-                                value={data.status}
-                                label="Initial Status"
-                                onChange={e => setData('status', e.target.value)}
-                            >
-                                <MenuItem value="active">Active</MenuItem>
-                                <MenuItem value="pending">Pending</MenuItem>
-                            </Select>
-                        </FormControl>
+                                    {sellers.map((seller) => (
+                                        <MenuItem
+                                            key={seller.id}
+                                            value={seller.id}
+                                        >
+                                            {seller.first_name}{" "}
+                                            {seller.last_name || ""}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                                {errors.seller_id && (
+                                    <FormHelperText>
+                                        {errors.seller_id}
+                                    </FormHelperText>
+                                )}
+                            </FormControl>
+                        )}
 
                         <Box sx={{ mt: 2 }}>
                             <Button
@@ -127,10 +151,9 @@ export default function Create({ customers, sellers }: Props) {
                                 disabled={processing}
                                 startIcon={<SaveIcon />}
                             >
-                                {processing ? 'Creating...' : 'Initialize Cart'}
+                                {processing ? "Creating..." : "Initialize Cart"}
                             </Button>
                         </Box>
-
                     </Stack>
                 </form>
             </Paper>
@@ -138,8 +161,4 @@ export default function Create({ customers, sellers }: Props) {
     );
 }
 
-Create.layout = (page: React.ReactNode) => (
-    <AdminLayout>
-        {page}
-    </AdminLayout>
-);
+Create.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
