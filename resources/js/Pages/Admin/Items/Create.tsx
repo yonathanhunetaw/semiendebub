@@ -2,7 +2,7 @@ import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm } from "@inertiajs/react";
 import {
     Box, Button, Paper, Stack, TextField, Typography,
-    Autocomplete, Chip, IconButton, Divider, Grid2 as Grid,
+    Autocomplete, Chip, IconButton, Divider, Grid as Grid,
     Alert, Fade
 } from "@mui/material";
 import DeleteIcon from '@mui/icons-material/Delete';
