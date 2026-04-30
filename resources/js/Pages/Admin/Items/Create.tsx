@@ -2,8 +2,7 @@ import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm } from "@inertiajs/react";
 import {
     Box, Button, Paper, Stack, TextField, Typography,
-    Autocomplete, Chip, IconButton, Divider, Grid as Grid,
-    InputAdornment
+    Autocomplete, Chip, IconButton, Divider, Grid as Grid
 } from "@mui/material";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -12,16 +11,16 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 interface OptionType { id: number; name?: string; category_name?: string; }
 
 export default function Create({ categories, colors, sizes, packagingTypes }: any) {
-    const { data, setData, post, processing, errors } = useForm({
+    const { data, setData, post, processing } = useForm({
         product_name: "",
-        product_description: "", // Added
-        packaging_details: "",    // Added
+        product_description: "",
+        packaging_details: "",
         item_category_id: "" as string | number,
-        status: "active",
         color_ids: [] as (string | number)[],
         size_ids: [] as (string | number)[],
         packaging: [{ item_packaging_type_id: "" as string | number, quantity: 1 }],
         images: [] as File[],
+        status: "active"
     });
 
     const inputStyle = {
@@ -29,12 +28,14 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
         '& .MuiOutlinedInput-root': {
             '& fieldset': { borderColor: '#444' },
             '&:hover fieldset': { borderColor: '#fff' },
+            '&.Mui-focused fieldset': { borderColor: '#3ea6ff' },
         },
     };
 
-    // Generic function to handle "Add New" button clicks
+    // Logic for the "+" Buttons
     const handleQuickAdd = (field: string, currentValues: any) => {
-        const name = prompt(`Enter new ${field} name:`);
+        const label = field.replace('_ids', '').replace('item_', '').replace('_id', '');
+        const name = prompt(`Enter new ${label} name:`);
         if (!name) return;
 
         if (Array.isArray(currentValues)) {
@@ -47,77 +48,76 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
     return (
         <Box sx={{ p: 3, bgcolor: '#0f0f0f', minHeight: '100vh', color: 'white' }}>
             <Head title="Create Item" />
-
-            <Typography variant="h5" fontWeight="bold" mb={3}>Register Item Template</Typography>
+            <Typography variant="h5" fontWeight="bold" mb={3}>Register New Item Blueprint</Typography>
 
             <Paper sx={{ p: 4, bgcolor: '#1e1e1e', backgroundImage: 'none', border: '1px solid #333' }}>
                 <form onSubmit={(e) => { e.preventDefault(); post(route('admin.items.store')); }}>
                     <Grid container spacing={4}>
 
-                        {/* LEFT: INFORMATION */}
+                        {/* LEFT COLUMN: Main Details */}
                         <Grid size={{ xs: 12, md: 7 }}>
                             <Stack spacing={3}>
                                 <TextField fullWidth label="Product Name" value={data.product_name} onChange={e => setData('product_name', e.target.value)} sx={inputStyle} />
 
-                                <TextField fullWidth multiline rows={2} label="Product Description" value={data.product_description} onChange={e => setData('product_description', e.target.value)} sx={inputStyle} />
+                                <TextField fullWidth multiline rows={3} label="Product Description" value={data.product_description} onChange={e => setData('product_description', e.target.value)} sx={inputStyle} />
 
-                                {/* CATEGORY + ADD BUTTON */}
-                                <Stack direction="row" spacing={1}>
+                                {/* CATEGORY */}
+                                <Stack direction="row" spacing={1} alignItems="flex-start">
                                     <Autocomplete
-                                        fullWidth
+                                        fullWidth freeSolo
                                         options={categories}
                                         getOptionLabel={(o: any) => o.category_name || o.name || o.toString()}
                                         value={categories.find((c: any) => c.id === data.item_category_id) || data.item_category_id || null}
                                         onChange={(_, val: any) => setData('item_category_id', val?.id || val)}
                                         renderInput={(p) => <TextField {...p} label="Category" sx={inputStyle} />}
                                     />
-                                    <IconButton onClick={() => handleQuickAdd('item_category_id', data.item_category_id)} sx={{ color: '#3ea6ff' }}><AddCircleIcon /></IconButton>
+                                    <IconButton onClick={() => handleQuickAdd('item_category_id', data.item_category_id)} sx={{ color: '#3ea6ff', mt: 1 }}><AddCircleIcon /></IconButton>
                                 </Stack>
 
-                                {/* COLORS + ADD BUTTON */}
-                                <Stack direction="row" spacing={1}>
+                                {/* COLORS */}
+                                <Stack direction="row" spacing={1} alignItems="flex-start">
                                     <Autocomplete
-                                        multiple fullWidth
+                                        multiple fullWidth freeSolo
                                         options={colors}
                                         getOptionLabel={(o: any) => o.name || o.toString()}
-                                        value={data.color_ids.map(id => colors.find((c: any) => c.id === id) || id.toString())}
+                                        value={data.color_ids.map(id => colors.find((c: any) => c.id === id) || id)}
                                         onChange={(_, val) => setData('color_ids', val.map((v: any) => v.id || v))}
                                         renderInput={(p) => <TextField {...p} label="Colors" sx={inputStyle} />}
-                                        renderTags={(val, getTagProps) => val.map((o: any, i) => (
+                                        renderTags={(val, getTagProps) => val.map((o: any, i: number) => (
                                             <Chip label={o.name || o} {...getTagProps({ index: i })} size="small" sx={{ bgcolor: '#333', color: 'white' }} />
                                         ))}
                                     />
-                                    <IconButton onClick={() => handleQuickAdd('color_ids', data.color_ids)} sx={{ color: '#3ea6ff' }}><AddCircleIcon /></IconButton>
+                                    <IconButton onClick={() => handleQuickAdd('color_ids', data.color_ids)} sx={{ color: '#3ea6ff', mt: 1 }}><AddCircleIcon /></IconButton>
                                 </Stack>
 
-                                {/* SIZES + ADD BUTTON */}
-                                <Stack direction="row" spacing={1}>
+                                {/* SIZES */}
+                                <Stack direction="row" spacing={1} alignItems="flex-start">
                                     <Autocomplete
-                                        multiple fullWidth
+                                        multiple fullWidth freeSolo
                                         options={sizes}
                                         getOptionLabel={(o: any) => o.name || o.toString()}
-                                        value={data.size_ids.map(id => sizes.find((s: any) => s.id === id) || id.toString())}
+                                        value={data.size_ids.map(id => sizes.find((s: any) => s.id === id) || id)}
                                         onChange={(_, val) => setData('size_ids', val.map((v: any) => v.id || v))}
                                         renderInput={(p) => <TextField {...p} label="Sizes" sx={inputStyle} />}
-                                        renderTags={(val, getTagProps) => val.map((o: any, i) => (
+                                        renderTags={(val, getTagProps) => val.map((o: any, i: number) => (
                                             <Chip label={o.name || o} {...getTagProps({ index: i })} size="small" sx={{ bgcolor: '#333', color: 'white' }} />
                                         ))}
                                     />
-                                    <IconButton onClick={() => handleQuickAdd('size_ids', data.size_ids)} sx={{ color: '#3ea6ff' }}><AddCircleIcon /></IconButton>
+                                    <IconButton onClick={() => handleQuickAdd('size_ids', data.size_ids)} sx={{ color: '#3ea6ff', mt: 1 }}><AddCircleIcon /></IconButton>
                                 </Stack>
                             </Stack>
                         </Grid>
 
-                        {/* RIGHT: PACKAGING & MEDIA */}
+                        {/* RIGHT COLUMN: Packaging & Images */}
                         <Grid size={{ xs: 12, md: 5 }}>
                             <Stack spacing={3}>
-                                <TextField fullWidth multiline rows={2} label="General Packaging Details (e.g., Boxed/Fragile)" value={data.packaging_details} onChange={e => setData('packaging_details', e.target.value)} sx={inputStyle} />
+                                <TextField fullWidth multiline rows={2} label="General Packaging Details (e.g. Boxed)" value={data.packaging_details} onChange={e => setData('packaging_details', e.target.value)} sx={inputStyle} />
 
                                 <Typography variant="subtitle2" color="primary" fontWeight="bold">PACKAGING HIERARCHY</Typography>
                                 {data.packaging.map((row, i) => (
                                     <Stack key={i} direction="row" spacing={1} alignItems="center">
                                         <Autocomplete
-                                            sx={{ flex: 3, ...inputStyle }}
+                                            freeSolo sx={{ flex: 3, ...inputStyle }}
                                             options={packagingTypes}
                                             getOptionLabel={(o: any) => o.name || o.toString()}
                                             value={packagingTypes.find((t: any) => t.id === row.item_packaging_type_id) || row.item_packaging_type_id || null}
@@ -128,7 +128,7 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
                                             }}
                                             renderInput={(p) => <TextField {...p} label="Type" size="small" />}
                                         />
-                                        <TextField label="Qty" size="small" type="number" sx={{ width: 70, ...inputStyle }} value={row.quantity} onChange={e => {
+                                        <TextField label="Qty" size="small" type="number" sx={{ width: 80, ...inputStyle }} value={row.quantity} onChange={e => {
                                             const pkg = [...data.packaging];
                                             pkg[i].quantity = parseInt(e.target.value) || 0;
                                             setData('packaging', pkg);
@@ -136,26 +136,33 @@ export default function Create({ categories, colors, sizes, packagingTypes }: an
                                         <IconButton onClick={() => setData('packaging', data.packaging.filter((_, idx) => idx !== i))} color="error" disabled={data.packaging.length === 1}><DeleteIcon /></IconButton>
                                     </Stack>
                                 ))}
-                                <Button startIcon={<AddCircleIcon />} onClick={() => setData('packaging', [...data.packaging, { item_packaging_type_id: "", quantity: 1 }])}>Add Level</Button>
+                                <Button startIcon={<AddCircleIcon />} onClick={() => setData('packaging', [...data.packaging, { item_packaging_type_id: "", quantity: 1 }])} sx={{ color: '#3ea6ff', alignSelf: 'flex-start' }}>
+                                    Add Level
+                                </Button>
 
-                                <Divider sx={{ borderColor: '#333' }} />
+                                <Divider sx={{ my: 1, borderColor: '#333' }} />
 
+                                <Typography variant="subtitle2" color="primary" fontWeight="bold">PRODUCT MEDIA</Typography>
                                 <Box
-                                    sx={{ border: '2px dashed #444', borderRadius: 2, p: 3, textAlign: 'center', cursor: 'pointer', '&:hover': { borderColor: '#3ea6ff' }}}
+                                    sx={{
+                                        border: '2px dashed #444', borderRadius: 2, p: 3, textAlign: 'center', cursor: 'pointer',
+                                        '&:hover': { borderColor: '#3ea6ff', bgcolor: '#222' }
+                                    }}
                                     component="label"
                                 >
-                                    <input type="file" hidden multiple onChange={e => setData('images', [...data.images, ...Array.from(e.target.files || [])])} />
-                                    <CloudUploadIcon sx={{ fontSize: 30, color: '#aaa', mb: 1 }} />
-                                    <Typography variant="body2" color="#aaa">Click to Upload Images</Typography>
-                                    {data.images.length > 0 && <Typography color="primary">{data.images.length} files</Typography>}
+                                    <input type="file" hidden multiple accept="image/*" onChange={e => setData('images', [...data.images, ...Array.from(e.target.files || [])])} />
+                                    <CloudUploadIcon sx={{ fontSize: 35, color: '#aaa', mb: 1 }} />
+                                    <Typography variant="body2" color="#aaa">Click to select images</Typography>
+                                    {data.images.length > 0 && <Typography color="primary" sx={{ mt: 1, fontWeight: 'bold' }}>{data.images.length} files staged</Typography>}
                                 </Box>
                             </Stack>
                         </Grid>
                     </Grid>
 
-                    <Box mt={4} display="flex" justifyContent="flex-end">
-                        <Button type="submit" variant="contained" disabled={processing} sx={{ px: 8, borderRadius: 20, bgcolor: 'white', color: 'black', fontWeight: 'bold' }}>
-                            Create Template
+                    <Box mt={5} display="flex" justifyContent="flex-end">
+                        <Button type="submit" variant="contained" disabled={processing}
+                            sx={{ px: 10, py: 1.5, borderRadius: 20, bgcolor: 'white', color: 'black', fontWeight: 'bold', '&:hover': { bgcolor: '#ccc' } }}>
+                            Save Product Template
                         </Button>
                     </Box>
                 </form>
