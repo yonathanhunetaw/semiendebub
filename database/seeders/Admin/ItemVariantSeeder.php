@@ -46,7 +46,8 @@ class ItemVariantSeeder extends Seeder
                             'store_id' => $storeId,
                             'item_variant_id' => $variant->id,
                             'price' => $calculatedPrice,
-                            'quantity' => rand(10, 100),
+                            'stock' => rand(10, 100),
+                            'active' => true,
                             'status' => 'active',
                         ]);
                     }
