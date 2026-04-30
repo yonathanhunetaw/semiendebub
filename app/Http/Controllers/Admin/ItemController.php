@@ -385,47 +385,84 @@ class ItemController extends Controller
     // Update the specified item
 
     public function store(Request $request)
-    {
-        // 1. Validate - Add all the fields your form is sending
-        $validated = $request->validate([
-            'product_name' => 'required|string|max:255',
-            'product_description' => 'nullable|string',
-            'item_category_id' => 'required|exists:item_categories,id',
-            'status' => 'required|in:active,inactive',
-            'images.*' => 'image|mimes:jpeg,png,jpg|max:2048', // Validate each file
-        ]);
+{
+    // 1. Validate - Note: we remove 'exists' for Category/Color/Size
+    // to allow new strings to pass through.
+    $validated = $request->validate([
+        'product_name'        => 'required|string|max:255',
+        'product_description' => 'nullable|string',
+        'packaging_details'   => 'nullable|string',
+        'item_category_id'    => 'required', // Removed exists:item_categories,id
+        'status'              => 'required|in:draft,active,inactive,archived',
+        'color_ids'           => 'nullable|array',
+        'size_ids'            => 'nullable|array',
+        'packaging'           => 'nullable|array', // {item_packaging_type_id, quantity}
+        'images.*'            => 'image|mimes:jpeg,png,jpg|max:5120',
+    ]);
 
-        // 2. Handle Image Uploads First
+    return \DB::transaction(function () use ($request, $validated) {
+
+        // 2. Resolve Category (Numeric ID or New String)
+        $categoryId = $validated['item_category_id'];
+        if (!is_numeric($categoryId)) {
+            $category = \App\Models\Item\ItemCategory::firstOrCreate(
+                ['name' => $categoryId] // Assuming column name is 'name'
+            );
+            $categoryId = $category->id;
+        }
+
+        // 3. Handle Image Uploads
         $imagePaths = [];
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
-                // Store in public/uploads/items and get the path
-                $path = $image->store('uploads/items', 'public');
-                $imagePaths[] = $path;
+                $imagePaths[] = $image->store('uploads/items', 'public');
             }
         }
 
-        // 3. Create the Item (One single time)
+        // 4. Create the Item Blueprint
         $item = Item::create([
-            'product_name' => $validated['product_name'],
+            'product_name'        => $validated['product_name'],
             'product_description' => $validated['product_description'],
-            'item_category_id' => $validated['item_category_id'],
-            'status' => $validated['status'],
-            'general_images' => $imagePaths, // Eloquent casts this to JSON automatically
-            'is_incomplete' => false,
+            'packaging_details'   => $validated['packaging_details'],
+            'item_category_id'    => $categoryId,
+            'status'              => $validated['status'],
+            'general_images'      => $imagePaths,
+            'is_incomplete'       => false,
         ]);
 
-        // 4. Sync Relationships (If your form sends these)
-        if ($request->has('color_ids')) {
-            $item->colors()->sync($request->color_ids);
+        // 5. Handle Colors (firstOrCreate for new strings)
+        if ($request->filled('color_ids')) {
+            $colorIds = collect($request->color_ids)->map(function ($value) {
+                if (is_numeric($value)) return $value;
+                return ItemColor::firstOrCreate(['name' => $value])->id;
+            });
+            $item->colors()->sync($colorIds);
         }
-        if ($request->has('size_ids')) {
-            $item->sizes()->sync($request->size_ids);
+
+        // 6. Handle Sizes (firstOrCreate for new strings)
+        if ($request->filled('size_ids')) {
+            $sizeIds = collect($request->size_ids)->map(function ($value) {
+                if (is_numeric($value)) return $value;
+                return ItemSize::firstOrCreate(['name' => $value])->id;
+            });
+            $item->sizes()->sync($sizeIds);
+        }
+
+        // 7. Sync Packaging Hierarchy
+        if ($request->filled('packaging')) {
+            $packagingData = collect($request->packaging)
+                ->filter(fn($pkg) => !empty($pkg['item_packaging_type_id']))
+                ->mapWithKeys(function ($pkg) {
+                    return [$pkg['item_packaging_type_id'] => ['quantity' => $pkg['quantity']]];
+                });
+
+            $item->packagingTypes()->sync($packagingData);
         }
 
         return redirect()->route('admin.items.index')
-            ->with('success', 'Item registered successfully!');
-    }
+            ->with('success', "Item '{$item->product_name}' registered successfully!");
+    });
+}
 
     // Remove the specified item
 
