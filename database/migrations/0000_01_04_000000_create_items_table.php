@@ -12,30 +12,24 @@ return new class extends Migration {
     {
         Schema::create('items', function (Blueprint $table) {
 
-
             // All properties should have images, price, stock
-
             $table->id();
-            $table->string('sku')->unique(); // no "after" needed
 
-            $table->string('product_name')->nullable();
+            // General Metadata
+            $table->json('general_images')->nullable(); // High-level marketing photos
+
+            // Core Identity (Shared by all variants)
+            $table->string('product_name');
             $table->text('product_description')->nullable();
-            $table->text('packaging_details')->nullable();
-            $table->json('selectedCategories')->nullable();
-            $table->json('newCategoryNames')->nullable();
-            $table->json('product_images')->nullable();
+            $table->text('packaging_details')->nullable(); // General info like "Boxed" or "Fragile"
 
+            // Categorization
+            // Use a foreign key instead of JSON for better performance
+            $table->foreignId('item_category_id')->nullable()->constrained()->onDelete('set null');
 
-            $table->enum('status', ['draft', 'active', 'inactive', 'unavailable'])->default('draft');
-            $table->boolean('incomplete')->default(true);
-            $table->unsignedBigInteger('category_id')->nullable();
-            $table->unsignedBigInteger('item_category_id')->nullable();
-
-            $table->string('barcode')->nullable()->unique();
-            $table->bigInteger('sold_count')->default(0)->nullable(false); // Assuming this is the sold count
-            // $table->decimal('discount_price', 10, 2)->nullable();
-            // $table->decimal('discount_percentage', 5, 2)->nullable();
-
+            // Status & Logic
+            $table->enum('status', ['draft', 'active', 'inactive', 'archived'])->default('draft');
+            $table->boolean('is_incomplete')->default(true);
 
             $table->timestamps();
 
@@ -47,13 +41,13 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        // Schema::table('item_variants', function (Blueprint $table) {
-        //     $table->dropForeign(['item_id']); // Drop foreign key constraint on item_id
-        // });
+        // 1. (Optional but safer) Disable foreign key constraints so
+        // the drop doesn't fail if other tables are pointing here.
+        Schema::disableForeignKeyConstraints();
 
-
+        // 2. Only drop the table this migration is responsible for.
         Schema::dropIfExists('items');
-        Schema::dropIfExists('item_colors');
 
+        Schema::enableForeignKeyConstraints();
     }
 };

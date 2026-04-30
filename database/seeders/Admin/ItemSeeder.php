@@ -243,62 +243,6 @@ class ItemSeeder extends Seeder
                             'status' => $variantShouldBeActive ? 'active' : 'inactive',
                         ]);
 
-                        // // ----------------------
-                        // // 1️⃣ Store Variant (base price)
-                        // $storeVariant = \App\Models\StoreVariant::updateOrCreate(
-                        //     [
-                        //         'store_id' => 1,
-                        //         'item_variant_id' => $variant->id
-                        //     ],
-                        //     [
-                        //         'price' => $finalPrice,
-                        //         'discount_price' => null,
-                        //         'discount_ends_at' => null,
-                        //         'active' => $variantShouldBeActive,
-                        //     ]
-                        // );
-
-                        // // 2️⃣ Seed Seller Prices
-                        // $sellers = \App\Models\User::where('role', 'seller')->get();
-                        // foreach ($sellers as $seller) {
-                        //     $storeVariant->sellerPrices()->updateOrCreate(
-                        //         [
-                        //             'store_variant_id' => $storeVariant->id,
-                        //             'seller_id' => $seller->id
-                        //         ],
-                        //         [
-                        //             'price' => $finalPrice * 0.98,
-                        //             'discount_price' => null,
-                        //             'discount_ends_at' => null,
-                        //             'active' => true,
-                        //         ]
-                        //     );
-                        // }
-
-                        // // 3️⃣ Seed Customer Prices
-                        // $customers = \App\Models\Customer::all();
-                        // foreach ($customers as $customer) {
-                        //     $storeVariant->customerPrices()->updateOrCreate(
-                        //         [
-                        //             'store_variant_id' => $storeVariant->id,
-                        //             'customer_id' => $customer->id
-                        //         ],
-                        //         [
-                        //             'price' => $finalPrice * 0.95,
-                        //             'discount_price' => null,
-                        //             'discount_ends_at' => null,
-                        //             'active' => true,
-                        //         ]
-                        //     );
-                        // }
-
-                        // ----------------------
-                        // Seed stock for this variant
-                        // ItemStock::create([
-                        //     '_variant_id' => $variant->id,
-                        //     'quantity' => rand(0, 20), // random stock for testing
-                        //     'item_inventory_location_id' => 1,           // assign to a store if needed
-                        // ]);
                     }
                 }
             }
