@@ -20,16 +20,18 @@ class StoreVariant extends Model
 
     protected $table = 'store_variants';
 
+    // app/Models/Store/StoreVariant.php
+
     protected $fillable = [
         'store_id',
         'item_variant_id',
-        'price',
-        'discount_price',
-        'discount_ends_at',
-        'stock',
+        'active',
         'manual_status',
         'forced_status',
-        'active',
+        'stock',
+        'price',
+        'discount_price',
+        'discount_ends_at' // Added
     ];
 
     /* ---------------------------------------------
@@ -105,7 +107,7 @@ class StoreVariant extends Model
 
     public function setManualStatusAttribute($value): void
     {
-        if (! in_array($value, self::MODES, true)) {
+        if (!in_array($value, self::MODES, true)) {
             throw new InvalidArgumentException('Invalid manual_status');
         }
 
@@ -131,7 +133,7 @@ class StoreVariant extends Model
 
         if (
             ($this->manual_status ?? 'auto') === 'forced'
-            && ! in_array($value, self::STATUSES, true)
+            && !in_array($value, self::STATUSES, true)
         ) {
             throw new InvalidArgumentException('Invalid forced_status');
         }
@@ -168,7 +170,7 @@ class StoreVariant extends Model
     public function getDisplayStatusAttribute(): string
     {
         return strtoupper(
-            $this->manual_status.' – '.str_replace('_', ' ', $this->computed_status)
+            $this->manual_status . ' – ' . str_replace('_', ' ', $this->computed_status)
         );
     }
 
