@@ -6,11 +6,11 @@ use App\Models\Auth\Customer;
 use App\Models\Seller\Cart;
 use Inertia\Inertia;
 use App\Models\Item;
-use App\Models\User;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use App\Models\Auth\User;
 
 
 // HTTP Verb	URI	                    Action	  Route Name
