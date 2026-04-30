@@ -106,18 +106,37 @@ class CartController extends Controller
      */
     public function show(Cart $cart)
     {
+        // 1. Authorization (Keep this! It's good practice)
         $this->authorize('view', $cart);
 
-        // Load variants, reach through to parent Item, and include attributes like Size/Color
+        // 2. Eager load everything needed for the UI
+        // We load 'customer' for the header and 'items.product' to get names/prices
         $cart->load([
-            'variants.item.category',
-            'variants.itemImage', // Assuming you have a relationship for specific variant images
             'customer',
-            'seller',
-            'store'
+            'items.product' // Assuming items belong to a product
         ]);
 
-        return Inertia::render('Seller/Carts/Show', compact('cart'));
+        // 3. Map items to match your React Interface
+        // This ensures your frontend doesn't have to guess where 'price' or 'name' is.
+        $cartData = [
+            'id' => $cart->id,
+            'status' => $cart->status,
+            'session_id' => $cart->session_id,
+            'customer' => $cart->customer,
+            'items' => $cart->items->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'product_name' => $item->product?->name ?? 'Unknown Product',
+                    'price' => $item->price, // Usually stored on the pivot/item table
+                    'quantity' => $item->quantity,
+                ];
+            }),
+        ];
+
+        // 4. Render with Inertia (Not the blade view)
+        return Inertia::render('Seller/Carts/Show', [
+            'cart' => $cartData
+        ]);
     }
 
     /**
