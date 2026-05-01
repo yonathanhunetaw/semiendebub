@@ -1,20 +1,31 @@
+// resources/js/Pages/Settings/Index.tsx
 import * as React from "react";
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head } from "@inertiajs/react";
 import {
     Box,
-    Button,
     Card,
     CardContent,
-    Chip,
     Divider,
     FormControl,
+    RadioGroup,
     FormControlLabel,
     Radio,
-    RadioGroup,
     Stack,
     Typography,
+    Button,
+    List,
 } from "@mui/material";
+import { Grid as Grid } from "@mui/material";
+import {
+    SettingsSuggest,
+    Storefront,
+    People,
+    AccountBalance,
+    Description,
+    History,
+    EventNote
+} from "@mui/icons-material";
 import { ThemeContext } from "@/app";
 
 type ThemeSetting = "light" | "dark" | "system";
@@ -26,134 +37,92 @@ export default function SettingsIndex() {
     };
 
     return (
-        <Box sx={{ p: 3, maxWidth: 1100 }}>
+        <Box sx={{ p: 3, maxWidth: 1200 }}>
             <Head title="Settings" />
 
-            <Stack spacing={1} mb={3}>
-                <Typography variant="h5" fontWeight={800} sx={{ color: "text.primary" }}>
+            <Stack spacing={1} mb={4}>
+                <Typography variant="h5" fontWeight={800}>
                     Settings
                 </Typography>
                 <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                    Layout for now. Theme settings are live so you can keep every page looking good in both modes.
+                    Configure your ERP environment and system utilities.
                 </Typography>
             </Stack>
 
-            <Stack spacing={2.5}>
-                {/* Appearance */}
-                <Card
-                    elevation={0}
-                    sx={{
-                        bgcolor: "background.paper",
-                        borderRadius: "12px",
-                        border: "1px solid",
-                        borderColor: "divider",
-                    }}
-                >
-                    <CardContent>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-                            <Typography fontWeight={800} sx={{ color: "text.primary" }}>
-                                Appearance
-                            </Typography>
-                            <Chip size="small" label="Active" color="success" />
-                        </Stack>
+            <Grid container spacing={3}>
+                {/* Slim Theme Toggle using Grid2 */}
+                <Grid size={12}>
+                    <Card elevation={0} sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
+                        <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between">
+                                <Stack direction="row" spacing={2} alignItems="center">
+                                    <SettingsSuggest sx={{ color: "text.secondary" }} />
+                                    <Typography variant="subtitle2" fontWeight={700}>System Appearance</Typography>
+                                </Stack>
 
-                        <Divider sx={{ borderColor: "divider", mb: 2 }} />
-
-                        <Stack spacing={1.5}>
-                            <Typography variant="subtitle2" sx={{ color: "text.secondary" }}>
-                                Theme mode
-                            </Typography>
-
-                            <FormControl>
-                                <RadioGroup
-                                    value={currentSetting}
-                                    onChange={(e) => toggleTheme(e.target.value as ThemeSetting)}
-                                >
-                                    <FormControlLabel
-                                        value="dark"
-                                        control={<Radio color="secondary" />}
-                                        label={<Typography sx={{ color: "text.primary" }}>Dark</Typography>}
-                                    />
-                                    <FormControlLabel
-                                        value="light"
-                                        control={<Radio color="secondary" />}
-                                        label={<Typography sx={{ color: "text.primary" }}>Light</Typography>}
-                                    />
-                                    <FormControlLabel
-                                        value="system"
-                                        control={<Radio color="secondary" />}
-                                        label={<Typography sx={{ color: "text.primary" }}>System</Typography>}
-                                    />
-                                </RadioGroup>
-                            </FormControl>
-
-                            <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                                “System” follows your device preference automatically.
-                            </Typography>
-                        </Stack>
-                    </CardContent>
-                </Card>
-
-                {/* Layout placeholders for future */}
-                <Stack direction={{ xs: "column", md: "row" }} spacing={2.5}>
-                    <Card
-                        elevation={0}
-                        sx={{
-                            flex: 1,
-                            bgcolor: "background.paper",
-                            borderRadius: "12px",
-                            border: "1px solid",
-                            borderColor: "divider",
-                        }}
-                    >
-                        <CardContent>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-                                <Typography fontWeight={800} sx={{ color: "text.primary" }}>
-                                    Notifications
-                                </Typography>
-                                <Chip size="small" label="Layout" variant="outlined" />
+                                <FormControl>
+                                    <RadioGroup
+                                        row
+                                        value={currentSetting}
+                                        onChange={(e) => toggleTheme(e.target.value as ThemeSetting)}
+                                    >
+                                        <FormControlLabel value="dark" control={<Radio size="small" color="secondary" />} label="Dark" />
+                                        <FormControlLabel value="light" control={<Radio size="small" color="secondary" />} label="Light" />
+                                        <FormControlLabel value="system" control={<Radio size="small" color="secondary" />} label="System" />
+                                    </RadioGroup>
+                                </FormControl>
                             </Stack>
-                            <Divider sx={{ borderColor: "divider", mb: 2 }} />
-                            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                                Placeholder for delivery / payments / low-stock alerts, and admin notifications.
-                            </Typography>
-                            <Button disabled sx={{ mt: 2 }} variant="contained">
-                                Configure
-                            </Button>
                         </CardContent>
                     </Card>
+                </Grid>
 
-                    <Card
-                        elevation={0}
-                        sx={{
-                            flex: 1,
-                            bgcolor: "background.paper",
-                            borderRadius: "12px",
-                            border: "1px solid",
-                            borderColor: "divider",
-                        }}
-                    >
+                {/* Infrastructure Card using Grid2 */}
+                <Grid size={{ xs: 12, md: 6 }}>
+                    <Card elevation={0} sx={{ height: '100%', borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
                         <CardContent>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-                                <Typography fontWeight={800} sx={{ color: "text.primary" }}>
-                                    Admin preferences
-                                </Typography>
-                                <Chip size="small" label="Layout" variant="outlined" />
-                            </Stack>
-                            <Divider sx={{ borderColor: "divider", mb: 2 }} />
-                            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                                Placeholder for defaults used across sidebar pages (tables density, currency, date format, etc.).
-                            </Typography>
-                            <Button disabled sx={{ mt: 2 }} variant="contained">
-                                Configure
-                            </Button>
+                            <Typography variant="overline" fontWeight={800} color="text.secondary">Infrastructure</Typography>
+                            <List sx={{ mt: 1 }}>
+                                <SettingItem icon={<Storefront />} title="Locations" desc="Manage Stores and Warehouses" />
+                                <Divider variant="inset" component="li" sx={{ my: 1 }} />
+                                <SettingItem icon={<People />} title="User Management" desc="Roles and staff permissions" />
+                                <Divider variant="inset" component="li" sx={{ my: 1 }} />
+                                <SettingItem icon={<History />} title="Sessions" desc="Security logs and login history" />
+                            </List>
                         </CardContent>
                     </Card>
-                </Stack>
-            </Stack>
+                </Grid>
+
+                {/* Operations & Logistics Card using Grid2 */}
+                <Grid size={{ xs: 12, md: 6 }}>
+                    <Card elevation={0} sx={{ height: '100%', borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
+                        <CardContent>
+                            <Typography variant="overline" fontWeight={800} color="text.secondary">Operations Hub</Typography>
+                            <List sx={{ mt: 1 }}>
+                                <SettingItem icon={<AccountBalance />} title="Balance" desc="Financial ledgers and currency" />
+                                <Divider variant="inset" component="li" sx={{ my: 1 }} />
+                                <SettingItem icon={<Description />} title="Documents" desc="Templates for invoices and labels" />
+                                <Divider variant="inset" component="li" sx={{ my: 1 }} />
+                                <SettingItem icon={<EventNote />} title="Calendar" desc="System scheduling and task logs" />
+                            </List>
+                        </CardContent>
+                    </Card>
+                </Grid>
+            </Grid>
         </Box>
     );
 }
 
-SettingsIndex.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
+function SettingItem({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
+    return (
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ p: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>
+            <Box sx={{ color: 'text.secondary', display: 'flex' }}>{icon}</Box>
+            <Box sx={{ flexGrow: 1 }}>
+                <Typography variant="body2" fontWeight={700}>{title}</Typography>
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>{desc}</Typography>
+            </Box>
+            <Button size="small" variant="outlined" sx={{ borderRadius: '8px', textTransform: 'none' }}>Open</Button>
+        </Stack>
+    );
+}
 
+SettingsIndex.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
