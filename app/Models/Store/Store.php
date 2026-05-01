@@ -3,6 +3,11 @@
 namespace App\Models\Store;
 
 use Illuminate\Database\Eloquent\Model;
+// Import from the specific domain folders you mentioned
+use App\Models\Auth\Customer;
+use App\Models\StockKeeper\ItemInventoryLocation;
+use App\Models\Auth\User;
+use App\Models\Item\Item;
 
 class Store extends Model
 {
@@ -12,32 +17,33 @@ class Store extends Model
         'status',
     ];
 
-    // Items in this store
+    // Items in this store (Linked via your item_store migration)
     public function items()
     {
-        return $this->belongsToMany(Item::class)
+        return $this->belongsToMany(Item::class, 'item_store')
             ->withPivot('active')
             ->withTimestamps();
     }
 
-    // Inventory locations
+    // Inventory locations (Now correctly pointing to StockKeeper)
     public function inventoryLocations()
     {
         return $this->hasMany(ItemInventoryLocation::class, 'store_id');
     }
 
-    // Variants for this store with pivot info
-    // Store.php
+    // Variants for this store
     public function variants()
     {
         return $this->hasMany(StoreVariant::class);
     }
 
+    // Sellers (Assuming User is also in Auth)
     public function sellers()
     {
         return $this->hasMany(User::class)->where('role', 'seller');
     }
 
+    // Customers (Now correctly pointing to Auth)
     public function customers()
     {
         return $this->hasMany(Customer::class);
