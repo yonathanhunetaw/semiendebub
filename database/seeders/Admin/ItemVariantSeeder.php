@@ -41,11 +41,12 @@ class ItemVariantSeeder extends Seeder
 
                         // 3. Put it in the Store
                         $hasDiscount = rand(1, 10) > 8;
+                        $calculatedPrice = $this->calculateDynamicPrice($item, $color, $size, $pkg);
 
                         StoreVariant::create([
                             'store_id' => $storeId,
                             'item_variant_id' => $variant->id,
-                            'price' => $calculatedPrice,
+                            'price' => $calculatedPrice, // Now the variable exists!
                             'discount_price' => $hasDiscount ? round($calculatedPrice * 0.8, 2) : null,
                             'discount_ends_at' => $hasDiscount ? now()->addDays(7) : null,
                             'stock' => rand(10, 100),
