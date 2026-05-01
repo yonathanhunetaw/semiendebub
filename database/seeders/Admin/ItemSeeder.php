@@ -71,12 +71,13 @@ class ItemSeeder extends Seeder
 
         foreach ($items as $data) {
             $item = Item::create([
-                'product_name'        => $data['name'],
+                'product_name' => $data['name'],
                 'product_description' => $data['description'],
-                'general_images'      => ["images/product_images/" . str_replace(' ', '_', $data['name']) . "_1.jpg"],
-                'status'              => 'active',
-                'item_category_id'    => $data['subcategory_id'] ?? $data['category_id'],
-                'is_incomplete'       => false,
+                // ItemSeeder.php
+                'general_images' => ["images/product_images/" . str_replace(' ', '_', $data['name']) . "_1.jpg"],
+                'status' => 'active',
+                'item_category_id' => $data['subcategory_id'] ?? $data['category_id'],
+                'is_incomplete' => false,
             ]);
 
             // Sync relationships

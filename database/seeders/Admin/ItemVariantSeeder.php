@@ -35,7 +35,9 @@ class ItemVariantSeeder extends Seeder
                             'barcode' => (string) rand(1000000000, 9999999999),
                             // 'status' => 'active', // <--- REMOVED THIS LINE
                             'packaging_total_pieces' => $quantityMultiplier,
-                            'images' => ["images/products/" . Str::slug($item->product_name) . "/main.jpg"],
+                            'images' => [
+                                "images/product_images/" . str_replace(' ', '_', $item->product_name) . "_1.jpg"
+                            ],
                         ]);
 
 
