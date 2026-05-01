@@ -1,217 +1,178 @@
-import * as React from "react";
+import { useState } from "react";
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link } from "@inertiajs/react";
 import {
-    Box,
-    Typography,
-    Stack,
-    Card,
-    CardContent,
-    Button,
-    Chip,
-    Divider,
-    Paper
+    Box, Chip, Grid, Paper, Table, TableBody, TableCell,
+    TableHead, TableRow, Typography, Button, TableContainer, Stack
 } from "@mui/material";
-import {
-    Storefront,
-    Warehouse,
-    ArrowForward,
-    Inventory2,
-    AddCircleOutline,
-    LocationOn
-} from "@mui/icons-material";
-import { Grid as Grid } from "@mui/material";
+import AddBusinessIcon from '@mui/icons-material/AddBusiness';
+import EditIcon from '@mui/icons-material/Edit';
 
-// This interface matches the data structure we set up in the InventoryController
-interface Store {
+/* ---------------------------------------------
+ | TypeScript Interfaces
+ |---------------------------------------------*/
+interface ItemVariant {
     id: number;
-    name: string;
-    type: 'retail' | 'warehouse';
-    location_code: string;
-    items_count: number;
+    sku: string | null;
+    images: string[] | null;
+    item_color?: { name: string };
+    item_size?: { name: string };
+    item_packaging_type?: { name: string };
+}
+
+interface Item {
+    id: number;
+    product_name: string;
+    product_description: string;
+    general_images: string[] | null; // Master images
+    category?: { name: string };
+    variants: ItemVariant[];
 }
 
 interface Props {
-    stores: Store[];
+    item: Item;
 }
 
-export default function InventoryIndex({ stores }: Props) {
-    return (
-        <Box sx={{ p: 3, maxWidth: 1400, margin: "0 auto" }}>
-            <Head title="Inventory Hub" />
+export default function Show({ item }: Props) {
+    if (!item) return null;
 
-            {/* Header Section */}
-            <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                justifyContent="space-between"
-                alignItems={{ xs: 'flex-start', sm: 'center' }}
-                spacing={2}
-                mb={5}
-            >
+    // Default image logic: Master > First Variant > Default
+    const masterFallback = item.general_images?.[0] || item.variants?.[0]?.images?.[0] || "/img/default.jpg";
+    const [selectedImage, setSelectedImage] = useState(masterFallback);
+
+    return (
+        <Box sx={{ p: 4, maxWidth: '1400px', margin: '0 auto' }}>
+            <Head title={`Catalog: ${item.product_name}`} />
+
+            {/* HEADER SECTION */}
+            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={4}>
                 <Box>
-                    <Typography variant="h4" fontWeight={900} letterSpacing="-0.5px">
-                        Inventory Hub
+                    <Typography variant="overline" color="primary" sx={{ fontWeight: 'bold' }}>
+                        Master Catalog Entry
                     </Typography>
-                    <Typography variant="body1" color="text.secondary">
-                        Manage stock levels and distributions across your {stores.length} locations.
+                    <Typography variant="h3" fontWeight="800">
+                        {item.product_name}
                     </Typography>
+                    {item.category && (
+                        <Chip label={item.category.name} size="small" sx={{ mt: 1 }} />
+                    )}
                 </Box>
-                <Button
-                    variant="contained"
-                    startIcon={<AddCircleOutline />}
-                    component={Link}
-                    href={route('store.create')} // Using your existing Store route name
-                    sx={{
-                        borderRadius: '12px',
-                        px: 3,
-                        py: 1.5,
-                        textTransform: 'none',
-                        fontWeight: 700,
-                        boxShadow: '0 4px 14px 0 rgba(0,118,255,0.39)'
-                    }}
-                >
-                    Add New Location
-                </Button>
+
+                <Stack direction="row" spacing={2}>
+                    <Button
+                        variant="outlined"
+                        startIcon={<EditIcon />}
+                        component={Link}
+                        href={route('admin.items.edit', item.id)}
+                        sx={{ borderRadius: '8px', px: 3, fontWeight: 'bold' }}
+                    >
+                        Edit Master
+                    </Button>
+                    <Button
+                        variant="contained"
+                        startIcon={<AddBusinessIcon />}
+                        sx={{ borderRadius: '8px', px: 3, fontWeight: 'bold' }}
+                    >
+                        Deploy to Location
+                    </Button>
+                </Stack>
             </Stack>
 
-            {/* Stores Grid */}
-            <Grid container spacing={3}>
-                {stores.map((store) => (
-                    <Grid item xs={12} sm={6} md={4} key={store.id}>
-                        <Card
-                            elevation={0}
-                            sx={{
-                                borderRadius: "16px",
-                                border: "1px solid",
-                                borderColor: "divider",
-                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                '&:hover': {
-                                    borderColor: 'primary.main',
-                                    transform: 'translateY(-6px)',
-                                    boxShadow: '0 12px 30px rgba(0,0,0,0.08)',
-                                    '& .arrow-icon': { transform: 'translateX(4px)' }
-                                }
-                            }}
-                        >
-                            <CardContent sx={{ p: 3 }}>
-                                {/* Top Row: Icon and Code */}
-                                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={3}>
-                                    <Box
-                                        sx={{
-                                            p: 1.5,
-                                            bgcolor: store.type === 'warehouse' ? 'info.soft' : 'primary.soft',
-                                            borderRadius: '12px',
-                                            color: store.type === 'warehouse' ? 'info.main' : 'primary.main',
-                                            display: 'flex',
-                                            border: '1px solid',
-                                            borderColor: 'inherit'
-                                        }}
-                                    >
-                                        {store.type === 'warehouse' ? <Warehouse fontSize="medium" /> : <Storefront fontSize="medium" />}
-                                    </Box>
-                                    <Chip
-                                        label={store.location_code}
-                                        size="small"
-                                        icon={<LocationOn sx={{ fontSize: '14px !important' }} />}
-                                        sx={{
-                                            fontWeight: 800,
-                                            borderRadius: '8px',
-                                            bgcolor: 'action.hover',
-                                            border: '1px solid',
-                                            borderColor: 'divider'
-                                        }}
-                                    />
-                                </Stack>
+            <Grid container spacing={4}>
+                {/* GALLERY SECTION */}
+                <Grid item xs={12} md={5}>
+                    <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: 'background.paper' }}>
+                        <Box sx={{ width: '100%', height: '450px', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+                            <Box
+                                component="img"
+                                src={selectedImage}
+                                sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', transition: '0.3s' }}
+                                onError={(e) => { e.currentTarget.src = "/img/default.jpg"; }}
+                            />
+                        </Box>
 
-                                {/* Store Info */}
-                                <Typography variant="h6" fontWeight={800} sx={{ mb: 0.5 }}>
-                                    {store.name}
-                                </Typography>
-
-                                <Typography variant="body2" sx={{ color: 'text.secondary', display: 'block', mb: 3 }}>
-                                    {store.type === 'warehouse' ? 'Main Distribution Center' : 'Retail Outlet / Shop'}
-                                </Typography>
-
-                                <Divider sx={{ my: 2, borderStyle: 'dashed' }} />
-
-                                {/* Inventory Stats */}
-                                <Stack direction="row" spacing={1.5} alignItems="center" mb={4}>
-                                    <Box sx={{ color: 'text.secondary', display: 'flex' }}>
-                                        <Inventory2 fontSize="small" />
-                                    </Box>
-                                    <Box>
-                                        <Typography variant="body2" fontWeight={700} lineHeight={1}>
-                                            {store.items_count} SKUs
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            Unique products in stock
-                                        </Typography>
-                                    </Box>
-                                </Stack>
-
-                                {/* Action Button */}
-                                <Button
-                                    fullWidth
-                                    variant="outlined"
-                                    component={Link}
-                                    href={route('inventory.show', store.id)} // Points to your show route
-                                    endIcon={<ArrowForward className="arrow-icon" sx={{ transition: '0.2s' }} />}
+                        {/* Thumbnail Strip: Master Images (Orange) + Variant Images (Blue) */}
+                        <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 1 }}>
+                            {item.general_images?.map((img, i) => (
+                                <Box
+                                    key={`master-${i}`}
+                                    component="img"
+                                    src={img}
+                                    onClick={() => setSelectedImage(img)}
                                     sx={{
-                                        borderRadius: '10px',
-                                        textTransform: 'none',
-                                        fontWeight: 700,
-                                        py: 1.2,
-                                        borderColor: 'divider',
-                                        color: 'text.primary',
-                                        '&:hover': {
-                                            bgcolor: 'primary.main',
-                                            color: 'white',
-                                            borderColor: 'primary.main'
-                                        }
+                                        width: 70, height: 70, borderRadius: 1, cursor: 'pointer',
+                                        border: selectedImage === img ? '2px solid #ed6c02' : '2px solid #eee',
+                                        objectFit: 'cover'
                                     }}
-                                >
-                                    Manage Inventory
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                ))}
+                                />
+                            ))}
+                            {item.variants?.map((v, i) => v.images?.[0] && (
+                                <Box
+                                    key={`variant-${i}`}
+                                    component="img"
+                                    src={v.images[0]}
+                                    onClick={() => setSelectedImage(v.images[0])}
+                                    sx={{
+                                        width: 70, height: 70, borderRadius: 1, cursor: 'pointer',
+                                        border: selectedImage === v.images[0] ? '2px solid #1976d2' : '2px solid transparent',
+                                        objectFit: 'cover'
+                                    }}
+                                />
+                            ))}
+                        </Box>
+                    </Paper>
+                </Grid>
 
-                {/* Empty State Logic */}
-                {stores.length === 0 && (
-                    <Grid item xs={12}>
-                        <Paper
-                            variant="outlined"
-                            sx={{
-                                p: 8,
-                                textAlign: 'center',
-                                borderRadius: '20px',
-                                bgcolor: 'transparent',
-                                borderStyle: 'dashed',
-                                borderWidth: 2
-                            }}
-                        >
-                            <Inventory2 sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
-                            <Typography variant="h6" fontWeight={700} color="text.secondary">
-                                No locations found
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                                You need to create a store or warehouse before you can manage inventory.
-                            </Typography>
-                            <Button
-                                variant="contained"
-                                component={Link}
-                                href={route('store.create')}
-                            >
-                                Create Your First Store
-                            </Button>
-                        </Paper>
-                    </Grid>
-                )}
+                {/* DETAILS & VARIATIONS */}
+                <Grid item xs={12} md={7}>
+                    <Typography variant="h6" gutterBottom fontWeight="bold">Description</Typography>
+                    <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+                        {item.product_description || "No description provided."}
+                    </Typography>
+
+                    <Typography variant="h6" gutterBottom fontWeight="bold">Global Variations</Typography>
+
+                    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                        <Table onMouseLeave={() => setSelectedImage(masterFallback)}>
+                            <TableHead sx={{ bgcolor: 'action.hover' }}>
+                                <TableRow>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>SKU</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Attributes</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>C-S-P Protocol Path</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {item.variants?.map((variant) => (
+                                    <TableRow
+                                        key={variant.id}
+                                        hover
+                                        onMouseEnter={() => variant.images?.[0] && setSelectedImage(variant.images[0])}
+                                    >
+                                        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
+                                            {variant.sku}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography variant="body2">
+                                                {variant.item_color?.name} / {variant.item_size?.name || 'No Size'}
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                {variant.item_packaging_type?.name}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
+                                                {variant.images?.[0]?.split('/product_images/')[1] || 'No Path'}
+                                            </Typography>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </Grid>
             </Grid>
         </Box>
     );
 }
 
-// Persistent Admin Layout
-InventoryIndex.layout = (page: React.ReactNode) => <AdminLayout children={page} />;
+Show.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
