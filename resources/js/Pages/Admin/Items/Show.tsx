@@ -49,89 +49,83 @@ interface Props {
  | Component Logic
  |---------------------------------------------*/
 
-export default function Show({ item, allImages }: Props) {
-    const [selectedImage, setSelectedImage] = useState(allImages[0] || "/img/default.jpg");
+export default function Show({ item, allImages = [] }: Props) {
+    // Safety check: if item is missing, show a loading state instead of crashing
+    if (!item) return <Typography>Loading Item Data...</Typography>;
+
+    const [selectedImage, setSelectedImage] = useState(
+        allImages?.[0] || "/img/default.jpg"
+    );
     const [openDeploy, setOpenDeploy] = useState(false);
     const [selectedLocation, setSelectedLocation] = useState('');
 
-    const handleDeploy = () => {
-        // Here you would use useForm or router.post to link the ITEM to the STORE
-        // This should only create the relationship, not set stock/price.
-        console.log(`Deploying ${item.product_name} to location: ${selectedLocation}`);
-        setOpenDeploy(false);
-    };
-
     return (
         <Box sx={{ p: 3 }}>
-            <Head title={`Item - ${item.product_name}`} />
+            <Head title={`Item - ${item?.product_name || 'Loading'}`} />
 
-            {/* ACTION BAR */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
                 <Typography variant="h4" fontWeight="bold">
-                    {item.product_name}
+                    {item?.product_name}
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                    <Button
-                        variant="contained"
-                        startIcon={<AddBusinessIcon />}
-                        onClick={() => setOpenDeploy(true)}
-                        color="primary"
-                    >
-                        Deploy to Location
-                    </Button>
-                </Box>
+                <Button
+                    variant="contained"
+                    startIcon={<AddBusinessIcon />}
+                    onClick={() => setOpenDeploy(true)}
+                >
+                    Deploy to Location
+                </Button>
             </Box>
 
             <Grid container spacing={3}>
-                {/* LEFT: Image Gallery (existing logic) */}
                 <Grid item xs={12} md={5}>
                     <Paper sx={{ p: 2, display: "flex", gap: 2, height: "500px" }}>
-                        <Box
-                            sx={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 1,
-                                width: "80px",
-                                overflowY: "auto",
-                                "&::-webkit-scrollbar": { display: "none" },
-                            }}
-                        >
-                            {allImages.map((img, i) => (
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, width: "80px", overflowY: "auto" }}>
+                            {allImages?.map((img, i) => (
                                 <Box
                                     key={i}
                                     component="img"
                                     src={img}
-                                    onMouseEnter={() => setSelectedImage(img)}
-                                    sx={{
-                                        width: "100%",
-                                        height: "70px",
-                                        objectFit: "cover",
-                                        borderRadius: 1,
-                                        cursor: "pointer",
-                                        border: selectedImage === img ? "2px solid #1976d2" : "2px solid transparent",
-                                    }}
+                                    onClick={() => setSelectedImage(img)}
+                                    sx={{ width: "100%", height: "70px", objectFit: "cover", cursor: "pointer", border: selectedImage === img ? "2px solid #1976d2" : "2px solid transparent" }}
                                 />
                             ))}
                         </Box>
-
-                        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', borderRadius: 2 }}>
+                        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Box component="img" src={selectedImage} sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                         </Box>
                     </Paper>
                 </Grid>
 
-                {/* RIGHT: Details & Variants */}
-                {/* RIGHT: Details & Variants */}
                 <Grid item xs={12} md={7}>
                     <Typography variant="body1" color="text.secondary" paragraph>
-                        {item.product_description}
+                        {item?.product_description}
                     </Typography>
-
                     <Divider sx={{ my: 3 }} />
 
-                    {/* Inventory Table (existing logic) */}
                     <Paper variant="outlined">
-                        {/* ... your existing table code */}
+                        <Table>
+                            <TableHead sx={{ bgcolor: "action.hover" }}>
+                                <TableRow>
+                                    <TableCell>SKU / Details</TableCell>
+                                    <TableCell>Store Stock</TableCell>
+                                    <TableCell>Status</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {/* Use optional chaining (?.) to prevent crashes if variants is undefined */}
+                                {item?.variants?.map((variant) => (
+                                    <TableRow key={variant.id}>
+                                        <TableCell>{variant.sku || 'No SKU'}</TableCell>
+                                        <TableCell>
+                                            {variant.store_variants?.reduce((acc, sv) => acc + sv.stock, 0) || 0} units
+                                        </TableCell>
+                                        <TableCell>
+                                            <Chip label={variant.status} size="small" color={variant.status === 'active' ? 'success' : 'default'} />
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
                     </Paper>
                 </Grid>
             </Grid>
