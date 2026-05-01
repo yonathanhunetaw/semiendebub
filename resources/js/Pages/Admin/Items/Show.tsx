@@ -8,7 +8,9 @@ import {
 import AddBusinessIcon from '@mui/icons-material/AddBusiness';
 import EditIcon from '@mui/icons-material/Edit';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';interface ItemVariant {
+import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
+
+interface ItemVariant {
     id: number;
     sku: string | null;
     images: string[] | null;
