@@ -91,7 +91,7 @@ class ItemController extends Controller
             'variants.itemColor',
             'variants.itemSize',
             'variants.itemPackagingType',
-            'variants.storeVariants.storeSellerPrices' => function ($query) {
+            'variants.storeVariants.SellerPrices' => function ($query) {
                 $query->where('seller_id', auth()->id())->where('active', 1);
             }
         ]);
