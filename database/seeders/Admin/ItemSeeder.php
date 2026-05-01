@@ -4,6 +4,7 @@ namespace Database\Seeders\Admin;
 
 use App\Models\Item\Item;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 
 class ItemSeeder extends Seeder
 {
@@ -70,8 +71,8 @@ class ItemSeeder extends Seeder
         ];
 
         foreach ($items as $data) {
-            // Force lowercase and underscores for Linux compatibility
-            $safeFolderName = str_replace(' ', '_', strtolower($data['name']));
+            // Str::snake ensures 'Bic Pen' becomes 'bic_pen' safely for Linux
+            $safeFolderName = Str::snake($data['name']);
 
             $item = Item::create([
                 'product_name' => $data['name'],

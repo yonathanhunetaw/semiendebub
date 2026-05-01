@@ -2,8 +2,8 @@ import { useState } from "react";
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head } from "@inertiajs/react";
 import {
-    Box, Chip, Divider, Grid, Paper, Table, TableBody, TableCell,
-    TableHead, TableRow, Typography, Button, Modal, MenuItem, Select, FormControl, InputLabel
+    Box, Chip, Grid, Paper, Table, TableBody, TableCell,
+    TableHead, TableRow, Typography, Button, TableContainer
 } from "@mui/material";
 import AddBusinessIcon from '@mui/icons-material/AddBusiness';
 
@@ -25,6 +25,7 @@ interface Item {
     id: number;
     product_name: string;
     product_description: string;
+    general_images: string[] | null; // <--- Master images added
     category?: { name: string };
     variants: ItemVariant[];
 }
@@ -37,8 +38,9 @@ interface Props {
 export default function Show({ item, allImages = [] }: Props) {
     if (!item) return null;
 
-    // Default to the first image in the master array
-    const [selectedImage, setSelectedImage] = useState(item.variants?.[0]?.images?.[0] || "/img/default.jpg");
+    // Default to Master image, fallback to Variant, fallback to default.jpg
+    const defaultMasterImage = item.general_images?.[0] || item.variants?.[0]?.images?.[0] || "/img/default.jpg";
+    const [selectedImage, setSelectedImage] = useState(defaultMasterImage);
     const [openDeploy, setOpenDeploy] = useState(false);
 
     return (
@@ -74,29 +76,51 @@ export default function Show({ item, allImages = [] }: Props) {
                 {/* GALLERY */}
                 <Grid item xs={12} md={5}>
                     <Paper elevation={0} sx={{ p: 2, bgcolor: 'background.paper', borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+
+                        {/* Main Preview */}
                         <Box sx={{ width: '100%', height: '450px', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
                             <Box
                                 component="img"
                                 src={selectedImage}
-                                sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', transition: '0.3s' }}
-                                // Fallback for missing images on the server
+                                sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', transition: '0.2s ease-in-out' }}
                                 onError={(e) => { e.currentTarget.src = "/img/default.jpg"; }}
                             />
                         </Box>
+
                         {/* Thumbnail Strip */}
                         <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 1 }}>
-                            {item.variants?.map((v, i) => (
+
+                            {/* FIRST: Render Master/General Images */}
+                            {item.general_images?.map((img, i) => (
                                 <Box
-                                    key={i}
+                                    key={`master-${i}`}
                                     component="img"
-                                    src={v.images?.[0]}
-                                    onClick={() => setSelectedImage(v.images?.[0])}
+                                    src={img}
+                                    onClick={() => setSelectedImage(img)}
                                     sx={{
                                         width: 70, height: 70, borderRadius: 1, cursor: 'pointer',
-                                        border: selectedImage === v.images?.[0] ? '2px solid #1976d2' : '2px solid transparent',
-                                        objectFit: 'cover'
+                                        border: selectedImage === img ? '2px solid #ed6c02' : '2px solid #ccc',
+                                        objectFit: 'cover',
+                                        opacity: selectedImage === img ? 1 : 0.7
                                     }}
                                 />
+                            ))}
+
+                            {/* SECOND: Render Variant C-S-P Images */}
+                            {item.variants?.map((v, i) => (
+                                v.images?.[0] && (
+                                    <Box
+                                        key={`variant-${i}`}
+                                        component="img"
+                                        src={v.images[0]}
+                                        onClick={() => setSelectedImage(v.images[0])}
+                                        sx={{
+                                            width: 70, height: 70, borderRadius: 1, cursor: 'pointer',
+                                            border: selectedImage === v.images[0] ? '2px solid #1976d2' : '2px solid transparent',
+                                            objectFit: 'cover'
+                                        }}
+                                    />
+                                )
                             ))}
                         </Box>
                     </Paper>
@@ -115,7 +139,8 @@ export default function Show({ item, allImages = [] }: Props) {
                     </Typography>
 
                     <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                        <Table size="medium">
+                        {/* MouseLeave on the table snaps the gallery back to the Master image */}
+                        <Table size="medium" onMouseLeave={() => setSelectedImage(defaultMasterImage)}>
                             <TableHead sx={{ bgcolor: 'action.hover' }}>
                                 <TableRow>
                                     <TableCell sx={{ fontWeight: 'bold' }}>SKU</TableCell>
@@ -128,8 +153,11 @@ export default function Show({ item, allImages = [] }: Props) {
                                     <TableRow
                                         key={variant.id}
                                         hover
-                                        // Update gallery on hover to show C-S-P specific image
-                                        onMouseEnter={() => setSelectedImage(variant.images?.[0])}
+                                        // Hover updates the gallery to show C-S-P specific image
+                                        onMouseEnter={() => {
+                                            if (variant.images?.[0]) setSelectedImage(variant.images[0]);
+                                        }}
+                                        sx={{ cursor: 'pointer' }}
                                     >
                                         <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
                                             {variant.sku || 'PENDING'}
@@ -143,9 +171,9 @@ export default function Show({ item, allImages = [] }: Props) {
                                             </Typography>
                                         </TableCell>
                                         <TableCell>
-                                            {/* Useful for debugging the Color-Size-Packaging folder structure */}
                                             <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-                                                {variant.images?.[0]?.replace('/images/product_images/', '')}
+                                                {/* Correctly reading from the variant array, not the master array */}
+                                                {variant.images?.[0]?.replace('/images/product_images/', '') || 'No Image Configured'}
                                             </Typography>
                                         </TableCell>
                                     </TableRow>
@@ -158,8 +186,5 @@ export default function Show({ item, allImages = [] }: Props) {
         </Box>
     );
 }
-
-// Add this wrapper to help debug if the screen goes white
-import { TableContainer } from "@mui/material";
 
 Show.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;

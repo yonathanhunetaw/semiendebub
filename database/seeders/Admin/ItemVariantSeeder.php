@@ -16,15 +16,18 @@ class ItemVariantSeeder extends Seeder
         $storeId = 1;
 
         foreach ($items as $item) {
-            $productFolder = str_replace(' ', '_', strtolower($item->product_name));
+            // Must match the exact snake_case logic from ItemSeeder
+            $productFolder = Str::snake($item->product_name);
             $sizes = $item->sizes->isNotEmpty() ? $item->sizes : [null];
 
             foreach ($item->colors as $color) {
                 foreach ($sizes as $size) {
                     foreach ($item->packagingTypes as $pkg) {
 
-                        $sizeId = $size ? $size->id : 0;
+                        $sizeId = $size ? $size->id : 0; // The "0" Rule
                         $folderPath = "{$color->id}-{$sizeId}-{$pkg->id}";
+
+                        // The exact C-S-P coordinate path
                         $variantImagePath = "/images/product_images/{$productFolder}/{$folderPath}/1.jpg";
 
                         $variant = ItemVariant::create([
@@ -35,18 +38,17 @@ class ItemVariantSeeder extends Seeder
                             'sku' => strtoupper(substr($productFolder, 0, 3)) . "-" . Str::random(8),
                             'barcode' => (string) rand(1000000000, 9999999999),
                             'packaging_total_pieces' => $pkg->pivot->quantity ?? 1,
-                            'images' => [$variantImagePath],
+                            'images' => [$variantImagePath], // Assign to the variant
                         ]);
 
-
-                        // 3. Put it in the Store
-                        $hasDiscount = rand(1, 10) > 8;
+                        // Calculate dynamic price BEFORE creating the StoreVariant
                         $calculatedPrice = $this->calculateDynamicPrice($item, $color, $size, $pkg);
+                        $hasDiscount = rand(1, 10) > 8;
 
                         StoreVariant::create([
                             'store_id' => $storeId,
                             'item_variant_id' => $variant->id,
-                            'price' => $calculatedPrice, // Now the variable exists!
+                            'price' => $calculatedPrice,
                             'discount_price' => $hasDiscount ? round($calculatedPrice * 0.8, 2) : null,
                             'discount_ends_at' => $hasDiscount ? now()->addDays(7) : null,
                             'stock' => rand(10, 100),
@@ -75,7 +77,6 @@ class ItemVariantSeeder extends Seeder
 
         $totalQty = $pkg->pivot->quantity ?? 1;
 
-        // Fixed the missing $ below
         $subtotal = $base * $totalQty;
 
         if ($totalQty > 1) {
