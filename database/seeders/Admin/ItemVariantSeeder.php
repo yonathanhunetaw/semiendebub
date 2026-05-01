@@ -16,28 +16,26 @@ class ItemVariantSeeder extends Seeder
         $storeId = 1;
 
         foreach ($items as $item) {
+            $productFolder = str_replace(' ', '_', strtolower($item->product_name));
             $sizes = $item->sizes->isNotEmpty() ? $item->sizes : [null];
 
             foreach ($item->colors as $color) {
                 foreach ($sizes as $size) {
                     foreach ($item->packagingTypes as $pkg) {
 
-                        $quantityMultiplier = $pkg->pivot->quantity ?? 1;
-                        $calculatedPrice = $this->calculateDynamicPrice($item, $color, $size, $pkg);
+                        $sizeId = $size ? $size->id : 0;
+                        $folderPath = "{$color->id}-{$sizeId}-{$pkg->id}";
+                        $variantImagePath = "/images/product_images/{$productFolder}/{$folderPath}/1.jpg";
 
-                        // 2. Create the Physical Variant
                         $variant = ItemVariant::create([
                             'item_id' => $item->id,
                             'item_color_id' => $color->id,
                             'item_size_id' => $size?->id,
                             'item_packaging_type_id' => $pkg->id,
-                            'sku' => strtoupper(substr($item->product_name, 0, 3)) . "-" . Str::random(8),
+                            'sku' => strtoupper(substr($productFolder, 0, 3)) . "-" . Str::random(8),
                             'barcode' => (string) rand(1000000000, 9999999999),
-                            // 'status' => 'active', // <--- REMOVED THIS LINE
-                            'packaging_total_pieces' => $quantityMultiplier,
-                            'images' => [
-                                "images/product_images/" . str_replace(' ', '_', $item->product_name) . "_1.jpg"
-                            ],
+                            'packaging_total_pieces' => $pkg->pivot->quantity ?? 1,
+                            'images' => [$variantImagePath],
                         ]);
 
 

@@ -53,7 +53,7 @@ class ItemSeeder extends Seeder
                 'category_id' => 11,
                 'subcategory_id' => 12,
                 'color_ids' => [2, 5, 1],
-                'size_ids' => [],
+                'size_ids' => [], // Pens have no size
                 'packagings' => [
                     1 => ['quantity' => 1],
                     2 => ['quantity' => 50],
@@ -70,23 +70,22 @@ class ItemSeeder extends Seeder
         ];
 
         foreach ($items as $data) {
+            // Force lowercase and underscores for Linux compatibility
+            $safeFolderName = str_replace(' ', '_', strtolower($data['name']));
+
             $item = Item::create([
                 'product_name' => $data['name'],
                 'product_description' => $data['description'],
-                // ItemSeeder.php
-                'general_images' => ["images/product_images/" . str_replace(' ', '_', $data['name']) . "_1.jpg"],
+                // Master image path
+                'general_images' => ["/images/product_images/{$safeFolderName}_1.jpg"],
                 'status' => 'active',
                 'item_category_id' => $data['subcategory_id'] ?? $data['category_id'],
                 'is_incomplete' => false,
             ]);
 
-            // Sync relationships
             $item->colors()->sync($data['color_ids']);
             $item->sizes()->sync($data['size_ids']);
             $item->packagingTypes()->sync($data['packagings']);
-
-            // Note: We store price_rules and active_packaging as a "memory" for the next seeder
-            // by using the $data array directly in the next step.
         }
     }
 }

@@ -35,12 +35,11 @@ interface Props {
 }
 
 export default function Show({ item, allImages = [] }: Props) {
-    // Safety check for the White Screen issue
     if (!item) return null;
 
-    const [selectedImage, setSelectedImage] = useState(allImages?.[0] || "/img/default.jpg");
+    // Default to the first image in the master array
+    const [selectedImage, setSelectedImage] = useState(item.variants?.[0]?.images?.[0] || "/img/default.jpg");
     const [openDeploy, setOpenDeploy] = useState(false);
-    const [selectedLocation, setSelectedLocation] = useState('');
 
     return (
         <Box sx={{ p: 4, maxWidth: '1400px', margin: '0 auto' }}>
@@ -80,18 +79,21 @@ export default function Show({ item, allImages = [] }: Props) {
                                 component="img"
                                 src={selectedImage}
                                 sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', transition: '0.3s' }}
+                                // Fallback for missing images on the server
+                                onError={(e) => { e.currentTarget.src = "/img/default.jpg"; }}
                             />
                         </Box>
+                        {/* Thumbnail Strip */}
                         <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 1 }}>
-                            {allImages.map((img, i) => (
+                            {item.variants?.map((v, i) => (
                                 <Box
                                     key={i}
                                     component="img"
-                                    src={img}
-                                    onClick={() => setSelectedImage(img)}
+                                    src={v.images?.[0]}
+                                    onClick={() => setSelectedImage(v.images?.[0])}
                                     sx={{
                                         width: 70, height: 70, borderRadius: 1, cursor: 'pointer',
-                                        border: selectedImage === img ? '2px solid #1976d2' : '2px solid transparent',
+                                        border: selectedImage === v.images?.[0] ? '2px solid #1976d2' : '2px solid transparent',
                                         objectFit: 'cover'
                                     }}
                                 />
@@ -118,12 +120,17 @@ export default function Show({ item, allImages = [] }: Props) {
                                 <TableRow>
                                     <TableCell sx={{ fontWeight: 'bold' }}>SKU</TableCell>
                                     <TableCell sx={{ fontWeight: 'bold' }}>Variation Details</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Global Status</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Storage Path</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {item.variants?.map((variant) => (
-                                    <TableRow key={variant.id} hover>
+                                    <TableRow
+                                        key={variant.id}
+                                        hover
+                                        // Update gallery on hover to show C-S-P specific image
+                                        onMouseEnter={() => setSelectedImage(variant.images?.[0])}
+                                    >
                                         <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
                                             {variant.sku || 'PENDING'}
                                         </TableCell>
@@ -136,12 +143,10 @@ export default function Show({ item, allImages = [] }: Props) {
                                             </Typography>
                                         </TableCell>
                                         <TableCell>
-                                            <Chip
-                                                label={variant.status}
-                                                size="small"
-                                                variant="outlined"
-                                                color={variant.status === 'active' ? 'success' : 'default'}
-                                            />
+                                            {/* Useful for debugging the Color-Size-Packaging folder structure */}
+                                            <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                                                {variant.images?.[0]?.replace('/images/product_images/', '')}
+                                            </Typography>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -150,13 +155,6 @@ export default function Show({ item, allImages = [] }: Props) {
                     </TableContainer>
                 </Grid>
             </Grid>
-
-            {/* DEPLOY MODAL (Same as before) */}
-            <Modal open={openDeploy} onClose={() => setOpenDeploy(false)}>
-                <Box sx={{ /* ... modal styling ... */ }}>
-                   {/* Deployment logic goes here */}
-                </Box>
-            </Modal>
         </Box>
     );
 }
