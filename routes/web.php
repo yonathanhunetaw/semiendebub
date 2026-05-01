@@ -30,6 +30,10 @@ require __DIR__.'/auth.php';                                // ['auth', 'verifie
 
 require __DIR__.'/web/admin/admin.php';                     // ['auth', 'verified', 'check_role:Admin']
 require __DIR__.'/web/admin/cart.php';
+require __DIR__.'/web/admin/inventory';
+
+require __DIR__.'/web/admin/store';
+
 
 /*-------------------------------------------------------------------------------------------------------------
 | DELIVERY - ['auth', 'verified'] - -> routes/web/delivery/delivery.php
