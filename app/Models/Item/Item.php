@@ -65,7 +65,7 @@ class Item extends Model
     public function colors(): BelongsToMany
     {
         return $this->belongsToMany(ItemColor::class, 'item_color_item', 'item_id', 'item_color_id')
-                    ->withTimestamps();
+            ->withTimestamps();
     }
 
     /**
@@ -74,7 +74,7 @@ class Item extends Model
     public function sizes(): BelongsToMany
     {
         return $this->belongsToMany(ItemSize::class, 'item_item_size', 'item_id', 'item_size_id')
-                    ->withTimestamps();
+            ->withTimestamps();
     }
 
     /**
@@ -84,8 +84,8 @@ class Item extends Model
     public function packagingTypes(): BelongsToMany
     {
         return $this->belongsToMany(ItemPackagingType::class, 'item_packaging_type_item', 'item_id', 'item_packaging_type_id')
-                    ->withPivot('quantity')
-                    ->withTimestamps();
+            ->withPivot('quantity')
+            ->withTimestamps();
     }
 
     /**
@@ -110,10 +110,17 @@ class Item extends Model
     public function stores(): BelongsToMany
     {
         return $this->belongsToMany(Store::class)
-                    ->withPivot('active')
-                    ->withTimestamps();
+            ->withPivot('active')
+            ->withTimestamps();
     }
 
+    // app/Models/Item/Item.php
+
+    public function storeVariants()
+    {
+        // This links the Item to the specific stock/price entries in each store
+        return $this->hasMany(\App\Models\Store\StoreVariant::class);
+    }
     /*
     |--------------------------------------------------------------------------
     | Business Logic / Helpers
