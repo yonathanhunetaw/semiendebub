@@ -3,12 +3,12 @@ import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link } from "@inertiajs/react";
 import {
     Box, Chip, Grid, Paper, Table, TableBody, TableCell,
-    TableHead, TableRow, Typography, Button, TableContainer, Stack
+    TableHead, TableRow, Typography, Button, TableContainer, Stack, IconButton
 } from "@mui/material";
 import AddBusinessIcon from '@mui/icons-material/AddBusiness';
 import EditIcon from '@mui/icons-material/Edit';
-
-interface ItemVariant {
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';interface ItemVariant {
     id: number;
     sku: string | null;
     images: string[] | null;
@@ -25,12 +25,22 @@ interface Item {
     category?: { name: string };
     variants: ItemVariant[];
 }
-
-export default function Show({ item }: { item: Item }) {
+export default function Show({ item }: { item: any }) {
     if (!item) return null;
 
     const masterFallback = item.general_images?.[0] || item.variants?.[0]?.images?.[0] || "/img/default.jpg";
     const [selectedImage, setSelectedImage] = useState(masterFallback);
+    const [showAllThumbnails, setShowAllThumbnails] = useState(false);
+
+    // Combine all images into one flat array for the gallery
+    const allGalleryImages = [
+        ...(item.general_images || []),
+        ...item.variants.map((v: any) => v.images?.[0]).filter(Boolean)
+    ];
+
+    // Limit view to 5 unless toggled
+    const displayedThumbnails = showAllThumbnails ? allGalleryImages : allGalleryImages.slice(0, 5);
+    const hasMore = allGalleryImages.length > 5;
 
     return (
         <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: '1440px', margin: '0 auto' }}>
@@ -46,7 +56,7 @@ export default function Show({ item }: { item: Item }) {
             >
                 <Box>
                     <Typography variant="overline" color="primary" sx={{ fontWeight: 800, letterSpacing: 1 }}>
-                        Master Catalog
+                        Merchant-King Catalog
                     </Typography>
                     <Typography variant="h4" fontWeight={900}>
                         {item.product_name}
@@ -56,7 +66,7 @@ export default function Show({ item }: { item: Item }) {
                 <Stack direction="row" spacing={1.5}>
                     <Button
                         variant="outlined"
-                        color="inherit"
+                        color="primary"
                         startIcon={<EditIcon />}
                         component={Link}
                         href={route('admin.items.edit', item.id)}
@@ -75,99 +85,78 @@ export default function Show({ item }: { item: Item }) {
             </Stack>
 
             <Grid container spacing={4}>
-                {/* LEFT: FIXED GALLERY SECTION */}
+                {/* GALLERY SECTION */}
                 <Grid item xs={12} md={5}>
                     <Paper
                         variant="outlined"
-                        sx={{
-                            p: 2,
-                            borderRadius: 4,
-                            position: 'sticky',
-                            top: 24,
-                            bgcolor: 'background.paper',
-                            overflow: 'hidden' // Prevents thumbnail blowouts
-                        }}
+                        sx={{ p: 2, borderRadius: 4, position: 'sticky', top: 24, bgcolor: 'background.paper' }}
                     >
-                        {/* Main Image Viewport */}
                         <Box sx={{
-                            width: '100%',
-                            height: 400,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            mb: 2,
-                            bgcolor: '#f9f9f9',
-                            borderRadius: 2
+                            width: '100%', height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            mb: 2, bgcolor: '#f5f5f5', borderRadius: 2, overflow: 'hidden'
                         }}>
                             <Box
                                 component="img"
                                 src={selectedImage}
-                                sx={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain' }}
-                                onError={(e) => { e.currentTarget.src = "/img/default.jpg"; }}
+                                sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                                onError={(e: any) => { e.currentTarget.src = "/img/default.jpg"; }}
                             />
                         </Box>
 
-                        {/* HORIZONTAL THUMBNAIL VIEW (Scrollable) */}
-                        <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 'bold', color: 'text.secondary' }}>
-                            GALLERY ASSETS
-                        </Typography>
-                        <Stack
-                            direction="row"
-                            spacing={1}
-                            sx={{
-                                overflowX: 'auto',
-                                pb: 1,
-                                '&::-webkit-scrollbar': { height: '6px' },
-                                '&::-webkit-scrollbar-thumb': { bgcolor: '#ccc', borderRadius: '10px' }
-                            }}
-                        >
-                            {/* Master Images */}
-                            {item.general_images?.map((img, i) => (
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>
+                                GALLERY ASSETS ({allGalleryImages.length})
+                            </Typography>
+                            {hasMore && (
+                                <Button
+                                    size="small"
+                                    onClick={() => setShowAllThumbnails(!showAllThumbnails)}
+                                    endIcon={showAllThumbnails ? <KeyboardArrowLeftIcon /> : <ExpandMoreIcon />}
+                                    sx={{ fontSize: '0.65rem', fontWeight: 700 }}
+                                >
+                                    {showAllThumbnails ? "Show Less" : `+${allGalleryImages.length - 5} More`}
+                                </Button>
+                            )}
+                        </Stack>
+
+                        <Box sx={{
+                            display: 'flex',
+                            flexWrap: showAllThumbnails ? 'wrap' : 'nowrap',
+                            gap: 1,
+                            overflowX: showAllThumbnails ? 'unset' : 'auto',
+                            pb: 1
+                        }}>
+                            {displayedThumbnails.map((img: string, i: number) => (
                                 <Box
-                                    key={`m-${i}`}
+                                    key={i}
                                     component="img"
                                     src={img}
                                     onClick={() => setSelectedImage(img)}
                                     sx={{
-                                        minWidth: 60, height: 60, borderRadius: 1, cursor: 'pointer',
-                                        border: selectedImage === img ? '2px solid #ed6c02' : '1px solid #ddd',
-                                        objectFit: 'cover'
+                                        width: 64, height: 64, borderRadius: 1.5, cursor: 'pointer',
+                                        border: selectedImage === img ? '2px solid #1976d2' : '1px solid #ddd',
+                                        objectFit: 'cover',
+                                        transition: '0.2s',
+                                        '&:hover': { borderColor: 'primary.main', transform: 'scale(1.05)' }
                                     }}
                                 />
                             ))}
-                            {/* Variant Images */}
-                            {item.variants?.map((v, i) => v.images?.[0] && (
-                                <Box
-                                    key={`v-${i}`}
-                                    component="img"
-                                    src={v.images[0]}
-                                    onClick={() => setSelectedImage(v.images[0])}
-                                    sx={{
-                                        minWidth: 60, height: 60, borderRadius: 1, cursor: 'pointer',
-                                        border: selectedImage === v.images[0] ? '2px solid #1976d2' : '1px solid #eee',
-                                        objectFit: 'cover'
-                                    }}
-                                />
-                            ))}
-                        </Stack>
+                        </Box>
                     </Paper>
                 </Grid>
 
-                {/* RIGHT: DETAILS & C-S-P TABLE */}
+                {/* DETAILS & TABLE */}
                 <Grid item xs={12} md={7}>
-                    <Typography variant="h6" fontWeight={800} gutterBottom>Description</Typography>
+                    <Typography variant="h6" fontWeight={800} gutterBottom>Global Description</Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.6 }}>
-                        {item.product_description || "Standard product entry in Merchant-King catalog."}
+                        {item.product_description || "No description provided for this catalog entry."}
                     </Typography>
 
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                        <Typography variant="h6" fontWeight={800}>Catalog Variations</Typography>
-                        <Chip label={`${item.variants.length} Combinations`} size="small" />
-                    </Stack>
+                    <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>Catalog Variations</Typography>
 
                     <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3 }}>
                         <Table size="small" onMouseLeave={() => setSelectedImage(masterFallback)}>
-                            <TableHead sx={{ bgcolor: 'grey.50' }}>
+                            <TableHead sx={{ bgcolor: 'action.hover' }}>
                                 <TableRow>
                                     <TableCell sx={{ fontWeight: 'bold' }}>SKU</TableCell>
                                     <TableCell sx={{ fontWeight: 'bold' }}>Variation</TableCell>
@@ -175,7 +164,7 @@ export default function Show({ item }: { item: Item }) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {item.variants.map((v) => (
+                                {item.variants.map((v: any) => (
                                     <TableRow
                                         key={v.id}
                                         hover
@@ -192,7 +181,7 @@ export default function Show({ item }: { item: Item }) {
                                             </Typography>
                                         </TableCell>
                                         <TableCell>
-                                            <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+                                            <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.65rem' }}>
                                                 {v.images?.[0]?.split('/product_images/')[1] || '---'}
                                             </Typography>
                                         </TableCell>
