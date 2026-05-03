@@ -47,6 +47,35 @@ class ItemController extends Controller
 
         // Add total stock and active variants count per item
         $items = $items->map(function ($item) {
+            $previewImages = collect($item->general_images ?? [])
+                ->merge(
+                    $item->variants
+                        ->pluck('images')
+                        ->flatten(1)
+                        ->filter()
+                )
+                ->filter()
+                ->map(function ($image) {
+                    if (!is_string($image) || $image === '') {
+                        return null;
+                    }
+
+                    if (str_starts_with($image, 'http')) {
+                        return $image;
+                    }
+
+                    if (str_starts_with($image, '/images/') || str_starts_with($image, 'images/')) {
+                        return asset(ltrim($image, '/'));
+                    }
+
+                    return asset('storage/' . ltrim($image, '/'));
+                })
+                ->filter()
+                ->unique()
+                ->take(5)
+                ->values();
+
+            $item->variants_count = $item->variants->count();
             $item->active_variants_count = $item->variants->filter(function ($variant) {
                 return $variant->status === 'active'
                     && $variant->storeVariants->contains(fn($storeVariant) => $storeVariant->active);
@@ -54,6 +83,7 @@ class ItemController extends Controller
             $item->total_stock = $item->variants->sum(function ($variant) {
                 return $variant->stocks->sum('quantity');
             });
+            $item->preview_images = $previewImages;
 
             return $item;
         });

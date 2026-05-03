@@ -1,6 +1,10 @@
 import AdminLayout from "@/Layouts/AppLayout";
-import {Head, Link, router} from "@inertiajs/react";
+import { Head, Link, router } from "@inertiajs/react";
+import AddIcon from "@mui/icons-material/Add";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import {
+    Avatar,
     Box,
     Button,
     Chip,
@@ -12,18 +16,16 @@ import {
     TableContainer,
     TableHead,
     TableRow,
-    Typography
+    Typography,
 } from "@mui/material";
-import AddIcon from '@mui/icons-material/Add';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
 interface Item {
     id: number;
     product_name: string;
-    status: 'active' | 'inactive' | 'unavailable' | 'draft';
+    status: "active" | "inactive" | "unavailable" | "draft" | "archived";
+    variants_count: number;
     active_variants_count: number;
-    total_stock: number;
+    preview_images?: string[];
 }
 
 interface Props {
@@ -31,119 +33,256 @@ interface Props {
     filters: {
         filter: string;
         sort: string;
-        direction: 'asc' | 'desc';
+        direction: "asc" | "desc";
     };
 }
 
-export default function ItemIndex({items, filters}: Props) {
+const statusOptions = ["all", "active", "inactive", "unavailable", "draft"];
 
-    // Handle filtering and sorting by visiting the route with new params
+const sortIcon = (filters: Props["filters"]) =>
+    filters.direction === "asc" ? (
+        <ArrowUpwardIcon fontSize="small" />
+    ) : (
+        <ArrowDownwardIcon fontSize="small" />
+    );
+
+export default function ItemIndex({ items, filters }: Props) {
     const updateParams = (newParams: Record<string, string>) => {
-        router.get(route('admin.items.index'), {
-            ...filters,
-            ...newParams,
-        }, {preserveState: true});
+        router.get(
+            route("admin.items.index"),
+            { ...filters, ...newParams },
+            { preserveState: true, preserveScroll: true },
+        );
     };
 
-    const statusOptions = ['all', 'active', 'inactive', 'unavailable', 'draft'];
+    const ImageStrip = ({ images = [] }: { images?: string[] }) => (
+        <Stack direction="row" spacing={1} sx={{ minWidth: 0 }}>
+            {Array.from({ length: 5 }).map((_, index) => {
+                const image = images[index];
+
+                return (
+                    <Avatar
+                        key={`${image ?? "empty"}-${index}`}
+                        src={image}
+                        variant="rounded"
+                        sx={{
+                            width: 42,
+                            height: 42,
+                            bgcolor: "action.hover",
+                            border: "1px solid",
+                            borderColor: "divider",
+                            fontSize: "0.7rem",
+                            color: "text.disabled",
+                        }}
+                    >
+                        {image ? "" : "—"}
+                    </Avatar>
+                );
+            })}
+        </Stack>
+    );
 
     return (
-        <Box sx={{p: 3}}>
-            <Head title="Items Management"/>
+        <Box sx={{ p: 0 }}>
+            <Head title="Items Management" />
 
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
-                <Typography variant="h4" fontWeight="bold">Items</Typography>
+            <Stack
+                direction={{ xs: "column", sm: "row" }}
+                justifyContent="space-between"
+                alignItems={{ xs: "flex-start", sm: "center" }}
+                spacing={2}
+                mb={3}
+            >
+                <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                        Items
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Physical product templates and their generated variant sets.
+                    </Typography>
+                </Box>
+
                 <Button
                     component={Link}
-                    href={route('admin.items.create')}
+                    href={route("admin.items.create")}
                     variant="contained"
-                    startIcon={<AddIcon/>}
+                    startIcon={<AddIcon />}
+                    sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700 }}
                 >
                     Add Item
                 </Button>
             </Stack>
 
-            {/* Status Filters */}
-            <Paper sx={{p: 2, mb: 3}}>
-                <Typography variant="subtitle2" gutterBottom sx={{textTransform: 'uppercase', color: 'text.secondary'}}>
+            <Paper
+                elevation={0}
+                sx={{
+                    p: 2,
+                    mb: 3,
+                    borderRadius: "12px",
+                    border: "1px solid",
+                    borderColor: "divider",
+                }}
+            >
+                <Typography
+                    variant="subtitle2"
+                    gutterBottom
+                    sx={{ textTransform: "uppercase", color: "text.secondary", fontWeight: 700 }}
+                >
                     Filter by Status
                 </Typography>
-                <Stack direction="row" spacing={1}>
-                    {statusOptions.map((opt) => (
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    {statusOptions.map((option) => (
                         <Chip
-                            key={opt}
-                            label={opt.toUpperCase()}
-                            onClick={() => updateParams({filter: opt})}
-                            color={filters.filter === opt ? "primary" : "default"}
-                            variant={filters.filter === opt ? "filled" : "outlined"}
-                            sx={{cursor: 'pointer'}}
+                            key={option}
+                            label={option.toUpperCase()}
+                            onClick={() => updateParams({ filter: option })}
+                            color={filters.filter === option ? "primary" : "default"}
+                            variant={filters.filter === option ? "filled" : "outlined"}
+                            sx={{ cursor: "pointer", fontWeight: 600 }}
                         />
                     ))}
                 </Stack>
             </Paper>
 
-            {/* Items Table */}
-            <TableContainer component={Paper} sx={{boxShadow: 3}}>
-                <Table>
-                    <TableHead sx={{bgcolor: 'background.default'}}>
-                        <TableRow>
-                            <TableCell>
-                                <Stack
-                                    direction="row"
-                                    alignItems="center"
-                                    sx={{cursor: 'pointer', fontWeight: 'bold'}}
-                                    onClick={() => updateParams({
-                                        sort: 'name',
-                                        direction: filters.direction === 'asc' ? 'desc' : 'asc'
-                                    })}
-                                >
-                                    Name
-                                    {filters.sort === 'name' && (
-                                        filters.direction === 'asc' ? <ArrowUpwardIcon fontSize="small"/> :
-                                            <ArrowDownwardIcon fontSize="small"/>
-                                    )}
-                                </Stack>
-                            </TableCell>
-                            <TableCell sx={{fontWeight: 'bold'}}>Inventory Details</TableCell>
-                            <TableCell align="right" sx={{fontWeight: 'bold'}}>Actions</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {items.length > 0 ? items.map((item) => (
-                            <TableRow key={item.id} hover>
-                                <TableCell>
-                                    <Typography variant="body1" fontWeight="medium">
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 2 }}>
+                {items.length > 0 ? (
+                    items.map((item) => (
+                        <Paper
+                            key={item.id}
+                            elevation={0}
+                            sx={{
+                                p: 2,
+                                borderRadius: "12px",
+                                border: "1px solid",
+                                borderColor: "divider",
+                            }}
+                        >
+                            <Stack spacing={2}>
+                                <ImageStrip images={item.preview_images} />
+                                <Box>
+                                    <Typography variant="subtitle1" fontWeight={700}>
                                         {item.product_name}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary">
                                         {item.status.toUpperCase()}
                                     </Typography>
-                                </TableCell>
-                                <TableCell>
+                                </Box>
+                                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                                     <Chip
-                                        label={`Variants: ${item.active_variants_count}`}
+                                        label={`${item.variants_count} Variants`}
                                         size="small"
                                         color="info"
-                                        sx={{mr: 1}}
-                                    />
-                                    <Typography variant="body2" component="span">
-                                        Stock: <strong>{item.total_stock}</strong>
-                                    </Typography>
-                                </TableCell>
-                                <TableCell align="right">
-                                    <Button
-                                        component={Link}
-                                        href={route('admin.items.show', item.id)}
-                                        size="small"
                                         variant="outlined"
-                                    >
-                                        View
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        )) : (
+                                    />
+                                    <Chip
+                                        label={`${item.active_variants_count} Active in Stores`}
+                                        size="small"
+                                        color="success"
+                                        variant="outlined"
+                                    />
+                                </Stack>
+                                <Button
+                                    component={Link}
+                                    href={route("admin.items.show", item.id)}
+                                    variant="outlined"
+                                    sx={{ alignSelf: "flex-start", textTransform: "none", fontWeight: 700 }}
+                                >
+                                    View
+                                </Button>
+                            </Stack>
+                        </Paper>
+                    ))
+                ) : (
+                    <Paper elevation={0} sx={{ p: 4, borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
+                        <Typography color="text.secondary">No items found.</Typography>
+                    </Paper>
+                )}
+            </Box>
+
+            <TableContainer
+                component={Paper}
+                elevation={0}
+                sx={{
+                    display: { xs: "none", md: "block" },
+                    borderRadius: "16px",
+                    border: "1px solid",
+                    borderColor: "divider",
+                }}
+            >
+                <Table>
+                    <TableHead sx={{ bgcolor: "action.hover" }}>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 800 }}>
+                                <Stack
+                                    direction="row"
+                                    alignItems="center"
+                                    spacing={0.5}
+                                    sx={{ cursor: "pointer" }}
+                                    onClick={() =>
+                                        updateParams({
+                                            sort: "name",
+                                            direction: filters.direction === "asc" ? "desc" : "asc",
+                                        })
+                                    }
+                                >
+                                    <span>Item</span>
+                                    {filters.sort === "name" ? sortIcon(filters) : null}
+                                </Stack>
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
+                            <TableCell sx={{ fontWeight: 800 }}>Variants</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 800 }}>
+                                Actions
+                            </TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {items.length > 0 ? (
+                            items.map((item) => (
+                                <TableRow key={item.id} hover>
+                                    <TableCell>
+                                        <Stack direction="row" spacing={2} alignItems="center">
+                                            <ImageStrip images={item.preview_images} />
+                                            <Box>
+                                                <Typography variant="body1" fontWeight={700}>
+                                                    {item.product_name}
+                                                </Typography>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    5-image preview
+                                                </Typography>
+                                            </Box>
+                                        </Stack>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            label={item.status.toUpperCase()}
+                                            size="small"
+                                            color={item.status === "active" ? "success" : "default"}
+                                            variant={item.status === "active" ? "filled" : "outlined"}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                            <Chip label={`${item.variants_count} Total`} size="small" color="info" variant="outlined" />
+                                            <Chip label={`${item.active_variants_count} Active`} size="small" color="success" variant="outlined" />
+                                        </Stack>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <Button
+                                            component={Link}
+                                            href={route("admin.items.show", item.id)}
+                                            size="small"
+                                            variant="outlined"
+                                            sx={{ textTransform: "none", fontWeight: 700 }}
+                                        >
+                                            View
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
                             <TableRow>
-                                <TableCell colSpan={3} align="center" sx={{py: 5}}>
+                                <TableCell colSpan={4} align="center" sx={{ py: 5 }}>
                                     No items found.
                                 </TableCell>
                             </TableRow>
@@ -155,8 +294,4 @@ export default function ItemIndex({items, filters}: Props) {
     );
 }
 
-ItemIndex.layout = (page: React.ReactNode) => (
-    <AdminLayout>
-        {page}
-    </AdminLayout>
-);
+ItemIndex.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
