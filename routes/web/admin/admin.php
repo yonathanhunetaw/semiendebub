@@ -39,6 +39,9 @@ Route::domain("admin.{$baseDomain}")
                 return redirect()->route('admin.settings');
             });
 
+            Route::post('items/inline-options', [ItemController::class, 'storeInlineOption'])->name('items.inline-options');
+            Route::patch('items/{item}/variants/{variant}/status', [ItemController::class, 'updateVariantStatus'])->name('items.variants.status');
+            Route::delete('items/{item}/variants/{variant}', [ItemController::class, 'destroyVariant'])->name('items.variants.destroy');
             Route::resource('items', ItemController::class);
 
             Route::resource('users', UserController::class);

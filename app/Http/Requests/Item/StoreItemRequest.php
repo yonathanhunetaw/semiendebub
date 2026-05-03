@@ -11,7 +11,7 @@ class StoreItemRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -24,13 +24,17 @@ class StoreItemRequest extends FormRequest
         return [
             'product_name' => 'required|string|max:255',
             'product_description' => 'nullable|string',
-            'item_category_id' => 'required|exists:item_categories,id',
-            'status' => 'required|in:active,inactive',
-            'general_images' => 'nullable|array',
-            'color_ids' => 'array', // Many-to-many
-            'size_ids' => 'array',  // Many-to-many
-            'packaging' => 'array', // Pivot with quantity
-            'packaging.*.id' => 'required|exists:item_packaging_types,id',
+            'packaging_details' => 'nullable|string',
+            'item_category_id' => 'required',
+            'status' => 'required|in:draft,active,inactive,archived',
+            'existing_images' => 'nullable|array|max:10',
+            'existing_images.*' => 'string',
+            'images' => 'nullable|array|max:10',
+            'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'color_ids' => 'nullable|array',
+            'size_ids' => 'nullable|array',
+            'packaging' => 'nullable|array',
+            'packaging.*.item_packaging_type_id' => 'required',
             'packaging.*.quantity' => 'required|integer|min:1',
         ];
     }

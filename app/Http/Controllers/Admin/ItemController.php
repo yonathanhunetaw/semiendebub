@@ -9,12 +9,15 @@ use App\Models\Item\ItemCategory;
 use App\Models\Item\ItemColor;
 use App\Models\Item\ItemPackagingType;
 use App\Models\Item\ItemSize;
+use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemInventoryLocation;
 use App\Models\Store\Store;
+use App\Models\Store\StoreVariant;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 // This single line generates the following routes:
@@ -206,8 +209,22 @@ class ItemController extends Controller
 
     public function edit(Item $item)
     {
+        $item->load([
+            'category',
+            'colors',
+            'sizes',
+            'packagingTypes' => fn($query) => $query->withPivot('quantity'),
+            'variants' => fn($query) => $query
+                ->with(['itemColor', 'itemSize', 'storeVariants.store'])
+                ->orderBy('id'),
+        ]);
+
         return Inertia::render('Admin/Items/Edit', [
             'item' => $item,
+            'categories' => ItemCategory::all(),
+            'colors' => ItemColor::all(),
+            'sizes' => ItemSize::all(),
+            'packagingTypes' => ItemPackagingType::all(),
         ]);
     }
 
@@ -394,74 +411,46 @@ class ItemController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'product_name' => 'required|string|max:255',
-            'item_category_id' => 'required', // Can be ID or String
-            'status' => 'required',
-            'color_ids' => 'nullable|array',
-            'size_ids' => 'nullable|array',
-            'packaging' => 'nullable|array',
-        ]);
+        $validated = $this->validateItemPayload($request);
 
         return DB::transaction(function () use ($request, $validated) {
-            // 1. Resolve Category
-            $categoryId = $validated['item_category_id'];
-            if (!is_numeric($categoryId)) {
-                $category = ItemCategory::firstOrCreate(['category_name' => $categoryId]);
-                $categoryId = $category->id;
-            }
-
-            // 2. Create Parent Item
             $item = Item::create([
                 'product_name' => $validated['product_name'],
-                'item_category_id' => $categoryId,
+                'product_description' => $validated['product_description'] ?? null,
+                'packaging_details' => $validated['packaging_details'] ?? null,
+                'item_category_id' => $this->resolveCategoryId($validated['item_category_id']),
                 'status' => $validated['status'],
                 'general_images' => $this->handleUploads($request),
                 'is_incomplete' => false,
             ]);
 
-            // 3. Resolve Colors (IDs or New Names)
-            if ($request->filled('color_ids')) {
-                $colorIds = collect($request->color_ids)->map(
-                    fn($val) =>
-                    is_numeric($val) ? $val : ItemColor::firstOrCreate(['name' => $val])->id
-                );
-                $item->colors()->sync($colorIds);
-            }
-
-            // 4. Resolve Sizes (IDs or New Names)
-            if ($request->filled('size_ids')) {
-                $sizeIds = collect($request->size_ids)->map(
-                    fn($val) =>
-                    is_numeric($val) ? $val : ItemSize::firstOrCreate(['name' => $val])->id
-                );
-                $item->sizes()->sync($sizeIds);
-            }
-
-            // 5. Packaging Hierarchy
-            if ($request->filled('packaging')) {
-                $pkgData = collect($request->packaging)->mapWithKeys(function ($p) {
-                    $typeId = $p['item_packaging_type_id'];
-                    if (!is_numeric($typeId)) {
-                        $typeId = ItemPackagingType::firstOrCreate(['name' => $typeId])->id;
-                    }
-                    return [$typeId => ['quantity' => $p['quantity']]];
-                });
-                $item->packagingTypes()->sync($pkgData);
-            }
+            $item->colors()->sync($this->resolveOptionIds($validated['color_ids'] ?? [], ItemColor::class));
+            $item->sizes()->sync($this->resolveOptionIds($validated['size_ids'] ?? [], ItemSize::class));
+            $item->packagingTypes()->sync($this->resolvePackagingPayload($validated['packaging'] ?? []));
+            $this->syncGeneratedVariants($item);
 
             return redirect()->route('admin.items.index');
         });
     }
 
-    private function handleUploads($request)
+    private function handleUploads($request, array $existingImages = [])
     {
-        $paths = [];
+        $paths = collect($existingImages)
+            ->filter()
+            ->map(function ($path) {
+                return str_starts_with($path, '/storage/')
+                    ? ltrim(str_replace('/storage/', '', $path), '/')
+                    : ltrim($path, '/');
+            })
+            ->values()
+            ->all();
+
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
                 $paths[] = $image->store('uploads/items', 'public');
             }
         }
+
         return $paths;
     }
 
@@ -482,40 +471,249 @@ class ItemController extends Controller
 
     public function update(Request $request, Item $item)
     {
-        // Validate the form input
-        $request->validate([
+        $validated = $this->validateItemPayload($request);
+
+        return DB::transaction(function () use ($request, $item, $validated) {
+            $item->update([
+                'product_name' => $validated['product_name'],
+                'product_description' => $validated['product_description'] ?? null,
+                'packaging_details' => $validated['packaging_details'] ?? null,
+                'item_category_id' => $this->resolveCategoryId($validated['item_category_id']),
+                'status' => $validated['status'],
+                'general_images' => $this->handleUploads($request, $validated['existing_images'] ?? []),
+                'is_incomplete' => false,
+            ]);
+
+            $item->colors()->sync($this->resolveOptionIds($validated['color_ids'] ?? [], ItemColor::class));
+            $item->sizes()->sync($this->resolveOptionIds($validated['size_ids'] ?? [], ItemSize::class));
+            $item->packagingTypes()->sync($this->resolvePackagingPayload($validated['packaging'] ?? []));
+            $this->syncGeneratedVariants($item);
+
+            return redirect()->route('admin.items.edit', $item)->with('success', 'Item updated successfully.');
+        });
+    }
+
+    public function storeInlineOption(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => 'required|in:category,color,size,packaging',
             'name' => 'required|string|max:255',
-            'price' => 'required|numeric',
-            'stock' => 'required|numeric',
-            'piecesinapacket' => 'required|numeric',
-            'packetsinacartoon' => 'required|numeric',
-            'image' => 'nullable|image|mimes:jpg,jpeg,png,gif', // Only validate if image is uploaded
         ]);
 
-        // Handle image upload
-        if ($request->hasFile('image')) {
-            // Store the uploaded image and get its path
-            $imagePath = $request->file('image')->store('public/images');
-        } else {
-            // If no image is uploaded, keep the existing image or leave as null
-            $imagePath = $item->image; // Retain the existing image path if no new image is uploaded
+        $name = trim($validated['name']);
+
+        [$modelClass, $nameColumn] = match ($validated['type']) {
+            'category' => [ItemCategory::class, 'category_name'],
+            'color' => [ItemColor::class, 'name'],
+            'size' => [ItemSize::class, 'name'],
+            'packaging' => [ItemPackagingType::class, 'name'],
+        };
+
+        $record = $modelClass::firstOrCreate([$nameColumn => $name]);
+
+        return response()->json([
+            'id' => $record->id,
+            'name' => $record->{$nameColumn},
+            'category_name' => $record->{$nameColumn},
+        ]);
+    }
+
+    public function updateVariantStatus(Request $request, Item $item, ItemVariant $variant)
+    {
+        abort_unless($variant->item_id === $item->id, 404);
+
+        $validated = $request->validate([
+            'active' => 'required|boolean',
+        ]);
+
+        $active = (bool) $validated['active'];
+
+        DB::transaction(function () use ($variant, $active) {
+            $variant->update([
+                'status' => $active ? 'active' : 'inactive',
+            ]);
+
+            $this->applyVariantAvailabilityToStores($variant, $active);
+        });
+
+        return back()->with('success', 'Variant availability updated successfully.');
+    }
+
+    public function destroyVariant(Item $item, ItemVariant $variant)
+    {
+        abort_unless($variant->item_id === $item->id, 404);
+
+        DB::transaction(function () use ($variant) {
+            $this->applyVariantAvailabilityToStores($variant, false);
+            $variant->delete();
+        });
+
+        return back()->with('success', 'Variant deleted successfully.');
+    }
+
+    private function validateItemPayload(Request $request): array
+    {
+        $validator = Validator::make($request->all(), [
+            'product_name' => 'required|string|max:255',
+            'product_description' => 'nullable|string',
+            'packaging_details' => 'nullable|string',
+            'item_category_id' => 'required',
+            'status' => 'required|in:draft,active,inactive,archived',
+            'color_ids' => 'nullable|array',
+            'color_ids.*' => 'nullable',
+            'size_ids' => 'nullable|array',
+            'size_ids.*' => 'nullable',
+            'packaging' => 'nullable|array',
+            'packaging.*.item_packaging_type_id' => 'required',
+            'packaging.*.quantity' => 'required|integer|min:1',
+            'existing_images' => 'nullable|array|max:10',
+            'existing_images.*' => 'string',
+            'images' => 'nullable|array|max:10',
+            'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+        ]);
+
+        $validator->after(function ($validator) use ($request) {
+            $existingCount = count($request->input('existing_images', []));
+            $uploadCount = count($request->file('images', []));
+
+            if (($existingCount + $uploadCount) > 10) {
+                $validator->errors()->add('images', 'You can upload a maximum of 10 images per item.');
+            }
+        });
+
+        return $validator->validate();
+    }
+
+    private function resolveCategoryId(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
         }
 
-        // Update the item
-        $item->update([
-            'name' => $request->name,
-            'description' => $request->description,
-            'catoption' => $request->catoption ? json_encode($request->catoption) : null, // Ensure it's an array or null
-            'pacoption' => $request->pacoption ? json_encode($request->pacoption) : null, // Ensure it's an array or null
-            'price' => $request->price,
-            'status' => $request->status,
-            'stock' => $request->stock,
-            'image' => $imagePath, // Store the image path
-            'piecesinapacket' => $request->piecesinapacket,
-            'packetsinacartoon' => $request->packetsinacartoon,
-        ]);
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
 
-        return redirect()->route('admin.items.index')->with('success', 'Item updated successfully.');
+        return ItemCategory::firstOrCreate([
+            'category_name' => trim((string) $value),
+        ])->id;
+    }
+
+    private function resolveOptionIds(array $values, string $modelClass, string $nameColumn = 'name'): array
+    {
+        return collect($values)
+            ->filter(fn($value) => $value !== null && $value !== '')
+            ->map(function ($value) use ($modelClass, $nameColumn) {
+                if (is_numeric($value)) {
+                    return (int) $value;
+                }
+
+                return $modelClass::firstOrCreate([
+                    $nameColumn => trim((string) $value),
+                ])->id;
+            })
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function resolvePackagingPayload(array $packaging): array
+    {
+        return collect($packaging)
+            ->filter(fn($row) => filled($row['item_packaging_type_id'] ?? null))
+            ->mapWithKeys(function ($row) {
+                $typeId = $row['item_packaging_type_id'];
+
+                if (!is_numeric($typeId)) {
+                    $typeId = ItemPackagingType::firstOrCreate([
+                        'name' => trim((string) $typeId),
+                    ])->id;
+                }
+
+                return [
+                    (int) $typeId => [
+                        'quantity' => max(1, (int) ($row['quantity'] ?? 1)),
+                    ],
+                ];
+            })
+            ->all();
+    }
+
+    private function syncGeneratedVariants(Item $item): void
+    {
+        $item->load(['colors', 'sizes', 'stores', 'variants' => fn($query) => $query->withTrashed()]);
+
+        $colorIds = $item->colors->pluck('id')->all();
+        $sizeIds = $item->sizes->pluck('id')->all();
+
+        if (empty($colorIds)) {
+            $colorIds = [null];
+        }
+
+        if (empty($sizeIds)) {
+            $sizeIds = [null];
+        }
+
+        foreach ($colorIds as $colorId) {
+            foreach ($sizeIds as $sizeId) {
+                $variant = ItemVariant::withTrashed()->firstOrNew([
+                    'item_id' => $item->id,
+                    'item_color_id' => $colorId,
+                    'item_size_id' => $sizeId,
+                ]);
+
+                if ($variant->trashed()) {
+                    $variant->restore();
+                }
+
+                if (!$variant->exists) {
+                    $variant->status = $item->status === 'active' ? 'active' : 'inactive';
+                    $variant->packaging_total_pieces = 1;
+                }
+
+                $variant->save();
+                $this->ensureStoreVariantRecords($item, $variant);
+            }
+        }
+    }
+
+    private function ensureStoreVariantRecords(Item $item, ItemVariant $variant): void
+    {
+        $storeIds = $item->stores()->pluck('stores.id');
+
+        if ($storeIds->isEmpty()) {
+            $storeIds = Store::query()->pluck('id');
+        }
+
+        foreach ($storeIds as $storeId) {
+            StoreVariant::firstOrCreate(
+                [
+                    'store_id' => $storeId,
+                    'item_variant_id' => $variant->id,
+                ],
+                [
+                    'active' => $variant->status === 'active',
+                    'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
+                    'forced_status' => $variant->status === 'active' ? null : 'inactive',
+                ]
+            );
+        }
+    }
+
+    private function applyVariantAvailabilityToStores(ItemVariant $variant, bool $active): void
+    {
+        $variant->loadMissing('item.stores', 'storeVariants');
+
+        $this->ensureStoreVariantRecords($variant->item, $variant);
+        $variant->load('storeVariants');
+
+        foreach ($variant->storeVariants as $storeVariant) {
+            $storeVariant->update([
+                'active' => $active,
+                'manual_status' => $active ? 'auto' : 'forced',
+                'forced_status' => $active ? null : 'inactive',
+            ]);
+        }
     }
 
     public function uploadImages(Request $request)
