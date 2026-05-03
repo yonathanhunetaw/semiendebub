@@ -28,6 +28,9 @@ class ItemController extends Controller
         $query = Item::where('status', 'active')
             ->with([
                 'category',
+                'variants.itemColor',
+                'variants.itemSize',
+                'variants.itemPackagingType',
                 'variants.storeVariants' => function ($q) use ($storeId) {
                     if ($storeId) {
                         $q->where('store_id', $storeId);
@@ -97,7 +100,7 @@ class ItemController extends Controller
             'variants.itemColor',
             'variants.itemSize',
             'variants.itemPackagingType',
-            'variants.storeVariants',
+            'variants.storeVariants.sellerPrices',
             'variants.owner',
         ]);
 
@@ -111,7 +114,7 @@ class ItemController extends Controller
         // 🔹 Build item images
         // 🔹 Build item images
         $itemImages = collect();
-        $rawImages = $item->product_images;
+        $rawImages = $item->general_images;
         if (!empty($rawImages)) {
             $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
             if (is_array($imagesArray)) {
@@ -158,7 +161,7 @@ class ItemController extends Controller
             $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
 
             $store_stock = $storeVariant?->stock ?? 0;
-            $price = $storeVariant?->price ?? $variant->price;
+            $price = $storeVariant?->price;
             $discount_price = $storeVariant?->discount_price;
             $status = $storeVariant?->computed_status ?? 'inactive';
             $store_active = $status === 'active';

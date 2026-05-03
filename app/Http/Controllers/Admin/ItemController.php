@@ -41,13 +41,16 @@ class ItemController extends Controller
     // Display a listing of the items
     public function index()
     {
-        $items = Item::with(['variants.stocks.inventoryLocation'])->get();
+        $items = Item::with(['variants.storeVariants.stocks.inventoryLocation'])->get();
 
         $stores = Store::all();
 
         // Add total stock and active variants count per item
         $items = $items->map(function ($item) {
-            $item->active_variants_count = $item->variants->where('is_active', 1)->count();
+            $item->active_variants_count = $item->variants->filter(function ($variant) {
+                return $variant->status === 'active'
+                    && $variant->storeVariants->contains(fn($storeVariant) => $storeVariant->active);
+            })->count();
             $item->total_stock = $item->variants->sum(function ($variant) {
                 return $variant->stocks->sum('quantity');
             });
@@ -64,13 +67,14 @@ class ItemController extends Controller
                         return [
                             'variant_id' => $variant->id,
                             'stores' => $stores->map(function ($store) use ($variant) {
-                                $stock = $variant->stocks->firstWhere('item_inventory_location_id', $store->id);
+                                $storeVariant = $variant->storeVariants->firstWhere('store_id', $store->id);
+                                $stock = $storeVariant?->stocks->sum('quantity') ?? 0;
 
                                 return [
                                     'store_id' => $store->id,
                                     'store_name' => $store->name,
-                                    'stock' => $stock?->quantity ?? 0,
-                                    'price' => $variant->price, // or custom price logic
+                                    'stock' => $stock,
+                                    'price' => $storeVariant?->discount_price ?? $storeVariant?->price,
                                 ];
                             }),
                         ];
@@ -100,7 +104,8 @@ class ItemController extends Controller
             'variants.itemColor',
             'variants.itemSize',
             'variants.itemPackagingType',
-            'variants.storeVariants.SellerPrices' => function ($query) {
+            'variants.storeVariants.store',
+            'variants.storeVariants.sellerPrices' => function ($query) {
                 $query->where('seller_id', auth()->id())->where('active', 1);
             }
         ]);
@@ -124,8 +129,8 @@ class ItemController extends Controller
 
         // 3️⃣ Decode item images
         $itemImages = [];
-        if ($item->product_images) {
-            $clean = preg_replace('/[^\[\]{}",:a-zA-Z0-9_\.\-\/]/', '', $item->product_images);
+        if ($item->general_images) {
+            $clean = preg_replace('/[^\[\]{}",:a-zA-Z0-9_\.\-\/]/', '', json_encode($item->general_images));
             $itemImages = json_decode($clean, true) ?: [];
         }
         logger('Step 3: Decoded item images', ['itemImages' => $itemImages]);
@@ -133,6 +138,10 @@ class ItemController extends Controller
         // 4️⃣ Prepare variant data
         // ✅ Prepare variant data including only variant images
         $variantData = $item->variants->map(function ($variant) {
+            $activeStoreVariant = $variant->storeVariants
+                ->sortBy(fn($storeVariant) => $storeVariant->discount_price ?? $storeVariant->price ?? PHP_FLOAT_MAX)
+                ->first();
+
             // Ensure $images is always an array
             $images = is_array($variant->images) ? $variant->images : (json_decode($variant->images, true) ?: []);
 
@@ -157,8 +166,19 @@ class ItemController extends Controller
                     $images
                 ),
 
-                'price' => $variant->price,
-                'stock' => $variant->stock,
+                'price' => $activeStoreVariant?->price,
+                'discount_price' => $activeStoreVariant?->discount_price,
+                'stock' => $activeStoreVariant?->stocks->sum('quantity') ?? $activeStoreVariant?->stock ?? 0,
+                'store_variants' => $variant->storeVariants->map(fn($storeVariant) => [
+                    'id' => $storeVariant->id,
+                    'store_id' => $storeVariant->store_id,
+                    'store_name' => $storeVariant->store?->name,
+                    'price' => $storeVariant->price,
+                    'discount_price' => $storeVariant->discount_price,
+                    'stock' => $storeVariant->stocks->sum('quantity') ?: $storeVariant->stock,
+                    'active' => $storeVariant->active,
+                    'computed_status' => $storeVariant->computed_status,
+                ])->values(),
                 'disabled' => $variant->status !== 'active',
             ];
         });

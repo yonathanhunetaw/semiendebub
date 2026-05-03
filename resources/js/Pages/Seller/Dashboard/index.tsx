@@ -27,7 +27,6 @@ interface StoreVariant {
 }
 
 interface ItemVariant {
-    price?: number | null;
     store_variants?: StoreVariant[];
     storeVariants?: StoreVariant[];
 }
@@ -35,7 +34,7 @@ interface ItemVariant {
 interface SellerItem {
     id: number;
     product_name: string;
-    product_images?: string[] | string | null;
+    general_images?: string[] | string | null;
     sold_count?: number | null;
     category?: {
         category_name?: string;
@@ -49,7 +48,7 @@ interface SellerItemFilters {
 }
 
 function itemImage(item: SellerItem) {
-    return sellerImage(item.product_images ?? null);
+    return sellerImage(item.general_images ?? null);
 }
 
 function variantStorePrices(variant: ItemVariant) {
@@ -58,7 +57,7 @@ function variantStorePrices(variant: ItemVariant) {
         .map((storeVariant) => storeVariant.discount_price ?? storeVariant.price)
         .filter((price): price is number => price != null);
 
-    return prices.length ? prices : [variant.price].filter((price): price is number => price != null);
+    return prices;
 }
 
 function itemPrice(item: SellerItem) {

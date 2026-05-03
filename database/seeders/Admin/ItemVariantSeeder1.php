@@ -47,7 +47,7 @@ class ItemVariantSeeder1 extends Seeder
                 'item_color_id' => $colors->random()->id ?? null,
                 'item_size_id' => $sizes->random()->id ?? null,
                 'item_packaging_type_id' => $packagingTypes->random()->id ?? null,
-                'is_active' => true,
+                'status' => 'active',
             ]);
 
             ItemVariant::create([
@@ -55,7 +55,7 @@ class ItemVariantSeeder1 extends Seeder
                 'item_color_id' => $colors->random()->id ?? null,
                 'item_size_id' => null,
                 'item_packaging_type_id' => null,
-                'is_active' => true,
+                'status' => 'active',
             ]);
 
             ItemVariant::create([
@@ -63,7 +63,7 @@ class ItemVariantSeeder1 extends Seeder
                 'item_color_id' => null,
                 'item_size_id' => $sizes->random()->id ?? null,
                 'item_packaging_type_id' => $packagingTypes->random()->id ?? null,
-                'is_active' => true,
+                'status' => 'active',
             ]);
 
             ItemVariant::create([
@@ -71,7 +71,7 @@ class ItemVariantSeeder1 extends Seeder
                 'item_color_id' => $colors->random()->id ?? null,
                 'item_size_id' => $sizes->random()->id ?? null,
                 'item_packaging_type_id' => null,
-                'is_active' => false,
+                'status' => 'inactive',
             ]);
 
             ItemVariant::create([
@@ -79,7 +79,7 @@ class ItemVariantSeeder1 extends Seeder
                 'item_color_id' => null,
                 'item_size_id' => null,
                 'item_packaging_type_id' => null,
-                'is_active' => true,
+                'status' => 'active',
             ]);
         }
     }

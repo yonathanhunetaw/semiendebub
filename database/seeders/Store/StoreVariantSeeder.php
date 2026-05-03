@@ -6,6 +6,7 @@ use App\Models\Auth\Customer;
 use App\Models\Auth\User;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemStock;
+use App\Models\Store\StoreVariant;
 use App\Models\Store\Store;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -43,26 +44,30 @@ class StoreVariantSeeder extends Seeder
 
             foreach ($variants as $variant) {
                 $priceFactor = rand(95, 105) / 100;
-                $basePrice = round($variant->price * $priceFactor, 2);
+                $basePrice = round($this->baseVariantPrice($variant) * $priceFactor, 2);
 
-                // FIX: We must insert immediately to get the ID for the relations below
-                $storeVariantId = DB::table('store_variants')->insertGetId([
+                $storeVariant = StoreVariant::updateOrCreate([
                     'store_id' => $store->id,
                     'item_variant_id' => $variant->id,
+                ], [
                     'price' => $basePrice,
                     'discount_price' => rand(0, 1) ? round($basePrice * (rand(90, 99) / 100), 2) : null,
                     'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
                     'active' => true, // Set to true to ensure they show up in your catalog
+                    'manual_status' => 'auto',
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
 
-                // <<< ADD ITEM STOCK HERE >>>
-                ItemStock::create([
-                    'store_variant_id' => $storeVariantId,
-                    'quantity' => rand(5, 50),
-                    'item_inventory_location_id' => 1,
-                ]);
+                ItemStock::updateOrCreate(
+                    [
+                        'store_variant_id' => $storeVariant->id,
+                        'item_inventory_location_id' => 1,
+                    ],
+                    [
+                        'quantity' => rand(5, 50),
+                    ]
+                );
 
                 // Seller prices
                 foreach ($sellers as $seller) {
@@ -70,7 +75,7 @@ class StoreVariantSeeder extends Seeder
                     $sellerPrice = round($basePrice * $factor, 2);
 
                     DB::table('store_variants_seller_prices')->insert([
-                        'store_variant_id' => $storeVariantId,
+                        'store_variant_id' => $storeVariant->id,
                         'seller_id' => $seller->id,
                         'price' => $sellerPrice,
                         'discount_price' => rand(0, 1) ? round($sellerPrice * (rand(90, 99) / 100), 2) : null,
@@ -87,7 +92,7 @@ class StoreVariantSeeder extends Seeder
                     $customerPrice = round($basePrice * $factor, 2);
 
                     DB::table('store_variants_customer_prices')->insert([
-                        'store_variant_id' => $storeVariantId,
+                        'store_variant_id' => $storeVariant->id,
                         'customer_id' => $customer->id,
                         'price' => $customerPrice,
                         'discount_price' => rand(0, 1) ? round($customerPrice * (rand(90, 99) / 100), 2) : null,
@@ -115,5 +120,21 @@ class StoreVariantSeeder extends Seeder
                 // This logic is now handled inside the variant loop for reliability
             }
         }
+    }
+
+    private function baseVariantPrice(ItemVariant $variant): float
+    {
+        $base = 10.00;
+        $name = $variant->item?->product_name ?? '';
+
+        if (str_contains($name, 'Bic')) {
+            $base = 17.00;
+        } elseif (str_contains($name, 'Ring')) {
+            $base = 15.00;
+        } elseif (str_contains($name, 'Sticky')) {
+            $base = 10.00;
+        }
+
+        return round($base * max(1, $variant->packaging_total_pieces ?? 1), 2);
     }
 }

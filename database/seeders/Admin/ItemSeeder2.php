@@ -544,11 +544,8 @@ class ItemSeeder2 extends Seeder
                             'item_color_id' => $color->id,
                             'item_size_id' => $size->id,
                             'item_packaging_type_id' => $pkg->id,
-                            'price' => 0,
-                            'discount_price' => null,
                             'barcode' => null,
                             'images' => json_encode([]),
-                            'is_active' => false,
                             'status' => 'inactive',
                             // 'sku' => "{$item->sku}-{$color->code}-{$size->code}-{$pkg->code}-{$item->id}",
                         ]);

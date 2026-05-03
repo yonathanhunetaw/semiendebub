@@ -2,6 +2,9 @@
 
 namespace App\Models\Store;
 
+use App\Models\Auth\Customer;
+use App\Models\Item\ItemVariant;
+use App\Models\StockKeeper\ItemStock;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use InvalidArgumentException;

@@ -35,11 +35,7 @@ class ItemVariant extends Model
         'item_color_id',
         'item_size_id',
         'item_packaging_type_id',
-        'is_active',
-        'price',
-        'stock',
         'owner_id',
-        'discount_price',
         'barcode',
         'images',
         'status',
@@ -53,28 +49,11 @@ class ItemVariant extends Model
      * @var array
      */
     protected $casts = [
-        'is_active' => 'boolean',
-        'price' => 'decimal:2',
-        'discount_price' => 'decimal:2',
         'images' => 'array', // so JSON becomes array automatically
     ];
 
     protected static function booted()
     {
-        static::saving(function ($variant) {
-            // ---------- Price / Discount Logic ----------
-            if ($variant->isDirty('price') && $variant->discount_percentage !== null) {
-                $variant->discount_price = $variant->price * (1 - $variant->discount_percentage / 100);
-            }
-
-            if ($variant->isDirty('discount_price') && $variant->discount_price !== null) {
-                $variant->discount_percentage = (($variant->price - $variant->discount_price) / $variant->price) * 100;
-            }
-
-            if ($variant->discount_percentage === null) {
-                $variant->discount_price = $variant->price;
-            }
-        });
 
         static::created(function ($variant) {
             if (!$variant->sku) {
@@ -189,7 +168,7 @@ class ItemVariant extends Model
 
     public function stores()
     {
-        return $this->belongsToMany(Store::class, 'store_variant')
+            return $this->belongsToMany(Store::class, 'store_variants', 'item_variant_id', 'store_id')
             ->withPivot('price', 'discount_price', 'active', 'discount_ends_at')
             ->withTimestamps();
     }
