@@ -38,13 +38,6 @@ class Cart extends Model
                 $cart->seller_id = $cart->seller_id ?? auth()->id();
             }
         });
-
-        // ADD THIS: Automatically filters every query by the user's store
-        static::addGlobalScope('store', function ($builder) {
-            if (auth()->check()) {
-                $builder->where('store_id', auth()->user()->store_id);
-            }
-        });
     }
     public function store(): BelongsTo
     {
@@ -99,6 +92,24 @@ class Cart extends Model
     public function scopeForStore($query, $storeId)
     {
         return $query->where('store_id', $storeId);
+    }
+
+    public function scopeOpen($query)
+    {
+        return $query->where('status', 'open');
+    }
+
+    public function scopeVisibleTo($query, User $user)
+    {
+        if ($user->role === 'admin') {
+            return $query;
+        }
+
+        return $query->where('store_id', $user->store_id)
+            ->where(function ($innerQuery) use ($user) {
+                $innerQuery->where('seller_id', $user->id)
+                    ->orWhere('user_id', $user->id);
+            });
     }
 
     /*

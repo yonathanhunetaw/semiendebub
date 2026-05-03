@@ -42,17 +42,10 @@ class CartController extends Controller
         $user = auth()->user();
 
         $carts = Cart::with(['customer', 'seller'])
-            ->withCount('variants') // Adds 'variants_count' to the result automatically
-            ->where('store_id', $user->store_id)
-            ->where(function ($query) use ($user) {
-                // Sellers see carts they are assigned to OR carts they created
-                $query->where('seller_id', $user->id)
-                    ->orWhere('user_id', $user->id)
-                    // If it's a Guest cart with no user_id, but it's in their store
-                    ->orWhereNull('user_id');
-            })
+            ->withCount('variants')
+            ->visibleTo($user)
             ->latest()
-            ->paginate(15) // Senior dev move: never use get() for lists
+            ->paginate(15)
             ->withQueryString();
 
         return Inertia::render('Seller/Carts/Index', [
@@ -65,10 +58,9 @@ class CartController extends Controller
      */
     public function create()
     {
-        // Only show customers and sellers relevant to the current user's store context
         $storeId = auth()->user()->store_id;
 
-        $customers = Customer::all();
+        $customers = Customer::where('store_id', $storeId)->get();
         $sellers = User::where('role', 'seller')
             ->where('store_id', $storeId)
             ->get();
@@ -91,7 +83,7 @@ class CartController extends Controller
             'user_id' => auth()->id(),
             'customer_id' => $request->customer_id,
             'seller_id' => $request->seller_id ?? (auth()->user()->role === 'seller' ? auth()->id() : null),
-            'status' => 'active',
+            'status' => 'open',
             // Generate a simple numeric session ID instead of a UUID
             'session_id' => (string) mt_rand(100000, 999999),
         ]);
@@ -120,9 +112,7 @@ class CartController extends Controller
             'items' => $cart->variants->map(function ($variant) {
                 return [
                     'id' => $variant->id,
-                    // Accessing name from the Item through the Variant
-                    'product_name' => $variant->item?->name ?? 'Unknown Item',
-                    // Getting price and quantity from the cart_items pivot table
+                    'product_name' => $variant->item?->product_name ?? 'Unknown Item',
                     'price' => $variant->pivot->price,
                     'quantity' => $variant->pivot->quantity,
                 ];
@@ -160,7 +150,7 @@ class CartController extends Controller
         $request->validate([
             'customer_id' => 'required|exists:customers,id',
             'seller_id' => 'nullable|exists:users,id',
-            'status' => 'required|in:pending,processing,completed,canceled',
+            'status' => 'required|in:open,processing,completed,canceled',
         ]);
 
         $cart->update([
@@ -208,7 +198,7 @@ class CartController extends Controller
             $cart = Cart::firstOrCreate([
                 'user_id' => auth()->id(),
                 'store_id' => $request->store_id,
-                'status' => 'pending',
+                'status' => 'open',
             ]);
         } else {
             // Guest: Use the Session to identify them
@@ -218,7 +208,7 @@ class CartController extends Controller
                 'session_id' => $sessionId, // You'll need to add this column to migrations
                 'user_id' => null,
                 'store_id' => $request->store_id,
-                'status' => 'pending',
+                'status' => 'open',
             ]);
         }
 
@@ -239,5 +229,43 @@ class CartController extends Controller
         }
 
         return redirect()->back()->with('success', 'Item added to cart!');
+    }
+
+    public function storeItem(Request $request, Cart $cart)
+    {
+        $this->authorize('update', $cart);
+
+        $validated = $request->validate([
+            'variant_id' => 'required|exists:item_variants,id',
+            'quantity' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0',
+        ]);
+
+        $variant = ItemVariant::findOrFail($validated['variant_id']);
+        $existing = $cart->variants()->where('item_variant_id', $variant->id)->first();
+
+        if ($existing) {
+            $cart->variants()->updateExistingPivot($variant->id, [
+                'quantity' => $existing->pivot->quantity + $validated['quantity'],
+                'price' => $validated['price'],
+                'store_id' => $cart->store_id,
+            ]);
+        } else {
+            $cart->variants()->attach($variant->id, [
+                'quantity' => $validated['quantity'],
+                'price' => $validated['price'],
+                'store_id' => $cart->store_id,
+            ]);
+        }
+
+        return redirect()->route('seller.carts.show', $cart)->with('success', 'Variant added to cart successfully.');
+    }
+
+    public function destroyItem(Cart $cart, ItemVariant $variant)
+    {
+        $this->authorize('update', $cart);
+        $cart->variants()->detach($variant->id);
+
+        return back()->with('success', 'Item removed from cart.');
     }
 }

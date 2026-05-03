@@ -236,14 +236,15 @@ export default function Show({
     const perPacket = isCartoon && selectedPrice != null ? selectedPrice : null;
 
     const { data, setData, post, processing, errors } = useForm({
-        item_id: item.id,
+        variant_id: initialVariant?.id ?? 0,
         quantity: 1,
         price: selectedPrice ?? displayPrice ?? 0,
     });
 
     React.useEffect(() => {
         setData("price", selectedPrice ?? displayPrice ?? 0);
-    }, [displayPrice, selectedPrice, setData]);
+        setData("variant_id", variant?.id ?? 0);
+    }, [displayPrice, selectedPrice, setData, variant?.id]);
 
     const colors = uniqueValues(variantData.map((entry) => entry.color));
     const sizes = availableSizes(variantData, selectedColor);

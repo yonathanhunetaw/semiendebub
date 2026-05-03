@@ -38,6 +38,7 @@ Route::domain("seller.$baseDomain")
             Route::resource('categories', CategoryController::class)->only(['index', 'show']);
             Route::resource('carts', CartController::class)->only(['create', 'store', 'show', 'edit', 'update', 'destroy']);
             Route::post('/carts/{cart}/items', [CartController::class, 'storeItem'])->name('carts.items.store');
+            Route::delete('/carts/{cart}/items/{variant}', [CartController::class, 'destroyItem'])->name('carts.items.destroy');
             Route::get('/settings', [SellerSettingsController::class, 'index'])->name('settings.index');
             Route::patch('/settings', [SellerSettingsController::class, 'update'])->name('settings.update');
         });

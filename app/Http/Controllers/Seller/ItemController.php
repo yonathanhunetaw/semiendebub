@@ -239,12 +239,16 @@ class ItemController extends Controller
         });
         // ... (Your existing Cart/Seller retrieval logic)
         $sellers = User::where('role', 'seller')->get();
-        $customersWithOpenCarts = Customer::whereHas('carts', fn($q) => $q->where('status', 'open'))
-            ->with(['carts' => fn($q) => $q->where('status', 'open')])->get();
+        $customersWithOpenCarts = Customer::where('store_id', $storeId)
+            ->whereHas('carts', fn($q) => $q->visibleTo(auth()->user())->open())
+            ->with(['carts' => fn($q) => $q->visibleTo(auth()->user())->open()])
+            ->get();
 
         $openCarts = Cart::with('customer')
-            ->where(fn($q) => $q->where('seller_id', auth()->id())->orWhere('user_id', auth()->id()))
-            ->where('status', 'open')->latest()->get();
+            ->visibleTo(auth()->user())
+            ->open()
+            ->latest()
+            ->get();
 
         $displayPrice = $variantData->where('status', 'active')->min('final_price') ?? $variantData->min('price');
 

@@ -5,7 +5,7 @@ import {
     sellerName,
 } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { Head, Link, router } from "@inertiajs/react";
+import { Head, router } from "@inertiajs/react";
 import {
     Avatar,
     Box,
@@ -21,7 +21,6 @@ import {
     useTheme,
     Chip,
 } from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AddIcon from "@mui/icons-material/Add";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
@@ -66,17 +65,9 @@ export default function Show({ cart }: { cart: Cart }) {
         <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: "background.default", minHeight: "100vh" }}>
             <Head title={`Cart #${cart.id} - ${customerFullname}`} />
 
-            <Button
-                component={Link}
-                href={route("seller.carts.index")}
-                startIcon={<ArrowBackIcon />}
-                sx={{ mb: 3, color: "text.secondary" }}
-            >
-                Back to Carts
-            </Button>
-
             <SellerHeader
                 title={customerFullname}
+                backHref={route("seller.carts.index")}
                 subtitle={`Session ID: ${cart.session_id}`}
             />
 

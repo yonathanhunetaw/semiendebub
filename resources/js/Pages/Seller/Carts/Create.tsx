@@ -1,11 +1,10 @@
 import {
-    SellerCard,
     SellerHeader,
     SELLER_BRAND_DARK,
-    sellerName,
+    SellerCard,
 } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { Head, useForm, usePage, Link } from "@inertiajs/react";
+import { Head, useForm, usePage } from "@inertiajs/react";
 import {
     Box,
     Button,
@@ -13,13 +12,7 @@ import {
     Stack,
     TextField,
     Typography,
-    FormControl,
-    InputLabel,
-    Select,
-    FormHelperText,
-    Paper
 } from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SaveIcon from "@mui/icons-material/Save";
 import React from "react";
 
@@ -35,7 +28,7 @@ export default function Create({ customers }: { customers: Customer[] }) {
     const { data, setData, post, processing, errors } = useForm({
         customer_id: "",
         seller_id: auth.user.id, // Auto-assigned from current user
-        status: "active",
+        status: "open",
     });
 
     const isAdmin = url.startsWith("/admin");
@@ -52,19 +45,11 @@ export default function Create({ customers }: { customers: Customer[] }) {
 
             <SellerHeader
                 title="Initialize Cart"
+                backHref={route(isAdmin ? "admin.carts.index" : "seller.carts.index")}
                 subtitle="Assign a customer to a new session"
             />
 
             <Box sx={{ maxWidth: 600, mx: "auto", mt: 4 }}>
-                <Button
-                    component={Link}
-                    href={route(isAdmin ? "admin.carts.index" : "seller.carts.index")}
-                    startIcon={<ArrowBackIcon />}
-                    sx={{ mb: 2, color: "text.secondary" }}
-                >
-                    Back to Carts
-                </Button>
-
                 <SellerCard>
                     <form onSubmit={handleSubmit}>
                         <Stack spacing={4} sx={{ p: 1 }}>
@@ -102,8 +87,8 @@ export default function Create({ customers }: { customers: Customer[] }) {
                                 onChange={(e) => setData("status", e.target.value)}
                                 variant="outlined"
                             >
-                                <MenuItem value="active">Active</MenuItem>
-                                <MenuItem value="pending">Pending</MenuItem>
+                                <MenuItem value="open">Open</MenuItem>
+                                <MenuItem value="processing">Processing</MenuItem>
                             </TextField>
 
                             <Button
