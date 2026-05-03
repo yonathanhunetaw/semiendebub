@@ -13,6 +13,7 @@ use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemInventoryLocation;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
+use App\Services\ItemVariantGenerationService;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,11 @@ use Inertia\Inertia;
 
 class ItemController extends Controller
 {
+    public function __construct(
+        private readonly ItemVariantGenerationService $itemVariantGenerationService
+    ) {
+    }
+
     // Display a listing of the items
     public function index()
     {
@@ -215,7 +221,7 @@ class ItemController extends Controller
             'sizes',
             'packagingTypes' => fn($query) => $query->withPivot('quantity'),
             'variants' => fn($query) => $query
-                ->with(['itemColor', 'itemSize', 'storeVariants.store'])
+                ->with(['itemColor', 'itemSize', 'itemPackagingType', 'storeVariants.store'])
                 ->orderBy('id'),
         ]);
 
@@ -427,7 +433,7 @@ class ItemController extends Controller
             $item->colors()->sync($this->resolveOptionIds($validated['color_ids'] ?? [], ItemColor::class));
             $item->sizes()->sync($this->resolveOptionIds($validated['size_ids'] ?? [], ItemSize::class));
             $item->packagingTypes()->sync($this->resolvePackagingPayload($validated['packaging'] ?? []));
-            $this->syncGeneratedVariants($item);
+            $this->itemVariantGenerationService->sync($item);
 
             return redirect()->route('admin.items.index');
         });
@@ -487,7 +493,7 @@ class ItemController extends Controller
             $item->colors()->sync($this->resolveOptionIds($validated['color_ids'] ?? [], ItemColor::class));
             $item->sizes()->sync($this->resolveOptionIds($validated['size_ids'] ?? [], ItemSize::class));
             $item->packagingTypes()->sync($this->resolvePackagingPayload($validated['packaging'] ?? []));
-            $this->syncGeneratedVariants($item);
+            $this->itemVariantGenerationService->sync($item);
 
             return redirect()->route('admin.items.edit', $item)->with('success', 'Item updated successfully.');
         });
@@ -533,7 +539,7 @@ class ItemController extends Controller
                 'status' => $active ? 'active' : 'inactive',
             ]);
 
-            $this->applyVariantAvailabilityToStores($variant, $active);
+            $this->itemVariantGenerationService->applyAvailabilityToStores($variant, $active);
         });
 
         return back()->with('success', 'Variant availability updated successfully.');
@@ -544,7 +550,7 @@ class ItemController extends Controller
         abort_unless($variant->item_id === $item->id, 404);
 
         DB::transaction(function () use ($variant) {
-            $this->applyVariantAvailabilityToStores($variant, false);
+            $this->itemVariantGenerationService->applyAvailabilityToStores($variant, false);
             $variant->delete();
         });
 
@@ -637,83 +643,6 @@ class ItemController extends Controller
                 ];
             })
             ->all();
-    }
-
-    private function syncGeneratedVariants(Item $item): void
-    {
-        $item->load(['colors', 'sizes', 'stores', 'variants' => fn($query) => $query->withTrashed()]);
-
-        $colorIds = $item->colors->pluck('id')->all();
-        $sizeIds = $item->sizes->pluck('id')->all();
-
-        if (empty($colorIds)) {
-            $colorIds = [null];
-        }
-
-        if (empty($sizeIds)) {
-            $sizeIds = [null];
-        }
-
-        foreach ($colorIds as $colorId) {
-            foreach ($sizeIds as $sizeId) {
-                $variant = ItemVariant::withTrashed()->firstOrNew([
-                    'item_id' => $item->id,
-                    'item_color_id' => $colorId,
-                    'item_size_id' => $sizeId,
-                ]);
-
-                if ($variant->trashed()) {
-                    $variant->restore();
-                }
-
-                if (!$variant->exists) {
-                    $variant->status = $item->status === 'active' ? 'active' : 'inactive';
-                    $variant->packaging_total_pieces = 1;
-                }
-
-                $variant->save();
-                $this->ensureStoreVariantRecords($item, $variant);
-            }
-        }
-    }
-
-    private function ensureStoreVariantRecords(Item $item, ItemVariant $variant): void
-    {
-        $storeIds = $item->stores()->pluck('stores.id');
-
-        if ($storeIds->isEmpty()) {
-            $storeIds = Store::query()->pluck('id');
-        }
-
-        foreach ($storeIds as $storeId) {
-            StoreVariant::firstOrCreate(
-                [
-                    'store_id' => $storeId,
-                    'item_variant_id' => $variant->id,
-                ],
-                [
-                    'active' => $variant->status === 'active',
-                    'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
-                    'forced_status' => $variant->status === 'active' ? null : 'inactive',
-                ]
-            );
-        }
-    }
-
-    private function applyVariantAvailabilityToStores(ItemVariant $variant, bool $active): void
-    {
-        $variant->loadMissing('item.stores', 'storeVariants');
-
-        $this->ensureStoreVariantRecords($variant->item, $variant);
-        $variant->load('storeVariants');
-
-        foreach ($variant->storeVariants as $storeVariant) {
-            $storeVariant->update([
-                'active' => $active,
-                'manual_status' => $active ? 'auto' : 'forced',
-                'forced_status' => $active ? null : 'inactive',
-            ]);
-        }
     }
 
     public function uploadImages(Request $request)

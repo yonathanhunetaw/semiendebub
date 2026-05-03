@@ -39,6 +39,7 @@ type VariantRecord = {
     status: string;
     item_color_id?: number | null;
     item_size_id?: number | null;
+    item_packaging_type?: { id: number; name: string } | null;
     item_color?: { id: number; name: string } | null;
     item_size?: { id: number; name: string } | null;
     store_variants?: Array<{
@@ -549,7 +550,7 @@ export default function ItemForm({ mode, item, categories, colors, sizes, packag
                                                                 {(variant.item_color?.name || "No Color")} / {(variant.item_size?.name || "No Size")}
                                                             </Typography>
                                                             <Typography variant="body2" color="text.secondary">
-                                                                Variant #{variant.id} · {variant.status}
+                                                                Variant #{variant.id} · {variant.item_packaging_type?.name || "No Packaging"} · {variant.status}
                                                             </Typography>
                                                             <Stack direction="row" flexWrap="wrap" gap={1} mt={1}>
                                                                 {(variant.store_variants ?? []).map((storeVariant) => (
