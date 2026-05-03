@@ -46,11 +46,10 @@ export default function Create({
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
     const inputStyle = {
-        "& .MuiInputLabel-root": { color: "#aaa" },
+        "& .MuiInputLabel-root": { color: "text.secondary" },
         "& .MuiOutlinedInput-root": {
-            "& fieldset": { borderColor: "#444" },
-            "&:hover fieldset": { borderColor: "#fff" },
-            "&.Mui-focused fieldset": { borderColor: "#3ea6ff" },
+            "& fieldset": { borderColor: "divider" }, // Uses the theme's border color
+            "&:hover fieldset": { borderColor: "primary.main" },
         },
     };
 
@@ -87,7 +86,14 @@ export default function Create({
         const uniqueId = index !== undefined ? `${field}-${index}` : field;
 
         return (
-            <Box sx={{ p: 3, bgcolor: 'background.default', minHeight: '100vh', color: 'text.primary' }}>
+            <Box
+                sx={{
+                    p: 3,
+                    bgcolor: "background.default",
+                    minHeight: "100vh",
+                    color: "text.primary",
+                }}
+            >
                 {activeCreator !== uniqueId ? (
                     <Button
                         startIcon={<AddIcon />}
@@ -162,9 +168,8 @@ export default function Create({
             <Paper
                 sx={{
                     p: 4,
-                    bgcolor: "#1e1e1e",
+                    bgcolor: "background.paper",
                     backgroundImage: "none",
-                    border: "1px solid #333",
                 }}
             >
                 <form
