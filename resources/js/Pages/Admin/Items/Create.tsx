@@ -87,7 +87,7 @@ export default function Create({
         const uniqueId = index !== undefined ? `${field}-${index}` : field;
 
         return (
-            <Box sx={{ mt: 1 }}>
+            <Box sx={{ p: 3, bgcolor: 'background.default', minHeight: '100vh', color: 'text.primary' }}>
                 {activeCreator !== uniqueId ? (
                     <Button
                         startIcon={<AddIcon />}
