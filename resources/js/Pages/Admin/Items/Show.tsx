@@ -199,3 +199,10 @@ export default function Show({ item }: { item: any }) {
 }
 
 Show.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
+
+
+
+// sudo docker exec -it Duka_app php artisan route:clear
+// sudo docker exec -it Duka_app php artisan optimize
+// sudo docker exec -it Duka_app php artisan config:clear
+// sudo docker exec -it Duka_app composer dump-autoload
