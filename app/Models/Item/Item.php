@@ -116,11 +116,7 @@ class Item extends Model
 
     // app/Models/Item/Item.php
 
-    public function storeVariants()
-    {
-        // This links the Item to the specific stock/price entries in each store
-        return $this->hasMany(\App\Models\Store\StoreVariant::class);
-    }
+
     /*
     |--------------------------------------------------------------------------
     | Business Logic / Helpers
