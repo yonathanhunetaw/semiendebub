@@ -2,196 +2,266 @@ import { useState } from "react";
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link } from "@inertiajs/react";
 import {
-    Box, Chip, Grid, Paper, Table, TableBody, TableCell,
-    TableHead, TableRow, Typography, Button, TableContainer, Stack, IconButton
+    Box, Button, Chip, Grid, IconButton, Paper, Stack,
+    Table, TableBody, TableCell, TableContainer, TableHead,
+    TableRow, Tooltip, Typography,
 } from "@mui/material";
-import AddBusinessIcon from '@mui/icons-material/AddBusiness';
-import EditIcon from '@mui/icons-material/Edit';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
+import AddBusinessIcon from "@mui/icons-material/AddBusiness";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import EditIcon from "@mui/icons-material/Edit";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import KeyboardArrowLeftIcon from "@mui/icons-material/KeyboardArrowLeft";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
-interface ItemVariant {
+interface ImageSlotData {
+    path: string;
+    url: string;
+}
+
+interface VariantRow {
     id: number;
     sku: string | null;
-    images: string[] | null;
-    item_color?: { name: string };
-    item_size?: { name: string };
-    item_packaging_type?: { name: string };
+    color: string | null;
+    size: string | null;
+    packaging: string | null;
+    status: string;
+    slots: ImageSlotData[];
+    slot_count: number;
+    proof_ok: boolean;
 }
 
 interface Item {
     id: number;
     product_name: string;
     product_description: string;
+    status: string;
     general_images: string[] | null;
-    category?: { name: string };
-    variants: ItemVariant[];
 }
-export default function Show({ item }: { item: any }) {
+
+const statusColor = (s: string): "success" | "warning" | "default" | "error" =>
+    s === "active" ? "success" : s === "draft" ? "warning" : s === "inactive" ? "default" : "error";
+
+export default function Show({ item, variantData }: { item: Item; variantData: VariantRow[] }) {
     if (!item) return null;
 
-    const masterFallback = item.general_images?.[0] || item.variants?.[0]?.images?.[0] || "/img/default.jpg";
+    const allGeneralImages = item.general_images ?? [];
+    const masterFallback = allGeneralImages[0] ?? variantData[0]?.slots[0]?.url ?? "/img/default.jpg";
+
     const [selectedImage, setSelectedImage] = useState(masterFallback);
-    const [showAllThumbnails, setShowAllThumbnails] = useState(false);
+    const [showAllThumbs, setShowAllThumbs] = useState(false);
 
-    // Combine all images into one flat array for the gallery
-    const allGalleryImages = [
-        ...(item.general_images || []),
-        ...item.variants.map((v: any) => v.images?.[0]).filter(Boolean)
-    ];
-
-    // Limit view to 5 unless toggled
-    const displayedThumbnails = showAllThumbnails ? allGalleryImages : allGalleryImages.slice(0, 5);
-    const hasMore = allGalleryImages.length > 5;
+    const displayedThumbs = showAllThumbs ? allGeneralImages : allGeneralImages.slice(0, 5);
+    const proofComplete = variantData.length > 0 && variantData.every((v) => v.proof_ok);
 
     return (
-        <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: '1440px', margin: '0 auto' }}>
+        <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: "1440px", margin: "0 auto" }}>
             <Head title={`Catalog: ${item.product_name}`} />
 
-            {/* HEADER & GLOBAL ACTIONS */}
-            <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                justifyContent="space-between"
-                alignItems={{ xs: 'flex-start', sm: 'center' }}
-                spacing={2}
-                sx={{ mb: 4 }}
-            >
+            {/* ── Header ── */}
+            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between"
+                alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 4 }}>
                 <Box>
                     <Typography variant="overline" color="primary" sx={{ fontWeight: 800, letterSpacing: 1 }}>
-                        Merchant-King Catalog
+                        Admin · Items
                     </Typography>
-                    <Typography variant="h4" fontWeight={900}>
-                        {item.product_name}
-                    </Typography>
+                    <Typography variant="h4" fontWeight={900}>{item.product_name}</Typography>
+                    <Stack direction="row" spacing={1} mt={0.5}>
+                        <Chip size="small" label={item.status.toUpperCase()} color={statusColor(item.status)} />
+                        <Chip size="small"
+                            icon={proofComplete ? <CheckCircleIcon /> : <ErrorOutlineIcon />}
+                            label={proofComplete ? "All variants proven" : "Some variants need images"}
+                            color={proofComplete ? "success" : "warning"} variant="outlined"
+                        />
+                    </Stack>
                 </Box>
-
                 <Stack direction="row" spacing={1.5}>
-                    <Button
-                        variant="outlined"
-                        color="primary"
-                        startIcon={<EditIcon />}
-                        component={Link}
-                        href={route('admin.items.edit', item.id)}
-                        sx={{ borderRadius: 2, fontWeight: 'bold', textTransform: 'none' }}
-                    >
-                        Edit Product
+                    <Button variant="outlined" startIcon={<EditIcon />} component={Link}
+                        href={route("admin.items.edit", item.id)}
+                        sx={{ borderRadius: 2, fontWeight: "bold", textTransform: "none" }}>
+                        Edit Item
                     </Button>
-                    <Button
-                        variant="contained"
-                        startIcon={<AddBusinessIcon />}
-                        sx={{ borderRadius: 2, fontWeight: 'bold', textTransform: 'none', px: 3 }}
-                    >
+                    <Button variant="contained" startIcon={<AddBusinessIcon />}
+                        sx={{ borderRadius: 2, fontWeight: "bold", textTransform: "none", px: 3 }}>
                         Deploy to Store
                     </Button>
                 </Stack>
             </Stack>
 
             <Grid container spacing={4}>
-                {/* GALLERY SECTION */}
+                {/* ── Gallery ── */}
                 <Grid item xs={12} md={5}>
-                    <Paper
-                        variant="outlined"
-                        sx={{ p: 2, borderRadius: 4, position: 'sticky', top: 24, bgcolor: 'background.paper' }}
-                    >
-                        <Box sx={{
-                            width: '100%', height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            mb: 2, bgcolor: '#f5f5f5', borderRadius: 2, overflow: 'hidden'
-                        }}>
-                            <Box
-                                component="img"
-                                src={selectedImage}
-                                sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                    <Paper variant="outlined" sx={{ p: 2, borderRadius: 4, position: "sticky", top: 24 }}>
+                        <Box sx={{ width: "100%", height: 360, display: "flex", alignItems: "center",
+                            justifyContent: "center", mb: 2, bgcolor: "#f5f5f5", borderRadius: 2, overflow: "hidden" }}>
+                            <Box component="img" src={selectedImage}
+                                sx={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                 onError={(e: any) => { e.currentTarget.src = "/img/default.jpg"; }}
                             />
                         </Box>
 
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>
-                                GALLERY ASSETS ({allGalleryImages.length})
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                            <Typography variant="caption" sx={{ fontWeight: "bold", color: "text.secondary" }}>
+                                GENERAL IMAGES ({allGeneralImages.length})
                             </Typography>
-                            {hasMore && (
-                                <Button
-                                    size="small"
-                                    onClick={() => setShowAllThumbnails(!showAllThumbnails)}
-                                    endIcon={showAllThumbnails ? <KeyboardArrowLeftIcon /> : <ExpandMoreIcon />}
-                                    sx={{ fontSize: '0.65rem', fontWeight: 700 }}
-                                >
-                                    {showAllThumbnails ? "Show Less" : `+${allGalleryImages.length - 5} More`}
+                            {allGeneralImages.length > 5 && (
+                                <Button size="small" onClick={() => setShowAllThumbs(!showAllThumbs)}
+                                    endIcon={showAllThumbs ? <KeyboardArrowLeftIcon /> : <ExpandMoreIcon />}
+                                    sx={{ fontSize: "0.65rem", fontWeight: 700 }}>
+                                    {showAllThumbs ? "Show Less" : `+${allGeneralImages.length - 5} More`}
                                 </Button>
                             )}
                         </Stack>
 
-                        <Box sx={{
-                            display: 'flex',
-                            flexWrap: showAllThumbnails ? 'wrap' : 'nowrap',
-                            gap: 1,
-                            overflowX: showAllThumbnails ? 'unset' : 'auto',
-                            pb: 1
-                        }}>
-                            {displayedThumbnails.map((img: string, i: number) => (
-                                <Box
-                                    key={i}
-                                    component="img"
-                                    src={img}
-                                    onClick={() => setSelectedImage(img)}
-                                    sx={{
-                                        width: 64, height: 64, borderRadius: 1.5, cursor: 'pointer',
-                                        border: selectedImage === img ? '2px solid #1976d2' : '1px solid #ddd',
-                                        objectFit: 'cover',
-                                        transition: '0.2s',
-                                        '&:hover': { borderColor: 'primary.main', transform: 'scale(1.05)' }
-                                    }}
-                                />
-                            ))}
+                        <Box sx={{ display: "flex", flexWrap: showAllThumbs ? "wrap" : "nowrap",
+                            gap: 1, overflowX: showAllThumbs ? "unset" : "auto", pb: 1 }}>
+                            {displayedThumbs.map((img, i) => {
+                                const src = img.startsWith("http") ? img : `/storage/${img}`;
+                                return (
+                                    <Box key={i} component="img" src={src}
+                                        onClick={() => setSelectedImage(src)}
+                                        sx={{ width: 64, height: 64, borderRadius: 1.5, cursor: "pointer",
+                                            border: selectedImage === src ? "2px solid #1976d2" : "1px solid #ddd",
+                                            objectFit: "cover", transition: "0.2s",
+                                            "&:hover": { borderColor: "primary.main", transform: "scale(1.05)" } }}
+                                    />
+                                );
+                            })}
                         </Box>
                     </Paper>
                 </Grid>
 
-                {/* DETAILS & TABLE */}
+                {/* ── Variants ── */}
                 <Grid item xs={12} md={7}>
-                    <Typography variant="h6" fontWeight={800} gutterBottom>Global Description</Typography>
+                    <Typography variant="h6" fontWeight={800} gutterBottom>Description</Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.6 }}>
-                        {item.product_description || "No description provided for this catalog entry."}
+                        {item.product_description || "No description provided."}
                     </Typography>
 
-                    <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>Catalog Variations</Typography>
+                    <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
+                        Variants & Visual Proof ({variantData.length})
+                    </Typography>
 
-                    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3 }}>
-                        <Table size="small" onMouseLeave={() => setSelectedImage(masterFallback)}>
-                            <TableHead sx={{ bgcolor: 'action.hover' }}>
-                                <TableRow>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>SKU</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Variation</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>C-S-P Path</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {item.variants.map((v: any) => (
-                                    <TableRow
-                                        key={v.id}
-                                        hover
-                                        onMouseEnter={() => v.images?.[0] && setSelectedImage(v.images[0])}
-                                        sx={{ cursor: 'pointer' }}
-                                    >
-                                        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{v.sku}</TableCell>
-                                        <TableCell>
-                                            <Typography variant="body2" fontWeight={500}>
-                                                {v.item_color?.name} / {v.item_size?.name || '0'}
+                    <Stack spacing={3}>
+                        {variantData.map((variant) => (
+                            <Paper key={variant.id} variant="outlined" sx={{
+                                p: 2, borderRadius: 2,
+                                borderColor: variant.proof_ok ? "success.main" : "warning.main",
+                                borderWidth: 1.5,
+                            }}>
+                                {/* Variant header */}
+                                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={1.5}>
+                                    <Box>
+                                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                                            <Typography variant="subtitle1" fontWeight={800}>
+                                                {[variant.color, variant.size, variant.packaging].filter(Boolean).join(" / ") || "Default"}
                                             </Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                                Pkg: {v.item_packaging_type?.name}
+                                            <Chip size="small" label={variant.status.toUpperCase()} color={statusColor(variant.status)} />
+                                            {variant.proof_ok
+                                                ? <Chip size="small" icon={<CheckCircleIcon />} label="Proof OK" color="success" />
+                                                : <Chip size="small" icon={<ErrorOutlineIcon />}
+                                                    label={`Need ${2 - variant.slot_count} more image${2 - variant.slot_count !== 1 ? "s" : ""}`}
+                                                    color="warning" />
+                                            }
+                                        </Stack>
+                                        {variant.sku && (
+                                            <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary" }}>
+                                                SKU: {variant.sku}
                                             </Typography>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.65rem' }}>
-                                                {v.images?.[0]?.split('/product_images/')[1] || '---'}
-                                            </Typography>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
+                                        )}
+                                    </Box>
+                                    <Typography variant="caption" color="text.disabled">
+                                        {variant.slot_count} / 5
+                                    </Typography>
+                                </Stack>
+
+                                {/* 5 image slots */}
+                                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
+                                    {Array.from({ length: 5 }).map((_, slotIndex) => {
+                                        const slot = variant.slots[slotIndex];
+                                        return (
+                                            <Box key={slotIndex}
+                                                onMouseEnter={() => slot && setSelectedImage(slot.url)}
+                                                onMouseLeave={() => setSelectedImage(masterFallback)}>
+                                                {slot ? (
+                                                    <Box sx={{ width: 80 }}>
+                                                        <Box component="img" src={slot.url}
+                                                            onError={(e: any) => { e.currentTarget.src = "/img/default.jpg"; }}
+                                                            onClick={() => setSelectedImage(slot.url)}
+                                                            sx={{ width: 80, height: 80, objectFit: "cover",
+                                                                borderRadius: 1.5, border: "1px solid",
+                                                                borderColor: "divider", cursor: "pointer", display: "block" }}
+                                                        />
+                                                        {/* Filename */}
+                                                        <Tooltip title={slot.path} arrow placement="bottom">
+                                                            <Typography variant="caption" sx={{
+                                                                display: "block", fontSize: "0.55rem",
+                                                                color: "text.disabled", mt: 0.5, maxWidth: 80,
+                                                                overflow: "hidden", textOverflow: "ellipsis",
+                                                                whiteSpace: "nowrap", fontFamily: "monospace",
+                                                            }}>
+                                                                {slot.path.split("/").pop()}
+                                                            </Typography>
+                                                        </Tooltip>
+                                                        <IconButton size="small" component="a" href={slot.url} target="_blank" sx={{ p: 0.25 }}>
+                                                            <OpenInNewIcon sx={{ fontSize: 12, color: "text.disabled" }} />
+                                                        </IconButton>
+                                                    </Box>
+                                                ) : (
+                                                    <Box sx={{
+                                                        width: 80, height: 80, borderRadius: 1.5,
+                                                        border: "2px dashed",
+                                                        borderColor: slotIndex < 2 ? "warning.main" : "divider",
+                                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                                        bgcolor: slotIndex < 2 ? "rgba(237,108,2,0.04)" : "background.default",
+                                                    }}>
+                                                        <Typography variant="caption"
+                                                            color={slotIndex < 2 ? "warning.main" : "text.disabled"}
+                                                            sx={{ fontSize: "0.6rem" }}>
+                                                            {slotIndex + 1}
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+                                            </Box>
+                                        );
+                                    })}
+                                </Stack>
+
+                                {/* Storage paths table */}
+                                {variant.slots.length > 0 && (
+                                    <Box>
+                                        <Typography variant="caption" color="text.disabled" fontWeight={700}
+                                            sx={{ textTransform: "uppercase", letterSpacing: "0.06em", display: "block", mb: 0.5 }}>
+                                            Storage Paths
+                                        </Typography>
+                                        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+                                            <Table size="small">
+                                                <TableHead sx={{ bgcolor: "action.hover" }}>
+                                                    <TableRow>
+                                                        <TableCell sx={{ fontWeight: 700, py: 0.5, fontSize: "0.7rem", width: 32 }}>#</TableCell>
+                                                        <TableCell sx={{ fontWeight: 700, py: 0.5, fontSize: "0.7rem" }}>storage/ path</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {variant.slots.map((slot, i) => (
+                                                        <TableRow key={i}>
+                                                            <TableCell sx={{ py: 0.5, fontSize: "0.7rem", color: "text.disabled" }}>{i + 1}</TableCell>
+                                                            <TableCell sx={{ py: 0.5 }}>
+                                                                <Typography variant="caption"
+                                                                    sx={{ fontFamily: "monospace", fontSize: "0.65rem", color: "text.secondary", wordBreak: "break-all" }}>
+                                                                    {slot.path}
+                                                                </Typography>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    </Box>
+                                )}
+                            </Paper>
+                        ))}
+                    </Stack>
                 </Grid>
             </Grid>
         </Box>
@@ -199,10 +269,3 @@ export default function Show({ item }: { item: any }) {
 }
 
 Show.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
-
-
-
-// sudo docker exec -it Duka_app php artisan route:clear
-// sudo docker exec -it Duka_app php artisan optimize
-// sudo docker exec -it Duka_app php artisan config:clear
-// sudo docker exec -it Duka_app composer dump-autoload
