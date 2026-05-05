@@ -112,33 +112,31 @@ class ItemController extends Controller
             ->first();
 
         // 🔹 Build item images
-        // 🔹 Build item images
         $itemImages = collect();
         $rawImages = $item->general_images;
         if (!empty($rawImages)) {
-            $imagesArray = is_string($rawImages) ? json_decode($rawImages, true) : $rawImages;
+            $imagesArray = is_array($rawImages) ? $rawImages : (json_decode($rawImages, true) ?: []);
             if (is_array($imagesArray)) {
                 $itemImages = collect($imagesArray)
                     ->filter(fn($img) => !empty($img))
-                    ->map(fn($img) => str_starts_with($img, 'http') ? $img : asset(ltrim($img, '/')));
+                    ->map(fn($img) => $this->resolveImageUrl($img));
             }
         }
 
         // 🔹 Process related attribute images (Color, Size, Packaging)
-        // 🔹 Process related attribute images (Color, Size, Packaging)
         $variantColorImages = $item->variants
-            ->map(fn($v) => $v->itemColor?->image_path ? asset(ltrim($v->itemColor->image_path, '/')) : null)
-            ->filter(fn($img) => !empty($img) && $img !== url('/'))
+            ->map(fn($v) => $v->itemColor?->image_path ? $this->resolveImageUrl($v->itemColor->image_path) : null)
+            ->filter(fn($img) => !empty($img))
             ->unique();
 
         $sizeImages = $item->variants
-            ->map(fn($v) => $v->itemSize?->image_path ? asset(ltrim($v->itemSize->image_path, '/')) : null)
-            ->filter(fn($img) => !empty($img) && $img !== url('/'))
+            ->map(fn($v) => $v->itemSize?->image_path ? $this->resolveImageUrl($v->itemSize->image_path) : null)
+            ->filter(fn($img) => !empty($img))
             ->unique();
 
         $packagingImages = $item->variants
-            ->map(fn($v) => $v->itemPackagingType?->image_path ? asset(ltrim($v->itemPackagingType->image_path, '/')) : null)
-            ->filter(fn($img) => !empty($img) && $img !== url('/'))
+            ->map(fn($v) => $v->itemPackagingType?->image_path ? $this->resolveImageUrl($v->itemPackagingType->image_path) : null)
+            ->filter(fn($img) => !empty($img))
             ->unique();
 
         $allImages = $itemImages
@@ -188,17 +186,7 @@ class ItemController extends Controller
 
             $variantImages = collect($rawVarImages)
                 ->filter(fn($img) => !empty($img))
-                ->map(function ($img) {
-                    if (str_starts_with($img, 'http'))
-                        return $img;
-
-                    // IMPORTANT: Your disk has "blue/null/piece"
-                    // If the database string is "blue/piece", we MUST add the null back.
-                    // If the database string is "blue/null/piece", we just leave it.
-                    $path = ltrim($img, '/');
-
-                    return asset($path);
-                });
+                ->map(fn($img) => $this->resolveImageUrl($img));
 
 
             $seller_price_record = $storeVariant
@@ -287,5 +275,37 @@ class ItemController extends Controller
     public function destroy(string $id)
     {
         //
+    }
+
+    /**
+     * Turn any stored image path into a fully-qualified URL.
+     *
+     * Handles all formats produced by the system:
+     *   - Already a full URL          → returned as-is
+     *   - uploads/variants/SKU/...    → storage disk  → asset('storage/...')
+     *   - images/product_images/...   → public disk   → asset('storage/...')
+     *   - /images/product_images/...  → legacy public → asset('storage/...')
+     *   - storage/...                 → strip prefix  → asset('storage/...')
+     */
+    private function resolveImageUrl(string $img): string
+    {
+        $img = trim($img);
+
+        if (str_starts_with($img, 'http')) {
+            return $img;
+        }
+
+        $path = ltrim($img, '/');
+
+        if (str_starts_with($path, 'storage/')) {
+            return asset($path);
+        }
+
+        // Paths that live under storage/app/public/
+        if (str_starts_with($path, 'uploads/') || str_starts_with($path, 'images/')) {
+            return asset('storage/' . $path);
+        }
+
+        return asset($path);
     }
 }
