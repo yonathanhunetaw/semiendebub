@@ -195,17 +195,20 @@ export default function ItemForm({
             // Inside your variantSlots initialization loop:
             existingImages.forEach((path: string, index: number) => {
                 if (index < IMAGES_PER_VARIANT) {
-                    // 1. Clean the path: remove leading slashes or existing storage prefixes
-                    let cleanPath = path.startsWith("/")
-                        ? path.substring(1)
-                        : path;
+                    // 1. The Regex "Power Washer"
+                    const cleanPath = path.replace(
+                        /^(\/)?storage(\/)+|^\//,
+                        "",
+                    );
 
-                    // If the path already contains 'storage/', remove it so we don't double up
-                    cleanPath = cleanPath.replace("storage/", "");
+                    // 2. Debug Logs - Open your browser console (F12) to see these
+                    console.log(`--- Image Slot ${index} ---`);
+                    console.log("Raw path from DB:", path);
+                    console.log("Cleaned path:", cleanPath);
+                    console.log("Final URL assigned:", `/storage/${cleanPath}`);
 
                     slots[index] = {
                         kind: "existing",
-                        // 2. Build the URL cleanly
                         url: path.startsWith("http")
                             ? path
                             : `/storage/${cleanPath}`,
