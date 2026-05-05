@@ -2,7 +2,7 @@
 
 namespace App\Models\StockKeeper;
 
-use App\Models\StoreVariant;
+use App\Models\Store\StoreVariant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -26,4 +26,6 @@ class ItemStock extends Model
     {
         return $this->belongsTo(ItemInventoryLocation::class, 'item_inventory_location_id');
     }
+
+
 }

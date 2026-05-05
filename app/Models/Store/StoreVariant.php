@@ -32,4 +32,8 @@ class StoreVariant extends Model
     {
         return $this->belongsTo(Store::class);
     }
+    public function stocks()
+    {
+        return $this->hasMany(\App\Models\StockKeeper\ItemStock::class, 'store_variant_id');
+    }
 }
