@@ -7,12 +7,24 @@ $baseDomain = config('app.system_domain', 'duka.local');
 
 Route::domain("admin.{$baseDomain}")
     ->middleware(['auth', 'verified', 'role.subdomain:admin'])
-    ->prefix('stores')
     ->group(function () {
-        Route::get('/', [StoreController::class, 'index'])->name('store.index');
-        Route::get('/create', [StoreController::class, 'create'])->name('store.create');
-        Route::post('/', [StoreController::class, 'store'])->name('store.store');
-        Route::get('/{store}/edit', [StoreController::class, 'edit'])->name('store.edit');
-        Route::patch('/{store}', [StoreController::class, 'update'])->name('store.update');
-        Route::delete('/{store}', [StoreController::class, 'destroy'])->name('store.destroy');
+
+        // ── Stores CRUD ───────────────────────────────────────────────────────
+        Route::prefix('stores')->name('store.')->group(function () {
+            Route::get('/',             [StoreController::class, 'index'])->name('index');
+            Route::get('/create',       [StoreController::class, 'create'])->name('create');
+            Route::post('/',            [StoreController::class, 'store'])->name('store');
+            Route::get('/{store}/edit', [StoreController::class, 'edit'])->name('edit');
+            Route::patch('/{store}',    [StoreController::class, 'update'])->name('update');
+            Route::delete('/{store}',   [StoreController::class, 'destroy'])->name('destroy');
+        });
+
+        // ── Inventory sidebar sub-routes ──────────────────────────────────────
+        // /inventory/stores  → same StoreController@index view
+        // /inventory/warehouse → placeholder (replace with WarehouseController later)
+        Route::prefix('inventory')->name('inventory.')->group(function () {
+            Route::get('/stores',    [StoreController::class, 'index'])->name('stores');
+            Route::get('/warehouse', fn () => inertia('Admin/Inventory/Warehouse/index'))->name('warehouse');
+            Route::get('/transfers', fn () => inertia('Admin/Inventory/Transfers/index'))->name('transfers');
+        });
     });

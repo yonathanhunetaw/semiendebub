@@ -82,57 +82,71 @@ class ItemController extends Controller
     // SHOW
     // ──────────────────────────────────────────────────────────────────────────
 
+
+
+    // Drop-in replacement for ItemController::show().
+// Add at the top of ItemController: use App\Models\Store;
+
     public function show(Item $item)
     {
         $item->load([
-            'category.parent',
-            'colors',
-            'sizes',
-            'packagingTypes',
             'variants.itemColor',
             'variants.itemSize',
             'variants.itemPackagingType',
-            'variants.storeVariants.store',
+            'storeVariants.store', // load deployed store info via StoreVariant
         ]);
 
+        // Build variantData for the React Show page
         $variantData = $item->variants->map(function ($variant) {
-            $images = is_array($variant->images)
-                ? $variant->images
-                : (json_decode($variant->images, true) ?: []);
+            $images = is_array($variant->images) ? $variant->images : [];
 
-            // Build the 5-slot array with storage paths and full URLs
-            $slots = array_map(function ($path) {
-                $cleanPath = ltrim($path, '/');
-                return [
-                    'path' => $cleanPath,
-                    'url' => asset('storage/' . $cleanPath),
-                ];
-            }, array_slice($images, 0, 5));
+            $slots = collect($images)->map(fn($path) => [
+                'path' => $path,
+                'url' => str_starts_with($path, 'http') ? $path : asset("storage/{$path}"),
+            ])->values()->toArray();
 
             return [
                 'id' => $variant->id,
                 'sku' => $variant->sku,
-                'color' => $variant->itemColor->name ?? null,
-                'size' => $variant->itemSize->name ?? null,
-                'packaging' => $variant->itemPackagingType->name ?? null,
+                'color' => $variant->itemColor?->name,
+                'size' => $variant->itemSize?->name,
+                'packaging' => $variant->itemPackagingType?->name,
                 'status' => $variant->status,
-                'slots' => $slots,                           // up to 5 filled slots
+                'slots' => $slots,
                 'slot_count' => count($slots),
                 'proof_ok' => count($slots) >= 2,
             ];
         });
 
-        $inventoryLocations = ItemInventoryLocation::all();
-        $sellers = User::where('role', 'seller')->get();
+        // Which store IDs already have at least one StoreVariant for this item?
+        $deployedStoreIds = $item->storeVariants
+            ->pluck('store_id')
+            ->unique()
+            ->toArray();
+
+        // Pass all active stores + whether each is already deployed
+        $stores = Store::where('status', 'active')
+            ->orderBy('name')
+            ->get()
+            ->map(fn($s) => [
+                'id' => $s->id,
+                'name' => $s->name,
+                'location' => $s->location,
+                'manager' => $s->manager,
+                'status' => $s->status,
+                'already_deployed' => in_array($s->id, $deployedStoreIds),
+            ]);
 
         return Inertia::render('Admin/Items/Show', [
-            'item' => $item,
-            'colors' => $item->colors,
-            'sizes' => $item->sizes,
-            'packagingTypes' => $item->packagingTypes,
-            'sellers' => $sellers,
-            'inventoryLocations' => $inventoryLocations,
+            'item' => [
+                'id' => $item->id,
+                'product_name' => $item->product_name,
+                'product_description' => $item->product_description,
+                'status' => $item->status,
+                'general_images' => $item->general_images,
+            ],
             'variantData' => $variantData,
+            'stores' => $stores,
         ]);
     }
 

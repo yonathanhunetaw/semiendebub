@@ -1,12 +1,20 @@
 import { useState } from "react";
 import AdminLayout from "@/Layouts/AppLayout";
-import { Head, Link } from "@inertiajs/react";
+import { Head, Link, router } from "@inertiajs/react";
 import {
     Box,
     Button,
     Chip,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    Divider,
     Grid,
     IconButton,
+    List,
+    ListItemButton,
+    ListItemText,
     Paper,
     Stack,
     Table,
@@ -25,6 +33,7 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import KeyboardArrowLeftIcon from "@mui/icons-material/KeyboardArrowLeft";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import StorefrontIcon from "@mui/icons-material/Storefront";
 
 interface ImageSlotData {
     path: string;
@@ -51,6 +60,14 @@ interface Item {
     general_images: string[] | null;
 }
 
+interface Store {
+    id: number;
+    name: string;
+    location?: string | null;
+    is_active: boolean;
+    already_deployed: boolean;
+}
+
 const statusColor = (s: string): "success" | "warning" | "default" | "error" =>
     s === "active"
         ? "success"
@@ -63,9 +80,11 @@ const statusColor = (s: string): "success" | "warning" | "default" | "error" =>
 export default function Show({
     item,
     variantData,
+    stores = [],
 }: {
     item: Item;
     variantData: VariantRow[];
+    stores?: Store[];
 }) {
     if (!item) return null;
 
@@ -73,7 +92,6 @@ export default function Show({
     const getImageUrl = (path: string) =>
         path.startsWith("http") ? path : `/storage/${path}`;
 
-    // Initialize state with the ALREADY formatted URL of the first image
     const [selectedImage, setSelectedImage] = useState(
         allGeneralImages.length > 0
             ? getImageUrl(allGeneralImages[0])
@@ -85,6 +103,23 @@ export default function Show({
         "/img/default.jpg";
 
     const [showAllThumbs, setShowAllThumbs] = useState(false);
+    const [deployOpen, setDeployOpen] = useState(false);
+    const [deployingToId, setDeployingToId] = useState<number | null>(null);
+
+    const handleDeploy = (storeId: number) => {
+        setDeployingToId(storeId);
+        router.post(
+            route("admin.items.deploy", item.id),
+            { store_id: storeId },
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setDeployingToId(null);
+                    setDeployOpen(false);
+                },
+            },
+        );
+    };
 
     const displayedThumbs = showAllThumbs
         ? allGeneralImages
@@ -157,6 +192,7 @@ export default function Show({
                     <Button
                         variant="contained"
                         startIcon={<AddBusinessIcon />}
+                        onClick={() => setDeployOpen(true)}
                         sx={{
                             borderRadius: 2,
                             fontWeight: "bold",
@@ -656,6 +692,110 @@ export default function Show({
                     </Stack>
                 </Grid>
             </Grid>
+
+            {/* ── Deploy to Store Dialog ── */}
+            <Dialog
+                open={deployOpen}
+                onClose={() => setDeployOpen(false)}
+                maxWidth="sm"
+                fullWidth
+                PaperProps={{ sx: { borderRadius: 3 } }}
+            >
+                <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                        <StorefrontIcon color="primary" />
+                        <span>Deploy to Store</span>
+                    </Stack>
+                </DialogTitle>
+                <Divider />
+                <DialogContent sx={{ px: 2, py: 1.5 }}>
+                    <Typography variant="body2" color="text.secondary" mb={2}>
+                        Select a store to make <strong>{item.product_name}</strong> available. Stores where this item is already deployed are marked.
+                    </Typography>
+                    {stores.length === 0 ? (
+                        <Box
+                            sx={{
+                                py: 4,
+                                textAlign: "center",
+                                color: "text.disabled",
+                            }}
+                        >
+                            <StorefrontIcon sx={{ fontSize: 40, mb: 1 }} />
+                            <Typography variant="body2">
+                                No active stores found. Create a store first.
+                            </Typography>
+                        </Box>
+                    ) : (
+                        <List disablePadding>
+                            {stores.map((store) => (
+                                <ListItemButton
+                                    key={store.id}
+                                    disabled={store.already_deployed || deployingToId === store.id}
+                                    onClick={() => handleDeploy(store.id)}
+                                    sx={{
+                                        borderRadius: 2,
+                                        mb: 0.5,
+                                        border: "1px solid",
+                                        borderColor: store.already_deployed
+                                            ? "success.main"
+                                            : "divider",
+                                        bgcolor: store.already_deployed
+                                            ? "rgba(46,125,50,0.06)"
+                                            : "background.paper",
+                                    }}
+                                >
+                                    <ListItemText
+                                        primary={
+                                            <Stack direction="row" alignItems="center" spacing={1}>
+                                                <span>{store.name}</span>
+                                                {store.already_deployed && (
+                                                    <Chip
+                                                        size="small"
+                                                        icon={<CheckCircleIcon />}
+                                                        label="Deployed"
+                                                        color="success"
+                                                        variant="outlined"
+                                                    />
+                                                )}
+                                            </Stack>
+                                        }
+                                        secondary={store.location ?? undefined}
+                                    />
+                                    {!store.already_deployed && (
+                                        <Button
+                                            size="small"
+                                            variant="contained"
+                                            disabled={deployingToId === store.id}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeploy(store.id);
+                                            }}
+                                            sx={{ ml: 1, textTransform: "none", fontWeight: 700 }}
+                                        >
+                                            {deployingToId === store.id ? "Deploying…" : "Deploy"}
+                                        </Button>
+                                    )}
+                                </ListItemButton>
+                            ))}
+                        </List>
+                    )}
+                </DialogContent>
+                <Divider />
+                <DialogActions sx={{ px: 3, py: 2 }}>
+                    <Button onClick={() => setDeployOpen(false)} sx={{ textTransform: "none" }}>
+                        Close
+                    </Button>
+                    <Button
+                        component={Link}
+                        href="/inventory/stores"
+                        variant="outlined"
+                        startIcon={<StorefrontIcon />}
+                        sx={{ textTransform: "none", fontWeight: 700 }}
+                    >
+                        Manage Stores
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }
