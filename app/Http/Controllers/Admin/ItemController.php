@@ -34,7 +34,8 @@ class ItemController extends Controller
 {
     public function __construct(
         private readonly ItemVariantGenerationService $itemVariantGenerationService
-    ) {}
+    ) {
+    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // INDEX
@@ -50,15 +51,19 @@ class ItemController extends Controller
                 ->merge($item->variants->pluck('images')->flatten(1)->filter())
                 ->filter()
                 ->map(function ($image) {
-                    if (!is_string($image) || $image === '') return null;
-                    if (str_starts_with($image, 'http')) return $image;
-                    if (str_starts_with($image, '/images/') || str_starts_with($image, 'images/')) return asset(ltrim($image, '/'));
+                    if (!is_string($image) || $image === '')
+                        return null;
+                    if (str_starts_with($image, 'http'))
+                        return $image;
+                    if (str_starts_with($image, '/images/') || str_starts_with($image, 'images/'))
+                        return asset(ltrim($image, '/'));
                     return asset('storage/' . ltrim($image, '/'));
                 })
                 ->filter()->unique()->take(5)->values();
 
             $item->variants_count = $item->variants->count();
-            $item->active_variants_count = $item->variants->filter(fn($v) =>
+            $item->active_variants_count = $item->variants->filter(
+                fn($v) =>
                 $v->status === 'active' && $v->storeVariants->contains(fn($sv) => $sv->active)
             )->count();
             $item->preview_images = $previewImages;
@@ -67,8 +72,8 @@ class ItemController extends Controller
         });
 
         return Inertia::render('Admin/Items/Index', [
-            'items'   => $items,
-            'stores'  => $stores,
+            'items' => $items,
+            'stores' => $stores,
             'filters' => request()->only(['filter', 'sort', 'direction']),
         ]);
     }
@@ -99,21 +104,21 @@ class ItemController extends Controller
             $slots = array_map(function ($path) {
                 $cleanPath = ltrim($path, '/');
                 return [
-                    'path'     => $cleanPath,
-                    'url'      => asset('storage/' . $cleanPath),
+                    'path' => $cleanPath,
+                    'url' => asset('storage/' . $cleanPath),
                 ];
             }, array_slice($images, 0, 5));
 
             return [
-                'id'        => $variant->id,
-                'sku'       => $variant->sku,
-                'color'     => $variant->itemColor->name ?? null,
-                'size'      => $variant->itemSize->name ?? null,
+                'id' => $variant->id,
+                'sku' => $variant->sku,
+                'color' => $variant->itemColor->name ?? null,
+                'size' => $variant->itemSize->name ?? null,
                 'packaging' => $variant->itemPackagingType->name ?? null,
-                'status'    => $variant->status,
-                'slots'     => $slots,                           // up to 5 filled slots
-                'slot_count'=> count($slots),
-                'proof_ok'  => count($slots) >= 2,
+                'status' => $variant->status,
+                'slots' => $slots,                           // up to 5 filled slots
+                'slot_count' => count($slots),
+                'proof_ok' => count($slots) >= 2,
             ];
         });
 
@@ -121,13 +126,13 @@ class ItemController extends Controller
         $sellers = User::where('role', 'seller')->get();
 
         return Inertia::render('Admin/Items/Show', [
-            'item'               => $item,
-            'colors'             => $item->colors,
-            'sizes'              => $item->sizes,
-            'packagingTypes'     => $item->packagingTypes,
-            'sellers'            => $sellers,
+            'item' => $item,
+            'colors' => $item->colors,
+            'sizes' => $item->sizes,
+            'packagingTypes' => $item->packagingTypes,
+            'sellers' => $sellers,
             'inventoryLocations' => $inventoryLocations,
-            'variantData'        => $variantData,
+            'variantData' => $variantData,
         ]);
     }
 
@@ -138,9 +143,9 @@ class ItemController extends Controller
     public function create()
     {
         return Inertia::render('Admin/Items/Create', [
-            'categories'   => ItemCategory::all(),
-            'colors'       => ItemColor::all(),
-            'sizes'        => ItemSize::all(),
+            'categories' => ItemCategory::all(),
+            'colors' => ItemColor::all(),
+            'sizes' => ItemSize::all(),
             'packagingTypes' => ItemPackagingType::all(),
         ]);
     }
@@ -156,13 +161,13 @@ class ItemController extends Controller
         return DB::transaction(function () use ($request, $validated) {
 
             $item = Item::create([
-                'product_name'        => $validated['product_name'],
+                'product_name' => $validated['product_name'],
                 'product_description' => $validated['product_description'] ?? null,
-                'packaging_details'   => $validated['packaging_details'] ?? null,
-                'item_category_id'    => $this->resolveCategoryId($validated['item_category_id']),
-                'status'              => 'draft',           // always draft until proof provided
-                'general_images'      => $this->handleUploads($request),
-                'is_incomplete'       => true,
+                'packaging_details' => $validated['packaging_details'] ?? null,
+                'item_category_id' => $this->resolveCategoryId($validated['item_category_id']),
+                'status' => 'draft',           // always draft until proof provided
+                'general_images' => $this->handleUploads($request),
+                'is_incomplete' => true,
             ]);
 
             $item->colors()->sync($this->resolveOptionIds($validated['color_ids'] ?? [], ItemColor::class));
@@ -195,15 +200,20 @@ class ItemController extends Controller
             'sizes',
             'packagingTypes' => fn($q) => $q->withPivot('quantity'),
             'variants' => fn($q) => $q
-                ->with(['itemColor', 'itemSize', 'itemPackagingType'])
+                ->with([
+                    'itemColor',
+                    'itemSize',
+                    'itemPackagingType',
+                    'images' // <--- ADD THIS LINE
+                ])
                 ->orderBy('id'),
         ]);
 
         return Inertia::render('Admin/Items/Edit', [
-            'item'           => $item,
-            'categories'     => ItemCategory::all(),
-            'colors'         => ItemColor::all(),
-            'sizes'          => ItemSize::all(),
+            'item' => $item,
+            'categories' => ItemCategory::all(),
+            'colors' => ItemColor::all(),
+            'sizes' => ItemSize::all(),
             'packagingTypes' => ItemPackagingType::all(),
         ]);
     }
@@ -219,11 +229,11 @@ class ItemController extends Controller
         return DB::transaction(function () use ($request, $item, $validated) {
 
             $item->update([
-                'product_name'        => $validated['product_name'],
+                'product_name' => $validated['product_name'],
                 'product_description' => $validated['product_description'] ?? null,
-                'packaging_details'   => $validated['packaging_details'] ?? null,
-                'item_category_id'    => $this->resolveCategoryId($validated['item_category_id']),
-                'general_images'      => $this->handleUploads($request, $validated['existing_images'] ?? []),
+                'packaging_details' => $validated['packaging_details'] ?? null,
+                'item_category_id' => $this->resolveCategoryId($validated['item_category_id']),
+                'general_images' => $this->handleUploads($request, $validated['existing_images'] ?? []),
             ]);
 
             $item->colors()->sync($this->resolveOptionIds($validated['color_ids'] ?? [], ItemColor::class));
@@ -266,16 +276,16 @@ class ItemController extends Controller
 
         [$modelClass, $nameColumn] = match ($validated['type']) {
             'category' => [ItemCategory::class, 'category_name'],
-            'color'    => [ItemColor::class, 'name'],
-            'size'     => [ItemSize::class, 'name'],
-            'packaging'=> [ItemPackagingType::class, 'name'],
+            'color' => [ItemColor::class, 'name'],
+            'size' => [ItemSize::class, 'name'],
+            'packaging' => [ItemPackagingType::class, 'name'],
         };
 
         $record = $modelClass::firstOrCreate([$nameColumn => trim($validated['name'])]);
 
         return response()->json([
-            'id'            => $record->id,
-            'name'          => $record->{$nameColumn},
+            'id' => $record->id,
+            'name' => $record->{$nameColumn},
             'category_name' => $record->{$nameColumn},
         ]);
     }
@@ -345,15 +355,15 @@ class ItemController extends Controller
         $variantMap = [];
         foreach ($item->variants as $variant) {
             $key = implode(':', [
-                $variant->item_color_id    ?? 'null',
-                $variant->item_size_id     ?? 'null',
+                $variant->item_color_id ?? 'null',
+                $variant->item_size_id ?? 'null',
                 $variant->item_packaging_type_id ?? 'null',
             ]);
             $variantMap[$key] = $variant;
         }
 
-        $newFiles     = $request->file('variant_images', []);
-        $existingPaths= $request->input('variant_existing_images', []);
+        $newFiles = $request->file('variant_images', []);
+        $existingPaths = $request->input('variant_existing_images', []);
 
         foreach ($variantMap as $key => $variant) {
             $slots = array_fill(0, 5, null);  // 5-slot array, null = keep existing
@@ -370,8 +380,8 @@ class ItemController extends Controller
             $newFilesForKey = $newFiles[$key] ?? [];
             foreach ($newFilesForKey as $slotIndex => $file) {
                 if ($file && $file->isValid()) {
-                    $sku  = $variant->sku ?? ('variant_' . $variant->id);
-                    $ext  = $file->getClientOriginalExtension() ?: 'jpg';
+                    $sku = $variant->sku ?? ('variant_' . $variant->id);
+                    $ext = $file->getClientOriginalExtension() ?: 'jpg';
                     $slotNumber = (int) $slotIndex + 1;  // 1-based in filename
                     $path = $file->storeAs(
                         'uploads/variants/' . $sku,
@@ -424,32 +434,32 @@ class ItemController extends Controller
     private function validateItemPayload(Request $request): array
     {
         $validator = Validator::make($request->all(), [
-            'product_name'                          => 'required|string|max:255',
-            'product_description'                   => 'nullable|string',
-            'packaging_details'                     => 'nullable|string',
-            'item_category_id'                      => 'required',
-            'status'                                => 'required|in:draft,active,inactive,archived',
-            'color_ids'                             => 'nullable|array',
-            'color_ids.*'                           => 'nullable',
-            'size_ids'                              => 'nullable|array',
-            'size_ids.*'                            => 'nullable',
-            'packaging'                             => 'nullable|array',
-            'packaging.*.item_packaging_type_id'    => 'required',
-            'packaging.*.quantity'                  => 'required|integer|min:1',
-            'existing_images'                       => 'nullable|array|max:10',
-            'existing_images.*'                     => 'string',
-            'images'                                => 'nullable|array|max:10',
-            'images.*'                              => 'image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'product_name' => 'required|string|max:255',
+            'product_description' => 'nullable|string',
+            'packaging_details' => 'nullable|string',
+            'item_category_id' => 'required',
+            'status' => 'required|in:draft,active,inactive,archived',
+            'color_ids' => 'nullable|array',
+            'color_ids.*' => 'nullable',
+            'size_ids' => 'nullable|array',
+            'size_ids.*' => 'nullable',
+            'packaging' => 'nullable|array',
+            'packaging.*.item_packaging_type_id' => 'required',
+            'packaging.*.quantity' => 'required|integer|min:1',
+            'existing_images' => 'nullable|array|max:10',
+            'existing_images.*' => 'string',
+            'images' => 'nullable|array|max:10',
+            'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             // Variant images: flexible — each slot is an image file
-            'variant_images'                        => 'nullable|array',
-            'variant_images.*'                      => 'nullable|array',
-            'variant_images.*.*'                    => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
-            'variant_existing_images'               => 'nullable|array',
+            'variant_images' => 'nullable|array',
+            'variant_images.*' => 'nullable|array',
+            'variant_images.*.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'variant_existing_images' => 'nullable|array',
         ]);
 
         $validator->after(function ($v) use ($request) {
             $existing = count($request->input('existing_images', []));
-            $uploads  = count($request->file('images', []));
+            $uploads = count($request->file('images', []));
             if (($existing + $uploads) > 10) {
                 $v->errors()->add('images', 'Maximum 10 general images per item.');
             }
@@ -460,8 +470,10 @@ class ItemController extends Controller
 
     private function resolveCategoryId(mixed $value): ?int
     {
-        if ($value === null || $value === '') return null;
-        if (is_numeric($value)) return (int) $value;
+        if ($value === null || $value === '')
+            return null;
+        if (is_numeric($value))
+            return (int) $value;
         return ItemCategory::firstOrCreate(['category_name' => trim((string) $value)])->id;
     }
 
@@ -470,7 +482,8 @@ class ItemController extends Controller
         return collect($values)
             ->filter(fn($v) => $v !== null && $v !== '')
             ->map(function ($v) use ($modelClass, $nameColumn) {
-                if (is_numeric($v)) return (int) $v;
+                if (is_numeric($v))
+                    return (int) $v;
                 return $modelClass::firstOrCreate([$nameColumn => trim((string) $v)])->id;
             })
             ->unique()->values()->all();
