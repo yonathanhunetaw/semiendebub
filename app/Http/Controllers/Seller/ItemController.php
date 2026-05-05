@@ -100,7 +100,7 @@ class ItemController extends Controller
             'variants.itemColor',
             'variants.itemSize',
             'variants.itemPackagingType',
-            'variants.storeVariants.sellerPrices',
+            // 'variants.storeVariants.sellerPrices',
             'variants.owner',
         ]);
 
