@@ -55,6 +55,10 @@ type VariantRecord = {
     status: string;
     item_color_id?: number | null;
     item_size_id?: number | null;
+    // Update these two lines:
+    item_packaging_type_id?: number | null;
+    images?: string[] | null;
+    // Keep these for the labels
     item_packaging_type?: { id: number; name: string } | null;
     item_color?: { id: number; name: string } | null;
     item_size?: { id: number; name: string } | null;
@@ -168,33 +172,32 @@ export default function ItemForm({
         Record<ComboKey, ImageSlot[]>
     >(() => {
         if (!item?.variants?.length) return {};
-
         const map: Record<ComboKey, ImageSlot[]> = {};
 
         for (const v of item.variants) {
             const key = comboKey(
                 String(v.item_color_id ?? "null"),
                 String(v.item_size_id ?? "null"),
-                String(v.item_packaging_type?.id ?? "null"),
+                String(v.item_packaging_type_id ?? "null"), // Matches migration and new Type
             );
 
-            // 1. Get existing images from the variant (assuming they are in v.images)
-            // Adjust 'v.images' based on your actual Eloquent relationship name
-            const dbImages = (v as any).images || [];
+            // Parse the JSON images column from the variant
+            // Laravel usually casts JSON to an array automatically
+            // This will now work without TypeScript errors
+            const existingImages = Array.isArray(v.images) ? v.images : [];
 
-            // 2. Map DB images to slots, fill the rest with "empty"
+            // Create the 5-slot array
             const slots: ImageSlot[] = Array(IMAGES_PER_VARIANT).fill({
                 kind: "empty",
             });
 
-            dbImages.forEach((img: any, index: number) => {
+            // Fill existing slots
+            existingImages.forEach((path: string, index: number) => {
                 if (index < IMAGES_PER_VARIANT) {
                     slots[index] = {
                         kind: "existing",
-                        url: img.url.startsWith("http")
-                            ? img.url
-                            : `/storage/${img.path}`,
-                        path: img.path, // The path used for syncing/deleting
+                        url: `/storage/${path}`,
+                        path: path,
                     };
                 }
             });

@@ -200,12 +200,7 @@ class ItemController extends Controller
             'sizes',
             'packagingTypes' => fn($q) => $q->withPivot('quantity'),
             'variants' => fn($q) => $q
-                ->with([
-                    'itemColor',
-                    'itemSize',
-                    'itemPackagingType',
-                    'images' // <--- ADD THIS LINE
-                ])
+                ->with(['itemColor', 'itemSize', 'itemPackagingType']) // REMOVED 'images' from here
                 ->orderBy('id'),
         ]);
 
