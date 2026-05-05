@@ -6,7 +6,8 @@ import {
     Layers,
     Inventory,
     MultipleStop,
-    BarChart,
+    Storefront,
+    Warehouse,
     PointOfSale,
     Payments,
     LocalShipping,
@@ -45,7 +46,7 @@ export default function AdminSidebar({
 
     // Only one dropdown state now: Inventory
     const [inventoryOpen, setInventoryOpen] = useState(
-        ["/inventory/transfers", "/inventory/stock"].some((path) => url.includes(path))
+        ["/inventory/transfers", "/inventory/stores", "/inventory/warehouse"].some((path) => url.includes(path))
     );
 
     const mainItemStyle = {
@@ -146,14 +147,25 @@ export default function AdminSidebar({
                         <List component="div" disablePadding>
                             <ListItemButton
                                 component={Link}
-                                href="/inventory/stock"
-                                selected={url.includes("/inventory/stock")}
+                                href="/inventory/stores"
+                                selected={url.includes("/inventory/stores")}
                                 sx={indentedItemStyle}
                             >
                                 <ListItemIcon sx={{ minWidth: 36 }}>
-                                    <BarChart fontSize="small" />
+                                    <Storefront fontSize="small" />
                                 </ListItemIcon>
-                                <ListItemText primary="Stock Levels" />
+                                <ListItemText primary="Stores" />
+                            </ListItemButton>
+                            <ListItemButton
+                                component={Link}
+                                href="/inventory/warehouse"
+                                selected={url.includes("/inventory/warehouse")}
+                                sx={indentedItemStyle}
+                            >
+                                <ListItemIcon sx={{ minWidth: 36 }}>
+                                    <Warehouse fontSize="small" />
+                                </ListItemIcon>
+                                <ListItemText primary="Warehouse" />
                             </ListItemButton>
                             <ListItemButton
                                 component={Link}
