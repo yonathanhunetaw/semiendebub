@@ -1283,11 +1283,7 @@ export default function ItemForm({
                                                                                     slot.kind ===
                                                                                     "new"
                                                                                         ? slot.preview
-                                                                                        : slot.url.startsWith(
-                                                                                                "http",
-                                                                                            )
-                                                                                          ? slot.url
-                                                                                          : `/storage/${slot.url}`
+                                                                                        : slot.url // Just use the URL we built in the loop
                                                                                 }
                                                                                 sx={{
                                                                                     width: 80,
