@@ -93,7 +93,7 @@ class ItemVariantGenerationService
                     'item_variant_id' => $variant->id,
                 ],
                 [
-                    'item_id' => $item->id, // 🔥 REQUIRED FIX
+                    // 'item_id' => $item->id, // 🔥 REQUIRED FIX
                     'active' => $variant->status === 'active',
                     'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
                     'forced_status' => $variant->status === 'active' ? null : 'inactive',
