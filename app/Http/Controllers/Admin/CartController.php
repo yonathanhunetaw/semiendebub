@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Models\Auth\Customer;
 use App\Models\Seller\Cart;
 use Inertia\Inertia;
-use App\Models\Item;
+use App\Models\Item\Item;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -33,27 +33,14 @@ class CartController extends Controller
      */
     public function index()
     {
-        // 1. Start the query with global relationships
-        $query = Cart::with(['customer', 'seller', 'store'])
-            ->withCount('variants');
-
-        // 2. Role-Based Scoping
-        if (auth()->user()->role !== 'admin') {
-            // If they aren't global admin, restrict to their store and their assigned carts
-            $query->where('store_id', auth()->user()->store_id)
-                ->where(function ($q) {
-                    $q->where('seller_id', auth()->id())
-                        ->orWhere('user_id', auth()->id())
-                        ->orWhereNull('user_id'); // Capture guest carts for their store
-                });
-        }
-
-        // 3. Execution (Using Pagination for high-volume ERP performance)
-        $carts = $query->latest()
+        // Use the scope from your Cart model which handles the admin/seller logic
+        $carts = Cart::with(['customer', 'seller', 'store'])
+            ->withCount('variants')
+            ->visibleTo(auth()->user())
+            ->latest()
             ->paginate(15)
             ->withQueryString();
 
-        // 4. Return to your new React Index
         return Inertia::render('Admin/Carts/Index', [
             'carts' => $carts,
         ]);
