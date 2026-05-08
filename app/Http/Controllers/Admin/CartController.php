@@ -33,10 +33,9 @@ class CartController extends Controller
      */
     public function index()
     {
-        // Use the scope from your Cart model which handles the admin/seller logic
         $carts = Cart::with(['customer', 'seller', 'store'])
             ->withCount('variants')
-            ->visibleTo(auth()->user())
+            ->visibleTo(auth()->user()) // This now returns everything if role === 'admin'
             ->latest()
             ->paginate(15)
             ->withQueryString();
@@ -45,55 +44,43 @@ class CartController extends Controller
             'carts' => $carts,
         ]);
     }
-    public function store(Request $request)
-    {
-        // 1. Validate - Note the use of 'seller' role check
-        $request->validate([
-            'customer_id' => 'nullable|exists:customers,id',
-            'seller_id' => 'nullable|exists:users,id,role,seller',
-            'status' => 'nullable|string',
-        ]);
 
-        // 2. Create the Cart
-        // We use the Seller namespace Model to match your logic
-        $cart = Cart::create([
-            'store_id' => 1, // Temporarily hardcoded; eventually use auth()->user()->store_id
-            'user_id' => auth()->id(), // The Admin/Staff who clicked "Create"
-            'customer_id' => $request->customer_id,
-            'seller_id' => $request->seller_id,
-            'status' => $request->status ?? 'active',
-            'session_id' => \Illuminate\Support\Str::uuid(), // Required for your migration logic
-        ]);
-
-        // 3. Redirect
-        // Use 'message' or 'success' depending on what your Inertia layout expects
-        return redirect()->route('admin.carts.index')
-            ->with('message', 'Global cart initialized successfully!');
-    }
 
 
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
+    // app/Http/Controllers/Admin/CartController.php
+
+    /**
+     * Show the form for creating a new resource.
+     */
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
     {
-        $customers = Customer::select('id', 'first_name', 'last_name')
-            ->get()
-            ->map(function ($customer) {
-                return [
-                    'id' => $customer->id,
-                    'name' => trim($customer->first_name . ' ' . $customer->last_name),
-                ];
-            });
-
-        $sellers = User::where('role', 'seller')
-            ->select('id', 'first_name', 'last_name')
-            ->get();
-
-        return inertia('Admin/Carts/Create', [
-            'customers' => $customers,
-            'sellers' => $sellers,
+        // Admins MUST provide a store_id because they aren't tied to one store
+        $request->validate([
+            'customer_id' => 'nullable|exists:customers,id',
+            'seller_id' => 'nullable|exists:users,id,role,seller',
+            'store_id' => 'required|exists:stores,id',
+            'status' => 'nullable|string',
         ]);
+
+        $cart = Cart::create([
+            'store_id' => $request->store_id, // Use the selected store
+            'user_id' => auth()->id(),       // Admin who created it
+            'customer_id' => $request->customer_id,
+            'seller_id' => $request->seller_id,
+            'status' => $request->status ?? 'open',
+            // Use a consistent session logic (numeric or UUID, but numeric is easier for humans)
+            'session_id' => (string) mt_rand(100000, 999999),
+        ]);
+
+        return redirect()->route('admin.carts.index')
+            ->with('message', 'Global cart initialized successfully for the selected store!');
     }
 
     /**

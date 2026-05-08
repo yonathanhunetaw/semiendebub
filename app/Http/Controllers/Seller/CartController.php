@@ -71,26 +71,30 @@ class CartController extends Controller
     /**
      * Store a newly created resource in storage.
      */
+    // App\Http\Controllers\Seller\CartController.php
+
     public function store(Request $request)
     {
+        $isAdmin = auth()->user()->role === 'admin';
+
         $request->validate([
             'customer_id' => 'nullable|exists:customers,id',
             'seller_id' => 'nullable|exists:users,id,role,seller',
+            'store_id' => $isAdmin ? 'required|exists:stores,id' : 'nullable', // Admin MUST pick a store
         ]);
 
         $cart = Cart::create([
-            'store_id' => auth()->user()->store_id ?? 1,
+            // If admin, take store from form. If seller, take from their profile.
+            'store_id' => $isAdmin ? $request->store_id : auth()->user()->store_id,
             'user_id' => auth()->id(),
             'customer_id' => $request->customer_id,
-            'seller_id' => $request->seller_id ?? (auth()->user()->role === 'seller' ? auth()->id() : null),
+            'seller_id' => $request->seller_id ?? ($isAdmin ? null : auth()->id()),
             'status' => 'open',
-            // Generate a simple numeric session ID instead of a UUID
             'session_id' => (string) mt_rand(100000, 999999),
         ]);
 
-        $routeName = auth()->user()->role === 'admin' ? 'admin.carts.index' : 'seller.carts.index';
-
-        return redirect()->route($routeName)->with('message', 'Cart #' . $cart->session_id . ' created.');
+        $routeName = $isAdmin ? 'admin.carts.index' : 'seller.carts.index';
+        return redirect()->route($routeName)->with('message', 'Cart initialized.');
     }
 
     /**

@@ -102,14 +102,11 @@ class Cart extends Model
     public function scopeVisibleTo($query, User $user)
     {
         if ($user->role === 'admin') {
-            return $query;
+            return $query; // Admin sees everything from all stores
         }
 
-        return $query->where('store_id', $user->store_id)
-            ->where(function ($innerQuery) use ($user) {
-                $innerQuery->where('seller_id', $user->id)
-                    ->orWhere('user_id', $user->id);
-            });
+        // Sellers only see their store's carts
+        return $query->where('store_id', $user->store_id);
     }
 
     /*
