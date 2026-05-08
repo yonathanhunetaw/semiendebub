@@ -6,6 +6,7 @@ use App\Models\Auth\Customer;
 use App\Models\Seller\Cart;
 use Inertia\Inertia;
 use App\Models\Item\Item;
+use App\Models\Store\Store;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -46,6 +47,33 @@ class CartController extends Controller
     }
 
 
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        // 1. Get all customers (Admin sees all)
+        $customers = Customer::all()->map(function ($customer) {
+            return [
+                'id' => $customer->id,
+                'name' => $customer->name, // Ensure your Customer model has the 'name' accessor
+            ];
+        });
+
+        // 2. Get all sellers globally
+        $sellers = User::where('role', 'seller')
+            ->select('id', 'first_name', 'last_name')
+            ->get();
+
+        // 3. Get all stores so the Admin can pick the context
+        $stores = Store::select('id', 'name')->get();
+
+        return Inertia::render('Admin/Carts/Create', [
+            'customers' => $customers,
+            'sellers' => $sellers,
+            'stores' => $stores,
+        ]);
+    }
 
     /**
      * Show the form for creating a new resource.
