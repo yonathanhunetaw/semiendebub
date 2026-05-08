@@ -13,7 +13,7 @@ class CartPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole('seller');
+        return $user->hasRole('seller') || $user->hasRole('admin');
     }
 
     /**
@@ -21,15 +21,11 @@ class CartPolicy
      */
     public function view(User $user, Cart $cart): bool
     {
-        // 1. Must be the same store
-        if ($user->store_id !== $cart->store_id) {
-            return false;
+        if ($user->hasRole('admin')) {
+            return true;
         }
 
-        // 2. Must be the creator, the assigned seller, or an admin
-        return $user->id === $cart->user_id ||
-            $user->id === $cart->seller_id ||
-            $user->hasRole('admin');
+        return $user->store_id === $cart->store_id;
     }
 
     public function update(User $user, Cart $cart): bool
@@ -39,7 +35,6 @@ class CartPolicy
 
     public function delete(User $user, Cart $cart): bool
     {
-        // Only the creator or an admin can delete a cart
-        return $user->id === $cart->user_id || $user->hasRole('admin');
+        return $user->hasRole('admin') || $user->store_id === $cart->store_id;
     }
 }

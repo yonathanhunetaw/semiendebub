@@ -32,7 +32,7 @@ interface Cart {
     };
     store?: {
         id: number;
-        store_name: string;
+        name: string;
     };
     seller?: {
         id: number;
@@ -73,11 +73,13 @@ export default function CartsIndex({ carts }: Props) {
         | "success"
         | "warning" => {
         switch (status?.toLowerCase()) {
-            case "active":
+            case "open":
                 return "success";
-            case "pending":
+            case "processing":
                 return "warning";
-            case "abandoned":
+            case "completed":
+                return "info";
+            case "canceled":
                 return "error";
             default:
                 return "default";
@@ -158,7 +160,7 @@ export default function CartsIndex({ carts }: Props) {
                                     </TableCell>
                                     <TableCell>
                                         <Typography variant="body2">
-                                            {cart.store?.store_name ||
+                                            {cart.store?.name ||
                                                 "Main Branch"}
                                         </Typography>
                                     </TableCell>
@@ -182,7 +184,7 @@ export default function CartsIndex({ carts }: Props) {
                                     </TableCell>
                                     <TableCell>
                                         <Chip
-                                            label={cart.status || "Active"}
+                                            label={cart.status || "Open"}
                                             size="small"
                                             color={getStatusColor(cart.status)}
                                         />

@@ -4,7 +4,7 @@ import {
     SellerCard,
 } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { Head, useForm, usePage } from "@inertiajs/react";
+import { Head, useForm } from "@inertiajs/react";
 import {
     Box,
     Button,
@@ -21,21 +21,30 @@ interface Customer {
     name: string;
 }
 
-export default function Create({ customers }: { customers: Customer[] }) {
-    const { url, props } = usePage();
-    const auth = props.auth as any;
+interface Props {
+    customers: Customer[];
+    auth: {
+        user: {
+            id: number;
+            role: string;
+            store_id: number | null;
+        };
+    };
+}
 
+export default function Create({ customers, auth }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         customer_id: "",
-        seller_id: auth.user.id, // Auto-assigned from current user
+        seller_id: auth.user.id,
         status: "open",
     });
 
-    const isAdmin = url.startsWith("/admin");
+    const isAdmin = auth.user.role === "admin";
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const targetRoute = isAdmin ? "admin.carts.store" : "seller.carts.store";
+        const targetRoute =
+            isAdmin ? "admin.carts.store" : "seller.carts.store";
         post(route(targetRoute));
     };
 

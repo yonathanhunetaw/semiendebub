@@ -1,5 +1,5 @@
 import AdminLayout from "@/Layouts/AppLayout";
-import { Head, useForm, Link, usePage } from "@inertiajs/react";
+import { Head, useForm, Link } from "@inertiajs/react";
 import {
     Box,
     Button,
@@ -47,8 +47,6 @@ interface Props {
 }
 
 export default function Create({ customers, sellers, stores, auth }: Props) {
-    const { url } = usePage();
-
     // 2. Determine context based on the user's role instead of the URL path
     const isAdmin = auth.user.role === "admin";
 
@@ -59,7 +57,7 @@ export default function Create({ customers, sellers, stores, auth }: Props) {
         store_id: isAdmin ? "" : auth.user.store_id || "",
         // If admin, they pick a seller. If seller, they are the seller.
         seller_id: isAdmin ? "" : auth.user.id,
-        status: "active",
+        status: "open",
     });
 
     const handleSubmit = (e: React.FormEvent) => {

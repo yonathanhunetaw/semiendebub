@@ -36,7 +36,8 @@ class HandleInertiaRequests extends Middleware
                 'id' => $request->user()->id,
                 'first_name' => $request->user()->first_name,
                 'email' => $request->user()->email,
-                // Add any other specific fields you need for the UI
+                'role' => $request->user()->role,
+                'store_id' => $request->user()->store_id,
             ] : null,
         ],
         'flash' => [
