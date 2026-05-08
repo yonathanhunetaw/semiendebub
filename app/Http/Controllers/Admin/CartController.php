@@ -32,11 +32,14 @@ class CartController extends Controller
     /**
      * Display a listing of the resource.
      */
+    /**
+     * Display all carts globally for the admin index.
+     */
     public function index()
     {
         $carts = Cart::with(['customer', 'seller', 'store'])
             ->withCount('variants')
-            ->visibleTo(auth()->user()) // This now returns everything if role === 'admin'
+            ->visibleTo(auth()->user()) // Uses updated scope below
             ->latest()
             ->paginate(15)
             ->withQueryString();
@@ -46,69 +49,42 @@ class CartController extends Controller
         ]);
     }
 
-
     /**
-     * Show the form for creating a new resource.
+     * Provide the necessary data for the React Create component.
      */
     public function create()
     {
-        // 1. Get all customers (Admin sees all)
-        $customers = Customer::all()->map(function ($customer) {
-            return [
-                'id' => $customer->id,
-                'name' => $customer->name, // Ensure your Customer model has the 'name' accessor
-            ];
-        });
-
-        // 2. Get all sellers globally
-        $sellers = User::where('role', 'seller')
-            ->select('id', 'first_name', 'last_name')
-            ->get();
-
-        // 3. Get all stores so the Admin can pick the context
-        $stores = Store::select('id', 'name')->get();
-
         return Inertia::render('Admin/Carts/Create', [
-            'customers' => $customers,
-            'sellers' => $sellers,
-            'stores' => $stores,
+            'customers' => Customer::all()->map(fn($c) => [
+                'id' => $c->id,
+                'name' => $c->name // Uses 'name' accessor from Customer model
+            ]),
+            'sellers' => User::where('role', 'seller')->get(['id', 'first_name', 'last_name']),
+            'stores' => Store::all(['id', 'name']), // Critical for the "Select Store" dropdown
         ]);
     }
 
     /**
-     * Show the form for creating a new resource.
-     */
-    // app/Http/Controllers/Admin/CartController.php
-
-    /**
-     * Show the form for creating a new resource.
-     */
-
-    /**
-     * Store a newly created resource in storage.
+     * Handle global cart creation by admin.
      */
     public function store(Request $request)
     {
-        // Admins MUST provide a store_id because they aren't tied to one store
         $request->validate([
             'customer_id' => 'nullable|exists:customers,id',
             'seller_id' => 'nullable|exists:users,id,role,seller',
             'store_id' => 'required|exists:stores,id',
-            'status' => 'nullable|string',
         ]);
 
         $cart = Cart::create([
-            'store_id' => $request->store_id, // Use the selected store
-            'user_id' => auth()->id(),       // Admin who created it
+            'store_id' => $request->store_id,
+            'user_id' => auth()->id(),
             'customer_id' => $request->customer_id,
             'seller_id' => $request->seller_id,
-            'status' => $request->status ?? 'open',
-            // Use a consistent session logic (numeric or UUID, but numeric is easier for humans)
+            'status' => 'open',
             'session_id' => (string) mt_rand(100000, 999999),
         ]);
 
-        return redirect()->route('admin.carts.index')
-            ->with('message', 'Global cart initialized successfully for the selected store!');
+        return redirect()->route('admin.carts.index')->with('message', 'Global cart created.');
     }
 
     /**

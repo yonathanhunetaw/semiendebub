@@ -99,14 +99,19 @@ class Cart extends Model
         return $query->where('status', 'open');
     }
 
+    // App\Models\Seller\Cart.php
+
     public function scopeVisibleTo($query, User $user)
     {
         if ($user->role === 'admin') {
-            return $query; // Admin sees everything from all stores
+            return $query; // Admin bypass: returns all records
         }
 
-        // Sellers only see their store's carts
-        return $query->where('store_id', $user->store_id);
+        return $query->where('store_id', $user->store_id) // Restricted for others
+            ->where(function ($innerQuery) use ($user) {
+                $innerQuery->where('seller_id', $user->id)
+                    ->orWhere('user_id', $user->id);
+            });
     }
 
     /*
