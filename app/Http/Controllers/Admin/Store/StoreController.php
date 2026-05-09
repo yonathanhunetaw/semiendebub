@@ -40,25 +40,23 @@ class StoreController extends Controller
     }
     public function show(Store $store)
     {
-        // 1. Load relationships with 'itemVariant.item' to get the names
+        // Ensure nested relations are loaded
         $store->load(['storeVariants.itemVariant.item', 'storeVariants.stocks']);
 
-        // 2. Map the data into a flat array for the frontend
         $inventory = $store->storeVariants->map(function ($sv) {
             return [
                 'id' => $sv->id,
-                'sku' => $sv->itemVariant->sku ?? 'NO-SKU',
-                'item_name' => $sv->itemVariant->item->name ?? 'Unknown Item',
+                'sku' => $sv->itemVariant->sku ?? 'N/A',
+                'item_name' => $sv->itemVariant->item->name ?? 'Unknown',
                 'price' => $sv->price ?? 0,
-                // Access sum of quantity from the stocks relationship
-                'stock' => $sv->stocks->sum('quantity') ?? 0,
+                'stock' => $sv->stocks ? $sv->stocks->sum('quantity') : 0,
                 'status' => $sv->status ?? 'inactive',
             ];
-        })->values(); // Reset keys to ensure it's a clean JSON array []
+        })->values(); // Reset keys to ensure it's a clean array []
 
         return Inertia::render('Admin/Inventory/Stores/Show', [
             'store' => $store,
-            'inventory' => $inventory,
+            'inventory' => $inventory, // This MUST match the prop name below
         ]);
     }
     /**

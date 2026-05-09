@@ -33,13 +33,18 @@ interface Props {
     inventory: InventoryItem[];
 }
 
-export default function InventoryShow({ store, inventory = [] }: Props) {
-    // Standardize to array to prevent .length errors
-    const items = Array.isArray(inventory) ? inventory : [];
+// 1. We set default values right in the parameters
+export default function InventoryShow({
+    store = { name: "Store" },
+    inventory = [],
+}: any) {
+    // 2. We create a safe local variable.
+    // If inventory is null/undefined, it becomes an empty array.
+    const safeItems = Array.isArray(inventory) ? inventory : [];
 
     return (
         <Box p={3}>
-            <Head title={`${store?.name || 'Store'} Inventory`} />
+            <Head title={`${store?.name || "Store"} Inventory`} />
 
             <Stack direction="row" spacing={2} alignItems="center" mb={3}>
                 <Button
@@ -47,66 +52,58 @@ export default function InventoryShow({ store, inventory = [] }: Props) {
                     href={route("store.index")}
                     startIcon={<ArrowBackIcon />}
                     variant="outlined"
-                    size="small"
                 >
-                    Back to Stores
+                    Back
                 </Button>
-                <Typography variant="h5" fontWeight={700}>
-                    {store?.name} Inventory
+                <Typography variant="h4">
+                    {store?.name || "Loading..."}
                 </Typography>
             </Stack>
 
-            <TableContainer
-                component={Paper}
-                elevation={0}
-                sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
-            >
+            <TableContainer component={Paper} elevation={3}>
                 <Table>
                     <TableHead sx={{ bgcolor: "action.hover" }}>
                         <TableRow>
-                            <TableCell sx={{ fontWeight: 800 }}>Item Name</TableCell>
-                            <TableCell sx={{ fontWeight: 800 }}>SKU</TableCell>
-                            <TableCell sx={{ fontWeight: 800 }}>Price</TableCell>
-                            <TableCell sx={{ fontWeight: 800 }}>Stock Level</TableCell>
-                            <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
+                            <TableCell sx={{ fontWeight: "bold" }}>
+                                Item Name
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: "bold" }}>
+                                SKU
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: "bold" }}>
+                                Price
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: "bold" }}>
+                                Stock
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: "bold" }}>
+                                Status
+                            </TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {items && items.length > 0 ? (
-                            items.map((item) => (
-                                <TableRow key={item.id} hover>
-                                    <TableCell sx={{ fontWeight: 600 }}>
+                        {/* 3. We check safeItems.length instead of inventory.length */}
+                        {safeItems.length > 0 ? (
+                            safeItems.map((item: any) => (
+                                <TableRow key={item.id}>
+                                    <TableCell sx={{ fontWeight: 700 }}>
                                         {item.item_name}
                                     </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                                            {item.sku}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>${Number(item.price).toLocaleString()}</TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={`${item.stock} in stock`}
-                                            size="small"
-                                            color={item.stock > 0 ? "success" : "error"}
-                                            variant="outlined"
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={item.status}
-                                            size="small"
-                                            variant="filled"
-                                            sx={{ textTransform: 'capitalize' }}
-                                        />
-                                    </TableCell>
+                                    <TableCell>{item.sku}</TableCell>
+                                    <TableCell>${item.price}</TableCell>
+                                    <TableCell>{item.stock}</TableCell>
+                                    <TableCell>{item.status}</TableCell>
                                 </TableRow>
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
+                                <TableCell
+                                    colSpan={5}
+                                    align="center"
+                                    sx={{ py: 5 }}
+                                >
                                     <Typography color="text.secondary">
-                                        No inventory items found for this store.
+                                        No items found for this store.
                                     </Typography>
                                 </TableCell>
                             </TableRow>
