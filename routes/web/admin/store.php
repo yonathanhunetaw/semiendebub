@@ -13,6 +13,7 @@ Route::domain("admin.{$baseDomain}")
         Route::prefix('stores')->name('store.')->group(function () {
             Route::get('/',             [StoreController::class, 'index'])->name('index');
             Route::get('/create',       [StoreController::class, 'create'])->name('create');
+            Route::get('/{store}',      [StoreController::class, 'show'])->name('show');
             Route::post('/',            [StoreController::class, 'store'])->name('store');
             Route::get('/{store}/edit', [StoreController::class, 'edit'])->name('edit');
             Route::patch('/{store}',    [StoreController::class, 'update'])->name('update');
