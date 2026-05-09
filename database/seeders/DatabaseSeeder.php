@@ -18,6 +18,7 @@ use Database\Seeders\Store\StoreSeeder;
 use Database\Seeders\Store\StoreVariantSeeder;
 use Database\Seeders\Seller\CartSeeder;
 use Database\Seeders\User\UserSeeder;
+use Database\Seeders\Inventory\WarehouseSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -55,6 +56,7 @@ class DatabaseSeeder extends Seeder
             ItemStoreSeeder::class,
             // StoreVariantSeeder::class,
             CartSeeder::class,
+            WarehouseSeeder::class,
         ]);
     }
 }
