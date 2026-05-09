@@ -12,12 +12,26 @@ return new class extends Migration {
     {
         Schema::create('item_stocks', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('store_variant_id')
+
+            // 1. Link to the specific SKU (The Variant)
+            // We use item_variant_id so stock can exist in warehouses OR stores
+            $table->foreignId('item_variant_id')
                 ->constrained()
                 ->cascadeOnDelete();
-            $table->foreignId('item_inventory_location_id')->constrained('item_inventory_locations')->onDelete('cascade');
+
+            // 2. The Polymorphic Location
+            // This creates 'location_id' (bigint) and 'location_type' (string)
+            // It allows stock to belong to either a 'Warehouse' or a 'Store'
+            $table->morphs('location');
+
+            // 3. Inventory Data
             $table->integer('quantity')->default(0);
+            $table->integer('min_stock_level')->default(5); // Alert threshold
+
             $table->timestamps();
+
+            // 4. Safety: Ensure one variant only has ONE stock row per location
+            $table->unique(['item_variant_id', 'location_id', 'location_type'], 'variant_location_unique');
         });
     }
 

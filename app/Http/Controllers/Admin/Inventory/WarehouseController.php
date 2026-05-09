@@ -1,68 +1,49 @@
 <?php
-
 namespace App\Http\Controllers\Admin\Inventory;
 
 use App\Http\Controllers\Controller;
-use App\Models\ItemInventoryLocation;
-use App\Models\Store\StoreVariant;
+use App\Models\Inventory\Warehouse;
+use App\Models\StockKeeper\ItemStock; // Adjust to your actual namespace
 use Inertia\Inertia;
 
 class WarehouseController extends Controller
 {
     public function index()
     {
-        // All inventory locations with their linked store name + stock counts
-        $locations = ItemInventoryLocation::with('store')
-            ->withCount('stockLines')
-            ->withSum('stockLines', 'quantity')
+        // 1. Get Warehouses only (Central Hubs)
+        $warehouses = Warehouse::withCount('stocks')
+            ->withSum('stocks as total_units', 'quantity')
             ->orderBy('name')
+            ->get();
+
+        // 2. Get Stock across ALL warehouses
+        // We filter location_type to only see Warehouse stock here
+        $stockLines = ItemStock::where('location_type', Warehouse::class)
+            ->with([
+                'itemVariant.item',
+                'itemVariant.itemColor',
+                'itemVariant.itemSize',
+                'location' // This is the Warehouse
+            ])
             ->get()
-            ->map(fn ($loc) => [
-                'id'                => $loc->id,
-                'name'              => $loc->name,
-                'address'           => $loc->address,
-                'store_id'          => $loc->store_id,
-                'store_name'        => $loc->store?->name,
-                'stock_lines_count' => $loc->stock_lines_count,
-                'total_units'       => (int) $loc->stock_lines_sum_quantity,
+            ->map(fn ($stock) => [
+                'id'            => $stock->id,
+                'item_name'     => $stock->itemVariant->item->product_name,
+                'sku'           => $stock->itemVariant->sku,
+                'variant_label' => collect([
+                    $stock->itemVariant->itemColor?->name,
+                    $stock->itemVariant->itemSize?->name,
+                ])->filter()->join(' / ') ?: 'Standard',
+                'location_name' => $stock->location->name, // Warehouse Name
+                'quantity'      => $stock->quantity,
+                'is_low'        => $stock->quantity <= $stock->min_stock_level,
             ]);
 
-        // Stock lines: one row per variant per location
-        // Adjust the model/relation names to match your actual StockLine model
-        $stockLines = \App\Models\StockLine::with([
-            'variant.item',
-            'variant.itemColor',
-            'variant.itemSize',
-            'location',
-        ])
-        ->orderBy('quantity')
-        ->get()
-        ->map(fn ($line) => [
-            'id'                  => $line->id,
-            'item_name'           => $line->variant->item->product_name,
-            'variant_label'       => collect([
-                $line->variant->itemColor?->name,
-                $line->variant->itemSize?->name,
-            ])->filter()->join(' / ') ?: 'Default',
-            'sku'                 => $line->variant->sku,
-            'location_name'       => $line->location->name,
-            'quantity'            => $line->quantity,
-            'low_stock_threshold' => $line->low_stock_threshold,
-        ]);
-
-        $totalUnits    = $stockLines->sum('quantity');
-        $lowStockCount = $stockLines->filter(
-            fn ($l) => $l['low_stock_threshold'] !== null && $l['quantity'] <= $l['low_stock_threshold']
-        )->count();
-
-        return Inertia::render('Admin/Inventory/Warehouse/index', [
-            'locations'      => $locations,
-            'stockLines'     => $stockLines,
-            'totalLocations' => $locations->count(),
-            'totalUnits'     => $totalUnits,
-            'lowStockCount'  => $lowStockCount,
+        return Inertia::render('Admin/Inventory/Warehouse/Index', [
+            'warehouses'    => $warehouses,
+            'stockLines'    => $stockLines,
+            'totalUnits'    => $stockLines->sum('quantity'),
+            'lowStockCount' => $stockLines->where('is_low', true)->count(),
         ]);
     }
-
-    // Add create/store/edit/update/destroy for locations as needed
 }

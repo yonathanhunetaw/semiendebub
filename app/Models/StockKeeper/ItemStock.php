@@ -26,6 +26,16 @@ class ItemStock extends Model
     {
         return $this->belongsTo(ItemInventoryLocation::class, 'item_inventory_location_id');
     }
+    public function location()
+    {
+        // This handles pointing to EITHER a Warehouse or a Store
+        return $this->morphTo();
+    }
+
+    public function itemVariant()
+    {
+        return $this->belongsTo(\App\Models\Item\ItemVariant::class);
+    }
 
 
 }
