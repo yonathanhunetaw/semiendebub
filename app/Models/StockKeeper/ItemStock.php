@@ -2,40 +2,39 @@
 
 namespace App\Models\StockKeeper;
 
-use App\Models\Store\StoreVariant;
+use App\Models\Item\ItemVariant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class ItemStock extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'store_variant_id',
-        'item_inventory_location_id',
+        'item_variant_id',
+        'location_id',
+        'location_type',
         'quantity',
+        'min_stock_level',
     ];
 
-    // Optional: relationships
-    public function storeVariant()
+    /**
+     * The parent location (can be a Warehouse or a Store).
+     * This looks at 'location_id' and 'location_type' in your DB.
+     */
+    public function location(): MorphTo
     {
-        return $this->belongsTo(StoreVariant::class, 'store_variant_id');
-    }
-
-    public function inventoryLocation()
-    {
-        return $this->belongsTo(ItemInventoryLocation::class, 'item_inventory_location_id');
-    }
-    public function location()
-    {
-        // This handles pointing to EITHER a Warehouse or a Store
         return $this->morphTo();
     }
 
-    public function itemVariant()
+    /**
+     * The specific SKU/Variant this stock record represents.
+     */
+    public function itemVariant(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Item\ItemVariant::class);
+        // Ensure the namespace here matches where your ItemVariant model actually lives
+        return $this->belongsTo(ItemVariant::class);
     }
-
-
 }

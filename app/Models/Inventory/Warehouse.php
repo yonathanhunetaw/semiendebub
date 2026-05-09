@@ -30,4 +30,10 @@ class Warehouse extends Model
         // Points to the ItemStock model in the same namespace
         return $this->morphMany(ItemStock::class, 'location');
     }
+
+    public function store()
+    {
+        // If a warehouse belongs to a specific store
+        return $this->belongsTo(\App\Models\Store\Store::class);
+    }
 }
