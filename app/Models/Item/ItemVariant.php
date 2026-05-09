@@ -138,23 +138,23 @@ class ItemVariant extends Model
         return $this->hasMany(ItemVariant::class, 'item_id');
     }
 
-    public function totalStock()
+    public function stocks()
+    {
+        return $this->hasMany(\App\Models\StockKeeper\ItemStock::class, 'item_variant_id');
+    }
+
+    public function totalStock(): int
     {
         return $this->stocks()->sum('quantity');
     }
 
-    public function stocks()
+    public function stockAtLocation(string $locationType, int $locationId): int
     {
-        return $this->hasManyThrough(
-            ItemStock::class,
-            StoreVariant::class,
-            'item_variant_id',
-            'store_variant_id',
-            'id',
-            'id'
-        );
+        return $this->stocks()
+            ->where('location_type', $locationType)
+            ->where('location_id', $locationId)
+            ->sum('quantity');
     }
-
     // Customer-specific prices
     // public function customerPrices(): HasMany
     // {
@@ -219,10 +219,5 @@ class ItemVariant extends Model
     public function item_stock()
     {
         return $this->hasOne(ItemStock::class, 'variant_id'); // or hasMany if multiple stocks
-    }
-
-    public function stockAtLocation($storeId)
-    {
-        return $this->stocks()->where('item_inventory_location_id', $storeId)->first()?->quantity ?? 0;
     }
 }
