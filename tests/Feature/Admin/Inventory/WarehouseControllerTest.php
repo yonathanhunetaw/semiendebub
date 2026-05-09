@@ -60,13 +60,23 @@ class WarehouseControllerTest extends TestCase
             'status' => 'active',
         ]);
 
+        // 2.5 Create the Store (Necessary for the Foreign Key)
+        $store = \App\Models\Store\Store::create([
+            'id' => 1, // Explicitly setting to 1 to match your StoreVariant logic
+            'name' => 'Main Branch',
+            'slug' => 'main-branch',
+            'status' => 'active',
+        ]);
+
         // 3. Create Warehouse and Stock
         $warehouse = Warehouse::create(['name' => 'Main Hub', 'code' => 'WH-1', 'status' => 'active']);
 
-        // Link through StoreVariant
+        // Now this will work because store_id 1 exists!
         $storeVariant = \App\Models\Store\StoreVariant::create([
             'item_variant_id' => $variant->id,
-            'store_id' => 1,
+            'store_id' => $store->id,
+            'price' => 100,
+            'stock' => 50,
         ]);
 
         \App\Models\StockKeeper\ItemStock::create([
@@ -78,7 +88,7 @@ class WarehouseControllerTest extends TestCase
         ]);
 
         // 4. Run Test
-        $response = $this->get(route('admin.inventory.warehouse'));
+        $response = $this->get(route('admin.inventory.warehouse.index'));
         $response->assertStatus(200);
     }
 }
