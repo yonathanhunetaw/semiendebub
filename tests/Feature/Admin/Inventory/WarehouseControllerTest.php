@@ -90,5 +90,14 @@ class WarehouseControllerTest extends TestCase
         // 4. Run Test
         $response = $this->get(route('admin.inventory.warehouse.index'));
         $response->assertStatus(200);
+
+        // Add these to check the data inside the Inertia props
+        $response->assertInertia(
+            fn($page) => $page
+                ->component('Admin/Inventory/Warehouse/index')
+                ->has('warehouses', 1) // Fails if 'warehouses' prop is missing or empty
+                ->where('totalUnits', 100)
+                ->where('totalWarehouses', 1)
+        );
     }
 }

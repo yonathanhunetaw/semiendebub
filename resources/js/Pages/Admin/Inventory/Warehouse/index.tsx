@@ -106,7 +106,7 @@ export default function WarehouseIndex({
                 </Box>
                 <Button
                     component={Link}
-                    href={route("admin.inventory.locations.create")}
+                    href={route("admin.inventory.warehouse.create")}
                     variant="contained"
                     startIcon={<AddIcon />}
                     sx={{
