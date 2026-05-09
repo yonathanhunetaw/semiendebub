@@ -50,6 +50,11 @@ export default function Create({ customers, sellers, stores, auth }: Props) {
     // 2. Determine context based on the user's role instead of the URL path
     const isAdmin = auth.user.role === "admin";
 
+    // --- ADD THE LOGS HERE ---
+    console.log("Current User Role:", auth.user.role);
+    console.log("Is Admin?:", isAdmin);
+    // -------------------------
+
     // 3. Initialize form with proper logic
     const { data, setData, post, processing, errors } = useForm({
         customer_id: "" as string | number,

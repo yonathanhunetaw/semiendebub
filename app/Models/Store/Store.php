@@ -8,9 +8,11 @@ use App\Models\Auth\Customer;
 use App\Models\StockKeeper\ItemInventoryLocation;
 use App\Models\Auth\User;
 use App\Models\Item\Item;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Store extends Model
 {
+    use HasFactory;
     protected $fillable = [
         'name',
         'location',

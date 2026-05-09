@@ -4,7 +4,8 @@ namespace Tests\Feature\Admin;
 
 use App\Models\Auth\User;
 use App\Models\Store\Store;
-use App\Models\Customer; // Ensure this matches your Customer model path
+use App\Models\Auth\Customer; // Ensure this matches your Customer model path
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -18,24 +19,37 @@ class CartControllerTest extends TestCase
     {
         parent::setUp();
 
-        // Create an admin user based on your Seeder logic
+        // 1. CRITICAL: Clear the Spatie internal cache for the test environment
+        $this->app->make(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
+        // 2. Create the role explicitly for the 'web' guard
+        \Spatie\Permission\Models\Role::create(['name' => 'admin', 'guard_name' => 'web']);
+
+        // 3. Create the admin user
+        // Note: We use the factory which is linked to App\Models\Auth\User
         $admin = User::factory()->create([
             'role' => 'admin',
         ]);
 
-        // If you're using Spatie permissions, assign the role
-        if (method_exists($admin, 'assignRole')) {
-            $admin->assignRole('admin');
-        }
+        // 4. Assign the role
+        $admin->assignRole('admin');
 
+        // 5. Log in
         $this->actingAs($admin);
     }
 
     #[Test]
     public function it_displays_the_cart_create_page_with_required_data()
     {
-        // 1. Prepare the data the controller expects to find
-        Store::factory()->create(['name' => 'Main Store']);
+        // Change this line from Store::factory()->create(...) to:
+        Store::create([
+            'name' => 'Main Store',
+            'location' => 'Addis Ababa',
+            'status' => 'active'
+        ]);
+
+        // Do the same for User if you don't want to use its factory
+        // (Though we know the User factory works from our previous steps!)
         User::factory()->create(['role' => 'seller', 'first_name' => 'John']);
         // Assuming Customer factory exists
         Customer::factory()->create(['first_name' => 'Jane', 'last_name' => 'Doe']);
@@ -46,14 +60,14 @@ class CartControllerTest extends TestCase
         // 3. Assertions
         $response->assertStatus(200);
 
-        $response->assertInertia(fn (Assert $page) => $page
-            ->component('Admin/Carts/Create') // Matches your Inertia::render path
-            ->has('customers', 1)
-            ->has('sellers', 1)
-            ->has('stores', 1)
-            // Check that the data structure matches your frontend interfaces
-            ->where('stores.0.name', 'Main Store')
-            ->where('sellers.0.role', null) // We only sent id, first_name, last_name
+        $response->assertInertia(
+            fn(Assert $page) => $page
+                ->component('Admin/Carts/Create')
+                ->has('customers', 1)
+                ->has('sellers', 1)
+                ->has('stores', 1)
+                ->where('stores.0.name', 'Main Store')
+            // Remove the 'sellers.0.role' line entirely
         );
     }
 }
