@@ -41,20 +41,24 @@ class StoreController extends Controller
 
     public function show(Store $store)
     {
-        // Load variants through the storeVariants relationship
         $store->load(['storeVariants.itemVariant.item', 'storeVariants.stocks']);
+
+        $inventory = $store->storeVariants->map(function ($sv) {
+            return [
+                'id' => $sv->id,
+                // Use optional() or ?? to prevent crashes if a relation is missing
+                'sku' => $sv->itemVariant->sku ?? 'NO-SKU',
+                'item_name' => $sv->itemVariant->item->name ?? 'Unknown Item',
+                'price' => $sv->price ?? 0,
+                'stock' => $sv->stocks ? $sv->stocks->sum('quantity') : 0,
+                // Check if your column is named 'status' or 'active'
+                'status' => $sv->status ?? 'inactive',
+            ];
+        });
 
         return Inertia::render('Admin/Inventory/Stores/Show', [
             'store' => $store,
-            // Map the data so it's clean for the frontend
-            'inventory' => $store->storeVariants->map(fn($sv) => [
-                'id' => $sv->id,
-                'sku' => $sv->itemVariant->sku,
-                'item_name' => $sv->itemVariant->item->name,
-                'price' => $sv->price,
-                'stock' => $sv->stocks->sum('quantity'),
-                'status' => $sv->active ? 'Active' : 'Inactive',
-            ]),
+            'inventory' => $inventory,
         ]);
     }
 

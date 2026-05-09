@@ -46,23 +46,29 @@ export default function StoreShow({ store, inventory }: any) {
                     <TableBody>
                         {inventory.map((item: any) => (
                             <TableRow key={item.id}>
-                                <TableCell sx={{ fontWeight: "bold" }}>
-                                    {item.item_name}
+                                <TableCell sx={{ fontWeight: 700 }}>
+                                    {item.item_name || "N/A"}
                                 </TableCell>
-                                <TableCell>{item.sku}</TableCell>
-                                <TableCell>${item.price}</TableCell>
+                                <TableCell>{item.sku || "N/A"}</TableCell>
+                                <TableCell>${item.price || 0}</TableCell>
                                 <TableCell>
                                     <Chip
-                                        label={item.stock}
+                                        label={item.stock ?? 0}
                                         color={
-                                            item.stock > 10
+                                            (item.stock ?? 0) > 10
                                                 ? "success"
                                                 : "error"
                                         }
                                         size="small"
                                     />
                                 </TableCell>
-                                <TableCell>{item.status}</TableCell>
+                                <TableCell>
+                                    <Chip
+                                        label={item.status || "inactive"}
+                                        size="small"
+                                        variant="outlined"
+                                    />
+                                </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
