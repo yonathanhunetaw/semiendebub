@@ -35,7 +35,17 @@ class WarehouseControllerTest extends TestCase
     public function it_displays_warehouses_and_stock_data()
     {
         // 1. Create dependencies
-        $item = \App\Models\Item\Item::factory()->create(['sku' => 'TSHIRT']);
+        $item = \App\Models\Item\Item::create([
+            'product_name' => 'Dispencer big',
+            'product_description' => 'Manual test description',
+            'packaging_details' => 'Manual packaging',
+            'price' => 384.92,
+            'status' => 'active',
+            'incomplete' => 1,
+            'category_id' => 1,
+            'sku' => 'TSHIRT',
+            'product_images' => json_encode(["https://via.placeholder.com/150"]),
+        ]);
         $color = \App\Models\Item\ItemColor::create(['name' => 'Red', 'code' => 'RD']);
         $pkg = \App\Models\Item\ItemPackagingType::create(['name' => 'Single', 'code' => 'S1']);
 
