@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\InventoryController;
-use App\Http\Controllers\Admin\Inventory\WarehouseController; // The new controller
+use App\Http\Controllers\Admin\Inventory\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('inventory')->group(function () {
