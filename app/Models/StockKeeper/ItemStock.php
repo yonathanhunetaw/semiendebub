@@ -29,18 +29,21 @@ class ItemStock extends Model
      * We pass 'item_variant_id' as the second argument to tell Laravel:
      * "Stop looking for store_variant_id and use item_variant_id instead."
      */
-    public function storeVariant()
+    // app/Models/StockKeeper/ItemStock.php
+
+    public function itemVariant(): BelongsTo
     {
-        // The second argument 'item_variant_id' is the "bridge"
-        // that fixes the naming mismatch.
         return $this->belongsTo(\App\Models\Store\StoreVariant::class, 'item_variant_id');
     }
 
     /**
-     * Alias to keep your itemVariant() relationship working if used elsewhere.
+     * Add this back!
+     * This is what the Controller/Eager-loader is looking for.
      */
-    public function itemVariant(): BelongsTo
+    public function storeVariant(): BelongsTo
     {
+        // We explicitly tell it to use 'item_variant_id'
+        // so it doesn't go looking for 'store_variant_id'
         return $this->belongsTo(\App\Models\Store\StoreVariant::class, 'item_variant_id');
     }
 }
