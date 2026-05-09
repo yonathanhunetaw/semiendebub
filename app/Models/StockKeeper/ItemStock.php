@@ -33,9 +33,8 @@ class ItemStock extends Model
 
     public function itemVariant(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Store\StoreVariant::class, 'item_variant_id');
+        return $this->belongsTo(\App\Models\Item\ItemVariant::class);
     }
-
     /**
      * Add this back!
      * This is what the Controller/Eager-loader is looking for.
