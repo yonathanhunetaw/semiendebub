@@ -52,10 +52,7 @@ class Store extends Model
     }
     public function storeVariants()
     {
-        // Adjust the class name and table name to match your actual database
-        return $this->hasMany(\App\Models\Item\ItemVariant::class);
-
-        // OR if it's a Many-to-Many:
-        // return $this->belongsToMany(\App\Models\Item\ItemVariant::class, 'store_item_variant');
+        // This tells Laravel that the store has many records in the store_variants table
+        return $this->hasMany(\App\Models\Store\StoreVariant::class, 'store_id');
     }
 }
