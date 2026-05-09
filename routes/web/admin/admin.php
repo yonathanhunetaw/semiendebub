@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Admin\Item\ItemDeployController;
+use App\Http\Controllers\Admin\ItemDeployController;
 use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\SessionController;
 use App\Http\Controllers\Admin\Store\StoreController;
