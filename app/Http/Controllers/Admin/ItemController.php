@@ -43,7 +43,7 @@ class ItemController extends Controller
 
     public function index()
     {
-        $items = Item::with(['variants.storeVariants.stocks.inventoryLocation'])->get();
+        $items = Item::with(['variants.storeVariants', 'variants.stocks'])->get();
         $stores = Store::all();
 
         $items = $items->map(function ($item) {
