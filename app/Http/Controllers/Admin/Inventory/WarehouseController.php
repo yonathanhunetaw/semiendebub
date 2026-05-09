@@ -29,27 +29,35 @@ class WarehouseController extends Controller
             });
 
         // 2. Get Stock across ALL warehouses
-        $stockLines = ItemStock::where('location_type', Warehouse::class)
+        // 2. Get Stock across ALL warehouses
+        $stockLines = ItemStock::whereHasMorph('location', [Warehouse::class])
             ->with([
-                'itemVariant.item',
-                'itemVariant.itemColor',
-                'itemVariant.itemSize',
+                // Reach: ItemStock -> StoreVariant -> ItemVariant -> Item/Color/Size
+                'itemVariant.itemVariant.item',
+                'itemVariant.itemVariant.itemColor',
+                'itemVariant.itemVariant.itemSize',
                 'location'
             ])
             ->get()
-            ->map(fn($stock) => [
-                'id' => $stock->id,
-                'item_name' => $stock->itemVariant->item->product_name,
-                'sku' => $stock->itemVariant->sku,
-                'variant_label' => collect([
-                    $stock->itemVariant->itemColor?->name,
-                    $stock->itemVariant->itemSize?->name,
-                ])->filter()->join(' / ') ?: 'Standard',
-                'location_name' => $stock->location->name,
-                'quantity' => $stock->quantity,
-                'min_stock_level' => $stock->min_stock_level, // Pass this for the progress bar
-                'is_low' => $stock->quantity <= $stock->min_stock_level,
-            ]);
+            ->map(function ($stock) {
+                // Since $stock->itemVariant is actually a StoreVariant model:
+                $storeVariant = $stock->itemVariant;
+                $itemVariant = $storeVariant->itemVariant; // The global variant blueprint
+
+                return [
+                    'id' => $stock->id,
+                    'item_name' => $itemVariant->item->product_name,
+                    'sku' => $itemVariant->sku,
+                    'variant_label' => collect([
+                        $itemVariant->itemColor?->name,
+                        $itemVariant->itemSize?->name,
+                    ])->filter()->join(' / ') ?: 'Standard',
+                    'location_name' => $stock->location->name,
+                    'quantity' => $stock->quantity,
+                    'min_stock_level' => $stock->min_stock_level,
+                    'is_low' => $stock->quantity <= $stock->min_stock_level,
+                ];
+            });
 
         // 3. FIX: Assign the variables by calculating from the collections
         $totalUnits = $stockLines->sum('quantity');

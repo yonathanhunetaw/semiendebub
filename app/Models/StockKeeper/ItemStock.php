@@ -32,9 +32,16 @@ class ItemStock extends Model
     /**
      * The specific SKU/Variant this stock record represents.
      */
-    public function itemVariant(): BelongsTo
+    // public function itemVariant(): BelongsTo
+    // {
+    //     // Ensure the namespace here matches where your ItemVariant model actually lives
+    //     return $this->belongsTo(ItemVariant::class);
+    // }
+    // app/Models/StockKeeper/ItemStock.php
+
+    public function itemVariant()
     {
-        // Ensure the namespace here matches where your ItemVariant model actually lives
-        return $this->belongsTo(ItemVariant::class);
+        // If this points to StoreVariant, the chain above works.
+        return $this->belongsTo(\App\Models\Store\StoreVariant::class, 'item_variant_id');
     }
 }
