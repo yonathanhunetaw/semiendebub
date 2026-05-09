@@ -32,6 +32,11 @@ class StoreVariant extends Model
     {
         return $this->belongsTo(Store::class);
     }
+    public function itemVariant()
+    {
+        // Make sure the foreign key 'item_variant_id' matches your database column
+        return $this->belongsTo(ItemVariant::class, 'item_variant_id');
+    }
     public function stocks()
     {
         return $this->hasMany(\App\Models\StockKeeper\ItemStock::class, 'store_variant_id');
