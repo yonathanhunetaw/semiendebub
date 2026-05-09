@@ -93,7 +93,7 @@ class ItemController extends Controller
             'variants.itemColor',
             'variants.itemSize',
             'variants.itemPackagingType',
-            'storeVariants.store', // load deployed store info via StoreVariant
+            'variants.storeVariants.store', // ← go through variants first
         ]);
 
         // Build variantData for the React Show page
@@ -119,10 +119,12 @@ class ItemController extends Controller
         });
 
         // Which store IDs already have at least one StoreVariant for this item?
-        $deployedStoreIds = $item->storeVariants
+        $deployedStoreIds = $item->variants
+            ->flatMap(fn($v) => $v->storeVariants)
             ->pluck('store_id')
             ->unique()
             ->toArray();
+
 
         // Pass all active stores + whether each is already deployed
         $stores = Store::where('status', 'active')
