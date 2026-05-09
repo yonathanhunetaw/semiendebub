@@ -38,30 +38,29 @@ class StoreController extends Controller
     {
         return Inertia::render('Admin/Inventory/Stores/Create');
     }
-
     public function show(Store $store)
     {
+        // 1. Load relationships with 'itemVariant.item' to get the names
         $store->load(['storeVariants.itemVariant.item', 'storeVariants.stocks']);
 
+        // 2. Map the data into a flat array for the frontend
         $inventory = $store->storeVariants->map(function ($sv) {
             return [
                 'id' => $sv->id,
-                // Use optional() or ?? to prevent crashes if a relation is missing
                 'sku' => $sv->itemVariant->sku ?? 'NO-SKU',
                 'item_name' => $sv->itemVariant->item->name ?? 'Unknown Item',
                 'price' => $sv->price ?? 0,
-                'stock' => $sv->stocks ? $sv->stocks->sum('quantity') : 0,
-                // Check if your column is named 'status' or 'active'
+                // Access sum of quantity from the stocks relationship
+                'stock' => $sv->stocks->sum('quantity') ?? 0,
                 'status' => $sv->status ?? 'inactive',
             ];
-        });
+        })->values(); // Reset keys to ensure it's a clean JSON array []
 
         return Inertia::render('Admin/Inventory/Stores/Show', [
             'store' => $store,
             'inventory' => $inventory,
         ]);
     }
-
     /**
      * Persist a new store.
      */
