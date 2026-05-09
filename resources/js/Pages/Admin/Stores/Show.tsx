@@ -16,7 +16,8 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
-export default function StoreShow({ store, inventory }: any) {
+export default function InventoryShow({ store, inventory = [] }: any) {
+    const items = Array.isArray(inventory) ? inventory : [];
     return (
         <Box p={3}>
             <Head title={`${store.name} Inventory`} />
@@ -78,4 +79,4 @@ export default function StoreShow({ store, inventory }: any) {
     );
 }
 
-StoreShow.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
+InventoryShow.layout = (page: React.ReactNode) => <AdminLayout>{page}</AdminLayout>;
