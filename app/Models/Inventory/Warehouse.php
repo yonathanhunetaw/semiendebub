@@ -15,6 +15,7 @@ class Warehouse extends Model
         'name',
         'code',
         'address',
+        'store_id',
         'manager',
         'status'
     ];
