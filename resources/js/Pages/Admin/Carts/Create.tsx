@@ -48,7 +48,8 @@ interface Props {
 
 export default function Create({ customers, sellers, stores, auth }: Props) {
     // 2. Determine context based on the user's role instead of the URL path
-    const isAdmin = auth.user.role === "admin";
+    // This will match "Admin", "admin", "ADMIN", etc.
+    const isAdmin = auth.user.role?.toLowerCase() === "admin";
 
     // --- ADD THE LOGS HERE ---
     console.log("Current User Role:", auth.user.role);
