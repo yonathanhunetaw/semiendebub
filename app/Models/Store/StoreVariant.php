@@ -3,6 +3,7 @@
 namespace App\Models\Store;
 
 use App\Models\Item\Item;
+use App\Models\Inventory\ItemStock;
 use App\Models\Item\ItemVariant;
 use App\Models\Store\Store;
 use Illuminate\Database\Eloquent\Model;
@@ -39,6 +40,7 @@ class StoreVariant extends Model
     }
     public function stocks()
     {
-        return $this->hasMany(\App\Models\StockKeeper\ItemStock::class, 'store_variant_id');
+        return $this->hasMany(ItemStock::class, 'item_variant_id', 'item_variant_id');
+        // reads: item_stocks.item_variant_id = store_variants.item_variant_id
     }
 }
