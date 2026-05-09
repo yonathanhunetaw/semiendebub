@@ -12,11 +12,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Database\Factories\ItemVariantFactory;
 
 class ItemVariant extends Model
 {
     use HasFactory;
     use SoftDeletes;
+
 
     /**
      * The table associated with the model.
@@ -67,6 +69,11 @@ class ItemVariant extends Model
             }
         });
 
+    }
+
+    protected static function newFactory()
+    {
+        return \Database\Factories\ItemVariantFactory::new();
     }
 
     /**
@@ -168,7 +175,7 @@ class ItemVariant extends Model
 
     public function stores()
     {
-            return $this->belongsToMany(Store::class, 'store_variants', 'item_variant_id', 'store_id')
+        return $this->belongsToMany(Store::class, 'store_variants', 'item_variant_id', 'store_id')
             ->withPivot('price', 'discount_price', 'active', 'discount_ends_at')
             ->withTimestamps();
     }
