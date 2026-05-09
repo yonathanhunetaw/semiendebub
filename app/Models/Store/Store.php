@@ -50,4 +50,12 @@ class Store extends Model
     {
         return $this->hasMany(Customer::class);
     }
+    public function storeVariants()
+    {
+        // Adjust the class name and table name to match your actual database
+        return $this->hasMany(\App\Models\Item\ItemVariant::class);
+
+        // OR if it's a Many-to-Many:
+        // return $this->belongsToMany(\App\Models\Item\ItemVariant::class, 'store_item_variant');
+    }
 }
