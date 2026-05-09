@@ -40,23 +40,38 @@ class StoreController extends Controller
     }
     public function show(Store $store)
     {
-        // Ensure nested relations are loaded
+        // Load relationships: Store -> StoreVariants -> ItemVariant -> Item
         $store->load(['storeVariants.itemVariant.item', 'storeVariants.stocks']);
 
-        $inventory = $store->storeVariants->map(function ($sv) {
+        // Group the store variants by the parent Item
+        $inventory = $store->storeVariants->groupBy(function ($sv) {
+            return $sv->itemVariant->item_id;
+        })->map(function ($variants, $itemId) {
+            $firstVariant = $variants->first();
+            $item = $firstVariant->itemVariant->item;
+
             return [
-                'id' => $sv->id,
-                'sku' => $sv->itemVariant->sku ?? 'N/A',
-                'item_name' => $sv->itemVariant->item->name ?? 'Unknown',
-                'price' => $sv->price ?? 0,
-                'stock' => $sv->stocks ? $sv->stocks->sum('quantity') : 0,
-                'status' => $sv->status ?? 'inactive',
+                'item_id' => $itemId,
+                'item_name' => $item->name ?? 'Unknown Item',
+                'category' => $item->category->name ?? 'N/A',
+                'total_variants' => $variants->count(),
+                'total_stock' => $variants->reduce(function ($carry, $sv) {
+                    return $carry + $sv->stocks->sum('quantity');
+                }, 0),
+                // Pass the individual variants for the expanded view
+                'variants' => $variants->map(fn($sv) => [
+                    'id' => $sv->id,
+                    'sku' => $sv->itemVariant->sku,
+                    'price' => $sv->price,
+                    'stock' => $sv->stocks->sum('quantity'),
+                    'status' => $sv->status,
+                ])->values(),
             ];
-        })->values(); // Reset keys to ensure it's a clean array []
+        })->values();
 
         return Inertia::render('Admin/Inventory/Stores/Show', [
             'store' => $store,
-            'inventory' => $inventory, // This MUST match the prop name below
+            'inventory' => $inventory,
         ]);
     }
     /**
