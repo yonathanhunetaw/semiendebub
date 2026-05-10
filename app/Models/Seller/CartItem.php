@@ -15,7 +15,8 @@ class CartItem extends Pivot
      */
     protected $fillable = [
         'cart_id',
-        'item_id',
+        'item_variant_id', // Changed from item_id to match your DB/Seeder
+        'store_id',
         'quantity',
         'price',
     ];
