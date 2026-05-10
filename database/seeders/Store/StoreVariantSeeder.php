@@ -55,6 +55,7 @@ class StoreVariantSeeder extends Seeder
                     'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
                     'active' => true, // Set to true to ensure they show up in your catalog
                     'manual_status' => 'auto',
+                    'status' => 'active',
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
