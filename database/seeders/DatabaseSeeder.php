@@ -56,8 +56,10 @@ class DatabaseSeeder extends Seeder
 
             ItemImageSeeder::class,
             ItemOwnerSeeder::class,
+
             ItemStoreSeeder::class,
             StoreVariantSeeder::class,
+
             CartSeeder::class,
             WarehouseSeeder::class,
         ]);
