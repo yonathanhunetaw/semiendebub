@@ -9,9 +9,11 @@ use App\Models\Store\Store;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class StoreVariant extends Model
 {
+    use HasFactory;
     protected $fillable = [
         'item_id',
         'item_variant_id',
@@ -77,5 +79,9 @@ class StoreVariant extends Model
 
         // Logic for 'auto' status (e.g., check stock or parent item status)
         return $this->status ?? 'active';
+    }
+    public function getStatusAttribute()
+    {
+        return $this->active ? 'active' : 'inactive';
     }
 }

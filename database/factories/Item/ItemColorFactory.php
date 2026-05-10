@@ -13,7 +13,6 @@ class ItemColorFactory extends Factory
     {
         return [
             'name' => fake()->safeColorName(),
-            'item_id' => fake()->numberBetween(1, 10), // Assuming you have 10 items
         ];
     }
 }

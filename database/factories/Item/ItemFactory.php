@@ -2,8 +2,8 @@
 
 namespace Database\Factories\Item;
 
-use App\Models\Item;
-use App\Models\ItemCategory;
+use App\Models\Item\Item;
+use App\Models\Item\ItemCategory;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -16,6 +16,7 @@ class ItemFactory extends Factory
      *
      * @return array<string, mixed>
      */
+    protected $model = Item::class;
     protected static $index = 0;
 
     public function definition(): array
@@ -467,8 +468,8 @@ class ItemFactory extends Factory
 
         ];
 
-        // Ensure we don't exceed the array bounds
         $productName = $itemNames[self::$index % count($itemNames)];
+        self::$index++;
 
         $itemCategories = [
             'Stationery',
@@ -483,63 +484,39 @@ class ItemFactory extends Factory
         ];
 
         return [
-            // //'name' => $this->faker->word(),
-            // 'name' => $this->faker->randomElement($names),
-            // 'description' => $this->faker->sentence(),
-            // 'catoption' => json_encode($this->faker->words(3)), // Example categories
-            // 'pacoption' => json_encode($this->faker->words(3)), // Example packaging options
-            // 'price' => $this->faker->randomFloat(2, 10, 500), // Price between 10 and 500
-            // 'status' => $this->faker->randomElement(['available', 'unavailable']),
-            // 'stock' => $this->faker->numberBetween(0, 1000), // Random integer between 0 and 1000
-            // 'images' => json_encode([
-            //     '#' // Path to the image on the VPS
-            // ]),
-            // 'piecesinapacket' => $this->faker->numberBetween(1, 36), // Random integer between 1 and 36
-            // 'packetsinacartoon' => $this->faker->numberBetween(1, 12), // Random integer between 1 and 12
-
             'product_name' => $productName,
-            'product_description' => $this->faker->sentence(),
+            'product_description' => $this->faker->paragraph(),
             'packaging_details' => $this->faker->sentence(),
-            'variation' => $this->faker->word(),
-            'price' => $this->faker->randomFloat(2, 10, 500), // Price between 10 and 500
-            'status' => $this->faker->randomElement(['draft', 'active', 'inactive', 'unavailable']),
-            'incomplete' => $this->faker->boolean(),
-            'category_id' => rand(1, 10), // Assuming categories exist
-            // 'item_category_id' => rand(1, 10),
-            'product_images' => json_encode([
+
+            // 1. Matches $table->enum('status', [...])
+            'status' => 'active',
+
+            // 2. Matches $table->boolean('is_incomplete')
+            'is_incomplete' => false,
+
+            // 3. Matches $table->foreignId('item_category_id')
+            'item_category_id' => \App\Models\Item\ItemCategory::factory(),
+
+            // 4. Matches $table->json('general_images')
+            'general_images' => json_encode([
                 'https://via.placeholder.com/150',
                 'https://via.placeholder.com/200',
-            ]), // Example image URLs
-            // 'selectedCategories' => json_encode(array_rand(range(1, 10), 3)),
-            // 'newCategoryNames' => json_encode([$this->faker->word(), $this->faker->word()]),
+            ]),
+
             'created_at' => now(),
             'updated_at' => now(),
         ];
     }
-
     public function configure()
     {
         return $this->afterCreating(function (Item $item) {
-            $categories = ItemCategory::inRandomOrder()->limit(rand(1, 6))->pluck('id');
-            $item->categories()->attach($categories);
+            // Only attempt to attach if the relationship exists
+            if (method_exists($item, 'categories')) {
+                $categories = ItemCategory::inRandomOrder()->limit(rand(1, 3))->pluck('id');
+                if ($categories->isNotEmpty()) {
+                    $item->categories()->sync($categories);
+                }
+            }
         });
     }
 }
-
-// $table->string('product_name')->nullable();
-// $table->text('product_description')->nullable();
-// $table->text('packaging_details')->nullable();
-// $table->string('variation')->nullable();
-// $table->decimal('price', 10, 2)->nullable();
-// $table->enum('status', ['draft', 'active', 'inactive', 'unavailable'])->default('draft');
-// $table->boolean('incomplete')->default(true);
-// $table->unsignedBigInteger('category_id')->nullable();
-// $table->unsignedBigInteger('item_category_id')->nullable();
-// $table->json('product_images')->nullable();
-// $table->json('selectedCategories')->nullable();
-// $table->json('newCategoryNames')->nullable();
-// $table->timestamps();
-
-// // Foreign Key Constraints
-// $table->foreign('category_id')->references('id')->on('item_categories')->onDelete('cascade');
-// $table->foreign('item_category_id')->references('id')->on('item_categories')->onDelete('cascade');
