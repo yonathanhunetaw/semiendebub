@@ -41,12 +41,10 @@ class CartController extends Controller
     {
         $user = auth()->user();
 
-        $carts = Cart::with(['customer', 'seller'])
-            ->withCount('variants')
+        $carts = Cart::with(['customer', 'seller', 'variants']) // Load the actual relationship
             ->visibleTo($user)
             ->latest()
-            ->paginate(15)
-            ->withQueryString();
+            ->paginate(15);
 
         return Inertia::render('Seller/Carts/Index', [
             'carts' => $carts,

@@ -19,6 +19,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import { useTheme } from "@mui/material";
 
 interface Cart {
     id: number;
@@ -48,7 +49,12 @@ interface Props {
 }
 
 export default function CartsIndex({ carts }: Props) {
-    const cartList = Array.isArray(carts) ? carts : (carts.data || []);
+    const theme = useTheme();
+
+    const isDark = theme.palette.mode === 'dark';
+    const contrastText = theme.palette.primary.contrastText;
+
+    const cartList = Array.isArray(carts) ? carts : carts.data || [];
 
     const handleDelete = (cartId: number) => {
         if (
@@ -99,7 +105,7 @@ export default function CartsIndex({ carts }: Props) {
                 <Typography variant="h4" fontWeight="bold">
                     Carts
                 </Typography>
-              <Button
+                <Button
                     component={Link}
                     href={route("admin.carts.create")} // Ensure this matches your route name
                     variant="contained"
@@ -160,8 +166,7 @@ export default function CartsIndex({ carts }: Props) {
                                     </TableCell>
                                     <TableCell>
                                         <Typography variant="body2">
-                                            {cart.store?.name ||
-                                                "Main Branch"}
+                                            {cart.store?.name || "Main Branch"}
                                         </Typography>
                                     </TableCell>
                                     <TableCell>
@@ -183,10 +188,17 @@ export default function CartsIndex({ carts }: Props) {
                                         </Typography>
                                     </TableCell>
                                     <TableCell>
+                                        // Inside your .map() function in React:
                                         <Chip
-                                            label={cart.status || "Open"}
+                                            // Change .items to .variants to match the Controller's 'with' call
+                                            label={`${cart.variants?.length ?? 0} items`}
                                             size="small"
-                                            color={getStatusColor(cart.status)}
+                                            sx={{
+                                                bgcolor: "rgba(0,0,0,0.1)",
+                                                color: contrastText,
+                                                fontWeight: 800,
+                                                fontSize: "0.7rem",
+                                            }}
                                         />
                                     </TableCell>
                                     <TableCell align="right">
