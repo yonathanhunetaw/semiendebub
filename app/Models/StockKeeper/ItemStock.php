@@ -39,10 +39,11 @@ class ItemStock extends Model
      * Add this back!
      * This is what the Controller/Eager-loader is looking for.
      */
+    // app/Models/StockKeeper/ItemStock.php
+
     public function storeVariant(): BelongsTo
     {
-        // We explicitly tell it to use 'item_variant_id'
-        // so it doesn't go looking for 'store_variant_id'
+        // The second argument MUST be the actual column name in your DB (item_variant_id)
         return $this->belongsTo(\App\Models\Store\StoreVariant::class, 'item_variant_id');
     }
 }

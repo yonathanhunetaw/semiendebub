@@ -47,19 +47,20 @@ class DashboardController extends Controller
             ->unique();
 
         $stocks = ItemStock::where('location_id', $storeId)
-            ->where('location_type', get_class($store)) // e.g., 'App\Models\Store'
-            ->whereIn('store_variant_id', $storeVariantIds)
+            ->where('location_type', get_class($store))
+            ->whereIn('item_variant_id', $storeVariantIds) // Use DB column name here
             ->get()
-            ->keyBy('store_variant_id');
+            ->keyBy('item_variant_id'); // Key by the variant ID for easy lookup
 
         // 3️⃣ Attach store-specific data to each variant
+        // 3️⃣ Attach data
         foreach ($items as $item) {
             foreach ($item->variants as $variant) {
                 $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
 
-                $variant->store_stock = $stocks[$storeVariant->id]->quantity ?? 0;
-
                 if ($storeVariant) {
+                    // Match the stock using the store_variant's ID against the item_variant_id column
+                    $variant->store_stock = $stocks[$storeVariant->id]->quantity ?? 0;
                     $variant->store_variant_id = $storeVariant->id;
                     $variant->store_price = $storeVariant->price;
                     $variant->store_discount_price = $storeVariant->discount_price;
