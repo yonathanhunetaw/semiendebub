@@ -25,7 +25,7 @@ class ItemController extends Controller
         $search = $request->filled('search') ? trim($request->search) : null;
         $cartId = $request->integer('cart_id') ?: null;
 
-        $query = Item::where('status', 'active')
+        $query = Item::where('status', 'true')
             ->with([
                 'category',
                 'variants.itemColor',
@@ -33,7 +33,8 @@ class ItemController extends Controller
                 'variants.itemPackagingType',
                 'variants.storeVariants' => function ($q) use ($storeId) {
                     if ($storeId) {
-                        $q->where('store_id', $storeId);
+                        $q->where('store_id', $storeId)
+                            ->with('stocks'); // 👈 Eager load stock here
                     }
                 },
             ]);
@@ -100,6 +101,9 @@ class ItemController extends Controller
             'variants.itemColor',
             'variants.itemSize',
             'variants.itemPackagingType',
+            'variants.storeVariants.sellerPrices',
+            'variants.storeVariants.customerPrices',
+            'variants.storeVariants.stocks',
             // 'variants.storeVariants.sellerPrices',
             'variants.owner',
         ]);
@@ -156,9 +160,18 @@ class ItemController extends Controller
 
         // 🔹 Build enriched variant data
         $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId) {
+            // Get the store variant for the current store
             $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
 
-            $store_stock = $storeVariant?->stock ?? 0;
+            // 🛑 FIX: Get stock from the item_stocks relationship, not the store_variants column
+            // We filter by location_id to make sure we don't show stock from other stores
+            $stockRecord = $storeVariant?->stocks
+                ->where('location_id', $storeId)
+                ->where('location_type', 'App\Models\Store\Store')
+                ->first();
+
+            $store_stock = $stockRecord?->quantity ?? 0;
+
             $price = $storeVariant?->price;
             $discount_price = $storeVariant?->discount_price;
             $status = $storeVariant?->computed_status ?? 'inactive';
