@@ -126,8 +126,8 @@ class StoreController extends Controller
             })->values();
 
         // Available customers & sellers for the dropdowns in the edit panel
-        $customers = Customer::orderBy('name')->get(['id', 'name']);
-        $sellers   = User::where('role', 'seller')->orderBy('name')->get(['id', 'name']);
+        $customers = Customer::orderBy('first_name')->get(['id', 'name']);
+        $sellers   = User::where('role', 'seller')->orderBy('first_name')->get(['id', 'first_name']);
 
         return Inertia::render('Admin/Inventory/Stores/Show', [
             'store'     => $store,
