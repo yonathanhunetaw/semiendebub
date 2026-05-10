@@ -3,7 +3,7 @@
 namespace App\Models\Store;
 
 use App\Models\Auth\Customer;
-use App\Models\StoreVariant;
+use App\Models\Store\StoreVariant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 

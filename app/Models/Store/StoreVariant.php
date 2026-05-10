@@ -31,8 +31,16 @@ class StoreVariant extends Model
      */
     public function sellerPrices(): HasMany
     {
-        // Adjust the class name if your pricing model is named differently (e.g., SellerPrice)
-        return $this->hasMany(\App\Models\Price\SellerPrice::class, 'store_variant_id');
+        // Use the actual class name you provided
+        return $this->hasMany(StoreVariantSellerPrice::class, 'store_variant_id');
+    }
+
+    /**
+     * Get the customer-specific price tiers.
+     */
+    public function customerPrices(): HasMany
+    {
+        return $this->hasMany(StoreVariantCustomerPrice::class, 'store_variant_id');
     }
 
     public function item(): BelongsTo

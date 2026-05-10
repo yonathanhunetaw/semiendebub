@@ -33,6 +33,8 @@ class DashboardController extends Controller
             'variants.itemSize',
             'variants.itemPackagingType',
             'variants.storeVariants',
+            'variants.storeVariants.sellerPrices',
+            'variants.storeVariants.customerPrices',
         ])
             ->where('status', 'active') // Only active items
             ->whereHas('variants.storeVariants', function ($q) use ($storeId) {
