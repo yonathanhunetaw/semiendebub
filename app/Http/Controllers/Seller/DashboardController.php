@@ -22,7 +22,7 @@ class DashboardController extends Controller
     {
         $store = Auth::user()->store;
         $storeId = $store?->id;
-        Log::info('Seller Store ID: '.$storeId);
+        Log::info('Seller Store ID: ' . $storeId);
 
         $sellerId = request('seller_id');      // optional
         $customerId = request('customer_id');  // optional
@@ -41,12 +41,13 @@ class DashboardController extends Controller
             ->get();
 
         // 2️⃣ Load stock for all variants in this store at once
-        $variantIds = $items->flatMap(fn ($item) => $item->variants->pluck('id'))->unique();
-        $storeVariantIds = $items->flatMap(fn ($item) => $item->variants->pluck('storeVariants.*.id'))
+        $variantIds = $items->flatMap(fn($item) => $item->variants->pluck('id'))->unique();
+        $storeVariantIds = $items->flatMap(fn($item) => $item->variants->pluck('storeVariants.*.id'))
             ->flatten()
             ->unique();
 
-        $stocks = ItemStock::where('item_inventory_location_id', $storeId)
+        $stocks = ItemStock::where('location_id', $storeId)
+            ->where('location_type', get_class($store)) // e.g., 'App\Models\Store'
             ->whereIn('store_variant_id', $storeVariantIds)
             ->get()
             ->keyBy('store_variant_id');
@@ -90,10 +91,10 @@ class DashboardController extends Controller
         Log::info('Seller Items Loaded', [
             'store_id' => $storeId,
             'items_count' => $items->count(),
-            'variants_count' => $items->sum(fn ($i) => $i->variants->count()),
+            'variants_count' => $items->sum(fn($i) => $i->variants->count()),
         ]);
 
-        return Inertia::render('Seller/Dashboard/index', compact('items', 'store'));
+        return Inertia::render('Seller/Dashboard/Index', compact('items', 'store'));
     }
 
     /**
