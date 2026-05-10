@@ -5,6 +5,7 @@ namespace Database\Seeders\Admin;
 use App\Models\Item\Item;
 use App\Models\Item\ItemVariant;
 use App\Services\ItemVariantGenerationService;
+use App\Models\Store\StoreVariant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
