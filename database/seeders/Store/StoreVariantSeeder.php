@@ -61,11 +61,13 @@ class StoreVariantSeeder extends Seeder
 
                 ItemStock::updateOrCreate(
                     [
-                        'store_variant_id' => $storeVariant->id,
-                        'item_inventory_location_id' => 1,
+                        'item_variant_id' => $storeVariant->id, // Use the ID from store_variants
+                        'location_id' => $store->id,            // Link to the specific store
+                        'location_type' => get_class($store),   // e.g., 'App\Models\Store\Store'
                     ],
                     [
                         'quantity' => rand(5, 50),
+                        'min_stock_level' => 5,
                     ]
                 );
 
@@ -108,7 +110,7 @@ class StoreVariantSeeder extends Seeder
                we are now inserting inside the loop to get the IDs required
                for Stock and Prices. I've left the logic flow intact.
             */
-            if (! empty($storeVariantRows)) {
+            if (!empty($storeVariantRows)) {
                 DB::table('store_variants')->insert($storeVariantRows);
 
                 $insertedStoreVariants = DB::table('store_variants')
