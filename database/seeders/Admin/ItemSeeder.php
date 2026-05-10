@@ -123,22 +123,6 @@ class ItemSeeder extends Seeder
             //    (ItemVariantGenerationService::sync is the single source of truth)
             $generator->sync($item);
 
-            $item->refresh()->load('variants.itemPackagingType');
-
-            foreach ($item->variants as $variant) {
-                // Pass the item and the specific variant
-                $calculatedPrice = $this->calculateDynamicPrice($item, $variant);
-
-                StoreVariant::create([
-                    'store_id' => 1,
-                    'item_variant_id' => $variant->id,
-                    'price' => $calculatedPrice,
-                    'stock' => rand(10, 100),
-                    'active' => true,
-                    'manual_status' => 'auto',
-                ]);
-            }
-
             // 4. Attach placeholder images to each variant
             //    This mirrors persistVariantImages() exactly.
             $this->seedVariantImages($item, $data);
