@@ -20,7 +20,6 @@ class StoreVariantSeeder extends Seeder
         $now = Carbon::now();
 
         foreach ($stores as $store) {
-
             // 1️⃣ Get items that belong to this store
             $itemIds = DB::table('item_store')
                 ->where('store_id', $store->id)
@@ -32,11 +31,8 @@ class StoreVariantSeeder extends Seeder
             }
 
             // 2️⃣ Get variants of those items
+            // Using the Model returns a collection of ItemVariant objects
             $variants = ItemVariant::whereIn('item_id', $itemIds)->get();
-
-            $storeVariantRows = [];
-            $sellerPriceRows = [];
-            $customerPriceRows = [];
 
             // Get sellers and customers for this store
             $sellers = User::where('store_id', $store->id)->where('role', 'seller')->get();
@@ -46,6 +42,7 @@ class StoreVariantSeeder extends Seeder
                 $priceFactor = rand(95, 105) / 100;
                 $basePrice = round($this->baseVariantPrice($variant) * $priceFactor, 2);
 
+                // Create or update the price tag for this store
                 $storeVariant = StoreVariant::updateOrCreate([
                     'store_id' => $store->id,
                     'item_variant_id' => $variant->id,
@@ -53,17 +50,19 @@ class StoreVariantSeeder extends Seeder
                     'price' => $basePrice,
                     'discount_price' => rand(0, 1) ? round($basePrice * (rand(90, 99) / 100), 2) : null,
                     'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
-                    'active' => true, // Set to true to ensure they show up in your catalog
+                    'active' => true,
                     'manual_status' => 'auto',
+                    // 'status' removed because the column doesn't exist
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
 
+                // 3️⃣ FIXED: Link stock to the ItemVariant ID, not StoreVariant ID
                 ItemStock::updateOrCreate(
                     [
-                        'item_variant_id' => $storeVariant->id, // Use the ID from store_variants
-                        'location_id' => $store->id,            // Link to the specific store
-                        'location_type' => get_class($store),   // e.g., 'App\Models\Store\Store'
+                        'item_variant_id' => $variant->id, // Physical Product ID
+                        'location_id' => $store->id,    // Where it is
+                        'location_type' => get_class($store),
                     ],
                     [
                         'quantity' => rand(5, 50),
@@ -71,55 +70,47 @@ class StoreVariantSeeder extends Seeder
                     ]
                 );
 
-                // Seller prices
+                // 4️⃣ Seller prices (Tiered Pricing)
                 foreach ($sellers as $seller) {
                     $factor = rand(90, 110) / 100;
                     $sellerPrice = round($basePrice * $factor, 2);
 
-                    DB::table('store_variants_seller_prices')->updateOrInsert([
-                        'store_variant_id' => $storeVariant->id,
-                        'seller_id' => $seller->id,
-                        'price' => $sellerPrice,
-                        'discount_price' => rand(0, 1) ? round($sellerPrice * (rand(90, 99) / 100), 2) : null,
-                        'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
-                        'active' => true,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ]);
+                    DB::table('store_variants_seller_prices')->updateOrInsert(
+                        [
+                            'store_variant_id' => $storeVariant->id,
+                            'seller_id' => $seller->id,
+                        ],
+                        [
+                            'price' => $sellerPrice,
+                            'discount_price' => rand(0, 1) ? round($sellerPrice * (rand(90, 99) / 100), 2) : null,
+                            'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
+                            'active' => true,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ]
+                    );
                 }
 
-                // Customer prices
+                // 5️⃣ Customer prices (Tiered Pricing)
                 foreach ($customers as $customer) {
                     $factor = rand(85, 105) / 100;
                     $customerPrice = round($basePrice * $factor, 2);
 
-                    DB::table('store_variants_customer_prices')->updateOrInsert([
-                        'store_variant_id' => $storeVariant->id,
-                        'customer_id' => $customer->id,
-                        'price' => $customerPrice,
-                        'discount_price' => rand(0, 1) ? round($customerPrice * (rand(90, 99) / 100), 2) : null,
-                        'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
-                        'active' => true,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ]);
+                    DB::table('store_variants_customer_prices')->updateOrInsert(
+                        [
+                            'store_variant_id' => $storeVariant->id,
+                            'customer_id' => $customer->id,
+                        ],
+                        [
+                            'price' => $customerPrice,
+                            'discount_price' => rand(0, 1) ? round($customerPrice * (rand(90, 99) / 100), 2) : null,
+                            'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
+                            'active' => true,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ]
+                    );
                 }
-            }
-
-            /* NOTE: The block below in your original code was redundant because
-               we are now inserting inside the loop to get the IDs required
-               for Stock and Prices. I've left the logic flow intact.
-            */
-            if (!empty($storeVariantRows)) {
-                DB::table('store_variants')->insert($storeVariantRows);
-
-                $insertedStoreVariants = DB::table('store_variants')
-                    ->where('store_id', $store->id)
-                    ->whereIn('item_variant_id', $variants->pluck('id'))
-                    ->get()
-                    ->keyBy('item_variant_id');
-
-                // This logic is now handled inside the variant loop for reliability
             }
         }
     }
@@ -129,13 +120,12 @@ class StoreVariantSeeder extends Seeder
         $base = 10.00;
         $name = $variant->item?->product_name ?? '';
 
-        if (str_contains($name, 'Bic')) {
+        if (str_contains($name, 'Bic'))
             $base = 17.00;
-        } elseif (str_contains($name, 'Ring')) {
+        elseif (str_contains($name, 'Ring'))
             $base = 15.00;
-        } elseif (str_contains($name, 'Sticky')) {
+        elseif (str_contains($name, 'Sticky'))
             $base = 10.00;
-        }
 
         return round($base * max(1, $variant->packaging_total_pieces ?? 1), 2);
     }
