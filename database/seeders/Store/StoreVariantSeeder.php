@@ -55,7 +55,6 @@ class StoreVariantSeeder extends Seeder
                     'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
                     'active' => true, // Set to true to ensure they show up in your catalog
                     'manual_status' => 'auto',
-                    'status' => 'active',
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
@@ -77,7 +76,7 @@ class StoreVariantSeeder extends Seeder
                     $factor = rand(90, 110) / 100;
                     $sellerPrice = round($basePrice * $factor, 2);
 
-                    DB::table('store_variants_seller_prices')->insert([
+                    DB::table('store_variants_seller_prices')->updateOrInsert([
                         'store_variant_id' => $storeVariant->id,
                         'seller_id' => $seller->id,
                         'price' => $sellerPrice,
@@ -94,7 +93,7 @@ class StoreVariantSeeder extends Seeder
                     $factor = rand(85, 105) / 100;
                     $customerPrice = round($basePrice * $factor, 2);
 
-                    DB::table('store_variants_customer_prices')->insert([
+                    DB::table('store_variants_customer_prices')->updateOrInsert([
                         'store_variant_id' => $storeVariant->id,
                         'customer_id' => $customer->id,
                         'price' => $customerPrice,
