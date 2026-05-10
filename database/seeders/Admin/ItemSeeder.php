@@ -30,20 +30,20 @@ class ItemSeeder extends Seeder
 
     private array $items = [
         [
-            'product_name'        => 'Noteit Sticky Note',
+            'product_name' => 'Noteit Sticky Note',
             'product_description' => 'NoteIt / Sticky Notes is a simple and convenient tool for quick memos, reminders, and desk organisation.',
-            'packaging_details'   => 'Available in single packs, boxes of 12, and boxes of 18.',
-            'item_category_id'    => 45,        // subcategory id (leaf)
-            'status'              => 'active',
-            'color_ids'           => [1, 2, 3, 4, 11],
-            'size_ids'            => [1, 2, 3],
-            'packaging'           => [
+            'packaging_details' => 'Available in single packs, boxes of 12, and boxes of 18.',
+            'item_category_id' => 45,        // subcategory id (leaf)
+            'status' => 'active',
+            'color_ids' => [1, 2, 3, 4, 11],
+            'size_ids' => [1, 2, 3],
+            'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1],
                 ['item_packaging_type_id' => 2, 'quantity' => 12],
                 ['item_packaging_type_id' => 3, 'quantity' => 18],
             ],
             // General item images (stored in public disk, relative to storage/app/public/)
-            'general_images'      => [
+            'general_images' => [
                 'images/product_images/noteit_sticky_note_1.jpg',
             ],
             // Per-variant placeholder images.
@@ -51,44 +51,44 @@ class ItemSeeder extends Seeder
             // where null dimensions use the string "null".
             // Values are up to 5 relative paths (same format as persistVariantImages output).
             // Provide at least 2 per variant to pass the proof gate and allow non-draft status.
-            'variant_images'      => [], // populated dynamically below via _buildVariantImages()
+            'variant_images' => [], // populated dynamically below via _buildVariantImages()
         ],
 
         [
-            'product_name'        => 'Ring',
+            'product_name' => 'Ring',
             'product_description' => 'Binding rings for punched papers. Available in multiple diameters.',
-            'packaging_details'   => 'Sold in boxes of 50 or 18.',
-            'item_category_id'    => 28,
-            'status'              => 'active',
-            'color_ids'           => [1, 2, 3, 4, 5],
-            'size_ids'            => [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
-            'packaging'           => [
+            'packaging_details' => 'Sold in boxes of 50 or 18.',
+            'item_category_id' => 28,
+            'status' => 'active',
+            'color_ids' => [1, 2, 3, 4, 5],
+            'size_ids' => [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
+            'packaging' => [
                 ['item_packaging_type_id' => 2, 'quantity' => 50],
                 ['item_packaging_type_id' => 3, 'quantity' => 18],
             ],
-            'general_images'      => [
+            'general_images' => [
                 'images/product_images/ring_1.jpg',
             ],
-            'variant_images'      => [],
+            'variant_images' => [],
         ],
 
         [
-            'product_name'        => 'Bic Pen',
+            'product_name' => 'Bic Pen',
             'product_description' => 'Classic Bic pens. Smooth writing, reliable ink.',
-            'packaging_details'   => 'Available individually, in boxes of 50, or boxes of 20.',
-            'item_category_id'    => 12,
-            'status'              => 'active',
-            'color_ids'           => [2, 5, 1],
-            'size_ids'            => [],        // no sizes → "null" dimension
-            'packaging'           => [
+            'packaging_details' => 'Available individually, in boxes of 50, or boxes of 20.',
+            'item_category_id' => 12,
+            'status' => 'active',
+            'color_ids' => [2, 5, 1],
+            'size_ids' => [],        // no sizes → "null" dimension
+            'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1],
                 ['item_packaging_type_id' => 2, 'quantity' => 50],
                 ['item_packaging_type_id' => 3, 'quantity' => 20],
             ],
-            'general_images'      => [
+            'general_images' => [
                 'images/product_images/bic_pen_1.jpg',
             ],
-            'variant_images'      => [],
+            'variant_images' => [],
         ],
     ];
 
@@ -102,13 +102,13 @@ class ItemSeeder extends Seeder
         foreach ($this->items as $data) {
             // 1. Create the item row (status always starts as draft — same as controller)
             $item = Item::create([
-                'product_name'        => $data['product_name'],
+                'product_name' => $data['product_name'],
                 'product_description' => $data['product_description'],
-                'packaging_details'   => $data['packaging_details'] ?? null,
-                'item_category_id'    => $data['item_category_id'],
-                'status'              => 'draft',
-                'general_images'      => $data['general_images'],
-                'is_incomplete'       => true,
+                'packaging_details' => $data['packaging_details'] ?? null,
+                'item_category_id' => $data['item_category_id'],
+                'status' => 'draft',
+                'general_images' => $data['general_images'],
+                'is_incomplete' => true,
             ]);
 
             // 2. Sync attributes — exactly as resolveOptionIds / resolvePackagingPayload do
@@ -121,6 +121,22 @@ class ItemSeeder extends Seeder
             // 3. Generate all variant rows + store_variant records
             //    (ItemVariantGenerationService::sync is the single source of truth)
             $generator->sync($item);
+
+            $item->refresh()->load('variants.itemPackagingType');
+
+            foreach ($item->variants as $variant) {
+                // Pass the item and the specific variant
+                $calculatedPrice = $this->calculateDynamicPrice($item, $variant);
+
+                StoreVariant::create([
+                    'store_id' => 1,
+                    'item_variant_id' => $variant->id,
+                    'price' => $calculatedPrice,
+                    'stock' => rand(10, 100),
+                    'active' => true,
+                    'manual_status' => 'auto',
+                ]);
+            }
 
             // 4. Attach placeholder images to each variant
             //    This mirrors persistVariantImages() exactly.
@@ -175,14 +191,14 @@ class ItemSeeder extends Seeder
             'variants.itemPackagingType',
         ]);
 
-        $safeName     = Str::snake($data['product_name']);
-        $explicitMap  = $data['variant_images'] ?? [];
+        $safeName = Str::snake($data['product_name']);
+        $explicitMap = $data['variant_images'] ?? [];
 
         foreach ($item->variants as $variant) {
-            $colorId    = $variant->item_color_id    ?? 'null';
-            $sizeId     = $variant->item_size_id     ?? 'null';
-            $packId     = $variant->item_packaging_type_id ?? 'null';
-            $key        = implode(':', [$colorId, $sizeId, $packId]);
+            $colorId = $variant->item_color_id ?? 'null';
+            $sizeId = $variant->item_size_id ?? 'null';
+            $packId = $variant->item_packaging_type_id ?? 'null';
+            $key = implode(':', [$colorId, $sizeId, $packId]);
 
             $sku = $variant->sku ?? ('variant_' . $variant->id);
 
@@ -223,7 +239,7 @@ class ItemSeeder extends Seeder
         $item->refresh()->load('variants');
 
         $allProven = $item->variants->every(function (ItemVariant $variant) {
-            $raw    = $variant->images;
+            $raw = $variant->images;
             $images = is_array($raw)
                 ? $raw
                 : (is_string($raw) ? (json_decode($raw, true) ?: []) : []);
@@ -233,8 +249,34 @@ class ItemSeeder extends Seeder
         $finalStatus = $allProven ? $requestedStatus : 'draft';
 
         $item->update([
-            'status'        => $finalStatus,
+            'status' => $finalStatus,
             'is_incomplete' => !$allProven,
         ]);
+    }
+
+    private function calculateDynamicPrice(Item $item, ItemVariant $variant): float
+    {
+        $base = 10.00;
+
+        // Use Str::contains for cleaner syntax
+        if (Str::contains($item->product_name, 'Bic'))
+            $base = 17.00;
+        elseif (Str::contains($item->product_name, 'Ring'))
+            $base = 15.00;
+        elseif (Str::contains($item->product_name, 'Sticky'))
+            $base = 10.00;
+
+        // Access the quantity from the packaging type linked to this specific variant
+        // We use the quantity stored in the variant itself (packaging_total_pieces)
+        $totalQty = $variant->packaging_total_pieces ?? 1;
+
+        $subtotal = $base * $totalQty;
+
+        // Apply bulk discount if more than 1 piece
+        if ($totalQty > 1) {
+            $subtotal = $subtotal * 0.95;
+        }
+
+        return round($subtotal, 2);
     }
 }
