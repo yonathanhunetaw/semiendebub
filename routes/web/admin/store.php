@@ -20,9 +20,26 @@ Route::domain("admin.{$baseDomain}")
             Route::delete('/{store}',   [StoreController::class, 'destroy'])->name('destroy');
         });
 
+        // ── Store variant & Price Management ──────────────────────────────────
+        // Placing these here as they are managed by StoreController
+        Route::patch('store-variants/{storeVariant}', [StoreController::class, 'updateVariant'])
+            ->name('store-variant.update');
+
+        // Customer-price upsert / delete
+        Route::post('store-variants/{storeVariant}/customer-prices', [StoreController::class, 'upsertCustomerPrice'])
+            ->name('store-variant.customer-price.upsert');
+
+        Route::delete('store-variant-customer-prices/{price}', [StoreController::class, 'destroyCustomerPrice'])
+            ->name('store-variant.customer-price.destroy');
+
+        // Seller-price upsert / delete
+        Route::post('store-variants/{storeVariant}/seller-prices', [StoreController::class, 'upsertSellerPrice'])
+            ->name('store-variant.seller-price.upsert');
+
+        Route::delete('store-variant-seller-prices/{price}', [StoreController::class, 'destroySellerPrice'])
+            ->name('store-variant.seller-price.destroy');
+
         // ── Inventory sidebar sub-routes ──────────────────────────────────────
-        // /inventory/stores  → same StoreController@index view
-        // /inventory/warehouse → placeholder (replace with WarehouseController later)
         Route::prefix('inventory')->name('inventory.')->group(function () {
             Route::get('/stores',    [StoreController::class, 'index'])->name('stores');
             Route::get('/warehouse', fn () => inertia('Admin/Inventory/Warehouse/index'))->name('warehouse');
