@@ -381,4 +381,20 @@ else
     exec_in_app php artisan view:clear || echo "View cache clear skipped or path not found."
 fi
 
+echo "Configuring MinIO storage..."
+# 1. Alias the local MinIO client to your running container
+# Use the credentials from your .env (admin / your_strong_password)
+compose exec -T minio mc alias set local http://localhost:9000 admin your_strong_password
+
+# 2. Create the bucket if it doesn't exist
+echo "Ensuring 'duka-images' bucket exists..."
+compose exec -T minio mc mb local/duka-images --ignore-existing
+
+# 3. Set the bucket to 'public' so your browser can view the images
+echo "Setting bucket policy to public..."
+compose exec -T minio mc anonymous set public local/duka-images
+
+# 4. Final Laravel link check
+exec_in_app php artisan config:clear
+
 echo "Deployment complete."

@@ -36,6 +36,20 @@ services:
       timeout: 3s
       retries: 10
 
+  minio:
+    image: minio/minio
+    container_name: Duka_minio
+    ports:
+      - "9000:9000"       # API Port (Laravel talks to this)
+      - "9001:9001"       # Console Port (You login here)
+    volumes:
+      - minio_data:/data  # Permanent storage for your images
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: your_strong_password
+    restart: unless-stopped
+
 networks:
   duka-network:
 
@@ -44,3 +58,4 @@ volumes:
   vendor_data:
   storage_data:
   node_modules_data:
+  minio_data:
