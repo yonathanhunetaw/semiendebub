@@ -37,11 +37,13 @@ class CartController extends Controller
     /**
      * Display a listing of the resource.
      */
+    // app/Http/Controllers/Seller/CartController.php
+
     public function index()
     {
         $user = auth()->user();
 
-        $carts = Cart::with(['customer', 'seller', 'variants']) // Load the actual relationship
+        $carts = Cart::with(['customer', 'seller', 'variants']) // MUST load 'variants'
             ->visibleTo($user)
             ->latest()
             ->paginate(15);
