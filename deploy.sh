@@ -361,8 +361,18 @@ else
 fi
 
 echo "Ensuring storage structure and permissions..."
-# 1. Manually create the directories Laravel needs before it asks for them
-exec_in_app mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache/data
+# Create all necessary paths in one go
+exec_in_app mkdir -p \
+    storage/framework/sessions \
+    storage/framework/views \
+    storage/framework/cache/data \
+    storage/app/seed-images \
+    public/images/defaults
+
+# Set ownership and permissions for everything at once
+# Including public/images ensures your default placeholders work!
+exec_in_app chown -R 33:33 storage bootstrap/cache public/images
+exec_in_app chmod -R 775 storage bootstrap/cache public/images
 # 2. Set the owner to www-data (ID 33) so the webserver can actually use them
 exec_in_app chown -R 33:33 storage bootstrap/cache
 exec_in_app chmod -R 775 storage bootstrap/cache
@@ -383,7 +393,7 @@ fi
 
 echo "Configuring MinIO storage..."
 
-# 1. Wait for MinIO API to be actually ready (Health Check)
+# 1. Wait for MinIO API to be actually ready
 echo "Waiting for MinIO API to initialize..."
 MAX_RETRIES=30
 COUNT=0
@@ -398,25 +408,20 @@ until compose exec -T minio sh -c "curl -sf http://localhost:9000/minio/health/l
 done
 echo " MinIO is ready."
 
-# 2. Dynamically pull credentials from .env instead of hardcoding
+# 2. Pull credentials
 MINIO_USER=$(env_value AWS_ACCESS_KEY_ID)
 MINIO_PASS=$(env_value AWS_SECRET_ACCESS_KEY)
 MINIO_BUCKET=$(env_value AWS_BUCKET)
 
-# 3. Alias the local MinIO client
+# 3. Setup MinIO Client and Bucket Policy
 compose exec -T minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS"
 
-# 4. Create the bucket if it doesn't exist
 if [ -n "$MINIO_BUCKET" ]; then
-    echo "Ensuring '$MINIO_BUCKET' bucket exists..."
+    echo "Ensuring '$MINIO_BUCKET' bucket exists and is public..."
     compose exec -T minio mc mb local/"$MINIO_BUCKET" --ignore-existing
-
-    # 5. Set the bucket to 'public' for web access
-    echo "Setting bucket policy to public..."
     compose exec -T minio mc anonymous set public local/"$MINIO_BUCKET"
 fi
 
-# 4. Final Laravel link check
+# 4. Final Laravel Cleanup
 exec_in_app php artisan config:clear
-
 echo "Deployment complete."

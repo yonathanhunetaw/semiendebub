@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 // This single line generates the following routes:
@@ -43,29 +44,29 @@ class ItemController extends Controller
 
     public function index()
     {
-        $items = Item::with(['variants.storeVariants', 'variants.stocks'])->get();
+        // 1. Eager load everything needed for the counts to avoid N+1 issues
+        $items = Item::with(['variants.storeVariants'])->get();
         $stores = Store::all();
 
         $items = $items->map(function ($item) {
+            // 2. Leverage the Accessors we built in the Model
+            // We take the general images and merge them with variant images
             $previewImages = collect($item->general_images ?? [])
-                ->merge($item->variants->pluck('images')->flatten(1)->filter())
+                ->map(fn($path) => Storage::exists($path) ? Storage::url($path) : asset('images/defaults/no-image.png'))
+                ->merge($item->variants->map(fn($v) => $v->image_url)) // Uses the ItemVariant accessor
                 ->filter()
-                ->map(function ($image) {
-                    if (!is_string($image) || $image === '')
-                        return null;
-                    if (str_starts_with($image, 'http'))
-                        return $image;
-                    if (str_starts_with($image, '/images/') || str_starts_with($image, 'images/'))
-                        return asset(ltrim($image, '/'));
-                    return asset('storage/' . ltrim($image, '/'));
-                })
-                ->filter()->unique()->take(5)->values();
+                ->unique()
+                ->take(5)
+                ->values();
 
+            // 3. Logic remains the same, but cleaner
             $item->variants_count = $item->variants->count();
-            $item->active_variants_count = $item->variants->filter(
-                fn($v) =>
-                $v->status === 'active' && $v->storeVariants->contains(fn($sv) => $sv->active)
-            )->count();
+
+            $item->active_variants_count = $item->variants->filter(function ($v) {
+                return $v->status === 'active' &&
+                    $v->storeVariants->where('active', true)->isNotEmpty();
+            })->count();
+
             $item->preview_images = $previewImages;
 
             return $item;
@@ -77,7 +78,6 @@ class ItemController extends Controller
             'filters' => request()->only(['filter', 'sort', 'direction']),
         ]);
     }
-
     // ──────────────────────────────────────────────────────────────────────────
     // SHOW
     // ──────────────────────────────────────────────────────────────────────────
@@ -89,66 +89,47 @@ class ItemController extends Controller
 
     public function show(Item $item)
     {
+        // 1. Eager load everything for the detail view
         $item->load([
-            'variants.itemColor',
-            'variants.itemSize',
+            'category',
+            'variants.color',
+            'variants.size',
             'variants.itemPackagingType',
-            'variants.storeVariants.store', // ← go through variants first
+            'variants.stocks'
         ]);
 
-        // Build variantData for the React Show page
-        $variantData = $item->variants->map(function ($variant) {
-            $images = is_array($variant->images) ? $variant->images : [];
+        // 2. Map the item to include all processed image URLs
+        $itemData = [
+            'id' => $item->id,
+            'product_name' => $item->product_name,
+            'product_description' => $item->product_description,
+            'status' => $item->status,
+            'category_name' => $item->category?->name ?? 'Uncategorized',
 
-            $slots = collect($images)->map(fn($path) => [
-                'path' => $path,
-                'url' => str_starts_with($path, 'http') ? $path : asset("storage/{$path}"),
-            ])->values()->toArray();
+            // Use the accessor for general images
+            'general_images' => collect($item->general_images ?? [])
+                ->map(fn($path) => Storage::exists($path) ? Storage::url($path) : asset('images/defaults/no-image.png'))
+                ->toArray(),
 
-            return [
-                'id' => $variant->id,
-                'sku' => $variant->sku,
-                'color' => $variant->itemColor?->name,
-                'size' => $variant->itemSize?->name,
-                'packaging' => $variant->itemPackagingType?->name,
-                'status' => $variant->status,
-                'slots' => $slots,
-                'slot_count' => count($slots),
-                'proof_ok' => count($slots) >= 2,
-            ];
-        });
-
-        // Which store IDs already have at least one StoreVariant for this item?
-        $deployedStoreIds = $item->variants
-            ->flatMap(fn($v) => $v->storeVariants)
-            ->pluck('store_id')
-            ->unique()
-            ->toArray();
-
-
-        // Pass all active stores + whether each is already deployed
-        $stores = Store::where('status', 'active')
-            ->orderBy('name')
-            ->get()
-            ->map(fn($s) => [
-                'id' => $s->id,
-                'name' => $s->name,
-                'location' => $s->location,
-                'manager' => $s->manager,
-                'status' => $s->status,
-                'already_deployed' => in_array($s->id, $deployedStoreIds),
-            ]);
+            // Process variants to use their individual MinIO accessors
+            'variants' => $item->variants->map(function ($variant) {
+                return [
+                    'id' => $variant->id,
+                    'sku' => $variant->sku,
+                    'color' => $variant->color?->name,
+                    'size' => $variant->size?->name,
+                    'packaging' => $variant->itemPackagingType?->name,
+                    'stock_count' => $variant->stocks->sum('quantity'),
+                    'status' => $variant->status,
+                    // Accessors we built earlier:
+                    'main_image' => $variant->image_url,
+                    'all_images' => $variant->all_image_urls,
+                ];
+            }),
+        ];
 
         return Inertia::render('Admin/Items/Show', [
-            'item' => [
-                'id' => $item->id,
-                'product_name' => $item->product_name,
-                'product_description' => $item->product_description,
-                'status' => $item->status,
-                'general_images' => $item->general_images,
-            ],
-            'variantData' => $variantData,
-            'stores' => $stores,
+            'item' => $itemData,
         ]);
     }
 
@@ -180,9 +161,9 @@ class ItemController extends Controller
                 'product_name' => $validated['product_name'],
                 'product_description' => $validated['product_description'] ?? null,
                 'packaging_details' => $validated['packaging_details'] ?? null,
-                'item_category_id' => $this->resolveCategoryId($validated['item_category_id']),
+                'it em_category_id' => $this->resolveCategoryId($validated['item_category_id']),
                 'status' => 'draft',           // always draft until proof provided
-                'general_images' => $this->handleUploads($request),
+                'general_images' => $this->handleUploads($request, []), // Pass empty array for new items
                 'is_incomplete' => true,
             ]);
 
@@ -312,20 +293,25 @@ class ItemController extends Controller
         $newStatus = $request->status;
 
         if ($newStatus === 'active') {
-            // Only allow if all variants have ≥2 images
-            $allProven = $item->variants()->get()->every(function ($variant) {
-                $images = is_array($variant->images)
-                    ? $variant->images
-                    : (json_decode($variant->images, true) ?: []);
+            // Eager load variants to avoid the N+1 problem on the Pi's CPU
+            $item->load('variants');
+
+            $allProven = $item->variants->every(function ($variant) {
+                // Since your ItemVariant model uses: protected $casts = ['images' => 'array'],
+                // $variant->images is ALREADY an array or null.
+                $images = $variant->images ?? [];
                 return count($images) >= 2;
             });
 
             if (!$allProven) {
-                return back()->withErrors(['status' => 'Cannot activate: one or more variants still need at least 2 images.']);
+                return back()->withErrors([
+                    'status' => 'Cannot activate: every variant must have at least 2 images (proof) before publishing.'
+                ]);
             }
         }
 
         $item->update(['status' => $newStatus]);
+
         return back()->with('success', 'Item status updated to ' . ucfirst($newStatus) . '.');
     }
 
@@ -360,23 +346,29 @@ class ItemController extends Controller
      */
     private function persistVariantImages(Request $request, Item $item): void
     {
-        $item->load(['variants.itemColor', 'variants.itemSize', 'variants.itemPackagingType']);
-
         // Build a lookup: comboKey → variant
-        $variantMap = [];
+        $item->load('variants');
+
+        // 1. Direct ID-based mapping (The most reliable way)
         foreach ($item->variants as $variant) {
-            $key = implode(':', [
-                $variant->item_color_id ?? 'null',
-                $variant->item_size_id ?? 'null',
-                $variant->item_packaging_type_id ?? 'null',
-            ]);
-            $variantMap[$key] = $variant;
+            $fileKey = "variant_image_{$variant->id}";
+
+            if ($request->hasFile($fileKey)) {
+                $file = $request->file($fileKey);
+
+                // Standardizing the SKU folder path
+                $fileName = "{$variant->sku}_main." . $file->getClientOriginalExtension();
+                $path = $file->storeAs("uploads/variants/{$variant->sku}", $fileName, 's3');
+
+                // Update the JSON column (casted as array in your model)
+                $variant->update(['images' => [$path]]);
+            }
         }
 
         $newFiles = $request->file('variant_images', []);
         $existingPaths = $request->input('variant_existing_images', []);
 
-        foreach ($variantMap as $key => $variant) {
+        foreach ($item as $key => $variant) {
             $slots = array_fill(0, 5, null);  // 5-slot array, null = keep existing
 
             // Slot 0-4: keep existing paths sent from the form
@@ -516,28 +508,41 @@ class ItemController extends Controller
 
     private function handleUploads(Request $request, array $existingImages = []): array
     {
-        $paths = collect($existingImages)
-            ->filter()
-            ->map(fn($p) => str_starts_with($p, '/storage/') ? ltrim(str_replace('/storage/', '', $p), '/') : ltrim($p, '/'))
-            ->values()->all();
+        $newPaths = [];
 
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $image) {
-                $paths[] = $image->store('uploads/items', 'public');
+        if ($request->hasFile('general_images')) {
+            foreach ($request->file('general_images') as $file) {
+                $name = Str::slug($request->product_name) . '_' . time() . '_' . Str::random(5) . '.' . $file->getClientOriginalExtension();
+
+                // Store to MinIO
+                $path = $file->storeAs('products', $name, 's3');
+                $newPaths[] = $path;
             }
         }
 
-        return $paths;
+        // Merge existing image paths from the DB with the newly uploaded paths
+        return array_merge($existingImages, $newPaths);
     }
 
-    // Legacy upload endpoints kept for backward compat
+    /**
+     * Modernized upload endpoint for MinIO
+     */
     public function uploadImages(Request $request)
     {
-        $request->validate(['product_images' => 'required|array', 'product_images.*' => 'image|max:5120']);
+        $request->validate([
+            'product_images' => 'required|array',
+            'product_images.*' => 'image|max:5120'
+        ]);
+
         $paths = [];
         foreach ($request->file('product_images') as $file) {
-            $paths[] = 'storage/' . $file->store('images/product_images', 'public');
+            // Store the file
+            $path = $file->store('images/product_images', 's3');
+
+            // Force the URL generation using the facade directly
+            $paths[] = Storage::disk('s3')->url($path);
         }
+
         return response()->json(['paths' => $paths]);
     }
 }

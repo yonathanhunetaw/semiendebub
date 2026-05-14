@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Database\Factories\ItemVariantFactory;
+use Illuminate\Support\Facades\Storage;
 
 class ItemVariant extends Model
 {
@@ -219,5 +220,43 @@ class ItemVariant extends Model
     public function item_stock()
     {
         return $this->hasOne(ItemStock::class, 'variant_id'); // or hasMany if multiple stocks
+    }
+
+    /**
+     * Accessor for a single representative image URL.
+     * Usage: $variant->image_url
+     */
+    public function getImageUrlAttribute(): string
+    {
+        $path = $this->images[0] ?? null;
+
+        // If path exists and we can find it on the configured default disk
+        if ($path && Storage::exists($path)) {
+            return Storage::url($path);
+        }
+
+        return asset('images/defaults/no-image.png');
+    }
+
+    /**
+     * Accessor for ALL images as full URLs.
+     * Usage: $variant->all_image_urls
+     */
+    public function getAllImageUrlsAttribute(): array
+    {
+        // Return the fallback immediately if the array is empty
+        if (empty($this->images) || !is_array($this->images)) {
+            return [asset('images/defaults/no-image.png')];
+        }
+
+        return array_map(function ($path) {
+            // Use the Storage facade directly.
+            // Since FILESYSTEM_DISK=s3, this checks MinIO automatically.
+            if (Storage::exists($path)) {
+                return Storage::url($path);
+            }
+
+            return asset('images/defaults/no-image.png');
+        }, $this->images);
     }
 }
