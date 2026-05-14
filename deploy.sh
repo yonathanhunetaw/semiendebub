@@ -382,17 +382,39 @@ else
 fi
 
 echo "Configuring MinIO storage..."
-# 1. Alias the local MinIO client to your running container
-# Use the credentials from your .env (admin / your_strong_password)
-compose exec -T minio mc alias set local http://localhost:9000 admin your_strong_password
 
-# 2. Create the bucket if it doesn't exist
-echo "Ensuring 'duka-images' bucket exists..."
-compose exec -T minio mc mb local/duka-images --ignore-existing
+# 1. Wait for MinIO API to be actually ready (Health Check)
+echo "Waiting for MinIO API to initialize..."
+MAX_RETRIES=30
+COUNT=0
+until compose exec -T minio sh -c "curl -sf http://localhost:9000/minio/health/live" >/dev/null 2>&1; do
+    echo -n "."
+    sleep 2
+    COUNT=$((COUNT + 1))
+    if [ $COUNT -ge $MAX_RETRIES ]; then
+        echo "MinIO failed to start in time. Skipping storage config."
+        break
+    fi
+done
+echo " MinIO is ready."
 
-# 3. Set the bucket to 'public' so your browser can view the images
-echo "Setting bucket policy to public..."
-compose exec -T minio mc anonymous set public local/duka-images
+# 2. Dynamically pull credentials from .env instead of hardcoding
+MINIO_USER=$(env_value AWS_ACCESS_KEY_ID)
+MINIO_PASS=$(env_value AWS_SECRET_ACCESS_KEY)
+MINIO_BUCKET=$(env_value AWS_BUCKET)
+
+# 3. Alias the local MinIO client
+compose exec -T minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS"
+
+# 4. Create the bucket if it doesn't exist
+if [ -n "$MINIO_BUCKET" ]; then
+    echo "Ensuring '$MINIO_BUCKET' bucket exists..."
+    compose exec -T minio mc mb local/"$MINIO_BUCKET" --ignore-existing
+
+    # 5. Set the bucket to 'public' for web access
+    echo "Setting bucket policy to public..."
+    compose exec -T minio mc anonymous set public local/"$MINIO_BUCKET"
+fi
 
 # 4. Final Laravel link check
 exec_in_app php artisan config:clear
