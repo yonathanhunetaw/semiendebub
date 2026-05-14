@@ -21,8 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
         AuthEventServiceProvider::class,
     ])
     ->withRouting(
-        web: __DIR__.'/../routes/web.php',
-        commands: __DIR__.'/../routes/console.php',
+        web: __DIR__ . '/../routes/web.php',
+        commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -49,9 +49,13 @@ return Application::configure(basePath: dirname(__DIR__))
         Integration::handles($exceptions);
 
         $exceptions->context(function (): array {
+            // 🛑 Check if the 'request' binding exists in the container
+            if (!app()->bound('request')) {
+                return [];
+            }
             $request = request();
 
-            if (! $request instanceof Request) {
+            if (!$request instanceof Request) {
                 return [];
             }
 
@@ -60,7 +64,7 @@ return Application::configure(basePath: dirname(__DIR__))
             $subdomain = 'root';
 
             if ($systemDomain !== '' && $host !== '' && $host !== $systemDomain) {
-                $suffix = '.'.$systemDomain;
+                $suffix = '.' . $systemDomain;
 
                 if (str_ends_with($host, $suffix)) {
                     $subdomain = substr($host, 0, -strlen($suffix));
@@ -70,7 +74,7 @@ return Application::configure(basePath: dirname(__DIR__))
             return [
                 'request' => [
                     'host' => $host,
-                    'path' => '/'.ltrim($request->path(), '/'),
+                    'path' => '/' . ltrim($request->path(), '/'),
                     'method' => $request->method(),
                     'subdomain' => $subdomain,
                 ],
@@ -78,14 +82,19 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->reportable(function (\Throwable $e) {
-            if (! app()->bound('sentry')) {
+            if (!app()->bound('sentry')) {
+                return;
+            }
+
+            // 🛑 Check if the 'request' binding exists in the container
+            if (!app()->bound('request')) {
                 return;
             }
 
             $request = request();
 
             \Sentry\configureScope(function (Scope $scope) use ($request): void {
-                if (! $request instanceof Request) {
+                if (!$request instanceof Request) {
                     return;
                 }
 
@@ -94,7 +103,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 $subdomain = 'root';
 
                 if ($systemDomain !== '' && $host !== '' && $host !== $systemDomain) {
-                    $suffix = '.'.$systemDomain;
+                    $suffix = '.' . $systemDomain;
 
                     if (str_ends_with($host, $suffix)) {
                         $subdomain = substr($host, 0, -strlen($suffix));
@@ -104,7 +113,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 $scope->setTag('app_env', (string) app()->environment());
                 $scope->setTag('app_host', $host);
                 $scope->setTag('app_subdomain', $subdomain);
-                $scope->setTag('app_path', '/'.ltrim($request->path(), '/'));
+                $scope->setTag('app_path', '/' . ltrim($request->path(), '/'));
 
                 if ($user = $request->user()) {
                     $scope->setUser([
