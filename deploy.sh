@@ -271,9 +271,14 @@ echo "Configuring git safe directory..."
 exec_in_app git config --global --add safe.directory /var/www/html || true
 
 echo "Installing PHP dependencies..."
-if [ "$APP_ENV" = "production" ]; then
+# Check if the S3 library is physically missing inside the vendor folder
+if ! exec_in_app test -d vendor/league/flysystem-aws-s3-v3; then
+    echo "S3 driver missing. Forcing composer install..."
+    exec_in_app composer install --optimize-autoloader --no-interaction
+elif [ "$APP_ENV" = "production" ]; then
     exec_in_app composer install --no-dev --optimize-autoloader --no-interaction
 else
+    # Fallback to standard check
     exec_in_app composer install --optimize-autoloader --no-interaction
 fi
 
