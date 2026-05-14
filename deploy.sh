@@ -219,7 +219,7 @@ fi
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     echo "Starting application database..."
-    compose up -d db
+    compose up -d db minio
 
     echo "Removing stale observability containers..."
     compose_rm_services lgtm glitchtip-web glitchtip-worker || docker rm -f lgtm glitchtip-web glitchtip-worker 2>/dev/null || true
