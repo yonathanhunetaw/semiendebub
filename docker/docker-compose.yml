@@ -1,7 +1,7 @@
 name: duka
 
 services:
-  app:
+  Duka_app:
     build:
       context: ..
       dockerfile: docker/Dockerfile

@@ -197,7 +197,7 @@ if [ "$APP_ENV" = "production" ] && { [ "$app_build_changes" -eq 1 ] || [ "$dock
     else
         echo "Application code/config changes detected. Rebuilding app image with cache..."
     fi
-    compose build app
+    compose build Duka_app
     echo "Cleaning Docker build cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -af >/dev/null 2>&1 || true
@@ -205,7 +205,7 @@ elif [ "$APP_ENV" = "production" ]; then
     echo "No production code/config changes detected. Skipping image rebuild."
 elif [ "$docker_changes" -eq 1 ]; then
     echo "Docker-related changes detected. Rebuilding app image..."
-    compose build app
+    compose build Duka_app
     echo "Cleaning Docker build cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -af >/dev/null 2>&1 || true
