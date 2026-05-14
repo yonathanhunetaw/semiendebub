@@ -272,19 +272,25 @@ exec_in_app git config --global --add safe.directory /var/www/html || true
 
 echo "Installing PHP dependencies..."
 
-# 1. Physical check: Is the specific S3 driver file there?
-# 2. Logical check: Has the composer.lock changed in Git?
-if ! exec_in_app test -f vendor/league/flysystem-aws-s3-v3/src/AwsS3V3Adapter.php || has_git_path_changes "composer.lock"; then
-    echo "Dependencies are missing or composer.lock has changed. Syncing..."
+# Target the specific file that was missing in your error log
+S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
+
+if ! exec_in_app test -f "$S3_CONVERTER_FILE" || has_git_path_changes "composer.lock"; then
+    echo "S3 driver files missing or composer.lock changed. Syncing dependencies..."
+
+    # If the file is missing, the volume might be corrupted.
+    # Removing the folder forces Composer to re-download for ARM64.
+    if ! exec_in_app test -f "$S3_CONVERTER_FILE"; then
+        exec_in_app rm -rf vendor/league/flysystem-aws-s3-v3
+    fi
 
     if [ "$APP_ENV" = "production" ]; then
         exec_in_app composer install --no-dev --optimize-autoloader --no-interaction
     else
-        # In Dev, we always want dev-dependencies
         exec_in_app composer install --optimize-autoloader --no-interaction
     fi
 else
-    echo "Dependencies are already up to date."
+    echo "PHP dependencies are already up to date."
 fi
 
 echo "Handling frontend..."
