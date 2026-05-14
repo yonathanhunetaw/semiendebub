@@ -98,6 +98,9 @@ else
     COMPOSE_FILES=(-f docker/docker-compose.yml -f docker/docker-compose.dev.yml)
 fi
 
+check_cloudflared() {
+    command -v cloudflared >/dev/null 2>&1
+}
 # ADD THIS:
 if check_cloudflared; then
     # If it's on the host, we make sure we ARE NOT using a cloudflared docker file
@@ -132,12 +135,13 @@ has_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Update the helper functions to use lowercase
 exec_in_app() {
-    compose exec -T Duka_app "$@"
+    compose exec -T duka_app "$@"
 }
 
 exec_in_app_as_root() {
-    compose exec -T -u root Duka_app "$@"
+    compose exec -T -u root duka_app "$@"
 }
 
 compose_rm_services() {
@@ -197,7 +201,7 @@ if [ "$APP_ENV" = "production" ] && { [ "$app_build_changes" -eq 1 ] || [ "$dock
     else
         echo "Application code/config changes detected. Rebuilding app image with cache..."
     fi
-    compose build Duka_app
+    compose build duka_app
     echo "Cleaning Docker build cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -af >/dev/null 2>&1 || true
@@ -205,7 +209,7 @@ elif [ "$APP_ENV" = "production" ]; then
     echo "No production code/config changes detected. Skipping image rebuild."
 elif [ "$docker_changes" -eq 1 ]; then
     echo "Docker-related changes detected. Rebuilding app image..."
-    compose build Duka_app
+    compose build duka_app
     echo "Cleaning Docker build cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -af >/dev/null 2>&1 || true
