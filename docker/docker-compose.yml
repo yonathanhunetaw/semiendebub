@@ -5,7 +5,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: Duka_app
+    container_name: duka_app
     restart: unless-stopped
     env_file:
       - ../.env
