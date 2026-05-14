@@ -253,10 +253,10 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
         ./manage.py shell -c "import os; from django.contrib.auth import get_user_model; User = get_user_model(); name = os.environ['DJANGO_SUPERUSER_USERNAME']; email = os.environ['DJANGO_SUPERUSER_EMAIL']; password = os.environ['DJANGO_SUPERUSER_PASSWORD']; exists = User.objects.filter(email=email).exists(); None if exists else User.objects.create_superuser(email=email, password=password, name=name)"
 
     compose up -d glitchtip-web glitchtip-worker
-    compose up -d duka_app
+    compose up -d --remove-orphans duka_app
 else
     echo "Starting containers..."
-    compose up -d
+    compose up -d --remove-orphans
 fi
 
 # Commented it out as certificats are now handedled by cloudflare
