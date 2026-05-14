@@ -31,28 +31,31 @@ class ItemImageSeeder extends Seeder
             ];
 
             foreach ($seedSources as $index => $sourceFileName) {
-                // The location on your Pi's disk (the Version 0 source)
-                $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
-
-                // The final path inside the MinIO bucket
                 $sku = $variant->sku ?? 'v' . $variant->id;
                 $minioPath = "uploads/variants/{$sku}/{$sku}_" . ($index + 1) . ".jpg";
+                $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
 
-                // 3. Physical Move: If the source exists, push it to MinIO
-                if (File::exists($sourcePath)) {
-                    // This puts the file in MinIO (S3 disk)
-                    Storage::disk('s3')->put($minioPath, File::get($sourcePath));
+                // 1. Check if the file is ALREADY in MinIO
+                $existsInMinio = Storage::disk('s3')->exists($minioPath);
 
-                    // 4. Database Insert: Save the MinIO path
-                    DB::table('item_images')->insert([
-                        'item_variant_id' => $variant->id,
-                        'image_path' => $minioPath,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
+                if (!$existsInMinio) {
+                    // 2. Only upload if it's missing from MinIO
+                    if (File::exists($sourcePath)) {
+                        Storage::disk('s3')->put($minioPath, File::get($sourcePath));
+                        $this->command->info("Uploaded new image to MinIO: {$minioPath}");
+                    } else {
+                        $this->command->warn("Seed source missing locally: {$sourcePath}");
+                        continue; // Skip DB insert if we have no file at all
+                    }
                 } else {
-                    $this->command->warn("Seed image missing: {$sourcePath}");
+                    $this->command->line("Image already in MinIO, skipping upload: {$minioPath}");
                 }
+
+                // 3. ALWAYS recreate the DB record (because migrate:fresh deleted it)
+                DB::table('item_images')->updateOrInsert(
+                    ['item_variant_id' => $variant->id, 'image_path' => $minioPath],
+                    ['created_at' => now(), 'updated_at' => now()]
+                );
             }
         }
     }
