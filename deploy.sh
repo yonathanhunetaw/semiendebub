@@ -197,11 +197,13 @@ fi
 
 if [ "$APP_ENV" = "production" ] && { [ "$app_build_changes" -eq 1 ] || [ "$docker_changes" -eq 1 ]; }; then
     if [ "$docker_changes" -eq 1 ]; then
-        echo "Docker-related changes detected. Rebuilding app image..."
+        echo "Docker-related changes detected. Rebuilding duka_app image..."
     else
-        echo "Application code/config changes detected. Rebuilding app image with cache..."
+        echo "Application code/config changes detected. Rebuilding duka_app image with cache..."
     fi
+    # CHANGE THIS LINE:
     compose build duka_app
+
     echo "Cleaning Docker build cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -af >/dev/null 2>&1 || true
@@ -251,7 +253,7 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
         ./manage.py shell -c "import os; from django.contrib.auth import get_user_model; User = get_user_model(); name = os.environ['DJANGO_SUPERUSER_USERNAME']; email = os.environ['DJANGO_SUPERUSER_EMAIL']; password = os.environ['DJANGO_SUPERUSER_PASSWORD']; exists = User.objects.filter(email=email).exists(); None if exists else User.objects.create_superuser(email=email, password=password, name=name)"
 
     compose up -d glitchtip-web glitchtip-worker
-    compose up -d app
+    compose up -d duka_app
 else
     echo "Starting containers..."
     compose up -d

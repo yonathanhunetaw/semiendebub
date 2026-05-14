@@ -1,5 +1,5 @@
 services:
-  app:
+  duka_app:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dev

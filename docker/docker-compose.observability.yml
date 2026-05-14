@@ -11,7 +11,7 @@ x-loki-logging: &loki-logging
     labels: "job={{.Name}},container={{.Name}}"
 
 services:
-  app:
+  duka_app:
     environment:
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-duka-app}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://lgtm:4318}
