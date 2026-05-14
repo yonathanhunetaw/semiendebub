@@ -21,6 +21,13 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $store = Auth::user()->store;
+        if (!$store) {
+            return Inertia::render('Seller/Dashboard/Index', [
+                'items' => [],
+                'store' => null,
+                'error' => 'No store associated with this account.'
+            ]);
+        }
         $storeId = $store?->id;
         Log::info('Seller Store ID: ' . $storeId);
 
