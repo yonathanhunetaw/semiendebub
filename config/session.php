@@ -128,8 +128,8 @@ return [
     */
 
     // ✅ SAFE FOR BOTH BROWSER AND CLI
-    'cookie' => env('SESSION_COOKIE', Str::slug(env('APP_NAME', 'laravel'), '_') . '_session') .
-        (isset($_SERVER['HTTP_HOST']) ? '_' . explode('.', $_SERVER['HTTP_HOST'])[0] : ''),
+    'cookie' => env('SESSION_COOKIE', Str::slug(env('APP_NAME', 'laravel'), '_').'_session') .
+            (isset($_SERVER['HTTP_HOST']) ? '_' . explode('.', $_SERVER['HTTP_HOST'])[0] : ''),
 
     /*
     |--------------------------------------------------------------------------
