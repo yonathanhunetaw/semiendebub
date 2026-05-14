@@ -317,10 +317,12 @@ else
         echo "Vite is already running."
     else
         echo "Launching Vite..."
-        compose exec -d app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
+        # CHANGE 'app' TO 'duka_app' HERE
+        compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
     fi
 
     echo "Waiting for Vite..."
+    # (The loop below uses exec_in_app, which you already updated to duka_app, so that is fine)
     if ! exec_in_app sh -lc '
         for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
@@ -336,10 +338,11 @@ else
         echo "Last Vite log output:"
         exec_in_app sh -lc 'tail -n 100 /tmp/vite.log 2>/dev/null || echo "No /tmp/vite.log found."'
         if exec_in_app sh -lc 'grep -q "@rollup/rollup-linux-arm64-gnu" /tmp/vite.log 2>/dev/null'; then
-            echo "Detected a stale Rollup optional dependency set. Reinstalling Node dependencies for this container architecture..."
+            echo "Detected a stale Rollup optional dependency set..."
             reset_node_dependencies
             echo "Relaunching Vite..."
-            compose exec -d app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
+            # CHANGE 'app' TO 'duka_app' HERE TOO
+            compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
             echo "Waiting for Vite after dependency reset..."
             if ! exec_in_app sh -lc '
                 for i in $(seq 1 60); do
