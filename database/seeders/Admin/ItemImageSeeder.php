@@ -1,5 +1,5 @@
 <?php
-namespace Database\Seeders;
+namespace Database\Seeders\Admin;
 
 use App\Models\Item\ItemVariant;
 use Illuminate\Database\Seeder;
