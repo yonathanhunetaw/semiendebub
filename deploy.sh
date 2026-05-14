@@ -272,16 +272,19 @@ exec_in_app git config --global --add safe.directory /var/www/html || true
 
 echo "Installing PHP dependencies..."
 
-# Check if the S3 library is physically missing inside the vendor folder
-if ! exec_in_app test -f vendor/league/flysystem-aws-s3-v3/src/AwsS3V3Adapter.php; then
-    echo "S3 driver missing. Forcing composer install..."
+# 1. Physical check: Is the specific S3 driver file there?
+# 2. Logical check: Has the composer.lock changed in Git?
+if ! exec_in_app test -f vendor/league/flysystem-aws-s3-v3/src/AwsS3V3Adapter.php || has_git_path_changes "composer.lock"; then
+    echo "Dependencies are missing or composer.lock has changed. Syncing..."
 
-    exec_in_app composer install --optimize-autoloader --no-interaction
-elif [ "$APP_ENV" = "production" ]; then
-    exec_in_app composer install --no-dev --optimize-autoloader --no-interaction
+    if [ "$APP_ENV" = "production" ]; then
+        exec_in_app composer install --no-dev --optimize-autoloader --no-interaction
+    else
+        # In Dev, we always want dev-dependencies
+        exec_in_app composer install --optimize-autoloader --no-interaction
+    fi
 else
-    # Fallback to standard check
-    exec_in_app composer install --optimize-autoloader --no-interaction
+    echo "Dependencies are already up to date."
 fi
 
 echo "Handling frontend..."
