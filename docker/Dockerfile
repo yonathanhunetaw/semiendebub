@@ -42,13 +42,15 @@ RUN sed -i 's|/var/www/html|/var/www/html/public|g' \
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # 6. Copy only manifests first (cache optimization)
+# This now includes the 'league/flysystem-aws-s3-v3' entry in your .lock file
 COPY composer.json composer.lock package*.json ./
 
 RUN git config --global --add safe.directory /var/www/html
 
 # 7. Install dependencies
-# Install PHP deps
+# This command will now find and install the S3 adapter
 RUN composer install --no-interaction --prefer-dist --no-scripts
+
 
 # Install Node deps
 RUN npm install
