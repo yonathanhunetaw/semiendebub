@@ -133,11 +133,11 @@ has_command() {
 }
 
 exec_in_app() {
-    compose exec -T app "$@"
+    compose exec -T Duka_app "$@"
 }
 
 exec_in_app_as_root() {
-    compose exec -T -u root app "$@"
+    compose exec -T -u root Duka_app "$@"
 }
 
 compose_rm_services() {
