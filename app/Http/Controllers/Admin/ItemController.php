@@ -52,8 +52,18 @@ class ItemController extends Controller
             // 2. Leverage the Accessors we built in the Model
             // We take the general images and merge them with variant images
             $previewImages = collect($item->general_images ?? [])
-                ->map(fn($path) => Storage::exists($path) ? Storage::url($path) : asset('images/defaults/no-image.png'))
-                ->merge($item->variants->map(fn($v) => $v->image_url)) // Uses the ItemVariant accessor
+                ->map(function ($path) {
+                    try {
+                        // Check if it exists on your MinIO/S3 disk
+                        return Storage::disk('s3')->exists($path)
+                            ? Storage::url($path)
+                            : asset('images/defaults/no-image.png');
+                    } catch (\Throwable $e) {
+                        // If MinIO is down or misconfigured, gracefully fall back to default
+                        return asset('images/defaults/no-image.png');
+                    }
+                })
+                ->merge($item->variants->map(fn($v) => $v->image_url))
                 ->filter()
                 ->unique()
                 ->take(5)
