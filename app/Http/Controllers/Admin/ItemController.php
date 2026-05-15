@@ -108,20 +108,15 @@ class ItemController extends Controller
             'variants.stocks'
         ]);
 
-        // 2. Map the item to include all processed image URLs
+        // 2. Map the item to include all processed image URLs safely via MinIO Accessors
         $itemData = [
             'id' => $item->id,
             'product_name' => $item->product_name,
             'product_description' => $item->product_description,
             'status' => $item->status,
             'category_name' => $item->category?->name ?? 'Uncategorized',
+            'general_images' => $item->processed_images->toArray(),
 
-            // Use the accessor for general images
-            'general_images' => collect($item->general_images ?? [])
-                ->map(fn($path) => Storage::exists($path) ? Storage::url($path) : asset('images/defaults/no-image.png'))
-                ->toArray(),
-
-            // Process variants to use their individual MinIO accessors
             'variants' => $item->variants->map(function ($variant) {
                 return [
                     'id' => $variant->id,
@@ -131,7 +126,6 @@ class ItemController extends Controller
                     'packaging' => $variant->itemPackagingType?->name,
                     'stock_count' => $variant->stocks->sum('quantity'),
                     'status' => $variant->status,
-                    // Accessors we built earlier:
                     'main_image' => $variant->image_url,
                     'all_images' => $variant->all_image_urls,
                 ];
@@ -147,6 +141,7 @@ class ItemController extends Controller
     // CREATE
     // ──────────────────────────────────────────────────────────────────────────
 
+
     public function create()
     {
         return Inertia::render('Admin/Items/Create', [
@@ -156,7 +151,6 @@ class ItemController extends Controller
             'packagingTypes' => ItemPackagingType::all(),
         ]);
     }
-
     // ──────────────────────────────────────────────────────────────────────────
     // STORE  (single multi-dimensional transaction)
     // ──────────────────────────────────────────────────────────────────────────
@@ -171,7 +165,7 @@ class ItemController extends Controller
                 'product_name' => $validated['product_name'],
                 'product_description' => $validated['product_description'] ?? null,
                 'packaging_details' => $validated['packaging_details'] ?? null,
-                'it em_category_id' => $this->resolveCategoryId($validated['item_category_id']),
+                'item_category_id' => $this->resolveCategoryId($validated['item_category_id']),
                 'status' => 'draft',           // always draft until proof provided
                 'general_images' => $this->handleUploads($request, []), // Pass empty array for new items
                 'is_incomplete' => true,
@@ -207,12 +201,48 @@ class ItemController extends Controller
             'sizes',
             'packagingTypes' => fn($q) => $q->withPivot('quantity'),
             'variants' => fn($q) => $q
-                ->with(['itemColor', 'itemSize', 'itemPackagingType']) // REMOVED 'images' from here
+                ->with(['itemColor', 'itemSize', 'itemPackagingType'])
                 ->orderBy('id'),
         ]);
 
+        // Build a safe data contract for your React editing fields
+        $itemData = [
+            'id' => $item->id,
+            'product_name' => $item->product_name,
+            'product_description' => $item->product_description,
+            'packaging_details' => $item->packaging_details,
+            'item_category_id' => $item->item_category_id,
+            'status' => $item->status,
+
+            // 🔄 Use your bulletproof MinIO accessors so React gets valid file links
+            'general_images' => $item->processed_images->toArray(),
+            'raw_general_images' => $item->general_images ?? [], // Handy if your form inputs need raw paths for tracking deletions
+
+            'colors' => $item->colors->map(fn($c) => $c->id)->toArray(),
+            'sizes' => $item->sizes->map(fn($s) => $s->id)->toArray(),
+            'packaging' => $item->packagingTypes->map(fn($p) => [
+                'item_packaging_type_id' => $p->id,
+                'quantity' => $p->pivot->quantity
+            ])->toArray(),
+
+            'variants' => $item->variants->map(function ($variant) {
+                return [
+                    'id' => $variant->id,
+                    'sku' => $variant->sku,
+                    'color_id' => $variant->item_color_id,
+                    'size_id' => $variant->item_size_id,
+                    'item_packaging_type_id' => $variant->item_packaging_type_id,
+                    'status' => $variant->status,
+                    // Safe image strings/arrays
+                    'main_image' => $variant->image_url,
+                    'all_images' => $variant->all_image_urls,
+                    'raw_images' => $variant->images ?? [],
+                ];
+            }),
+        ];
+
         return Inertia::render('Admin/Items/Edit', [
-            'item' => $item,
+            'item' => $itemData,
             'categories' => ItemCategory::all(),
             'colors' => ItemColor::all(),
             'sizes' => ItemSize::all(),
@@ -356,69 +386,70 @@ class ItemController extends Controller
      */
     private function persistVariantImages(Request $request, Item $item): void
     {
-        // Build a lookup: comboKey → variant
+        // Ensure variants are fresh and loaded
         $item->load('variants');
 
-        // 1. Direct ID-based mapping (The most reliable way)
-        foreach ($item->variants as $variant) {
-            $fileKey = "variant_image_{$variant->id}";
-
-            if ($request->hasFile($fileKey)) {
-                $file = $request->file($fileKey);
-
-                // Standardizing the SKU folder path
-                $fileName = "{$variant->sku}_main." . $file->getClientOriginalExtension();
-                $path = $file->storeAs("uploads/variants/{$variant->sku}", $fileName, 's3');
-
-                // Update the JSON column (casted as array in your model)
-                $variant->update(['images' => [$path]]);
-            }
-        }
-
+        // Pull raw file arrays and existing track inputs from the request structure
         $newFiles = $request->file('variant_images', []);
         $existingPaths = $request->input('variant_existing_images', []);
 
-        foreach ($item as $key => $variant) {
-            $slots = array_fill(0, 5, null);  // 5-slot array, null = keep existing
+        // 🔄 Loop over the collection relationship properly
+        foreach ($item->variants as $variant) {
 
-            // Slot 0-4: keep existing paths sent from the form
-            $existingSlotsForKey = $existingPaths[$key] ?? [];
+            // --- STEP 1: Direct Single Image Fast-Track ---
+            $fileKey = "variant_image_{$variant->id}";
+            if ($request->hasFile($fileKey)) {
+                $file = $request->file($fileKey);
+                $fileName = "{$variant->sku}_main." . $file->getClientOriginalExtension();
+
+                // Unify tracking to the default 's3' MinIO disk setup
+                $path = $file->storeAs("uploads/variants/{$variant->sku}", $fileName, 's3');
+                $variant->update(['images' => [$path]]);
+                continue; // Skip complex multi-slot evaluation if direct mapping took place
+            }
+
+            // --- STEP 2: Multi-Slot Array Setup (Slots 0 to 4) ---
+            $slots = array_fill(0, 5, null);  // 5-slot array frame, null = keep existing
+
+            // Use the variant's concrete ID as the key instead of the loop iteration counter
+            $variantKey = $variant->id;
+
+            // Map over existing paths sent from the view/form
+            $existingSlotsForKey = $existingPaths[$variantKey] ?? [];
             foreach ($existingSlotsForKey as $slotIndex => $path) {
                 if (is_string($path) && $path !== '') {
                     $slots[(int) $slotIndex] = ltrim($path, '/');
                 }
             }
 
-            // Slot 0-4: overwrite with new uploads
-            $newFilesForKey = $newFiles[$key] ?? [];
+            // Handle and process any incoming new multi-slot file uploads
+            $newFilesForKey = $newFiles[$variantKey] ?? [];
             foreach ($newFilesForKey as $slotIndex => $file) {
                 if ($file && $file->isValid()) {
                     $sku = $variant->sku ?? ('variant_' . $variant->id);
                     $ext = $file->getClientOriginalExtension() ?: 'jpg';
-                    $slotNumber = (int) $slotIndex + 1;  // 1-based in filename
+                    $slotNumber = (int) $slotIndex + 1;  // Human readable file index suffix
+
+                    // 🔄 CRITICAL FIX: Save to 's3' instead of 'public' so MinIO handles it
                     $path = $file->storeAs(
                         'uploads/variants/' . $sku,
                         "{$sku}_{$slotNumber}.{$ext}",
-                        'public'
+                        's3'
                     );
                     $slots[(int) $slotIndex] = $path;
                 }
             }
 
-            // Merge: new slots override, existing non-null slots fill gaps,
-            // server images fill the rest (don't erase what was already there)
-            $existingImages = is_array($variant->images)
-                ? $variant->images
-                : (json_decode($variant->images, true) ?: []);
+            // --- STEP 3: Fallback Merge Architecture ---
+            $existingImages = is_array($variant->images) ? $variant->images : [];
 
             $merged = [];
             for ($i = 0; $i < 5; $i++) {
                 if ($slots[$i] !== null) {
                     $merged[] = $slots[$i];
                 } elseif (isset($existingImages[$i])) {
-                    $merged[] = $existingImages[$i];  // preserve untouched server image
+                    $merged[] = $existingImages[$i];  // Preserve untouched server paths
                 }
-                // null + no server image → just skip (slot stays empty)
             }
 
             $variant->update(['images' => $merged]);
@@ -426,23 +457,28 @@ class ItemController extends Controller
     }
 
     /**
-     * After images are saved, decide if the item can leave draft.
-     * Every variant must have ≥2 images; otherwise lock to draft.
+     * After images are saved, decide if the item can leave draft status safely.
+     * Every variant must have at least 2 image files; otherwise lock to draft state.
      */
     private function evaluateDraftStatus(Item $item, string $requestedStatus): void
     {
         $item->refresh()->load('variants');
 
         $allProven = $item->variants->every(function ($variant) {
-            $images = is_array($variant->images)
-                ? $variant->images
-                : (json_decode($variant->images, true) ?: []);
+            $images = is_array($variant->images) ? $variant->images : [];
             return count($images) >= 2;
         });
 
+        // Enforce business rule validation: Force to draft if asset threshold is not met
         $finalStatus = $allProven ? $requestedStatus : 'draft';
-        $item->update(['status' => $finalStatus, 'is_incomplete' => !$allProven]);
+
+        $item->update([
+            'status' => $finalStatus,
+            'is_incomplete' => !$allProven
+        ]);
     }
+
+
 
     private function validateItemPayload(Request $request): array
     {
@@ -461,20 +497,26 @@ class ItemController extends Controller
             'packaging.*.quantity' => 'required|integer|min:1',
             'existing_images' => 'nullable|array|max:10',
             'existing_images.*' => 'string',
-            'images' => 'nullable|array|max:10',
-            'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:5120',
-            // Variant images: flexible — each slot is an image file
+
+            // 🔄 CRITICAL FIX: Standardized key to 'general_images' to match your storage routine
+            'general_images' => 'nullable|array|max:10',
+            'general_images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+
+            // Variant images array setup
             'variant_images' => 'nullable|array',
             'variant_images.*' => 'nullable|array',
             'variant_images.*.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'variant_existing_images' => 'nullable|array',
         ]);
 
+        // Inline validation adjustment for file thresholds
         $validator->after(function ($v) use ($request) {
             $existing = count($request->input('existing_images', []));
-            $uploads = count($request->file('images', []));
+            // 🔄 CRITICAL FIX: Checked files using the matched key
+            $uploads = count($request->file('general_images', []));
+
             if (($existing + $uploads) > 10) {
-                $v->errors()->add('images', 'Maximum 10 general images per item.');
+                $v->errors()->add('general_images', 'Maximum 10 general images per item total.');
             }
         });
 
@@ -483,10 +525,12 @@ class ItemController extends Controller
 
     private function resolveCategoryId(mixed $value): ?int
     {
-        if ($value === null || $value === '')
+        if ($value === null || $value === '') {
             return null;
-        if (is_numeric($value))
+        }
+        if (is_numeric($value)) {
             return (int) $value;
+        }
         return ItemCategory::firstOrCreate(['category_name' => trim((string) $value)])->id;
     }
 
@@ -495,8 +539,9 @@ class ItemController extends Controller
         return collect($values)
             ->filter(fn($v) => $v !== null && $v !== '')
             ->map(function ($v) use ($modelClass, $nameColumn) {
-                if (is_numeric($v))
+                if (is_numeric($v)) {
                     return (int) $v;
+                }
                 return $modelClass::firstOrCreate([$nameColumn => trim((string) $v)])->id;
             })
             ->unique()->values()->all();
@@ -520,36 +565,48 @@ class ItemController extends Controller
     {
         $newPaths = [];
 
+        // Keys now align with the validated parameters upstream
         if ($request->hasFile('general_images')) {
             foreach ($request->file('general_images') as $file) {
                 $name = Str::slug($request->product_name) . '_' . time() . '_' . Str::random(5) . '.' . $file->getClientOriginalExtension();
 
-                // Store to MinIO
+                // Store to MinIO using our verified S3 disk adapter configurations
                 $path = $file->storeAs('products', $name, 's3');
                 $newPaths[] = $path;
             }
         }
 
-        // Merge existing image paths from the DB with the newly uploaded paths
+        // Merge legacy records with new object storage prefixes cleanly
         return array_merge($existingImages, $newPaths);
     }
 
     /**
      * Modernized upload endpoint for MinIO
      */
+
     public function uploadImages(Request $request)
     {
         $request->validate([
+            'product_name' => 'required|string', // Pass this from the frontend form to name your files semantically
             'product_images' => 'required|array',
             'product_images.*' => 'image|max:5120'
         ]);
 
         $paths = [];
-        foreach ($request->file('product_images') as $file) {
-            // Store the file
-            $path = $file->store('images/product_images', 's3');
+        foreach ($request->file('product_images') as $index => $file) {
+            // Build a clean, structured filename matching your "Duka" product layout rules
+            $slug = Str::slug($request->input('product_name'));
+            $counter = $index + 1;
+            $extension = $file->getClientOriginalExtension() ?: 'jpg';
 
-            // Force the URL generation using the facade directly
+            // Example output path: images/product_images/noteit_sticky_note_1.jpg
+            $fileName = "{$slug}_{$counter}.{$extension}";
+            $directory = 'images/product_images';
+
+            // 🔄 storeAs gives you exact filename control over the object key in MinIO
+            $path = $file->storeAs($directory, $fileName, 's3');
+
+            // Force the URL generation using the facade directly to bypass any driver contract quirks
             $paths[] = Storage::disk('s3')->url($path);
         }
 
