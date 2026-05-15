@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Dev\Lessons;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Storage;
 
 // For generating IDs if not using a DB
 
@@ -14,13 +15,34 @@ class Lesson6Controller extends Controller
      * Display the Color Organizer (List of colors).
      * Route: admin.lessons.lesson6 (GET)
      */
+
+
+
     public function index()
     {
         // In a real app: $colors = Color::all();
         $colors = [
-            ['id' => '0175d1f0-a8c6-41bf-8d02-df5734d829a4', 'title' => 'ocean at dusk', 'color' => '#00c4e2', 'rating' => 5],
-            ['id' => '83c7ba2f-7392-4d7d-9e23-35adbe186046', 'title' => 'lawn', 'color' => '#26ac56', 'rating' => 3],
-            ['id' => 'a11e3995-b0bd-4d58-8c48-5e49ae7f7f23', 'title' => 'bright red', 'color' => '#ff0000', 'rating' => 0],
+            [
+                'id' => '0175d1f0-a8c6-41bf-8d02-df5734d829a4',
+                'title' => 'ocean at dusk',
+                'color' => '#00c4e2',
+                'rating' => 5,
+                'image_url' => Storage::disk('s3')->temporaryUrl('3X3_blue_1.jpg', now()->addMinutes(15))
+            ],
+            [
+                'id' => '83c7ba2f-7392-4d7d-9e23-35adbe186046',
+                'title' => 'lawn',
+                'color' => '#26ac56',
+                'rating' => 3,
+                'image_url' => Storage::disk('s3')->temporaryUrl('3X3_Green_1.jpg', now()->addMinutes(15))
+            ],
+            [
+                'id' => 'a11e3995-b0bd-4d58-8c48-5e49ae7f7f23',
+                'title' => 'bright red',
+                'color' => '#ff0000',
+                'rating' => 0,
+                'image_url' => Storage::disk('s3')->temporaryUrl('1.jpg', now()->addMinutes(15))
+            ],
         ];
 
         return Inertia::render('Dev/Lessons/Lesson6/index', [

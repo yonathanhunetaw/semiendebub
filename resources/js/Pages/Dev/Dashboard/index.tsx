@@ -5,6 +5,7 @@ import { Box, Typography, Paper } from '@mui/material';
 export default function Index() {
     return (
         <>
+
             {/* The title here will be prefixed to what we set in DevLayout */}
             <Head title="Terminal" />
 
