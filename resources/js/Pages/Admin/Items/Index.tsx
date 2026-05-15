@@ -25,7 +25,7 @@ interface Item {
     status: "active" | "inactive" | "unavailable" | "draft" | "archived";
     variants_count: number;
     active_variants_count: number;
-    preview_images?: string[];
+    processed_images?: string[]; //  Updated key to match model accessor
 }
 
 interface Props {
@@ -172,7 +172,8 @@ export default function ItemIndex({ items, filters }: Props) {
                             }}
                         >
                             <Stack spacing={2}>
-                                <ImageStrip images={item.preview_images} />
+                                {/* 🔄 Changed from item.preview_images to item.processed_images */}
+                                <ImageStrip images={item.processed_images} />
                                 <Box>
                                     <Typography
                                         variant="subtitle1"
@@ -237,7 +238,6 @@ export default function ItemIndex({ items, filters }: Props) {
                     </Paper>
                 )}
             </Box>
-
             <TableContainer
                 component={Paper}
                 elevation={0}
@@ -294,8 +294,9 @@ export default function ItemIndex({ items, filters }: Props) {
                                             spacing={2}
                                             alignItems="center"
                                         >
+                                            {/* 🔄 Changed from item.preview_images to item.processed_images */}
                                             <ImageStrip
-                                                images={item.preview_images}
+                                                images={item.processed_images}
                                             />
                                             <Box>
                                                 <Typography

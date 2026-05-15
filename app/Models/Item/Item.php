@@ -10,6 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Filesystem\FilesystemAdapter;
 
 class Item extends Model
 {
@@ -51,6 +54,30 @@ class Item extends Model
     |--------------------------------------------------------------------------
     */
 
+
+
+    /**
+     * Automatically maps raw JSON bucket paths to valid URLs or fallback images.
+     * Prevents Flysystem check existence crashes if MinIO is misconfigured or down.
+     */
+    public function getProcessedImagesAttribute(): \Illuminate\Support\Collection
+    {
+        return collect($this->general_images ?? [])
+            ->map(function ($path) {
+                try {
+                    /** @var FilesystemAdapter $disk */
+                    $disk = Storage::disk('s3');
+
+                    if ($disk->exists($path)) {
+                        return $disk->url($path);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("MinIO connectivity failure while checking path [{$path}]: " . $e->getMessage());
+                }
+
+                return asset('images/defaults/no-image.png');
+            });
+    }
     /**
      * Item belongs to a main category.
      */
