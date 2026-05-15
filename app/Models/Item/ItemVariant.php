@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Database\Factories\ItemVariantFactory;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class ItemVariant extends Model
 {
@@ -226,13 +227,23 @@ class ItemVariant extends Model
      * Accessor for a single representative image URL.
      * Usage: $variant->image_url
      */
+
+
+
+
     public function getImageUrlAttribute(): string
     {
         $path = $this->images[0] ?? null;
 
-        // If path exists and we can find it on the configured default disk
-        if ($path && Storage::exists($path)) {
-            return Storage::url($path);
+        if ($path) {
+            try {
+                // Calling s3 disk directly on the facade bypasses contract restrictions
+                if (Storage::disk('s3')->exists($path)) {
+                    return Storage::disk('s3')->url($path);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("MinIO connectivity failure in ItemVariant single image check [{$path}]: " . $e->getMessage());
+            }
         }
 
         return asset('images/defaults/no-image.png');
@@ -244,16 +255,17 @@ class ItemVariant extends Model
      */
     public function getAllImageUrlsAttribute(): array
     {
-        // Return the fallback immediately if the array is empty
         if (empty($this->images) || !is_array($this->images)) {
             return [asset('images/defaults/no-image.png')];
         }
 
         return array_map(function ($path) {
-            // Use the Storage facade directly.
-            // Since FILESYSTEM_DISK=s3, this checks MinIO automatically.
-            if (Storage::exists($path)) {
-                return Storage::url($path);
+            try {
+                if (Storage::disk('s3')->exists($path)) {
+                    return Storage::disk('s3')->url($path);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("MinIO connectivity failure in ItemVariant multi-image loop [{$path}]: " . $e->getMessage());
             }
 
             return asset('images/defaults/no-image.png');
