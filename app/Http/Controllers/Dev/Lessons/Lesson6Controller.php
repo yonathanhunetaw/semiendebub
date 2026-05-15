@@ -45,7 +45,7 @@ class Lesson6Controller extends Controller
             ],
         ];
 
-        return Inertia::render('Dev/Lessons/Lesson6/index', [
+        return Inertia::render('Dev/Dashboard/Lesson6/Index', [
             'initialColors' => $colors,
         ]);
     }
