@@ -99,7 +99,6 @@ class ItemController extends Controller
 
     public function show(Item $item)
     {
-        // 1. Eager load everything for the detail view
         $item->load([
             'category',
             'variants.color',
@@ -108,32 +107,50 @@ class ItemController extends Controller
             'variants.stocks'
         ]);
 
-        // 2. Map the item to include all processed image URLs safely via MinIO Accessors
         $itemData = [
             'id' => $item->id,
             'product_name' => $item->product_name,
             'product_description' => $item->product_description,
             'status' => $item->status,
-            'category_name' => $item->category?->name ?? 'Uncategorized',
-            'general_images' => $item->processed_images->toArray(),
-
-            'variants' => $item->variants->map(function ($variant) {
-                return [
-                    'id' => $variant->id,
-                    'sku' => $variant->sku,
-                    'color' => $variant->color?->name,
-                    'size' => $variant->size?->name,
-                    'packaging' => $variant->itemPackagingType?->name,
-                    'stock_count' => $variant->stocks->sum('quantity'),
-                    'status' => $variant->status,
-                    'main_image' => $variant->image_url,
-                    'all_images' => $variant->all_image_urls,
-                ];
-            }),
+            'general_images' => $item->processed_images->toArray(), // Returns fully resolved URLs from MinIO
         ];
+
+        // 🔄 Map your variants to match the dynamic 5-slot front-end interface format exactly
+        $variantData = $item->variants->map(function ($variant) {
+            // Read raw storage keys safely
+            $rawPaths = is_array($variant->images) ? $variant->images : [];
+            // Read fully resolved MinIO URLs processed via our accessor safety nets
+            $resolvedUrls = $variant->all_image_urls;
+
+            $slots = [];
+            foreach ($rawPaths as $index => $path) {
+                if (isset($resolvedUrls[$index])) {
+                    $slots[] = [
+                        'path' => $path,                 // Raw bucket location (e.g. uploads/variants/...)
+                        'url' => $resolvedUrls[$index], // Fully qualified MinIO HTTP address
+                    ];
+                }
+            }
+
+            $slotCount = count($slots);
+
+            return [
+                'id' => $variant->id,
+                'sku' => $variant->sku,
+                'color' => $variant->color?->name,
+                'size' => $variant->size?->name,
+                'packaging' => $variant->itemPackagingType?->name,
+                'status' => $variant->status,
+                'slots' => $slots,                       // Matches dynamic Front-End ImageSlotData format
+                'slot_count' => $slotCount,
+                'proof_ok' => $slotCount >= 2,           // Verification gate matches model criteria
+            ];
+        });
 
         return Inertia::render('Admin/Items/Show', [
             'item' => $itemData,
+            'variantData' => $variantData,
+            'stores' => \App\Models\Store\Store::all(), // Add deployment target query lists here
         ]);
     }
 

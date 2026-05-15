@@ -89,8 +89,8 @@ export default function Show({
     if (!item) return null;
 
     const allGeneralImages = item.general_images ?? [];
-    const getImageUrl = (path: string) =>
-        path.startsWith("http") ? path : `/storage/${path}`;
+    // Since our Laravel accessors handle MinIO URLs on the server, just pass the string right through
+    const getImageUrl = (path: string) => path;
 
     const [selectedImage, setSelectedImage] = useState(
         allGeneralImages.length > 0
@@ -710,7 +710,9 @@ export default function Show({
                 <Divider />
                 <DialogContent sx={{ px: 2, py: 1.5 }}>
                     <Typography variant="body2" color="text.secondary" mb={2}>
-                        Select a store to make <strong>{item.product_name}</strong> available. Stores where this item is already deployed are marked.
+                        Select a store to make{" "}
+                        <strong>{item.product_name}</strong> available. Stores
+                        where this item is already deployed are marked.
                     </Typography>
                     {stores.length === 0 ? (
                         <Box
@@ -730,7 +732,10 @@ export default function Show({
                             {stores.map((store) => (
                                 <ListItemButton
                                     key={store.id}
-                                    disabled={store.already_deployed || deployingToId === store.id}
+                                    disabled={
+                                        store.already_deployed ||
+                                        deployingToId === store.id
+                                    }
                                     onClick={() => handleDeploy(store.id)}
                                     sx={{
                                         borderRadius: 2,
@@ -746,12 +751,18 @@ export default function Show({
                                 >
                                     <ListItemText
                                         primary={
-                                            <Stack direction="row" alignItems="center" spacing={1}>
+                                            <Stack
+                                                direction="row"
+                                                alignItems="center"
+                                                spacing={1}
+                                            >
                                                 <span>{store.name}</span>
                                                 {store.already_deployed && (
                                                     <Chip
                                                         size="small"
-                                                        icon={<CheckCircleIcon />}
+                                                        icon={
+                                                            <CheckCircleIcon />
+                                                        }
                                                         label="Deployed"
                                                         color="success"
                                                         variant="outlined"
@@ -765,14 +776,22 @@ export default function Show({
                                         <Button
                                             size="small"
                                             variant="contained"
-                                            disabled={deployingToId === store.id}
+                                            disabled={
+                                                deployingToId === store.id
+                                            }
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 handleDeploy(store.id);
                                             }}
-                                            sx={{ ml: 1, textTransform: "none", fontWeight: 700 }}
+                                            sx={{
+                                                ml: 1,
+                                                textTransform: "none",
+                                                fontWeight: 700,
+                                            }}
                                         >
-                                            {deployingToId === store.id ? "Deploying…" : "Deploy"}
+                                            {deployingToId === store.id
+                                                ? "Deploying…"
+                                                : "Deploy"}
                                         </Button>
                                     )}
                                 </ListItemButton>
@@ -782,7 +801,10 @@ export default function Show({
                 </DialogContent>
                 <Divider />
                 <DialogActions sx={{ px: 3, py: 2 }}>
-                    <Button onClick={() => setDeployOpen(false)} sx={{ textTransform: "none" }}>
+                    <Button
+                        onClick={() => setDeployOpen(false)}
+                        sx={{ textTransform: "none" }}
+                    >
                         Close
                     </Button>
                     <Button
