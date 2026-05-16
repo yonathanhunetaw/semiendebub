@@ -4,20 +4,16 @@ namespace Database\Seeders\Admin;
 
 use App\Models\Item\Item;
 use App\Models\Item\ItemVariant;
-use App\Models\Item\ItemColor;
-use App\Models\Item\ItemSize;
-use App\Models\Item\ItemPackagingType;
 use App\Services\ItemVariantGenerationService;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\File;
 
 class ItemSeeder extends Seeder
 {
     /**
-     * Centralized Configuration Blueprint
-     * Keeps text, relations, logistics (CBM), and pinned image IDs in one place.
+     * The Matrix Definition matching your real assets directory layout.
      */
-
     // ═════════════════════════════════════════════════════════════════════════
     // SEED REFERENCE DIRECTORY
     // Use these hardcoded structural lookup IDs when defining new items below.
@@ -56,7 +52,6 @@ class ItemSeeder extends Seeder
     // ═════════════════════════════════════════════════════════════════════════
     // THE MATRIX DEFINITION
     // ═════════════════════════════════════════════════════════════════════════
-
     private array $items = [
         [
             'product_name'        => '2025 - 1',
@@ -64,15 +59,14 @@ class ItemSeeder extends Seeder
             'packaging_details'   => 'Available in individual pieces, and master cartons of 96.',
             'item_category_id'    => 45, 
             'status'              => 'active',
-            'picsum_id'           => 201,   // Pinned baseline image identifier for this item
+            'picsum_id'           => 201,   
+            'file_prefix'         => '2025-1', // ◄ Explicitly match your local filenames
             'color_ids'           => [1, 2], 
             'size_ids'            => [1],    
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1,   'cbm' => 0.0012], 
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1600], 
             ],
-            'general_images' => [], // Processed and populated dynamically via the Factory bucket logic
-            'variant_images' => [],
         ],
         [
             'product_name'        => '2025 - ብልጭልጭ',
@@ -81,14 +75,13 @@ class ItemSeeder extends Seeder
             'item_category_id'    => 45,
             'status'              => 'active',
             'picsum_id'           => 202,
+            'file_prefix'         => '2025-ብልጭልጭ',
             'color_ids'           => [1, 2],
             'size_ids'            => [1],
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1,   'cbm' => 0.0015],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.2000],
             ],
-            'general_images' => [],
-            'variant_images' => [],
         ],
         [
             'product_name'        => '25k - 1 ፓሪስ',
@@ -97,14 +90,13 @@ class ItemSeeder extends Seeder
             'item_category_id'    => 46, 
             'status'              => 'active',
             'picsum_id'           => 203,
+            'file_prefix'         => '25k-1ፓሪስ',
             'color_ids'           => [2],
-            'size_ids' => [1],
+            'size_ids'            => [1],
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1,   'cbm' => 0.0008],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1100],
             ],
-            'general_images' => [],
-            'variant_images' => [],
         ],
         [
             'product_name'        => '25k - 5 ጨርቅ ማስታወሻ',
@@ -113,18 +105,15 @@ class ItemSeeder extends Seeder
             'item_category_id'    => 46,
             'status'              => 'active',
             'picsum_id'           => 204,
+            'file_prefix'         => '25k-5ጨርቅማስታወሻ',
             'color_ids'           => [2],
-            'size_ids'            => [1], // [] for no sizes
+            'size_ids'            => [1], 
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1,   'cbm' => 0.0009],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1250],
             ],
-            'general_images' => [],
-            'variant_images' => [],
         ]
     ];
-
-    // ─────────────────────────────────────────────────────────────────────────
 
     public function run(): void
     {
@@ -132,8 +121,6 @@ class ItemSeeder extends Seeder
         $generator = app(ItemVariantGenerationService::class);
 
         foreach ($this->items as $data) {
-            // 1. Create the Parent Item via Factory using your pinned Picsum ID workflow.
-            // This pulls the photo, pushes it to MinIO, and sets 'general_images' automatically.
             $item = Item::factory()
                 ->withPicsumId($data['picsum_id'])
                 ->create([
@@ -145,39 +132,72 @@ class ItemSeeder extends Seeder
                     'is_incomplete'       => true,
                 ]);
 
-            // 2. Sync core catalog attributes
             $item->colors()->sync($data['color_ids']);
             $item->sizes()->sync($data['size_ids']);
             $item->packagingTypes()->sync(
                 $this->buildPackagingSync($data['packaging'])
             );
 
-            // 3. Generate variant matrix records via your central pipeline service
+            // Generate physical variants
             $generator->sync($item);
 
-            // 4. Populate pivot table volume details
             $this->populatePackagingQuantitiesAndCbm($item, $data);
 
-            // 5. Build dynamic variant images from Picsum via Factory logic
+            // FIX: Load variant images from local folder up to 5 files
             $this->seedDeterministicVariantImages($item, $data);
 
-            // 6. Re-evaluate status rules to lift item out of draft mode
+            // Re-evaluate draft metrics to unlock live production status
             $this->evaluateDraftStatus($item, $data['status']);
         }
     }
 
-    // ─── Core Helpers ────────────────────────────────────────────────────────
-
     /**
-     * Map configuration layout directly into your pivot tracking tables.
+     * FIXED: Loops up to 5 images per variant matching your local filesystem.
      */
+    private function seedDeterministicVariantImages(Item $item, array $data): void
+    {
+        $item->load('variants');
+        $prefix = $data['file_prefix'];
+
+        foreach ($item->variants as $variant) {
+            $variantImagesArray = [];
+
+            // Read up to 5 corresponding images from your seed folder
+            for ($index = 1; $index <= 5; $index++) {
+                $sourceFileName = "{$prefix}_{$index}.jpg";
+                $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
+                
+                // Destination directory key structure inside MinIO bucket
+                $sku = $variant->sku ?? 'v' . $variant->id;
+                $minioPath = "uploads/variants/{$sku}/{$sourceFileName}";
+
+                if (File::exists($sourcePath)) {
+                    // Check if it's already resting inside your MinIO S3 bucket disk
+                    $existsInMinio = Storage::disk('minio')->exists($minioPath);
+
+                    if (!$existsInMinio) {
+                        Storage::disk('minio')->put($minioPath, File::get($sourcePath));
+                    }
+
+                    $variantImagesArray[] = $minioPath;
+                }
+            }
+
+            // Save the populated array down to the physical json column field
+            if (!empty($variantImagesArray)) {
+                $variant->update([
+                    'images' => $variantImagesArray
+                ]);
+            }
+        }
+    }
+
     private function populatePackagingQuantitiesAndCbm(Item $item, array $data): void
     {
         $item->load('variants');
 
         foreach ($item->variants as $variant) {
             $syncPayload = [];
-
             foreach ($data['packaging'] as $packConfig) {
                 $packTypeId = (int)$packConfig['item_packaging_type_id'];
 
@@ -195,9 +215,6 @@ class ItemSeeder extends Seeder
         }
     }
 
-    /**
-     * Convert incoming packaging array to raw framework structure.
-     */
     private function buildPackagingSync(array $packaging): array
     {
         $result = [];
@@ -210,46 +227,12 @@ class ItemSeeder extends Seeder
         return $result;
     }
 
-    /**
-     * Process variant images deterministically using factory-driven image mappings.
-     * This ensures images match perfectly across lookups even on a fresh migrate:fresh.
-     */
-    private function seedDeterministicVariantImages(Item $item, array $data): void
-    {
-        $item->load('variants');
-        
-        // Base starting baseline for variant images to distinguish them from the parent photo
-        $variantPhotoSeedBase = $data['picsum_id'] + 300; 
-
-        foreach ($item->variants as $vIndex => $variant) {
-            // Generate a unique, deterministic photo ID per distinct item variant
-            $pinnedVariantPicsumId = $variantPhotoSeedBase + $vIndex;
-
-            // Use the factory's underlying download logic to stream images to your MinIO disk
-            // temporarily creating a dummy model state to capture paths
-            $dummyVariant = ItemVariant::factory()
-                ->withPicsumId($pinnedVariantPicsumId)
-                ->make();
-
-            // Intercept paths generated by factory rules and push them directly onto your verified entity
-            $variant->update([
-                'images' => $dummyVariant->images // Contains matching verified MinIO asset strings
-            ]);
-        }
-    }
-
-    /**
-     * Evaluate image counts per variant to move item past draft security walls.
-     */
     private function evaluateDraftStatus(Item $item, string $requestedStatus): void
     {
         $item->refresh()->load('variants');
 
         $allProven = $item->variants->every(function (ItemVariant $variant) {
-            $raw = $variant->images;
-            $images = is_array($raw)
-                ? $raw
-                : (is_string($raw) ? (json_decode($raw, true) ?: []) : []);
+            $images = $variant->images ?? [];
             return count($images) >= 2;
         });
 
