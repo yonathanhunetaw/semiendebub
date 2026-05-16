@@ -45,6 +45,7 @@ class Lesson6Controller extends Controller
             ],
         ];
 
+        // Update this if your React component is in the Lessons folder rather than Dashboard
         return Inertia::render('Dev/Dashboard/Lesson6/Index', [
             'initialColors' => $colors,
         ]);
