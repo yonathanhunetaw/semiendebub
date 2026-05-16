@@ -190,6 +190,7 @@ class ItemController extends Controller
 
     public function edit(Item $item)
     {
+        // 1. Eager load everything smoothly (now including itemPackagingType)
         $item->load([
             'category',
             'colors',
@@ -208,18 +209,21 @@ class ItemController extends Controller
             'item_category_id' => $item->item_category_id,
             'status' => $item->status,
 
-            // CHANGED: was $item->processed_images->toArray() (Collection).
-            // getProcessedImagesAttribute() now returns array via ImageResolver.
+            // Optimized via ImageResolver (Zero S3 API network checking overhead)
             'general_images' => $item->processed_images,
             'raw_general_images' => $item->general_images ?? [],
 
-            'colors' => $item->colors->map(fn($c) => $c->id)->toArray(),
-            'sizes' => $item->sizes->map(fn($s) => $s->id)->toArray(),
+            // Flat primitive array mapping for basic option selectors
+            'colors' => $item->colors->pluck('id')->toArray(),
+            'sizes' => $item->sizes->pluck('id')->toArray(),
+
+            // Multi-dimensional array configuration matching pivot fields
             'packaging' => $item->packagingTypes->map(fn($p) => [
                 'item_packaging_type_id' => $p->id,
                 'quantity' => $p->pivot->quantity,
             ])->toArray(),
 
+            // Transforming children variants cleanly for Inertia prop transport
             'variants' => $item->variants->map(function ($variant) {
                 return [
                     'id' => $variant->id,
@@ -228,21 +232,14 @@ class ItemController extends Controller
                     'size_id' => $variant->item_size_id,
                     'item_packaging_type_id' => $variant->item_packaging_type_id,
                     'status' => $variant->status,
-                    // CHANGED: was $variant->image_url and $variant->all_image_urls
-                    // (both made Storage::disk('s3')->exists() calls per image).
-                    // Now uses ImageResolver accessors — no network check.
                     'main_image' => $variant->image_url,
                     'all_images' => $variant->all_image_urls,
-                    'raw_images' => $variant->images ?? [],
-                    // Also expose the structured slots for ItemForm.tsx variant image matrix
-                    'images' => $variant->images ?? [],
-                    'item_color_id' => $variant->item_color_id,
-                    'item_size_id' => $variant->item_size_id,
+                    'images' => $variant->images ?? [], // Core array used by ItemForm matrix
                     'item_color' => $variant->itemColor,
                     'item_size' => $variant->itemSize,
                     'item_packaging_type' => $variant->itemPackagingType,
                 ];
-            }),
+            })->toArray(),
         ];
 
         return Inertia::render('Admin/Items/Edit', [
@@ -253,7 +250,6 @@ class ItemController extends Controller
             'packagingTypes' => ItemPackagingType::all(),
         ]);
     }
-
     // ──────────────────────────────────────────────────────────────────────────
     // UPDATE  (single multi-dimensional transaction)
     // ──────────────────────────────────────────────────────────────────────────
