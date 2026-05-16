@@ -42,6 +42,7 @@ class StoreVariantSeeder extends Seeder
                 $basePrice = round($this->baseVariantPrice($variant) * $priceFactor, 2);
 
                 // Create or update the price tag for this store
+                // Column 'item_id' is excluded here because it doesn't live in this table
                 $storeVariant = StoreVariant::updateOrCreate([
                     'store_id'        => $store->id,
                     'item_variant_id' => $variant->id,
