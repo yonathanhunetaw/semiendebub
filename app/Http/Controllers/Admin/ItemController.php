@@ -47,31 +47,37 @@ class ItemController extends Controller
         $items = Item::with(['variants.storeVariants'])->get();
         $stores = Store::all();
 
-        $items = $items->map(function ($item) {
-            // 2. Use ImageResolver instead of the inline Storage::disk('s3')->exists() try/catch
+        $processedItems = $items->map(function ($item) {
+            // 2. Build the fully qualified MinIO CDN paths array
             $previewImages = collect($item->general_images ?? [])
                 ->map(fn($path) => ImageResolver::resolve($path))
                 ->merge($item->variants->map(fn($v) => $v->image_url))
                 ->filter()
                 ->unique()
                 ->take(5)
-                ->values();
+                ->values()
+                ->toArray(); // Ensure it evaluates to a clean primitive array
 
-            // 3. Logic remains the same
-            $item->variants_count = $item->variants->count();
+            $variantsCount = $item->variants->count();
 
-            $item->active_variants_count = $item->variants->filter(function ($v) {
+            $activeVariantsCount = $item->variants->filter(function ($v) {
                 return $v->status === 'active' &&
                     $v->storeVariants->where('active', true)->isNotEmpty();
             })->count();
 
-            $item->preview_images = $previewImages;
-
-            return $item;
+            // 3. ⚡ CRITICAL: Return a structured array matching the exact fields React expects
+            return [
+                'id' => $item->id,
+                'product_name' => $item->product_name,
+                'status' => $item->status,
+                'variants_count' => $variantsCount,
+                'active_variants_count' => $activeVariantsCount,
+                'processed_images' => $previewImages, // ◄ Matches item.processed_images perfectly!
+            ];
         });
 
         return Inertia::render('Admin/Items/Index', [
-            'items' => $items,
+            'items' => $processedItems, // ◄ Send the cleanly formatted array payload
             'stores' => $stores,
             'filters' => request()->only(['filter', 'sort', 'direction']),
         ]);
