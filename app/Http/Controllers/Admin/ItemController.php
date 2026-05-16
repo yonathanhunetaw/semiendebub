@@ -43,20 +43,18 @@ class ItemController extends Controller
 
     public function index()
     {
-        // 1. Eager load everything needed for the counts to avoid N+1 issues
         $items = Item::with(['variants.storeVariants'])->get();
         $stores = Store::all();
 
         $processedItems = $items->map(function ($item) {
-            // 2. Build the fully qualified MinIO CDN paths array
             $previewImages = collect($item->general_images ?? [])
                 ->map(fn($path) => ImageResolver::resolve($path))
-                ->merge($item->variants->map(fn($v) => $v->image_url))
+                ->merge($item->variants->map(fn($v) => ImageResolver::resolve($v->images[0] ?? null)))
                 ->filter()
                 ->unique()
                 ->take(5)
                 ->values()
-                ->toArray(); // Ensure it evaluates to a clean primitive array
+                ->toArray();
 
             $variantsCount = $item->variants->count();
 
@@ -65,19 +63,18 @@ class ItemController extends Controller
                     $v->storeVariants->where('active', true)->isNotEmpty();
             })->count();
 
-            // 3. ⚡ CRITICAL: Return a structured array matching the exact fields React expects
             return [
                 'id' => $item->id,
                 'product_name' => $item->product_name,
                 'status' => $item->status,
                 'variants_count' => $variantsCount,
                 'active_variants_count' => $activeVariantsCount,
-                'processed_images' => $previewImages, // ◄ Matches item.processed_images perfectly!
+                'processed_images' => $previewImages,
             ];
         });
 
         return Inertia::render('Admin/Items/Index', [
-            'items' => $processedItems, // ◄ Send the cleanly formatted array payload
+            'items' => $processedItems,
             'stores' => $stores,
             'filters' => request()->only(['filter', 'sort', 'direction']),
         ]);
