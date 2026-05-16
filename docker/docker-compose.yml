@@ -37,37 +37,37 @@ services:
       retries: 10
 
   minio:
-      image: minio/minio
-      container_name: Duka_minio
-      ports:
-        - "9000:9000"       # API Port (Laravel talks to this)
-        - "9001:9001"       # Console Port (You login here)
-      volumes:
-        - minio_data:/data  # Permanent storage for your images
-      command: server /data --console-address ":9001"
-      environment:
-        MINIO_ROOT_USER: admin
-        MINIO_ROOT_PASSWORD: your_strong_password
-      restart: unless-stopped
-      networks:
-        - duka-network
+    image: minio/minio
+    container_name: Duka_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: your_strong_password
+    restart: unless-stopped
+    networks:
+      - duka-network
 
-    # 🎯 AUTOMATIC BUCKET & ANONYMOUS ACCESS POLICY CREATOR
-    minio_setup:
-      image: minio/mc:latest
-      container_name: Duka_minio_setup
-      depends_on:
-        - minio
-      networks:
-        - duka-network
-      entrypoint: >
-        /bin/sh -c "
-        until (/usr/bin/mc alias set local_setup http://Duka_minio:9000 admin your_strong_password) do echo 'Waiting for MinIO engine...' && sleep 1; done;
-        /usr/bin/mc mb local_setup/duka-images --ignore-existing;
-        /usr/bin/mc anonymous set download local_setup/duka-images;
-        echo '🚀 MinIO: duka-images bucket created and policy set to PUBLIC!';
-        exit 0;
-        "
+  minio_setup:
+    image: minio/mc:latest
+    container_name: Duka_minio_setup
+    depends_on:
+      - minio
+    networks:
+      - duka-network
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc alias set local_setup http://Duka_minio:9000 admin your_strong_password) do echo 'Waiting for MinIO engine...' && sleep 1; done;
+      /usr/bin/mc mb local_setup/duka-images --ignore-existing;
+      /usr/bin/mc anonymous set download local_setup/duka-images;
+      echo '🚀 MinIO: duka-images bucket created and policy set to PUBLIC!';
+      exit 0;
+      "
+
 networks:
   duka-network:
 
