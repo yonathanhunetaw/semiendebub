@@ -8,32 +8,20 @@ use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Models\Store\StoreVariantCustomerPrice;
 use App\Models\Store\StoreVariantSellerPrice;
+use App\Services\ImageResolver;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Database\Factories\ItemVariantFactory;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
 
 class ItemVariant extends Model
 {
     use HasFactory;
     use SoftDeletes;
 
+    protected $table = 'item_variants';
 
-    /**
-     * The table associated with the model.
-     *
-     * @var string
-     */
-    protected $table = 'item_variants'; // Explicitly set the table name
-
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
         'item_id',
         'item_color_id',
@@ -41,36 +29,29 @@ class ItemVariant extends Model
         'item_packaging_type_id',
         'owner_id',
         'barcode',
-        'images',
+        'images',  // Stores raw MinIO keys, e.g. ["uploads/variants/SKU/front.jpg"]
         'status',
         'packaging_total_pieces',
         'sku',
     ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array
-     */
     protected $casts = [
-        'images' => 'array', // so JSON becomes array automatically
+        'images' => 'array',
     ];
 
     protected static function booted()
     {
-
         static::created(function ($variant) {
             if (!$variant->sku) {
                 $itemSku = $variant->item?->sku ?? 'ITEM';
-                $colorCode = $variant->item_color?->code ?? 'X';
-                $sizeCode = $variant->item_size?->code ?? 'X';
-                $packCode = $variant->item_packaging_type?->code ?? '1';
+                $colorCode = $variant->itemColor?->code ?? 'X';
+                $sizeCode = $variant->itemSize?->code ?? 'X';
+                $packCode = $variant->itemPackagingType?->code ?? '1';
 
                 $variant->sku = "{$itemSku}-{$colorCode}-{$sizeCode}-{$packCode}-{$variant->id}";
-                $variant->saveQuietly(); // safe, id exists, guaranteed unique
+                $variant->saveQuietly();
             }
         });
-
     }
 
     protected static function newFactory()
@@ -78,36 +59,63 @@ class ItemVariant extends Model
         return \Database\Factories\ItemVariantFactory::new();
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Image Accessors
+    |--------------------------------------------------------------------------
+    */
+
     /**
-     * Get the item that owns the variant.
+     * Single representative image URL.
+     * Usage: $variant->image_url
      */
+    public function getImageUrlAttribute(): string
+    {
+        $key = $this->images[0] ?? null;
+        return ImageResolver::resolve($key);
+    }
+
+    /**
+     * All images as fully-resolved URLs.
+     * Usage: $variant->all_image_urls
+     */
+    public function getAllImageUrlsAttribute(): array
+    {
+        if (empty($this->images)) {
+            return [asset('images/defaults/no-image.png')];
+        }
+        return ImageResolver::resolveAll($this->images);
+    }
+
+    /**
+     * Structured slot data for the Show.tsx admin view.
+     * Returns array of ['path' => <key>, 'url' => <full url>].
+     */
+    public function getImageSlotsAttribute(): array
+    {
+        if (empty($this->images)) {
+            return [];
+        }
+
+        return collect($this->images)
+            ->filter()
+            ->map(fn($key) => [
+                'path' => $key,
+                'url'  => ImageResolver::resolve($key),
+            ])
+            ->values()
+            ->toArray();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Relationships
+    |--------------------------------------------------------------------------
+    */
+
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
-    }
-
-    /**
-     * Get the color associated with the variant.
-     */
-    public function color(): BelongsTo
-    {
-        return $this->belongsTo(ItemColor::class, 'item_color_id');
-    }
-
-    /**
-     * Get the size associated with the variant.
-     */
-    public function size(): BelongsTo
-    {
-        return $this->belongsTo(ItemSize::class, 'item_size_id');
-    }
-
-    /**
-     * Get the packaging type associated with the variant.
-     */
-    public function itemPackagingType(): BelongsTo
-    {
-        return $this->belongsTo(ItemPackagingType::class, 'item_packaging_type_id');
     }
 
     public function itemColor()
@@ -120,6 +128,11 @@ class ItemVariant extends Model
         return $this->belongsTo(ItemSize::class, 'item_size_id');
     }
 
+    public function itemPackagingType(): BelongsTo
+    {
+        return $this->belongsTo(ItemPackagingType::class, 'item_packaging_type_id');
+    }
+
     public function owner()
     {
         return $this->belongsTo(User::class, 'owner_id');
@@ -130,20 +143,38 @@ class ItemVariant extends Model
         return $this->hasMany(StoreVariant::class, 'item_variant_id');
     }
 
-    /**
-     * Get all physical variants (SKUs) associated with this item template.
-     * This is your link to the actual prices and stock.
-     */
-    public function variants()
-    {
-        // Ensure this matches the 'item_id' in your item_variants migration
-        return $this->hasMany(ItemVariant::class, 'item_id');
-    }
-
     public function stocks()
     {
         return $this->hasMany(\App\Models\StockKeeper\ItemStock::class, 'item_variant_id');
     }
+
+    public function stores()
+    {
+        return $this->belongsToMany(Store::class, 'store_variants', 'item_variant_id', 'store_id')
+            ->withPivot('price', 'discount_price', 'active', 'discount_ends_at')
+            ->withTimestamps();
+    }
+
+    public function storeCustomerPrices()
+    {
+        return $this->hasMany(StoreVariantCustomerPrice::class, 'store_variant_id');
+    }
+
+    public function storeSellerPrices()
+    {
+        return $this->hasMany(StoreVariantSellerPrice::class, 'store_variant_id');
+    }
+
+    public function item_stock()
+    {
+        return $this->hasOne(ItemStock::class, 'variant_id');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Business Logic
+    |--------------------------------------------------------------------------
+    */
 
     public function totalStock(): int
     {
@@ -156,42 +187,6 @@ class ItemVariant extends Model
             ->where('location_type', $locationType)
             ->where('location_id', $locationId)
             ->sum('quantity');
-    }
-    // Customer-specific prices
-    // public function customerPrices(): HasMany
-    // {
-    //     return $this->hasMany(CustomerPrice::class, 'item_variant_id');
-    //     // 'item_variant_id' is the foreign key in the customer_prices table pointing to this variant
-    // }
-
-    // // Seller-specific prices
-    // public function sellerPrices(): HasMany
-    // {
-    //     return $this->hasMany(SellerPrice::class, 'item_variant_id');
-    //     // 'item_variant_id' is the foreign key in the seller_prices table pointing to this variant
-    // }
-
-    // In ItemVariant.php
-
-    // Store-specific customer prices
-
-    public function stores()
-    {
-        return $this->belongsToMany(Store::class, 'store_variants', 'item_variant_id', 'store_id')
-            ->withPivot('price', 'discount_price', 'active', 'discount_ends_at')
-            ->withTimestamps();
-    }
-
-    // Store-specific seller prices
-
-    public function storeCustomerPrices()
-    {
-        return $this->hasMany(StoreVariantCustomerPrice::class, 'store_variant_id');
-    }
-
-    public function storeSellerPrices()
-    {
-        return $this->hasMany(StoreVariantSellerPrice::class, 'store_variant_id');
     }
 
     public function calculateTotalPieces(): int
@@ -216,59 +211,5 @@ class ItemVariant extends Model
         }
 
         return $found ? $total : 1;
-    }
-
-    public function item_stock()
-    {
-        return $this->hasOne(ItemStock::class, 'variant_id'); // or hasMany if multiple stocks
-    }
-
-    /**
-     * Accessor for a single representative image URL.
-     * Usage: $variant->image_url
-     */
-
-
-
-
-    public function getImageUrlAttribute(): string
-    {
-        $path = $this->images[0] ?? null;
-
-        if ($path) {
-            try {
-                // Calling s3 disk directly on the facade bypasses contract restrictions
-                if (Storage::disk('s3')->exists($path)) {
-                    return Storage::disk('s3')->url($path);
-                }
-            } catch (\Throwable $e) {
-                Log::warning("MinIO connectivity failure in ItemVariant single image check [{$path}]: " . $e->getMessage());
-            }
-        }
-
-        return asset('images/defaults/no-image.png');
-    }
-
-    /**
-     * Accessor for ALL images as full URLs.
-     * Usage: $variant->all_image_urls
-     */
-    public function getAllImageUrlsAttribute(): array
-    {
-        if (empty($this->images) || !is_array($this->images)) {
-            return [asset('images/defaults/no-image.png')];
-        }
-
-        return array_map(function ($path) {
-            try {
-                if (Storage::disk('s3')->exists($path)) {
-                    return Storage::disk('s3')->url($path);
-                }
-            } catch (\Throwable $e) {
-                Log::warning("MinIO connectivity failure in ItemVariant multi-image loop [{$path}]: " . $e->getMessage());
-            }
-
-            return asset('images/defaults/no-image.png');
-        }, $this->images);
     }
 }
