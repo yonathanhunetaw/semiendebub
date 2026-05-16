@@ -1,12 +1,11 @@
 <?php
+
 namespace Database\Seeders\Admin;
 
-use App\Models\Item\ItemVariant;
+use App\Models\Item\Item;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Str;
 
 class ItemImageSeeder extends Seeder
 {
@@ -15,47 +14,61 @@ class ItemImageSeeder extends Seeder
      */
     public function run(): void
     {
-        // 1. Get variants with their parent items
-        $variants = ItemVariant::with('item')->get();
+        // 1️⃣ Map your generated item IDs to their corresponding disk file prefixes
+        // (Make sure these prefixes match the base names of your images exactly)
+        $itemFilePrefixes = [
+            1 => '2025-1',
+            2 => '2025-ብልጭልጭ',
+            3 => '25k-1ፓሪስ',
+            4 => '25k-5ጨርቅማስታወሻ',
+        ];
 
-        foreach ($variants as $variant) {
-            $productName = $variant->item?->product_name ?? 'Unknown_Product';
+        foreach ($itemFilePrefixes as $itemId => $prefix) {
+            $item = Item::find($itemId);
+            
+            if (!$item) {
+                $this->command->warn("Item ID {$itemId} not found in database, skipping image processing.");
+                continue;
+            }
 
-            // Use snake_case to match your file naming convention
-            $sanitizedProductName = Str::snake($productName);
+            $itemImagesArray = [];
 
-            // 2. Define the source images in your permanent storage/app/seed-images folder
-            $seedSources = [
-                "{$sanitizedProductName}_1.jpg",
-                "{$sanitizedProductName}_2.jpg",
-            ];
-
-            foreach ($seedSources as $index => $sourceFileName) {
-                $sku = $variant->sku ?? 'v' . $variant->id;
-                $minioPath = "uploads/variants/{$sku}/{$sku}_" . ($index + 1) . ".jpg";
+            // 2️⃣ Loop up to 5 images per product item
+            for ($index = 1; $index <= 5; $index++) {
+                $sourceFileName = "{$prefix}_{$index}.jpg";
                 $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
+                
+                // Destination directory structure inside your MinIO bucket
+                $minioPath = "uploads/items/{$item->id}/{$sourceFileName}";
 
-                // 1. Check if the file is ALREADY in MinIO
-                $existsInMinio = Storage::disk('s3')->exists($minioPath);
+                // Check if the physical file is present in your local seed directory
+                if (File::exists($sourcePath)) {
+                    
+                    // Check if it's already resting inside MinIO storage bucket disk
+                    $existsInMinio = Storage::disk('minio')->exists($minioPath);
 
-                if (!$existsInMinio) {
-                    // 2. Only upload if it's missing from MinIO
-                    if (File::exists($sourcePath)) {
-                        Storage::disk('s3')->put($minioPath, File::get($sourcePath));
+                    if (!$existsInMinio) {
+                        // Stream the original file layout directly into MinIO using its true name
+                        Storage::disk('minio')->put($minioPath, File::get($sourcePath));
                         $this->command->info("Uploaded new image to MinIO: {$minioPath}");
                     } else {
-                        $this->command->warn("Seed source missing locally: {$sourcePath}");
-                        continue; // Skip DB insert if we have no file at all
+                        $this->command->line("Image already in MinIO, skipping upload: {$minioPath}");
                     }
-                } else {
-                    $this->command->line("Image already in MinIO, skipping upload: {$minioPath}");
-                }
 
-                // 3. ALWAYS recreate the DB record (because migrate:fresh deleted it)
-                DB::table('item_images')->updateOrInsert(
-                    ['item_variant_id' => $variant->id, 'image_path' => $minioPath],
-                    ['created_at' => now(), 'updated_at' => now()]
-                );
+                    // Append the verified file key to our item's collection array
+                    $itemImagesArray[] = $minioPath;
+
+                } else {
+                    $this->command->warn("Seed source missing locally: {$sourcePath}");
+                }
+            }
+
+            // 3️⃣ Save the true array paths back to the parent item entity block
+            if (!empty($itemImagesArray)) {
+                $item->update([
+                    'general_images' => $itemImagesArray
+                ]);
+                $this->command->info("Successfully attached " . count($itemImagesArray) . " images to Item ID: {$item->id}");
             }
         }
     }
