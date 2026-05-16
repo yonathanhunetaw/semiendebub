@@ -12,34 +12,11 @@ use App\Services\ImageResolver;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Log;
 
-/**
- * ItemVariantFactory
- *
- * SEEDING STRATEGY
- * ─────────────────
- * Like ItemFactory, this downloads a picsum image and stores the MinIO key.
- * The "images" column holds raw keys — never URLs.
- *
- * HOW TO KEEP SEEDED VARIANTS IN SYNC
- * ─────────────────────────────────────
- * When you edit a variant via the admin UI and save new images:
- *   1. Note the variant's SKU and the MinIO key paths shown in the Show page.
- *   2. Use ->withPicsumId(N) to pin the same visual, or ->withLocalImages([...])
- *      to use files committed under storage/app/seed-images/.
- *
- * Example:
- *   ItemVariant::factory()
- *       ->for($item)
- *       ->withPicsumId(442)          // always the same image on reseed
- *       ->create([
- *           'item_color_id' => $redColor->id,
- *           'item_size_id'  => $largeSize->id,
- *       ]);
- */
 class ItemVariantFactory extends Factory
 {
     protected $model = ItemVariant::class;
 
+    // Optional overrides — set via ->withPicsumId(N) or ->withLocalImages([...])
     protected int $picsumId = 0;
     protected array $localImages = [];
 
@@ -54,41 +31,51 @@ class ItemVariantFactory extends Factory
             'status'                 => 'active',
             'packaging_total_pieces' => 1,
             'barcode'                => $this->faker->ean13(),
-            'images'                 => [], // Filled in configure() after model has an ID/SKU
-            'sku'                    => null, // booted() hook generates this
+            'images'                 => [],
+
+            // Leave 'sku' null so the booted() hook auto-generates it after insert.
+            // If you set it here, booted() will skip generation (it checks !$variant->sku).
+            'sku'                    => null,
         ];
     }
 
+    /**
+     * After the variant is created (and the booted() hook has set the SKU),
+     * upload placeholder images to MinIO and store the raw keys in 'images'.
+     *
+     * Two images are uploaded per variant — the minimum needed to pass the
+     * proof_ok gate in the admin UI (slot_count >= 2).
+     */
     public function configure(): static
     {
         return $this->afterCreating(function (ItemVariant $variant) {
             $keys = [];
+            // Use the generated SKU as the folder name so paths are meaningful
+            $sku = $variant->sku ?? $variant->id;
 
             if (!empty($this->localImages)) {
+                // Upload files committed to storage/app/seed-images/
                 foreach ($this->localImages as $index => $filename) {
                     $localPath = storage_path('app/seed-images/' . $filename);
-                    $sku = $variant->sku ?? $variant->id;
                     $key = "uploads/variants/{$sku}/img-{$index}.jpg";
                     try {
                         $keys[] = ImageResolver::uploadSeedImage($localPath, $key);
                     } catch (\Throwable $e) {
-                        Log::warning("ItemVariantFactory: could not upload local image [{$filename}]: " . $e->getMessage());
+                        Log::warning("ItemVariantFactory: could not upload [{$filename}]: " . $e->getMessage());
                     }
                 }
             } else {
+                // Download from picsum.photos — deterministic when picsumId is pinned
                 $seedId = $this->picsumId > 0 ? $this->picsumId : ($variant->id + 200);
-                $sku    = $variant->sku ?? $variant->id;
 
-                // Two images per variant (min needed for proof_ok gate in the UI)
-                $offsets = [0, 20];
-                foreach ($offsets as $i => $offset) {
+                foreach ([0, 20] as $i => $offset) {
                     $id  = (($seedId + $offset) % 1000) ?: 1;
                     $url = "https://picsum.photos/id/{$id}/600/600";
                     $key = "uploads/variants/{$sku}/img-{$i}.jpg";
                     try {
                         $keys[] = ImageResolver::uploadFromUrl($url, $key);
                     } catch (\Throwable $e) {
-                        Log::warning("ItemVariantFactory: could not upload picsum image [{$url}]: " . $e->getMessage());
+                        Log::warning("ItemVariantFactory: could not upload from [{$url}]: " . $e->getMessage());
                     }
                 }
             }
@@ -99,6 +86,11 @@ class ItemVariantFactory extends Factory
         });
     }
 
+    /**
+     * Pin a specific picsum image so every reseed produces the same photo.
+     *
+     * Usage: ItemVariant::factory()->withPicsumId(442)->create([...]);
+     */
     public function withPicsumId(int $id): static
     {
         $clone = clone $this;
@@ -106,6 +98,11 @@ class ItemVariantFactory extends Factory
         return $clone;
     }
 
+    /**
+     * Use files committed under storage/app/seed-images/ instead of downloading.
+     *
+     * Usage: ItemVariant::factory()->withLocalImages(['red-front.jpg', 'red-back.jpg'])->create([...]);
+     */
     public function withLocalImages(array $filenames): static
     {
         $clone = clone $this;
