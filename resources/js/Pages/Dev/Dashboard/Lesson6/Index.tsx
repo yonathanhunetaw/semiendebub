@@ -64,7 +64,7 @@ export default function Index({ initialColors }: IndexProps) {
                                         alignItems: 'center',
                                         justifyContent: 'center'
                                     }}
-                                Box>
+                                >
                                     {color.image_url ? (
                                         <Box
                                             component="img"
