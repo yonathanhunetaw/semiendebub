@@ -58,7 +58,7 @@ class ItemController extends Controller
         if ($items->isEmpty()) {
             Log::info("No items found for store: " . ($storeId ?? 'N/A'));
         }
-        return Inertia::render('Seller/Items/Index', [
+        return Inertia::render('Admin/Items/Index', [
             'items' => $items,
             'filters' => [
                 'search' => $search ?? '',
