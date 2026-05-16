@@ -82,6 +82,11 @@ export default function ItemIndex({ items, filters }: Props) {
     return (
         <Box sx={{ p: 0 }}>
             <Head title="Items Management" />
+            {/* 🚨 TEMP TEST 🚨 */}
+            <h1 style={{ color: 'red', background: 'yellow', padding: '20px', fontSize: '40px', zIndex: 9999, position: 'relative' }}>
+                IF YOU CAN SEE THIS, COMPILATION IS WORKING!
+            </h1>
+            
 
             <Stack
                 direction={{ xs: "column", sm: "row" }}
