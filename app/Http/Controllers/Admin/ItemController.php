@@ -87,7 +87,6 @@ class ItemController extends Controller
             'category',
             'variants.itemColor',
             'variants.itemSize',
-            'variants.itemPackagingType',
             'variants.stocks',
         ]);
 
