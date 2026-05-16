@@ -1032,6 +1032,7 @@ export default function ItemForm({
                                 gap={2}
                                 mt={2}
                             >
+                                {/* Cleaned existing images map */}
                                 {data.existing_images.map((img) => (
                                     <Card
                                         key={img}
@@ -1044,11 +1045,7 @@ export default function ItemForm({
                                     >
                                         <Box
                                             component="img"
-                                            src={
-                                                img.startsWith("http")
-                                                    ? img
-                                                    : `/storage/${img}`
-                                            }
+                                            src={img}
                                             alt=""
                                             sx={{
                                                 width: "100%",
@@ -1069,6 +1066,8 @@ export default function ItemForm({
                                         </CardContent>
                                     </Card>
                                 ))}
+
+                                {/* Fresh uploaded files map */}
                                 {data.images.map((img, i) => (
                                     <Card
                                         key={`${img.name}-${i}`}
@@ -1283,7 +1282,7 @@ export default function ItemForm({
                                                                                     slot.kind ===
                                                                                     "new"
                                                                                         ? slot.preview
-                                                                                        : slot.url // Just use the URL we built in the loop
+                                                                                        : slot.url
                                                                                 }
                                                                                 sx={{
                                                                                     width: 80,
