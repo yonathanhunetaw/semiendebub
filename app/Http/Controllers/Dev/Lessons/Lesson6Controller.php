@@ -7,20 +7,15 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 
-// For generating IDs if not using a DB
-
 class Lesson6Controller extends Controller
 {
     /**
      * Display the Color Organizer (List of colors).
-     * Route: admin.lessons.lesson6 (GET)
+     * Route: dev.lesson6.index (GET)
      */
-
-
-
     public function index()
     {
-        // In a real app: $colors = Color::all();
+        // Static dataset simulating database records with live MinIO S3 links
         $colors = [
             [
                 'id' => '0175d1f0-a8c6-41bf-8d02-df5734d829a4',
@@ -45,11 +40,11 @@ class Lesson6Controller extends Controller
             ],
         ];
 
-        // Update this if your React component is in the Lessons folder rather than Dashboard
         return Inertia::render('Dev/Dashboard/Lesson6/Index', [
             'initialColors' => $colors,
         ]);
     }
+
 
     /**
      * Show the form for creating a new color.
