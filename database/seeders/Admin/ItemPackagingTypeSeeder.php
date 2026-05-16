@@ -16,7 +16,6 @@ class ItemPackagingTypeSeeder extends Seeder
             'Box',
             'Bundle',
             'Bag',
-
         ];
 
         foreach ($packagingTypes as $type) {

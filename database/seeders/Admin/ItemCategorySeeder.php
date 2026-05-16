@@ -46,6 +46,9 @@ class ItemCategorySeeder extends Seeder
                 'Crayons', 'Drawing Book', 'Glue Stick', 'Scissors',
                 'Pencil Colored', 'Erasor', 'Sharpner',
             ],
+            'Copy & Printer Paper' => [
+                'A4 Printer Paper', 'Printer Paper A3', 'Letter', 'Legal', 'Tabloid',
+            ],
         ];
 
         foreach ($categories as $categoryName => $subcategories) {

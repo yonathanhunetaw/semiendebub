@@ -9,25 +9,18 @@ return new class extends Migration {
     {
         Schema::create('item_variants', function (Blueprint $table) {
             $table->id();
-
-            // Identity
+            $table->foreignId('item_id')->constrained()->onDelete('cascade');
+            
+            // Core Identity (Saying it in one place)
             $table->string('sku')->unique()->nullable();
             $table->string('barcode')->nullable()->unique();
-
-            // Relationships
-            $table->foreignId('item_id')->constrained()->onDelete('cascade');
             $table->foreignId('item_color_id')->nullable()->constrained()->onDelete('set null');
             $table->foreignId('item_size_id')->nullable()->constrained()->onDelete('set null');
-            $table->foreignId('item_packaging_type_id')->nullable()->constrained()->onDelete('set null');
+            // Keep this strictly for universal identity tags that never change regardless of how the product is packaged
+                    // $table->foreignId('item_packaging_type_id')->constrained('item_packaging_types')->onDelete('cascade');
             $table->foreignId('owner_id')->nullable()->constrained('users');
 
-            // Physical Specs
-            $table->integer('packaging_total_pieces')->default(1);
-            $table->json('images')->nullable();
-
-            // Status (Unified)
             $table->enum('status', ['active', 'inactive', 'unavailable', 'out_of_stock'])->default('inactive');
-
             $table->timestamps();
             $table->softDeletes();
         });

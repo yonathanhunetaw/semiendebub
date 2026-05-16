@@ -16,9 +16,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('item_variant_id')->constrained('item_variants')->onDelete('cascade');
             $table->foreignId('item_packaging_type_id')->constrained('item_packaging_types')->onDelete('cascade');
-            $table->foreignId('item_color_id')->constrained('item_colors')->onDelete('cascade'); // Added color_id
-            $table->foreignId('item_size_id')->constrained('item_sizes')->onDelete('cascade'); // Added size_id
-            $table->integer('quantity');
+            
+            // Logistics specs for this specific packaging tier
+            $table->integer('quantity');                   // e.g., 1 for Piece, 12 for Box, 120 for Carton
+            $table->decimal('cbm', 8, 4)->default(0.0000); // The unique volume of this specific packaging layer
+            
             $table->timestamps();
         });
     }

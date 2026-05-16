@@ -101,7 +101,7 @@ class ItemVariant extends Model
             ->filter()
             ->map(fn($key) => [
                 'path' => $key,
-                'url'  => ImageResolver::resolve($key),
+                'url' => ImageResolver::resolve($key),
             ])
             ->values()
             ->toArray();
