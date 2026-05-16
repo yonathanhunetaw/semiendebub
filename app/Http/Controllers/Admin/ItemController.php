@@ -73,6 +73,9 @@ class ItemController extends Controller
             ];
         });
 
+        // 🚨 ADD THIS DIE AND DUMP LINE HERE:
+        dd($processedItems->toArray());
+
         return Inertia::render('Admin/Items/Index', [
             'items' => $processedItems,
             'stores' => $stores,
