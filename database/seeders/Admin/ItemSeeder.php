@@ -159,39 +159,42 @@ class ItemSeeder extends Seeder
         $item->load('variants');
         $prefix = $data['file_prefix'];
 
-        foreach ($item->variants as $variant) {
-            $variantImagesArray = [];
+        $itemImagesArray = [];
 
-            // Read up to 5 corresponding images from your seed folder
-            for ($index = 1; $index <= 5; $index++) {
-                $sourceFileName = "{$prefix}_{$index}.jpg";
-                $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
+        // 1. Process and upload images to the ITEM level folder (0-indexed to match img-0)
+        for ($index = 0; $index < 5; $index++) {
+            // Matches your desktop source filenames: prefix_1.jpg, prefix_2.jpg, etc.
+            $sourceFileName = "{$prefix}_" . ($index + 1) . ".jpg";
+            $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
 
-                // Destination directory key structure inside MinIO bucket
-                $sku = $variant->sku ?? 'v' . $variant->id;
-                $minioPath = "uploads/variants/{$sku}/{$sourceFileName}";
+            // 🎯 EXACT MINIO PATH STRUCTURE
+            $minioPath = "uploads/items/{$item->id}/img-{$index}.jpg";
 
-                if (File::exists($sourcePath)) {
-                    // Check if it's already resting inside your MinIO S3 bucket disk
-                    $existsInMinio = Storage::disk('minio')->exists($minioPath);
-
-                    if (!$existsInMinio) {
-                        Storage::disk('minio')->put($minioPath, File::get($sourcePath));
-                    }
-
-                    $variantImagesArray[] = $minioPath;
+            if (File::exists($sourcePath)) {
+                // Check and upload to MinIO disk
+                if (!Storage::disk('minio')->exists($minioPath)) {
+                    Storage::disk('minio')->put($minioPath, File::get($sourcePath));
                 }
-            }
 
-            // Save the populated array down to the physical json column field
-            if (!empty($variantImagesArray)) {
-                $variant->update([
-                    'images' => $variantImagesArray
-                ]);
+                // Save the exact format your frontend resolver context expects
+                $itemImagesArray[] = "/duka-images/" . $minioPath;
             }
         }
-    }
 
+        // 2. 🎯 SAVE IT TO THE ITEM LEVEL ('general_images')
+        if (!empty($itemImagesArray)) {
+            $item->update([
+                'general_images' => $itemImagesArray
+            ]);
+        }
+
+        // 3. Keep your variants in sync by assigning the same item-level images to them
+        foreach ($item->variants as $variant) {
+            $variant->update([
+                'images' => $itemImagesArray
+            ]);
+        }
+    }
     private function populatePackagingQuantitiesAndCbm(Item $item, array $data): void
     {
         $item->load('variants');
