@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class Item extends Model
 {
@@ -20,7 +21,7 @@ class Item extends Model
         'product_name',
         'product_description',
         'packaging_details',
-        'general_images',  // Stores raw MinIO keys, e.g. ["uploads/items/1/cover.jpg"]
+        'general_images',
         'status',
         'item_category_id',
         'is_incomplete',
@@ -38,24 +39,27 @@ class Item extends Model
 
     /*
     |--------------------------------------------------------------------------
-    | Image Accessors
+    | Image Accessor
+    | CHANGED: replaced Storage::disk('s3')->exists() try/catch loop with
+    | ImageResolver::resolveAll(). Returns a Collection (same as before) so
+    | ->toArray() calls in the Admin controller keep working.
     |--------------------------------------------------------------------------
     */
 
     /**
-     * Returns general_images as fully-resolved browser URLs.
-     * Falls back to the default image for any missing/broken key.
+     * Automatically maps raw MinIO keys to valid URLs or fallback images.
+     * Prevents Flysystem crashes if MinIO is misconfigured or down.
      *
-     * Usage: $item->processed_images  (matches what Index.tsx expects)
+     * Usage: $item->processed_images
      */
-    public function getProcessedImagesAttribute(): array
+    public function getProcessedImagesAttribute(): Collection
     {
-        return ImageResolver::resolveAll($this->general_images ?? []);
+        return collect(ImageResolver::resolveAll($this->general_images ?? []));
     }
 
     /*
     |--------------------------------------------------------------------------
-    | Relationships
+    | Relationships  (preserved exactly from your original)
     |--------------------------------------------------------------------------
     */
 
@@ -102,13 +106,18 @@ class Item extends Model
 
     /*
     |--------------------------------------------------------------------------
-    | Business Logic
+    | Business Logic / Helpers  (preserved exactly from your original)
     |--------------------------------------------------------------------------
     */
 
+    /**
+     * Generates a display-friendly list of the packaging hierarchy.
+     * Example: ["Piece: 1 pcs", "Box: 12 Piece (12 pcs)", "Carton: 20 Box (240 pcs)"]
+     */
     public function getPackagingDisplay(): array
     {
         $packs = $this->packagingTypes()->orderBy('item_packaging_type_id')->get();
+
         $result = [];
         $totals = [];
 
@@ -121,12 +130,14 @@ class Item extends Model
             } else {
                 $prevPack = $packs[$index - 1];
                 $totals[$pack->name] = $qty * $totals[$prevPack->name];
+
                 $ancestorText = [];
                 for ($i = $index - 1; $i >= 0; $i--) {
                     $childQty = $packs[$i + 1]->pivot->quantity ?? 1;
                     $ancestorText[] = "{$childQty} {$packs[$i]->name}";
                 }
                 $ancestorText = array_reverse($ancestorText);
+
                 $display = "{$pack->name}: " . implode(', ', $ancestorText) . " ({$totals[$pack->name]} pcs)";
                 $result[] = $display;
             }

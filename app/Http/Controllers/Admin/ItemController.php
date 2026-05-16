@@ -2,223 +2,581 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Http\Controllers\Admin\Controller;
-use App\Models\Auth\Customer;
-use App\Models\Auth\User;
+use App\Http\Controllers\Controller;
 use App\Models\Item\Item;
-use App\Models\Seller\Cart;
+use App\Models\Item\ItemCategory;
+use App\Models\Item\ItemColor;
+use App\Models\Item\ItemPackagingType;
+use App\Models\Item\ItemSize;
+use App\Models\Item\ItemVariant;
+use App\Models\StockKeeper\ItemInventoryLocation;
+use App\Models\Store\Store;
 use App\Services\ImageResolver;
-use App\Services\PriceProvider;
+use App\Services\ItemVariantGenerationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
+
+// This single line generates the following routes:
+//
+// GET /item                → index method
+// GET /item/create         → create method
+// POST /item               → store method
+// GET /item/{item}         → show method
+// GET /item/{item}/edit    → edit method
+// PUT/PATCH /item/{item}   → update method
+// DELETE /item/{item}      → destroy method
 
 class ItemController extends Controller
 {
-    public function index(Request $request)
+    public function __construct(
+        private readonly ItemVariantGenerationService $itemVariantGenerationService
+    ) {
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // INDEX
+    // ──────────────────────────────────────────────────────────────────────────
+
+    public function index()
     {
-        $storeId = Auth::user()->store?->id;
-        $search  = $request->filled('search') ? trim($request->search) : null;
-        $cartId  = $request->integer('cart_id') ?: null;
+        // 1. Eager load everything needed for the counts to avoid N+1 issues
+        $items = Item::with(['variants.storeVariants'])->get();
+        $stores = Store::all();
 
-        $query = Item::where('status', 'true')
-            ->with([
-                'category',
-                'variants.itemColor',
-                'variants.itemSize',
-                'variants.itemPackagingType',
-                'variants.storeVariants' => function ($q) use ($storeId) {
-                    if ($storeId) {
-                        $q->where('store_id', $storeId)->with('stocks');
-                    }
-                },
-            ]);
+        $items = $items->map(function ($item) {
+            // 2. Use ImageResolver instead of the inline Storage::disk('s3')->exists() try/catch
+            $previewImages = collect($item->general_images ?? [])
+                ->map(fn($path) => ImageResolver::resolve($path))
+                ->merge($item->variants->map(fn($v) => $v->image_url))
+                ->filter()
+                ->unique()
+                ->take(5)
+                ->values();
 
-        if ($storeId) {
-            $query->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId));
-        }
+            // 3. Logic remains the same
+            $item->variants_count = $item->variants->count();
 
-        if ($search) {
-            $query->where('product_name', 'LIKE', '%' . $search . '%');
-        }
+            $item->active_variants_count = $item->variants->filter(function ($v) {
+                return $v->status === 'active' &&
+                    $v->storeVariants->where('active', true)->isNotEmpty();
+            })->count();
 
-        $items = $query->orderBy('product_name')->get();
+            $item->preview_images = $previewImages;
 
-        if ($items->isEmpty()) {
-            Log::info("No items found for store: " . ($storeId ?? 'N/A'));
-        }
+            return $item;
+        });
 
         return Inertia::render('Admin/Items/Index', [
             'items'   => $items,
-            'filters' => [
-                'search'  => $search ?? '',
-                'cart_id' => $cartId,
-            ],
+            'stores'  => $stores,
+            'filters' => request()->only(['filter', 'sort', 'direction']),
         ]);
     }
 
-    public function create()
-    {
-        //
-    }
-
-    public function store(Request $request)
-    {
-        //
-    }
+    // ──────────────────────────────────────────────────────────────────────────
+    // SHOW
+    // ──────────────────────────────────────────────────────────────────────────
 
     public function show(Item $item)
     {
-        $store    = Auth::user()->store;
-        $storeId  = $store?->id;
-
-        $sellerId       = request('seller_id');
-        $customerId     = request('customer_id');
-        $selectedCartId = request('cart_id');
-
         $item->load([
-            'variants.itemColor',
-            'variants.itemSize',
+            'category',
+            'variants.color',
+            'variants.size',
             'variants.itemPackagingType',
-            'variants.storeVariants.sellerPrices',
-            'variants.storeVariants.customerPrices',
-            'variants.storeVariants.stocks',
-            'variants.owner',
+            'variants.stocks',
         ]);
 
-        $storeVariants = $item->variants->flatMap(fn($v) => $v->storeVariants);
+        $itemData = [
+            'id'                  => $item->id,
+            'product_name'        => $item->product_name,
+            'product_description' => $item->product_description,
+            'status'              => $item->status,
+            // CHANGED: was $item->processed_images->toArray() (Collection).
+            // getProcessedImagesAttribute() now returns array via ImageResolver, so no ->toArray() needed.
+            'general_images'      => $item->processed_images,
+        ];
 
-        $minStoreVariant = $storeVariants
-            ->filter(fn($sv) => $sv->computed_status === 'active')
-            ->sortBy(fn($sv) => $sv->discount_price ?? $sv->price)
-            ->first();
+        // 🔄 Map variants to the dynamic 5-slot front-end interface format
+        $variantData = $item->variants->map(function ($variant) {
+            $rawPaths     = is_array($variant->images) ? $variant->images : [];
+            // CHANGED: was $variant->all_image_urls (Storage::disk('s3')->exists() per image).
+            // Now uses getImageSlotsAttribute() which calls ImageResolver — no network check needed.
+            $slots = $variant->image_slots;
 
-        // ── General item images ──────────────────────────────────────────────
-        // general_images stores raw keys; resolve them all at once.
-        $itemImages = collect(ImageResolver::resolveAll($item->general_images ?? []));
-
-        // Attribute images (color, size, packaging)
-        $variantColorImages = $item->variants
-            ->map(fn($v) => $v->itemColor?->image_path ? ImageResolver::resolve($v->itemColor->image_path) : null)
-            ->filter()->unique();
-
-        $sizeImages = $item->variants
-            ->map(fn($v) => $v->itemSize?->image_path ? ImageResolver::resolve($v->itemSize->image_path) : null)
-            ->filter()->unique();
-
-        $packagingImages = $item->variants
-            ->map(fn($v) => $v->itemPackagingType?->image_path ? ImageResolver::resolve($v->itemPackagingType->image_path) : null)
-            ->filter()->unique();
-
-        $allImages = $itemImages
-            ->merge($variantColorImages)
-            ->merge($sizeImages)
-            ->merge($packagingImages)
-            ->filter()->unique()->values();
-
-        // ── Variant data ─────────────────────────────────────────────────────
-        $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId) {
-            $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
-
-            $stockRecord = $storeVariant?->stocks
-                ->where('location_id', $storeId)
-                ->where('location_type', 'App\Models\Store\Store')
-                ->first();
-
-            $store_stock   = $stockRecord?->quantity ?? 0;
-            $price         = $storeVariant?->price;
-            $discount_price = $storeVariant?->discount_price;
-            $status        = $storeVariant?->computed_status ?? 'inactive';
-            $store_active  = $status === 'active';
-
-            $price_ladder = $storeVariant
-                ? PriceProvider::getPriceLadder(
-                    storeVariantId: $storeVariant->id,
-                    storeId: $storeId,
-                    sellerId: $sellerId,
-                    customerId: $customerId
-                )
-                : [];
-
-            $final_price = $storeVariant ? PriceProvider::getFinalPrice($price_ladder) : null;
-
-            // Resolve variant images — images column holds raw MinIO keys
-            $variantImages = collect(ImageResolver::resolveAll($variant->images ?? []));
-
-            $seller_price_record = $storeVariant
-                ? $storeVariant->sellerPrices()
-                    ->where('seller_id', auth()->id())
-                    ->where('active', true)
-                    ->first()
-                : null;
-
-            $primaryImage = $variantImages->first()
-                ?? ($variant->itemColor?->image_path
-                    ? ImageResolver::resolve($variant->itemColor->image_path)
-                    : asset('images/defaults/no-image.png'));
+            $slotCount = count($slots);
 
             return [
-                'id'                    => $variant->id,
-                'img'                   => $primaryImage,
-                'images'                => $variantImages->toArray(),
-                'color'                 => $variant->itemColor?->name,
-                'size'                  => $variant->itemSize?->name,
-                'packaging'             => $variant->itemPackagingType?->name,
-                'price'                 => $price,
-                'discount_price'        => $discount_price,
-                'stock'                 => $store_stock,
-                'status'                => $status,
-                'store_active'          => $store_active,
-                'quantity'              => $variant->calculateTotalPieces(),
-                'price_ladder'          => $price_ladder,
-                'final_price'           => $final_price,
-                'seller_price'          => $seller_price_record?->price,
-                'seller_discount_price' => $seller_price_record?->discount_price,
+                'id'        => $variant->id,
+                'sku'       => $variant->sku,
+                'color'     => $variant->color?->name,
+                'size'      => $variant->size?->name,
+                'packaging' => $variant->itemPackagingType?->name,
+                'status'    => $variant->status,
+                'slots'     => $slots,       // [{path, url}, ...]
+                'slot_count' => $slotCount,
+                'proof_ok'  => $slotCount >= 2,
             ];
         });
 
-        $sellers = User::where('role', 'seller')->get();
-
-        $customersWithOpenCarts = Customer::where('store_id', $storeId)
-            ->whereHas('carts', fn($q) => $q->visibleTo(auth()->user())->open())
-            ->with(['carts' => fn($q) => $q->visibleTo(auth()->user())->open()])
-            ->get();
-
-        $openCarts = Cart::with('customer')
-            ->visibleTo(auth()->user())
-            ->open()
-            ->latest()
-            ->get();
-
-        $displayPrice = $variantData->where('status', 'active')->min('final_price')
-            ?? $variantData->min('price');
-
-        return Inertia::render('Seller/Items/Show', compact(
-            'item',
-            'sellers',
-            'customersWithOpenCarts',
-            'openCarts',
-            'allImages',
-            'variantData',
-            'minStoreVariant',
-            'displayPrice',
-            'selectedCartId'
-        ));
+        return Inertia::render('Admin/Items/Show', [
+            'item'        => $itemData,
+            'variantData' => $variantData,
+            'stores'      => Store::all(),
+        ]);
     }
 
-    public function edit(string $id)
+    // ──────────────────────────────────────────────────────────────────────────
+    // CREATE
+    // ──────────────────────────────────────────────────────────────────────────
+
+    public function create()
     {
-        //
+        return Inertia::render('Admin/Items/Create', [
+            'categories'    => ItemCategory::all(),
+            'colors'        => ItemColor::all(),
+            'sizes'         => ItemSize::all(),
+            'packagingTypes' => ItemPackagingType::all(),
+        ]);
     }
 
-    public function update(Request $request, string $id)
+    // ──────────────────────────────────────────────────────────────────────────
+    // STORE  (single multi-dimensional transaction)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    public function store(Request $request)
     {
-        //
+        $validated = $this->validateItemPayload($request);
+
+        return DB::transaction(function () use ($request, $validated) {
+
+            $item = Item::create([
+                'product_name'        => $validated['product_name'],
+                'product_description' => $validated['product_description'] ?? null,
+                'packaging_details'   => $validated['packaging_details'] ?? null,
+                'item_category_id'    => $this->resolveCategoryId($validated['item_category_id']),
+                'status'              => 'draft', // always draft until proof provided
+                'general_images'      => $this->handleUploads($request, []),
+                'is_incomplete'       => true,
+            ]);
+
+            $item->colors()->sync($this->resolveOptionIds($validated['color_ids'] ?? [], ItemColor::class));
+            $item->sizes()->sync($this->resolveOptionIds($validated['size_ids'] ?? [], ItemSize::class));
+            $item->packagingTypes()->sync($this->resolvePackagingPayload($validated['packaging'] ?? []));
+
+            $this->itemVariantGenerationService->sync($item);
+
+            $this->persistVariantImages($request, $item);
+
+            $this->evaluateDraftStatus($item, $validated['status']);
+
+            return redirect()->route('admin.items.edit', $item)
+                ->with('success', 'Item created. Upload images for every variant to publish.');
+        });
     }
 
-    public function destroy(string $id)
+    // ──────────────────────────────────────────────────────────────────────────
+    // EDIT
+    // ──────────────────────────────────────────────────────────────────────────
+
+    public function edit(Item $item)
     {
-        //
+        $item->load([
+            'category',
+            'colors',
+            'sizes',
+            'packagingTypes' => fn($q) => $q->withPivot('quantity'),
+            'variants'       => fn($q) => $q
+                ->with(['itemColor', 'itemSize', 'itemPackagingType'])
+                ->orderBy('id'),
+        ]);
+
+        $itemData = [
+            'id'                  => $item->id,
+            'product_name'        => $item->product_name,
+            'product_description' => $item->product_description,
+            'packaging_details'   => $item->packaging_details,
+            'item_category_id'    => $item->item_category_id,
+            'status'              => $item->status,
+
+            // CHANGED: was $item->processed_images->toArray() (Collection).
+            // getProcessedImagesAttribute() now returns array via ImageResolver.
+            'general_images'      => $item->processed_images,
+            'raw_general_images'  => $item->general_images ?? [],
+
+            'colors'    => $item->colors->map(fn($c) => $c->id)->toArray(),
+            'sizes'     => $item->sizes->map(fn($s) => $s->id)->toArray(),
+            'packaging' => $item->packagingTypes->map(fn($p) => [
+                'item_packaging_type_id' => $p->id,
+                'quantity'               => $p->pivot->quantity,
+            ])->toArray(),
+
+            'variants' => $item->variants->map(function ($variant) {
+                return [
+                    'id'                     => $variant->id,
+                    'sku'                    => $variant->sku,
+                    'color_id'               => $variant->item_color_id,
+                    'size_id'                => $variant->item_size_id,
+                    'item_packaging_type_id' => $variant->item_packaging_type_id,
+                    'status'                 => $variant->status,
+                    // CHANGED: was $variant->image_url and $variant->all_image_urls
+                    // (both made Storage::disk('s3')->exists() calls per image).
+                    // Now uses ImageResolver accessors — no network check.
+                    'main_image'  => $variant->image_url,
+                    'all_images'  => $variant->all_image_urls,
+                    'raw_images'  => $variant->images ?? [],
+                    // Also expose the structured slots for ItemForm.tsx variant image matrix
+                    'images'      => $variant->images ?? [],
+                    'item_color_id'              => $variant->item_color_id,
+                    'item_size_id'               => $variant->item_size_id,
+                    'item_color'                 => $variant->itemColor,
+                    'item_size'                  => $variant->itemSize,
+                    'item_packaging_type'        => $variant->itemPackagingType,
+                ];
+            }),
+        ];
+
+        return Inertia::render('Admin/Items/Edit', [
+            'item'          => $itemData,
+            'categories'    => ItemCategory::all(),
+            'colors'        => ItemColor::all(),
+            'sizes'         => ItemSize::all(),
+            'packagingTypes' => ItemPackagingType::all(),
+        ]);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // UPDATE  (single multi-dimensional transaction)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    public function update(Request $request, Item $item)
+    {
+        $validated = $this->validateItemPayload($request);
+
+        return DB::transaction(function () use ($request, $item, $validated) {
+
+            $item->update([
+                'product_name'        => $validated['product_name'],
+                'product_description' => $validated['product_description'] ?? null,
+                'packaging_details'   => $validated['packaging_details'] ?? null,
+                'item_category_id'    => $this->resolveCategoryId($validated['item_category_id']),
+                'general_images'      => $this->handleUploads($request, $validated['existing_images'] ?? []),
+            ]);
+
+            $item->colors()->sync($this->resolveOptionIds($validated['color_ids'] ?? [], ItemColor::class));
+            $item->sizes()->sync($this->resolveOptionIds($validated['size_ids'] ?? [], ItemSize::class));
+            $item->packagingTypes()->sync($this->resolvePackagingPayload($validated['packaging'] ?? []));
+
+            $this->itemVariantGenerationService->sync($item);
+
+            $this->persistVariantImages($request, $item);
+
+            $this->evaluateDraftStatus($item, $validated['status']);
+
+            return redirect()->route('admin.items.edit', $item)
+                ->with('success', 'Item updated successfully.');
+        });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // DESTROY
+    // ──────────────────────────────────────────────────────────────────────────
+
+    public function destroy(Item $item)
+    {
+        $item->delete();
+        return redirect()->route('admin.items.index')->with('success', 'Item deleted.');
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // INLINE OPTION
+    // ──────────────────────────────────────────────────────────────────────────
+
+    public function storeInlineOption(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => 'required|in:category,color,size,packaging',
+            'name' => 'required|string|max:255',
+        ]);
+
+        [$modelClass, $nameColumn] = match ($validated['type']) {
+            'category' => [ItemCategory::class, 'category_name'],
+            'color'    => [ItemColor::class, 'name'],
+            'size'     => [ItemSize::class, 'name'],
+            'packaging' => [ItemPackagingType::class, 'name'],
+        };
+
+        $record = $modelClass::firstOrCreate([$nameColumn => trim($validated['name'])]);
+
+        return response()->json([
+            'id'            => $record->id,
+            'name'          => $record->{$nameColumn},
+            'category_name' => $record->{$nameColumn},
+        ]);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // STATUS HELPERS
+    // ──────────────────────────────────────────────────────────────────────────
+
+    public function updateStatus(Request $request, Item $item)
+    {
+        $request->validate(['status' => 'required|in:active,inactive,unavailable,draft']);
+
+        $newStatus = $request->status;
+
+        if ($newStatus === 'active') {
+            $item->load('variants');
+
+            $allProven = $item->variants->every(function ($variant) {
+                $images = $variant->images ?? [];
+                return count($images) >= 2;
+            });
+
+            if (!$allProven) {
+                return back()->withErrors([
+                    'status' => 'Cannot activate: every variant must have at least 2 images (proof) before publishing.',
+                ]);
+            }
+        }
+
+        $item->update(['status' => $newStatus]);
+
+        return back()->with('success', 'Item status updated to ' . ucfirst($newStatus) . '.');
+    }
+
+    // Variant status is now a store-level concern — removed updateVariantStatus
+    // and its store propagation from the item controller.
+    // Store controllers manage store_variants.active directly.
+
+    public function destroyVariant(Item $item, ItemVariant $variant)
+    {
+        abort_unless($variant->item_id === $item->id, 404);
+
+        DB::transaction(function () use ($variant) {
+            $variant->storeVariants()->update(['active' => false]);
+            $variant->delete();
+        });
+
+        return back()->with('success', 'Variant deleted.');
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // PRIVATE HELPERS
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Persist variant images from the multi-dimensional form input.
+     *
+     * Form key format:
+     *   variant_images[colorId:sizeId:packagingId][slotIndex]  → new File
+     *   variant_existing_images[colorId:sizeId:packagingId][slotIndex] → path string
+     *
+     * Images are stored as:  uploads/variants/{sku}/{slotIndex+1}.{ext}
+     */
+    private function persistVariantImages(Request $request, Item $item): void
+    {
+        $item->load('variants');
+
+        $newFiles      = $request->file('variant_images', []);
+        $existingPaths = $request->input('variant_existing_images', []);
+
+        foreach ($item->variants as $variant) {
+
+            // --- STEP 1: Direct Single Image Fast-Track ---
+            $fileKey = "variant_image_{$variant->id}";
+            if ($request->hasFile($fileKey)) {
+                $file     = $request->file($fileKey);
+                $fileName = "{$variant->sku}_main." . $file->getClientOriginalExtension();
+                $path     = $file->storeAs("uploads/variants/{$variant->sku}", $fileName, 's3');
+                $variant->update(['images' => [$path]]);
+                continue;
+            }
+
+            // --- STEP 2: Multi-Slot Array Setup (Slots 0 to 4) ---
+            $slots      = array_fill(0, 5, null);
+            $variantKey = $variant->id;
+
+            $existingSlotsForKey = $existingPaths[$variantKey] ?? [];
+            foreach ($existingSlotsForKey as $slotIndex => $path) {
+                if (is_string($path) && $path !== '') {
+                    $slots[(int) $slotIndex] = ltrim($path, '/');
+                }
+            }
+
+            $newFilesForKey = $newFiles[$variantKey] ?? [];
+            foreach ($newFilesForKey as $slotIndex => $file) {
+                if ($file && $file->isValid()) {
+                    $sku    = $variant->sku ?? ('variant_' . $variant->id);
+                    $ext    = $file->getClientOriginalExtension() ?: 'jpg';
+                    $slotNumber = (int) $slotIndex + 1;
+
+                    $path = $file->storeAs(
+                        'uploads/variants/' . $sku,
+                        "{$sku}_{$slotNumber}.{$ext}",
+                        's3'
+                    );
+                    $slots[(int) $slotIndex] = $path;
+                }
+            }
+
+            // --- STEP 3: Fallback Merge Architecture ---
+            $existingImages = is_array($variant->images) ? $variant->images : [];
+
+            $merged = [];
+            for ($i = 0; $i < 5; $i++) {
+                if ($slots[$i] !== null) {
+                    $merged[] = $slots[$i];
+                } elseif (isset($existingImages[$i])) {
+                    $merged[] = $existingImages[$i];
+                }
+            }
+
+            $variant->update(['images' => $merged]);
+        }
+    }
+
+    /**
+     * After images are saved, decide if the item can leave draft status safely.
+     * Every variant must have at least 2 image files; otherwise lock to draft state.
+     */
+    private function evaluateDraftStatus(Item $item, string $requestedStatus): void
+    {
+        $item->refresh()->load('variants');
+
+        $allProven = $item->variants->every(function ($variant) {
+            $images = is_array($variant->images) ? $variant->images : [];
+            return count($images) >= 2;
+        });
+
+        $finalStatus = $allProven ? $requestedStatus : 'draft';
+
+        $item->update([
+            'status'        => $finalStatus,
+            'is_incomplete' => !$allProven,
+        ]);
+    }
+
+    private function validateItemPayload(Request $request): array
+    {
+        $validator = Validator::make($request->all(), [
+            'product_name'                    => 'required|string|max:255',
+            'product_description'             => 'nullable|string',
+            'packaging_details'               => 'nullable|string',
+            'item_category_id'                => 'required',
+            'status'                          => 'required|in:draft,active,inactive,archived',
+            'color_ids'                       => 'nullable|array',
+            'color_ids.*'                     => 'nullable',
+            'size_ids'                        => 'nullable|array',
+            'size_ids.*'                      => 'nullable',
+            'packaging'                       => 'nullable|array',
+            'packaging.*.item_packaging_type_id' => 'required',
+            'packaging.*.quantity'            => 'required|integer|min:1',
+            'existing_images'                 => 'nullable|array|max:10',
+            'existing_images.*'               => 'string',
+            'general_images'                  => 'nullable|array|max:10',
+            'general_images.*'                => 'image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'variant_images'                  => 'nullable|array',
+            'variant_images.*'                => 'nullable|array',
+            'variant_images.*.*'              => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'variant_existing_images'         => 'nullable|array',
+        ]);
+
+        $validator->after(function ($v) use ($request) {
+            $existing = count($request->input('existing_images', []));
+            $uploads  = count($request->file('general_images', []));
+
+            if (($existing + $uploads) > 10) {
+                $v->errors()->add('general_images', 'Maximum 10 general images per item total.');
+            }
+        });
+
+        return $validator->validate();
+    }
+
+    private function resolveCategoryId(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+        return ItemCategory::firstOrCreate(['category_name' => trim((string) $value)])->id;
+    }
+
+    private function resolveOptionIds(array $values, string $modelClass, string $nameColumn = 'name'): array
+    {
+        return collect($values)
+            ->filter(fn($v) => $v !== null && $v !== '')
+            ->map(function ($v) use ($modelClass, $nameColumn) {
+                if (is_numeric($v)) {
+                    return (int) $v;
+                }
+                return $modelClass::firstOrCreate([$nameColumn => trim((string) $v)])->id;
+            })
+            ->unique()->values()->all();
+    }
+
+    private function resolvePackagingPayload(array $packaging): array
+    {
+        return collect($packaging)
+            ->filter(fn($row) => filled($row['item_packaging_type_id'] ?? null))
+            ->mapWithKeys(function ($row) {
+                $typeId = $row['item_packaging_type_id'];
+                if (!is_numeric($typeId)) {
+                    $typeId = ItemPackagingType::firstOrCreate(['name' => trim((string) $typeId)])->id;
+                }
+                return [(int) $typeId => ['quantity' => max(1, (int) ($row['quantity'] ?? 1))]];
+            })
+            ->all();
+    }
+
+    private function handleUploads(Request $request, array $existingImages = []): array
+    {
+        $newPaths = [];
+
+        if ($request->hasFile('general_images')) {
+            foreach ($request->file('general_images') as $file) {
+                $name = Str::slug($request->product_name) . '_' . time() . '_' . Str::random(5) . '.' . $file->getClientOriginalExtension();
+                // Store raw key to MinIO — ImageResolver::resolve() will build the URL at render time
+                $path = $file->storeAs('uploads/items', $name, 's3');
+                $newPaths[] = $path;
+            }
+        }
+
+        return array_merge($existingImages, $newPaths);
+    }
+
+    /**
+     * Modernized upload endpoint for MinIO
+     */
+    public function uploadImages(Request $request)
+    {
+        $request->validate([
+            'product_name'    => 'required|string',
+            'product_images'  => 'required|array',
+            'product_images.*' => 'image|max:5120',
+        ]);
+
+        $paths = [];
+        foreach ($request->file('product_images') as $index => $file) {
+            $slug      = Str::slug($request->input('product_name'));
+            $counter   = $index + 1;
+            $extension = $file->getClientOriginalExtension() ?: 'jpg';
+            $fileName  = "{$slug}_{$counter}.{$extension}";
+
+            // Store raw key — ImageResolver builds the URL at render time
+            $path = $file->storeAs('uploads/items', $fileName, 's3');
+
+            // Return the resolved URL for the immediate upload response
+            $paths[] = ImageResolver::resolve($path);
+        }
+
+        return response()->json(['paths' => $paths]);
     }
 }

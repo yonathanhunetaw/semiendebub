@@ -1,6 +1,6 @@
 <?php
 
-namespace Database\Seeders\Admin;
+namespace Database\Seeders;
 
 use App\Models\Item\Item;
 use App\Models\Item\ItemCategory;
@@ -50,21 +50,20 @@ class ItemSeeder extends Seeder
     public function run(): void
     {
         // ── Shared attribute records ─────────────────────────────────────────
-// ── Shared attribute records ─────────────────────────────────────────
         $general = ItemCategory::firstOrCreate(['category_name' => 'General']);
         $apparel = ItemCategory::firstOrCreate(['category_name' => 'Apparel']);
 
-        $red = ItemColor::firstOrCreate(['name' => 'Red']);
-        $blue = ItemColor::firstOrCreate(['name' => 'Blue']);
-        $black = ItemColor::firstOrCreate(['name' => 'Black']);
+        $red   = ItemColor::firstOrCreate(['name' => 'Red'],   ['code' => 'RED']);
+        $blue  = ItemColor::firstOrCreate(['name' => 'Blue'],  ['code' => 'BLU']);
+        $black = ItemColor::firstOrCreate(['name' => 'Black'], ['code' => 'BLK']);
 
-        $small = ItemSize::firstOrCreate(['name' => 'S']);
-        $medium = ItemSize::firstOrCreate(['name' => 'M']);
-        $large = ItemSize::firstOrCreate(['name' => 'L']);
+        $small  = ItemSize::firstOrCreate(['name' => 'S'],  ['code' => 'S']);
+        $medium = ItemSize::firstOrCreate(['name' => 'M'],  ['code' => 'M']);
+        $large  = ItemSize::firstOrCreate(['name' => 'L'],  ['code' => 'L']);
 
-        $piece = ItemPackagingType::firstOrCreate(['name' => 'Piece']);
-        $box = ItemPackagingType::firstOrCreate(['name' => 'Box']);
-        $carton = ItemPackagingType::firstOrCreate(['name' => 'Carton']);
+        $piece  = ItemPackagingType::firstOrCreate(['name' => 'Piece'],  ['code' => 'PC']);
+        $box    = ItemPackagingType::firstOrCreate(['name' => 'Box'],    ['code' => 'BOX']);
+        $carton = ItemPackagingType::firstOrCreate(['name' => 'Carton'], ['code' => 'CTN']);
 
         // ── Item 1: Red Widget ───────────────────────────────────────────────
         // Pinned to picsum ID 237 — always the same image on reseed.
@@ -72,17 +71,17 @@ class ItemSeeder extends Seeder
         $widget = Item::factory()
             ->withPicsumId(237)
             ->create([
-                'product_name' => 'Red Widget',
+                'product_name'        => 'Red Widget',
                 'product_description' => 'A sturdy, multi-purpose red widget suitable for all environments.',
-                'packaging_details' => '1 Piece per box, 12 boxes per carton.',
-                'status' => 'active',
-                'item_category_id' => $general->id,
+                'packaging_details'   => '1 Piece per box, 12 boxes per carton.',
+                'status'              => 'active',
+                'item_category_id'    => $general->id,
             ]);
 
         // Packaging hierarchy: Piece(1) → Box(12 pieces) → Carton(10 boxes)
         $widget->packagingTypes()->sync([
-            $piece->id => ['quantity' => 1],
-            $box->id => ['quantity' => 12],
+            $piece->id  => ['quantity' => 1],
+            $box->id    => ['quantity' => 12],
             $carton->id => ['quantity' => 10],
         ]);
 
@@ -92,10 +91,10 @@ class ItemSeeder extends Seeder
                 ->for($widget)
                 ->withPicsumId(237 + $size->id) // Different picsum per size
                 ->create([
-                    'item_color_id' => $red->id,
-                    'item_size_id' => $size->id,
+                    'item_color_id'          => $red->id,
+                    'item_size_id'           => $size->id,
                     'item_packaging_type_id' => $piece->id,
-                    'status' => 'active',
+                    'status'                 => 'active',
                 ]);
         }
 
@@ -103,16 +102,16 @@ class ItemSeeder extends Seeder
         $tshirt = Item::factory()
             ->withPicsumId(442)
             ->create([
-                'product_name' => 'Classic T-Shirt',
+                'product_name'        => 'Classic T-Shirt',
                 'product_description' => 'Premium cotton t-shirt with a relaxed fit.',
-                'packaging_details' => 'Individually packed in a polybag.',
-                'status' => 'active',
-                'item_category_id' => $apparel->id,
+                'packaging_details'   => 'Individually packed in a polybag.',
+                'status'              => 'active',
+                'item_category_id'    => $apparel->id,
             ]);
 
         $tshirt->packagingTypes()->sync([
             $piece->id => ['quantity' => 1],
-            $box->id => ['quantity' => 6],
+            $box->id   => ['quantity' => 6],
         ]);
 
         foreach ([$blue, $black] as $color) {
@@ -121,10 +120,10 @@ class ItemSeeder extends Seeder
                     ->for($tshirt)
                     ->withPicsumId(442 + $color->id + $size->id)
                     ->create([
-                        'item_color_id' => $color->id,
-                        'item_size_id' => $size->id,
+                        'item_color_id'          => $color->id,
+                        'item_size_id'           => $size->id,
                         'item_packaging_type_id' => $piece->id,
-                        'status' => 'active',
+                        'status'                 => 'active',
                     ]);
             }
         }
