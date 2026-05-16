@@ -44,9 +44,9 @@ Route::domain("dev.{$baseDomain}")
             | Including these files here ensures they inherit the 'dev.' subdomain,
             | naming prefixes, and all required authentication middleware layers.
             */
-            require __DIR__.'/web/dev/dev.php';
-            require __DIR__.'/web/dev/lessons/lesson4.php';
-            require __DIR__.'/web/dev/lessons/lesson6.php';
+            require __DIR__.'/dev/dev.php';
+            require __DIR__.'/dev/lessons/lesson4.php';
+            require __DIR__.'/dev/lessons/lesson6.php';
 
         });
     });
