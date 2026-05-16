@@ -14,14 +14,12 @@ class ItemVariantGenerationService
         $item->load([
             'colors',
             'sizes',
-            'packagingTypes' => fn($query) => $query->withPivot('quantity'),
             'stores',
             'variants' => fn($query) => $query->withTrashed(),
         ]);
 
         $colorIds = $item->colors->pluck('id')->all();
         $sizeIds = $item->sizes->pluck('id')->all();
-        $packagingTypes = $item->packagingTypes;
 
         if (empty($colorIds)) {
             $colorIds = [null];
@@ -31,44 +29,38 @@ class ItemVariantGenerationService
             $sizeIds = [null];
         }
 
-        if ($packagingTypes->isEmpty()) {
-            $packagingTypes = collect([(object) ['id' => null, 'pivot' => (object) ['quantity' => 1]]]);
-        }
-
         $validKeys = [];
 
+        // ─── Loop strictly over physical characteristics ─────────────────────
         foreach ($colorIds as $colorId) {
             foreach ($sizeIds as $sizeId) {
-                foreach ($packagingTypes as $packagingType) {
-                    $packagingId = $packagingType->id;
-                    $packagingQty = (int) ($packagingType->pivot->quantity ?? 1);
+                
+                // Key format shifts to just "color:size"
+                $validKeys[] = $this->variantKey($colorId, $sizeId);
 
-                    $validKeys[] = $this->variantKey($colorId, $sizeId, $packagingId);
+                $variant = ItemVariant::withTrashed()->firstOrNew([
+                    'item_id'       => $item->id,
+                    'item_color_id' => $colorId,
+                    'item_size_id'  => $sizeId,
+                ]);
 
-                    $variant = ItemVariant::withTrashed()->firstOrNew([
-                        'item_id' => $item->id,
-                        'item_color_id' => $colorId,
-                        'item_size_id' => $sizeId,
-                        'item_packaging_type_id' => $packagingId,
-                    ]);
-
-                    if ($variant->trashed()) {
-                        $variant->restore();
-                    }
-
-                    $variant->status = $variant->status ?: ($item->status === 'active' ? 'active' : 'inactive');
-                    $variant->packaging_total_pieces = max(1, $packagingQty);
-                    $variant->save();
-
-                    $this->ensureStoreVariantRecords($item, $variant);
+                if ($variant->trashed()) {
+                    $variant->restore();
                 }
+
+                // Default basic properties if new
+                $variant->status = $variant->status ?: ($item->status === 'active' ? 'active' : 'inactive');
+                $variant->save();
+
+                $this->ensureStoreVariantRecords($item, $variant);
             }
         }
 
+        // ─── Clean up obsolete variants ──────────────────────────────────────
         $item->variants()
             ->get()
             ->reject(fn(ItemVariant $variant) => in_array(
-                $this->variantKey($variant->item_color_id, $variant->item_size_id, $variant->item_packaging_type_id),
+                $this->variantKey($variant->item_color_id, $variant->item_size_id),
                 $validKeys,
                 true
             ))
@@ -89,12 +81,12 @@ class ItemVariantGenerationService
         foreach ($storeIds as $storeId) {
             StoreVariant::firstOrCreate(
                 [
-                    'store_id' => $storeId,
+                    'store_id'        => $storeId,
                     'item_variant_id' => $variant->id,
                 ],
                 [
-                    // 'item_id' => $item->id, // 🔥 REQUIRED FIX
-                    'active' => $variant->status === 'active',
+                    'item_id'       => $item->id, // Added verified required fix
+                    'active'        => $variant->status === 'active',
                     'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
                     'forced_status' => $variant->status === 'active' ? null : 'inactive',
                 ]
@@ -111,19 +103,18 @@ class ItemVariantGenerationService
 
         foreach ($variant->storeVariants as $storeVariant) {
             $storeVariant->update([
-                'active' => $active,
+                'active'        => $active,
                 'manual_status' => $active ? 'auto' : 'forced',
                 'forced_status' => $active ? null : 'inactive',
             ]);
         }
     }
 
-    private function variantKey(?int $colorId, ?int $sizeId, ?int $packagingId): string
+    private function variantKey(?int $colorId, ?int $sizeId): string
     {
         return implode(':', [
             $colorId ?? 'null',
-            $sizeId ?? 'null',
-            $packagingId ?? 'null',
+            $sizeId  ?? 'null',
         ]);
     }
 }
