@@ -54,62 +54,62 @@ class ItemSeeder extends Seeder
     // ═════════════════════════════════════════════════════════════════════════
     private array $items = [
         [
-            'product_name'        => '2025 - 1',
+            'product_name' => '2025 - 1',
             'product_description' => 'Premium quality distribution catalog ledger item for 2025.',
-            'packaging_details'   => 'Available in individual pieces, and master cartons of 96.',
-            'item_category_id'    => 45, 
-            'status'              => 'active',
-            'picsum_id'           => 201,   
-            'file_prefix'         => '2025-1', // ◄ Explicitly match your local filenames
-            'color_ids'           => [1, 2], 
-            'size_ids'            => [1],    
+            'packaging_details' => 'Available in individual pieces, and master cartons of 96.',
+            'item_category_id' => 45,
+            'status' => 'active',
+            'picsum_id' => 201,
+            'file_prefix' => '2025-1', // ◄ Explicitly match your local filenames
+            'color_ids' => [1, 2],
+            'size_ids' => [1],
             'packaging' => [
-                ['item_packaging_type_id' => 1, 'quantity' => 1,   'cbm' => 0.0012], 
-                ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1600], 
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0012],
+                ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1600],
             ],
         ],
         [
-            'product_name'        => '2025 - ብልጭልጭ',
+            'product_name' => '2025 - ብልጭልጭ',
             'product_description' => 'Premium quality distribution catalog ledger item for 2025 - ብልጭልጭ.',
-            'packaging_details'   => 'Available in individual pieces, boxes of 12, and master cartons of 120.',
-            'item_category_id'    => 45,
-            'status'              => 'active',
-            'picsum_id'           => 202,
-            'file_prefix'         => '2025-ብልጭልጭ',
-            'color_ids'           => [1, 2],
-            'size_ids'            => [1],
+            'packaging_details' => 'Available in individual pieces, boxes of 12, and master cartons of 120.',
+            'item_category_id' => 45,
+            'status' => 'active',
+            'picsum_id' => 202,
+            'file_prefix' => '2025-ብልጭልጭ',
+            'color_ids' => [1, 2],
+            'size_ids' => [1],
             'packaging' => [
-                ['item_packaging_type_id' => 1, 'quantity' => 1,   'cbm' => 0.0015],
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0015],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.2000],
             ],
         ],
         [
-            'product_name'        => '25k - 1 ፓሪስ',
+            'product_name' => '25k - 1 ፓሪስ',
             'product_description' => 'Premium quality distribution catalog ledger item for 25k - 1 ፓሪስ.',
-            'packaging_details'   => 'Available in individual pieces, boxes of 12, and master cartons of 120.',
-            'item_category_id'    => 46, 
-            'status'              => 'active',
-            'picsum_id'           => 203,
-            'file_prefix'         => '25k-1ፓሪስ',
-            'color_ids'           => [2],
-            'size_ids'            => [1],
+            'packaging_details' => 'Available in individual pieces, boxes of 12, and master cartons of 120.',
+            'item_category_id' => 46,
+            'status' => 'active',
+            'picsum_id' => 203,
+            'file_prefix' => '25k-1ፓሪስ',
+            'color_ids' => [2],
+            'size_ids' => [1],
             'packaging' => [
-                ['item_packaging_type_id' => 1, 'quantity' => 1,   'cbm' => 0.0008],
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0008],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1100],
             ],
         ],
         [
-            'product_name'        => '25k - 5 ጨርቅ ማስታወሻ',
+            'product_name' => '25k - 5 ጨርቅ ማስታወሻ',
             'product_description' => 'Premium quality distribution catalog ledger item for 25k - 5 ጨርቅ ማስታወሻ.',
-            'packaging_details'   => 'Available in individual pieces, boxes of 12, and master cartons of 120.',
-            'item_category_id'    => 46,
-            'status'              => 'active',
-            'picsum_id'           => 204,
-            'file_prefix'         => '25k-5ጨርቅማስታወሻ',
-            'color_ids'           => [2],
-            'size_ids'            => [1], 
+            'packaging_details' => 'Available in individual pieces, boxes of 12, and master cartons of 120.',
+            'item_category_id' => 46,
+            'status' => 'active',
+            'picsum_id' => 204,
+            'file_prefix' => '25k-5ጨርቅማስታወሻ',
+            'color_ids' => [2],
+            'size_ids' => [1],
             'packaging' => [
-                ['item_packaging_type_id' => 1, 'quantity' => 1,   'cbm' => 0.0009],
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0009],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1250],
             ],
         ]
@@ -124,12 +124,12 @@ class ItemSeeder extends Seeder
             $item = Item::factory()
                 ->withPicsumId($data['picsum_id'])
                 ->create([
-                    'product_name'        => $data['product_name'],
+                    'product_name' => $data['product_name'],
                     'product_description' => $data['product_description'],
-                    'packaging_details'   => $data['packaging_details'] ?? null,
-                    'item_category_id'    => $data['item_category_id'],
-                    'status'              => 'draft', 
-                    'is_incomplete'       => true,
+                    'packaging_details' => $data['packaging_details'] ?? null,
+                    'item_category_id' => $data['item_category_id'],
+                    'status' => 'draft',
+                    'is_incomplete' => true,
                 ]);
 
             $item->colors()->sync($data['color_ids']);
@@ -166,7 +166,7 @@ class ItemSeeder extends Seeder
             for ($index = 1; $index <= 5; $index++) {
                 $sourceFileName = "{$prefix}_{$index}.jpg";
                 $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
-                
+
                 // Destination directory key structure inside MinIO bucket
                 $sku = $variant->sku ?? 'v' . $variant->id;
                 $minioPath = "uploads/variants/{$sku}/{$sourceFileName}";
@@ -199,13 +199,13 @@ class ItemSeeder extends Seeder
         foreach ($item->variants as $variant) {
             $syncPayload = [];
             foreach ($data['packaging'] as $packConfig) {
-                $packTypeId = (int)$packConfig['item_packaging_type_id'];
+                $packTypeId = (int) $packConfig['item_packaging_type_id'];
 
                 $syncPayload[$packTypeId] = [
-                    'quantity'      => max(1, (int)$packConfig['quantity']),
-                    'cbm'           => $packConfig['cbm'] ?? 0.0000,
+                    'quantity' => max(1, (int) $packConfig['quantity']),
+                    'cbm' => $packConfig['cbm'] ?? 0.0000,
                     'item_color_id' => $variant->item_color_id,
-                    'item_size_id'  => $variant->item_size_id,
+                    'item_size_id' => $variant->item_size_id,
                 ];
             }
 
@@ -229,18 +229,23 @@ class ItemSeeder extends Seeder
 
     private function evaluateDraftStatus(Item $item, string $requestedStatus): void
     {
-        $item->refresh()->load('variants');
-
-        $allProven = $item->variants->every(function (ItemVariant $variant) {
-            $images = $variant->images ?? [];
-            return count($images) >= 2;
-        });
-
-        $finalStatus = $allProven ? $requestedStatus : 'draft';
-
+        // 1. Force the parent item status to active/requested state
         $item->update([
-            'status'        => $finalStatus,
-            'is_incomplete' => !$allProven,
+            'status' => $requestedStatus,
+            'is_incomplete' => false,
         ]);
+
+        // 2. ⚡ CRITICAL: Loop through and activate the variants so they show up as "Active" in your store tables
+        $item->refresh()->load('variants');
+        foreach ($item->variants as $variant) {
+            $variant->update([
+                'status' => $requestedStatus // Flips variant status to 'active'
+            ]);
+
+            // Sync up the store variant connection maps to match
+            if (method_exists($this, 'applyAvailabilityToStores')) {
+                $this->applyAvailabilityToStores($variant, $requestedStatus === 'active');
+            }
+        }
     }
 }
