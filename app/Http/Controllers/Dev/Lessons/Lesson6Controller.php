@@ -1,127 +1,147 @@
-<?php
+import DevLayout from '@/Layouts/DevLayout';
+import { Head } from '@inertiajs/react';
+import { Box, Typography, Paper, Grid, Rating } from '@mui/material';
 
-namespace App\Http\Controllers\Dev\Lessons;
-
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Illuminate\Support\Facades\Storage;
-
-// For generating IDs if not using a DB
-
-class Lesson6Controller extends Controller
-{
-    /**
-     * Display the Color Organizer (List of colors).
-     * Route: admin.lessons.lesson6 (GET)
-     */
-
-
-
-    public function index()
-    {
-        // In a real app: $colors = Color::all();
-        $colors = [
-            [
-                'id' => '0175d1f0-a8c6-41bf-8d02-df5734d829a4',
-                'title' => 'ocean at dusk',
-                'color' => '#00c4e2',
-                'rating' => 5,
-                'image_url' => Storage::disk('s3')->temporaryUrl('3X3_blue_1.jpg', now()->addMinutes(15))
-            ],
-            [
-                'id' => '83c7ba2f-7392-4d7d-9e23-35adbe186046',
-                'title' => 'lawn',
-                'color' => '#26ac56',
-                'rating' => 3,
-                'image_url' => Storage::disk('s3')->temporaryUrl('3X3_Green_1.jpg', now()->addMinutes(15))
-            ],
-            [
-                'id' => 'a11e3995-b0bd-4d58-8c48-5e49ae7f7f23',
-                'title' => 'bright red',
-                'color' => '#ff0000',
-                'rating' => 0,
-                'image_url' => Storage::disk('s3')->temporaryUrl('1.jpg', now()->addMinutes(15))
-            ],
-        ];
-
-        // Update this if your React component is in the Lessons folder rather than Dashboard
-        return Inertia::render('Dev/Dashboard/Lesson6/Index', [
-            'initialColors' => $colors,
-        ]);
-    }
-
-    /**
-     * Show the form for creating a new color.
-     * Route: admin.lessons.create (GET)
-     */
-    public function create()
-    {
-        return Inertia::render('Dev/Lessons/Lesson6/CreateColor');
-    }
-
-    /**
-     * Store a newly created color in storage.
-     * Route: admin.lessons.store (POST)
-     */
-    public function store(Request $request)
-    {
-        //        $validated = $request->validate([
-        //            'title' => 'required|string|max:255',
-        //            'color' => 'required|string|size:7', // Hex code
-        //        ]);
-
-        // Logic: Color::create([...$validated, 'rating' => 0]);
-
-        return redirect()->route('lessons6.store')
-            ->with('success', 'Color added successfully!');
-    }
-
-    /**
-     * Display a specific color (rarely used for this specific app).
-     * Route: admin.lessons.show (GET)
-     */
-    public function show($id)
-    {
-        // Logic: $color = Color::findOrFail($id);
-        return Inertia::render('Dev/Lessons/Lesson6/ShowColor', ['color' => $id]);
-    }
-
-    /**
-     * Show the form for editing a color.
-     * Route: admin.lessons.edit (GET)
-     */
-    public function edit($id)
-    {
-        // Logic: $color = Color::findOrFail($id);
-        return Inertia::render('Dev/Lessons/Lesson6/EditColor', ['color' => $id]);
-    }
-
-    /**
-     * Update the rating or title of a color.
-     * Route: admin.lessons.update (PUT/PATCH)
-     */
-    public function update(Request $request, $id)
-    {
-        $validated = $request->validate([
-            'rating' => 'integer|min:0|max:5',
-            'title' => 'string',
-        ]);
-
-        // Logic: $color = Color::findOrFail($id);
-        // $color->update($validated);
-
-        return back(); // Refresh the page with updated data
-    }
-
-    /**
-     * Remove a color from the organizer.
-     * Route: admin.lessons.destroy (DELETE)
-     */
-    public function destroy($id)
-    {
-        // Logic: Color::destroy($id);
-
-        return back()->with('message', 'Color removed.');
-    }
+interface ColorAsset {
+    id: string;
+    title: string;
+    color: string;
+    rating: number;
+    image_url?: string;
 }
+
+interface IndexProps {
+    initialColors: ColorAsset[];
+}
+
+export default function Index({ initialColors }: IndexProps) {
+    return (
+        <>
+            <Head title="Imperial Colors & Assets" />
+
+            <Box sx={{ p: 1 }}>
+                <Typography
+                    variant="h5"
+                    sx={{
+                        fontFamily: 'monospace',
+                        color: '#f1f1f1',
+                        mb: 3,
+                        fontWeight: 700,
+                        borderBottom: '1px solid #2f2f2f',
+                        pb: 2
+                    }}
+                >
+                    // Imperial Colors & Assets Initialized
+                </Typography>
+
+                <Grid container spacing={3}>
+                    {initialColors.map((color) => (
+                        <Grid item xs={12} sm={6} md={4} key={color.id}>
+                            <Paper
+                                elevation={0}
+                                sx={{
+                                    bgcolor: '#1f1f1f',
+                                    border: '1px solid #2f2f2f',
+                                    borderRadius: '8px',
+                                    overflow: 'hidden',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    transition: 'transform 0.2s, border-color 0.2s',
+                                    '&:hover': {
+                                        borderColor: color.color,
+                                        transform: 'translateY(-2px)'
+                                    }
+                                }}
+                            >
+                                {/* Asset Media Window */}
+                                <Box
+                                    sx={{
+                                        width: '100%',
+                                        height: '180px',
+                                        bgcolor: '#0a0a0a',
+                                        position: 'relative',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    {color.image_url ? (
+                                        <Box
+                                            component="img"
+                                            src={color.image_url}
+                                            alt={color.title}
+                                            sx={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover'
+                                            }}
+                                        />
+                                    ) : (
+                                        <Typography
+                                            variant="body2"
+                                            sx={{ fontFamily: 'monospace', color: '#aaaaaa' }}
+                                        >
+                                            [ No Asset Registered ]
+                                        </Typography>
+                                    )}
+
+                                    {/* Color Hex Badge */}
+                                    <Box
+                                        sx={{
+                                            position: 'absolute',
+                                            bottom: '10px',
+                                            right: '10px',
+                                            bgcolor: 'rgba(15, 15, 15, 0.85)',
+                                            px: 1.5,
+                                            py: 0.5,
+                                            borderRadius: '4px',
+                                            border: '1px solid #2f2f2f',
+                                            fontSize: '12px',
+                                            fontFamily: 'monospace',
+                                            color: color.color,
+                                            fontWeight: 'bold'
+                                        }}
+                                    >
+                                        {color.color}
+                                    </Box>
+                                </Box>
+
+                                {/* Metadata Panel */}
+                                <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    <Typography
+                                        variant="subtitle1"
+                                        sx={{
+                                            color: '#f1f1f1',
+                                            fontWeight: 600,
+                                            textTransform: 'capitalize',
+                                            fontFamily: 'Roboto, sans-serif'
+                                        }}
+                                    >
+                                        {color.title}
+                                    </Typography>
+
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#888888' }}>
+                                            RATING:
+                                        </Typography>
+                                        <Rating
+                                            value={color.rating}
+                                            readOnly
+                                            size="small"
+                                            sx={{
+                                                color: '#ffc107',
+                                                '& .MuiRating-iconEmpty': { color: '#333333' }
+                                            }}
+                                        />
+                                    </Box>
+                                </Box>
+                            </Paper>
+                        </Grid>
+                    ))}
+                </Grid>
+            </Box>
+        </>
+    );
+}
+
+Index.layout = (page: React.ReactNode) => <DevLayout>{page}</DevLayout>;
