@@ -85,7 +85,7 @@ class ItemVariantGenerationService
                     'item_variant_id' => $variant->id,
                 ],
                 [
-                    'item_id'       => $item->id, // Added verified required fix
+                    //  Fixed: Removed 'item_id' column assignment completely since it doesn't exist in store_variants
                     'active'        => $variant->status === 'active',
                     'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
                     'forced_status' => $variant->status === 'active' ? null : 'inactive',
