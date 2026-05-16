@@ -1,6 +1,6 @@
 <?php
 
-namespace Database\Seeders;
+namespace Database\Seeders\Admin;
 
 use App\Models\Item\Item;
 use App\Models\Item\ItemCategory;
@@ -53,18 +53,17 @@ class ItemSeeder extends Seeder
         $general = ItemCategory::firstOrCreate(['category_name' => 'General']);
         $apparel = ItemCategory::firstOrCreate(['category_name' => 'Apparel']);
 
-        $red   = ItemColor::firstOrCreate(['name' => 'Red'],   ['code' => 'RED']);
-        $blue  = ItemColor::firstOrCreate(['name' => 'Blue'],  ['code' => 'BLU']);
-        $black = ItemColor::firstOrCreate(['name' => 'Black'], ['code' => 'BLK']);
+        $red = ItemColor::firstOrCreate(['name' => 'Red']);
+        $blue = ItemColor::firstOrCreate(['name' => 'Blue']);
+        $black = ItemColor::firstOrCreate(['name' => 'Black']);
 
-        $small  = ItemSize::firstOrCreate(['name' => 'S'],  ['code' => 'S']);
-        $medium = ItemSize::firstOrCreate(['name' => 'M'],  ['code' => 'M']);
-        $large  = ItemSize::firstOrCreate(['name' => 'L'],  ['code' => 'L']);
+        $small = ItemSize::firstOrCreate(['name' => 'S']);
+        $medium = ItemSize::firstOrCreate(['name' => 'M']);
+        $large = ItemSize::firstOrCreate(['name' => 'L']);
 
-        $piece  = ItemPackagingType::firstOrCreate(['name' => 'Piece'],  ['code' => 'PC']);
-        $box    = ItemPackagingType::firstOrCreate(['name' => 'Box'],    ['code' => 'BOX']);
-        $carton = ItemPackagingType::firstOrCreate(['name' => 'Carton'], ['code' => 'CTN']);
-
+        $piece = ItemPackagingType::firstOrCreate(['name' => 'Piece']);
+        $box = ItemPackagingType::firstOrCreate(['name' => 'Box']);
+        $carton = ItemPackagingType::firstOrCreate(['name' => 'Carton']);
         // ── Item 1: Red Widget ───────────────────────────────────────────────
         // Pinned to picsum ID 237 — always the same image on reseed.
         // To change the image: update withPicsumId() or switch to withLocalImages().
