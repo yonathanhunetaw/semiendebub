@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Database\Factories\ItemVariantFactory;
 
 class ItemVariant extends Model
 {
@@ -26,12 +25,10 @@ class ItemVariant extends Model
         'item_id',
         'item_color_id',
         'item_size_id',
-        'item_packaging_type_id',
         'owner_id',
         'barcode',
         'images',  // Stores raw MinIO keys, e.g. ["uploads/variants/SKU/front.jpg"]
         'status',
-        'packaging_total_pieces',
         'sku',
     ];
 
@@ -46,9 +43,9 @@ class ItemVariant extends Model
                 $itemSku = $variant->item?->sku ?? 'ITEM';
                 $colorCode = $variant->itemColor?->code ?? 'X';
                 $sizeCode = $variant->itemSize?->code ?? 'X';
-                $packCode = $variant->itemPackagingType?->code ?? '1';
 
-                $variant->sku = "{$itemSku}-{$colorCode}-{$sizeCode}-{$packCode}-{$variant->id}";
+                // SKU format simplified to physical combination tracking matrix
+                $variant->sku = "{$itemSku}-{$colorCode}-{$sizeCode}-{$variant->id}";
                 $variant->saveQuietly();
             }
         });
@@ -128,11 +125,6 @@ class ItemVariant extends Model
         return $this->belongsTo(ItemSize::class, 'item_size_id');
     }
 
-    public function itemPackagingType(): BelongsTo
-    {
-        return $this->belongsTo(ItemPackagingType::class, 'item_packaging_type_id');
-    }
-
     public function owner()
     {
         return $this->belongsTo(User::class, 'owner_id');
@@ -167,7 +159,7 @@ class ItemVariant extends Model
 
     public function item_stock()
     {
-        return $this->hasOne(ItemStock::class, 'variant_id');
+        return $this->hasOne(ItemStock::class, 'item_variant_id');
     }
 
     /*
@@ -187,29 +179,5 @@ class ItemVariant extends Model
             ->where('location_type', $locationType)
             ->where('location_id', $locationId)
             ->sum('quantity');
-    }
-
-    public function calculateTotalPieces(): int
-    {
-        if (!$this->item_packaging_type_id) {
-            return 1;
-        }
-
-        $item = $this->item;
-        $packs = $item->packagingTypes->sortBy('pivot_id')->values();
-        $total = 1;
-        $found = false;
-
-        foreach ($packs as $pack) {
-            $qty = $pack->pivot->quantity ?? 1;
-            $total *= $qty;
-
-            if ($pack->id == $this->item_packaging_type_id) {
-                $found = true;
-                break;
-            }
-        }
-
-        return $found ? $total : 1;
     }
 }

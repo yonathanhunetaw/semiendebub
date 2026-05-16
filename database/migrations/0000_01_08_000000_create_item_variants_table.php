@@ -10,19 +10,18 @@ return new class extends Migration {
         Schema::create('item_variants', function (Blueprint $table) {
             $table->id();
             $table->foreignId('item_id')->constrained()->onDelete('cascade');
-            
-            // Core Identity (Saying it in one place)
-            $table->string('sku')->unique()->nullable();
-            $table->string('barcode')->nullable()->unique();
-            $table->foreignId('item_color_id')->nullable()->constrained()->onDelete('set null');
-            $table->foreignId('item_size_id')->nullable()->constrained()->onDelete('set null');
-            // Keep this strictly for universal identity tags that never change regardless of how the product is packaged
-                    // $table->foreignId('item_packaging_type_id')->constrained('item_packaging_types')->onDelete('cascade');
-            $table->foreignId('owner_id')->nullable()->constrained('users');
+            $table->foreignId('item_color_id')->nullable()->constrained()->onDelete('cascade');
+            $table->foreignId('item_size_id')->nullable()->constrained()->onDelete('cascade');
 
-            $table->enum('status', ['active', 'inactive', 'unavailable', 'out_of_stock'])->default('inactive');
-            $table->timestamps();
+            // ─── CRITICAL: Ensure this column is physically built by MySQL ───────
+            $table->json('images')->nullable();
+
+            $table->string('sku')->nullable()->unique();
+            $table->string('barcode')->nullable();
+            $table->string('status')->default('active');
+            $table->foreignId('owner_id')->nullable()->constrained('users')->onDelete('set null');
             $table->softDeletes();
+            $table->timestamps();
         });
     }
 
