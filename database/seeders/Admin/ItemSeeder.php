@@ -1,6 +1,6 @@
 <?php
 
-anamespace Database\Seeders;
+namespace Database\Seeders;
 
 use App\Models\Item\Item;
 use App\Models\Item\ItemCategory;
