@@ -154,6 +154,9 @@ class ItemSeeder extends Seeder
     /**
      * FIXED: Loops up to 5 images per variant matching your local filesystem.
      */
+    /**
+     * FIXED: Seeds up to 5 images with exact matching raw object keys.
+     */
     private function seedDeterministicVariantImages(Item $item, array $data): void
     {
         $item->load('variants');
@@ -161,34 +164,40 @@ class ItemSeeder extends Seeder
 
         $itemImagesArray = [];
 
-        // 1. Process and upload images to the ITEM level folder (0-indexed to match img-0)
+        // 1. Process and upload images to the ITEM level folder
         for ($index = 0; $index < 5; $index++) {
-            // Matches your desktop source filenames: prefix_1.jpg, prefix_2.jpg, etc.
+            // Matches local files: 2025-1_1.jpg, 2025-1_2.jpg, etc.
             $sourceFileName = "{$prefix}_" . ($index + 1) . ".jpg";
             $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
 
-            // 🎯 EXACT MINIO PATH STRUCTURE
+            // 🎯 MATCHES UI UPLOADS EXACTLY: Pure, raw object storage key
             $minioPath = "uploads/items/{$item->id}/img-{$index}.jpg";
 
             if (File::exists($sourcePath)) {
-                // Check and upload to MinIO disk
-                if (!Storage::disk('minio')->exists($minioPath)) {
-                    Storage::disk('minio')->put($minioPath, File::get($sourcePath));
-                }
+                // ⚡ Uses 's3' disk to match your production ItemController settings
+                $disk = Storage::disk('s3');
 
-                // Save the exact format your frontend resolver context expects
-                $itemImagesArray[] = "/duka-images/" . $minioPath;
+                try {
+                    if (!$disk->exists($minioPath)) {
+                        $disk->put($minioPath, File::get($sourcePath));
+                    }
+
+                    // ✨ FIXED: Push ONLY the clean raw storage key (No "/duka-images/" prefix!)
+                    $itemImagesArray[] = $minioPath;
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error("Failed seeding image: " . $e->getMessage());
+                }
             }
         }
 
-        // 2. 🎯 SAVE IT TO THE ITEM LEVEL ('general_images')
+        // 2. Save the matching array to the parent Item level ('general_images')
         if (!empty($itemImagesArray)) {
             $item->update([
                 'general_images' => $itemImagesArray
             ]);
         }
 
-        // 3. Keep your variants in sync by assigning the same item-level images to them
+        // 3. Save the exact same matching array to the children Variants level ('images')
         foreach ($item->variants as $variant) {
             $variant->update([
                 'images' => $itemImagesArray
