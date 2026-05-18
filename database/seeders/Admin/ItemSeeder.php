@@ -157,6 +157,9 @@ class ItemSeeder extends Seeder
     /**
      * FIXED: Seeds up to 5 images with exact matching raw object keys.
      */
+    /**
+     * FIXED: Seeds up to 5 images with exact matching raw object keys.
+     */
     private function seedDeterministicVariantImages(Item $item, array $data): void
     {
         $item->load('variants');
@@ -164,17 +167,15 @@ class ItemSeeder extends Seeder
 
         $itemImagesArray = [];
 
-        // 1. Process and upload images to the ITEM level folder
         for ($index = 0; $index < 5; $index++) {
-            // Matches local files: 2025-1_1.jpg, 2025-1_2.jpg, etc.
             $sourceFileName = "{$prefix}_" . ($index + 1) . ".jpg";
             $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
 
-            // 🎯 MATCHES UI UPLOADS EXACTLY: Pure, raw object storage key
+            // 🎯 FIXED NAME PATH: Clean raw object key layout matching web UI behavior
             $minioPath = "uploads/items/{$item->id}/img-{$index}.jpg";
 
             if (File::exists($sourcePath)) {
-                // ⚡ Uses 's3' disk to match your production ItemController settings
+                // Always write to your configured 's3' disk context
                 $disk = Storage::disk('s3');
 
                 try {
@@ -182,7 +183,7 @@ class ItemSeeder extends Seeder
                         $disk->put($minioPath, File::get($sourcePath));
                     }
 
-                    // ✨ FIXED: Push ONLY the clean raw storage key (No "/duka-images/" prefix!)
+                    // ✨ Save the raw key (no leading bucket slash wrappers)
                     $itemImagesArray[] = $minioPath;
                 } catch (\Exception $e) {
                     \Illuminate\Support\Facades\Log::error("Failed seeding image: " . $e->getMessage());
@@ -190,14 +191,14 @@ class ItemSeeder extends Seeder
             }
         }
 
-        // 2. Save the matching array to the parent Item level ('general_images')
+        // Save to parent item field
         if (!empty($itemImagesArray)) {
             $item->update([
                 'general_images' => $itemImagesArray
             ]);
         }
 
-        // 3. Save the exact same matching array to the children Variants level ('images')
+        // Save exactly matching keys to child variants
         foreach ($item->variants as $variant) {
             $variant->update([
                 'images' => $itemImagesArray
