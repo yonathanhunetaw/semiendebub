@@ -14,13 +14,16 @@ class ItemVariantGenerationService
         $item->load([
             'colors',
             'sizes',
+            'packagingTypes', // 🎯 Load packaging contexts explicitly
             'stores',
             'variants' => fn($query) => $query->withTrashed(),
         ]);
 
         $colorIds = $item->colors->pluck('id')->all();
         $sizeIds = $item->sizes->pluck('id')->all();
+        $packagingTypeIds = $item->packagingTypes->pluck('id')->all(); // 🎯 Extract active packaging types
 
+        // Fallbacks for items without distinct attributes to keep the matrix intact
         if (empty($colorIds)) {
             $colorIds = [null];
         }
@@ -29,38 +32,57 @@ class ItemVariantGenerationService
             $sizeIds = [null];
         }
 
+        if (empty($packagingTypeIds)) {
+            $packagingTypeIds = [null];
+        }
+
         $validKeys = [];
 
-        // ─── Loop strictly over physical characteristics ─────────────────────
+        // ─── 🎯 THREE-TIER NESTED COMBINATION MATRIX LOOP ─────────────────────
         foreach ($colorIds as $colorId) {
             foreach ($sizeIds as $sizeId) {
-                
-                // Key format shifts to just "color:size"
-                $validKeys[] = $this->variantKey($colorId, $sizeId);
+                foreach ($packagingTypeIds as $packagingTypeId) {
+                    
+                    // Trace string tracking compound key now includes the packaging type dimension
+                    $validKeys[] = $this->variantKey($colorId, $sizeId, $packagingTypeId);
 
-                $variant = ItemVariant::withTrashed()->firstOrNew([
-                    'item_id'       => $item->id,
-                    'item_color_id' => $colorId,
-                    'item_size_id'  => $sizeId,
-                ]);
+                    $variant = ItemVariant::withTrashed()->firstOrNew([
+                        'item_id'                => $item->id,
+                        'item_color_id'          => $colorId,
+                        'item_size_id'           => $sizeId,
+                        'item_packaging_type_id' => $packagingTypeId, // 🎯 Tracks package variation explicitly
+                    ]);
 
-                if ($variant->trashed()) {
-                    $variant->restore();
+                    if ($variant->trashed()) {
+                        $variant->restore();
+                    }
+
+                    // 🎯 AUTOMATED STRUCTURAL SKU GENERATION
+                    // Output matches the standard schema pattern: DUKA-I1-C2-S1-P3
+                    if (empty($variant->sku)) {
+                        $variant->sku = sprintf(
+                            'DUKA-I%d-C%s-S%s-P%s',
+                            $item->id,
+                            $colorId ?? '0',
+                            $sizeId ?? '0',
+                            $packagingTypeId ?? '0'
+                        );
+                    }
+
+                    // Default basic properties if brand new
+                    $variant->status = $variant->status ?: ($item->status === 'active' ? 'active' : 'inactive');
+                    $variant->save();
+
+                    $this->ensureStoreVariantRecords($item, $variant);
                 }
-
-                // Default basic properties if new
-                $variant->status = $variant->status ?: ($item->status === 'active' ? 'active' : 'inactive');
-                $variant->save();
-
-                $this->ensureStoreVariantRecords($item, $variant);
             }
         }
 
-        // ─── Clean up obsolete variants ──────────────────────────────────────
+        // ─── Clean up obsolete variants matching the updated keys ────────────
         $item->variants()
             ->get()
             ->reject(fn(ItemVariant $variant) => in_array(
-                $this->variantKey($variant->item_color_id, $variant->item_size_id),
+                $this->variantKey($variant->item_color_id, $variant->item_size_id, $variant->item_packaging_type_id),
                 $validKeys,
                 true
             ))
@@ -85,7 +107,6 @@ class ItemVariantGenerationService
                     'item_variant_id' => $variant->id,
                 ],
                 [
-                    //  Fixed: Removed 'item_id' column assignment completely since it doesn't exist in store_variants
                     'active'        => $variant->status === 'active',
                     'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
                     'forced_status' => $variant->status === 'active' ? null : 'inactive',
@@ -110,11 +131,15 @@ class ItemVariantGenerationService
         }
     }
 
-    private function variantKey(?int $colorId, ?int $sizeId): string
+    /**
+     * Helper trace builder key method updated to accommodate packaging types.
+     */
+    private function variantKey(?int $colorId, ?int $sizeId, ?int $packagingTypeId = null): string
     {
         return implode(':', [
             $colorId ?? 'null',
             $sizeId  ?? 'null',
+            $packagingTypeId ?? 'null',
         ]);
     }
 }
