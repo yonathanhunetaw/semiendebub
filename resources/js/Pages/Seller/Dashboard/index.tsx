@@ -21,9 +21,20 @@ import {
 } from "@mui/material";
 import React from "react";
 
+// 🎯 UPDATED: Map layout to match structural multi-tier JSON matrices
+interface PackagingMatrixRow {
+    packaging_type_id: number;
+    unit_name: string;
+    multiplier: number;
+    price: number;
+    discount_price: number | null;
+    discount_ends_at: string | null;
+    image: string | null;
+}
+
 interface StoreVariant {
-    price?: number | null;
-    discount_price?: number | null;
+    id: number;
+    pricing_matrix?: PackagingMatrixRow[] | null;
 }
 
 interface ItemVariant {
@@ -51,13 +62,22 @@ function itemImage(item: SellerItem) {
     return sellerImage(item.general_images ?? null);
 }
 
+// 🎯 UPDATED: Dig inside the structural JSON matrices arrays for pricing properties
 function variantStorePrices(variant: ItemVariant) {
     const storeVariants = variant.storeVariants ?? variant.store_variants ?? [];
-    const prices = storeVariants
-        .map((storeVariant) => storeVariant.discount_price ?? storeVariant.price)
-        .filter((price): price is number => price != null);
+    const absolutePrices: number[] = [];
 
-    return prices;
+    storeVariants.forEach((storeVariant) => {
+        const matrix = storeVariant.pricing_matrix ?? [];
+        matrix.forEach((row) => {
+            const finalPrice = row.discount_price ?? row.price;
+            if (finalPrice != null) {
+                absolutePrices.push(finalPrice);
+            }
+        });
+    });
+
+    return absolutePrices;
 }
 
 function itemPrice(item: SellerItem) {
@@ -93,7 +113,6 @@ export default function Index({
         );
     };
 
-    // Shared style for cards and inputs to adapt to theme
     const cardStyle = {
         bgcolor: "background.paper",
         color: "text.primary",
@@ -180,7 +199,8 @@ export default function Index({
                             href={route("seller.items.show", {
                                 item: item.id,
                                 cart_id: filters.cart_id || undefined,
-                            })}
+                                })
+                            }
                             sx={{
                                 ...cardStyle,
                                 p: 0,
@@ -228,8 +248,9 @@ export default function Index({
                                     />
                                 </Stack>
 
+                                {/* 🎯 FIXED: Renders baseline price fallback text instead of breaking layout strings */}
                                 <Typography sx={{ mt: 1, fontWeight: 900, color: "primary.main" }}>
-                                    {sellerPrice(itemPrice(item))}
+                                    {itemPrice(item) !== null ? sellerPrice(itemPrice(item)) : "N/A"}
                                 </Typography>
 
                                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>

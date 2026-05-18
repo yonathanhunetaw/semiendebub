@@ -11,8 +11,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
-// Models
-
 class DashboardController extends Controller
 {
     /**
@@ -28,58 +26,63 @@ class DashboardController extends Controller
                 'error' => 'No store associated with this account.'
             ]);
         }
-        $storeId = $store?->id;
+        $storeId = $store->id;
         Log::info('Seller Store ID: ' . $storeId);
 
-        $sellerId = request('seller_id');      // optional
-        $customerId = request('customer_id');  // optional
+        $sellerId = $request->input('seller_id');      
+        $customerId = $request->input('customer_id');  
 
-        // 1️⃣ Load items with their variants and all needed relations
+        // 1️⃣ Load items with updated database relationship configurations
         $items = Item::with([
             'variants.itemColor',
             'variants.itemSize',
-            'variants.itemPackagingType',
-            'variants.storeVariants',
+            // 🎯 FIXED: Removed obsolete variants.itemPackagingType connection layer
+            'variants.storeVariants' => function ($q) use ($storeId) {
+                $q->where('store_id', $storeId);
+            },
             'variants.storeVariants.sellerPrices',
             'variants.storeVariants.customerPrices',
         ])
-            ->where('status', 'active') // Only active items
+            ->where('status', 'active') 
             ->whereHas('variants.storeVariants', function ($q) use ($storeId) {
                 $q->where('store_id', $storeId);
             })
             ->get();
 
-        // 2️⃣ Load stock for all variants in this store at once
-        $variantIds = $items->flatMap(fn($item) => $item->variants->pluck('id'))->unique();
+        // 2️⃣ Load stock levels safely for the store pool
         $storeVariantIds = $items->flatMap(fn($item) => $item->variants->pluck('storeVariants.*.id'))
             ->flatten()
             ->unique();
 
         $stocks = ItemStock::where('location_id', $storeId)
             ->where('location_type', get_class($store))
-            ->whereIn('item_variant_id', $storeVariantIds) // Use DB column name here
+            ->whereIn('item_variant_id', $storeVariantIds) 
             ->get()
-            ->keyBy('item_variant_id'); // Key by the variant ID for easy lookup
+            ->keyBy('item_variant_id'); 
 
-        // 3️⃣ Attach store-specific data to each variant
-        // 3️⃣ Attach data
+        // 3️⃣ Process each product unit line using structural matrix layers
         foreach ($items as $item) {
             foreach ($item->variants as $variant) {
                 $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
 
                 if ($storeVariant) {
-                    // Match the stock using the store_variant's ID against the item_variant_id column
                     $variant->store_stock = $stocks[$storeVariant->id]->quantity ?? 0;
                     $variant->store_variant_id = $storeVariant->id;
-                    $variant->store_price = $storeVariant->price;
-                    $variant->store_discount_price = $storeVariant->discount_price;
-                    $variant->discount_ends_at = $storeVariant->discount_ends_at;
+                    
+                    // 🎯 FIXED: Pulling from JSON pricing matrix fallback arrays instead of dead columns
+                    $matrix = $storeVariant->pricing_matrix ?? [];
+                    $baseRow = $matrix[0] ?? null;
+
+                    $variant->store_price = $baseRow['price'] ?? 0.00;
+                    $variant->store_discount_price = $baseRow['discount_price'] ?? null;
+                    $variant->discount_ends_at = $baseRow['discount_ends_at'] ?? null;
+                    
                     $variant->manual_status = $storeVariant->manual_status ?? 'auto';
                     $variant->forced_status = $storeVariant->forced_status;
+                    $variant->status = $storeVariant->computed_status ?? ($storeVariant->active ? 'active' : 'inactive');
+                    $variant->store_active = $variant->status === 'active';
 
-                    $variant->status = $storeVariant->computed_status;
-                    $variant->store_active = $storeVariant->computed_status === 'active';
-
+                    // Dynamic price ladders computed by system micro-engines
                     $variant->price_ladder = PriceProvider::getPriceLadder(
                         storeVariantId: $storeVariant->id,
                         storeId: $storeId,
@@ -98,60 +101,11 @@ class DashboardController extends Controller
             }
         }
 
-        Log::info('Seller Items Loaded', [
+        Log::info('Seller Items Loaded on Dashboard', [
             'store_id' => $storeId,
             'items_count' => $items->count(),
-            'variants_count' => $items->sum(fn($i) => $i->variants->count()),
         ]);
 
         return Inertia::render('Seller/Dashboard/Index', compact('items', 'store'));
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
     }
 }
