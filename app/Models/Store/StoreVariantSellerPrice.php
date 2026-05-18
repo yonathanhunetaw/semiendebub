@@ -14,19 +14,26 @@ class StoreVariantSellerPrice extends Model
     protected $fillable = [
         'store_variant_id',
         'seller_id',
-        'price',
-        'discount_price',
-        'discount_ends_at',
+        // 🎯 UPDATED: Replaced flat fields with your unified packaging JSON column matrix
+        'pricing_matrix',
+        'active',
     ];
 
-    protected $dates = ['discount_ends_at'];
+    /**
+     * 🎯 THE CASTS DEFINITION
+     * Hydrates the seller-specific wholesale tiers into an array context instantly.
+     */
+    protected $casts = [
+        'pricing_matrix' => 'array',
+        'active' => 'boolean',
+    ];
 
     public function storeVariants(): BelongsTo
     {
         return $this->belongsTo(StoreVariant::class, 'store_variant_id');
     }
 
-    public function seller()
+    public function seller(): BelongsTo
     {
         return $this->belongsTo(User::class, 'seller_id');
     }

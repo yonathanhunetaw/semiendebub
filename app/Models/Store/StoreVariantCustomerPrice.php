@@ -14,12 +14,20 @@ class StoreVariantCustomerPrice extends Model
     protected $fillable = [
         'store_variant_id',
         'customer_id',
-        'price',
-        'discount_price',
-        'discount_ends_at',
+        // 🎯 UPDATED: Removed individual flat decimal fields, replaced with your JSON matrix
+        'pricing_matrix',
+        'active',
     ];
 
-    protected $dates = ['discount_ends_at'];
+    /**
+     * 🎯 THE CASTS DEFINITION
+     * Forces Laravel to parse the customer's negotiated packaging contract block
+     * straight into a clean, searchable multidimensional array.
+     */
+    protected $casts = [
+        'pricing_matrix' => 'array',
+        'active' => 'boolean',
+    ];
 
     public function storeVariant(): BelongsTo
     {

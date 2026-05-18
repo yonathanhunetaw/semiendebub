@@ -3,7 +3,7 @@
 namespace App\Models\Store;
 
 use App\Models\Item\Item;
-use App\Models\StockKeeper\ItemStock; // Fixed namespace based on your previous snippet
+use App\Models\StockKeeper\ItemStock;
 use App\Models\Item\ItemVariant;
 use App\Models\Store\Store;
 use Illuminate\Database\Eloquent\Model;
@@ -14,17 +14,26 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class StoreVariant extends Model
 {
     use HasFactory;
+
     protected $fillable = [
         'item_id',
         'item_variant_id',
         'store_id',
         'stock',
-        'price',
-        'discount_price',
-        'discount_ends_at',
+        // 🎯 UPDATED: Replaced individual flat price fields with your new JSON matrix column
+        'pricing_matrix', 
         'manual_status',
         'forced_status',
         'status',
+    ];
+
+    /**
+     * 🎯 THE CASTS DEFINITION
+     * This forces Laravel to turn your JSON matrix database text into a clean
+     * multi-dimensional PHP array automatically whenever you fetch it.
+     */
+    protected $casts = [
+        'pricing_matrix' => 'array',
     ];
 
     /**
@@ -33,7 +42,6 @@ class StoreVariant extends Model
      */
     public function sellerPrices(): HasMany
     {
-        // Use the actual class name you provided
         return $this->hasMany(StoreVariantSellerPrice::class, 'store_variant_id');
     }
 
@@ -80,6 +88,7 @@ class StoreVariant extends Model
         // Logic for 'auto' status (e.g., check stock or parent item status)
         return $this->status ?? 'active';
     }
+
     public function getStatusAttribute()
     {
         return $this->active ? 'active' : 'inactive';
