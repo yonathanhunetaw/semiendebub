@@ -10,12 +10,12 @@ use Illuminate\Support\Facades\DB;
 
 class ItemVariantGenerationService
 {
-    public function sync(Item $item): void
+    public function sync(Item $item, array $uploadedImages = []): void
     {
         $item->load([
             'colors',
             'sizes',
-            'packagingTypes', // 🎯 Load packaging contexts for the JSON matrix layer
+            'packagingTypes',
             'stores',
             'variants' => fn($query) => $query->withTrashed(),
         ]);
@@ -64,14 +64,16 @@ class ItemVariantGenerationService
 
                 // Default basic properties if brand new
                 $variant->status = $variant->status ?: ($item->status === 'active' ? 'active' : 'inactive');
+                // Sync the main variant images column directly
+                if (!empty($uploadedImages)) {
+                    $variant->images = $uploadedImages;
+                }
                 $variant->save();
 
-                // Process the role-based JSON pricing arrays for this physical unit
-                $this->ensureStoreVariantRecords($item, $variant);
+                $this->ensureStoreVariantRecords($item, $variant, $uploadedImages);
             }
         }
 
-        // ─── Clean up obsolete physical variants ─────────────────────────────
         $item->variants()
             ->get()
             ->reject(fn(ItemVariant $variant) => in_array(
@@ -80,12 +82,11 @@ class ItemVariantGenerationService
                 true
             ))
             ->each(function (ItemVariant $variant) {
-                $this->applyAvailabilityToStores($variant, false);
                 $variant->delete();
             });
     }
 
-    public function ensureStoreVariantRecords(Item $item, ItemVariant $variant): void
+    public function ensureStoreVariantRecords(Item $item, ItemVariant $variant, array $uploadedImages = []): void
     {
         $storeIds = $item->stores()->pluck('stores.id');
 
@@ -95,25 +96,32 @@ class ItemVariantGenerationService
 
         foreach ($storeIds as $storeId) {
             
-            // ─── 1. BUILD BASELINE STORE PRICING MATRIX ─────────────────────
+            // ─── 1. STANDARD STORE PRICING MATRIX ───────────────────────────
             $storeMatrix = [];
             foreach ($item->packagingTypes as $index => $packType) {
                 $multiplier = (int) ($packType->pivot->quantity ?? 1);
                 
-                $baseRetailCost = 100.00; // Standard baseline unit cost
-                $calculatedPrice = $baseRetailCost * $multiplier;
-
-                // Apply bulk wholesale markdown curves
-                if ($multiplier >= 120) {
-                    $calculatedPrice *= 0.80; // 20% Carton discount
-                } elseif ($multiplier >= 10) {
-                    $calculatedPrice *= 0.90; // 10% Packet discount
+                // Determine baseline retail prices per item brand rules
+                $baseRetailCost = 10.00;
+                if (str_contains($item->product_name, 'Bic')) {
+                    $baseRetailCost = 17.00;
+                } elseif (str_contains($item->product_name, 'Ring')) {
+                    $baseRetailCost = 15.00;
                 }
 
-                // Match up your specific seed images to their respective packaging tier keys
-                $targetFileNumber = ($index % 5) + 1;
-                $specificPackageFileName = "{$item->file_prefix}_{$targetFileNumber}.jpg";
-                $packageMinioKey = "uploads/items/{$item->id}/{$specificPackageFileName}";
+                $calculatedPrice = $baseRetailCost * $multiplier;
+
+                // Bulk wholesale discount scale mappings
+                if ($multiplier >= 1000) {
+                    $calculatedPrice *= 0.75; // 25% Industrial Master bulk discount
+                } elseif ($multiplier >= 100) {
+                    $calculatedPrice *= 0.85; // 15% Standard Carton drop
+                } elseif ($multiplier >= 10) {
+                    $calculatedPrice *= 0.92; // 8% Small bundle box drop
+                }
+
+                // Map to the real uploaded file path or fallback to a placeholder
+                $packageMinioKey = $uploadedImages[$index] ?? ($uploadedImages[0] ?? 'uploads/items/placeholder.jpg');
 
                 $storeMatrix[] = [
                     'packaging_type_id' => $packType->id,
@@ -126,7 +134,6 @@ class ItemVariantGenerationService
                 ];
             }
 
-            // Save standard baseline map
             $storeVariant = StoreVariant::updateOrCreate(
                 [
                     'store_id'        => $storeId,
@@ -140,75 +147,34 @@ class ItemVariantGenerationService
                 ]
             );
 
-            // ─── 2. BUILD CUSTOM AGENT/SELLER PRICING MATRIX ─────────────────
+            // ─── 2. SELLER / AGENT MATRIX TIER ─────────────────────────────
             $sellerMatrix = [];
             foreach ($storeMatrix as $row) {
-                // Sellers get an additional 15% wholesale drop across all lines
-                $sellerDiscountPrice = $row['price'] * 0.85; 
-                
                 $sellerMatrix[] = array_merge($row, [
-                    'price' => round($sellerDiscountPrice, 2)
+                    'price' => round($row['price'] * 0.85, 2) // Additional 15% wholesale agent markdown
                 ]);
             }
 
-            $defaultSellerId = 1; // Assuming a standard seeder reference user exists
             DB::table('store_variants_seller_prices')->updateOrInsert(
-                [
-                    'store_variant_id' => $storeVariant->id, 
-                    'seller_id'        => $defaultSellerId
-                ],
-                [
-                    'pricing_matrix' => json_encode($sellerMatrix), 
-                    'active'         => true, 
-                    'updated_at'     => now()
-                ]
+                ['store_variant_id' => $storeVariant->id, 'seller_id' => 1],
+                ['pricing_matrix' => json_encode($sellerMatrix), 'active' => true, 'updated_at' => now()]
             );
 
-            // ─── 3. BUILD CUSTOM VIP CUSTOMER CONTRACT MATRIX ───────────────
+            // ─── 3. VIP CUSTOMER CONTRACT MATRIX TIER ──────────────────────
             $customerMatrix = [];
             foreach ($storeMatrix as $row) {
-                // VIP customers lock in an alternative 5% loyalty contract markdown
-                $customerContractPrice = $row['price'] * 0.95; 
-                
                 $customerMatrix[] = array_merge($row, [
-                    'price' => round($customerContractPrice, 2)
+                    'price' => round($row['price'] * 0.95, 2) // 5% Standard loyalty contract markdown
                 ]);
             }
 
-            $defaultCustomerId = 1; // Assuming a standard customer record exists
             DB::table('store_variants_customer_prices')->updateOrInsert(
-                [
-                    'store_variant_id' => $storeVariant->id, 
-                    'customer_id'      => $defaultCustomerId
-                ],
-                [
-                    'pricing_matrix' => json_encode($customerMatrix), 
-                    'active'         => true, 
-                    'updated_at'     => now()
-                ]
+                ['store_variant_id' => $storeVariant->id, 'customer_id' => 1],
+                ['pricing_matrix' => json_encode($customerMatrix), 'active' => true, 'updated_at' => now()]
             );
         }
     }
 
-    public function applyAvailabilityToStores(ItemVariant $variant, bool $active): void
-    {
-        $variant->loadMissing('item.stores', 'storeVariants');
-
-        $this->ensureStoreVariantRecords($variant->item, $variant);
-        $variant->load('storeVariants');
-
-        foreach ($variant->storeVariants as $storeVariant) {
-            $storeVariant->update([
-                'active'        => $active,
-                'manual_status' => $active ? 'auto' : 'forced',
-                'forced_status' => $active ? null : 'inactive',
-            ]);
-        }
-    }
-
-    /**
-     * Helper trace builder key method restored strictly for physical mapping tracking.
-     */
     private function variantKey(?int $colorId, ?int $sizeId): string
     {
         return implode(':', [
