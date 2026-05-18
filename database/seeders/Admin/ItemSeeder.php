@@ -152,12 +152,6 @@ class ItemSeeder extends Seeder
     }
 
     /**
-     * FIXED: Loops up to 5 images per variant matching your local filesystem.
-     */
-    /**
-     * FIXED: Seeds up to 5 images with exact matching raw object keys.
-     */
-    /**
      * FIXED: Seeds up to 5 images with exact matching raw object keys.
      */
     private function seedDeterministicVariantImages(Item $item, array $data): void
@@ -171,11 +165,11 @@ class ItemSeeder extends Seeder
             $sourceFileName = "{$prefix}_" . ($index + 1) . ".jpg";
             $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
 
-            // 🎯 FIXED NAME PATH: Clean raw object key layout matching web UI behavior
+            // 🎯 MATCHES PRODUCTION UI UPLOADS EXACTLY: Pure object storage keys
             $minioPath = "uploads/items/{$item->id}/img-{$index}.jpg";
 
             if (File::exists($sourcePath)) {
-                // Always write to your configured 's3' disk context
+                // Production uses 's3' disk context via your .env parameters
                 $disk = Storage::disk('s3');
 
                 try {
@@ -183,7 +177,7 @@ class ItemSeeder extends Seeder
                         $disk->put($minioPath, File::get($sourcePath));
                     }
 
-                    // ✨ Save the raw key (no leading bucket slash wrappers)
+                    // ✨ Save the raw key (ImageResolver will append your AWS_URL properly)
                     $itemImagesArray[] = $minioPath;
                 } catch (\Exception $e) {
                     \Illuminate\Support\Facades\Log::error("Failed seeding image: " . $e->getMessage());
