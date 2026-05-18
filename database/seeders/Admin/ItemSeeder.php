@@ -54,6 +54,53 @@ class ItemSeeder extends Seeder
     // ═════════════════════════════════════════════════════════════════════════
     private array $items = [
         [
+            'product_name' => 'Noteit',
+            'product_description' => 'Premium Noteit ledger item with multi-dimensional grid layout bindings.',
+            'packaging_details' => 'Distributed in individual pieces, dozens, and master cartons of 240 units.',
+            'item_category_id' => 46, // NoteBook 25k
+            'status' => 'active',
+            'picsum_id' => 201,
+            'file_prefix' => 'noteit', 
+            'color_ids' => [4, 5, 11], // Green (4), Red (5), Yellow (11)
+            'size_ids' => [1, 2, 3],    // 3x5 Medium (1), 3x5 Large (2), 4x6 Small (3)
+            'packaging' => [
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0012],   // Piece
+                ['item_packaging_type_id' => 4, 'quantity' => 12, 'cbm' => 0.0150],  // Dozen (Box)
+                ['item_packaging_type_id' => 3, 'quantity' => 240, 'cbm' => 0.3100], // Carton
+            ],
+        ],
+        [
+            'product_name' => 'Ring',
+            'product_description' => 'High-durability binding rings supporting full mechanical sizing spans.',
+            'packaging_details' => 'Packed in production bundles of 100 or industrial master cartons of 1600.',
+            'item_category_id' => 28, // Binding Accessories
+            'status' => 'active',
+            'picsum_id' => 202,
+            'file_prefix' => 'ring', 
+            'color_ids' => [1, 4, 2, 5, 3, 11], // Blue(1), Green(4), Black(2), Red(5), White(3), Yellow(11)
+            'size_ids' => [19, 20, 21, 22, 23, 24], // System IDs representing 6mm up to 16mm scales
+            'packaging' => [
+                ['item_packaging_type_id' => 2, 'quantity' => 100, 'cbm' => 0.0085],  // Packet
+                ['item_packaging_type_id' => 3, 'quantity' => 1600, 'cbm' => 0.1450], // Carton
+            ],
+        ],
+        [
+            'product_name' => 'Bic',
+            'product_description' => 'Classic fine-point industrial high-fluid retail ballpoint pen lines.',
+            'packaging_details' => 'Sold in individual pieces, intermediate packets of 50, or master cases of 1000.',
+            'item_category_id' => 12, // Pens & Writing
+            'status' => 'active',
+            'picsum_id' => 203,
+            'file_prefix' => 'bic', 
+            'color_ids' => [1, 2, 5], // Blue (1), Black (2), Red (5)
+            'size_ids' => [],         // No custom size variants
+            'packaging' => [
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0003],    // Piece
+                ['item_packaging_type_id' => 2, 'quantity' => 50, 'cbm' => 0.0160],   // Packet
+                ['item_packaging_type_id' => 3, 'quantity' => 1000, 'cbm' => 0.3400], // Carton
+            ],
+        ],
+        [
             'product_name' => '2025 - 1',
             'product_description' => 'Premium quality distribution catalog ledger item for 2025.',
             'packaging_details' => 'Available in individual pieces, and master cartons of 96.',
@@ -112,7 +159,7 @@ class ItemSeeder extends Seeder
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0009],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1250],
             ],
-        ]
+        ]    
     ];
 
     public function run(): void
@@ -138,46 +185,33 @@ class ItemSeeder extends Seeder
                 $this->buildPackagingSync($data['packaging'])
             );
 
-            // Generate physical variants
-            $generator->sync($item);
+            // 🎯 Step 1: Upload and verify images first
+            $uploadedImages = $this->seedDeterministicVariantImages($item, $data);
+
+            // 🎯 Step 2: Generate variants and pass verified image arrays down to the JSON matrices
+            $generator->sync($item, $uploadedImages);
 
             $this->populatePackagingQuantitiesAndCbm($item, $data);
-
-            // Processes the images using matching target source names
-            $this->seedDeterministicVariantImages($item, $data);
-
-            // Re-evaluate draft metrics to unlock live production status
             $this->evaluateDraftStatus($item, $data['status']);
         }
     }
 
-   /**
-     * FIXED: Seeds up to 5 images with exact matching raw object keys.
-     */
-    private function seedDeterministicVariantImages(Item $item, array $data): void
+    private function seedDeterministicVariantImages(Item $item, array $data): array
     {
-        $item->load('variants');
         $prefix = $data['file_prefix'];
-
         $itemImagesArray = [];
+        $disk = Storage::disk('s3');
 
         for ($index = 1; $index <= 5; $index++) {
             $sourceFileName = "{$prefix}_{$index}.jpg";
             $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
-
-            // 🎯 FIXED SYNTAX: Added missing closing double quote right here
             $minioPath = "uploads/items/{$item->id}/{$sourceFileName}";
 
             if (File::exists($sourcePath)) {
-                // Production uses 's3' disk context via your .env parameters
-                $disk = Storage::disk('s3');
-
                 try {
                     if (!$disk->exists($minioPath)) {
                         $disk->put($minioPath, File::get($sourcePath));
                     }
-
-                    // Save the raw matching filename key string
                     $itemImagesArray[] = $minioPath;
                 } catch (\Exception $e) {
                     \Illuminate\Support\Facades\Log::error("Failed seeding image: " . $e->getMessage());
@@ -185,19 +219,11 @@ class ItemSeeder extends Seeder
             }
         }
 
-        // Save to parent item field
         if (!empty($itemImagesArray)) {
-            $item->update([
-                'general_images' => $itemImagesArray
-            ]);
+            $item->update(['general_images' => $itemImagesArray]);
         }
 
-        // Save exactly matching keys to child variants
-        foreach ($item->variants as $variant) {
-            $variant->update([
-                'images' => $itemImagesArray
-            ]);
-        }
+        return $itemImagesArray;
     }
 
     private function populatePackagingQuantitiesAndCbm(Item $item, array $data): void
@@ -237,23 +263,14 @@ class ItemSeeder extends Seeder
 
     private function evaluateDraftStatus(Item $item, string $requestedStatus): void
     {
-        // 1. Force the parent item status to active/requested state
         $item->update([
             'status' => $requestedStatus,
             'is_incomplete' => false,
         ]);
 
-        // 2. ⚡ CRITICAL: Loop through and activate the variants so they show up as "Active" in your store tables
         $item->refresh()->load('variants');
         foreach ($item->variants as $variant) {
-            $variant->update([
-                'status' => $requestedStatus 
-            ]);
-
-            // Sync up the store variant connection maps to match
-            if (method_exists($this, 'applyAvailabilityToStores')) {
-                $this->applyAvailabilityToStores($variant, $requestedStatus === 'active');
-            }
+            $variant->update(['status' => $requestedStatus]);
         }
     }
 }
