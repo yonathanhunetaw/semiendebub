@@ -15,7 +15,6 @@ class ItemImageSeeder extends Seeder
     public function run(): void
     {
         // 1️⃣ Map your generated item IDs to their corresponding disk file prefixes
-        // (Make sure these prefixes match the base names of your images exactly)
         $itemFilePrefixes = [
             1 => '2025-1',
             2 => '2025-ብልጭልጭ',
@@ -24,7 +23,7 @@ class ItemImageSeeder extends Seeder
         ];
 
         foreach ($itemFilePrefixes as $itemId => $prefix) {
-            $item = Item::find($itemId);
+            $item = Item::with('variants')->find($itemId);
             
             if (!$item) {
                 $this->command->warn("Item ID {$itemId} not found in database, skipping image processing.");
@@ -34,28 +33,30 @@ class ItemImageSeeder extends Seeder
             $itemImagesArray = [];
 
             // 2️⃣ Loop up to 5 images per product item
-            for ($index = 1; $index <= 5; $index++) {
-                $sourceFileName = "{$prefix}_{$index}.jpg";
+            for ($index = 0; $index < 5; $index++) {
+                // Look for: prefix_1.jpg, prefix_2.jpg, etc.
+                $sourceFileName = "{$prefix}_" . ($index + 1) . ".jpg";
                 $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
                 
-                // Destination directory structure inside your MinIO bucket
-                $minioPath = "uploads/items/{$item->id}/{$sourceFileName}";
+                // 🎯 FIXED: Name structure matches UI uploads exactly: img-0.jpg, img-1.jpg, etc.
+                $minioPath = "uploads/items/{$item->id}/img-{$index}.jpg";
 
                 // Check if the physical file is present in your local seed directory
                 if (File::exists($sourcePath)) {
                     
-                    // Check if it's already resting inside MinIO storage bucket disk
-                    $existsInMinio = Storage::disk('minio')->exists($minioPath);
+                    // ⚡ FIXED: Changed driver context from 'minio' to 's3' to match your filesystem config
+                    $disk = Storage::disk('s3');
+                    $existsInMinio = $disk->exists($minioPath);
 
                     if (!$existsInMinio) {
-                        // Stream the original file layout directly into MinIO using its true name
-                        Storage::disk('minio')->put($minioPath, File::get($sourcePath));
+                        // Stream the original file layout directly into MinIO
+                        $disk->put($minioPath, File::get($sourcePath));
                         $this->command->info("Uploaded new image to MinIO: {$minioPath}");
                     } else {
                         $this->command->line("Image already in MinIO, skipping upload: {$minioPath}");
                     }
 
-                    // Append the verified file key to our item's collection array
+                    // ✨ FIXED: Append pure raw key paths (No bucket prefixes or leading slashes)
                     $itemImagesArray[] = $minioPath;
 
                 } else {
@@ -63,12 +64,21 @@ class ItemImageSeeder extends Seeder
                 }
             }
 
-            // 3️⃣ Save the true array paths back to the parent item entity block
+            // 3️⃣ Save the true array paths back to the parent item and its child variants
             if (!empty($itemImagesArray)) {
+                // Save to parent item level ('general_images')
                 $item->update([
                     'general_images' => $itemImagesArray
                 ]);
-                $this->command->info("Successfully attached " . count($itemImagesArray) . " images to Item ID: {$item->id}");
+
+                // 🎯 FIXED: Sync names down to variants so variant arrays are populated too
+                foreach ($item->variants as $variant) {
+                    $variant->update([
+                        'images' => $itemImagesArray
+                    ]);
+                }
+
+                $this->command->info("Successfully attached " . count($itemImagesArray) . " images to Item ID: {$item->id} and its variants.");
             }
         }
     }
