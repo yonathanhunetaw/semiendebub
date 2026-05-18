@@ -30,7 +30,7 @@ class StoreVariantSeeder extends Seeder
                 continue;
             }
 
-            // 2️⃣ Get variants of those items
+            // 2️⃣ Get physical variants of those items
             $variants = ItemVariant::whereIn('item_id', $itemIds)->get();
 
             // Get sellers and customers for this store
@@ -38,25 +38,64 @@ class StoreVariantSeeder extends Seeder
             $customers = Customer::where('store_id', $store->id)->get();
 
             foreach ($variants as $variant) {
-                $priceFactor = rand(95, 105) / 100;
-                $basePrice = round($this->baseVariantPrice($variant) * $priceFactor, 2);
+                // Fetch all packaging variations configured for this item variant
+                $variant->load('item.packagingTypes');
+                $packagingTypes = $variant->item?->packagingTypes ?? collect();
 
-                // Create or update the price tag for this store
-                // Column 'item_id' is excluded here because it doesn't live in this table
+                if ($packagingTypes->isEmpty()) {
+                    continue; // Skip if no packaging tiers are defined yet
+                }
+
+                $baseItemPrice = $this->calculateBaseProductRate($variant);
+                $storePriceFactor = rand(95, 105) / 100;
+
+                // ─── 1. GENERATE STORE PRICING MATRIX ─────────────────────────
+                $storeMatrix = [];
+                foreach ($packagingTypes as $index => $packType) {
+                    $multiplier = (int) ($packType->pivot->quantity ?? 1);
+                    $calculatedPrice = $baseItemPrice * $multiplier * $storePriceFactor;
+
+                    // Bulk volume tiered markdowns
+                    if ($multiplier >= 120) {
+                        $calculatedPrice *= 0.80; // 20% Carton discount
+                    } elseif ($multiplier >= 10) {
+                        $calculatedPrice *= 0.90; // 10% Packet discount
+                    }
+
+                    // Optional promotional logic inside the tier context
+                    $hasDiscount = (bool) rand(0, 1);
+                    $discountPrice = $hasDiscount ? round($calculatedPrice * (rand(90, 99) / 100), 2) : null;
+                    $discountEnds = $hasDiscount ? $now->copy()->addDays(rand(1, 10))->toDateTimeString() : null;
+
+                    // Match up your specific file names
+                    $prefix = $variant->item?->file_prefix ?? '2025-1';
+                    $targetFileNumber = ($index % 5) + 1;
+                    $packageMinioKey = "uploads/items/{$variant->item_id}/{$prefix}_{$targetFileNumber}.jpg";
+
+                    $storeMatrix[] = [
+                        'packaging_type_id' => $packType->id,
+                        'unit_name'         => $packType->name,
+                        'multiplier'        => $multiplier,
+                        'price'             => round($calculatedPrice, 2),
+                        'discount_price'    => $discountPrice,
+                        'discount_ends_at'  => $discountEnds,
+                        'image'             => $packageMinioKey,
+                    ];
+                }
+
+                // Save or Update the main store variant record
                 $storeVariant = StoreVariant::updateOrCreate([
                     'store_id'        => $store->id,
                     'item_variant_id' => $variant->id,
                 ], [
-                    'price'            => $basePrice,
-                    'discount_price'   => rand(0, 1) ? round($basePrice * (rand(90, 99) / 100), 2) : null,
-                    'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
+                    'pricing_matrix'   => $storeMatrix, // 🎯 FIXED: Saved as JSON array
                     'active'           => true,
                     'manual_status'    => 'auto',
                     'created_at'       => $now,
                     'updated_at'       => $now,
                 ]);
 
-                // 3️⃣ Link stock to the ItemVariant ID, not StoreVariant ID
+                // 3️⃣ Link stock levels to the physical pool
                 ItemStock::updateOrCreate(
                     [
                         'item_variant_id' => $variant->id, 
@@ -69,10 +108,21 @@ class StoreVariantSeeder extends Seeder
                     ]
                 );
 
-                // 4️⃣ Seller prices (Tiered Pricing)
+                // ─── 2. GENERATE SELLER PRICING MATRIX ─────────────────────────
                 foreach ($sellers as $seller) {
-                    $factor = rand(90, 110) / 100;
-                    $sellerPrice = round($basePrice * $factor, 2);
+                    $sellerMatrix = [];
+                    $sellerFactor = rand(90, 110) / 100;
+
+                    foreach ($storeMatrix as $row) {
+                        $sellerPrice = $row['price'] * $sellerFactor;
+                        $hasDiscount = (bool) rand(0, 1);
+
+                        $sellerMatrix[] = array_merge($row, [
+                            'price'            => round($sellerPrice, 2),
+                            'discount_price'   => $hasDiscount ? round($sellerPrice * (rand(90, 99) / 100), 2) : null,
+                            'discount_ends_at' => $hasDiscount ? $now->copy()->addDays(rand(1, 10))->toDateTimeString() : null,
+                        ]);
+                    }
 
                     DB::table('store_variants_seller_prices')->updateOrInsert(
                         [
@@ -80,9 +130,7 @@ class StoreVariantSeeder extends Seeder
                             'seller_id'        => $seller->id,
                         ],
                         [
-                            'price'            => $sellerPrice,
-                            'discount_price'   => rand(0, 1) ? round($sellerPrice * (rand(90, 99) / 100), 2) : null,
-                            'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
+                            'pricing_matrix'   => json_encode($sellerMatrix), // 🎯 FIXED
                             'active'           => true,
                             'created_at'       => $now,
                             'updated_at'       => $now,
@@ -90,10 +138,21 @@ class StoreVariantSeeder extends Seeder
                     );
                 }
 
-                // 5️⃣ Customer prices (Tiered Pricing)
+                // ─── 3. GENERATE CUSTOMER PRICING MATRIX ───────────────────────
                 foreach ($customers as $customer) {
-                    $factor = rand(85, 105) / 100;
-                    $customerPrice = round($basePrice * $factor, 2);
+                    $customerMatrix = [];
+                    $customerFactor = rand(85, 105) / 100;
+
+                    foreach ($storeMatrix as $row) {
+                        $customerPrice = $row['price'] * $customerFactor;
+                        $hasDiscount = (bool) rand(0, 1);
+
+                        $customerMatrix[] = array_merge($row, [
+                            'price'            => round($customerPrice, 2),
+                            'discount_price'   => $hasDiscount ? round($customerPrice * (rand(90, 99) / 100), 2) : null,
+                            'discount_ends_at' => $hasDiscount ? $now->copy()->addDays(rand(1, 10))->toDateTimeString() : null,
+                        ]);
+                    }
 
                     DB::table('store_variants_customer_prices')->updateOrInsert(
                         [
@@ -101,9 +160,7 @@ class StoreVariantSeeder extends Seeder
                             'customer_id'      => $customer->id,
                         ],
                         [
-                            'price'            => $customerPrice,
-                            'discount_price'   => rand(0, 1) ? round($customerPrice * (rand(90, 99) / 100), 2) : null,
-                            'discount_ends_at' => rand(0, 1) ? $now->copy()->addDays(rand(1, 10)) : null,
+                            'pricing_matrix'   => json_encode($customerMatrix), // 🎯 FIXED
                             'active'           => true,
                             'created_at'       => $now,
                             'updated_at'       => $now,
@@ -115,9 +172,9 @@ class StoreVariantSeeder extends Seeder
     }
 
     /**
-     * Calculate variant base pricing dynamically using the new design constraints.
+     * Calculate variant base item pricing rules safely.
      */
-    private function baseVariantPrice(ItemVariant $variant): float
+    private function calculateBaseProductRate(ItemVariant $variant): float
     {
         $base = 10.00;
         $name = $variant->item?->product_name ?? '';
@@ -130,13 +187,6 @@ class StoreVariantSeeder extends Seeder
             $base = 10.00;
         }
 
-        // Fetch piece quantity scale multiplier directly via our pivot structure.
-        // Falls back safely to 1 if no exact matching configuration is loaded yet.
-        $piecesMultiplier = DB::table('item_variant_packaging_quantity')
-            ->where('item_variant_id', $variant->id)
-            ->where('item_packaging_type_id', 1) // 1 = Single Piece Unit
-            ->value('quantity') ?? 1;
-
-        return round($base * max(1, $piecesMultiplier), 2);
+        return $base;
     }
 }
