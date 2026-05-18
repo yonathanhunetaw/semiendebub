@@ -21,20 +21,21 @@ class ItemController extends Controller
     public function index(Request $request)
     {
         $storeId = Auth::user()->store?->id;
-        // Ensure we have a string, default to empty
         $search = $request->filled('search') ? trim($request->search) : null;
         $cartId = $request->integer('cart_id') ?: null;
 
-        $query = Item::where('status', 'true')
+        // 🎯 FIXED: Changed query status condition to look for 'active' records 
+        $query = Item::where('status', 'active')
             ->with([
                 'category',
                 'variants.itemColor',
                 'variants.itemSize',
-                'variants.itemPackagingType',
+                // 🎯 FIXED: Removed 'variants.itemPackagingType' relationship load,
+                // as packaging specs now live inside the JSON matrix column properties.
                 'variants.storeVariants' => function ($q) use ($storeId) {
                     if ($storeId) {
                         $q->where('store_id', $storeId)
-                            ->with('stocks'); // 👈 Eager load stock here
+                          ->with('stocks');
                     }
                 },
             ]);
@@ -46,18 +47,30 @@ class ItemController extends Controller
             });
         }
 
-        // 2. Only apply search if there is actually a search term
+        // 2. Filter search strings cleanly
         if ($search) {
             $query->where('product_name', 'LIKE', '%' . $search . '%');
         }
 
-        // 3. Get the results (No more ternary check here!)
         $items = $query->orderBy('product_name')->get();
 
-        // Temporary debug
+        // 🎯 OPTIONAL ENHANCEMENT STEP:
+        // If your PriceProvider requires calculating personalized wholesale margins
+        // on top of your loaded JSON array trees before feeding Inertia view rows:
+        /*
+        $items->each(function($item) {
+            foreach ($item->variants as $variant) {
+                foreach ($variant->storeVariants as $storeVariant) {
+                    // You can access, parse, or sort through the $storeVariant->pricing_matrix array values directly here
+                }
+            }
+        });
+        */
+
         if ($items->isEmpty()) {
             Log::info("No items found for store: " . ($storeId ?? 'N/A'));
         }
+
         return Inertia::render('Seller/Items/Index', [
             'items' => $items,
             'filters' => [
@@ -66,6 +79,7 @@ class ItemController extends Controller
             ],
         ]);
     }
+
 
     /**
      * Show the form for creating a new resource.
