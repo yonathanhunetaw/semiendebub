@@ -20,12 +20,29 @@ import {
 } from "@mui/material";
 import React from "react";
 
+// 🎯 UPDATED: Define internal properties reflecting your role packaging rows
+interface PackagingMatrixRow {
+    packaging_type_id: number;
+    unit_name: string;
+    multiplier: number;
+    price: number;
+    discount_price: number | null;
+    discount_ends_at: string | null;
+    image: string | null;
+}
+
 interface StoreVariant {
-    price?: number | null;
-    discount_price?: number | null;
+    id: number;
+    store_id: number;
+    item_variant_id: number;
+    // 🎯 UPDATED: Flat prices removed, replaced with parsed matrix array properties
+    pricing_matrix?: PackagingMatrixRow[] | null;
+    active: boolean;
 }
 
 interface ItemVariant {
+    id: number;
+    sku: string;
     store_variants?: StoreVariant[];
     storeVariants?: StoreVariant[];
 }
@@ -50,18 +67,27 @@ function itemImage(item: SellerItem) {
     return sellerImage(item.general_images ?? null);
 }
 
+// 🎯 UPDATED: Extract pricing safely from inside your JSON Matrix arrays
 function variantStorePrices(variant: ItemVariant) {
     const storeVariants = variant.storeVariants ?? variant.store_variants ?? [];
-    const prices = storeVariants
-        .map((storeVariant) => storeVariant.discount_price ?? storeVariant.price)
-        .filter((price): price is number => price != null);
+    const absolutePrices: number[] = [];
 
-    return prices;
+    storeVariants.forEach((storeVariant) => {
+        const matrix = storeVariant.pricing_matrix ?? [];
+        matrix.forEach((row) => {
+            const finalPrice = row.discount_price ?? row.price;
+            if (finalPrice != null) {
+                absolutePrices.push(finalPrice);
+            }
+        });
+    });
+
+    return absolutePrices;
 }
 
+// 🎯 UPDATED: Calculates the baseline floor price across any packaging variations
 function itemPrice(item: SellerItem) {
     const prices = (item.variants ?? []).flatMap(variantStorePrices);
-
     return prices.length ? Math.min(...prices) : null;
 }
 
@@ -75,7 +101,11 @@ export default function Index({
     const { data, setData } = useForm({
         search: filters.search ?? "",
     });
-    const hasSearch = data.search.trim() !== "";
+    
+    // 🎯 DESIGN REQUIREMENT FIX: 
+    // If you want items to show immediately on mount before typing, 
+    // change this to: const hasSearch = true;
+    const hasSearch = data.search.trim() !== "" || items.length > 0;
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -212,8 +242,9 @@ export default function Index({
                                         <Chip label="NEW" size="small" color="warning" />
                                     </Stack>
 
+                                    {/* 🎯 Displays the lowest baseline entry pricing option cleanly */}
                                     <Typography sx={{ mt: 1, fontWeight: 800, color: "error.main" }}>
-                                        {sellerPrice(itemPrice(item))}
+                                        {itemPrice(item) !== null ? sellerPrice(itemPrice(item)) : "N/A"}
                                     </Typography>
 
                                     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
