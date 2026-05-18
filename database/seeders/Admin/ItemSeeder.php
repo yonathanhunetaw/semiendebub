@@ -60,7 +60,7 @@ class ItemSeeder extends Seeder
             'item_category_id' => 45,
             'status' => 'active',
             'picsum_id' => 201,
-            'file_prefix' => '2025-1', // ◄ Explicitly match your local filenames
+            'file_prefix' => '2025-1', 
             'color_ids' => [1, 2],
             'size_ids' => [1],
             'packaging' => [
@@ -143,7 +143,7 @@ class ItemSeeder extends Seeder
 
             $this->populatePackagingQuantitiesAndCbm($item, $data);
 
-            // FIX: Load variant images from local folder up to 5 files
+            // Processes the images using matching target source names
             $this->seedDeterministicVariantImages($item, $data);
 
             // Re-evaluate draft metrics to unlock live production status
@@ -151,7 +151,7 @@ class ItemSeeder extends Seeder
         }
     }
 
-    /**
+   /**
      * FIXED: Seeds up to 5 images with exact matching raw object keys.
      */
     private function seedDeterministicVariantImages(Item $item, array $data): void
@@ -161,12 +161,12 @@ class ItemSeeder extends Seeder
 
         $itemImagesArray = [];
 
-        for ($index = 0; $index < 5; $index++) {
-            $sourceFileName = "{$prefix}_" . ($index + 1) . ".jpg";
+        for ($index = 1; $index <= 5; $index++) {
+            $sourceFileName = "{$prefix}_{$index}.jpg";
             $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
 
-            // 🎯 MATCHES PRODUCTION UI UPLOADS EXACTLY: Pure object storage keys
-            $minioPath = "uploads/items/{$item->id}/img-{$index}.jpg";
+            // 🎯 FIXED SYNTAX: Added missing closing double quote right here
+            $minioPath = "uploads/items/{$item->id}/{$sourceFileName}";
 
             if (File::exists($sourcePath)) {
                 // Production uses 's3' disk context via your .env parameters
@@ -177,7 +177,7 @@ class ItemSeeder extends Seeder
                         $disk->put($minioPath, File::get($sourcePath));
                     }
 
-                    // ✨ Save the raw key (ImageResolver will append your AWS_URL properly)
+                    // Save the raw matching filename key string
                     $itemImagesArray[] = $minioPath;
                 } catch (\Exception $e) {
                     \Illuminate\Support\Facades\Log::error("Failed seeding image: " . $e->getMessage());
@@ -199,6 +199,7 @@ class ItemSeeder extends Seeder
             ]);
         }
     }
+
     private function populatePackagingQuantitiesAndCbm(Item $item, array $data): void
     {
         $item->load('variants');
@@ -246,7 +247,7 @@ class ItemSeeder extends Seeder
         $item->refresh()->load('variants');
         foreach ($item->variants as $variant) {
             $variant->update([
-                'status' => $requestedStatus // Flips variant status to 'active'
+                'status' => $requestedStatus 
             ]);
 
             // Sync up the store variant connection maps to match
