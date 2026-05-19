@@ -73,6 +73,17 @@ services:
         echo '🚀 MinIO pipeline successfully completed!';
         exit 0;
         "
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # <--- CRITICAL: Gives it ability to discover containers
+      - ./docker/promtail-config.yaml:/etc/promtail/config.yaml
+    command: -config.file=/etc/promtail/config.yaml
+    networks:
+      - duka-network
+    restart: unless-stopped      
 
 networks:
   duka-network:
