@@ -380,9 +380,8 @@ if [ "$RESET_DB" = "1" ]; then
     fi
     exec_in_app php artisan migrate:fresh --seed --force
 else
-    # Keeping your current logic, but usually this would just be 'migrate'
-    # if you aren't resetting every time.
-    exec_in_app php artisan migrate:fresh --seed --force
+    # FIXED: Changed from migrate:fresh to regular migrate
+    exec_in_app php artisan migrate --force
 fi
 
 echo "Ensuring storage structure and permissions..."
