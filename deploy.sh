@@ -168,12 +168,12 @@ echo "FORCE_BUILD=$FORCE_BUILD"
 echo "ENABLE_OBSERVABILITY=$ENABLE_OBSERVABILITY"
 echo "Starting deployment..."
 
-if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
-    echo "Ensuring Loki Docker logging driver is installed..."
-    if ! docker_raw plugin inspect loki >/dev/null 2>&1; then
-        docker_raw plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
-    fi
-fi
+# if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
+#     echo "Ensuring Loki Docker logging driver is installed..."
+#     if ! docker_raw plugin inspect loki >/dev/null 2>&1; then
+#         docker_raw plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
+#     fi
+# fi
 
 docker_changes=0
 app_build_changes=0
