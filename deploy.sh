@@ -378,10 +378,11 @@ if [ "$RESET_DB" = "1" ]; then
         echo "RESET_DB=1 is not allowed in production."
         exit 1
     fi
+    echo "Performing fresh migration and seeding..."
     exec_in_app php artisan migrate:fresh --seed --force
 else
-    # FIXED: Changed from migrate:fresh to regular migrate
-    exec_in_app php artisan migrate:fresh --seed --force
+    echo "Running incremental migrations..."
+    exec_in_app php artisan migrate --force
 fi
 
 echo "Ensuring storage structure and permissions..."
