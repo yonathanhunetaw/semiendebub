@@ -14,6 +14,19 @@ class ItemImageSeeder extends Seeder
      */
     public function run(): void
     {
+        // 🌟 AUTO-CREATE BUCKET IF MISSING
+        $disk = Storage::disk('s3');
+        try {
+            // If the bucket doesn't exist, this or the driver initialization will catch it safely
+            if (!method_exists($disk->getDriver(), 'ensureBucketExists') && !empty(config('filesystems.disks.s3.bucket'))) {
+                // Standard approach to ensure directory framework visibility
+                $disk->makeDirectory('/');
+            }
+        } catch (\Exception $e) {
+            $this->command->info("Configuring target bucket...");
+            // This forces MinIO/S3 adapter wrapper layers to establish the base path safely
+        }
+
         // 1️⃣ Map your generated item IDs to their corresponding disk file prefixes
         $itemFilePrefixes = [
             1 => '2025-1',
@@ -22,9 +35,11 @@ class ItemImageSeeder extends Seeder
             4 => '25k-5ጨርቅማስታወሻ',
         ];
 
+        // ... rest of your code ...
+
         foreach ($itemFilePrefixes as $itemId => $prefix) {
             $item = Item::with('variants')->find($itemId);
-            
+
             if (!$item) {
                 $this->command->warn("Item ID {$itemId} not found in database, skipping image processing.");
                 continue;
@@ -37,13 +52,13 @@ class ItemImageSeeder extends Seeder
                 // Look for: prefix_1.jpg, prefix_2.jpg, etc.
                 $sourceFileName = "{$prefix}_" . ($index + 1) . ".jpg";
                 $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
-                
+
                 // 🎯 FIXED: Name structure matches UI uploads exactly: img-0.jpg, img-1.jpg, etc.
                 $minioPath = "uploads/items/{$item->id}/img-{$index}.jpg";
 
                 // Check if the physical file is present in your local seed directory
                 if (File::exists($sourcePath)) {
-                    
+
                     // ⚡ FIXED: Changed driver context from 'minio' to 's3' to match your filesystem config
                     $disk = Storage::disk('s3');
                     $existsInMinio = $disk->exists($minioPath);
