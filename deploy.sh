@@ -439,13 +439,40 @@ MINIO_PASS=$(env_value AWS_SECRET_ACCESS_KEY)
 MINIO_BUCKET=$(env_value AWS_BUCKET)
 
 # 3. Setup MinIO Client and Bucket Policy
-compose exec -T minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS"
+# Update the alias line to point directly to the service container
+compose exec -T Duka_minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS"
+# Set download policy specifically for the bucket
+compose exec -T Duka_minio mc anonymous set download local/"$MINIO_BUCKET"
+
+
 
 if [ -n "$MINIO_BUCKET" ]; then
     echo "Ensuring '$MINIO_BUCKET' bucket exists and is public..."
     compose exec -T minio mc mb local/"$MINIO_BUCKET" --ignore-existing
     compose exec -T minio mc anonymous set public local/"$MINIO_BUCKET"
 fi
+
+echo "🪣 Ensuring MinIO bucket exists..."
+
+# 1. Use the official MinIO Client (mc) container to connect to your running service
+# 2. Register the local 'Duka_minio' alias using your configuration credentials
+# 3. Create the bucket if it doesn't exist, and set its download policy to public
+sudo docker run --rm --network duka-network minio/mc:latest sh -c "
+  until mc alias set myminio http://Duka_minio:9000 admin your_strong_password; do
+    echo 'Waiting for MinIO service initialization...'
+    sleep 2
+  done
+  
+  if ! mc ls myminio/duka-images > /dev/null 2>&1; then
+    echo 'Creating missing bucket: duka-images'
+    mc mb myminio/duka-images
+    mc anonymous set download myminio/duka-images
+  else
+    echo 'Bucket duka-images already exists.'
+  fi
+"
+
+echo "✅ MinIO bucket configuration complete."
 
 # 4. Final Laravel Cleanup
 exec_in_app php artisan config:clear
