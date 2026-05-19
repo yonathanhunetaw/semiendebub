@@ -107,19 +107,21 @@ class ItemController extends Controller
 
         //####################################################################################################
         // 🪵 LOG 3: Performance breakdown + payload review
-        Log::info("Admin Items Index: Data mapping complete", [
-            'processed_count' => $processedItems->count(),
-            'mapping_time_ms' => $mappingTimeMs,
-            'total_time_ms' => $totalTimeMs,
-            // 🎯 FIX: Explicitly convert the mapped collection to a clean array of values
-            'items' => $processedItems->map(fn($item) => [
-                'id' => $item['id'],
-                'name' => $item['product_name'],
-                'status' => $item['status'],
-                'total_variants' => $item['variants_count'],
-                'active_v' => $item['active_variants_count']
-            ])->values()->all()
-        ]);
+        Log::info(
+            "Admin Items Index: Data mapping complete\n" .
+            json_encode([
+                'processed_count' => $processedItems->count(),
+                'mapping_time_ms' => $mappingTimeMs,
+                'total_time_ms' => $totalTimeMs,
+                'items' => $processedItems->map(fn($item) => [
+                    'id' => $item['id'],
+                    'name' => $item['product_name'],
+                    'status' => $item['status'],
+                    'total_variants' => $item['variants_count'],
+                    'active_v' => $item['active_variants_count']
+                ])->values()->all()
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        );
         //####################################################################################################
 
         // 🚨 ADD THIS DIE AND DUMP LINE HERE:
