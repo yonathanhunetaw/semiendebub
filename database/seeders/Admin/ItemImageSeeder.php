@@ -61,7 +61,13 @@ class ItemImageSeeder extends Seeder
 
                     // ⚡ FIXED: Changed driver context from 'minio' to 's3' to match your filesystem config
                     $disk = Storage::disk('s3');
-                    $existsInMinio = $disk->exists($minioPath);
+                    // 🔄 Replace line 64's raw check with this safer block:
+                    try {
+                        $existsInMinio = $disk->exists($minioPath);
+                    } catch (\Exception $e) {
+                        // If MinIO complains the bucket doesn't exist yet, assume false and move on to upload
+                        $existsInMinio = false;
+                    }
 
                     if (!$existsInMinio) {
                         // Stream the original file layout directly into MinIO
