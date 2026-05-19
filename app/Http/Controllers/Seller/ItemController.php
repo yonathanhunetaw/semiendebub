@@ -18,92 +18,88 @@ class ItemController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index()
     {
-        $user = Auth::user();
-        $storeId = Auth::user()->store?->id;
-        $search = $request->filled('search') ? trim($request->search) : null;
-        $cartId = $request->integer('cart_id') ?: null;
+        // 🪵 LOG 1: Track start of the admin request
+        Log::info("Admin Items Index: Fetching raw dataset");
 
-        // 🪵 LOG 1: Track incoming request context
-        Log::info("Fetching items index page", [
-            'user_id' => $user->id,
-            'store_id' => $storeId,
-            'search' => $search,
-            'cart_id' => $cartId,
-        ]);
-
-        // 🎯 FIXED: Changed query status condition to look for 'active' records 
-        $query = Item::where('status', 'active')
-            ->with([
-                'category',
-                'variants.itemColor',
-                'variants.itemSize',
-                // 🎯 FIXED: Removed 'variants.itemPackagingType' relationship load,
-                // as packaging specs now live inside the JSON matrix column properties.
-                'variants.storeVariants' => function ($q) use ($storeId) {
-                    if ($storeId) {
-                        $q->where('store_id', $storeId)
-                            ->with('stocks');
-                    }
-                },
-            ]);
-
-        // 1. Only filter by store if storeId exists
-        if ($storeId) {
-            $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
-                $q->where('store_id', $storeId);
-            });
-        }
-
-        // 2. Filter search strings cleanly
-        if ($search) {
-            $query->where('product_name', 'LIKE', '%' . $search . '%');
-        }
-
-        // 🪵 LOG 2: Benchmark query execution time
         $startTime = microtime(true);
 
-        $items = $query->orderBy('product_name')->get();
+        $items = Item::with(['variants.storeVariants'])->get();
+        $stores = Store::all();
 
-        $executionTime = round((microtime(true) - $startTime) * 1000, 2); // Time in milliseconds
+        // 🪵 LOG 2: Benchmark initial database pull
+        Log::info("Admin Items Index: DB queries complete", [
+            'items_raw_count' => $items->count(),
+            'stores_count' => $stores->count(),
+            'db_time_ms' => round((microtime(true) - $startTime) * 1000, 2)
+        ]);
 
-        // 🪵 LOG 3: Log query outcome & performance
-        if ($items->isEmpty()) {
-            Log::warning("No items found matching the criteria", [
-                'store_id' => $storeId ?? 'N/A',
-                'search_term' => $search,
-                'execution_ms' => $executionTime
-            ]);
-        } else {
-            Log::info("Items retrieved successfully", [
-                'count' => $items->count(),
-                'store_id' => $storeId ?? 'N/A',
-                'execution_ms' => $executionTime
-            ]);
-        }
+        $mappingStartTime = microtime(true);
 
+        $processedItems = $items->map(function ($item) {
+            // Fallback to empty array if general_images is null
+            $generalImages = $item->general_images ?? [];
 
-
-        // 🎯 OPTIONAL ENHANCEMENT STEP:
-        // If your PriceProvider requires calculating personalized wholesale margins
-        // on top of your loaded JSON array trees before feeding Inertia view rows:
-        /*
-        $items->each(function($item) {
-            foreach ($item->variants as $variant) {
-                foreach ($variant->storeVariants as $storeVariant) {
-                    // You can access, parse, or sort through the $storeVariant->pricing_matrix array values directly here
-                }
+            // Safety check if the JSON/cast failed and returned a string instead of an array
+            if (is_string($generalImages)) {
+                Log::warning("Item ID {$item->id} has 'general_images' stored as a string instead of array.", [
+                    'raw_value' => $generalImages
+                ]);
+                $generalImages = json_decode($generalImages, true) ?? [];
             }
-        });
-        */
 
-        return Inertia::render('Seller/Items/Index', [
-            'items' => $items,
-            'filters' => [
-                'search' => $search ?? '',
-                'cart_id' => $cartId,
-            ],
+            $previewImages = collect($generalImages)
+                ->map(fn($path) => ImageResolver::resolve($path))
+                ->merge($item->variants->map(fn($v) => ImageResolver::resolve($v->images[0] ?? null)))
+                ->filter()
+                ->unique()
+                ->take(5)
+                ->values()
+                ->toArray();
+
+            $variantsCount = $item->variants->count();
+
+            $activeVariantsCount = $item->variants->filter(function ($v) {
+                return $v->status === 'active' &&
+                    $v->storeVariants->where('active', true)->isNotEmpty();
+            })->count();
+
+            return [
+                'id' => $item->id,
+                'product_name' => $item->product_name,
+                'status' => $item->status,
+                'variants_count' => $variantsCount,
+                'active_variants_count' => $activeVariantsCount,
+                'processed_images' => $previewImages,
+            ];
+        });
+
+        $totalTimeMs = round((microtime(true) - $startTime) * 1000, 2);
+        $mappingTimeMs = round((microtime(true) - $mappingStartTime) * 1000, 2);
+
+        // 🪵 LOG 3: Performance breakdown + payload review
+        Log::info("Admin Items Index: Data mapping complete", [
+            'processed_count' => $processedItems->count(),
+            'mapping_time_ms' => $mappingTimeMs,
+            'total_time_ms' => $totalTimeMs,
+            // 🎯 ADDED: Pluck compact data from your processed array to view details directly in logs
+            'items' => $processedItems->map(fn($item) => [
+                'id' => $item['id'],
+                'name' => $item['product_name'],
+                'status' => $item['status'],
+                'total_variants' => $item['variants_count'],
+                'active_v' => $item['active_variants_count']
+            ])->toArray()
+        ]);
+
+        // 🚨 ADD THIS DIE AND DUMP LINE HERE:
+        // dd($processedItems->toArray());
+
+        return Inertia::render('Admin/Items/Index', [
+            'items' => $processedItems,
+            'stores' => $stores,
+            'filters' => request()->only(['filter', 'sort', 'direction']),
         ]);
     }
 

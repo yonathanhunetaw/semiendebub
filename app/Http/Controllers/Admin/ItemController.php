@@ -41,13 +41,40 @@ class ItemController extends Controller
     // INDEX
     // ──────────────────────────────────────────────────────────────────────────
 
+
+
     public function index()
     {
+        // 🪵 LOG 1: Track start of the admin request
+        Log::info("Admin Items Index: Fetching raw dataset");
+
+        $startTime = microtime(true);
+
         $items = Item::with(['variants.storeVariants'])->get();
         $stores = Store::all();
 
+        // 🪵 LOG 2: Benchmark initial database pull
+        Log::info("Admin Items Index: DB queries complete", [
+            'items_raw_count' => $items->count(),
+            'stores_count' => $stores->count(),
+            'db_time_ms' => round((microtime(true) - $startTime) * 1000, 2)
+        ]);
+
+        $mappingStartTime = microtime(true);
+
         $processedItems = $items->map(function ($item) {
-            $previewImages = collect($item->general_images ?? [])
+            // Fallback to empty array if general_images is null
+            $generalImages = $item->general_images ?? [];
+
+            // Safety check if the JSON/cast failed and returned a string instead of an array
+            if (is_string($generalImages)) {
+                Log::warning("Item ID {$item->id} has 'general_images' stored as a string instead of array.", [
+                    'raw_value' => $generalImages
+                ]);
+                $generalImages = json_decode($generalImages, true) ?? [];
+            }
+
+            $previewImages = collect($generalImages)
                 ->map(fn($path) => ImageResolver::resolve($path))
                 ->merge($item->variants->map(fn($v) => ImageResolver::resolve($v->images[0] ?? null)))
                 ->filter()
@@ -72,6 +99,16 @@ class ItemController extends Controller
                 'processed_images' => $previewImages,
             ];
         });
+
+        $totalTimeMs = round((microtime(true) - $startTime) * 1000, 2);
+        $mappingTimeMs = round((microtime(true) - $mappingStartTime) * 1000, 2);
+
+        // 🪵 LOG 3: Performance breakdown of data processing
+        Log::info("Admin Items Index: Data mapping complete", [
+            'processed_count' => $processedItems->count(),
+            'mapping_time_ms' => $mappingTimeMs,
+            'total_time_ms' => $totalTimeMs,
+        ]);
 
         // 🚨 ADD THIS DIE AND DUMP LINE HERE:
         // dd($processedItems->toArray());
