@@ -1,13 +1,13 @@
 x-loki-logging: &loki-logging
-  driver: loki
+  driver: json-file
   options:
+    max-size: "10m"
+    max-file: "3"
     loki-url: "http://localhost:13100/loki/api/v1/push"
     loki-batch-size: "400"
     loki-retries: "5"
     loki-timeout: "1s"
     keep-file: "true"
-    max-size: "50m"
-    max-file: "3"
     labels: "job={{.Name}},container={{.Name}}"
 
 services:
