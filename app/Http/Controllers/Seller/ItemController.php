@@ -70,25 +70,25 @@ class ItemController extends Controller
         // 🪵 LOG 3: Single point of truth for query outcomes + item details
         if ($items->isEmpty()) {
             Log::warning("No items found matching the criteria", [
-                'store_id' => $storeId ?? 'N/A',
-                'search_term' => $search,
+                'store_id'     => $storeId ?? 'N/A',
+                'search_term'  => $search,
                 'execution_ms' => $executionTime,
-                'items' => []
+                'items'        => []
             ]);
         } else {
             Log::info("Items retrieved successfully", [
-                'count' => $items->count(),
-                'store_id' => $storeId ?? 'N/A',
+                'count'        => $items->count(),
+                'store_id'     => $storeId ?? 'N/A',
                 'execution_ms' => $executionTime,
-                // 🎯 ADDED: Pluck compact dataset info straight into your log file
-                'items' => $items->map(fn($item) => [
-                    'id' => $item->id,
-                    'name' => $item->product_name,
-                    'status' => $item->status,
+                // 🎯 FIX: Map, pluck, reset keys with values(), and convert to a raw array
+                'items'        => $items->map(fn($item) => [
+                    'id'             => $item->id,
+                    'name'           => $item->product_name,
+                    'status'         => $item->status,
                     'variants_count' => $item->variants->count(),
-                ])->toArray()
-            ]);
-        }
+                ])->values()->all()
+            ]); // <-- Closes the Log::info array and statement
+        } // 
 
         // 🎯 OPTIONAL ENHANCEMENT STEP: Wholesale margin calculations...
         /*

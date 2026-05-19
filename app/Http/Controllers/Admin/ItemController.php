@@ -45,6 +45,7 @@ class ItemController extends Controller
 
     public function index()
     {
+        //####################################################################################################
         // 🪵 LOG 1: Track start of the admin request
         Log::info("Admin Items Index: Fetching raw dataset");
 
@@ -59,6 +60,7 @@ class ItemController extends Controller
             'stores_count' => $stores->count(),
             'db_time_ms' => round((microtime(true) - $startTime) * 1000, 2)
         ]);
+        //####################################################################################################
 
         $mappingStartTime = microtime(true);
 
@@ -103,12 +105,22 @@ class ItemController extends Controller
         $totalTimeMs = round((microtime(true) - $startTime) * 1000, 2);
         $mappingTimeMs = round((microtime(true) - $mappingStartTime) * 1000, 2);
 
-        // 🪵 LOG 3: Performance breakdown of data processing
+        //####################################################################################################
+        // 🪵 LOG 3: Performance breakdown + payload review
         Log::info("Admin Items Index: Data mapping complete", [
             'processed_count' => $processedItems->count(),
             'mapping_time_ms' => $mappingTimeMs,
             'total_time_ms' => $totalTimeMs,
+            // 🎯 FIX: Explicitly convert the mapped collection to a clean array of values
+            'items' => $processedItems->map(fn($item) => [
+                'id' => $item['id'],
+                'name' => $item['product_name'],
+                'status' => $item['status'],
+                'total_variants' => $item['variants_count'],
+                'active_v' => $item['active_variants_count']
+            ])->values()->all()
         ]);
+        //####################################################################################################
 
         // 🚨 ADD THIS DIE AND DUMP LINE HERE:
         // dd($processedItems->toArray());
