@@ -3,7 +3,7 @@ name: duka
 services:
   duka_app:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile
     container_name: duka_app
     restart: unless-stopped

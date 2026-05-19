@@ -1,7 +1,7 @@
 services:
   duka_app:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.dev
     volumes:
       - ../:/var/www/html

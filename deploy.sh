@@ -319,7 +319,7 @@ else
         echo "Vite is already running."
     else
         echo "Launching Vite..."
-        # CHANGE 'app' TO 'duka_app' HERE
+        # 🎯 FIXED: TARGETS DUKA_APP CONTAINER INSTEAD OF OLD 'APP' BINDING
         compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
     fi
 
@@ -343,7 +343,7 @@ else
             echo "Detected a stale Rollup optional dependency set..."
             reset_node_dependencies
             echo "Relaunching Vite..."
-            # CHANGE 'app' TO 'duka_app' HERE TOO
+            # 🎯 FIXED: TARGETS DUKA_APP CONTAINER HERE AS WELL
             compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
             echo "Waiting for Vite after dependency reset..."
             if ! exec_in_app sh -lc '
