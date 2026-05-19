@@ -91,7 +91,7 @@ return [
             'handler_with' => [
                 'host' => env('PAPERTRAIL_URL'),
                 'port' => env('PAPERTRAIL_PORT'),
-                'connectionString' => 'tls://' . env('PAPERTRAIL_URL') . ':' . env('PAPERTRAIL_PORT'),
+                'connectionString' => 'tls://'.env('PAPERTRAIL_URL').':'.env('PAPERTRAIL_PORT'),
             ],
             'processors' => [PsrLogMessageProcessor::class],
         ],
@@ -166,17 +166,20 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
-        // Inside config/logging.php
-
+        // Loki Channel
         'loki' => [
             'driver' => 'monolog',
             'level' => env('LOG_LEVEL', 'info'),
-            'handler' => TekoEstudio\Loki\LokiHandler::class,
-            // 🎯 FIX: Use 'handler_with' so the parameters map directly to the LokiHandler constructor
-            'handler_with' => [
-                'lokiUrl' => env('LOKI_PUSH_URL', 'http://127.0.0.1:3100/loki/api/v1/push'),
-            ],
+            'handler' => LokiHandler::class,
             'formatter' => Monolog\Formatter\JsonFormatter::class,
+            'with' => [
+                'url' => env('LOKI_PUSH_URL', 'http://127.0.0.1:3100/loki/api/v1/push'),
+                'labels' => [
+                    'job' => 'laravel',   // This is the label you use in Grafana queries
+                    'env' => env('APP_ENV', 'production'),
+                    'app' => env('APP_NAME', 'Duka'),
+                ],
+            ],
         ],
     ],
 
