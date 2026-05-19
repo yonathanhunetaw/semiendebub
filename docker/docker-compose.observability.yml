@@ -1,8 +1,8 @@
 x-loki-logging: &loki-logging
-  driver: loki
+  driver: json-file
   options:
-    loki-url: "http://Duka_lgtm:3100/loki/api/v1/push"
-    loki-retention: "24h"
+    max-size: "10m"
+    max-file: "3"
 
 services:
   duka_app:
