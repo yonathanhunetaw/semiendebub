@@ -20,9 +20,18 @@ class ItemController extends Controller
      */
     public function index(Request $request)
     {
+        $user = Auth::user();
         $storeId = Auth::user()->store?->id;
         $search = $request->filled('search') ? trim($request->search) : null;
         $cartId = $request->integer('cart_id') ?: null;
+
+        // 🪵 LOG 1: Track incoming request context
+        Log::info("Fetching items index page", [
+            'user_id' => $user->id,
+            'store_id' => $storeId,
+            'search' => $search,
+            'cart_id' => $cartId,
+        ]);
 
         // 🎯 FIXED: Changed query status condition to look for 'active' records 
         $query = Item::where('status', 'active')
@@ -35,7 +44,7 @@ class ItemController extends Controller
                 'variants.storeVariants' => function ($q) use ($storeId) {
                     if ($storeId) {
                         $q->where('store_id', $storeId)
-                          ->with('stocks');
+                            ->with('stocks');
                     }
                 },
             ]);
@@ -52,7 +61,29 @@ class ItemController extends Controller
             $query->where('product_name', 'LIKE', '%' . $search . '%');
         }
 
+        // 🪵 LOG 2: Benchmark query execution time
+        $startTime = microtime(true);
+
         $items = $query->orderBy('product_name')->get();
+
+        $executionTime = round((microtime(true) - $startTime) * 1000, 2); // Time in milliseconds
+
+        // 🪵 LOG 3: Log query outcome & performance
+        if ($items->isEmpty()) {
+            Log::warning("No items found matching the criteria", [
+                'store_id' => $storeId ?? 'N/A',
+                'search_term' => $search,
+                'execution_ms' => $executionTime
+            ]);
+        } else {
+            Log::info("Items retrieved successfully", [
+                'count' => $items->count(),
+                'store_id' => $storeId ?? 'N/A',
+                'execution_ms' => $executionTime
+            ]);
+        }
+
+
 
         // 🎯 OPTIONAL ENHANCEMENT STEP:
         // If your PriceProvider requires calculating personalized wholesale margins
@@ -66,10 +97,6 @@ class ItemController extends Controller
             }
         });
         */
-
-        if ($items->isEmpty()) {
-            Log::info("No items found for store: " . ($storeId ?? 'N/A'));
-        }
 
         return Inertia::render('Seller/Items/Index', [
             'items' => $items,
