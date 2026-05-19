@@ -76,4 +76,4 @@ else
     echo "🌐 Running HTTP only"
 fi
 
-exec apache2-foreground
+exec apache2 -D FOREGROUND
