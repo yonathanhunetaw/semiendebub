@@ -7,6 +7,8 @@ services:
       dockerfile: docker/Dockerfile
     container_name: duka_app
     restart: unless-stopped
+    ports:
+      - "8095:80"
     env_file:
       - ../.env
     depends_on:
@@ -84,7 +86,7 @@ services:
     networks:
       - duka-network
     restart: unless-stopped
-    
+
 networks:
   duka-network:
 
