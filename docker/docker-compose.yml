@@ -78,13 +78,13 @@ services:
     container_name: promtail
     volumes:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # <--- CRITICAL: Gives it ability to discover containers
-      - ./docker/promtail-config.yaml:/etc/promtail/config.yaml
-    command: -config.file=/etc/promtail/config.yaml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./promtail-config.yaml:/tmp/config.yaml  # <--- Mount to /tmp
+    command: -config.file=/tmp/config.yaml      # <--- Point to /tmp
     networks:
       - duka-network
-    restart: unless-stopped      
-
+    restart: unless-stopped
+    
 networks:
   duka-network:
 
