@@ -278,8 +278,12 @@ exec_in_app git config --global --add safe.directory /var/www/html || true
 
 echo "Installing PHP dependencies..."
 
-# Target the specific file that was missing in your error log
+# 1. Ensure the required Flysystem package is present
+exec_in_app composer require league/flysystem-aws-s3-v3:"^3.0" --no-interaction --no-update
+
+# 2. Define the check file
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
+
 
 if ! exec_in_app test -f "$S3_CONVERTER_FILE" || has_git_path_changes "composer.lock"; then
     echo "S3 driver files missing or composer.lock changed. Syncing dependencies..."
@@ -402,6 +406,10 @@ exec_in_app chmod -R 775 storage bootstrap/cache public/images
 exec_in_app chown -R 33:33 storage bootstrap/cache
 exec_in_app chmod -R 775 storage bootstrap/cache
 
+exec_in_app touch storage/logs/laravel.log
+exec_in_app chown 33:33 storage/logs/laravel.log
+exec_in_app chmod 664 storage/logs/laravel.log
+
 echo "Refreshing Laravel caches..."
 # We use '|| true' so that even if a clear command fails, the script keeps going
 exec_in_app php artisan optimize:clear || true
@@ -454,11 +462,14 @@ fi
 
 echo "🪣 Ensuring MinIO bucket exists..."
 
-# 1. Use the official MinIO Client (mc) container to connect to your running service
-# 2. Register the local 'Duka_minio' alias using your configuration credentials
-# 3. Create the bucket if it doesn't exist, and set its download policy to public
+# 1. Pull credentials from your .env using your helper
+MINIO_USER=$(env_value MINIO_ROOT_USER)
+MINIO_PASS=$(env_value MINIO_ROOT_PASSWORD)
+
+# 2. Use the official MinIO Client (mc) container to connect and configure
+# We use the variables $MINIO_USER and $MINIO_PASS inside the container command
 sudo docker run --rm --network duka-network minio/mc:latest sh -c "
-  until mc alias set myminio http://Duka_minio:9000 admin your_strong_password; do
+  until mc alias set myminio http://Duka_minio:9000 $MINIO_USER $MINIO_PASS; do
     echo 'Waiting for MinIO service initialization...'
     sleep 2
   done
