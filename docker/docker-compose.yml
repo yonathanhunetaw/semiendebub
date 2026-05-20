@@ -1,5 +1,6 @@
 name: duka
 
+
 services:
   duka_app:
     build:
@@ -9,6 +10,7 @@ services:
     restart: unless-stopped
     ports:
       - "8095:80"
+      - "5177:5177"
     env_file:
       - ../.env
     depends_on:
