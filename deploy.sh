@@ -145,10 +145,11 @@ exec_in_app_as_root() {
 }
 
 compose_rm_services() {
+    # We pass the service names as arguments to the command
     if has_command timeout; then
-        timeout 20s compose rm -fsv "$@"
+        timeout 20s "${DOCKER_CMD[@]}" compose --env-file .env "${COMPOSE_FILES[@]}" rm -fsv "$@"
     else
-        compose rm -fsv "$@"
+        "${DOCKER_CMD[@]}" compose --env-file .env "${COMPOSE_FILES[@]}" rm -fsv "$@"
     fi
 }
 
@@ -278,8 +279,21 @@ exec_in_app git config --global --add safe.directory /var/www/html || true
 
 echo "Installing PHP dependencies..."
 
-# 1. Ensure the required Flysystem package is present
+# 1. Add the package to composer.json
 exec_in_app composer require league/flysystem-aws-s3-v3:"^3.0" --no-interaction --no-update
+
+# 2. Check if the lock file is in sync
+if ! exec_in_app composer validate --no-check-all --quiet; then
+    echo "Lock file out of sync, updating..."
+    exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction
+fi
+
+# 3. Standard install
+if [ "$APP_ENV" = "production" ]; then
+    exec_in_app composer install --no-dev --optimize-autoloader --no-interaction
+else
+    exec_in_app composer install --optimize-autoloader --no-interaction
+fi
 
 # 2. Define the check file
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
