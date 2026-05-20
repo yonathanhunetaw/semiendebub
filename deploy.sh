@@ -403,6 +403,15 @@ else
     exec_in_app php artisan migrate --force
 fi
 
+echo "--- Purging Laravel Cache ---"
+exec_in_app php artisan cache:clear
+exec_in_app php artisan config:clear
+exec_in_app php artisan route:clear
+exec_in_app php artisan view:clear
+exec_in_app php artisan event:clear
+exec_in_app php artisan optimize:clear
+# -------------------------------
+
 echo "Ensuring storage structure and permissions..."
 # Create all necessary paths in one go
 exec_in_app mkdir -p \
