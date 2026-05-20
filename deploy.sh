@@ -465,30 +465,6 @@ fi
 
 echo "✅ MinIO configuration complete."
 
-echo "🪣 Ensuring MinIO bucket exists..."
-
-# 1. Pull credentials
-MINIO_USER=$(env_value MINIO_ROOT_USER)
-MINIO_PASS=$(env_value MINIO_ROOT_PASSWORD)
-
-# 2. Get the project network name automatically
-NETWORK_NAME=$(sudo docker compose -f docker/docker-compose.yml config --networks | head -n 1 | awk '{print $1}')
-
-# 3. Use the network created by compose
-sudo docker run --rm --network "$NETWORK_NAME" minio/mc:latest sh -c "
-  until mc alias set myminio http://minio:9000 $MINIO_USER $MINIO_PASS; do
-    echo 'Waiting for MinIO service initialization...'
-    sleep 2
-  done
-  
-  if ! mc ls myminio/duka-images > /dev/null 2>&1; then
-    echo 'Creating missing bucket: duka-images'
-    mc mb myminio/duka-images
-    mc anonymous set download myminio/duka-images
-  else
-    echo 'Bucket duka-images already exists.'
-  fi
-"
 
 echo "✅ MinIO bucket configuration complete."
 
