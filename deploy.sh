@@ -338,7 +338,7 @@ else
     else
         echo "Launching Vite..."
         # 🎯 FIXED: TARGETS DUKA_APP CONTAINER INSTEAD OF OLD 'APP' BINDING
-        compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
+        compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
     fi
 
     echo "Waiting for Vite..."
@@ -362,7 +362,7 @@ else
             reset_node_dependencies
             echo "Relaunching Vite..."
             # 🎯 FIXED: TARGETS DUKA_APP CONTAINER HERE AS WELL
-            compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1'
+            compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
             echo "Waiting for Vite after dependency reset..."
             if ! exec_in_app sh -lc '
                 for i in $(seq 1 60); do
