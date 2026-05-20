@@ -467,14 +467,16 @@ echo "✅ MinIO configuration complete."
 
 echo "🪣 Ensuring MinIO bucket exists..."
 
-# 1. Pull credentials from your .env using your helper
+# 1. Pull credentials
 MINIO_USER=$(env_value MINIO_ROOT_USER)
 MINIO_PASS=$(env_value MINIO_ROOT_PASSWORD)
 
-# 2. Use the official MinIO Client (mc) container to connect and configure
-# We use the variables $MINIO_USER and $MINIO_PASS inside the container command
-sudo docker run --rm --network duka-network minio/mc:latest sh -c "
-  until mc alias set myminio http://Duka_minio:9000 $MINIO_USER $MINIO_PASS; do
+# 2. Get the project network name automatically
+NETWORK_NAME=$(sudo docker compose -f docker/docker-compose.yml config --networks | head -n 1 | awk '{print $1}')
+
+# 3. Use the network created by compose
+sudo docker run --rm --network "$NETWORK_NAME" minio/mc:latest sh -c "
+  until mc alias set myminio http://minio:9000 $MINIO_USER $MINIO_PASS; do
     echo 'Waiting for MinIO service initialization...'
     sleep 2
   done
