@@ -440,18 +440,11 @@ fi
 
 echo "Configuring MinIO storage..."
 
-# 1. Wait for MinIO API to be actually ready
+# 1. Wait for MinIO API to be ready
 echo "Waiting for MinIO API to initialize..."
-MAX_RETRIES=30
-COUNT=0
 until compose exec -T minio sh -c "curl -sf http://localhost:9000/minio/health/live" >/dev/null 2>&1; do
     echo -n "."
     sleep 2
-    COUNT=$((COUNT + 1))
-    if [ $COUNT -ge $MAX_RETRIES ]; then
-        echo "MinIO failed to start in time. Skipping storage config."
-        break
-    fi
 done
 echo " MinIO is ready."
 
@@ -460,19 +453,17 @@ MINIO_USER=$(env_value AWS_ACCESS_KEY_ID)
 MINIO_PASS=$(env_value AWS_SECRET_ACCESS_KEY)
 MINIO_BUCKET=$(env_value AWS_BUCKET)
 
-# 3. Setup MinIO Client and Bucket Policy
-# Update the alias line to point directly to the service container
-compose exec -T Duka_minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS"
-# Set download policy specifically for the bucket
-compose exec -T Duka_minio mc anonymous set download local/"$MINIO_BUCKET"
-
-
+# 3. Setup MinIO Client (mc) inside the running minio container
+compose exec -T minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS"
+compose exec -T minio mc anonymous set download local/"$MINIO_BUCKET"
 
 if [ -n "$MINIO_BUCKET" ]; then
     echo "Ensuring '$MINIO_BUCKET' bucket exists and is public..."
     compose exec -T minio mc mb local/"$MINIO_BUCKET" --ignore-existing
     compose exec -T minio mc anonymous set public local/"$MINIO_BUCKET"
 fi
+
+echo "✅ MinIO configuration complete."
 
 echo "🪣 Ensuring MinIO bucket exists..."
 
