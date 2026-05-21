@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Str;
-
+use Illuminate\Support\Facades\Log;
 return [
 
     /*
@@ -126,8 +126,15 @@ return [
     | since doing so does not grant a meaningful security improvement.
     |
     */
-
-    'cookie' => env('SESSION_COOKIE', 'duka_session'),
+    'cookie' => (function() {
+        $name = env('SESSION_COOKIE', 'duka_session');
+        Log::info('Session Cookie Debug', [
+            'resolved_name' => $name,
+            'http_host' => $_SERVER['HTTP_HOST'] ?? 'n/a'
+        ]);
+        return $name;
+    })(),
+    
     /*
     |--------------------------------------------------------------------------
     | Session Cookie Path
