@@ -55,6 +55,23 @@ Route::middleware('notify.public.visit')->get('/', function () {
         return redirect()->route($roleDashboards[$expectedRole]);
     }
 
+    if ($user) {
+        $primaryRole = $user->roles->pluck('name')->first();
+        $targetHost = null;
+        foreach (config('subdomains.host_role_map', []) as $mappedHost => $mappedRole) {
+            if ($mappedRole === $primaryRole) {
+                $targetHost = $mappedHost;
+                break;
+            }
+        }
+        if ($targetHost) {
+            $protocol = request()->isSecure() ? 'https://' : 'http://';
+            $port = request()->getPort();
+            $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
+            return redirect()->to($protocol . $targetHost . $portSuffix . '/dashboard');
+        }
+    }
+
     return Inertia::render('Guest/Welcome/index');
 });
 

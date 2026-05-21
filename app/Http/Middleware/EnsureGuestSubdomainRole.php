@@ -29,6 +29,6 @@ class EnsureGuestSubdomainRole
             return redirect()->to($request->getSchemeAndHttpHost().'/');
         }
 
-        return redirect()->to('/dashboard');
+        return $next($request);
     }
 }

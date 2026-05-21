@@ -129,10 +129,12 @@ class AuthenticatedSessionController extends Controller
                 'url' => $url
             ]);
 
-            // Clean up session before leaving for isolated domains
-            Auth::guard('web')->logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
+            // Clean up session before leaving ONLY for isolated domains
+            if (config('subdomains.separated_session_hosts', false)) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
 
             return Inertia::location($url);
         }

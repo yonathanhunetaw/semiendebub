@@ -344,7 +344,7 @@ else
     echo "Waiting for Vite..."
     # (The loop below uses exec_in_app, which you already updated to duka_app, so that is fine)
     if ! exec_in_app sh -lc '
-        for i in $(seq 1 60); do
+        for i in $(seq 1 120); do
             if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
                 exit 0
             fi
@@ -365,7 +365,7 @@ else
             compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
             echo "Waiting for Vite after dependency reset..."
             if ! exec_in_app sh -lc '
-                for i in $(seq 1 60); do
+                for i in $(seq 1 120); do
                     if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
                         exit 0
                     fi

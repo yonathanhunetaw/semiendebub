@@ -34,6 +34,25 @@ class AllowSubdomainLogin
             return redirect()->to('/dashboard');
         }
 
+        // If we are sharing sessions across subdomains, redirect them to their respective role's dashboard.
+        if (!config('subdomains.separated_session_hosts', false)) {
+            $primaryRole = $user->roles->pluck('name')->first();
+            $targetHost = null;
+            foreach (config('subdomains.host_role_map', []) as $mappedHost => $mappedRole) {
+                if ($mappedRole === $primaryRole) {
+                    $targetHost = $mappedHost;
+                    break;
+                }
+            }
+
+            if ($targetHost && $targetHost !== $host) {
+                $protocol = $request->isSecure() ? 'https://' : 'http://';
+                $port = $request->getPort();
+                $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
+                return redirect()->to($protocol . $targetHost . $portSuffix . '/dashboard');
+            }
+        }
+
         // Otherwise allow the login/register forms on this subdomain.
         return $next($request);
     }
