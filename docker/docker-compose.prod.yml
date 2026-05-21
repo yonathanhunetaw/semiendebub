@@ -1,5 +1,7 @@
 services:
   duka_app:
+    build:
+      context: ..
     volumes:
       - ../:/var/www/html
       - storage_data:/var/www/html/storage
