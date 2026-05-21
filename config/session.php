@@ -128,10 +128,10 @@ return [
     */
     'cookie' => (function() {
         $name = env('SESSION_COOKIE', 'duka_session');
-        Log::info('Session Cookie Debug', [
-            'resolved_name' => $name,
-            'http_host' => $_SERVER['HTTP_HOST'] ?? 'n/a'
-        ]);
+        
+        // Use error_log instead of the Log facade
+        error_log('DEBUG: Session Cookie Name is ' . $name);
+        
         return $name;
     })(),
     
