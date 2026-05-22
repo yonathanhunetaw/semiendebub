@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
             cors: {
                 origin: (origin, callback) => {
                     // Allow if it matches the pattern or is the Pi's direct IP for testing
-                    if (!origin || subdomainOriginPattern.test(origin) || origin.includes('192.168.1.14')) {
+                    if (!origin || subdomainOriginPattern.test(origin) || origin.includes('192.168.1.15')) {
                         callback(null, true);
                         return;
                     }
