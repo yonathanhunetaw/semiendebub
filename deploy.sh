@@ -329,15 +329,21 @@ if [ "$APP_ENV" = "production" ]; then
 else
     echo "Starting Vite dev server..."
     exec_in_app rm -rf public/build
+    
+    # 🎯 PROACTIVE FIX: Clear Vite cache to prevent 504 errors on domain changes
+    echo "Sanitizing Vite environment..."
+    exec_in_app rm -rf node_modules/.vite
+    
     if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
         echo "Installing Node dependencies..."
         install_node_dependencies
     fi
+
     if exec_in_app sh -lc 'curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1'; then
         echo "Vite is already running."
     else
         echo "Launching Vite..."
-        # 🎯 FIXED: TARGETS DUKA_APP CONTAINER INSTEAD OF OLD 'APP' BINDING
+        # 🎯 Added --force to ensure it doesn't try to reuse a stale cache
         compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
     fi
 
