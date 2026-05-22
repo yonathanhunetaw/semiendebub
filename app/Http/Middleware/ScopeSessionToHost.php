@@ -20,6 +20,7 @@ class ScopeSessionToHost
         config([
             'session.cookie' => $cookieName,
             'session.domain' => null,
+            'session.path' => '/'
         ]);
 
         return $next($request);
