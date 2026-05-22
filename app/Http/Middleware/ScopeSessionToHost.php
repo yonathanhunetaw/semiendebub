@@ -17,28 +17,20 @@ class ScopeSessionToHost
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if ($this->shouldScopeSessionToHost()) {
-            $cookieName = $this->cookieNameForHost($request->getHost());
+        $cookieName = $this->cookieNameForHost($request->getHost());
 
-            config([
-                'session.cookie' => $cookieName,
-                'session.domain' => null,
-            ]);
-        }
+        config([
+            'session.cookie' => $cookieName,
+            'session.domain' => null, // Explicitly keep this null
+        ]);
 
         return $next($request);
-    }
-
-    private function shouldScopeSessionToHost(): bool
-    {
-        return app()->environment(['local', 'testing'])
-            && config('session.domain') === null;
     }
 
     private function cookieNameForHost(string $host): string
     {
         return Str::slug(
-            (string) config('app.name', 'laravel').'_'.$host.'_session',
+            (string) config('app.name', 'laravel') . '_' . $host . '_session',
             '_'
         );
     }
