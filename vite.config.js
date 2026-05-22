@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
             },
             allowedHosts: [`.${appDomain}`, appDomain],
             hmr: {
-                host: true, // Dynamically use the browser's current host
+                host: 'duka2.pi',
                 protocol: hmrProtocol,
                 port: devServerPort,
                 clientPort: devServerPort, 
