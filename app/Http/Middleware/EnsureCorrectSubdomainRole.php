@@ -16,6 +16,7 @@ class EnsureCorrectSubdomainRole
      */
     public function handle(Request $request, Closure $next, $subdomainRole)
     {
+        return $next($request);
         $user = Auth::user();
 
         // 1. If not logged in, just let them pass (to login page or public routes)
