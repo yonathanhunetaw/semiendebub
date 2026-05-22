@@ -136,7 +136,7 @@ class AuthenticatedSessionController extends Controller
                 $request->session()->regenerateToken();
             }
 
-            return Inertia::location($url);
+            return redirect()->away($url);
         }
 
         // LOG: Fallback for when the user is already on the correct subdomain
