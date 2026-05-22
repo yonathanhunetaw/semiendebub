@@ -8,12 +8,12 @@ export default defineConfig(({ mode }) => {
 
     const devServerHost = env.VITE_DEV_SERVER_HOST ?? '0.0.0.0';
     const devServerPort = Number(env.VITE_DEV_SERVER_PORT ?? 5177);
-    const hmrHost = env.VITE_HMR_HOST ?? 'duka.local';
     const hmrProtocol = env.VITE_HMR_PROTOCOL ?? 'ws';
-    const appDomain = env.APP_SYSTEM_DOMAIN ?? 'duka.local';
+    const appDomain = env.APP_SYSTEM_DOMAIN ?? 'duka2.pi';
 
+    // Matches http(s)://sub.duka2.pi or http(s)://duka2.pi
     const subdomainOriginPattern = new RegExp(
-        `^https?:\\/\\/([a-z0-9-]+\\.)?${appDomain.replace('.', '\\.')}(:\\d+)?$`,
+        `^https?:\\/\\/([a-z0-9-]+\\.)*${appDomain.replace('.', '\\.')}(:\\d+)?$`,
         'i'
     );
 
@@ -34,10 +34,10 @@ export default defineConfig(({ mode }) => {
             },
             allowedHosts: [`.${appDomain}`, appDomain],
             hmr: {
-                host: hmrHost,
+                host: true, // Dynamically use the browser's current host
                 protocol: hmrProtocol,
                 port: devServerPort,
-                clientPort: devServerPort,
+                clientPort: devServerPort, 
             },
             watch: {
                 usePolling: true,
