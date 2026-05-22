@@ -27,7 +27,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
+
+        // Add the CSRF exclusion here
+        $middleware->validateCsrfTokens(except: [
+            'login',
+        ]);
+
         $middleware->prepend(ScopeSessionToHost::class);
+
         $middleware->alias([
             'role' => RoleMiddleware::class,
             'role.subdomain' => EnsureCorrectSubdomainRole::class,
@@ -39,10 +46,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
-        ]);
-
-        $middleware->web(append: [
-            HandleInertiaRequests::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
