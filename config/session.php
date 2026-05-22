@@ -126,15 +126,7 @@ return [
     | since doing so does not grant a meaningful security improvement.
     |
     */
-    'cookie' => (function() {
-        $name = env('SESSION_COOKIE', 'duka_session');
-        
-        // Use error_log instead of the Log facade
-        error_log('DEBUG: Session Cookie Name is ' . $name);
-        
-        return $name;
-    })(),
-    
+    'cookie' => 'duka_session',
     /*
     |--------------------------------------------------------------------------
     | Session Cookie Path
@@ -159,7 +151,7 @@ return [
     |
     */
 
-    'domain' => env('SESSION_DOMAIN', null),
+    'domain' => null,
 
     /*
     |--------------------------------------------------------------------------
