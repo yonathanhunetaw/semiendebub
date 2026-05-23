@@ -34,17 +34,23 @@ class ItemVariantGenerationService
 
         $validKeys = [];
 
+        \Illuminate\Support\Facades\Log::info('Variant Generation Stats:', [
+            'colors' => $item->colors->pluck('id')->toArray(),
+            'sizes' => $item->sizes->pluck('id')->toArray(),
+            'count_colors' => $item->colors->count(),
+            'count_sizes' => $item->sizes->count()
+        ]);
         // ─── 🎯 TWO-TIER PHYSICAL COMBINATION MATRIX LOOP (Color x Size) ─────
         foreach ($colorIds as $colorId) {
             foreach ($sizeIds as $sizeId) {
-                
+
                 // Trace string tracking compound key
                 $validKeys[] = $this->variantKey($colorId, $sizeId);
 
                 $variant = ItemVariant::withTrashed()->firstOrNew([
-                    'item_id'       => $item->id,
+                    'item_id' => $item->id,
                     'item_color_id' => $colorId,
-                    'item_size_id'  => $sizeId,
+                    'item_size_id' => $sizeId,
                 ]);
 
                 if ($variant->trashed()) {
@@ -95,12 +101,12 @@ class ItemVariantGenerationService
         }
 
         foreach ($storeIds as $storeId) {
-            
+
             // ─── 1. STANDARD STORE PRICING MATRIX ───────────────────────────
             $storeMatrix = [];
             foreach ($item->packagingTypes as $index => $packType) {
                 $multiplier = (int) ($packType->pivot->quantity ?? 1);
-                
+
                 // Determine baseline retail prices per item brand rules
                 $baseRetailCost = 10.00;
                 if (str_contains($item->product_name, 'Bic')) {
@@ -125,25 +131,25 @@ class ItemVariantGenerationService
 
                 $storeMatrix[] = [
                     'packaging_type_id' => $packType->id,
-                    'unit_name'         => $packType->name,
-                    'multiplier'        => $multiplier,
-                    'price'             => round($calculatedPrice, 2),
-                    'discount_price'    => null, 
-                    'discount_ends_at'  => null,
-                    'image'             => $packageMinioKey,
+                    'unit_name' => $packType->name,
+                    'multiplier' => $multiplier,
+                    'price' => round($calculatedPrice, 2),
+                    'discount_price' => null,
+                    'discount_ends_at' => null,
+                    'image' => $packageMinioKey,
                 ];
             }
 
             $storeVariant = StoreVariant::updateOrCreate(
                 [
-                    'store_id'        => $storeId,
+                    'store_id' => $storeId,
                     'item_variant_id' => $variant->id,
                 ],
                 [
-                    'active'         => $variant->status === 'active',
-                    'manual_status'  => $variant->status === 'active' ? 'auto' : 'forced',
-                    'forced_status'  => $variant->status === 'active' ? null : 'inactive',
-                    'pricing_matrix' => $storeMatrix, 
+                    'active' => $variant->status === 'active',
+                    'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
+                    'forced_status' => $variant->status === 'active' ? null : 'inactive',
+                    'pricing_matrix' => $storeMatrix,
                 ]
             );
 
@@ -179,7 +185,7 @@ class ItemVariantGenerationService
     {
         return implode(':', [
             $colorId ?? 'null',
-            $sizeId  ?? 'null',
+            $sizeId ?? 'null',
         ]);
     }
 }
