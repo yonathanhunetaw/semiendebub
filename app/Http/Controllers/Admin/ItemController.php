@@ -139,60 +139,48 @@ class ItemController extends Controller
     // ──────────────────────────────────────────────────────────────────────────
 
     public function show(Item $item)
-    {
-        $item->load([
-            'category',
-            'variants.itemColor',
-            'variants.itemSize',
-            'variants.packagingQuantities',
-            'variants.stocks',
-            'stores'
-        ]);
+{
+    $item->load([
+        'category',
+        'variants.itemColor',
+        'variants.itemSize',
+        'variants.packagingQuantities',
+        'variants.stocks',
+        'stores'
+    ]);
 
-        // 1. Create a detailed data payload for both Inertia and Logging
-        $payload = [
+    Log::info('Item Show Payload:', ['data' => json_encode($payload, JSON_PRETTY_PRINT)]);
+
+    return Inertia::render('Admin/Items/Show', [
+        'item' => [
             'id' => $item->id,
             'product_name' => $item->product_name,
-            'category' => $item->category?->name,
+            'product_description' => $item->product_description,
             'status' => $item->status,
-            'variants' => $item->variants->map(function ($v) {
-                return [
-                    'sku' => $v->sku,
-                    'color' => $v->itemColor?->name,
-                    'size' => $v->itemSize?->name,
-                    'packaging' => $v->packagingQuantities->map(fn($p) => [
-                        'name' => $p->name,
-                        'qty' => $p->pivot->quantity,
-                        'cbm' => $p->pivot->cbm
-                    ]),
-                    'status' => $v->status,
-                    'images' => $v->image_slots // Assumes your Model has image_slots logic
-                ];
-            })
-        ];
-
-        // 2. Log as JSON for easy parsing
-        Log::info('Item Show Payload:', ['data' => json_encode($payload, JSON_PRETTY_PRINT)]);
-
-        return Inertia::render('Admin/Items/Show', [
-            'item' => array_merge($payload, [
-                'general_images' => $item->processed_images,
-                'description' => $item->product_description
-            ]),
-            'variantData' => $item->variants->map(fn($v) => [
-                'id' => $v->id,
-                'sku' => $v->sku,
-                'color' => $v->itemColor?->name,
-                'size' => $v->itemSize?->name,
-                'packaging' => $v->packagingQuantities, // Pass the whole collection
-                'status' => $v->status,
-                'slots' => $v->image_slots,
-                'slot_count' => count($v->image_slots),
-                'proof_ok' => count($v->image_slots) >= 2,
-            ]),
-            'stores' => Store::all(),
-        ]);
-    }
+            'general_images' => $item->processed_images,
+        ],
+        'variantData' => $item->variants->map(fn($v) => [
+            'id' => $v->id,
+            'sku' => $v->sku,
+            'color' => $v->itemColor?->name,
+            'size' => $v->itemSize?->name,
+            'packaging' => $v->itemPackagingType?->name, // Single packaging type name
+            'status' => $v->status,
+            'slots' => $v->image_slots,
+            'slot_count' => count($v->image_slots),
+            'proof_ok' => count($v->image_slots) >= 2,
+            // FIX: Add packaging_data with proper pivot structure
+            'packaging_data' => $v->packagingQuantities->map(fn($p) => [
+                'name' => $p->name,
+                'pivot' => [
+                    'quantity' => $p->pivot->quantity,
+                    'cbm' => $p->pivot->cbm
+                ]
+            ])->values()->toArray(),
+        ]),
+        'stores' => Store::all(),
+    ]);
+}
 
     // ──────────────────────────────────────────────────────────────────────────
     // CREATE
