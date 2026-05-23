@@ -235,7 +235,7 @@ class ItemSeeder extends Seeder
             foreach ($data['packaging'] as $packConfig) {
                 $packTypeId = (int) $packConfig['item_packaging_type_id'];
 
-                // Only send what the table expects: quantity and cbm
+                // This perfectly matches the columns in our new migration
                 $syncPayload[$packTypeId] = [
                     'quantity' => max(1, (int) $packConfig['quantity']),
                     'cbm' => $packConfig['cbm'] ?? 0.0000,
