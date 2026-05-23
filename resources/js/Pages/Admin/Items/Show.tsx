@@ -100,6 +100,17 @@ export default function Show({
     variantData: VariantRow[];
     stores?: Store[];
 }) {
+    // Safety check - if data is invalid, show error instead of white screen
+    if (!item || !item.id) {
+        return (
+            <Box sx={{ p: 4, textAlign: 'center' }}>
+                <Typography color="error">Error: Item data is missing or invalid.</Typography>
+                <Button onClick={() => window.location.reload()} sx={{ mt: 2 }}>
+                    Reload Page
+                </Button>
+            </Box>
+        );
+    }
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
