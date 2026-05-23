@@ -235,7 +235,7 @@ class ItemSeeder extends Seeder
             foreach ($data['packaging'] as $packConfig) {
                 $packTypeId = (int) $packConfig['item_packaging_type_id'];
 
-                // Just map the quantity and cbm to the packaging type
+                // Only send what the table expects: quantity and cbm
                 $syncPayload[$packTypeId] = [
                     'quantity' => max(1, (int) $packConfig['quantity']),
                     'cbm' => $packConfig['cbm'] ?? 0.0000,

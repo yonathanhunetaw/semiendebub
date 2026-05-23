@@ -183,9 +183,8 @@ class ItemVariant extends Model
 
     public function packagingQuantities()
     {
-        // No color or size here, just the pivot data
         return $this->belongsToMany(ItemPackagingType::class, 'item_variant_packaging_quantity')
-            ->withPivot('quantity', 'cbm')
+            ->withPivot('quantity', 'cbm') // Only these two!
             ->withTimestamps();
     }
 }
