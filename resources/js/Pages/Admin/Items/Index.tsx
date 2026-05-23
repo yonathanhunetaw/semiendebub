@@ -17,6 +17,7 @@ import {
     TableHead,
     TableRow,
     Typography,
+    useTheme,
 } from "@mui/material";
 
 interface Item {
@@ -47,6 +48,8 @@ const sortIcon = (filters: Props["filters"]) =>
     );
 
 export default function ItemIndex({ items, filters }: Props) {
+    const theme = useTheme();
+    
     const updateParams = (newParams: Record<string, string>) => {
         router.get(
             route("admin.items.index"),
@@ -82,12 +85,9 @@ export default function ItemIndex({ items, filters }: Props) {
     return (
         <Box sx={{ p: 0 }}>
             <Head title="Items Management" />
-            {/* 🚨 TEMP TEST 🚨 */}
-            <h1 style={{ color: 'red', background: 'yellow', padding: '20px', fontSize: '40px', zIndex: 9999, position: 'relative' }}>
-                IF YOU CAN SEE THIS, COMPILATION IS WORKING!
-            </h1>
             
-
+            {/* Remove the test H1 - it's not needed anymore */}
+            
             <Stack
                 direction={{ xs: "column", sm: "row" }}
                 justifyContent="space-between"
@@ -154,6 +154,7 @@ export default function ItemIndex({ items, filters }: Props) {
                 </Stack>
             </Paper>
 
+            {/* Mobile View */}
             <Box sx={{ display: { xs: "grid", md: "none" }, gap: 2 }}>
                 {items.length > 0 ? (
                     items.map((item) => (
@@ -199,6 +200,13 @@ export default function ItemIndex({ items, filters }: Props) {
                                         alignSelf: "flex-start",
                                         textTransform: "none",
                                         fontWeight: 700,
+                                        // FIX: Make button visible in dark mode
+                                        color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                                        borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.5)' : undefined,
+                                        '&:hover': {
+                                            borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.8)' : undefined,
+                                            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : undefined,
+                                        }
                                     }}
                                 >
                                     View
@@ -213,6 +221,7 @@ export default function ItemIndex({ items, filters }: Props) {
                 )}
             </Box>
 
+            {/* Desktop Table View */}
             <TableContainer
                 component={Paper}
                 elevation={0}
@@ -285,7 +294,17 @@ export default function ItemIndex({ items, filters }: Props) {
                                             href={route("admin.items.show", item.id)}
                                             size="small"
                                             variant="outlined"
-                                            sx={{ textTransform: "none", fontWeight: 700 }}
+                                            sx={{ 
+                                                textTransform: "none", 
+                                                fontWeight: 700,
+                                                // FIX: Make button visible in dark mode
+                                                color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                                                borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.5)' : undefined,
+                                                '&:hover': {
+                                                    borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.8)' : undefined,
+                                                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : undefined,
+                                                }
+                                            }}
                                         >
                                             View
                                         </Button>
