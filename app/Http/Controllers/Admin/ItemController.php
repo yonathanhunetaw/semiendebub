@@ -247,10 +247,14 @@ class ItemController extends Controller
             'colors',
             'sizes',
             'packagingTypes' => fn($q) => $q->withPivot('quantity'),
+            // ADDED: packagingQuantities here
             'variants' => fn($q) => $q
-                ->with(['itemColor', 'itemSize', 'itemPackagingType'])
+                ->with(['itemColor', 'itemSize', 'itemPackagingType', 'packagingQuantities'])
                 ->orderBy('id'),
         ]);
+
+
+
 
         $itemData = [
             'id' => $item->id,
@@ -274,18 +278,16 @@ class ItemController extends Controller
                 'quantity' => $p->pivot->quantity,
             ])->toArray(),
 
-            // Transforming children variants cleanly for Inertia prop transport
             'variants' => $item->variants->map(function ($variant) {
                 return [
                     'id' => $variant->id,
                     'sku' => $variant->sku,
-                    'color_id' => $variant->item_color_id,
-                    'size_id' => $variant->item_size_id,
-                    'item_packaging_type_id' => $variant->item_packaging_type_id,
-                    'status' => $variant->status,
-                    'main_image' => $variant->image_url,
-                    'all_images' => $variant->all_image_urls,
-                    'images' => $variant->images ?? [], // Core array used by ItemForm matrix
+                    // ... your existing keys ...
+                    'packaging_quantities' => $variant->packagingQuantities->map(fn($pq) => [
+                        'id' => $pq->id,
+                        'quantity' => $pq->pivot->quantity,
+                        'cbm' => $pq->pivot->cbm,
+                    ]),
                     'item_color' => $variant->itemColor,
                     'item_size' => $variant->itemSize,
                     'item_packaging_type' => $variant->itemPackagingType,
