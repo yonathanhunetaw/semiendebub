@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import {
@@ -100,7 +100,11 @@ export default function Show({
     variantData: VariantRow[];
     stores?: Store[];
 }) {
-    // Safety check - if data is invalid, show error instead of white screen
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const [mobileImageViewerOpen, setMobileImageViewerOpen] = useState(false);
+    
+    // Safety check
     if (!item || !item.id) {
         return (
             <Box sx={{ p: 4, textAlign: 'center' }}>
@@ -111,12 +115,6 @@ export default function Show({
             </Box>
         );
     }
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-    const [mobileImageViewerOpen, setMobileImageViewerOpen] = useState(false);
-    
-    if (!item) return null;
 
     const getVariantDisplayText = (variant: VariantRow): string => {
         const parts = [];
@@ -168,12 +166,20 @@ export default function Show({
     
     const proofComplete = variantData.length > 0 && variantData.every((v) => v.proof_ok);
 
-    const formatCBM = (cbm: number): string => {
-        if (!cbm && cbm !== 0) return "N/A";
-        return `${cbm.toFixed(3)} m³`;
+    // FIXED: Safe formatCBM function that handles strings, nulls, undefined
+    const formatCBM = (cbm: any): string => {
+        if (cbm === null || cbm === undefined) return "N/A";
+        
+        // Convert string to number if needed
+        let numValue = typeof cbm === 'string' ? parseFloat(cbm) : cbm;
+        
+        // Check if it's a valid number
+        if (isNaN(numValue)) return "N/A";
+        
+        return `${numValue.toFixed(3)} m³`;
     };
 
-    // Image Viewer Component (reused for mobile modal)
+    // Image Viewer Component
     const ImageViewer = () => (
         <Paper
             variant="outlined"
@@ -234,8 +240,6 @@ export default function Show({
                 gap: 1.5,
                 overflowX: showAllThumbs ? "unset" : "auto",
                 pb: 1,
-                "&::-webkit-scrollbar": { height: 4 },
-                "&::-webkit-scrollbar-thumb": { bgcolor: "divider", borderRadius: 8 },
             }}>
                 {displayedThumbs.map((img, i) => {
                     const src = getImageUrl(img);
@@ -312,7 +316,6 @@ export default function Show({
         <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: "1440px", margin: "0 auto" }}>
             <Head title={`Catalog: ${item.product_name}`} />
 
-            {/* Header */}
             <Stack
                 direction={{ xs: "column", sm: "row" }}
                 justifyContent="space-between"
@@ -370,14 +373,12 @@ export default function Show({
             </Stack>
 
             <Grid container spacing={4}>
-                {/* Gallery Section - stays on left in tablet mode */}
-                <Grid item xs={12} md={5} sx={{ order: { xs: 2, md: 1 } }}>
+                <Grid size={{ xs: 12, md: 5 }} sx={{ order: { xs: 2, md: 1 } }}>
                     <ImageViewer />
                     {isMobile && <MobileImageViewerModal />}
                 </Grid>
 
-                {/* Variants Section */}
-                <Grid item xs={12} md={7} sx={{ order: { xs: 1, md: 2 } }}>
+                <Grid size={{ xs: 12, md: 7 }} sx={{ order: { xs: 1, md: 2 } }}>
                     <Typography variant="h6" fontWeight={800} gutterBottom>
                         Description
                     </Typography>
@@ -441,7 +442,6 @@ export default function Show({
                                         </Typography>
                                     </Stack>
 
-                                    {/* Packaging Information Section - FIXED */}
                                     {hasPackaging && (
                                         <Box sx={{ mb: 2 }}>
                                             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
@@ -457,7 +457,7 @@ export default function Show({
                                                     const displayText = `${pkg.name}: ${quantity} unit${quantity !== 1 ? "s" : ""} (${formatCBM(cbm)})`;
                                                     
                                                     return (
-                                                        <Tooltip key={idx} title={`Total volume: ${(quantity * cbm).toFixed(3)} m³`} arrow>
+                                                        <Tooltip key={idx} title={`Total volume: ${(quantity * Number(cbm) || 0).toFixed(3)} m³`} arrow>
                                                             <Chip
                                                                 size="small"
                                                                 icon={<InventoryIcon />}
@@ -469,18 +469,9 @@ export default function Show({
                                                     );
                                                 })}
                                             </Stack>
-                                            {packagingList.some(p => !p.pivot?.quantity || !p.pivot?.cbm) && (
-                                                <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5 }}>
-                                                    <WarningIcon sx={{ fontSize: 12, color: "warning.main" }} />
-                                                    <Typography variant="caption" color="warning.main">
-                                                        Some packaging missing quantity or CBM values
-                                                    </Typography>
-                                                </Stack>
-                                            )}
                                         </Box>
                                     )}
 
-                                    {/* 5 image slots */}
                                     <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
                                         {Array.from({ length: 5 }).map((_, slotIndex) => {
                                             const slot = variant.slots?.[slotIndex];
@@ -573,7 +564,6 @@ export default function Show({
                                         })}
                                     </Stack>
 
-                                    {/* Storage paths table */}
                                     {variant.slots && variant.slots.length > 0 && (
                                         <Box>
                                             <Typography variant="caption" color="text.disabled" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: "0.06em", display: "block", mb: 0.5 }}>
@@ -610,7 +600,6 @@ export default function Show({
                 </Grid>
             </Grid>
 
-            {/* Deploy Dialog */}
             <Dialog open={deployOpen} onClose={() => setDeployOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
                 <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
                     <Stack direction="row" alignItems="center" spacing={1}>
