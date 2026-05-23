@@ -54,7 +54,7 @@ class DatabaseSeeder extends Seeder
 
             ItemSeeder::class,
 
-            ItemImageSeeder::class,
+            //ItemImageSeeder::class,
             ItemOwnerSeeder::class,
 
             ItemStoreSeeder::class,
