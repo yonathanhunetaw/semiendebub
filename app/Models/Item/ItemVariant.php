@@ -180,4 +180,18 @@ class ItemVariant extends Model
             ->where('location_id', $locationId)
             ->sum('quantity');
     }
+
+    // Add this method to your ItemVariant model
+    public function packagingQuantities()
+    {
+        // The table name is 'item_variant_packaging_quantity' based on your migration
+        return $this->belongsToMany(
+            \App\Models\Item\ItemPackagingType::class,
+            'item_variant_packaging_quantity', // Exact table name
+            'item_variant_id',                 // Foreign key on pivot
+            'item_packaging_type_id'           // Related foreign key on pivot
+        )
+            ->withPivot('quantity', 'cbm', 'item_color_id', 'item_size_id')
+            ->withTimestamps();
+    }
 }
