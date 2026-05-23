@@ -146,56 +146,50 @@ class ItemController extends Controller
             'variants.itemSize',
             'variants.packagingQuantities',
             'variants.stocks',
-
+            'stores'
         ]);
 
-        $itemData = [
+        // 1. Create a detailed data payload for both Inertia and Logging
+        $payload = [
             'id' => $item->id,
             'product_name' => $item->product_name,
-            'product_description' => $item->product_description,
+            'category' => $item->category?->name,
             'status' => $item->status,
-            // CHANGED: was $item->processed_images->toArray() (Collection).
-            // getProcessedImagesAttribute() now returns array via ImageResolver, so no ->toArray() needed.
-            'general_images' => $item->processed_images,
+            'variants' => $item->variants->map(function ($v) {
+                return [
+                    'sku' => $v->sku,
+                    'color' => $v->itemColor?->name,
+                    'size' => $v->itemSize?->name,
+                    'packaging' => $v->packagingQuantities->map(fn($p) => [
+                        'name' => $p->name,
+                        'qty' => $p->pivot->quantity,
+                        'cbm' => $p->pivot->cbm
+                    ]),
+                    'status' => $v->status,
+                    'images' => $v->image_slots // Assumes your Model has image_slots logic
+                ];
+            })
         ];
 
-        // 🔄 Map variants to the dynamic 5-slot front-end interface format
-        $variantData = $item->variants->map(function ($variant) {
-            // Debugging Log (check your Laravel storage/logs/laravel.log)
-            Log::info('Variant Packaging:', [
-                'sku' => $variant->sku,
-                'packaging' => $variant->packagingQuantities->map(function ($p) {
-                    return [
-                        'type' => $p->name,
-                        'quantity' => $p->pivot->quantity,
-                        'cbm' => $p->pivot->cbm
-                    ];
-                })->toArray()
-            ]);
-
-            return [
-                'id' => $variant->id,
-                'sku' => $variant->sku,
-                'color' => $variant->color?->name,
-                'size' => $variant->size?->name,
-                // Map the collection to include quantity and cbm
-                'packaging_details' => $variant->packagingQuantities->map(function ($pack) {
-                    return [
-                        'type_name' => $pack->name,
-                        'quantity' => $pack->pivot->quantity,
-                        'cbm' => $pack->pivot->cbm,
-                    ];
-                }),
-                'status' => $variant->status,
-                'slots' => $variant->image_slots,
-                'slot_count' => count($variant->image_slots),
-                'proof_ok' => count($variant->image_slots) >= 2,
-            ];
-        });
+        // 2. Log as JSON for easy parsing
+        Log::info('Item Show Payload:', ['data' => json_encode($payload, JSON_PRETTY_PRINT)]);
 
         return Inertia::render('Admin/Items/Show', [
-            'item' => $itemData,
-            'variantData' => $variantData,
+            'item' => array_merge($payload, [
+                'general_images' => $item->processed_images,
+                'description' => $item->product_description
+            ]),
+            'variantData' => $item->variants->map(fn($v) => [
+                'id' => $v->id,
+                'sku' => $v->sku,
+                'color' => $v->itemColor?->name,
+                'size' => $v->itemSize?->name,
+                'packaging' => $v->packagingQuantities, // Pass the whole collection
+                'status' => $v->status,
+                'slots' => $v->image_slots,
+                'slot_count' => count($v->image_slots),
+                'proof_ok' => count($v->image_slots) >= 2,
+            ]),
             'stores' => Store::all(),
         ]);
     }

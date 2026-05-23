@@ -31,9 +31,20 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EditIcon from "@mui/icons-material/Edit";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import InventoryIcon from "@mui/icons-material/Inventory";
 import KeyboardArrowLeftIcon from "@mui/icons-material/KeyboardArrowLeft";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import StorefrontIcon from "@mui/icons-material/Storefront";
+import WarningIcon from "@mui/icons-material/Warning";
+
+// Extended interface to include packaging data
+interface PackagingItem {
+    name: string;
+    pivot?: {
+        quantity: number;
+        cbm: number;
+    };
+}
 
 interface ImageSlotData {
     path: string;
@@ -50,6 +61,7 @@ interface VariantRow {
     slots: ImageSlotData[];
     slot_count: number;
     proof_ok: boolean;
+    packaging_data?: PackagingItem[]; // Added for nested packaging collection
 }
 
 interface Item {
@@ -89,19 +101,22 @@ export default function Show({
     if (!item) return null;
 
     const allGeneralImages = item.general_images ?? [];
-    // Since our Laravel accessors handle MinIO URLs on the server, just pass the string right through
-    const getImageUrl = (path: string) => path;
+    
+    // Safe image URL getter with fallback
+    const getImageUrl = (path: string | null | undefined): string => {
+        if (!path) return "/img/default.jpg";
+        return path; // Assume backend provides full MinIO URL
+    };
 
-    const [selectedImage, setSelectedImage] = useState(
-        allGeneralImages.length > 0
-            ? getImageUrl(allGeneralImages[0])
-            : (variantData[0]?.slots[0]?.url ?? "/img/default.jpg"),
-    );
-    const masterFallback =
-        allGeneralImages[0] ??
-        variantData[0]?.slots[0]?.url ??
-        "/img/default.jpg";
+    // Safe master fallback with proper fallback chain
+    const masterFallback = (() => {
+        if (allGeneralImages.length > 0) return getImageUrl(allGeneralImages[0]);
+        const firstVariantWithSlot = variantData.find(v => v.slots?.length > 0);
+        if (firstVariantWithSlot?.slots[0]?.url) return firstVariantWithSlot.slots[0].url;
+        return "/img/default.jpg";
+    })();
 
+    const [selectedImage, setSelectedImage] = useState(masterFallback);
     const [showAllThumbs, setShowAllThumbs] = useState(false);
     const [deployOpen, setDeployOpen] = useState(false);
     const [deployingToId, setDeployingToId] = useState<number | null>(null);
@@ -124,14 +139,20 @@ export default function Show({
     const displayedThumbs = showAllThumbs
         ? allGeneralImages
         : allGeneralImages.slice(0, 5);
-    const proofComplete =
-        variantData.length > 0 && variantData.every((v) => v.proof_ok);
+    
+    const proofComplete = variantData.length > 0 && variantData.every((v) => v.proof_ok);
+
+    // Helper to format CBM value
+    const formatCBM = (cbm: number): string => {
+        if (!cbm && cbm !== 0) return "N/A";
+        return `${cbm.toFixed(3)} m³`;
+    };
 
     return (
         <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: "1440px", margin: "0 auto" }}>
             <Head title={`Catalog: ${item.product_name}`} />
 
-            {/* ── Header ── */}
+            {/* Header - unchanged */}
             <Stack
                 direction={{ xs: "column", sm: "row" }}
                 justifyContent="space-between"
@@ -206,7 +227,7 @@ export default function Show({
             </Stack>
 
             <Grid container spacing={4}>
-                {/* ── Gallery ── */}
+                {/* Gallery Section - improved with safer null handling */}
                 <Grid item xs={12} md={5}>
                     <Paper
                         variant="outlined"
@@ -217,16 +238,15 @@ export default function Show({
                             top: 24,
                         }}
                     >
-                        {/* Main Image Container */}
                         <Box
                             sx={{
                                 width: "100%",
-                                aspectRatio: "1 / 1", // Forces a square shape (prevents narrow look)
+                                aspectRatio: "1 / 1",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 mb: 2,
-                                bgcolor: "background.default", // Uses your theme's dark/light color
+                                bgcolor: "background.default",
                                 borderRadius: 2,
                                 overflow: "hidden",
                                 border: "1px solid",
@@ -239,15 +259,14 @@ export default function Show({
                                 sx={{
                                     width: "100%",
                                     height: "100%",
-                                    objectFit: "contain", // Keeps image proportions safe
+                                    objectFit: "contain",
                                 }}
-                                onError={(e: any) => {
+                                onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
                                     e.currentTarget.src = "/img/default.jpg";
                                 }}
                             />
                         </Box>
 
-                        {/* Thumbnail Header */}
                         <Stack
                             direction="row"
                             justifyContent="space-between"
@@ -266,9 +285,7 @@ export default function Show({
                             {allGeneralImages.length > 5 && (
                                 <Button
                                     size="small"
-                                    onClick={() =>
-                                        setShowAllThumbs(!showAllThumbs)
-                                    }
+                                    onClick={() => setShowAllThumbs(!showAllThumbs)}
                                     endIcon={
                                         showAllThumbs ? (
                                             <KeyboardArrowLeftIcon />
@@ -276,10 +293,6 @@ export default function Show({
                                             <ExpandMoreIcon />
                                         )
                                     }
-                                    sx={{
-                                        fontSize: "0.65rem",
-                                        fontWeight: 700,
-                                    }}
                                 >
                                     {showAllThumbs
                                         ? "Show Less"
@@ -288,7 +301,6 @@ export default function Show({
                             )}
                         </Stack>
 
-                        {/* Thumbnails Container */}
                         <Box
                             sx={{
                                 display: "flex",
@@ -296,7 +308,6 @@ export default function Show({
                                 gap: 1.5,
                                 overflowX: showAllThumbs ? "unset" : "auto",
                                 pb: 1,
-                                // Hide scrollbar but allow swiping on mobile
                                 "&::-webkit-scrollbar": { height: 4 },
                                 "&::-webkit-scrollbar-thumb": {
                                     bgcolor: "divider",
@@ -315,7 +326,7 @@ export default function Show({
                                         sx={{
                                             width: 64,
                                             height: 64,
-                                            minWidth: 64, // Prevents the 'squashed' look in flex-nowrap
+                                            minWidth: 64,
                                             borderRadius: 1.5,
                                             cursor: "pointer",
                                             border: "2px solid",
@@ -338,7 +349,7 @@ export default function Show({
                     </Paper>
                 </Grid>
 
-                {/* ── Variants ── */}
+                {/* Variants Section - NOW WITH PACKAGING DISPLAY */}
                 <Grid item xs={12} md={7}>
                     <Typography variant="h6" fontWeight={800} gutterBottom>
                         Description
@@ -356,344 +367,441 @@ export default function Show({
                     </Typography>
 
                     <Stack spacing={3}>
-                        {variantData.map((variant) => (
-                            <Paper
-                                key={variant.id}
-                                variant="outlined"
-                                sx={{
-                                    p: 2,
-                                    borderRadius: 2,
-                                    borderColor: variant.proof_ok
-                                        ? "success.main"
-                                        : "warning.main",
-                                    borderWidth: 1.5,
-                                }}
-                            >
-                                {/* Variant header */}
-                                <Stack
-                                    direction="row"
-                                    justifyContent="space-between"
-                                    alignItems="flex-start"
-                                    mb={1.5}
+                        {variantData.map((variant) => {
+                            // Safely access packaging data
+                            const packagingList = variant.packaging_data ?? [];
+                            const hasPackaging = packagingList.length > 0;
+                            
+                            return (
+                                <Paper
+                                    key={variant.id}
+                                    variant="outlined"
+                                    sx={{
+                                        p: 2,
+                                        borderRadius: 2,
+                                        borderColor: variant.proof_ok
+                                            ? "success.main"
+                                            : "warning.main",
+                                        borderWidth: 1.5,
+                                    }}
                                 >
-                                    <Box>
-                                        <Stack
-                                            direction="row"
-                                            spacing={1}
-                                            alignItems="center"
-                                            flexWrap="wrap"
-                                        >
-                                            <Typography
-                                                variant="subtitle1"
-                                                fontWeight={800}
-                                            >
-                                                {[
-                                                    variant.color,
-                                                    variant.size,
-                                                    variant.packaging,
-                                                ]
-                                                    .filter(Boolean)
-                                                    .join(" / ") || "Default"}
-                                            </Typography>
-                                            <Chip
-                                                size="small"
-                                                label={variant.status.toUpperCase()}
-                                                color={statusColor(
-                                                    variant.status,
-                                                )}
-                                            />
-                                            {variant.proof_ok ? (
-                                                <Chip
-                                                    size="small"
-                                                    icon={<CheckCircleIcon />}
-                                                    label="Proof OK"
-                                                    color="success"
-                                                />
-                                            ) : (
-                                                <Chip
-                                                    size="small"
-                                                    icon={<ErrorOutlineIcon />}
-                                                    label={`Need ${2 - variant.slot_count} more image${2 - variant.slot_count !== 1 ? "s" : ""}`}
-                                                    color="warning"
-                                                />
-                                            )}
-                                        </Stack>
-                                        {variant.sku && (
-                                            <Typography
-                                                variant="caption"
-                                                sx={{
-                                                    fontFamily: "monospace",
-                                                    color: "text.secondary",
-                                                }}
-                                            >
-                                                SKU: {variant.sku}
-                                            </Typography>
-                                        )}
-                                    </Box>
-                                    <Typography
-                                        variant="caption"
-                                        color="text.disabled"
+                                    {/* Variant header with packaging chips */}
+                                    <Stack
+                                        direction="row"
+                                        justifyContent="space-between"
+                                        alignItems="flex-start"
+                                        mb={1.5}
+                                        flexWrap="wrap"
+                                        gap={1}
                                     >
-                                        {variant.slot_count} / 5
-                                    </Typography>
-                                </Stack>
-
-                                {/* 5 image slots */}
-                                <Stack
-                                    direction="row"
-                                    spacing={1}
-                                    flexWrap="wrap"
-                                    useFlexGap
-                                    mb={2}
-                                >
-                                    {Array.from({ length: 5 }).map(
-                                        (_, slotIndex) => {
-                                            const slot =
-                                                variant.slots[slotIndex];
-                                            return (
-                                                <Box
-                                                    key={slotIndex}
-                                                    onMouseEnter={() =>
-                                                        slot &&
-                                                        setSelectedImage(
-                                                            slot.url,
-                                                        )
-                                                    }
-                                                    onMouseLeave={() =>
-                                                        setSelectedImage(
-                                                            masterFallback,
-                                                        )
-                                                    }
+                                        <Box sx={{ flex: 1 }}>
+                                            <Stack
+                                                direction="row"
+                                                spacing={1}
+                                                alignItems="center"
+                                                flexWrap="wrap"
+                                                sx={{ mb: 0.5 }}
+                                            >
+                                                <Typography
+                                                    variant="subtitle1"
+                                                    fontWeight={800}
                                                 >
-                                                    {slot ? (
-                                                        <Box sx={{ width: 80 }}>
-                                                            <Box
-                                                                component="img"
-                                                                src={slot.url}
-                                                                onError={(
-                                                                    e: any,
-                                                                ) => {
-                                                                    e.currentTarget.src =
-                                                                        "/img/default.jpg";
-                                                                }}
-                                                                onClick={() =>
-                                                                    setSelectedImage(
-                                                                        slot.url,
-                                                                    )
-                                                                }
-                                                                sx={{
-                                                                    width: 80,
-                                                                    height: 80,
-                                                                    objectFit:
-                                                                        "cover",
-                                                                    borderRadius: 1.5,
-                                                                    border: "1px solid",
-                                                                    borderColor:
-                                                                        "divider",
-                                                                    cursor: "pointer",
-                                                                    display:
-                                                                        "block",
-                                                                }}
-                                                            />
-                                                            {/* Filename */}
-                                                            <Tooltip
-                                                                title={
-                                                                    slot.path
-                                                                }
-                                                                arrow
-                                                                placement="bottom"
-                                                            >
-                                                                <Typography
-                                                                    variant="caption"
-                                                                    sx={{
-                                                                        display:
-                                                                            "block",
-                                                                        fontSize:
-                                                                            "0.55rem",
-                                                                        color: "text.disabled",
-                                                                        mt: 0.5,
-                                                                        maxWidth: 80,
-                                                                        overflow:
-                                                                            "hidden",
-                                                                        textOverflow:
-                                                                            "ellipsis",
-                                                                        whiteSpace:
-                                                                            "nowrap",
-                                                                        fontFamily:
-                                                                            "monospace",
-                                                                    }}
-                                                                >
-                                                                    {slot.path
-                                                                        .split(
-                                                                            "/",
-                                                                        )
-                                                                        .pop()}
-                                                                </Typography>
-                                                            </Tooltip>
-                                                            <IconButton
-                                                                size="small"
-                                                                component="a"
-                                                                href={slot.url}
-                                                                target="_blank"
-                                                                sx={{ p: 0.25 }}
-                                                            >
-                                                                <OpenInNewIcon
-                                                                    sx={{
-                                                                        fontSize: 12,
-                                                                        color: "text.disabled",
-                                                                    }}
-                                                                />
-                                                            </IconButton>
-                                                        </Box>
-                                                    ) : (
-                                                        <Box
-                                                            sx={{
-                                                                width: 80,
-                                                                height: 80,
-                                                                borderRadius: 1.5,
-                                                                border: "2px dashed",
-                                                                borderColor:
-                                                                    slotIndex <
-                                                                    2
-                                                                        ? "warning.main"
-                                                                        : "divider",
-                                                                display: "flex",
-                                                                alignItems:
-                                                                    "center",
-                                                                justifyContent:
-                                                                    "center",
-                                                                bgcolor:
-                                                                    slotIndex <
-                                                                    2
-                                                                        ? "rgba(237,108,2,0.04)"
-                                                                        : "background.default",
-                                                            }}
-                                                        >
-                                                            <Typography
-                                                                variant="caption"
-                                                                color={
-                                                                    slotIndex <
-                                                                    2
-                                                                        ? "warning.main"
-                                                                        : "text.disabled"
-                                                                }
-                                                                sx={{
-                                                                    fontSize:
-                                                                        "0.6rem",
-                                                                }}
-                                                            >
-                                                                {slotIndex + 1}
-                                                            </Typography>
-                                                        </Box>
+                                                    {[
+                                                        variant.color,
+                                                        variant.size,
+                                                        variant.packaging,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(" / ") || "Default"}
+                                                </Typography>
+                                                <Chip
+                                                    size="small"
+                                                    label={variant.status.toUpperCase()}
+                                                    color={statusColor(
+                                                        variant.status,
                                                     )}
-                                                </Box>
-                                            );
-                                        },
-                                    )}
-                                </Stack>
-
-                                {/* Storage paths table */}
-                                {variant.slots.length > 0 && (
-                                    <Box>
+                                                />
+                                                {variant.proof_ok ? (
+                                                    <Chip
+                                                        size="small"
+                                                        icon={<CheckCircleIcon />}
+                                                        label="Proof OK"
+                                                        color="success"
+                                                    />
+                                                ) : (
+                                                    <Chip
+                                                        size="small"
+                                                        icon={<ErrorOutlineIcon />}
+                                                        label={`Need ${Math.max(0, 2 - variant.slot_count)} more image${Math.max(0, 2 - variant.slot_count) !== 1 ? "s" : ""}`}
+                                                        color="warning"
+                                                    />
+                                                )}
+                                            </Stack>
+                                            {variant.sku && (
+                                                <Typography
+                                                    variant="caption"
+                                                    sx={{
+                                                        fontFamily: "monospace",
+                                                        color: "text.secondary",
+                                                        display: "block",
+                                                    }}
+                                                >
+                                                    SKU: {variant.sku}
+                                                </Typography>
+                                            )}
+                                        </Box>
                                         <Typography
                                             variant="caption"
                                             color="text.disabled"
-                                            fontWeight={700}
-                                            sx={{
-                                                textTransform: "uppercase",
-                                                letterSpacing: "0.06em",
-                                                display: "block",
-                                                mb: 0.5,
-                                            }}
                                         >
-                                            Storage Paths
+                                            {variant.slot_count} / 5 slots
                                         </Typography>
-                                        <TableContainer
-                                            component={Paper}
-                                            variant="outlined"
-                                            sx={{ borderRadius: 1 }}
-                                        >
-                                            <Table size="small">
-                                                <TableHead
+                                    </Stack>
+
+                                    {/* NEW: Packaging Information Section */}
+                                    {hasPackaging && (
+                                        <Box sx={{ mb: 2 }}>
+                                            <Stack
+                                                direction="row"
+                                                spacing={1}
+                                                alignItems="center"
+                                                sx={{ mb: 1 }}
+                                            >
+                                                <InventoryIcon 
+                                                    sx={{ 
+                                                        fontSize: 14, 
+                                                        color: "text.secondary" 
+                                                    }} 
+                                                />
+                                                <Typography
+                                                    variant="caption"
+                                                    fontWeight={700}
                                                     sx={{
-                                                        bgcolor: "action.hover",
+                                                        textTransform: "uppercase",
+                                                        letterSpacing: "0.06em",
+                                                        color: "text.secondary",
                                                     }}
                                                 >
-                                                    <TableRow>
-                                                        <TableCell
-                                                            sx={{
-                                                                fontWeight: 700,
-                                                                py: 0.5,
-                                                                fontSize:
-                                                                    "0.7rem",
-                                                                width: 32,
-                                                            }}
+                                                    Packaging Details
+                                                </Typography>
+                                            </Stack>
+                                            <Stack 
+                                                direction="row" 
+                                                spacing={1} 
+                                                flexWrap="wrap" 
+                                                useFlexGap
+                                            >
+                                                {packagingList.map((pkg, idx) => {
+                                                    const quantity = pkg.pivot?.quantity ?? 0;
+                                                    const cbm = pkg.pivot?.cbm ?? 0;
+                                                    const displayText = `${pkg.name}: ${quantity} unit${quantity !== 1 ? "s" : ""} (${formatCBM(cbm)})`;
+                                                    
+                                                    return (
+                                                        <Tooltip
+                                                            key={idx}
+                                                            title={`Total volume: ${(quantity * cbm).toFixed(3)} m³`}
+                                                            arrow
                                                         >
-                                                            #
-                                                        </TableCell>
-                                                        <TableCell
-                                                            sx={{
-                                                                fontWeight: 700,
-                                                                py: 0.5,
-                                                                fontSize:
-                                                                    "0.7rem",
-                                                            }}
-                                                        >
-                                                            storage/ path
-                                                        </TableCell>
-                                                    </TableRow>
-                                                </TableHead>
-                                                <TableBody>
-                                                    {variant.slots.map(
-                                                        (slot, i) => (
-                                                            <TableRow key={i}>
-                                                                <TableCell
-                                                                    sx={{
-                                                                        py: 0.5,
-                                                                        fontSize:
-                                                                            "0.7rem",
-                                                                        color: "text.disabled",
+                                                            <Chip
+                                                                size="small"
+                                                                icon={<InventoryIcon />}
+                                                                label={displayText}
+                                                                variant="outlined"
+                                                                sx={{
+                                                                    fontFamily: "monospace",
+                                                                    fontSize: "0.7rem",
+                                                                }}
+                                                            />
+                                                        </Tooltip>
+                                                    );
+                                                })}
+                                            </Stack>
+                                            {/* Show warning if packaging exists but no quantity/CBM */}
+                                            {packagingList.some(p => !p.pivot?.quantity || !p.pivot?.cbm) && (
+                                                <Stack 
+                                                    direction="row" 
+                                                    spacing={0.5} 
+                                                    alignItems="center" 
+                                                    sx={{ mt: 0.5 }}
+                                                >
+                                                    <WarningIcon sx={{ fontSize: 12, color: "warning.main" }} />
+                                                    <Typography variant="caption" color="warning.main">
+                                                        Some packaging missing quantity or CBM values
+                                                    </Typography>
+                                                </Stack>
+                                            )}
+                                        </Box>
+                                    )}
+
+                                    {/* 5 image slots - with improved null safety */}
+                                    <Stack
+                                        direction="row"
+                                        spacing={1.5}
+                                        flexWrap="wrap"
+                                        useFlexGap
+                                        sx={{ mb: 2 }}
+                                    >
+                                        {Array.from({ length: 5 }).map(
+                                            (_, slotIndex) => {
+                                                const slot = variant.slots?.[slotIndex];
+                                                const isRequiredSlot = slotIndex < 2;
+                                                
+                                                return (
+                                                    <Box
+                                                        key={slotIndex}
+                                                        sx={{ position: "relative" }}
+                                                        onMouseEnter={() =>
+                                                            slot?.url &&
+                                                            setSelectedImage(slot.url)
+                                                        }
+                                                        onMouseLeave={() =>
+                                                            setSelectedImage(masterFallback)
+                                                        }
+                                                    >
+                                                        {slot?.url ? (
+                                                            <Box sx={{ width: 80 }}>
+                                                                <Box
+                                                                    component="img"
+                                                                    src={slot.url}
+                                                                    onError={(
+                                                                        e: React.SyntheticEvent<HTMLImageElement>,
+                                                                    ) => {
+                                                                        e.currentTarget.src =
+                                                                            "/img/default.jpg";
                                                                     }}
-                                                                >
-                                                                    {i + 1}
-                                                                </TableCell>
-                                                                <TableCell
+                                                                    onClick={() =>
+                                                                        setSelectedImage(
+                                                                            slot.url,
+                                                                        )
+                                                                    }
                                                                     sx={{
-                                                                        py: 0.5,
+                                                                        width: 80,
+                                                                        height: 80,
+                                                                        objectFit:
+                                                                            "cover",
+                                                                        borderRadius: 1.5,
+                                                                        border: "1px solid",
+                                                                        borderColor:
+                                                                            "divider",
+                                                                        cursor: "pointer",
+                                                                        display:
+                                                                            "block",
                                                                     }}
+                                                                />
+                                                                <Tooltip
+                                                                    title={slot.path}
+                                                                    arrow
+                                                                    placement="bottom"
                                                                 >
                                                                     <Typography
                                                                         variant="caption"
                                                                         sx={{
+                                                                            display:
+                                                                                "block",
+                                                                            fontSize:
+                                                                                "0.55rem",
+                                                                            color: "text.disabled",
+                                                                            mt: 0.5,
+                                                                            maxWidth: 80,
+                                                                            overflow:
+                                                                                "hidden",
+                                                                            textOverflow:
+                                                                                "ellipsis",
+                                                                            whiteSpace:
+                                                                                "nowrap",
                                                                             fontFamily:
                                                                                 "monospace",
-                                                                            fontSize:
-                                                                                "0.65rem",
-                                                                            color: "text.secondary",
-                                                                            wordBreak:
-                                                                                "break-all",
+                                                                            textAlign:
+                                                                                "center",
                                                                         }}
                                                                     >
-                                                                        {
-                                                                            slot.path
-                                                                        }
+                                                                        {slot.path
+                                                                            .split(
+                                                                                "/",
+                                                                            )
+                                                                            .pop()}
                                                                     </Typography>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ),
-                                                    )}
-                                                </TableBody>
-                                            </Table>
-                                        </TableContainer>
-                                    </Box>
-                                )}
-                            </Paper>
-                        ))}
+                                                                </Tooltip>
+                                                                <IconButton
+                                                                    size="small"
+                                                                    component="a"
+                                                                    href={slot.url}
+                                                                    target="_blank"
+                                                                    sx={{ 
+                                                                        p: 0.25,
+                                                                        display: "block",
+                                                                        mx: "auto",
+                                                                        mt: 0.25
+                                                                    }}
+                                                                >
+                                                                    <OpenInNewIcon
+                                                                        sx={{
+                                                                            fontSize: 12,
+                                                                            color: "text.disabled",
+                                                                        }}
+                                                                    />
+                                                                </IconButton>
+                                                            </Box>
+                                                        ) : (
+                                                            <Box
+                                                                sx={{
+                                                                    width: 80,
+                                                                    height: 80,
+                                                                    borderRadius: 1.5,
+                                                                    border: "2px dashed",
+                                                                    borderColor: isRequiredSlot
+                                                                        ? "warning.main"
+                                                                        : "divider",
+                                                                    display: "flex",
+                                                                    alignItems:
+                                                                        "center",
+                                                                    justifyContent:
+                                                                        "center",
+                                                                    bgcolor: isRequiredSlot
+                                                                        ? "rgba(237,108,2,0.04)"
+                                                                        : "background.default",
+                                                                    flexDirection: "column",
+                                                                    gap: 0.5,
+                                                                }}
+                                                            >
+                                                                <Typography
+                                                                    variant="caption"
+                                                                    color={
+                                                                        isRequiredSlot
+                                                                            ? "warning.main"
+                                                                            : "text.disabled"
+                                                                    }
+                                                                    sx={{
+                                                                        fontSize:
+                                                                            "0.65rem",
+                                                                        fontWeight: 600,
+                                                                    }}
+                                                                >
+                                                                    Slot {slotIndex + 1}
+                                                                </Typography>
+                                                                {isRequiredSlot && (
+                                                                    <Typography
+                                                                        variant="caption"
+                                                                        color="warning.main"
+                                                                        sx={{
+                                                                            fontSize:
+                                                                                "0.55rem",
+                                                                        }}
+                                                                    >
+                                                                        Required
+                                                                    </Typography>
+                                                                )}
+                                                            </Box>
+                                                        )}
+                                                    </Box>
+                                                );
+                                            },
+                                        )}
+                                    </Stack>
+
+                                    {/* Storage paths table - with null safety */}
+                                    {variant.slots && variant.slots.length > 0 && (
+                                        <Box>
+                                            <Typography
+                                                variant="caption"
+                                                color="text.disabled"
+                                                fontWeight={700}
+                                                sx={{
+                                                    textTransform: "uppercase",
+                                                    letterSpacing: "0.06em",
+                                                    display: "block",
+                                                    mb: 0.5,
+                                                }}
+                                            >
+                                                Storage Paths
+                                            </Typography>
+                                            <TableContainer
+                                                component={Paper}
+                                                variant="outlined"
+                                                sx={{ borderRadius: 1 }}
+                                            >
+                                                <Table size="small">
+                                                    <TableHead
+                                                        sx={{
+                                                            bgcolor: "action.hover",
+                                                        }}
+                                                    >
+                                                        <TableRow>
+                                                            <TableCell
+                                                                sx={{
+                                                                    fontWeight: 700,
+                                                                    py: 0.5,
+                                                                    fontSize:
+                                                                        "0.7rem",
+                                                                    width: 40,
+                                                                }}
+                                                            >
+                                                                Slot
+                                                            </TableCell>
+                                                            <TableCell
+                                                                sx={{
+                                                                    fontWeight: 700,
+                                                                    py: 0.5,
+                                                                    fontSize:
+                                                                        "0.7rem",
+                                                                }}
+                                                            >
+                                                                Storage Path
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {variant.slots.map(
+                                                            (slot, i) => (
+                                                                <TableRow key={i}>
+                                                                    <TableCell
+                                                                        sx={{
+                                                                            py: 0.5,
+                                                                            fontSize:
+                                                                                "0.7rem",
+                                                                            color: "text.disabled",
+                                                                        }}
+                                                                    >
+                                                                        {i + 1}
+                                                                    </TableCell>
+                                                                    <TableCell
+                                                                        sx={{
+                                                                            py: 0.5,
+                                                                        }}
+                                                                    >
+                                                                        <Typography
+                                                                            variant="caption"
+                                                                            sx={{
+                                                                                fontFamily:
+                                                                                    "monospace",
+                                                                                fontSize:
+                                                                                    "0.65rem",
+                                                                                color: "text.secondary",
+                                                                                wordBreak:
+                                                                                    "break-all",
+                                                                            }}
+                                                                        >
+                                                                            {
+                                                                                slot.path
+                                                                            }
+                                                                        </Typography>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ),
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                        </Box>
+                                    )}
+                                </Paper>
+                            );
+                        })}
                     </Stack>
                 </Grid>
             </Grid>
 
-            {/* ── Deploy to Store Dialog ── */}
+            {/* Deploy Dialog - unchanged */}
             <Dialog
                 open={deployOpen}
                 onClose={() => setDeployOpen(false)}
