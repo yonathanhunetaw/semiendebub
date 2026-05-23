@@ -60,7 +60,7 @@ class ItemSeeder extends Seeder
             'item_category_id' => 46, // NoteBook 25k
             'status' => 'active',
             'picsum_id' => 201,
-            'file_prefix' => 'noteit', 
+            'file_prefix' => 'noteit',
             'color_ids' => [4, 5, 11], // Green (4), Red (5), Yellow (11)
             'size_ids' => [1, 2, 3],    // 3x5 Medium (1), 3x5 Large (2), 4x6 Small (3)
             'packaging' => [
@@ -76,7 +76,7 @@ class ItemSeeder extends Seeder
             'item_category_id' => 28, // Binding Accessories
             'status' => 'active',
             'picsum_id' => 202,
-            'file_prefix' => 'ring', 
+            'file_prefix' => 'ring',
             'color_ids' => [1, 4, 2, 5, 3, 11], // Blue(1), Green(4), Black(2), Red(5), White(3), Yellow(11)
             'size_ids' => [19, 20, 21, 22, 23, 24], // System IDs representing 6mm up to 16mm scales
             'packaging' => [
@@ -91,7 +91,7 @@ class ItemSeeder extends Seeder
             'item_category_id' => 12, // Pens & Writing
             'status' => 'active',
             'picsum_id' => 203,
-            'file_prefix' => 'bic', 
+            'file_prefix' => 'bic',
             'color_ids' => [1, 2, 5], // Blue (1), Black (2), Red (5)
             'size_ids' => [],         // No custom size variants
             'packaging' => [
@@ -107,7 +107,7 @@ class ItemSeeder extends Seeder
             'item_category_id' => 45,
             'status' => 'active',
             'picsum_id' => 201,
-            'file_prefix' => '2025-1', 
+            'file_prefix' => '2025-1',
             'color_ids' => [1, 2],
             'size_ids' => [1],
             'packaging' => [
@@ -159,7 +159,7 @@ class ItemSeeder extends Seeder
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0009],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1250],
             ],
-        ]    
+        ]
     ];
 
     public function run(): void
@@ -235,11 +235,10 @@ class ItemSeeder extends Seeder
             foreach ($data['packaging'] as $packConfig) {
                 $packTypeId = (int) $packConfig['item_packaging_type_id'];
 
+                // Just map the quantity and cbm to the packaging type
                 $syncPayload[$packTypeId] = [
                     'quantity' => max(1, (int) $packConfig['quantity']),
                     'cbm' => $packConfig['cbm'] ?? 0.0000,
-                    'item_color_id' => $variant->item_color_id,
-                    'item_size_id' => $variant->item_size_id,
                 ];
             }
 
@@ -248,7 +247,6 @@ class ItemSeeder extends Seeder
             }
         }
     }
-
     private function buildPackagingSync(array $packaging): array
     {
         $result = [];
