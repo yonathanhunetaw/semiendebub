@@ -20,6 +20,7 @@ return new class extends Migration {
 
             // Core Identity (Shared by all variants)
             $table->string('product_name');
+            $table->string('file_prefix')->nullable();
             $table->text('product_description')->nullable();
             $table->text('packaging_details')->nullable(); // General info like "Boxed" or "Fragile"
 

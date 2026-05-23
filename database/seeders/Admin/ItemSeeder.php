@@ -172,6 +172,7 @@ class ItemSeeder extends Seeder
                 ->withPicsumId($data['picsum_id'])
                 ->create([
                     'product_name' => $data['product_name'],
+                    'file_prefix'         => $data['file_prefix'],
                     'product_description' => $data['product_description'],
                     'packaging_details' => $data['packaging_details'] ?? null,
                     'item_category_id' => $data['item_category_id'],

@@ -25,11 +25,12 @@ class Item extends Model
         'status',
         'item_category_id',
         'is_incomplete',
+        'file_prefix',
     ];
 
     protected $casts = [
         'general_images' => 'array',
-        'is_incomplete'  => 'boolean',
+        'is_incomplete' => 'boolean',
     ];
 
     protected static function newFactory()
