@@ -203,19 +203,18 @@ class ItemSeeder extends Seeder
         $disk = Storage::disk('s3');
 
         for ($index = 1; $index <= 5; $index++) {
+            // This will now look for 'noteit_1.jpg', 'noteit_2.jpg', etc.
             $sourceFileName = "{$prefix}_{$index}.jpg";
             $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
             $minioPath = "uploads/items/{$item->id}/{$sourceFileName}";
 
             if (File::exists($sourcePath)) {
-                try {
-                    if (!$disk->exists($minioPath)) {
-                        $disk->put($minioPath, File::get($sourcePath));
-                    }
-                    $itemImagesArray[] = $minioPath;
-                } catch (\Exception $e) {
-                    \Illuminate\Support\Facades\Log::error("Failed seeding image: " . $e->getMessage());
+                if (!$disk->exists($minioPath)) {
+                    $disk->put($minioPath, File::get($sourcePath));
                 }
+                $itemImagesArray[] = $minioPath;
+            } else {
+                \Log::error("Missing local image: {$sourcePath}");
             }
         }
 
