@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import {
@@ -25,6 +25,7 @@ import {
     TableRow,
     Tooltip,
     Typography,
+    useTheme,
 } from "@mui/material";
 import AddBusinessIcon from "@mui/icons-material/AddBusiness";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -61,7 +62,7 @@ interface VariantRow {
     slots: ImageSlotData[];
     slot_count: number;
     proof_ok: boolean;
-    packaging_data?: PackagingItem[]; // Added for nested packaging collection
+    packaging_data?: PackagingItem[];
 }
 
 interface Item {
@@ -98,6 +99,8 @@ export default function Show({
     variantData: VariantRow[];
     stores?: Store[];
 }) {
+    const theme = useTheme();
+    
     if (!item) return null;
 
     const allGeneralImages = item.general_images ?? [];
@@ -105,21 +108,22 @@ export default function Show({
     // Safe image URL getter with fallback
     const getImageUrl = (path: string | null | undefined): string => {
         if (!path) return "/img/default.jpg";
-        return path; // Assume backend provides full MinIO URL
+        return path;
     };
 
-    // Safe master fallback with proper fallback chain
-    const masterFallback = (() => {
+    // Safe master fallback
+    const masterFallback = useMemo(() => {
         if (allGeneralImages.length > 0) return getImageUrl(allGeneralImages[0]);
         const firstVariantWithSlot = variantData.find(v => v.slots?.length > 0);
         if (firstVariantWithSlot?.slots[0]?.url) return firstVariantWithSlot.slots[0].url;
         return "/img/default.jpg";
-    })();
+    }, [allGeneralImages, variantData]);
 
     const [selectedImage, setSelectedImage] = useState(masterFallback);
     const [showAllThumbs, setShowAllThumbs] = useState(false);
     const [deployOpen, setDeployOpen] = useState(false);
     const [deployingToId, setDeployingToId] = useState<number | null>(null);
+    const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
 
     const handleDeploy = (storeId: number) => {
         setDeployingToId(storeId);
@@ -136,23 +140,58 @@ export default function Show({
         );
     };
 
+    // Handle image hover with debounce to prevent flickering
+    const handleImageHover = useCallback((imageUrl: string | undefined) => {
+        if (!imageUrl) return;
+        
+        // Clear any pending timeout
+        if (hoverTimeout) {
+            clearTimeout(hoverTimeout);
+        }
+        
+        // Set new timeout to prevent rapid flickering
+        const timeout = setTimeout(() => {
+            setSelectedImage(imageUrl);
+        }, 50);
+        
+        setHoverTimeout(timeout);
+    }, [hoverTimeout]);
+
+    const handleImageLeave = useCallback(() => {
+        if (hoverTimeout) {
+            clearTimeout(hoverTimeout);
+            setHoverTimeout(null);
+        }
+        // Don't reset to master fallback immediately - only if no new hover
+        setTimeout(() => {
+            setSelectedImage(prev => prev);
+        }, 100);
+    }, [hoverTimeout]);
+
     const displayedThumbs = showAllThumbs
         ? allGeneralImages
         : allGeneralImages.slice(0, 5);
     
     const proofComplete = variantData.length > 0 && variantData.every((v) => v.proof_ok);
 
-    // Helper to format CBM value
     const formatCBM = (cbm: number): string => {
         if (!cbm && cbm !== 0) return "N/A";
         return `${cbm.toFixed(3)} m³`;
+    };
+
+    // Helper to get display text for variant
+    const getVariantDisplayText = (variant: VariantRow): string => {
+        const parts = [];
+        if (variant.color) parts.push(variant.color);
+        if (variant.size) parts.push(variant.size);
+        if (variant.packaging && variant.packaging !== 'null') parts.push(variant.packaging);
+        return parts.length > 0 ? parts.join(" / ") : "Default";
     };
 
     return (
         <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: "1440px", margin: "0 auto" }}>
             <Head title={`Catalog: ${item.product_name}`} />
 
-            {/* Header - unchanged */}
             <Stack
                 direction={{ xs: "column", sm: "row" }}
                 justifyContent="space-between"
@@ -206,6 +245,12 @@ export default function Show({
                             borderRadius: 2,
                             fontWeight: "bold",
                             textTransform: "none",
+                            color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                            borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.3)' : undefined,
+                            '&:hover': {
+                                borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.5)' : undefined,
+                                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : undefined,
+                            }
                         }}
                     >
                         Edit Item
@@ -227,7 +272,6 @@ export default function Show({
             </Stack>
 
             <Grid container spacing={4}>
-                {/* Gallery Section - improved with safer null handling */}
                 <Grid item xs={12} md={5}>
                     <Paper
                         variant="outlined"
@@ -349,7 +393,6 @@ export default function Show({
                     </Paper>
                 </Grid>
 
-                {/* Variants Section - NOW WITH PACKAGING DISPLAY */}
                 <Grid item xs={12} md={7}>
                     <Typography variant="h6" fontWeight={800} gutterBottom>
                         Description
@@ -368,9 +411,9 @@ export default function Show({
 
                     <Stack spacing={3}>
                         {variantData.map((variant) => {
-                            // Safely access packaging data
                             const packagingList = variant.packaging_data ?? [];
                             const hasPackaging = packagingList.length > 0;
+                            const variantDisplayText = getVariantDisplayText(variant);
                             
                             return (
                                 <Paper
@@ -385,7 +428,6 @@ export default function Show({
                                         borderWidth: 1.5,
                                     }}
                                 >
-                                    {/* Variant header with packaging chips */}
                                     <Stack
                                         direction="row"
                                         justifyContent="space-between"
@@ -406,13 +448,7 @@ export default function Show({
                                                     variant="subtitle1"
                                                     fontWeight={800}
                                                 >
-                                                    {[
-                                                        variant.color,
-                                                        variant.size,
-                                                        variant.packaging,
-                                                    ]
-                                                        .filter(Boolean)
-                                                        .join(" / ") || "Default"}
+                                                    {variantDisplayText}
                                                 </Typography>
                                                 <Chip
                                                     size="small"
@@ -458,7 +494,6 @@ export default function Show({
                                         </Typography>
                                     </Stack>
 
-                                    {/* NEW: Packaging Information Section */}
                                     {hasPackaging && (
                                         <Box sx={{ mb: 2 }}>
                                             <Stack
@@ -516,7 +551,6 @@ export default function Show({
                                                     );
                                                 })}
                                             </Stack>
-                                            {/* Show warning if packaging exists but no quantity/CBM */}
                                             {packagingList.some(p => !p.pivot?.quantity || !p.pivot?.cbm) && (
                                                 <Stack 
                                                     direction="row" 
@@ -533,7 +567,6 @@ export default function Show({
                                         </Box>
                                     )}
 
-                                    {/* 5 image slots - with improved null safety */}
                                     <Stack
                                         direction="row"
                                         spacing={1.5}
@@ -550,13 +583,11 @@ export default function Show({
                                                     <Box
                                                         key={slotIndex}
                                                         sx={{ position: "relative" }}
-                                                        onMouseEnter={() =>
-                                                            slot?.url &&
-                                                            setSelectedImage(slot.url)
-                                                        }
-                                                        onMouseLeave={() =>
-                                                            setSelectedImage(masterFallback)
-                                                        }
+                                                        onMouseEnter={() => {
+                                                            if (slot?.url) {
+                                                                setSelectedImage(slot.url);
+                                                            }
+                                                        }}
                                                     >
                                                         {slot?.url ? (
                                                             <Box sx={{ width: 80 }}>
@@ -699,7 +730,6 @@ export default function Show({
                                         )}
                                     </Stack>
 
-                                    {/* Storage paths table - with null safety */}
                                     {variant.slots && variant.slots.length > 0 && (
                                         <Box>
                                             <Typography
@@ -801,7 +831,6 @@ export default function Show({
                 </Grid>
             </Grid>
 
-            {/* Deploy Dialog - unchanged */}
             <Dialog
                 open={deployOpen}
                 onClose={() => setDeployOpen(false)}
