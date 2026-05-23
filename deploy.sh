@@ -328,11 +328,13 @@ if [ "$APP_ENV" = "production" ]; then
     exec_in_app npm run build
 else
     echo "Starting Vite dev server..."
-    exec_in_app rm -rf public/build
     
-    # 🎯 PROACTIVE FIX: Clear Vite cache to prevent 504 errors on domain changes
+    # 🎯 FIX: Remove all artifacts that could make Laravel think it's in production mode
     echo "Sanitizing Vite environment..."
-    exec_in_app rm -rf node_modules/.vite
+    exec_in_app rm -rf public/build node_modules/.vite public/hot
+    
+    # Optional: Give the Pi's filesystem a split-second to commit the delete
+    sleep 1 
     
     if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
         echo "Installing Node dependencies..."
@@ -343,7 +345,7 @@ else
         echo "Vite is already running."
     else
         echo "Launching Vite..."
-        # 🎯 Added --force to ensure it doesn't try to reuse a stale cache
+        # 🎯 Ensure it doesn't try to reuse a stale cache
         compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
     fi
 
