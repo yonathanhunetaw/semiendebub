@@ -50,8 +50,8 @@ export default defineConfig(({ mode }) => {
             }),
             react(),
         ],
-        optimizeDeps: {
-            force: true,
-        },
+        // optimizeDeps: {
+        //     force: true,
+        // },
     };
 });
