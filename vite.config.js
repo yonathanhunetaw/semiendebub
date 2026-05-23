@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
                 host: 'duka2.pi',
                 protocol: hmrProtocol,
                 port: devServerPort,
-                clientPort: devServerPort, 
+                clientPort: devServerPort,
             },
             watch: {
                 usePolling: true,
@@ -50,5 +50,8 @@ export default defineConfig(({ mode }) => {
             }),
             react(),
         ],
+        optimizeDeps: {
+            force: true,
+        },
     };
 });
