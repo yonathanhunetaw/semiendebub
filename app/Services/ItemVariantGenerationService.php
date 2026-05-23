@@ -41,10 +41,21 @@ class ItemVariantGenerationService
             'count_sizes' => $item->sizes->count()
         ]);
         // ─── 🎯 TWO-TIER PHYSICAL COMBINATION MATRIX LOOP (Color x Size) ─────
-        foreach ($colorIds as $colorId) {
-            foreach ($sizeIds as $sizeId) {
+        // ─── 🎯 TWO-TIER PHYSICAL COMBINATION MATRIX LOOP (Color x Size) ─────
+// Use 'as $cIdx => $colorId' to get the numeric position of the color
+        foreach ($colorIds as $cIdx => $colorId) {
+            // Use 'as $sIdx => $sizeId' to get the numeric position of the size
+            foreach ($sizeIds as $sIdx => $sizeId) {
 
-                // Trace string tracking compound key
+                // 1. Calculate the variant index (1 to 9)
+                $variantNum = ($cIdx * count($sizeIds)) + $sIdx + 1;
+
+                // 2. Build the specific image array for this variant
+                $variantSpecificImages = [];
+                for ($i = 1; $i <= 5; $i++) {
+                    $variantSpecificImages[] = "uploads/items/{$item->id}/{$item->file_prefix}_v{$variantNum}_{$i}.jpg";
+                }
+
                 $validKeys[] = $this->variantKey($colorId, $sizeId);
 
                 $variant = ItemVariant::withTrashed()->firstOrNew([
@@ -57,26 +68,19 @@ class ItemVariantGenerationService
                     $variant->restore();
                 }
 
-                // 🎯 AUTOMATED STRUCTURAL SKU GENERATION
-                // Output matches clean pattern: DUKA-I1-C2-S1
+                // SKU Generation
                 if (empty($variant->sku)) {
-                    $variant->sku = sprintf(
-                        'DUKA-I%d-C%s-S%s',
-                        $item->id,
-                        $colorId ?? '0',
-                        $sizeId ?? '0'
-                    );
+                    $variant->sku = sprintf('DUKA-I%d-C%s-S%s', $item->id, $colorId ?? '0', $sizeId ?? '0');
                 }
 
-                // Default basic properties if brand new
                 $variant->status = $variant->status ?: ($item->status === 'active' ? 'active' : 'inactive');
-                // Sync the main variant images column directly
-                if (!empty($uploadedImages)) {
-                    $variant->images = $uploadedImages;
-                }
+
+                // 3. Assign the specific images to THIS variant
+                $variant->images = $variantSpecificImages;
                 $variant->save();
 
-                $this->ensureStoreVariantRecords($item, $variant, $uploadedImages);
+                // 4. Pass the specific variant images to the store records
+                $this->ensureStoreVariantRecords($item, $variant, $variantSpecificImages);
             }
         }
 

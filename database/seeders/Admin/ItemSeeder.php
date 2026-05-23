@@ -198,31 +198,38 @@ class ItemSeeder extends Seeder
 
     private function seedDeterministicVariantImages(Item $item, array $data): array
     {
-        $prefix = $data['file_prefix'];
+        $prefix = $data['file_prefix']; // 'noteit'
         $itemImagesArray = [];
         $disk = Storage::disk('s3');
 
-        for ($index = 1; $index <= 5; $index++) {
-            // This will now look for 'noteit_1.jpg', 'noteit_2.jpg', etc.
-            $sourceFileName = "{$prefix}_{$index}.jpg";
-            $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
-            $minioPath = "uploads/items/{$item->id}/{$sourceFileName}";
+        // 1. Seed General Images (noteit_1.jpg to noteit_5.jpg)
+        for ($i = 1; $i <= 5; $i++) {
+            $name = "{$prefix}_{$i}.jpg";
+            $this->uploadToMinio($disk, $item->id, $name);
+            $itemImagesArray[] = "uploads/items/{$item->id}/{$name}";
+        }
 
-            if (File::exists($sourcePath)) {
-                if (!$disk->exists($minioPath)) {
-                    $disk->put($minioPath, File::get($sourcePath));
-                }
-                $itemImagesArray[] = $minioPath;
-            } else {
-                \Log::error("Missing local image: {$sourcePath}");
+        // 2. Seed Variant Images (noteit_v1_1.jpg to noteit_v9_5.jpg)
+        // We loop through the 9 expected variants and 5 images each
+        for ($v = 1; $v <= 9; $v++) {
+            for ($i = 1; $i <= 5; $i++) {
+                $name = "{$prefix}_v{$v}_{$i}.jpg";
+                $this->uploadToMinio($disk, $item->id, $name);
             }
         }
 
-        if (!empty($itemImagesArray)) {
-            $item->update(['general_images' => $itemImagesArray]);
-        }
-
         return $itemImagesArray;
+    }
+
+    // Helper to keep code clean
+    private function uploadToMinio($disk, $itemId, $fileName)
+    {
+        $sourcePath = storage_path("app/seed-images/{$fileName}");
+        $minioPath = "uploads/items/{$itemId}/{$fileName}";
+
+        if (File::exists($sourcePath) && !$disk->exists($minioPath)) {
+            $disk->put($minioPath, File::get($sourcePath));
+        }
     }
 
     private function populatePackagingQuantitiesAndCbm(Item $item, array $data): void
