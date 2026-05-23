@@ -487,4 +487,5 @@ echo "✅ MinIO bucket configuration complete."
 
 # 4. Final Laravel Cleanup
 exec_in_app php artisan config:clear
-echo "Deployment complete."
+echo "--- Deployment complete. Showing Vite logs (Ctrl+C to stop following) ---"
+exec_in_app tail -f /tmp/vite.log
