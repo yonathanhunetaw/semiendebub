@@ -144,7 +144,9 @@ class ItemController extends Controller
             'category',
             'variants.itemColor',
             'variants.itemSize',
+            'variants.packagingQuantities',
             'variants.stocks',
+
         ]);
 
         $itemData = [
@@ -159,23 +161,35 @@ class ItemController extends Controller
 
         // 🔄 Map variants to the dynamic 5-slot front-end interface format
         $variantData = $item->variants->map(function ($variant) {
-            $rawPaths = is_array($variant->images) ? $variant->images : [];
-            // CHANGED: was $variant->all_image_urls (Storage::disk('s3')->exists() per image).
-            // Now uses getImageSlotsAttribute() which calls ImageResolver — no network check needed.
-            $slots = $variant->image_slots;
-
-            $slotCount = count($slots);
+            // Debugging Log (check your Laravel storage/logs/laravel.log)
+            Log::info('Variant Packaging:', [
+                'sku' => $variant->sku,
+                'packaging' => $variant->packagingQuantities->map(function ($p) {
+                    return [
+                        'type' => $p->name,
+                        'quantity' => $p->pivot->quantity,
+                        'cbm' => $p->pivot->cbm
+                    ];
+                })->toArray()
+            ]);
 
             return [
                 'id' => $variant->id,
                 'sku' => $variant->sku,
                 'color' => $variant->color?->name,
                 'size' => $variant->size?->name,
-                'packaging' => $variant->itemPackagingType?->name,
+                // Map the collection to include quantity and cbm
+                'packaging_details' => $variant->packagingQuantities->map(function ($pack) {
+                    return [
+                        'type_name' => $pack->name,
+                        'quantity' => $pack->pivot->quantity,
+                        'cbm' => $pack->pivot->cbm,
+                    ];
+                }),
                 'status' => $variant->status,
-                'slots' => $slots,       // [{path, url}, ...]
-                'slot_count' => $slotCount,
-                'proof_ok' => $slotCount >= 2,
+                'slots' => $variant->image_slots,
+                'slot_count' => count($variant->image_slots),
+                'proof_ok' => count($variant->image_slots) >= 2,
             ];
         });
 
