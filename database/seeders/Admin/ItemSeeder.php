@@ -181,15 +181,9 @@ class ItemSeeder extends Seeder
 
             $item->colors()->sync($data['color_ids']);
             $item->sizes()->sync($data['size_ids']);
-            $item->packagingTypes()->sync(
-                $this->buildPackagingSync($data['packaging'])
-            );
+            $item->packagingTypes()->sync($this->buildPackagingSync($data['packaging']));
 
-            // 🎯 Step 1: Upload and verify images first
-            $uploadedImages = $this->seedDeterministicVariantImages($item, $data);
-
-            // 🎯 Step 2: Generate variants and pass verified image arrays down to the JSON matrices
-            $generator->sync($item, $uploadedImages);
+            $generator->sync($item);
 
             $this->populatePackagingQuantitiesAndCbm($item, $data);
             $this->evaluateDraftStatus($item, $data['status']);

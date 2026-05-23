@@ -9,98 +9,41 @@ use Illuminate\Support\Facades\File;
 
 class ItemImageSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        // 🌟 AUTO-CREATE BUCKET IF MISSING
         $disk = Storage::disk('s3');
-        try {
-            // If the bucket doesn't exist, this or the driver initialization will catch it safely
-            if (!method_exists($disk->getDriver(), 'ensureBucketExists') && !empty(config('filesystems.disks.s3.bucket'))) {
-                // Standard approach to ensure directory framework visibility
-                $disk->makeDirectory('/');
-            }
-        } catch (\Exception $e) {
-            $this->command->info("Configuring target bucket...");
-            // This forces MinIO/S3 adapter wrapper layers to establish the base path safely
-        }
+        $items = Item::all(); // Get all items created by ItemSeeder
 
-        // 1️⃣ Map your generated item IDs to their corresponding disk file prefixes
-        $itemFilePrefixes = [
-            1 => '2025-1',
-            2 => '2025-ብልጭልጭ',
-            3 => '25k-1ፓሪስ',
-            4 => '25k-5ጨርቅማስታወሻ',
-        ];
-
-        // ... rest of your code ...
-
-        foreach ($itemFilePrefixes as $itemId => $prefix) {
-            $item = Item::with('variants')->find($itemId);
-
-            if (!$item) {
-                $this->command->warn("Item ID {$itemId} not found in database, skipping image processing.");
-                continue;
+        foreach ($items as $item) {
+            // Retrieve the file prefix (ensure it's stored on the Item model or derived)
+            // If you don't have it on the model, you can map it by name here
+            $prefix = $this->getPrefixFromName($item->product_name);
+            
+            // 1. Upload General Images (1-5)
+            for ($i = 1; $i <= 5; $i++) {
+                $this->uploadImage($disk, $item, "{$prefix}_{$i}.jpg", "uploads/items/{$item->id}/{$prefix}_{$i}.jpg");
             }
 
-            $itemImagesArray = [];
-
-            // 2️⃣ Loop up to 5 images per product item
-            for ($index = 0; $index < 5; $index++) {
-                // Look for: prefix_1.jpg, prefix_2.jpg, etc.
-                $sourceFileName = "{$prefix}_" . ($index + 1) . ".jpg";
-                $sourcePath = storage_path("app/seed-images/{$sourceFileName}");
-
-                // 🎯 FIXED: Name structure matches UI uploads exactly: img-0.jpg, img-1.jpg, etc.
-                $minioPath = "uploads/items/{$item->id}/img-{$index}.jpg";
-
-                // Check if the physical file is present in your local seed directory
-                if (File::exists($sourcePath)) {
-
-                    // ⚡ FIXED: Changed driver context from 'minio' to 's3' to match your filesystem config
-                    $disk = Storage::disk('s3');
-                    // 🔄 Replace line 64's raw check with this safer block:
-                    try {
-                        $existsInMinio = $disk->exists($minioPath);
-                    } catch (\Exception $e) {
-                        // If MinIO complains the bucket doesn't exist yet, assume false and move on to upload
-                        $existsInMinio = false;
-                    }
-
-                    if (!$existsInMinio) {
-                        // Stream the original file layout directly into MinIO
-                        $disk->put($minioPath, File::get($sourcePath));
-                        $this->command->info("Uploaded new image to MinIO: {$minioPath}");
-                    } else {
-                        $this->command->line("Image already in MinIO, skipping upload: {$minioPath}");
-                    }
-
-                    // ✨ FIXED: Append pure raw key paths (No bucket prefixes or leading slashes)
-                    $itemImagesArray[] = $minioPath;
-
-                } else {
-                    $this->command->warn("Seed source missing locally: {$sourcePath}");
+            // 2. Upload Variant Images (v1-v9)
+            for ($v = 1; $v <= 9; $v++) {
+                for ($i = 1; $i <= 5; $i++) {
+                    $this->uploadImage($disk, $item, "{$prefix}_v{$v}_{$i}.jpg", "uploads/items/{$item->id}/{$prefix}_v{$v}_{$i}.jpg");
                 }
             }
-
-            // 3️⃣ Save the true array paths back to the parent item and its child variants
-            if (!empty($itemImagesArray)) {
-                // Save to parent item level ('general_images')
-                $item->update([
-                    'general_images' => $itemImagesArray
-                ]);
-
-                // 🎯 FIXED: Sync names down to variants so variant arrays are populated too
-                foreach ($item->variants as $variant) {
-                    $variant->update([
-                        'images' => $itemImagesArray
-                    ]);
-                }
-
-                $this->command->info("Successfully attached " . count($itemImagesArray) . " images to Item ID: {$item->id} and its variants.");
-            }
         }
+    }
+
+    private function uploadImage($disk, $item, $fileName, $minioPath)
+    {
+        $sourcePath = storage_path("app/seed-images/{$fileName}");
+        if (File::exists($sourcePath) && !$disk->exists($minioPath)) {
+            $disk->put($minioPath, File::get($sourcePath));
+        }
+    }
+
+    private function getPrefixFromName($name) {
+        // Map your product names to their prefixes
+        $map = ['Noteit' => 'noteit', 'Ring' => 'ring', 'Bic' => 'bic', /* ... */];
+        return $map[$name] ?? 'default';
     }
 }
