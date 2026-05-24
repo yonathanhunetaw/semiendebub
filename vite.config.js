@@ -4,43 +4,21 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
-
-    const devServerHost = env.VITE_DEV_SERVER_HOST ?? '0.0.0.0';
-    const devServerPort = Number(env.VITE_DEV_SERVER_PORT ?? 5177);
-    const hmrProtocol = env.VITE_HMR_PROTOCOL ?? 'ws';
-    // This will now dynamically pick up 'duka1.local' or 'duka2.pi'
-    const appDomain = env.APP_SYSTEM_DOMAIN ?? 'duka2.pi';
-
-    // Matches http(s)://sub.duka2.pi or http(s)://duka2.pi
-    const subdomainOriginPattern = new RegExp(
-        `^https?:\\/\\/([a-z0-9-]+\\.)*${appDomain.replace('.', '\\.')}(:\\d+)?$`,
-        'i'
-    );
-
+    
+    // Use the actual domain that resolves to your Mac
+    // Since ping duka1.local works from your Mac, use that
+    const appDomain = env.APP_SYSTEM_DOMAIN || 'duka1.local';
+    const devServerPort = 5177;
+    
     return {
         server: {
-            host: devServerHost,
+            host: '0.0.0.0',  // Listen on all interfaces
             port: devServerPort,
             strictPort: true,
-            cors: {
-                origin: true, // Allow all origins during local dev for easier debugging
-            },
-            // Dynamically allow the domain and all its subdomains
-            allowedHosts: [appDomain, `.${appDomain}`, 'localhost'],
-            // origin: (origin, callback) => {
-            //                     // Allow if it matches the pattern or is the Pi's direct IP for testing
-            //                     if (!origin || subdomainOriginPattern.test(origin) || origin.includes('192.168.1.15')) {
-            //                         callback(null, true);
-            //                         return;
-            //                     }
-            //                     callback(new Error(`Origin ${origin} is not allowed by Vite dev server CORS policy.`));
-            //                 },
-            //             },
-            //             allowedHosts: [`.${appDomain}`, appDomain],
+            cors: true,
             hmr: {
-                // IMPORTANT: Use the variable, not the hardcoded string
-                host: appDomain,
-                protocol: hmrProtocol,
+                host: appDomain,  // Use duka1.local since it resolves to your Mac
+                protocol: 'ws',
                 port: devServerPort,
                 clientPort: devServerPort,
             },
