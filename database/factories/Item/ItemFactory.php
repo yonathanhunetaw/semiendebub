@@ -25,13 +25,13 @@ class ItemFactory extends Factory
     public function definition(): array
     {
         return [
-            'product_name'        => $this->faker->words(3, true),
+            'product_name' => $this->faker->words(3, true),
             'product_description' => $this->faker->paragraph(),
-            'packaging_details'   => $this->faker->sentence(),
-            'general_images'      => [],   // was json_encode(["https://via.placeholder.com/150"])
-            'status'              => 'active',
-            'is_incomplete'       => false,
-            'item_category_id'    => ItemCategory::firstOrCreate(
+            'packaging_details' => $this->faker->sentence(),
+            'general_images' => [],   // was json_encode(["https://via.placeholder.com/150"])
+            'status' => 'active',
+            'is_incomplete' => false,
+            'item_category_id' => ItemCategory::firstOrCreate(
                 ['category_name' => 'General']
             )->id,
 
@@ -53,25 +53,16 @@ class ItemFactory extends Factory
                 // Use files committed to storage/app/seed-images/
                 foreach ($this->localImages as $index => $filename) {
                     $localPath = storage_path('app/seed-images/' . $filename);
-                    $key = "uploads/items/{$item->id}/img-{$index}.jpg";
+
+                    // CHANGE THIS LINE: 
+                    // From: $key = "uploads/items/{$item->id}/img-{$index}.jpg";
+                    // To this to preserve your original filename:
+                    $key = "uploads/items/{$item->id}/" . $filename;
+
                     try {
                         $keys[] = ImageResolver::uploadSeedImage($localPath, $key);
                     } catch (\Throwable $e) {
                         Log::warning("ItemFactory: could not upload [{$filename}]: " . $e->getMessage());
-                    }
-                }
-            } else {
-                // Download from picsum.photos — use a pinned ID for idempotent reseeds
-                $seedId = $this->picsumId > 0 ? $this->picsumId : $item->id;
-
-                foreach ([0, 10] as $i => $offset) {
-                    $id  = (($seedId + $offset) % 1000) ?: 1;
-                    $url = "https://picsum.photos/id/{$id}/600/600";
-                    $key = "uploads/items/{$item->id}/img-{$i}.jpg";
-                    try {
-                        $keys[] = ImageResolver::uploadFromUrl($url, $key);
-                    } catch (\Throwable $e) {
-                        Log::warning("ItemFactory: could not download [{$url}]: " . $e->getMessage());
                     }
                 }
             }
