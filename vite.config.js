@@ -3,12 +3,12 @@ import laravel from 'laravel-vite-plugin';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    // Load env file from the current directory (where your .env is)
     const env = loadEnv(mode, process.cwd(), '');
 
     const devServerHost = env.VITE_DEV_SERVER_HOST ?? '0.0.0.0';
     const devServerPort = Number(env.VITE_DEV_SERVER_PORT ?? 5177);
     const hmrProtocol = env.VITE_HMR_PROTOCOL ?? 'ws';
+    // This will now dynamically pick up 'duka1.local' or 'duka2.pi'
     const appDomain = env.APP_SYSTEM_DOMAIN ?? 'duka2.pi';
 
     // Matches http(s)://sub.duka2.pi or http(s)://duka2.pi
@@ -23,18 +23,23 @@ export default defineConfig(({ mode }) => {
             port: devServerPort,
             strictPort: true,
             cors: {
-                origin: (origin, callback) => {
-                    // Allow if it matches the pattern or is the Pi's direct IP for testing
-                    if (!origin || subdomainOriginPattern.test(origin) || origin.includes('192.168.1.15')) {
-                        callback(null, true);
-                        return;
-                    }
-                    callback(new Error(`Origin ${origin} is not allowed by Vite dev server CORS policy.`));
-                },
+                origin: true, // Allow all origins during local dev for easier debugging
             },
-            allowedHosts: [`.${appDomain}`, appDomain],
+            // Dynamically allow the domain and all its subdomains
+            allowedHosts: [appDomain, `.${appDomain}`, 'localhost'],
+            // origin: (origin, callback) => {
+            //                     // Allow if it matches the pattern or is the Pi's direct IP for testing
+            //                     if (!origin || subdomainOriginPattern.test(origin) || origin.includes('192.168.1.15')) {
+            //                         callback(null, true);
+            //                         return;
+            //                     }
+            //                     callback(new Error(`Origin ${origin} is not allowed by Vite dev server CORS policy.`));
+            //                 },
+            //             },
+            //             allowedHosts: [`.${appDomain}`, appDomain],
             hmr: {
-                host: 'localhost',
+                // IMPORTANT: Use the variable, not the hardcoded string
+                host: appDomain,
                 protocol: hmrProtocol,
                 port: devServerPort,
                 clientPort: devServerPort,
