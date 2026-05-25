@@ -122,7 +122,7 @@ class StoreVariantSeeder extends Seeder
         }
     }
 
-    private function calculateBaseProductRate(ItemVariant $variant): float
+    private function calculateBaseProductRate($variant): float
     {
         $name = $variant->item?->product_name ?? '';
         return match (true) {
