@@ -99,45 +99,42 @@ class ItemVariantGenerationService
     public function ensureStoreVariantRecords(Item $item, ItemVariant $variant, array $uploadedImages = []): void
     {
         $storeIds = $item->stores()->pluck('stores.id');
-
         if ($storeIds->isEmpty()) {
             $storeIds = Store::query()->pluck('id');
         }
 
         foreach ($storeIds as $storeId) {
-
-            // ─── 1. STANDARD STORE PRICING MATRIX ───────────────────────────
             $storeMatrix = [];
+
             foreach ($item->packagingTypes as $index => $packType) {
                 $multiplier = (int) ($packType->pivot->quantity ?? 1);
+                $typeName = strtolower($packType->name);
 
-                // Determine baseline retail prices per item brand rules
-                $baseRetailCost = 10.00;
+                // 1. Define base price logic
+                $unitPrice = 10.00; // Default fallback
+
                 if (str_contains($item->product_name, 'Bic')) {
-                    $baseRetailCost = 17.00;
+                    // Custom Bic logic:
+                    // Piece = 17, Packet = 16.7 (per piece), Carton = 16.6 (per piece)
+                    $unitPrice = match ($typeName) {
+                        'packet' => 16.70,
+                        'cartoon' => 16.60,
+                        default => 17.00, // 'piece' or fallback
+                    };
                 } elseif (str_contains($item->product_name, 'Ring')) {
-                    $baseRetailCost = 15.00;
+                    $unitPrice = 15.00;
                 }
 
-                $calculatedPrice = $baseRetailCost * $multiplier;
+                // 2. Calculate total price (Unit Price * Quantity in this pack)
+                $totalPrice = $unitPrice * $multiplier;
 
-                // Bulk wholesale discount scale mappings
-                if ($multiplier >= 1000) {
-                    $calculatedPrice *= 0.75; // 25% Industrial Master bulk discount
-                } elseif ($multiplier >= 100) {
-                    $calculatedPrice *= 0.85; // 15% Standard Carton drop
-                } elseif ($multiplier >= 10) {
-                    $calculatedPrice *= 0.92; // 8% Small bundle box drop
-                }
-
-                // Map to the real uploaded file path or fallback to a placeholder
                 $packageMinioKey = $uploadedImages[$index] ?? ($uploadedImages[0] ?? 'uploads/items/placeholder.jpg');
 
                 $storeMatrix[] = [
                     'packaging_type_id' => $packType->id,
                     'unit_name' => $packType->name,
                     'multiplier' => $multiplier,
-                    'price' => round($calculatedPrice, 2),
+                    'price' => round($totalPrice, 2),
                     'discount_price' => null,
                     'discount_ends_at' => null,
                     'image' => $packageMinioKey,
