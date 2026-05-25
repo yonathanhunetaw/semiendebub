@@ -61,6 +61,9 @@ services:
       container_name: Duka_minio_setup
       depends_on:
         - minio
+      volumes:
+        # Mount the local folder containing your images to the container
+        - ./img:/tmp/img 
       networks:
         - duka-network
       entrypoint: >
@@ -70,6 +73,9 @@ services:
         
         echo 'Creating duka-images bucket if missing...';
         /usr/bin/mc mb local_setup/duka-images --ignore-existing;
+        
+        echo 'Uploading default image...';
+        /usr/bin/mc cp /tmp/img/default.jpg local_setup/duka-images/default.jpg;
         
         echo 'Applying public anonymous download policy...';
         /usr/bin/mc anonymous set download local_setup/duka-images;
