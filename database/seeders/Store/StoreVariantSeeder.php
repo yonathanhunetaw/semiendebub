@@ -22,16 +22,31 @@ class StoreVariantSeeder extends Seeder
         foreach ($stores as $store) {
             // 1. Get all variants linked to items available in this store
             // In StoreVariantSeeder.php
-            $variants = ItemVariant::whereHas('item.stores', function ($q) use ($store) {
-                $q->where('store_id', $store->id);
-            })->with(['item.packagingTypes', 'itemPackagingType'])->get();
+            // In StoreVariantSeeder.php, update the fetching block:
+
+            $variants = ItemVariant::query() // Use the Query Builder from the Model
+                ->whereHas('item.stores', function ($q) use ($store) {
+                    $q->where('store_id', $store->id);
+                })
+                ->with(['item.packagingTypes', 'itemPackagingType'])
+                ->get(); // This will return a Collection of ItemVariant models
             if ($variants->isEmpty())
                 continue;
 
             $sellers = User::where('store_id', $store->id)->where('role', 'seller')->get();
             $customers = Customer::where('store_id', $store->id)->get();
 
-            foreach ($variants as $variant) {
+            foreach ($variants as $v) {
+                // Force the variable to be an ItemVariant instance
+                // If $v is already a model, this does nothing. 
+                // If $v is a stdClass, this fetches the fresh model from the database.
+                $variant = ($v instanceof ItemVariant)
+                    ? $v
+                    : ItemVariant::find($v->id);
+
+                // Now you can safely pass $variant to your method
+                $baseItemPrice = $this->calculateBaseProductRate($variant);
+
                 // 2. Calculate Base Price for THIS specific variant
                 $packType = $variant->itemPackagingType;
                 $multiplier = (int) ($packType->pivot->quantity ?? 1);
@@ -85,8 +100,8 @@ class StoreVariantSeeder extends Seeder
                         ['store_variant_id' => $storeVariant->id, 'seller_id' => $seller->id],
                         [
                             // Change this:
-                            'pricing_matrix' => json_encode(['price' => round($price * 0.95, 2)]), 
-                            'active' => true, 
+                            'pricing_matrix' => json_encode(['price' => round($price * 0.95, 2)]),
+                            'active' => true,
                             'updated_at' => $now
                         ]
                     );
@@ -97,8 +112,8 @@ class StoreVariantSeeder extends Seeder
                         ['store_variant_id' => $storeVariant->id, 'customer_id' => $customer->id],
                         [
                             // Change this:
-                            'pricing_matrix' => json_encode(['price' => round($price * 0.98, 2)]), 
-                            'active' => true, 
+                            'pricing_matrix' => json_encode(['price' => round($price * 0.98, 2)]),
+                            'active' => true,
                             'updated_at' => $now
                         ]
                     );
