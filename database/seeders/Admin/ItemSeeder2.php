@@ -687,16 +687,17 @@ class ItemSeeder2 extends Seeder
 
             'Noteit',
             'Ring',
+            'Bic'
         ];$productNames = [
             // 1, '2025 - 1',
             // 2, '2025 - ብልጭልጭ',
             // 3, '25k - 1 ፓሪስ',
             // 4, '25k - 5 ጨርቅ ማስታወሻ',
-            // 5, 'A3 - Laola',
+            // 5, 'A3 - Paper Laola',
             // 6, 'A3 - Road map',
             // 7, 'A4 - Binding file ዉዱ',
             // 8, 'A4 - Gold on',
-            // 9, 'A4 - Laola',
+            // 9, 'A4 - Paper Laola',
             // 10, 'A4 - Post',
             // 11, 'A5 - 10 ባለቀለበት',
             // 12, 'A5 - 11 - 1 ጠንካራ ከቨር ያለዉ',

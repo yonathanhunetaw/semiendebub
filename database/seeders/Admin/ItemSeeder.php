@@ -19,28 +19,63 @@ class ItemSeeder extends Seeder
     // Use these hardcoded structural lookup IDs when defining new items below.
     // ═════════════════════════════════════════════════════════════════════════
     //
-    // 1. LEAF SUBCATEGORY IDS (`item_category_id`)
-    //    ┌───────────────────────────┬───────────────────────────┐
-    //    │ 12 → Pens & Writing       │ 45 → Agenda               │
-    //    │ 28 → Binding Accessories   │ 46 → NoteBook 25k         │
-    //    │ 35 → Desk Organisation    │ 47 → NoteBook A4          │
-    //    └───────────────────────────┴───────────────────────────┘
+    // 1. CATEGORY IDS (`item_category_id`)
+    //    ┌───────────────────────────┬───────────────────────────┬───────────────────────────┐
+    //    │ NOTEBOOKS                 │ WRITING TOOLS             │ FILES & FOLDERS           │
+    //    │ 1 → Subject               │ 10 → Bic Pen              │ 19 → Box File             │
+    //    │ 2 → NoteBook 18k          │ 11 → Diamond pen          │ 20 → Folder               │
+    //    │ 3 → NoteBook 25k          │ 12 → Pencil               │ 21 → Clip file            │
+    //    │ 4 → Agenda                │ 13 → Pencil Colored       │ 22 → Clipboard            │
+    //    │ 5 → NoteBook 32k          │ 14 → Eraser               │ 23 → Document Case        │
+    //    │ 6 → NoteBook 60k          │ 15 → Sharpener            │ 24 → Display book         │
+    //    │ 7 → NoteBook A4           │ 16 → Marker               │ 25 → Binding              │
+    //    │ 8 → NoteBook A5           │ 17 → Highlighter          │                           │
+    //    │ 9 → Locally Made          │ 18 → Fluid (Whiteout)     │                           │
+    //    ├───────────────────────────┼───────────────────────────┼───────────────────────────┤
+    //    │ DESK ACCESSORIES          │ MEASURING TOOLS           │ OFFICE SUPPLIES           │
+    //    │ 26 → Stapler              │ 35 → Ruler                │ 39 → Envelope             │
+    //    │ 27 → Puncher              │ 36 → Set Square           │ 40 → Sticky Notes         │
+    //    │ 28 → Fastener             │ 37 → T square             │ 41 → Calculator           │
+    //    │ 29 → Elastic band         │ 38 → Protractor           │ 42 → Paper Clips          │
+    //    │ 30 → Paper tray           │                           │ 43 → Staples              │
+    //    │ 31 → Tape Dispenser       │                           │ 44 → Scissors             │
+    //    │ 32 → Globe                │                           │                           │
+    //    │ 33 → Glue                 │                           │                           │
+    //    ├───────────────────────────┼───────────────────────────┼───────────────────────────┤
+    //    │ ART MATERIALS             │ SCHOOL SUPPLIES           │ COPY & PRINTER PAPER      │
+    //    │ 45 → Watercolor           │ 50 → Pen and Pencil       │ 55 → A4 Printer Paper     │
+    //    │ 46 → Oil Color            │ 51 → Subject              │ 56 → Printer Paper A3     │
+    //    │ 47 → Paint Brush          │ 52 → Geometry Set         │ 57 → Letter               │
+    //    │ 48 → Canvas               │ 53 → Compass              │ 58 → Legal                │
+    //    │ 49 → Sketch Book          │ 54 → Drawing Book         │ 59 → Tabloid              │
+    //    └───────────────────────────┴───────────────────────────┴───────────────────────────┘
     //
     // 2. CORE SYSTEM COLORS (`color_ids`)
-    //    ┌───────────────────────────┬───────────────────────────┐
-    //    │ 1  → Blue                 │ 4  → Green                │
-    //    │ 2  → Black                │ 5  → Red                  │
-    //    │ 3  → White                │ 11 → Yellow               │
+    //     
+    //    ┌───────────────────────────┬───────────────────────────┐ 
+    //    │ 1  → Red                  │ 7  → Purple               │
+    //    │ 2  → Blue                 │ 8  → Orange               │
+    //    │ 3  → Green                | 9  → Pink                 |
+    //    | 4  → Yellow               │ 10 → Brown                │
+    //    | 5  → Black                | 11 → Mixed                |
+    //    | 6  → White                |                           |
     //    └───────────────────────────┴───────────────────────────┘
-    //
-    // 3. BOOK & COMPONENT SIZES (`size_ids`)
-    //    ┌───────────────────────────┬───────────────────────────┐
-    //    │ 1  → Medium (M)           │ 21 → Ring 10mm            │
-    //    │ 2  → Large (L)            │ 22 → Ring 12mm            │
-    //    │ 3  → Small (S)            │ 23 → Ring 14mm            │
-    //    │ 19 → Ring 6mm             │ 24 → Ring 16mm            │
-    //    │ 20 → Ring 8mm             │ ... (Leave [] for None)   │
-    //    └───────────────────────────┴───────────────────────────┘
+    //     
+    // 3. COMPONENT SIZES (`size_ids`)
+    //    ┌───────────────────────────┬───────────────────────────┬───────────────────────────┐
+    //    │ 1  → 3x3Inch              │ 13 → A5                   │ 25 → 18mm                 │
+    //    │ 2  → 4x4Inch              │ 14 → A6                   │ 26 → 20mm                 │
+    //    │ 3  → 5x5Inch              │ 15 → A7                   │ 27 → 22mm                 │
+    //    │ 4  → 10x10mm              │ 16 → A8                   │ 28 → 24mm                 │
+    //    │ 5  → Small                │ 17 → A9                   │ 29 → 26mm                 │
+    //    │ 6  → Medium               │ 18 → A10                  │ 30 → 28mm                 │
+    //    │ 7  → Large                │ 19 → 6mm                  │ 31 → 30mm                 │
+    //    │ 8  → Extra Large          │ 20 → 8mm                  │ 32 → 32mm                 │
+    //    │ 9  → A1                   │ 21 → 10mm                 │ 33 → 34mm                 │
+    //    │ 10 → A2                   │ 22 → 12mm                 │ 34 → 36mm                 │
+    //    │ 11 → A3                   │ 23 → 14mm                 │                           │
+    //    │ 12 → A4                   │ 24 → 16mm                 │ ... (Leave [] for None)   │
+    //    └───────────────────────────┴───────────────────────────┴───────────────────────────┘
     //
     // 4. PACKAGING UNIT TYPES & MULTIPLIERS (`packaging`)
     //    ┌───────────────────────────┬───────────────────────────┐
@@ -61,7 +96,7 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 201,
             'file_prefix' => 'noteit',
-            'color_ids' => [4, 5, 11], // Green (4), Red (5), Yellow (11)
+            'color_ids' => [11],  // Mixed (11)
             'size_ids' => [1, 2, 3],    // 3x5 Medium (1), 3x5 Large (2), 4x6 Small (3)
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0012],   // Piece
@@ -77,8 +112,8 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 202,
             'file_prefix' => 'ring',
-            'color_ids' => [1, 4, 2, 5, 3, 11], // Blue(1), Green(4), Black(2), Red(5), White(3), Yellow(11)
-            'size_ids' => [19, 20, 21, 22, 23, 24], // System IDs representing 6mm up to 16mm scales
+            'color_ids' => [1, 2, 3, 5, 6], // Red(1), Blue(2), Green(3), Black(5), White(6)
+            'size_ids' => [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34], // System IDs representing 6mm up to 36mm scales
             'packaging' => [
                 ['item_packaging_type_id' => 2, 'quantity' => 100, 'cbm' => 0.0085],  // Packet
                 ['item_packaging_type_id' => 3, 'quantity' => 1600, 'cbm' => 0.1450], // Carton
@@ -92,7 +127,7 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 203,
             'file_prefix' => 'bic',
-            'color_ids' => [1, 2, 5], // Blue (1), Black (2), Red (5)
+            'color_ids' => [2, 5, 1], // Blue (2), Black (5), Red (1)
             'size_ids' => [],         // No custom size variants
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0003],    // Piece
@@ -108,11 +143,11 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 201,
             'file_prefix' => '2025-1',
-            'color_ids' => [1, 2],
-            'size_ids' => [1],
+            'color_ids' => [5, 10], // Black (5), Browne (10)
+            'size_ids' => [13], // A5 (13)
             'packaging' => [
-                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0012],
-                ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1600],
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0012],   // Piece
+                ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1600], // Carton
             ],
         ],
         [
@@ -123,10 +158,10 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 202,
             'file_prefix' => '2025-ብልጭልጭ',
-            'color_ids' => [1, 2],
-            'size_ids' => [1],
+            'color_ids' => [5, 10], // Black (5), Browne (10)
+            'size_ids' => [13], // A5 (13)
             'packaging' => [
-                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0015],
+                ['item_packaging_type_id' => 5, 'quantity' => 1, 'cbm' => 0.0015],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.2000],
             ],
         ],
@@ -138,8 +173,8 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 203,
             'file_prefix' => '25k-1ፓሪስ',
-            'color_ids' => [2],
-            'size_ids' => [1],
+            'color_ids' => [5, 10], // Black (5), Browne (10)
+            'size_ids' => [13], // A5 (13)
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0008],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1100],
@@ -153,11 +188,56 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 204,
             'file_prefix' => '25k-5ጨርቅማስታወሻ',
-            'color_ids' => [2],
-            'size_ids' => [1],
+            'color_ids' => [5, 10], // Black (5), Browne (10)
+            'size_ids' => [13], // A5 (13)
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0009],
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1250],
+            ],
+        ],
+        [
+            'product_name' => 'A3 - Paper Laola',
+            'product_description' => 'Professional A3-sized Laola format binder for high-capacity document storage.',
+            'packaging_details' => 'Available in bundles of 200 and master cartons of 5 bundles.',
+            'item_category_id' => 56, // A3 Printer Paper
+            'status' => 'active',
+            'picsum_id' => 205,
+            'file_prefix' => 'a3-paperlaola',
+            'color_ids' => [6], // White (6)
+            'size_ids' => [11],    // A3 (11)
+            'packaging' => [
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0025],
+                ['item_packaging_type_id' => 3, 'quantity' => 80, 'cbm' => 0.2000],
+            ],
+        ],
+        [
+            'product_name' => 'A3 - Road map',
+            'product_description' => 'Specialized A3-sized road map ledger for logistics and navigation planning.',
+            'packaging_details' => 'Available in individual pieces and master cartons of 100.',
+            'item_category_id' => 45,
+            'status' => 'active',
+            'picsum_id' => 206,
+            'file_prefix' => 'a3-roadmap',
+            'color_ids' => [1, 3], // Blue (1), White (3)
+            'size_ids' => [11],    // A3 (11)
+            'packaging' => [
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0020],
+                ['item_packaging_type_id' => 3, 'quantity' => 100, 'cbm' => 0.2000],
+            ],
+        ],
+        [
+            'product_name' => 'A4 - Binding file ዉዱ',
+            'product_description' => 'Durable A4-sized binding file (ዉዱ) for secure archive and presentation.',
+            'packaging_details' => 'Available in individual pieces, boxes of 12, and master cartons of 120.',
+            'item_category_id' => 28,
+            'status' => 'active',
+            'picsum_id' => 207,
+            'file_prefix' => 'a4-binding-file-wudu',
+            'color_ids' => [2, 5], // Black (2), Red (5)
+            'size_ids' => [12],    // A4 (12)
+            'packaging' => [
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0015],
+                ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.1800],
             ],
         ]
     ];
@@ -172,7 +252,7 @@ class ItemSeeder extends Seeder
                 ->withPicsumId($data['picsum_id'])
                 ->create([
                     'product_name' => $data['product_name'],
-                    'file_prefix'         => $data['file_prefix'],
+                    'file_prefix' => $data['file_prefix'],
                     'product_description' => $data['product_description'],
                     'packaging_details' => $data['packaging_details'] ?? null,
                     'item_category_id' => $data['item_category_id'],
