@@ -1,9 +1,7 @@
 import {
-    SELLER_BRAND_DARK,
     SellerCard,
     SellerHeader,
     sellerHeaderButtonSx,
-    sellerImage,
     sellerPrice,
 } from "@/Components/Seller/sellerUi";
 
@@ -11,7 +9,6 @@ import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import QrCodeScannerRoundedIcon from "@mui/icons-material/QrCodeScannerRounded";
 import BarcodeIcon from "@mui/icons-material/QrCode2";
 
 import {
@@ -22,91 +19,35 @@ import {
     Stack,
     Typography,
     useTheme,
-    Avatar,
 } from "@mui/material";
 
 import React from "react";
 
-/* =========================
-   TYPES
-========================= */
-
-interface PackagingMatrixRow {
-    packaging_type_id: number;
-    unit_name: string;
-    multiplier: number;
-    price: number;
-    discount_price: number | null;
-    discount_ends_at: string | null;
-    image: string | null;
-}
-
-interface StoreVariant {
-    id: number;
-    pricing_matrix?: PackagingMatrixRow[] | null;
-}
-
-interface ItemVariant {
-    store_variants?: StoreVariant[];
-    storeVariants?: StoreVariant[];
-}
+/* ================= TYPES ================= */
 
 interface SellerItem {
     id: number;
     product_name: string;
     general_images?: string[] | string | null;
+    processed_images?: string[]; // ✅ FIX ADDED
     sold_count?: number | null;
     category?: {
         category_name?: string;
     } | null;
-    variants?: ItemVariant[];
 }
 
-interface SellerItemFilters {
-    search?: string;
-    cart_id?: number | null;
-}
-
-/* =========================
-   HELPERS
-========================= */
+/* ================= CONSTANTS ================= */
 
 const FALLBACK_IMAGE = "/images/defaults/no-image.png";
 
-function itemImage(item: SellerItem) {
-    return sellerImage(item.general_images ?? null);
-}
-
-function variantStorePrices(variant: ItemVariant) {
-    const storeVariants = variant.storeVariants ?? variant.store_variants ?? [];
-    const prices: number[] = [];
-
-    storeVariants.forEach((storeVariant) => {
-        const matrix = storeVariant.pricing_matrix ?? [];
-        matrix.forEach((row) => {
-            const finalPrice = row.discount_price ?? row.price;
-            if (finalPrice != null) prices.push(finalPrice);
-        });
-    });
-
-    return prices;
-}
-
-function itemPrice(item: SellerItem) {
-    const prices = (item.variants ?? []).flatMap(variantStorePrices);
-    return prices.length ? Math.min(...prices) : null;
-}
-
-/* =========================
-   COMPONENT
-========================= */
+/* ================= COMPONENT ================= */
 
 export default function Index({
     items = [],
     filters = {},
 }: {
     items?: SellerItem[];
-    filters?: SellerItemFilters;
+    filters?: { search?: string; cart_id?: number | null };
 }) {
     const { data, setData } = useForm({
         search: filters.search ?? "",
@@ -114,40 +55,26 @@ export default function Index({
 
     const theme = useTheme();
 
-    const [loadedImages, setLoadedImages] = React.useState<Record<number, boolean>>({});
+    const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
 
-    const submit = (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        router.get(
-            route("seller.items.index"),
-            {
-                search: data.search,
-                cart_id: filters.cart_id || undefined,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-            },
-        );
-    };
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
 
-    const cardStyle = {
-        bgcolor: "background.paper",
-        color: "text.primary",
-        border: "1px solid",
-        borderColor: "divider",
-        textDecoration: "none",
-        "& .MuiTypography-root": { color: "text.primary" },
+        console.log("🔍 Seller search submit:", data.search);
+
+        router.get(route("seller.items.index"), {
+            search: data.search,
+            cart_id: filters.cart_id || undefined,
+        });
     };
 
     return (
-        <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pb: 5 }}>
+        <Box sx={{ bgcolor: "background.default", minHeight: "100vh" }}>
             <Head title="Seller Items" />
 
             {/* ================= HEADER ================= */}
             <SellerHeader title="">
-                <Box component="form" onSubmit={submit} sx={{ mt: 1 }}>
+                <Box component="form" onSubmit={submit}>
                     <Stack direction="row" spacing={1}>
                         <Box
                             sx={{
@@ -158,7 +85,6 @@ export default function Index({
                                 borderRadius: 999,
                                 backgroundColor: "rgba(255,255,255,0.14)",
                                 border: "1px solid rgba(255,255,255,0.44)",
-                                backdropFilter: "blur(8px)",
                             }}
                         >
                             <SearchRoundedIcon sx={{ color: "#fff", mr: 1 }} />
@@ -166,14 +92,11 @@ export default function Index({
                                 fullWidth
                                 placeholder="Search items"
                                 value={data.search}
-                                onChange={(e) => setData("search", e.target.value)}
-                                sx={{
-                                    fontSize: 15,
-                                    color: "#fff",
-                                    "& input::placeholder": {
-                                        color: "rgba(255,255,255,0.9)",
-                                    },
+                                onChange={(e) => {
+                                    console.log("⌨️ typing:", e.target.value);
+                                    setData("search", e.target.value);
                                 }}
+                                sx={{ color: "#fff" }}
                             />
                         </Box>
 
@@ -181,7 +104,7 @@ export default function Index({
                             <SearchRoundedIcon />
                         </IconButton>
 
-                        {/* 🔥 QR → Barcode */}
+                        {/* BARCODE ICON */}
                         <IconButton sx={sellerHeaderButtonSx}>
                             <BarcodeIcon />
                         </IconButton>
@@ -198,150 +121,126 @@ export default function Index({
                         gap: 1.5,
                     }}
                 >
-                    {items.map((item) => (
-                        <SellerCard
-                            key={item.id}
-                            component={Link}
-                            href={route("seller.items.show", {
-                                item: item.id,
-                                cart_id: filters.cart_id || undefined,
-                            })}
-                            sx={{
-                                ...cardStyle,
-                                p: 0,
-                                overflow: "hidden",
-                            }}
-                        >
-                            {/* ================= IMAGE ================= */}
-                            <Box
+                    {items.map((item) => {
+                        const img =
+                            item.processed_images?.[0] ||
+                            item.general_images?.[0] ||
+                            FALLBACK_IMAGE;
+
+                        console.log("🖼️ ITEM IMAGE DEBUG:", {
+                            id: item.id,
+                            processed: item.processed_images,
+                            general: item.general_images,
+                            final: img,
+                        });
+
+                        return (
+                            <SellerCard
+                                key={item.id}
+                                component={Link}
+                                href={route("seller.items.show", item.id)}
                                 sx={{
-                                    height: 140,
-                                    position: "relative",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    backgroundColor:
-                                        theme.palette.mode === "dark"
-                                            ? "rgba(255,255,255,0.02)"
-                                            : "#f8fafc",
+                                    p: 0,
                                     overflow: "hidden",
                                 }}
                             >
-                                {/* Skeleton */}
-                                {!loadedImages[item.id] && (
-                                    <Box
-                                        sx={{
-                                            position: "absolute",
-                                            inset: 0,
-                                            background:
-                                                "linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.05) 63%)",
-                                            backgroundSize: "400% 100%",
-                                            animation: "shimmer 1.2s infinite",
-                                        }}
-                                    />
-                                )}
-
+                                {/* ================= IMAGE ================= */}
                                 <Box
-                                    component="img"
-                                    src={itemImage(item) || FALLBACK_IMAGE}
-                                    alt={item.product_name}
-                                    onLoad={() =>
-                                        setLoadedImages((prev) => ({
-                                            ...prev,
-                                            [item.id]: true,
-                                        }))
-                                    }
-                                    onError={(e) => {
-                                        (e.currentTarget as HTMLImageElement).src =
-                                            FALLBACK_IMAGE;
-                                        setLoadedImages((prev) => ({
-                                            ...prev,
-                                            [item.id]: true,
-                                        }));
-                                    }}
                                     sx={{
-                                        width: "100%",
-                                        height: "100%",
-                                        objectFit: "contain",
-                                        opacity: loadedImages[item.id] ? 1 : 0,
-                                        transition: "opacity 0.25s ease-in-out",
-                                    }}
-                                />
-                            </Box>
-
-                            {/* ================= CONTENT ================= */}
-                            <Box sx={{ p: 1.5 }}>
-                                <Stack
-                                    direction="row"
-                                    justifyContent="space-between"
-                                    alignItems="center"
-                                >
-                                    <Typography sx={{ fontWeight: 800 }} noWrap>
-                                        {item.product_name}
-                                    </Typography>
-
-                                    <Chip
-                                        label="NEW"
-                                        size="small"
-                                        sx={{
-                                            bgcolor: "primary.main",
-                                            color:
-                                                theme.palette.mode === "dark"
-                                                    ? "#000"
-                                                    : "#fff",
-                                            fontWeight: 900,
-                                        }}
-                                    />
-                                </Stack>
-
-                                <Typography
-                                    sx={{
-                                        mt: 1,
-                                        fontWeight: 900,
-                                        color: "primary.main",
+                                        height: 140,
+                                        position: "relative",
+                                        background:
+                                            theme.palette.mode === "dark"
+                                                ? "rgba(255,255,255,0.02)"
+                                                : "#f8fafc",
                                     }}
                                 >
-                                    {itemPrice(item) !== null
-                                        ? sellerPrice(itemPrice(item))
-                                        : "N/A"}
-                                </Typography>
-
-                                <Stack
-                                    direction="row"
-                                    justifyContent="space-between"
-                                    sx={{ mt: 1 }}
-                                >
-                                    <Typography
-                                        variant="caption"
-                                        sx={{
-                                            color: "text.secondary",
-                                            fontWeight: 600,
-                                        }}
-                                    >
-                                        {item.sold_count ?? 0} sold
-                                    </Typography>
-
-                                    {item.category?.category_name && (
-                                        <Chip
-                                            label={item.category.category_name}
-                                            size="small"
-                                            variant="outlined"
+                                    {/* shimmer */}
+                                    {!loaded[item.id] && (
+                                        <Box
                                             sx={{
-                                                color: "text.secondary",
-                                                borderColor: "divider",
-                                                height: 20,
-                                                fontSize: "0.65rem",
+                                                position: "absolute",
+                                                inset: 0,
+                                                background:
+                                                    "linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.05) 63%)",
+                                                backgroundSize: "400% 100%",
+                                                animation: "shimmer 1.2s infinite",
                                             }}
                                         />
                                     )}
-                                </Stack>
-                            </Box>
-                        </SellerCard>
-                    ))}
+
+                                    <img
+                                        src={img}
+                                        alt={item.product_name}
+                                        onLoad={() => {
+                                            console.log("✅ image loaded:", item.id);
+                                            setLoaded((p) => ({
+                                                ...p,
+                                                [item.id]: true,
+                                            }));
+                                        }}
+                                        onError={(e) => {
+                                            console.warn("⚠️ image failed:", img);
+
+                                            const el = e.currentTarget as HTMLImageElement;
+                                            el.src = FALLBACK_IMAGE;
+
+                                            setLoaded((p) => ({
+                                                ...p,
+                                                [item.id]: true,
+                                            }));
+                                        }}
+                                        style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            objectFit: "contain",
+                                            opacity: loaded[item.id] ? 1 : 0,
+                                            transition: "opacity 0.3s ease",
+                                        }}
+                                    />
+                                </Box>
+
+                                {/* ================= CONTENT ================= */}
+                                <Box sx={{ p: 1.5 }}>
+                                    <Typography fontWeight={800} noWrap>
+                                        {item.product_name}
+                                    </Typography>
+
+                                    <Typography
+                                        sx={{
+                                            mt: 1,
+                                            fontWeight: 900,
+                                            color: "primary.main",
+                                        }}
+                                    >
+                                        {sellerPrice?.(0) ?? "N/A"}
+                                    </Typography>
+
+                                    <Stack
+                                        direction="row"
+                                        justifyContent="space-between"
+                                        sx={{ mt: 1 }}
+                                    >
+                                        <Typography variant="caption">
+                                            {item.sold_count ?? 0} sold
+                                        </Typography>
+
+                                        {item.category?.category_name && (
+                                            <Chip
+                                                label={item.category.category_name}
+                                                size="small"
+                                                variant="outlined"
+                                            />
+                                        )}
+                                    </Stack>
+                                </Box>
+                            </SellerCard>
+                        );
+                    })}
                 </Box>
             </Box>
 
-            {/* ================= SHIMMER KEYFRAME ================= */}
+            {/* ================= SHIMMER ================= */}
             <style>{`
                 @keyframes shimmer {
                     0% { background-position: 100% 0; }
