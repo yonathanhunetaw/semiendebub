@@ -41,10 +41,7 @@ interface SellerItem {
     // ✅ ADD THIS: Define the shape of your variants
     variants: Array<{
         storeVariants: Array<{
-            pricing_matrix: {
-                price: number | string;
-                discount_price?: number | string | null;
-            };
+            pricing_matrix: any;
         }>;
     }>;
 
@@ -143,9 +140,25 @@ export default function Index({
                     }}
                 >
                     {items.map((item) => {
+                        console.log("DEBUG ITEM:", JSON.stringify(item, null, 2));
                         console.log("ITEM DATA:", item); // Check console for store_price here
                         const firstVariant = item.variants?.[0];
-                        const price = firstVariant?.storeVariants?.[0]?.pricing_matrix?.price;
+                        // Check multiple potential locations for the price
+                        // 1. Get the matrix from the first variant
+                        const sv = item.variants?.[0]?.storeVariants?.[0];
+                        let matrix = sv?.pricing_matrix;
+
+                        // 2. If it's a string, parse it
+                        if (typeof matrix === 'string') {
+                            try { matrix = JSON.parse(matrix); } catch { matrix = null; }
+                        }
+
+                        // 3. Extract the price
+                        // Handles: [ {price: 10} ] OR {price: 10}
+                        const price = Array.isArray(matrix)
+                            ? (matrix[0]?.price ?? matrix[0]?.["price"])
+                            : (matrix?.price ?? matrix?.["price"]);
+
                         const images =
                             item.processed_images?.length
                                 ? item.processed_images
