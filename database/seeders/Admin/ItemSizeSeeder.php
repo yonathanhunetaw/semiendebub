@@ -55,9 +55,9 @@ class ItemSizeSeeder extends Seeder
             ['id' => 34, 'name' => '36mm'],
         ];
 
-        foreach ($sizes as $sizeName) {
+        foreach ($sizes as $size) {  // Changed from $sizeName to $size
             ItemSize::firstOrCreate([
-                'name' => $sizeName,
+                'name' => $size['name'],  // Access the 'name' key from the array
             ]);
         }
     }
