@@ -58,7 +58,7 @@ class StoreController extends Controller
             'storeVariants.itemVariant.item.category',
             'storeVariants.itemVariant.itemColor',
             'storeVariants.itemVariant.itemSize',
-            'storeVariants.itemVariant.itemPackagingType',
+            'storeVariants.itemVariant.PackagingType',
             'storeVariants.stocks',
             'storeVariants.customerPrices.customer',
             'storeVariants.sellerPrices.seller',
@@ -91,7 +91,7 @@ class StoreController extends Controller
                         'label' => implode(' / ', array_filter([
                             $sv->itemVariant->itemColor?->name,
                             $sv->itemVariant->itemSize?->name,
-                            $sv->itemVariant->itemPackagingType?->name,
+                            $sv->itemVariant->packagingType?->name,
                         ])) ?: $sv->itemVariant->sku,
 
                         // Base store-variant fields
