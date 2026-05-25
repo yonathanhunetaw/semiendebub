@@ -15,6 +15,7 @@ return new class extends Migration {
 
             // ─── CRITICAL: Ensure this column is physically built by MySQL ───────
             $table->json('images')->nullable();
+            $table->foreignId('item_packaging_type_id')->nullable()->constrained()->onDelete('cascade');
 
             $table->string('sku')->nullable()->unique();
             $table->string('barcode')->nullable();
