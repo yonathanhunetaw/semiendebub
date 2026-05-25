@@ -21,11 +21,12 @@ class StoreVariantSeeder extends Seeder
 
         foreach ($stores as $store) {
             // 1. Get all variants linked to items available in this store
+            // In StoreVariantSeeder.php
             $variants = ItemVariant::whereHas('item.stores', function ($q) use ($store) {
                 $q->where('store_id', $store->id);
             })->with(['item.packagingTypes', 'itemPackagingType'])->get();
-
-            if ($variants->isEmpty()) continue;
+            if ($variants->isEmpty())
+                continue;
 
             $sellers = User::where('store_id', $store->id)->where('role', 'seller')->get();
             $customers = Customer::where('store_id', $store->id)->get();
@@ -35,31 +36,33 @@ class StoreVariantSeeder extends Seeder
                 $packType = $variant->itemPackagingType;
                 $multiplier = (int) ($packType->pivot->quantity ?? 1);
                 $baseItemPrice = $this->calculateBaseProductRate($variant);
-                
+
                 $price = round($baseItemPrice * $multiplier * (rand(95, 105) / 100), 2);
-                
+
                 // Tiered discount logic
-                if ($multiplier >= 120) $price *= 0.80;
-                elseif ($multiplier >= 10) $price *= 0.90;
+                if ($multiplier >= 120)
+                    $price *= 0.80;
+                elseif ($multiplier >= 10)
+                    $price *= 0.90;
                 $price = round($price, 2);
 
                 // 3. Save to StoreVariant (Use columns, not JSON matrix)
                 $storeVariant = StoreVariant::updateOrCreate([
-                    'store_id'        => $store->id,
+                    'store_id' => $store->id,
                     'item_variant_id' => $variant->id,
                 ], [
-                    'price'           => $price,
-                    'active'          => true,
-                    'manual_status'   => 'auto',
-                    'updated_at'      => $now,
+                    'price' => $price,
+                    'active' => true,
+                    'manual_status' => 'auto',
+                    'updated_at' => $now,
                 ]);
 
                 // 4. Update Stock
                 ItemStock::updateOrCreate(
                     [
-                        'item_variant_id' => $variant->id, 
-                        'location_id'     => $store->id,
-                        'location_type'   => Store::class,
+                        'item_variant_id' => $variant->id,
+                        'location_id' => $store->id,
+                        'location_type' => Store::class,
                     ],
                     ['quantity' => rand(5, 50), 'min_stock_level' => 5]
                 );
@@ -85,7 +88,7 @@ class StoreVariantSeeder extends Seeder
     private function calculateBaseProductRate(ItemVariant $variant): float
     {
         $name = $variant->item?->product_name ?? '';
-        return match(true) {
+        return match (true) {
             str_contains($name, 'Bic') => 17.00,
             str_contains($name, 'Ring') => 15.00,
             default => 10.00,

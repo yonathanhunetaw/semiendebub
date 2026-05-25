@@ -26,6 +26,7 @@ class ItemVariant extends Model
         'item_color_id',
         'item_size_id',
         'owner_id',
+        'item_packaging_type_id',
         'barcode',
         'images',  // Stores raw MinIO keys, e.g. ["uploads/variants/SKU/front.jpg"]
         'status',
@@ -186,5 +187,10 @@ class ItemVariant extends Model
         return $this->belongsToMany(ItemPackagingType::class, 'item_variant_packaging_quantity')
             ->withPivot('quantity', 'cbm') // Only these two!
             ->withTimestamps();
+    }
+
+    public function itemPackagingType()
+    {
+        return $this->belongsTo(ItemPackagingType::class, 'item_packaging_type_id');
     }
 }
