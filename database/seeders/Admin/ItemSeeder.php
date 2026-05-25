@@ -264,6 +264,13 @@ class ItemSeeder extends Seeder
             $item->sizes()->sync($data['size_ids']);
             $item->packagingTypes()->sync($this->buildPackagingSync($data['packaging']));
 
+            // ✅ ADD THIS
+            $images = $this->seedDeterministicVariantImages($item, $data);
+
+            $item->update([
+                'general_images' => $images
+            ]);
+
             $generator->sync($item);
 
             $this->populatePackagingQuantitiesAndCbm($item, $data);
