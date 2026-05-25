@@ -4,24 +4,28 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
-    
-    // Use the actual domain that resolves to your Mac
-    // Since ping duka1.local works from your Mac, use that
-    const appDomain = env.APP_SYSTEM_DOMAIN || 'duka1.local';
-    const devServerPort = 5177;
-    
+
+    const appDomain = env.APP_DOMAIN || 'duka2.pi';
+    const devPort = 5177;
+
     return {
+        cacheDir: '/tmp/vite-cache',
+
         server: {
-            host: '0.0.0.0',  // Listen on all interfaces
-            port: devServerPort,
+            host: true,
+            port: devPort,
             strictPort: true,
+
             cors: true,
+
+            origin: `http://${appDomain}:${devPort}`,
+
             hmr: {
-                host: appDomain,  // Use duka1.local since it resolves to your Mac
+                host: appDomain,
                 protocol: 'ws',
-                port: devServerPort,
-                clientPort: devServerPort,
+                clientPort: devPort,
             },
+
             watch: {
                 usePolling: true,
             },

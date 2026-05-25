@@ -331,7 +331,7 @@ else
     
     # 🎯 FIX: Remove all artifacts that could make Laravel think it's in production mode
     echo "Sanitizing Vite environment..."
-    exec_in_app rm -rf public/build node_modules/.vite public/hot
+    exec_in_app sh -lc 'rm -rf node_modules/.vite /tmp/vite-cache'
     
     # Optional: Give the Pi's filesystem a split-second to commit the delete
     sleep 1 
