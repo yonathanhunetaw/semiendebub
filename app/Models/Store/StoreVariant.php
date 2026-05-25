@@ -21,7 +21,7 @@ class StoreVariant extends Model
         'store_id',
         'stock',
         // 🎯 UPDATED: Replaced individual flat price fields with your new JSON matrix column
-        'pricing_matrix', 
+        'pricing_matrix',
         'manual_status',
         'forced_status',
         'status',
@@ -92,5 +92,11 @@ class StoreVariant extends Model
     public function getStatusAttribute()
     {
         return $this->active ? 'active' : 'inactive';
+    }
+    // In StoreVariant.php (Model)
+    public function getIsDiscountedAttribute()
+    {
+        $matrix = $this->pricing_matrix;
+        return isset($matrix['discount_price']) && $matrix['discount_price'] < $matrix['price'];
     }
 }

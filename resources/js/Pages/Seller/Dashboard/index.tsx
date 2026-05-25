@@ -144,6 +144,10 @@ export default function Index({
                         const variant = item.variants?.[0];
                         const storeVariant = variant?.storeVariants?.[0];
                         let matrix = storeVariant?.pricing_matrix;
+                        const sv = item.variants?.[0]?.storeVariants?.[0];
+                        const price = item.store_price
+                            || (sv?.pricing_matrix?.price)
+                            || (Array.isArray(sv?.pricing_matrix) ? sv?.pricing_matrix[0]?.price : null);
 
                         // 2. Normalize: If it's a JSON string, parse it
                         if (typeof matrix === 'string') {
@@ -152,10 +156,7 @@ export default function Index({
 
                         // 3. Extract the price
                         // Check: 1. Item-level price, 2. Flat object price, 3. Array-based price
-                        const price = item.store_price
-                            || (matrix?.price)
-                            || (Array.isArray(matrix) ? matrix[0]?.price : null)
-                            || (storeVariant?.pricing_matrix?.price); // Direct access if matrix is already an object
+                        
 
                         // 4. Debug to see what's happening
                         console.log("EXTRACTED PRICE DEBUG:", {
@@ -253,10 +254,33 @@ export default function Index({
                                         {item.product_name}
                                     </Typography>
 
-                                    {/* This displays the price extracted from the variants */}
-                                    <Typography sx={{ mt: 1, fontWeight: 900, color: "primary.main" }}>
-                                        {price ? `Ksh ${price}` : "Price N/A"}
-                                    </Typography>
+                                    {/* ================= PRICE ================= */}
+                                    <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <Typography
+                                            fontWeight={900}
+                                            sx={{ color: "primary.main", fontSize: "1.1rem" }}
+                                        >
+                                            {/* Show discount price if it exists, otherwise base price */}
+                                            {sv?.pricing_matrix?.discount_price
+                                                ? `${sv.pricing_matrix.discount_price} Birr`
+                                                : (price ? `${price} Birr` : "Price N/A")
+                                            }
+                                        </Typography>
+
+                                        {/* Show crossed-out base price ONLY if there is a discount */}
+                                        {sv?.pricing_matrix?.discount_price && (
+                                            <Typography
+                                                variant="caption"
+                                                sx={{
+                                                    textDecoration: "line-through",
+                                                    color: "text.secondary",
+                                                    ml: 1
+                                                }}
+                                            >
+                                                {price} Birr
+                                            </Typography>
+                                        )}
+                                    </Box>
 
                                     <Stack
                                         direction="row"
