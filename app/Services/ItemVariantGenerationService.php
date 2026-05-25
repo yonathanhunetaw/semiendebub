@@ -81,83 +81,52 @@ class ItemVariantGenerationService
             $storeIds = Store::query()->pluck('id');
         }
 
-        foreach ($storeIds as $storeId) {
-            $storeMatrix = [];
+        // Get the specific packaging type for this variant
+        $packType = $variant->itemPackagingType;
+        if (!$packType)
+            return;
 
-            foreach ($item->packagingTypes as $index => $packType) {
-                $multiplier = (int) ($packType->pivot->quantity ?? 1);
-                $typeName = strtolower($packType->name);
+        $multiplier = (int) ($packType->pivot->quantity ?? 1);
+        $typeName = strtolower($packType->name);
 
-                // 1. Define base price logic
-                $unitPrice = 10.00; // Default fallback
-
-                if (str_contains($item->product_name, 'Bic')) {
-                    // Custom Bic logic:
-                    // Piece = 17, Packet = 16.7 (per piece), Carton = 16.6 (per piece)
-                    $unitPrice = match ($typeName) {
-                        'packet' => 16.70,
-                        'cartoon' => 16.60,
-                        default => 17.00, // 'piece' or fallback
-                    };
-                } elseif (str_contains($item->product_name, 'Ring')) {
-                    $unitPrice = 15.00;
-                }
-
-                // 2. Calculate total price (Unit Price * Quantity in this pack)
-                $totalPrice = $unitPrice * $multiplier;
-
-                $packageMinioKey = $uploadedImages[$index] ?? ($uploadedImages[0] ?? 'uploads/items/placeholder.jpg');
-
-                $storeMatrix[] = [
-                    'packaging_type_id' => $packType->id,
-                    'unit_name' => $packType->name,
-                    'multiplier' => $multiplier,
-                    'price' => round($totalPrice, 2),
-                    'discount_price' => null,
-                    'discount_ends_at' => null,
-                    'image' => $packageMinioKey,
-                ];
-            }
-
-            $storeVariant = StoreVariant::updateOrCreate(
-                [
-                    'store_id' => $storeId,
-                    'item_variant_id' => $variant->id,
-                ],
-                [
-                    'active' => $variant->status === 'active',
-                    'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
-                    'forced_status' => $variant->status === 'active' ? null : 'inactive',
-                    'pricing_matrix' => $storeMatrix,
-                ]
-            );
-
-            // ─── 2. SELLER / AGENT MATRIX TIER ─────────────────────────────
-            $sellerMatrix = [];
-            foreach ($storeMatrix as $row) {
-                $sellerMatrix[] = array_merge($row, [
-                    'price' => round($row['price'] * 0.85, 2) // Additional 15% wholesale agent markdown
-                ]);
-            }
-
-            DB::table('store_variants_seller_prices')->updateOrInsert(
-                ['store_variant_id' => $storeVariant->id, 'seller_id' => 1],
-                ['pricing_matrix' => json_encode($sellerMatrix), 'active' => true, 'updated_at' => now()]
-            );
-
-            // ─── 3. VIP CUSTOMER CONTRACT MATRIX TIER ──────────────────────
-            $customerMatrix = [];
-            foreach ($storeMatrix as $row) {
-                $customerMatrix[] = array_merge($row, [
-                    'price' => round($row['price'] * 0.95, 2) // 5% Standard loyalty contract markdown
-                ]);
-            }
-
-            DB::table('store_variants_customer_prices')->updateOrInsert(
-                ['store_variant_id' => $storeVariant->id, 'customer_id' => 1],
-                ['pricing_matrix' => json_encode($customerMatrix), 'active' => true, 'updated_at' => now()]
-            );
+        // 1. Define base price logic
+        $unitPrice = 10.00;
+        if (str_contains($item->product_name, 'Bic')) {
+            $unitPrice = match ($typeName) {
+                'packet' => 16.70,
+                'cartoon' => 16.60,
+                default => 17.00,
+            };
+        } elseif (str_contains($item->product_name, 'Ring')) {
+            $unitPrice = 15.00;
         }
+
+        $totalPrice = $unitPrice * $multiplier;
+
+        // 2. We are no longer using a Matrix array; we are saving the specific data
+        // Just keep the logic for price calculation, then update the record
+        $storeVariant = StoreVariant::updateOrCreate(
+            [
+                'store_id' => $storeIds->first(), // Or iterate if you need multiple
+                'item_variant_id' => $variant->id,
+            ],
+            [
+                'active' => $variant->status === 'active',
+                'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
+                'price' => round($totalPrice, 2), // Save the specific price here
+            ]
+        );
+
+        // 3. Update Seller/Customer Pricing using the new column structure
+        DB::table('store_variants_seller_prices')->updateOrInsert(
+            ['store_variant_id' => $storeVariant->id, 'seller_id' => 1],
+            ['price' => round($totalPrice * 0.85, 2), 'active' => true, 'updated_at' => now()]
+        );
+
+        DB::table('store_variants_customer_prices')->updateOrInsert(
+            ['store_variant_id' => $storeVariant->id, 'customer_id' => 1],
+            ['price' => round($totalPrice * 0.95, 2), 'active' => true, 'updated_at' => now()]
+        );
     }
 
     private function variantKey(?int $colorId, ?int $sizeId): string

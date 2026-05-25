@@ -32,7 +32,7 @@ class StoreVariantSeeder extends Seeder
             $customers = Customer::where('store_id', $store->id)->get();
 
             foreach ($variants as $variant) {
-                // 2. Calculate Base Price for THIS specific variant (which IS a packaging type)
+                // 2. Calculate Base Price for THIS specific variant
                 $packType = $variant->itemPackagingType;
                 $multiplier = (int) ($packType->pivot->quantity ?? 1);
                 $baseItemPrice = $this->calculateBaseProductRate($variant);
@@ -46,17 +46,27 @@ class StoreVariantSeeder extends Seeder
                     $price *= 0.90;
                 $price = round($price, 2);
 
-                // 3. Save to StoreVariant (Use columns, not JSON matrix)
+                // ─── ADD THESE LINES TO DEFINE THE VARIABLES ───
+                $hasDiscount = (bool) rand(0, 1);
+                $discountPrice = $hasDiscount ? round($price * (rand(90, 99) / 100), 2) : null;
+                $discountEnds = $hasDiscount ? $now->copy()->addDays(rand(1, 10))->toDateTimeString() : null;
+                // ───────────────────────────────────────────────
+
+                // 3. Save to StoreVariant
                 $storeVariant = StoreVariant::updateOrCreate([
                     'store_id' => $store->id,
                     'item_variant_id' => $variant->id,
                 ], [
-                    'price' => $price,
+                    'pricing_matrix' => [
+                        'price' => $price,
+                        'discount_price' => $discountPrice, // Now defined!
+                        'discount_ends_at' => $discountEnds, // Now defined!
+                    ],
                     'active' => true,
                     'manual_status' => 'auto',
-                    'updated_at' => $now,
                 ]);
 
+                // ... (rest of your code)
                 // 4. Update Stock
                 ItemStock::updateOrCreate(
                     [
