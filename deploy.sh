@@ -472,21 +472,26 @@ MINIO_BUCKET=$(env_value AWS_BUCKET)
 
 # 3. Setup MinIO Client (mc) inside the running minio container
 compose exec -T minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS"
-compose exec -T minio mc anonymous set download local/"$MINIO_BUCKET"
 
+# Ensure the app bucket exists
 if [ -n "$MINIO_BUCKET" ]; then
     echo "Ensuring '$MINIO_BUCKET' bucket exists and is public..."
     compose exec -T minio mc mb local/"$MINIO_BUCKET" --ignore-existing
-    compose exec -T minio mc anonymous set public local/"$MINIO_BUCKET"
+    compose exec -T minio mc anonymous set download local/"$MINIO_BUCKET"
 fi
 
-echo "✅ MinIO configuration complete."
+# Ensure the 'img' bucket exists
+echo "Ensuring 'img' bucket exists and is public..."
+compose exec -T minio mc mb local/img --ignore-existing
+compose exec -T minio mc anonymous set download local/img
 
-
-echo "✅ MinIO bucket configuration complete."
+echo "✅ MinIO buckets are configured."
 
 # 4. Final Laravel Cleanup
 exec_in_app php artisan config:clear
-echo "--- Deployment complete---"
-# echo "--- Deployment complete. Showing Vite logs (Ctrl+C to stop following) ---"
-# exec_in_app tail -f /tmp/vite.log
+
+echo "--- Deployment complete ---"
+
+# Use this to watch the app startup
+echo "--- Following application logs (Ctrl+C to stop) ---"
+docker logs -f duka_app
