@@ -140,25 +140,29 @@ export default function Index({
                     }}
                 >
                     {items.map((item) => {
-                        console.log("DEBUG ITEM:", JSON.stringify(item, null, 2));
-                        console.log("ITEM DATA:", item); // Check console for store_price here
-                        const firstVariant = item.variants?.[0];
-                        // Check multiple potential locations for the price
-                        // 1. Get the matrix from the first variant
-                        const sv = item.variants?.[0]?.storeVariants?.[0];
-                        let matrix = sv?.pricing_matrix;
+                        // 1. Traverse safely through the structure
+                        const variant = item.variants?.[0];
+                        const storeVariant = variant?.storeVariants?.[0];
+                        let matrix = storeVariant?.pricing_matrix;
 
-                        // 2. If it's a string, parse it
+                        // 2. Normalize: If it's a JSON string, parse it
                         if (typeof matrix === 'string') {
                             try { matrix = JSON.parse(matrix); } catch { matrix = null; }
                         }
 
                         // 3. Extract the price
-                        // Handles: [ {price: 10} ] OR {price: 10}
-                        const price = Array.isArray(matrix)
-                            ? (matrix[0]?.price ?? matrix[0]?.["price"])
-                            : (matrix?.price ?? matrix?.["price"]);
+                        // Check: 1. Item-level price, 2. Flat object price, 3. Array-based price
+                        const price = item.store_price
+                            || (matrix?.price)
+                            || (Array.isArray(matrix) ? matrix[0]?.price : null)
+                            || (storeVariant?.pricing_matrix?.price); // Direct access if matrix is already an object
 
+                        // 4. Debug to see what's happening
+                        console.log("EXTRACTED PRICE DEBUG:", {
+                            itemId: item.id,
+                            matrix: matrix,
+                            foundPrice: price
+                        });
                         const images =
                             item.processed_images?.length
                                 ? item.processed_images
