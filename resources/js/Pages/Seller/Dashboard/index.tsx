@@ -26,18 +26,31 @@ import React from "react";
 
 /* ================= TYPES ================= */
 
+/* ================= TYPES ================= */
+
 interface SellerItem {
     id: number;
     product_name: string;
     general_images?: string[] | string | null;
-
-    // ✅ FIX: backend may or may not send this → optional safe type
     processed_images?: string[];
-
     sold_count?: number | null;
     category?: {
         category_name?: string;
     } | null;
+
+    // ✅ ADD THIS: Define the shape of your variants
+    variants: Array<{
+        storeVariants: Array<{
+            pricing_matrix: {
+                price: number | string;
+                discount_price?: number | string | null;
+            };
+        }>;
+    }>;
+
+    store_price?: number | string;
+    final_price?: number | string | null;
+    store_stock?: number;
 }
 
 interface SellerItemFilters {
@@ -130,14 +143,17 @@ export default function Index({
                     }}
                 >
                     {items.map((item) => {
+                        console.log("ITEM DATA:", item); // Check console for store_price here
+                        const firstVariant = item.variants?.[0];
+                        const price = firstVariant?.storeVariants?.[0]?.pricing_matrix?.price;
                         const images =
                             item.processed_images?.length
                                 ? item.processed_images
                                 : Array.isArray(item.general_images)
-                                ? item.general_images
-                                : typeof item.general_images === "string"
-                                ? [item.general_images]
-                                : [];
+                                    ? item.general_images
+                                    : typeof item.general_images === "string"
+                                        ? [item.general_images]
+                                        : [];
 
                         const img = images?.[0] || FALLBACK_IMAGE;
 
@@ -213,20 +229,16 @@ export default function Index({
                                     />
                                 </Box>
 
+
                                 {/* ================= CONTENT ================= */}
                                 <Box sx={{ p: 1.5 }}>
                                     <Typography fontWeight={800} noWrap>
                                         {item.product_name}
                                     </Typography>
 
-                                    <Typography
-                                        sx={{
-                                            mt: 1,
-                                            fontWeight: 900,
-                                            color: "primary.main",
-                                        }}
-                                    >
-                                        {sellerPrice(0)}
+                                    {/* This displays the price extracted from the variants */}
+                                    <Typography sx={{ mt: 1, fontWeight: 900, color: "primary.main" }}>
+                                        {price ? `Ksh ${price}` : "Price N/A"}
                                     </Typography>
 
                                     <Stack

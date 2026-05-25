@@ -29,8 +29,8 @@ class DashboardController extends Controller
         $storeId = $store->id;
         Log::info('Seller Store ID: ' . $storeId);
 
-        $sellerId = $request->input('seller_id');      
-        $customerId = $request->input('customer_id');  
+        $sellerId = $request->input('seller_id');
+        $customerId = $request->input('customer_id');
 
         // 1️⃣ Load items with updated database relationship configurations
         $items = Item::with([
@@ -43,7 +43,7 @@ class DashboardController extends Controller
             'variants.storeVariants.sellerPrices',
             'variants.storeVariants.customerPrices',
         ])
-            ->where('status', 'active') 
+            ->where('status', 'active')
             ->whereHas('variants.storeVariants', function ($q) use ($storeId) {
                 $q->where('store_id', $storeId);
             })
@@ -56,19 +56,25 @@ class DashboardController extends Controller
 
         $stocks = ItemStock::where('location_id', $storeId)
             ->where('location_type', get_class($store))
-            ->whereIn('item_variant_id', $storeVariantIds) 
+            ->whereIn('item_variant_id', $storeVariantIds)
             ->get()
-            ->keyBy('item_variant_id'); 
+            ->keyBy('item_variant_id');
 
         // 3️⃣ Process each product unit line using structural matrix layers
         foreach ($items as $item) {
+            // ADD THIS: Find the minimum price among all variants for this item
+            // We map the variant prices and take the min()
+            $item->store_price = $item->variants
+                ->map(fn($v) => $v->storeVariants->where('store_id', $storeId)->first()?->pricing_matrix['price'] ?? 0)
+                ->filter()
+                ->min();
             foreach ($item->variants as $variant) {
                 $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
 
                 if ($storeVariant) {
                     $variant->store_stock = $stocks[$storeVariant->id]->quantity ?? 0;
                     $variant->store_variant_id = $storeVariant->id;
-                    
+
                     // 🎯 FIXED: Pulling from JSON pricing matrix fallback arrays instead of dead columns
                     $matrix = $storeVariant->pricing_matrix ?? [];
                     $baseRow = $matrix[0] ?? null;
@@ -76,7 +82,7 @@ class DashboardController extends Controller
                     $variant->store_price = $baseRow['price'] ?? 0.00;
                     $variant->store_discount_price = $baseRow['discount_price'] ?? null;
                     $variant->discount_ends_at = $baseRow['discount_ends_at'] ?? null;
-                    
+
                     $variant->manual_status = $storeVariant->manual_status ?? 'auto';
                     $variant->forced_status = $storeVariant->forced_status;
                     $variant->status = $storeVariant->computed_status ?? ($storeVariant->active ? 'active' : 'inactive');
