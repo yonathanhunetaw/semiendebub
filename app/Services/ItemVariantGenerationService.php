@@ -12,52 +12,21 @@ class ItemVariantGenerationService
 {
     public function sync(Item $item, array $uploadedImages = []): void
     {
-        $item->load([
-            'colors',
-            'sizes',
-            'packagingTypes',
-            'stores',
-            'variants' => fn($query) => $query->withTrashed(),
-        ]);
+        $item->load(['colors', 'sizes', 'packagingTypes', 'stores']);
 
-        $colorIds = $item->colors->pluck('id')->all();
-        $sizeIds = $item->sizes->pluck('id')->all();
-
-        // Fallbacks for items without distinct attributes to keep the matrix intact
-        if (empty($colorIds)) {
-            $colorIds = [null];
-        }
-
-        if (empty($sizeIds)) {
-            $sizeIds = [null];
-        }
+        // Get IDs, defaulting to [null] if the collection is empty
+        $colorIds = $item->colors->isNotEmpty() ? $item->colors->pluck('id')->all() : [null];
+        $sizeIds = $item->sizes->isNotEmpty() ? $item->sizes->pluck('id')->all() : [null];
 
         $validKeys = [];
+        $variantIndex = 1; // Counter for image mapping
 
-        \Illuminate\Support\Facades\Log::info('Variant Generation Stats:', [
-            'colors' => $item->colors->pluck('id')->toArray(),
-            'sizes' => $item->sizes->pluck('id')->toArray(),
-            'count_colors' => $item->colors->count(),
-            'count_sizes' => $item->sizes->count()
-        ]);
-        // ─── 🎯 TWO-TIER PHYSICAL COMBINATION MATRIX LOOP (Color x Size) ─────
-        // ─── 🎯 TWO-TIER PHYSICAL COMBINATION MATRIX LOOP (Color x Size) ─────
-// Use 'as $cIdx => $colorId' to get the numeric position of the color
-        foreach ($colorIds as $cIdx => $colorId) {
-            // Use 'as $sIdx => $sizeId' to get the numeric position of the size
-            foreach ($sizeIds as $sIdx => $sizeId) {
-
-                // 1. Calculate the variant index (1 to 9)
-                $variantNum = ($cIdx * count($sizeIds)) + $sIdx + 1;
-
-                // 2. Build the specific image array for this variant
-                $variantSpecificImages = [];
-                for ($i = 1; $i <= 5; $i++) {
-                    $variantSpecificImages[] = "uploads/items/{$item->id}/{$item->file_prefix}_v{$variantNum}_{$i}.jpg";
-                }
+        foreach ($colorIds as $colorId) {
+            foreach ($sizeIds as $sizeId) {
 
                 $validKeys[] = $this->variantKey($colorId, $sizeId);
 
+                // 1. Create or Restore Variant
                 $variant = ItemVariant::withTrashed()->firstOrNew([
                     'item_id' => $item->id,
                     'item_color_id' => $colorId,
@@ -68,32 +37,28 @@ class ItemVariantGenerationService
                     $variant->restore();
                 }
 
-                // SKU Generation
-                if (empty($variant->sku)) {
-                    $variant->sku = sprintf('DUKA-I%d-C%s-S%s', $item->id, $colorId ?? '0', $sizeId ?? '0');
+                // 2. Assign images based on the dynamic index
+                $variantSpecificImages = [];
+                for ($i = 1; $i <= 5; $i++) {
+                    $variantSpecificImages[] = "uploads/items/{$item->id}/{$item->file_prefix}_v{$variantIndex}_{$i}.jpg";
                 }
 
-                $variant->status = $variant->status ?: ($item->status === 'active' ? 'active' : 'inactive');
-
-                // 3. Assign the specific images to THIS variant
                 $variant->images = $variantSpecificImages;
+                $variant->sku = $variant->sku ?: sprintf('DUKA-I%d-C%s-S%s', $item->id, $colorId ?? '0', $sizeId ?? '0');
+                $variant->status = $item->status;
                 $variant->save();
 
-                // 4. Pass the specific variant images to the store records
+                // 3. Process Store/Pricing
                 $this->ensureStoreVariantRecords($item, $variant, $variantSpecificImages);
+
+                $variantIndex++; // Increment for next combination
             }
         }
 
-        $item->variants()
-            ->get()
-            ->reject(fn(ItemVariant $variant) => in_array(
-                $this->variantKey($variant->item_color_id, $variant->item_size_id),
-                $validKeys,
-                true
-            ))
-            ->each(function (ItemVariant $variant) {
-                $variant->delete();
-            });
+        // Delete variants no longer in the matrix
+        $item->variants()->whereNotIn('id', $item->variants()->get()->filter(function ($v) use ($validKeys) {
+            return in_array($this->variantKey($v->item_color_id, $v->item_size_id), $validKeys);
+        })->pluck('id'))->delete();
     }
 
     public function ensureStoreVariantRecords(Item $item, ItemVariant $variant, array $uploadedImages = []): void
