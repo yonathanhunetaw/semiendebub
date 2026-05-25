@@ -322,8 +322,6 @@ class ItemSeeder extends Seeder
             $syncPayload = [];
             foreach ($data['packaging'] as $packConfig) {
                 $packTypeId = (int) $packConfig['item_packaging_type_id'];
-
-                // This perfectly matches the columns in our new migration
                 $syncPayload[$packTypeId] = [
                     'quantity' => max(1, (int) $packConfig['quantity']),
                     'cbm' => $packConfig['cbm'] ?? 0.0000,
@@ -331,6 +329,7 @@ class ItemSeeder extends Seeder
             }
 
             if (method_exists($variant, 'packagingQuantities')) {
+                // FIX: Use sync() to ensure you aren't adding redundant records
                 $variant->packagingQuantities()->sync($syncPayload);
             }
         }
