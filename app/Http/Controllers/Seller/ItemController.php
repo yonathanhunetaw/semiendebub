@@ -33,13 +33,11 @@ class ItemController extends Controller
             'cart_id' => $cartId,
         ]);
 
-        // 🎯 FIXED: Changed query status condition to look for 'active' records 
         $query = Item::where('status', 'active')
             ->with([
                 'category',
                 'variants.itemColor',
                 'variants.itemSize',
-                // 🎯 FIXED: Removed 'variants.itemPackagingType' relationship load
                 'variants.storeVariants' => function ($q) use ($storeId) {
                     if ($storeId) {
                         $q->where('store_id', $storeId)
@@ -48,14 +46,12 @@ class ItemController extends Controller
                 },
             ]);
 
-        // 1. Only filter by store if storeId exists
         if ($storeId) {
             $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
                 $q->where('store_id', $storeId);
             });
         }
 
-        // 2. Filter search strings cleanly
         if ($search) {
             $query->where('product_name', 'LIKE', '%' . $search . '%');
         }
@@ -67,33 +63,59 @@ class ItemController extends Controller
 
         $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
-        // 🪵 LOG 3: Single point of truth for query outcomes + item details
+        // 🪵 LOG 3
         if ($items->isEmpty()) {
             Log::warning("No items found matching the criteria", [
-                'store_id'     => $storeId ?? 'N/A',
-                'search_term'  => $search,
+                'store_id' => $storeId ?? 'N/A',
+                'search_term' => $search,
                 'execution_ms' => $executionTime,
-                'items'        => []
+                'items' => []
             ]);
         } else {
             Log::info("Items retrieved successfully", [
-                'count'        => $items->count(),
-                'store_id'     => $storeId ?? 'N/A',
+                'count' => $items->count(),
+                'store_id' => $storeId ?? 'N/A',
                 'execution_ms' => $executionTime,
-                // 🎯 FIX: Map, pluck, reset keys with values(), and convert to a raw array
-                'items'        => $items->map(fn($item) => [
-                    'id'             => $item->id,
-                    'name'           => $item->product_name,
-                    'status'         => $item->status,
+                'items' => $items->map(fn($item) => [
+                    'id' => $item->id,
+                    'name' => $item->product_name,
+                    'status' => $item->status,
                     'variants_count' => $item->variants->count(),
                 ])->values()->all()
-            ]); // <-- Closes the Log::info array and statement
-        } // 
+            ]);
+        }
 
-        // 🎯 OPTIONAL ENHANCEMENT STEP: Wholesale margin calculations...
-        /*
-        $items->each(function($item) { ... });
-        */
+        // 🔥 IMAGE + TRANSFORM LAYER (FIXED)
+        $items = $items->map(function ($item) {
+
+            $generalImages = $item->general_images ?? [];
+
+            if (is_string($generalImages)) {
+                $decoded = json_decode($generalImages, true);
+                $generalImages = is_array($decoded) ? $decoded : [];
+            }
+
+            $previewImages = collect($generalImages)
+                ->map(fn($path) => $this->resolveImageUrl($path))
+                ->merge(
+                    $item->variants->map(
+                        fn($v) => $this->resolveImageUrl($v->images[0] ?? null)
+                    )
+                )
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
+            return [
+                'id' => $item->id,
+                'product_name' => $item->product_name,
+                'sold_count' => $item->sold_count ?? 0,
+                'category' => $item->category,
+                'variants' => $item->variants,
+                'processed_images' => $previewImages,
+            ];
+        });
 
         return Inertia::render('Seller/Items/Index', [
             'items' => $items,
