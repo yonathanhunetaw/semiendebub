@@ -17,7 +17,8 @@ import {
     InputBase,
     Stack,
     Typography,
-    useTheme
+    useTheme,
+    Avatar,
 } from "@mui/material";
 import React from "react";
 
@@ -122,6 +123,30 @@ export default function Index({
         "& .MuiTypography-root": { color: "text.primary" },
     };
 
+    const ImageStrip = ({ images = [] }: { images?: string[] }) => (
+        <Stack direction="row" spacing={1} sx={{ minWidth: 0 }}>
+            {Array.from({ length: 5 }).map((_, index) => {
+                const image = images[index];
+
+                return (
+                    <Avatar
+                        key={`${image ?? "empty"}-${index}`}
+                        src={image || "/images/defaults/no-image.png"}
+                        variant="rounded"
+                        sx={{
+                            width: 42,
+                            height: 42,
+                            bgcolor: "#272727",
+                            border: "1px solid",
+                            borderColor: "divider",
+                            opacity: image ? 1 : 0.3,
+                        }}
+                    />
+                );
+            })}
+        </Stack>
+    );
+
     return (
         <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pb: 5 }}>
             <Head title="Seller Catalog" />
@@ -199,7 +224,7 @@ export default function Index({
                             href={route("seller.items.show", {
                                 item: item.id,
                                 cart_id: filters.cart_id || undefined,
-                                })
+                            })
                             }
                             sx={{
                                 ...cardStyle,
@@ -213,21 +238,23 @@ export default function Index({
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    backgroundColor: theme.palette.mode === 'dark' ? "rgba(255,255,255,0.02)" : "#f8fafc",
+                                    backgroundColor:
+                                        theme.palette.mode === "dark"
+                                            ? "rgba(255,255,255,0.02)"
+                                            : "#f8fafc",
                                 }}
                             >
-                                {itemImage(item) ? (
-                                    <Box
-                                        component="img"
-                                        src={itemImage(item)!}
-                                        alt={item.product_name}
-                                        sx={{ width: "100%", height: "100%", objectFit: "contain" }}
-                                    />
-                                ) : (
-                                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                                        No image
-                                    </Typography>
-                                )}
+                                <Box
+                                    component="img"
+                                    src={itemImage(item) || "/images/defaults/no-image.png"}
+                                    alt={item.product_name}
+                                    sx={{
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "contain",
+                                        opacity: itemImage(item) ? 1 : 0.4,
+                                    }}
+                                />
                             </Box>
 
                             <Box sx={{ p: 1.5 }}>
