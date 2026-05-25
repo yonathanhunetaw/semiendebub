@@ -26,19 +26,14 @@ class PriceProvider
             ->where('store_id', $storeId)
             ->first();
 
-        if (!$storeVariant) {
+        if (!$storeVariant || empty($storeVariant->pricing_matrix)) {
             return [];
         }
 
-        $matrix = json_decode($storeVariant->pricing_matrix ?? '[]', true);
+        $matrix = json_decode($storeVariant->pricing_matrix, true);
 
-        if (empty($matrix)) {
-            return [];
-        }
-
-        // 1️⃣ Base price = first packaging tier (or piece)
-        $base = $matrix[0];
-
+        // 1️⃣ Normalize: Handle both [0 => ['price' => ...]] and ['price' => ...]
+        $base = self::normalizeMatrix($matrix);
         $prices[] = self::formatMatrixPrice('store', $base);
 
         // 2️⃣ Seller override
@@ -49,9 +44,9 @@ class PriceProvider
                 ->where('active', true)
                 ->first();
 
-            if ($seller) {
+            if ($seller && !empty($seller->pricing_matrix)) {
                 $sellerMatrix = json_decode($seller->pricing_matrix, true);
-                $prices[] = self::formatMatrixPrice('seller', $sellerMatrix[0] ?? $base);
+                $prices[] = self::formatMatrixPrice('seller', self::normalizeMatrix($sellerMatrix));
             }
         }
 
@@ -63,9 +58,9 @@ class PriceProvider
                 ->where('active', true)
                 ->first();
 
-            if ($customer) {
+            if ($customer && !empty($customer->pricing_matrix)) {
                 $customerMatrix = json_decode($customer->pricing_matrix, true);
-                $prices[] = self::formatMatrixPrice('customer', $customerMatrix[0] ?? $base);
+                $prices[] = self::formatMatrixPrice('customer', self::normalizeMatrix($customerMatrix));
             }
         }
 
@@ -73,34 +68,39 @@ class PriceProvider
     }
 
     /**
-     * Get the final price (last applicable layer)
+     * Helper to ensure we always get a valid price array
      */
+    protected static function normalizeMatrix(array $matrix): array
+    {
+        // If it's a list (has index 0), return that. If not, return the matrix itself.
+        return (isset($matrix[0]) && is_array($matrix[0])) ? $matrix[0] : $matrix;
+    }
+
     public static function getFinalPrice(array $priceLadder): ?float
     {
-        if (empty($priceLadder))
-            return null;
-
+        if (empty($priceLadder)) return null;
         return end($priceLadder)['final'];
     }
 
-    /**
-     * Format price with discount check
-     */
     protected static function formatMatrixPrice(string $level, array $row): array
     {
         $now = Carbon::now();
 
-        $final = ($row['discount_price'] ?? null)
-            && (!isset($row['discount_ends_at']) || $now->lt($row['discount_ends_at']))
-            ? $row['discount_price']
-            : $row['price'];
+        // Ensure we have 'price' key to avoid errors
+        $price = $row['price'] ?? 0.00;
+        $discount = $row['discount_price'] ?? null;
+        $endsAt = $row['discount_ends_at'] ?? null;
+
+        $final = ($discount && (!$endsAt || $now->lt(Carbon::parse($endsAt))))
+            ? $discount
+            : $price;
 
         return [
             'level' => $level,
-            'price' => $row['price'],
-            'discount_price' => $row['discount_price'] ?? null,
-            'discount_ends_at' => $row['discount_ends_at'] ?? null,
-            'final' => $final,
+            'price' => $price,
+            'discount_price' => $discount,
+            'discount_ends_at' => $endsAt,
+            'final' => (float)$final,
         ];
     }
 }
