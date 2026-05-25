@@ -49,7 +49,7 @@ const sortIcon = (filters: Props["filters"]) =>
 
 export default function ItemIndex({ items, filters }: Props) {
     const theme = useTheme();
-    
+
     const updateParams = (newParams: Record<string, string>) => {
         router.get(
             route("admin.items.index"),
@@ -58,36 +58,39 @@ export default function ItemIndex({ items, filters }: Props) {
         );
     };
 
-    const ImageStrip = ({ images = [] }: { images?: string[] }) => (
-        <Stack direction="row" spacing={1} sx={{ minWidth: 0 }}>
-            {Array.from({ length: 5 }).map((_, index) => {
-                const image = images[index];
-
-                return (
-                    <Avatar
-                        key={`${image ?? "empty"}-${index}`}
-                        src={image || "/images/defaults/no-image.png"}
-                        variant="rounded"
-                        sx={{
-                            width: 42,
-                            height: 42,
-                            bgcolor: "#272727", 
-                            border: "1px solid",
-                            borderColor: "divider",
-                            opacity: image ? 1 : 0.3,
-                        }}
-                    />
-                );
-            })}
-        </Stack>
+    const ImageStrip = ({ image }: { image?: string | null }) => (
+        <Box
+            sx={{
+                height: 140,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor:
+                    theme.palette.mode === "dark"
+                        ? "rgba(255,255,255,0.02)"
+                        : "#f8fafc",
+            }}
+        >
+            <Box
+                component="img"
+                src={image || "/images/defaults/no-image.png"}
+                alt="item"
+                sx={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    opacity: image ? 1 : 0.4,
+                }}
+            />
+        </Box>
     );
 
     return (
         <Box sx={{ p: 0 }}>
             <Head title="Items Management" />
-            
+
             {/* Remove the test H1 - it's not needed anymore */}
-            
+
             <Stack
                 direction={{ xs: "column", sm: "row" }}
                 justifyContent="space-between"
@@ -294,8 +297,8 @@ export default function ItemIndex({ items, filters }: Props) {
                                             href={route("admin.items.show", item.id)}
                                             size="small"
                                             variant="outlined"
-                                            sx={{ 
-                                                textTransform: "none", 
+                                            sx={{
+                                                textTransform: "none",
                                                 fontWeight: 700,
                                                 // FIX: Make button visible in dark mode
                                                 color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
