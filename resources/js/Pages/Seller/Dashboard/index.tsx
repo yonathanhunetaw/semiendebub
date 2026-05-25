@@ -2,6 +2,7 @@ import {
     SellerCard,
     SellerHeader,
     sellerHeaderButtonSx,
+    sellerImage,
     sellerPrice,
 } from "@/Components/Seller/sellerUi";
 
@@ -29,14 +30,20 @@ interface SellerItem {
     id: number;
     product_name: string;
     general_images?: string[] | string | null;
-    processed_images?: string[]; // ✅ FIX ADDED
+
+    // ✅ FIX: backend may or may not send this → optional safe type
+    processed_images?: string[];
+
     sold_count?: number | null;
     category?: {
         category_name?: string;
     } | null;
 }
 
-/* ================= CONSTANTS ================= */
+interface SellerItemFilters {
+    search?: string;
+    cart_id?: number | null;
+}
 
 const FALLBACK_IMAGE = "/images/defaults/no-image.png";
 
@@ -47,7 +54,7 @@ export default function Index({
     filters = {},
 }: {
     items?: SellerItem[];
-    filters?: { search?: string; cart_id?: number | null };
+    filters?: SellerItemFilters;
 }) {
     const { data, setData } = useForm({
         search: filters.search ?? "",
@@ -88,6 +95,7 @@ export default function Index({
                             }}
                         >
                             <SearchRoundedIcon sx={{ color: "#fff", mr: 1 }} />
+
                             <InputBase
                                 fullWidth
                                 placeholder="Search items"
@@ -122,10 +130,16 @@ export default function Index({
                     }}
                 >
                     {items.map((item) => {
-                        const img =
-                            item.processed_images?.[0] ||
-                            item.general_images?.[0] ||
-                            FALLBACK_IMAGE;
+                        const images =
+                            item.processed_images?.length
+                                ? item.processed_images
+                                : Array.isArray(item.general_images)
+                                ? item.general_images
+                                : typeof item.general_images === "string"
+                                ? [item.general_images]
+                                : [];
+
+                        const img = images?.[0] || FALLBACK_IMAGE;
 
                         console.log("🖼️ ITEM IMAGE DEBUG:", {
                             id: item.id,
@@ -155,7 +169,6 @@ export default function Index({
                                                 : "#f8fafc",
                                     }}
                                 >
-                                    {/* shimmer */}
                                     {!loaded[item.id] && (
                                         <Box
                                             sx={{
@@ -182,8 +195,8 @@ export default function Index({
                                         onError={(e) => {
                                             console.warn("⚠️ image failed:", img);
 
-                                            const el = e.currentTarget as HTMLImageElement;
-                                            el.src = FALLBACK_IMAGE;
+                                            (e.currentTarget as HTMLImageElement).src =
+                                                FALLBACK_IMAGE;
 
                                             setLoaded((p) => ({
                                                 ...p,
@@ -213,7 +226,7 @@ export default function Index({
                                             color: "primary.main",
                                         }}
                                     >
-                                        {sellerPrice?.(0) ?? "N/A"}
+                                        {sellerPrice(0)}
                                     </Typography>
 
                                     <Stack
