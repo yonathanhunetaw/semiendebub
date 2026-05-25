@@ -79,17 +79,28 @@ class StoreVariantSeeder extends Seeder
                 );
 
                 // 5. Update Seller/Customer specific prices (Directly)
+                // 5. Update Seller/Customer specific prices (Directly)
                 foreach ($sellers as $seller) {
                     DB::table('store_variants_seller_prices')->updateOrInsert(
                         ['store_variant_id' => $storeVariant->id, 'seller_id' => $seller->id],
-                        ['price' => round($price * 0.95, 2), 'active' => true, 'updated_at' => $now]
+                        [
+                            // Change this:
+                            'pricing_matrix' => json_encode(['price' => round($price * 0.95, 2)]), 
+                            'active' => true, 
+                            'updated_at' => $now
+                        ]
                     );
                 }
 
                 foreach ($customers as $customer) {
                     DB::table('store_variants_customer_prices')->updateOrInsert(
                         ['store_variant_id' => $storeVariant->id, 'customer_id' => $customer->id],
-                        ['price' => round($price * 0.98, 2), 'active' => true, 'updated_at' => $now]
+                        [
+                            // Change this:
+                            'pricing_matrix' => json_encode(['price' => round($price * 0.98, 2)]), 
+                            'active' => true, 
+                            'updated_at' => $now
+                        ]
                     );
                 }
             }
