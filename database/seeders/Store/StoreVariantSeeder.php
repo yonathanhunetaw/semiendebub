@@ -53,14 +53,15 @@ class StoreVariantSeeder extends Seeder
                 // ───────────────────────────────────────────────
 
                 // 3. Save to StoreVariant
+                // ... inside your loop
                 $storeVariant = StoreVariant::updateOrCreate([
                     'store_id' => $store->id,
                     'item_variant_id' => $variant->id,
                 ], [
                     'pricing_matrix' => [
                         'price' => $price,
-                        'discount_price' => $discountPrice, // Now defined!
-                        'discount_ends_at' => $discountEnds, // Now defined!
+                        'discount_price' => $discountPrice,
+                        'discount_ends_at' => $discountEnds,
                     ],
                     'active' => true,
                     'manual_status' => 'auto',

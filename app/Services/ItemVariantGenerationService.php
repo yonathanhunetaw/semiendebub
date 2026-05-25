@@ -105,15 +105,22 @@ class ItemVariantGenerationService
 
         // 2. We are no longer using a Matrix array; we are saving the specific data
         // Just keep the logic for price calculation, then update the record
+        // Find the updateOrCreate in ensureStoreVariantRecords() and change it to:
         $storeVariant = StoreVariant::updateOrCreate(
             [
-                'store_id' => $storeIds->first(), // Or iterate if you need multiple
+                'store_id' => $storeIds->first(),
                 'item_variant_id' => $variant->id,
             ],
             [
                 'active' => $variant->status === 'active',
                 'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
-                'price' => round($totalPrice, 2), // Save the specific price here
+                'forced_status' => $variant->status === 'active' ? null : 'inactive',
+                // Save to the JSON column instead of a non-existent 'price' column
+                'pricing_matrix' => [
+                    'price' => round($totalPrice, 2),
+                    'discount_price' => null,
+                    'discount_ends_at' => null,
+                ],
             ]
         );
 
