@@ -81,7 +81,6 @@ class ItemVariantGenerationService
             $storeIds = Store::query()->pluck('id');
         }
 
-        // Get the specific packaging type for this variant
         $packType = $variant->itemPackagingType;
         if (!$packType)
             return;
@@ -89,7 +88,6 @@ class ItemVariantGenerationService
         $multiplier = (int) ($packType->pivot->quantity ?? 1);
         $typeName = strtolower($packType->name);
 
-        // 1. Define base price logic
         $unitPrice = 10.00;
         if (str_contains($item->product_name, 'Bic')) {
             $unitPrice = match ($typeName) {
@@ -102,20 +100,18 @@ class ItemVariantGenerationService
         }
 
         $totalPrice = $unitPrice * $multiplier;
+        $firstStoreId = $storeIds->first();
 
-        // 2. We are no longer using a Matrix array; we are saving the specific data
-        // Just keep the logic for price calculation, then update the record
-        // Find the updateOrCreate in ensureStoreVariantRecords() and change it to:
+        // 1. Create/Update the StoreVariant FIRST so we have an ID
         $storeVariant = StoreVariant::updateOrCreate(
             [
-                'store_id' => $storeIds->first(),
+                'store_id' => $firstStoreId,
                 'item_variant_id' => $variant->id,
             ],
             [
                 'active' => $variant->status === 'active',
                 'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
                 'forced_status' => $variant->status === 'active' ? null : 'inactive',
-                // Save to the JSON column instead of a non-existent 'price' column
                 'pricing_matrix' => [
                     'price' => round($totalPrice, 2),
                     'discount_price' => null,
@@ -124,15 +120,23 @@ class ItemVariantGenerationService
             ]
         );
 
-        // 3. Update Seller/Customer Pricing using the new column structure
+        // 2. Now use $storeVariant->id for the prices
         DB::table('store_variants_seller_prices')->updateOrInsert(
             ['store_variant_id' => $storeVariant->id, 'seller_id' => 1],
-            ['price' => round($totalPrice * 0.85, 2), 'active' => true, 'updated_at' => now()]
+            [
+                'pricing_matrix' => json_encode(['price' => round($totalPrice * 0.85, 2), 'active' => true]),
+                'active' => true,
+                'updated_at' => now()
+            ]
         );
 
         DB::table('store_variants_customer_prices')->updateOrInsert(
             ['store_variant_id' => $storeVariant->id, 'customer_id' => 1],
-            ['price' => round($totalPrice * 0.95, 2), 'active' => true, 'updated_at' => now()]
+            [
+                'pricing_matrix' => json_encode(['price' => round($totalPrice * 0.95, 2), 'active' => true]),
+                'active' => true,
+                'updated_at' => now()
+            ]
         );
     }
 
