@@ -67,13 +67,12 @@ GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-glitchtip}"
 GLITCHTIP_DB_NAME="${GLITCHTIP_DB_NAME:-glitchtip}"
 
 DOCKER_FILES=(
-    docker/Dockerfile
-    docker/Dockerfile.dev
-    docker/docker-compose.yml
-    docker/docker-compose.dev.yml
-    docker/docker-compose.prod.yml
-    docker/docker-compose.observability.yml
-    docker/docker-entrypoint.sh
+    "$BASE_DIR/Dockerfile"
+    "$BASE_DIR/Dockerfile.dev"
+    "$BASE_DIR/docker-compose.yml"
+    "$BASE_DIR/docker-compose.dev.yml"
+    "$BASE_DIR/docker-compose.prod.yml"
+    "$BASE_DIR/docker-compose.observability.yml"
 )
 
 APP_BUILD_FILES=(
@@ -100,11 +99,10 @@ NODE_FILES=(
     package-lock.json
 )
 
-# No 'docker/' prefix here
 if [ "$APP_ENV" = "production" ]; then
-    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.prod.yml")
 else
-    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml)
+    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.dev.yml" -f "$BASE_DIR/docker-compose.prod.yml")
 fi
 
 check_cloudflared() {
@@ -118,12 +116,11 @@ if check_cloudflared; then
 fi
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
-    if [ ! -f docker/docker-compose.observability.yml ]; then
-        echo "ENABLE_OBSERVABILITY=1 but docker/docker-compose.observability.yml was not found."
+    if [ ! -f "$BASE_DIR/docker-compose.observability.yml" ]; then
+        echo "Error: $BASE_DIR/docker-compose.observability.yml not found."
         exit 1
     fi
-
-    COMPOSE_FILES+=(-f docker/docker-compose.observability.yml)
+    COMPOSE_FILES+=(-f "$BASE_DIR/docker-compose.observability.yml")
 fi
 
 if docker info >/dev/null 2>&1; then
@@ -502,8 +499,8 @@ fi
 if [ "$APP_ENV" = "production" ]; then
     echo "--- Preparing Image Proxy Configuration ---"
     
-    # 1. Create the nginx.conf file if it doesn't exist (in your docker folder)
-    cat > docker/nginx.conf <<EOF
+    # Create the nginx.conf inside the docker/ folder
+    cat > "$BASE_DIR/nginx.conf" <<EOF
 server {
     listen 80;
     server_name _;
@@ -516,8 +513,7 @@ server {
     }
 }
 EOF
-    echo "✅ nginx.conf updated."
-    # 🎯 FORCE RESTART THE PROXY TO PICK UP THE NEW CONFIG
+    echo "✅ nginx.conf created in $BASE_DIR/"
     compose restart nginx_proxy
 fi
 
