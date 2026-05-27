@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+
 APP_ENV=$(
     awk -F= '
         $1 == "APP_ENV" {
@@ -45,6 +46,11 @@ if [ -z "${APP_ENV:-}" ]; then
     echo "APP_ENV is not set in .env"
     exit 1
 fi
+
+# Force the script to use both files, ensuring all services (including nginx_proxy) are seen
+compose() {
+    docker-compose -f docker-compose.yml -f docker-compose.prod.yml "$@"
+}
 
 RESET_DB="${RESET_DB:-$(env_value RESET_DB)}"
 FORCE_BUILD="${FORCE_BUILD:-$(env_value FORCE_BUILD)}"
@@ -508,6 +514,8 @@ server {
 }
 EOF
     echo "✅ nginx.conf updated."
+    # 🎯 FORCE RESTART THE PROXY TO PICK UP THE NEW CONFIG
+    compose restart nginx_proxy
 fi
 
 # 4. Final Laravel Cleanup
