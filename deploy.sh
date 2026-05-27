@@ -265,10 +265,10 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
 
     compose up -d glitchtip-web glitchtip-worker
     echo "Starting duka_app and nginx_proxy..."
-    compose up -d --remove-orphans duka_app nginx_proxy
+    compose up -d --remove-orphans duka_app nginx_proxy minio_setup
 else
     echo "Starting duka_app and nginx_proxy..."
-    compose up -d --remove-orphans duka_app nginx_proxy
+    compose up -d --remove-orphans duka_app nginx_proxy minio_setup
 fi
 
 # Commented it out as certificats are now handedled by cloudflare
@@ -466,39 +466,13 @@ else
     exec_in_app php artisan view:clear || echo "View cache clear skipped or path not found."
 fi
 
-echo "Configuring MinIO storage..."
-
-# 1. Wait for MinIO service to actually be up
-echo "Waiting for MinIO container..."
-until compose exec -T minio /bin/sh -c "nc -z localhost 9000" >/dev/null 2>&1; do
+echo "Ensuring MinIO buckets are ready..."
+# This waits for the minio_setup container to finish its 'exit 0' command
+until [ "$(docker inspect -f '{{.State.ExitCode}}' Duka_minio_setup)" == "0" ]; do
     echo -n "."
     sleep 2
 done
-echo " MinIO is up."
-
-# 2. Extract credentials
-MINIO_USER=$(env_value AWS_ACCESS_KEY_ID)
-MINIO_PASS=$(env_value AWS_SECRET_ACCESS_KEY)
-
-# 3. Setup MinIO Client (mc) 
-# Use the service name 'minio' from your docker-compose.yml
-echo "Configuring mc alias..."
-compose exec -T minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS"
-
-# Verify alias was created
-if [ $? -eq 0 ]; then
-    echo "✅ mc alias set successfully."
-    
-    # Now configure your buckets
-    BUCKETS=("duka-images" "img")
-    for BUCKET in "${BUCKETS[@]}"; do
-        echo "Ensuring '$BUCKET' exists..."
-        compose exec -T minio mc mb local/"$BUCKET" --ignore-existing
-        compose exec -T minio mc anonymous set download local/"$BUCKET"
-    done
-else
-    echo "❌ Failed to set mc alias. Check credentials."
-fi
+echo " Buckets configured."
 
 if [ "$APP_ENV" = "production" ]; then
     echo "--- Preparing Image Proxy Configuration ---"

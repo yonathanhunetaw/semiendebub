@@ -68,18 +68,21 @@ services:
       entrypoint: >
         /bin/sh -c "
         echo 'Registering local server credentials...';
-        until (/usr/bin/mc alias set local_setup http://Duka_minio:9000 admin your_strong_password) do echo 'Waiting for MinIO API endpoint...' && sleep 2; done;
+        until /usr/bin/mc alias set local_setup http://minio:9000 admin your_strong_password; do 
+            echo 'Waiting for MinIO API endpoint...'; 
+            sleep 2; 
+        done;
         
-        echo 'Creating duka-images bucket if missing...';
+        echo 'Creating duka-images bucket...';
         /usr/bin/mc mb local_setup/duka-images --ignore-existing;
         
         echo 'Creating img bucket...';
         /usr/bin/mc mb local_setup/img --ignore-existing;
         
-        echo 'Uploading default image to img bucket...';
-        /usr/bin/mc cp /tmp/img/default.jpg local_setup/img/default.jpg;
+        echo 'Uploading default image...';
+        /usr/bin/mc cp /tmp/img/default.jpg local_setup/img/default.jpg --quiet || echo 'Default image not found, skipping...';
         
-        echo 'Applying public anonymous download policy to img bucket...';
+        echo 'Applying public anonymous policy...';
         /usr/bin/mc anonymous set download local_setup/img;
         
         echo '🚀 Setup complete!';
