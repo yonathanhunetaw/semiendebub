@@ -254,6 +254,7 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
         ./manage.py shell -c "import os; from django.contrib.auth import get_user_model; User = get_user_model(); name = os.environ['DJANGO_SUPERUSER_USERNAME']; email = os.environ['DJANGO_SUPERUSER_EMAIL']; password = os.environ['DJANGO_SUPERUSER_PASSWORD']; exists = User.objects.filter(email=email).exists(); None if exists else User.objects.create_superuser(email=email, password=password, name=name)"
 
     compose up -d glitchtip-web glitchtip-worker
+    compose up -d --remove-orphans duka_app nginx_proxy
     compose up -d --remove-orphans duka_app
 else
     echo "Starting containers..."
@@ -457,36 +458,57 @@ fi
 
 echo "Configuring MinIO storage..."
 
-# 1. Wait for MinIO API to be ready
-echo "Waiting for MinIO API to initialize..."
-until compose exec -T minio sh -c "curl -sf http://localhost:9000/minio/health/live" >/dev/null 2>&1; do
+# 1. Wait for MinIO service to actually be up
+echo "Waiting for MinIO container..."
+until compose exec -T minio /bin/sh -c "nc -z localhost 9000" >/dev/null 2>&1; do
     echo -n "."
     sleep 2
 done
-echo " MinIO is ready."
+echo " MinIO is up."
 
-# 2. Pull credentials
+# 2. Extract credentials
 MINIO_USER=$(env_value AWS_ACCESS_KEY_ID)
 MINIO_PASS=$(env_value AWS_SECRET_ACCESS_KEY)
-MINIO_BUCKET=$(env_value AWS_BUCKET)
 
-# 3. Setup MinIO Client (mc) inside the running minio container
+# 3. Setup MinIO Client (mc) 
+# Use the service name 'minio' from your docker-compose.yml
+echo "Configuring mc alias..."
 compose exec -T minio mc alias set local http://localhost:9000 "$MINIO_USER" "$MINIO_PASS"
 
-# Ensure the app bucket exists
-if [ -n "$MINIO_BUCKET" ]; then
-    echo "Ensuring '$MINIO_BUCKET' bucket exists and is public..."
-    compose exec -T minio mc mb local/"$MINIO_BUCKET" --ignore-existing
-    compose exec -T minio mc anonymous set download local/"$MINIO_BUCKET"
+# Verify alias was created
+if [ $? -eq 0 ]; then
+    echo "✅ mc alias set successfully."
+    
+    # Now configure your buckets
+    BUCKETS=("duka-images" "img")
+    for BUCKET in "${BUCKETS[@]}"; do
+        echo "Ensuring '$BUCKET' exists..."
+        compose exec -T minio mc mb local/"$BUCKET" --ignore-existing
+        compose exec -T minio mc anonymous set download local/"$BUCKET"
+    done
+else
+    echo "❌ Failed to set mc alias. Check credentials."
 fi
 
-# Ensure the 'img' bucket exists
-echo "Ensuring 'img' bucket exists and is public..."
-compose exec -T minio mc mb local/img --ignore-existing
-compose exec -T minio mc anonymous set download local/img
+if [ "$APP_ENV" = "production" ]; then
+    echo "--- Preparing Image Proxy Configuration ---"
+    
+    # 1. Create the nginx.conf file if it doesn't exist (in your docker folder)
+    cat > docker/nginx.conf <<EOF
+server {
+    listen 80;
+    server_name _;
 
-echo "✅ MinIO buckets are configured."
-
+    location /images/ {
+        proxy_pass http://minio:9000/;
+        proxy_set_header Host \$http_host;
+        proxy_buffering off;
+        client_max_body_size 0;
+    }
+}
+EOF
+    echo "✅ nginx.conf updated."
+fi
 # 4. Final Laravel Cleanup
 exec_in_app php artisan config:clear
 
