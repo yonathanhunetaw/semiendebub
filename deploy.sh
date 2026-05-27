@@ -190,39 +190,24 @@ docker_changes=0
 app_build_changes=0
 node_changes=0
 
+# 1. Determine if a rebuild is necessary
+# We only care about infrastructure (DOCKER_FILES) or forced builds.
+# We no longer care about APP_BUILD_FILES for the container build phase.
+should_rebuild=0
+
 if [ "$FORCE_BUILD" = "1" ]; then
-    docker_changes=1
+    echo "FORCE_BUILD=1 detected."
+    should_rebuild=1
 elif has_git_path_changes "${DOCKER_FILES[@]}"; then
-    docker_changes=1
-else
-    docker_changes=0
+    echo "Docker-related changes detected."
+    should_rebuild=1
 fi
 
-if [ "$FORCE_BUILD" = "1" ]; then
-    app_build_changes=1
-elif has_git_path_changes "${APP_BUILD_FILES[@]}"; then
-    app_build_changes=1
-else
-    app_build_changes=0
-fi
-
-if [ "$APP_ENV" = "production" ] && { [ "$app_build_changes" -eq 1 ] || [ "$docker_changes" -eq 1 ]; }; then
-    if [ "$docker_changes" -eq 1 ]; then
-        echo "Docker-related changes detected. Rebuilding duka_app image..."
-    else
-        echo "Application code/config changes detected. Rebuilding duka_app image with cache..."
-    fi
-    # CHANGE THIS LINE:
+# 2. Perform the build
+if [ "$should_rebuild" -eq 1 ]; then
+    echo "Rebuilding duka_app image..."
     compose build duka_app
 
-    echo "Cleaning Docker build cache..."
-    docker_raw builder prune -af >/dev/null 2>&1 || true
-    docker_raw image prune -af >/dev/null 2>&1 || true
-elif [ "$APP_ENV" = "production" ]; then
-    echo "No production code/config changes detected. Skipping image rebuild."
-elif [ "$docker_changes" -eq 1 ]; then
-    echo "Docker-related changes detected. Rebuilding app image..."
-    compose build duka_app
     echo "Cleaning Docker build cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -af >/dev/null 2>&1 || true
@@ -230,8 +215,11 @@ else
     echo "No Docker-related changes detected. Skipping image rebuild."
 fi
 
+# 3. Check for node changes for the frontend step (keep this for your npm logic)
 if has_git_path_changes "${NODE_FILES[@]}"; then
     node_changes=1
+else
+    node_changes=0
 fi
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
