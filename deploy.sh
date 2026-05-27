@@ -101,7 +101,7 @@ NODE_FILES=(
 if [ "$APP_ENV" = "production" ]; then
     COMPOSE_FILES=(-f docker/docker-compose.yml -f docker/docker-compose.prod.yml)
 else
-    COMPOSE_FILES=(-f docker/docker-compose.yml -f docker/docker-compose.dev.yml)COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml)
+    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.prod.yml)
 fi
 
 check_cloudflared() {
