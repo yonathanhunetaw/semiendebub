@@ -4,6 +4,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# 2. DEFINE BASE_DIR HERE BEFORE IT IS USED ANYWHERE ELSE
+BASE_DIR="docker"
+
+# 3. Then continue with the rest of your variables...
 APP_ENV=$(
     awk -F= '
         $1 == "APP_ENV" {
