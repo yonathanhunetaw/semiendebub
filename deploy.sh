@@ -2,6 +2,8 @@
 set -euo pipefail
 
 
+cd "$(dirname "$0")"
+
 APP_ENV=$(
     awk -F= '
         $1 == "APP_ENV" {
