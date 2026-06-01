@@ -202,7 +202,7 @@ class ItemController extends Controller
             ->merge($variantImagesCollection)
             ->filter(fn($img) => !empty($img))
             ->unique()
-            ->values(); 
+            ->values();
         // 🚀 LOG 1: Main Gallery Images
         Log::info('INERTIA_DEBUG: Main Gallery (allImages)', [
             'item_id' => $item->id,
@@ -273,8 +273,7 @@ class ItemController extends Controller
             $payload = [
                 'id' => $variant->id,
                 // ... (other fields)
-                'img' => $variantImages->first() ?: ($variant->itemColor ? asset(ltrim($variant->itemColor->image_path, '/')) : '/img/default.jpg'),
-                'images' => $variantImages->toArray(),
+                'img' => $variantImages->first() ?: ($variant->itemColor ? asset(ltrim($variant->itemColor->image_path, '/')) : '/img/default.jpg'),'images' => $variantImages->toArray(),
                 'color' => $variant->itemColor?->name,
                 'size' => $variant->itemSize?->name,
                 'packaging' => $variant->itemPackagingType?->name,
@@ -359,25 +358,19 @@ class ItemController extends Controller
      *   - /images/product_images/...  → legacy public → asset('storage/...')
      *   - storage/...                 → strip prefix  → asset('storage/...')
      */
-    private function resolveImageUrl(string $img): string
+    private function resolveImageUrl(?string $path): ?string
     {
-        $img = trim($img);
+        if (empty($path))
+            return null;
 
-        if (str_starts_with($img, 'http')) {
-            return $img;
-        }
+        // If it's already a full URL, return it
+        if (str_starts_with($path, 'http'))
+            return $path;
 
-        $path = ltrim($img, '/');
+        // Use your MinIO/S3 domain base instead of the local storage/app URL
+        // Replace 'duka2.pi:9000/duka-images' with your actual bucket/MinIO base URL
+        $baseUrl = "http://duka2.pi:9000/duka-images";
 
-        if (str_starts_with($path, 'storage/')) {
-            return asset($path);
-        }
-
-        // Paths that live under storage/app/public/
-        if (str_starts_with($path, 'uploads/') || str_starts_with($path, 'images/')) {
-            return asset('storage/' . $path);
-        }
-
-        return asset($path);
+        return $baseUrl . '/' . ltrim($path, '/');
     }
 }

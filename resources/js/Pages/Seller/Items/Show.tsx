@@ -207,14 +207,12 @@ export default function Show({
     const activeImage = React.useMemo(() => {
         if (selectedImage) return selectedImage;
 
-        // Use the first image from allImages (which now contains General + Variant images)
-        // If that fails, fallback to the variant-specific image
         const source = allImages[0] || variant?.images?.[0] || null;
 
         if (!source) return null;
 
-        // If it's already a full URL, return as is
-        if (typeof source === "string" && (source.startsWith("http") || source.startsWith("//"))) {
+        // IF IT STARTS WITH HTTP, IT IS ALREADY RESOLVED. DO NOT USE sellerImage().
+        if (typeof source === "string" && source.startsWith("http")) {
             return source;
         }
 
