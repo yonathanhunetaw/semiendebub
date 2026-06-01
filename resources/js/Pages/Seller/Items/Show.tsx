@@ -190,8 +190,8 @@ export default function Show({
         selectedCartId
             ? String(selectedCartId)
             : openCarts[0]?.id
-              ? String(openCarts[0].id)
-              : "",
+                ? String(openCarts[0].id)
+                : "",
     );
 
     const variant = findVariant(
@@ -203,24 +203,29 @@ export default function Show({
 
     // 🔹 CALCULATE ACTIVE IMAGE (Prevents the flash/disappear effect)
     // 🔹 Update activeImage
+    // 🔹 Replace your current activeImage useMemo with this:
     const activeImage = React.useMemo(() => {
         if (selectedImage) return selectedImage;
 
-        const source = variant?.images?.[0] || allImages[0] || null;
+        // Use the first image from allImages (which now contains General + Variant images)
+        // If that fails, fallback to the variant-specific image
+        const source = allImages[0] || variant?.images?.[0] || null;
 
-        // IF THE SOURCE IS ALREADY A FULL URL, DON'T USE THE HELPER
-        if (typeof source === "string" && source.startsWith("http")) {
+        if (!source) return null;
+
+        // If it's already a full URL, return as is
+        if (typeof source === "string" && (source.startsWith("http") || source.startsWith("//"))) {
             return source;
         }
 
         return sellerImage(source);
     }, [selectedImage, variant?.id, allImages]);
 
-    // 🔹 Update thumbnails mapping
-    const images = (variant?.images ?? allImages)
+    // 🔹 Replace your current images constant with this:
+    const images = allImages
         .map((image) => {
-            // IF THE IMAGE IS ALREADY A FULL URL, RETURN IT AS IS
-            if (typeof image === "string" && image.startsWith("http")) {
+            // If it's already a full URL, return as is
+            if (typeof image === "string" && (image.startsWith("http") || image.startsWith("//"))) {
                 return image;
             }
             return sellerImage(image);
