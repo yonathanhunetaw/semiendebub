@@ -31,6 +31,7 @@ import React from "react";
 interface SellerItem {
     id: number;
     product_name: string;
+    image_urls?: string[];
     general_images?: string[] | string | null;
     processed_images?: string[];
     sold_count?: number | null;
@@ -156,7 +157,7 @@ export default function Index({
 
                         // 3. Extract the price
                         // Check: 1. Item-level price, 2. Flat object price, 3. Array-based price
-                        
+
 
                         // 4. Debug to see what's happening
                         console.log("EXTRACTED PRICE DEBUG:", {
@@ -164,14 +165,8 @@ export default function Index({
                             matrix: matrix,
                             foundPrice: price
                         });
-                        const images =
-                            item.processed_images?.length
-                                ? item.processed_images
-                                : Array.isArray(item.general_images)
-                                    ? item.general_images
-                                    : typeof item.general_images === "string"
-                                        ? [item.general_images]
-                                        : [];
+                        // Use the 'image_urls' property created in the Controller
+                        const images = item.image_urls || [];
 
                         const img = images?.[0] || FALLBACK_IMAGE;
 

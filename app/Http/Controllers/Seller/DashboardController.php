@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\Controller;
 use App\Models\Item\Item;
 use App\Models\StockKeeper\ItemStock;
 use App\Services\PriceProvider;
+use App\Services\ImageResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -62,6 +63,17 @@ class DashboardController extends Controller
 
         // 3️⃣ Process each product unit line using structural matrix layers
         foreach ($items as $item) {
+            // 1. Add image processing logic similar to your Admin controller
+            $generalImages = $item->general_images ?? [];
+
+            // Resolve images
+            $item->image_urls = collect($generalImages)
+                ->map(fn($path) => ImageResolver::resolve($path))
+                ->merge($item->variants->map(fn($v) => ImageResolver::resolve($v->images[0] ?? null)))
+                ->filter()
+                ->unique()
+                ->values();
+
             // ADD THIS: Find the minimum price among all variants for this item
             // We map the variant prices and take the min()
             $item->store_price = $item->variants
