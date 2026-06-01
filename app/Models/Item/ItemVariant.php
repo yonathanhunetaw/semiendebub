@@ -193,4 +193,20 @@ class ItemVariant extends Model
     {
         return $this->belongsTo(ItemPackagingType::class, 'item_packaging_type_id');
     }
+
+    /**
+     * Calculates total pieces based on the packaging relationship.
+     */
+    public function calculateTotalPieces(): int
+    {
+        // Ensure the relationship is loaded, or at least return 0 if it's empty
+        if (!$this->packagingQuantities) {
+            return 0;
+        }
+
+        // Sum the quantity from the pivot table
+        return (int) $this->packagingQuantities->sum(function ($packaging) {
+            return $packaging->pivot->quantity ?? 0;
+        });
+    }
 }

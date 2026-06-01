@@ -161,6 +161,7 @@ class ItemController extends Controller
             'variants.itemColor',
             'variants.itemSize',
             'variants.itemPackagingType',
+            'variants.packagingQuantities',
             'variants.storeVariants.sellerPrices',
             'variants.storeVariants.customerPrices',
             'variants.storeVariants.stocks',
