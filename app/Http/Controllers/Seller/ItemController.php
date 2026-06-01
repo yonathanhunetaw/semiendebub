@@ -177,6 +177,7 @@ class ItemController extends Controller
             ->first();
 
         // 🔹 Build item images
+        // 🔹 1. Process General Item Images (Priority)
         $itemImages = collect();
         $rawImages = $item->general_images;
         if (!empty($rawImages)) {
@@ -188,30 +189,20 @@ class ItemController extends Controller
             }
         }
 
-        // 🔹 Process related attribute images (Color, Size, Packaging)
-        $variantColorImages = $item->variants
-            ->map(fn($v) => $v->itemColor?->image_path ? $this->resolveImageUrl($v->itemColor->image_path) : null)
-            ->filter(fn($img) => !empty($img))
-            ->unique();
+        // 🔹 2. Process all Variant Images
+        $variantImagesCollection = $item->variants->flatMap(function ($v) {
+            $raw = is_string($v->images) ? json_decode($v->images, true) : ($v->images ?? []);
+            return collect(is_array($raw) ? $raw : [])
+                ->filter(fn($img) => !empty($img))
+                ->map(fn($img) => $this->resolveImageUrl($img));
+        });
 
-        $sizeImages = $item->variants
-            ->map(fn($v) => $v->itemSize?->image_path ? $this->resolveImageUrl($v->itemSize->image_path) : null)
-            ->filter(fn($img) => !empty($img))
-            ->unique();
-
-        $packagingImages = $item->variants
-            ->map(fn($v) => $v->itemPackagingType?->image_path ? $this->resolveImageUrl($v->itemPackagingType->image_path) : null)
-            ->filter(fn($img) => !empty($img))
-            ->unique();
-
+        // 🔹 3. Merge: General first, then unique Variant images
         $allImages = $itemImages
-            ->merge($variantColorImages)
-            ->merge($sizeImages)
-            ->merge($packagingImages)
+            ->merge($variantImagesCollection)
             ->filter(fn($img) => !empty($img))
             ->unique()
-            ->values();
-
+            ->values(); 
         // 🚀 LOG 1: Main Gallery Images
         Log::info('INERTIA_DEBUG: Main Gallery (allImages)', [
             'item_id' => $item->id,
