@@ -29,6 +29,34 @@ done
 
 echo "✅ MySQL is ready!"
 
+# ===== PROXY CONFIGURATION =====
+echo "🖼️ Configuring image proxy to MinIO..."
+
+cat > /etc/apache2/conf-available/proxy-images.conf << 'PROXYEOF'
+ProxyPass /images/ http://Duka_minio:9000/duka-images/
+ProxyPassReverse /images/ http://Duka_minio:9000/duka-images/
+
+<Location /images/>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+    Header set Cache-Control "public, max-age=3600"
+    
+    <IfModule mod_rewrite.c>
+        RewriteEngine Off
+    </IfModule>
+</Location>
+
+<Directory /images/>
+    Options -Indexes
+</Directory>
+PROXYEOF
+
+a2enmod proxy proxy_http headers
+a2enconf proxy-images
+
+echo "✅ Image proxy configured to Duka_minio"
+# ===== END PROXY CONFIGURATION =====
+
 BASE_DOMAIN="${APP_SYSTEM_DOMAIN:-duka.local}"
 
 sed -i "/ServerName/d" /etc/apache2/sites-available/000-default.conf
