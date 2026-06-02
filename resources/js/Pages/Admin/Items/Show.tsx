@@ -37,7 +37,6 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import KeyboardArrowLeftIcon from "@mui/icons-material/KeyboardArrowLeft";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import StorefrontIcon from "@mui/icons-material/Storefront";
-import WarningIcon from "@mui/icons-material/Warning";
 import CloseIcon from "@mui/icons-material/Close";
 
 interface PackagingItem {
@@ -128,19 +127,20 @@ export default function Show({
 
     const allGeneralImages = item.general_images ?? [];
 
+    // Backend already resolves URLs, so just return the path as-is
     const getImageUrl = (path: string | null | undefined): string => {
-        if (!path) return "/img/default.jpg";
+        if (!path) return "/images/defaults/no-image.png";
         return path;
     };
 
     const masterFallback = useMemo(() => {
-        if (allGeneralImages.length > 0) return getImageUrl(allGeneralImages[0]);
+        if (allGeneralImages.length > 0) return allGeneralImages[0];
         const firstVariantWithSlot = variantData.find(v => v.slots?.length > 0);
         if (firstVariantWithSlot?.slots[0]?.url) return firstVariantWithSlot.slots[0].url;
-        return "/img/default.jpg";
+        return null;
     }, [allGeneralImages, variantData]);
 
-    const [selectedImage, setSelectedImage] = useState(masterFallback);
+    const [selectedImage, setSelectedImage] = useState<string | null>(masterFallback);
     const [showAllThumbs, setShowAllThumbs] = useState(false);
     const [deployOpen, setDeployOpen] = useState(false);
     const [deployingToId, setDeployingToId] = useState<number | null>(null);
@@ -166,16 +166,13 @@ export default function Show({
 
     const proofComplete = variantData.length > 0 && variantData.every((v) => v.proof_ok);
 
-    // FIXED: Safe formatCBM function that handles strings, nulls, undefined
+    // Safe formatCBM function that handles strings, nulls, undefined
     const formatCBM = (cbm: any): string => {
         if (cbm === null || cbm === undefined) return "N/A";
-
-        // Convert string to number if needed
+        
         let numValue = typeof cbm === 'string' ? parseFloat(cbm) : cbm;
-
-        // Check if it's a valid number
         if (isNaN(numValue)) return "N/A";
-
+        
         return `${numValue.toFixed(3)} m³`;
     };
 
@@ -207,18 +204,22 @@ export default function Show({
                 }}
                 onClick={() => isMobile && setMobileImageViewerOpen(true)}
             >
-                <Box
-                    component="img"
-                    src={selectedImage}
-                    sx={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                    }}
-                    onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                        e.currentTarget.src = "/img/default.jpg";
-                    }}
-                />
+                {selectedImage ? (
+                    <Box
+                        component="img"
+                        src={selectedImage}
+                        sx={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                        }}
+                        onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                            e.currentTarget.src = "/images/defaults/no-image.png";
+                        }}
+                    />
+                ) : (
+                    <Typography color="text.secondary">No image available</Typography>
+                )}
             </Box>
 
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
@@ -242,13 +243,16 @@ export default function Show({
                 pb: 1,
             }}>
                 {displayedThumbs.map((img, i) => {
-                    const src = getImageUrl(img);
+                    const src = img;
                     return (
                         <Box
                             key={i}
                             component="img"
                             src={src}
                             onClick={() => setSelectedImage(src)}
+                            onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                                e.currentTarget.src = "/images/defaults/no-image.png";
+                            }}
                             sx={{
                                 width: 64,
                                 height: 64,
@@ -296,18 +300,22 @@ export default function Show({
                 }}
                 onClick={() => setMobileImageViewerOpen(false)}
             >
-                <Box
-                    component="img"
-                    src={selectedImage}
-                    sx={{
-                        maxWidth: '100%',
-                        maxHeight: '100%',
-                        objectFit: 'contain',
-                    }}
-                    onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                        e.currentTarget.src = "/img/default.jpg";
-                    }}
-                />
+                {selectedImage ? (
+                    <Box
+                        component="img"
+                        src={selectedImage}
+                        sx={{
+                            maxWidth: '100%',
+                            maxHeight: '100%',
+                            objectFit: 'contain',
+                        }}
+                        onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                            e.currentTarget.src = "/images/defaults/no-image.png";
+                        }}
+                    />
+                ) : (
+                    <Typography color="white">No image available</Typography>
+                )}
             </Box>
         </Dialog>
     );
@@ -373,12 +381,13 @@ export default function Show({
             </Stack>
 
             <Grid container spacing={4}>
-                <Grid size={{ xs: 12, md: 5 }} sx={{ order: { xs: 2, md: 1 } }}>
+                {/* FIXED: Mobile layout - images first on mobile (order: xs=1), content second (order: xs=2) */}
+                <Grid size={{ xs: 12, md: 5 }} sx={{ order: { xs: 1, md: 1 } }}>
                     <ImageViewer />
                     {isMobile && <MobileImageViewerModal />}
                 </Grid>
 
-                <Grid size={{ xs: 12, md: 7 }} sx={{ order: { xs: 1, md: 2 } }}>
+                <Grid size={{ xs: 12, md: 7 }} sx={{ order: { xs: 2, md: 2 } }}>
                     <Typography variant="h6" fontWeight={800} gutterBottom>
                         Description
                     </Typography>
@@ -392,20 +401,18 @@ export default function Show({
 
                     <Stack spacing={3}>
                         {variantData.map((variant) => {
-                            // Filter packaging data to only this variant's packaging type
-                            const packagingList = React.useMemo(() => {
+                            // FIXED: Filter packaging data to only this variant's packaging type
+                            const packagingList = useMemo(() => {
                                 const allPackaging = variant.packaging_data ?? [];
-
-                                // Only show packaging that matches the variant's own packaging type
+                                
                                 if (variant.packaging && variant.packaging !== 'null') {
                                     return allPackaging.filter(pkg => pkg.name === variant.packaging);
                                 }
-
+                                
                                 return allPackaging;
                             }, [variant.packaging, variant.packaging_data]);
 
                             const hasPackaging = packagingList.length > 0;
-                            // ... rest of the componenta
 
                             return (
                                 <Paper
@@ -488,7 +495,7 @@ export default function Show({
                                         {Array.from({ length: 5 }).map((_, slotIndex) => {
                                             const slot = variant.slots?.[slotIndex];
                                             const isRequiredSlot = slotIndex < 2;
-
+                                            
                                             return (
                                                 <Box
                                                     key={slotIndex}
@@ -505,7 +512,7 @@ export default function Show({
                                                                 component="img"
                                                                 src={slot.url}
                                                                 onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                                                                    e.currentTarget.src = "/img/default.jpg";
+                                                                    e.currentTarget.src = "/images/defaults/no-image.png";
                                                                 }}
                                                                 onClick={() => setSelectedImage(slot.url)}
                                                                 sx={{

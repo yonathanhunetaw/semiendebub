@@ -86,14 +86,14 @@ function availablePackaging(
     let filtered = variants.filter(
         (variant) => variant.color === color && variant.size === size
     );
-    
+
     // If packaging type specified, filter further
     if (packagingType) {
         filtered = filtered.filter(
             (variant) => variant.packaging === packagingType
         );
     }
-    
+
     return uniqueValues(filtered.map((variant) => variant.packaging));
 }
 
@@ -535,32 +535,37 @@ export default function Show({
                 PaperProps={{ sx: { bgcolor: "#000", display: "flex", flexDirection: "column" } }}
             >
                 {/* Toolbar */}
-                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 1.5 }}>
-                    <Stack direction="row" spacing={1}>
-                        <IconButton
-                            onClick={() => setViewerZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))}
-                            sx={{ color: "#fff", bgcolor: "rgba(255,255,255,0.1)", borderRadius: 2 }}
-                        >
-                            <ZoomOutRoundedIcon />
-                        </IconButton>
-                        <IconButton
-                            onClick={() => setViewerZoom((z) => Math.min(4, +(z + 0.25).toFixed(2)))}
-                            sx={{ color: "#fff", bgcolor: "rgba(255,255,255,0.1)", borderRadius: 2 }}
-                        >
-                            <ZoomInRoundedIcon />
-                        </IconButton>
-                        <Box sx={{ display: "flex", alignItems: "center", px: 1 }}>
-                            <Typography sx={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>
-                                {Math.round(viewerZoom * 100)}%
-                            </Typography>
-                        </Box>
-                    </Stack>
-                    <IconButton
-                        onClick={() => setImageViewerOpen(false)}
-                        sx={{ color: "#fff", bgcolor: "rgba(255,255,255,0.1)", borderRadius: 2 }}
-                    >
-                        <CloseRoundedIcon />
-                    </IconButton>
+                <Box sx={{ display: "flex", flexWrap: showAllThumbs ? "wrap" : "nowrap", gap: 1.5, overflowX: showAllThumbs ? "unset" : "auto", pb: 1 }}>
+                    {displayedThumbs.map((img, i) => {
+                        const src = img; // Backend already resolved the URL
+                        return (
+                            <Box
+                                key={i}
+                                component="img"
+                                src={src}
+                                onClick={() => setSelectedImage(src)}
+                                onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                                    e.currentTarget.src = "/images/defaults/no-image.png";
+                                }}
+                                sx={{
+                                    width: 64,
+                                    height: 64,
+                                    minWidth: 64,
+                                    borderRadius: 1.5,
+                                    cursor: "pointer",
+                                    border: "2px solid",
+                                    borderColor: selectedImage === src ? "primary.main" : "transparent",
+                                    bgcolor: "background.paper",
+                                    objectFit: "cover",
+                                    transition: "0.2s",
+                                    "&:hover": {
+                                        transform: "scale(1.05)",
+                                        borderColor: "primary.light",
+                                    },
+                                }}
+                            />
+                        );
+                    })}
                 </Box>
 
                 {/* Zoomable image */}
