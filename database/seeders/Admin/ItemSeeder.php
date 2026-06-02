@@ -280,19 +280,29 @@ class ItemSeeder extends Seeder
 
     private function seedDeterministicVariantImages(Item $item, array $data): array
     {
-        $prefix = $data['file_prefix']; // 'noteit'
-        $itemImagesArray = [];
-        $disk = Storage::disk('s3');
+        // Check if MinIO is available
+        try {
+            $disk = Storage::disk('s3');
+            if (!$disk->exists('/')) {
+                echo "⚠️ MinIO not available, skipping image uploads for {$item->product_name}\n";
+                return [];
+            }
+        } catch (\Exception $e) {
+            echo "⚠️ MinIO not available (" . $e->getMessage() . "), skipping image uploads for {$item->product_name}\n";
+            return [];
+        }
 
-        // 1. Seed General Images (noteit_1.jpg to noteit_5.jpg)
+        $prefix = $data['file_prefix'];
+        $itemImagesArray = [];
+
+        // 1. Seed General Images
         for ($i = 1; $i <= 5; $i++) {
             $name = "{$prefix}_{$i}.jpg";
             $this->uploadToMinio($disk, $item->id, $name);
             $itemImagesArray[] = "uploads/items/{$item->id}/{$name}";
         }
 
-        // 2. Seed Variant Images (noteit_v1_1.jpg to noteit_v9_5.jpg)
-        // We loop through the 9 expected variants and 5 images each
+        // 2. Seed Variant Images
         for ($v = 1; $v <= 9; $v++) {
             for ($i = 1; $i <= 5; $i++) {
                 $name = "{$prefix}_v{$v}_{$i}.jpg";
