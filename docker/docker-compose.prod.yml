@@ -54,15 +54,15 @@ services:
       /bin/sh -c "
       mc alias set local http://Duka_minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY};
       TIMEOUT=30;
-      while [ \$TIMEOUT -gt 0 ]; do
+      while [ $$TIMEOUT -gt 0 ]; do
         if mc ls local >/dev/null 2>&1; then
           break;
         fi;
         echo 'Waiting for MinIO...';
         sleep 1;
-        TIMEOUT=\$((\$TIMEOUT - 1));
+        TIMEOUT=$$(($$TIMEOUT - 1));
       done;
-      if [ \$TIMEOUT -eq 0 ]; then
+      if [ $$TIMEOUT -eq 0 ]; then
         echo 'Error: MinIO did not become ready in 30 seconds';
         exit 1;
       fi;
