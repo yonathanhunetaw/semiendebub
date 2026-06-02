@@ -309,9 +309,34 @@ class ItemSeeder extends Seeder
         $sourcePath = storage_path("app/seed-images/{$fileName}");
         $minioPath = "uploads/items/{$itemId}/{$fileName}";
 
-        if (File::exists($sourcePath) && !$disk->exists($minioPath)) {
-            $disk->put($minioPath, File::get($sourcePath));
+        if (!File::exists($sourcePath)) {
+            echo "⚠️ Warning: Source file not found: {$sourcePath}\n";
+            return false;
         }
+
+        try {
+            // Check if disk is available
+            if (!$disk) {
+                echo "⚠️ Warning: S3 disk not available, skipping upload for {$fileName}\n";
+                return false;
+            }
+
+            // Check if MinIO is connected
+            if (!$disk->exists('/')) {
+                echo "⚠️ Warning: MinIO not reachable, skipping upload for {$fileName}\n";
+                return false;
+            }
+
+            if (!$disk->exists($minioPath)) {
+                $disk->put($minioPath, File::get($sourcePath));
+                echo "✅ Uploaded: {$minioPath}\n";
+            }
+        } catch (\Exception $e) {
+            echo "❌ Error uploading {$fileName}: " . $e->getMessage() . "\n";
+            return false;
+        }
+
+        return true;
     }
 
     private function populatePackagingQuantitiesAndCbm(Item $item, array $data): void
