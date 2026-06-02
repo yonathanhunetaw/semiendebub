@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import {
@@ -86,10 +86,10 @@ const statusColor = (s: string): "success" | "warning" | "default" | "error" =>
     s === "active"
         ? "success"
         : s === "draft"
-          ? "warning"
-          : s === "inactive"
-            ? "default"
-            : "error";
+            ? "warning"
+            : s === "inactive"
+                ? "default"
+                : "error";
 
 export default function Show({
     item,
@@ -103,7 +103,7 @@ export default function Show({
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const [mobileImageViewerOpen, setMobileImageViewerOpen] = useState(false);
-    
+
     // Safety check
     if (!item || !item.id) {
         return (
@@ -127,7 +127,7 @@ export default function Show({
     };
 
     const allGeneralImages = item.general_images ?? [];
-    
+
     const getImageUrl = (path: string | null | undefined): string => {
         if (!path) return "/img/default.jpg";
         return path;
@@ -163,19 +163,19 @@ export default function Show({
     const displayedThumbs = showAllThumbs
         ? allGeneralImages
         : allGeneralImages.slice(0, 5);
-    
+
     const proofComplete = variantData.length > 0 && variantData.every((v) => v.proof_ok);
 
     // FIXED: Safe formatCBM function that handles strings, nulls, undefined
     const formatCBM = (cbm: any): string => {
         if (cbm === null || cbm === undefined) return "N/A";
-        
+
         // Convert string to number if needed
         let numValue = typeof cbm === 'string' ? parseFloat(cbm) : cbm;
-        
+
         // Check if it's a valid number
         if (isNaN(numValue)) return "N/A";
-        
+
         return `${numValue.toFixed(3)} m³`;
     };
 
@@ -392,9 +392,21 @@ export default function Show({
 
                     <Stack spacing={3}>
                         {variantData.map((variant) => {
-                            const packagingList = variant.packaging_data ?? [];
+                            // Filter packaging data to only this variant's packaging type
+                            const packagingList = React.useMemo(() => {
+                                const allPackaging = variant.packaging_data ?? [];
+
+                                // Only show packaging that matches the variant's own packaging type
+                                if (variant.packaging && variant.packaging !== 'null') {
+                                    return allPackaging.filter(pkg => pkg.name === variant.packaging);
+                                }
+
+                                return allPackaging;
+                            }, [variant.packaging, variant.packaging_data]);
+
                             const hasPackaging = packagingList.length > 0;
-                            
+                            // ... rest of the componenta
+
                             return (
                                 <Paper
                                     key={variant.id}
@@ -455,7 +467,7 @@ export default function Show({
                                                     const quantity = pkg.pivot?.quantity ?? 0;
                                                     const cbm = pkg.pivot?.cbm ?? 0;
                                                     const displayText = `${pkg.name}: ${quantity} unit${quantity !== 1 ? "s" : ""} (${formatCBM(cbm)})`;
-                                                    
+
                                                     return (
                                                         <Tooltip key={idx} title={`Total volume: ${(quantity * Number(cbm) || 0).toFixed(3)} m³`} arrow>
                                                             <Chip
@@ -476,7 +488,7 @@ export default function Show({
                                         {Array.from({ length: 5 }).map((_, slotIndex) => {
                                             const slot = variant.slots?.[slotIndex];
                                             const isRequiredSlot = slotIndex < 2;
-                                            
+
                                             return (
                                                 <Box
                                                     key={slotIndex}

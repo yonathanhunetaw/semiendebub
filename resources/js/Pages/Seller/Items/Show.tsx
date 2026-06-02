@@ -81,14 +81,20 @@ function availablePackaging(
     variants: SellerVariantData[],
     color: string,
     size: string,
+    packagingType?: string, // Add this
 ) {
-    return uniqueValues(
-        variants
-            .filter(
-                (variant) => variant.color === color && variant.size === size,
-            )
-            .map((variant) => variant.packaging),
+    let filtered = variants.filter(
+        (variant) => variant.color === color && variant.size === size
     );
+    
+    // If packaging type specified, filter further
+    if (packagingType) {
+        filtered = filtered.filter(
+            (variant) => variant.packaging === packagingType
+        );
+    }
+    
+    return uniqueValues(filtered.map((variant) => variant.packaging));
 }
 
 function findVariant(

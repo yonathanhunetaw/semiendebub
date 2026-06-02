@@ -149,30 +149,6 @@ class ItemController extends Controller
             'stores'
         ]);
 
-        // 1. Create a detailed data payload for both Inertia and Logging
-        $payload = [
-            'id' => $item->id,
-            'product_name' => $item->product_name,
-            'category' => $item->category?->name,
-            'status' => $item->status,
-            'variants' => $item->variants->map(function ($v) {
-                return [
-                    'sku' => $v->sku,
-                    'color' => $v->itemColor?->name,
-                    'size' => $v->itemSize?->name,
-                    'packaging' => $v->packagingQuantities->map(fn($p) => [
-                        'name' => $p->name,
-                        'qty' => $p->pivot->quantity,
-                        'cbm' => $p->pivot->cbm
-                    ]),
-                    'status' => $v->status,
-                    'images' => $v->image_slots // Assumes your Model has image_slots logic
-                ];
-            })
-        ];
-
-        Log::info('Item Show Payload:', ['data' => json_encode($payload, JSON_PRETTY_PRINT)]);
-
         return Inertia::render('Admin/Items/Show', [
             'item' => [
                 'id' => $item->id,
@@ -181,25 +157,53 @@ class ItemController extends Controller
                 'status' => $item->status,
                 'general_images' => $item->processed_images,
             ],
-            'variantData' => $item->variants->map(fn($v) => [
-                'id' => $v->id,
-                'sku' => $v->sku,
-                'color' => $v->itemColor?->name,
-                'size' => $v->itemSize?->name,
-                'packaging' => $v->itemPackagingType?->name, // Single packaging type name
-                'status' => $v->status,
-                'slots' => $v->image_slots,
-                'slot_count' => count($v->image_slots),
-                'proof_ok' => count($v->image_slots) >= 2,
-                // FIX: Add packaging_data with proper pivot structure
-                'packaging_data' => $v->packagingQuantities->map(fn($p) => [
-                    'name' => $p->name,
-                    'pivot' => [
-                        'quantity' => $p->pivot->quantity,
-                        'cbm' => $p->pivot->cbm
-                    ]
-                ])->values()->toArray(),
-            ]),
+            'variantData' => $item->variants->map(function ($v) {
+                // Filter packaging data to only the variant's specific packaging type
+                $filteredPackagingData = collect();
+
+                if ($v->itemPackagingType) {
+                    // Find the packaging quantity that matches this variant's packaging type
+                    $matchingPackaging = $v->packagingQuantities
+                        ->firstWhere('id', $v->itemPackagingType->id);
+
+                    if ($matchingPackaging) {
+                        $filteredPackagingData = collect([
+                            [
+                                'name' => $matchingPackaging->name,
+                                'pivot' => [
+                                    'quantity' => $matchingPackaging->pivot->quantity,
+                                    'cbm' => $matchingPackaging->pivot->cbm
+                                ]
+                            ]
+                        ]);
+                    }
+                }
+
+                // Fallback to all packaging quantities if no specific type found
+                if ($filteredPackagingData->isEmpty()) {
+                    $filteredPackagingData = $v->packagingQuantities->map(fn($p) => [
+                        'name' => $p->name,
+                        'pivot' => [
+                            'quantity' => $p->pivot->quantity,
+                            'cbm' => $p->pivot->cbm
+                        ]
+                    ]);
+                }
+
+                // Log::info('Item Show Payload:', ['data' => json_encode($payload, JSON_PRETTY_PRINT)]);
+                return [
+                    'id' => $v->id,
+                    'sku' => $v->sku,
+                    'color' => $v->itemColor?->name,
+                    'size' => $v->itemSize?->name,
+                    'packaging' => $v->itemPackagingType?->name,
+                    'status' => $v->status,
+                    'slots' => $v->image_slots,
+                    'slot_count' => count($v->image_slots),
+                    'proof_ok' => count($v->image_slots) >= 2,
+                    'packaging_data' => $filteredPackagingData->values()->toArray(),
+                ];
+            }),
             'stores' => Store::all(),
         ]);
     }

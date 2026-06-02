@@ -199,14 +199,8 @@ class ItemVariant extends Model
      */
     public function calculateTotalPieces(): int
     {
-        // Ensure the relationship is loaded, or at least return 0 if it's empty
-        if (!$this->packagingQuantities) {
-            return 0;
-        }
-
-        // Sum the quantity from the pivot table
-        return (int) $this->packagingQuantities->sum(function ($packaging) {
-            return $packaging->pivot->quantity ?? 0;
-        });
+        // Option 2 is best for performance
+        return (int) $this->packagingQuantities()
+            ->sum('item_variant_packaging_quantity.quantity');
     }
 }
