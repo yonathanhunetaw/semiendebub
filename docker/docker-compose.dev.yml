@@ -7,8 +7,53 @@ services:
       - ../:/var/www/html
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
-      # 🎯 ADD THIS SUB-MOUNT OVERRIDE TO UNLOCK YOUR HOST FILES INSIDE THE VOLUME:
       - ../storage/app/seed-images:/var/www/html/storage/app/seed-images
     ports:
       - "8095:80"
       - "5177:5177"
+    networks:
+      - duka-network
+
+  # Add MinIO for local development
+  Duka_minio:
+    image: minio/minio
+    container_name: Duka_minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - duka-network
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: your_strong_password
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  minio_setup:
+    image: minio/mc:latest
+    container_name: Duka_minio_setup
+    depends_on:
+      - Duka_minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set local http://Duka_minio:9000 admin your_strong_password;
+      mc mb local/duka-images --ignore-existing;
+      mc policy set public local/duka-images;
+      echo '✅ MinIO bucket configured!';
+      exit 0;
+      "
+    networks:
+      - duka-network
+    restart: "no"
+
+networks:
+  duka-network:
+    driver: bridge
+
+volumes:
+  storage_data:
+  vendor_data:
+  minio_data:
