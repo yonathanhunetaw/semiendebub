@@ -465,22 +465,9 @@ echo " Buckets configured."
 if [ "$APP_ENV" = "production" ]; then
     echo "--- Preparing Image Proxy Configuration ---"
     
-    # Create the nginx.conf inside the docker/ folder
-    cat > "$BASE_DIR/nginx.conf" <<EOF
-server {
-    listen 80;
-    server_name _;
 
-    location /images/ {
-        proxy_pass http://minio:9000/;
-        proxy_set_header Host \$http_host;
-        proxy_buffering off;
-        client_max_body_size 0;
-    }
-}
-EOF
-    echo "✅ nginx.conf created in $BASE_DIR/"
-    compose restart nginx_proxy
+    echo "✅ nginx.conf already configured manually"
+    
 fi
 
 # 4. Final Laravel Cleanup
