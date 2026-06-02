@@ -52,8 +52,10 @@ services:
       - Duka_minio
     entrypoint: >
       /bin/sh -c "
-      sleep 5;
-      mc alias set local http://Duka_minio:9000 admin your_strong_password;
+      until mc alias set local http://Duka_minio:9000 admin your_strong_password; do
+        echo 'Waiting for MinIO...';
+        sleep 1;
+      done;
       mc mb local/duka-images --ignore-existing;
       mc policy set public local/duka-images;
       echo '✅ MinIO bucket configured!';

@@ -455,11 +455,17 @@ else
 fi
 
 echo "Ensuring MinIO buckets are ready..."
-# This waits for the minio_setup container to finish its 'exit 0' command
-until [ "$(docker inspect -f '{{.State.ExitCode}}' Duka_minio_setup)" == "0" ]; do
+# This waits for the minio_setup container to finish
+until [ "$(docker inspect -f '{{.State.Status}}' Duka_minio_setup)" == "exited" ]; do
     echo -n "."
     sleep 2
 done
+echo
+EXIT_CODE=$(docker inspect -f '{{.State.ExitCode}}' Duka_minio_setup)
+if [ "$EXIT_CODE" != "0" ]; then
+    echo "Error: MinIO setup failed with exit code $EXIT_CODE"
+    exit "$EXIT_CODE"
+fi
 echo " Buckets configured."
 
 if [ "$APP_ENV" = "production" ]; then
