@@ -149,61 +149,55 @@ class ItemController extends Controller
             'stores'
         ]);
 
+        // Debug: Log what images we're sending
+        \Log::info('Item Show - General Images', [
+            'item_id' => $item->id,
+            'raw_general_images' => $item->general_images,
+            'resolved_general_images' => !empty($item->general_images)
+                ? ImageResolver::resolveAll($item->general_images)
+                : [],
+        ]);
+
+        $variantData = $item->variants->map(function ($v) {
+            // Debug each variant's images
+            \Log::info('Variant Images', [
+                'variant_id' => $v->id,
+                'sku' => $v->sku,
+                'raw_images' => $v->images,
+                'resolved_slots' => $v->image_slots,
+            ]);
+
+            return [
+                'id' => $v->id,
+                'sku' => $v->sku,
+                'color' => $v->itemColor?->name,
+                'size' => $v->itemSize?->name,
+                'packaging' => $v->itemPackagingType?->name,
+                'status' => $v->status,
+                'slots' => $v->image_slots,
+                'slot_count' => count($v->image_slots),
+                'proof_ok' => count($v->image_slots) >= 2,
+                'packaging_data' => $v->packagingQuantities->map(fn($p) => [
+                    'name' => $p->name,
+                    'pivot' => [
+                        'quantity' => $p->pivot->quantity,
+                        'cbm' => $p->pivot->cbm
+                    ]
+                ])->values()->toArray(),
+            ];
+        });
+
         return Inertia::render('Admin/Items/Show', [
             'item' => [
                 'id' => $item->id,
                 'product_name' => $item->product_name,
                 'product_description' => $item->product_description,
                 'status' => $item->status,
-                'general_images' => $item->processed_images,
+                'general_images' => !empty($item->general_images)
+                    ? ImageResolver::resolveAll($item->general_images)
+                    : [],
             ],
-            'variantData' => $item->variants->map(function ($v) {
-                // Filter packaging data to only the variant's specific packaging type
-                $filteredPackagingData = collect();
-
-                if ($v->itemPackagingType) {
-                    // Find the packaging quantity that matches this variant's packaging type
-                    $matchingPackaging = $v->packagingQuantities
-                        ->firstWhere('id', $v->itemPackagingType->id);
-
-                    if ($matchingPackaging) {
-                        $filteredPackagingData = collect([
-                            [
-                                'name' => $matchingPackaging->name,
-                                'pivot' => [
-                                    'quantity' => $matchingPackaging->pivot->quantity,
-                                    'cbm' => $matchingPackaging->pivot->cbm
-                                ]
-                            ]
-                        ]);
-                    }
-                }
-
-                // Fallback to all packaging quantities if no specific type found
-                if ($filteredPackagingData->isEmpty()) {
-                    $filteredPackagingData = $v->packagingQuantities->map(fn($p) => [
-                        'name' => $p->name,
-                        'pivot' => [
-                            'quantity' => $p->pivot->quantity,
-                            'cbm' => $p->pivot->cbm
-                        ]
-                    ]);
-                }
-
-                // Log::info('Item Show Payload:', ['data' => json_encode($payload, JSON_PRETTY_PRINT)]);
-                return [
-                    'id' => $v->id,
-                    'sku' => $v->sku,
-                    'color' => $v->itemColor?->name,
-                    'size' => $v->itemSize?->name,
-                    'packaging' => $v->itemPackagingType?->name,
-                    'status' => $v->status,
-                    'slots' => $v->image_slots,
-                    'slot_count' => count($v->image_slots),
-                    'proof_ok' => count($v->image_slots) >= 2,
-                    'packaging_data' => $filteredPackagingData->values()->toArray(),
-                ];
-            }),
+            'variantData' => $variantData,
             'stores' => Store::all(),
         ]);
     }

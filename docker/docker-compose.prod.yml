@@ -6,27 +6,68 @@ services:
       - ../:/var/www/html
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
-      # 🎯 ADD THIS SUB-MOUNT OVERRIDE FOR PRODUCTION:
       - ../storage/app/seed-images:/var/www/html/storage/app/seed-images
-
-    # Only expose HTTP/HTTPS
     ports:
       - "80:80"
       - "443:443"
-
-    # Ensure correct env
     environment:
       APP_ENV: production
-
-    # Restart policy (good for prod)
     restart: unless-stopped
+    networks:
+      - duka-network
 
   nginx_proxy:
-      image: nginx:alpine
-      ports:
-        - "8080:80"  # We map this to 8080 on the host to avoid conflict
-      volumes:
-        - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      depends_on:
-        - minio
-      restart: unless-stopped
+    image: nginx:alpine
+    container_name: nginx_proxy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - Duka_minio
+    networks:
+      - duka-network
+    restart: unless-stopped
+
+  Duka_minio:
+    image: minio/minio
+    container_name: Duka_minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - duka-network
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: your_strong_password
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  minio_setup:
+    image: minio/mc:latest
+    container_name: Duka_minio_setup
+    depends_on:
+      - Duka_minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set local http://Duka_minio:9000 admin your_strong_password;
+      mc mb local/duka-images --ignore-existing;
+      mc policy set public local/duka-images;
+      echo '✅ MinIO bucket configured!';
+      exit 0;
+      "
+    networks:
+      - duka-network
+    restart: "no"
+
+networks:
+  duka-network:
+    driver: bridge
+
+volumes:
+  storage_data:
+  vendor_data:
+  minio_data:
