@@ -39,8 +39,8 @@ services:
     networks:
       - duka-network
     environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: your_strong_password
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
     volumes:
       - minio_data:/data
     restart: unless-stopped
@@ -52,12 +52,13 @@ services:
       - Duka_minio
     entrypoint: >
       /bin/sh -c "
-      until mc alias set local http://Duka_minio:9000 admin your_strong_password; do
+      mc alias set local http://Duka_minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY};
+      until mc ls local >/dev/null 2>&1; do
         echo 'Waiting for MinIO...';
         sleep 1;
       done;
-      mc mb local/duka-images --ignore-existing;
-      mc policy set public local/duka-images;
+      mc mb local/${AWS_BUCKET} --ignore-existing;
+      mc policy set public local/${AWS_BUCKET};
       echo '✅ MinIO bucket configured!';
       exit 0;
       "
