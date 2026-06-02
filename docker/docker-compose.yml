@@ -1,6 +1,5 @@
 name: duka
 
-
 services:
   duka_app:
     build:
@@ -40,68 +39,21 @@ services:
       timeout: 3s
       retries: 10
 
-  minio:
-    image: minio/minio
-    container_name: Duka_minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: your_strong_password
-    restart: unless-stopped
-    networks:
-      - duka-network
-
-  minio_setup:
-      image: minio/mc:latest
-      container_name: Duka_minio_setup
-      depends_on:
-        - minio
-      volumes:
-        - ./img:/tmp/img 
-      networks:
-        - duka-network
-      entrypoint: >
-        /bin/sh -c "
-        echo 'Registering local server credentials...';
-        until /usr/bin/mc alias set local_setup http://minio:9000 admin your_strong_password; do 
-            echo 'Waiting for MinIO API endpoint...'; 
-            sleep 2; 
-        done;
-        
-        echo 'Creating duka-images bucket...';
-        /usr/bin/mc mb local_setup/duka-images --ignore-existing;
-        
-        echo 'Creating img bucket...';
-        /usr/bin/mc mb local_setup/img --ignore-existing;
-        
-        echo 'Uploading default image...';
-        /usr/bin/mc cp /tmp/img/default.jpg local_setup/img/default.jpg --quiet || echo 'Default image not found, skipping...';
-        
-        echo 'Applying public anonymous policy...';
-        /usr/bin/mc anonymous set download local_setup/img;
-        
-        echo '🚀 Setup complete!';
-        exit 0;
-        "
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
     volumes:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./promtail-config.yaml:/tmp/config.yaml  # <--- Mount to /tmp
-    command: -config.file=/tmp/config.yaml      # <--- Point to /tmp
+      - ./promtail-config.yaml:/tmp/config.yaml
+    command: -config.file=/tmp/config.yaml
     networks:
       - duka-network
     restart: unless-stopped
 
 networks:
   duka-network:
+    driver: bridge
 
 volumes:
   database_data:
