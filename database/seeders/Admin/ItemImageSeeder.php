@@ -11,39 +11,61 @@ class ItemImageSeeder extends Seeder
 {
     public function run(): void
     {
-        $disk = Storage::disk('s3');
-        $items = Item::all(); // Get all items created by ItemSeeder
+        // Check if MinIO is available
+        try {
+            $disk = Storage::disk('s3');
+            if (!$disk->exists('/')) {
+                echo "⚠️ MinIO not available, skipping ItemImageSeeder\n";
+                return;
+            }
+        } catch (\Exception $e) {
+            echo "⚠️ MinIO not available (" . $e->getMessage() . "), skipping ItemImageSeeder\n";
+            return;
+        }
+
+        $items = Item::all();
 
         foreach ($items as $item) {
-            // Retrieve the file prefix (ensure it's stored on the Item model or derived)
-            // If you don't have it on the model, you can map it by name here
-            $prefix = $this->getPrefixFromName($item->product_name);
-            
-            // 1. Upload General Images (1-5)
-            for ($i = 1; $i <= 5; $i++) {
-                $this->uploadImage($disk, $item, "{$prefix}_{$i}.jpg", "uploads/items/{$item->id}/{$prefix}_{$i}.jpg");
-            }
+            $this->seedImagesForItem($disk, $item);
+        }
+    }
 
-            // 2. Upload Variant Images (v1-v9)
-            for ($v = 1; $v <= 9; $v++) {
-                for ($i = 1; $i <= 5; $i++) {
-                    $this->uploadImage($disk, $item, "{$prefix}_v{$v}_{$i}.jpg", "uploads/items/{$item->id}/{$prefix}_v{$v}_{$i}.jpg");
-                }
+    private function seedImagesForItem($disk, Item $item): void
+    {
+        $prefix = $item->file_prefix ?? 'item';
+        
+        // Upload general images (1-5)
+        for ($i = 1; $i <= 5; $i++) {
+            $fileName = "{$prefix}_{$i}.jpg";
+            $minioPath = "uploads/items/{$item->id}/{$fileName}";
+            $this->uploadImage($disk, $item, $fileName, $minioPath);
+        }
+
+        // Upload variant images
+        foreach ($item->variants as $variantIndex => $variant) {
+            for ($i = 1; $i <= 5; $i++) {
+                $fileName = "{$prefix}_v" . ($variantIndex + 1) . "_{$i}.jpg";
+                $minioPath = "uploads/items/{$item->id}/{$fileName}";
+                $this->uploadImage($disk, $item, $fileName, $minioPath);
             }
         }
     }
 
-    private function uploadImage($disk, $item, $fileName, $minioPath)
+    private function uploadImage($disk, Item $item, string $fileName, string $minioPath): void
     {
         $sourcePath = storage_path("app/seed-images/{$fileName}");
-        if (File::exists($sourcePath) && !$disk->exists($minioPath)) {
-            $disk->put($minioPath, File::get($sourcePath));
+        
+        // Skip if source file doesn't exist
+        if (!File::exists($sourcePath)) {
+            return; // Silent skip
         }
-    }
 
-    private function getPrefixFromName($name) {
-        // Map your product names to their prefixes
-        $map = ['Noteit' => 'noteit', 'Ring' => 'ring', 'Bic' => 'bic', /* ... */];
-        return $map[$name] ?? 'default';
+        try {
+            if (!$disk->exists($minioPath)) {
+                $disk->put($minioPath, File::get($sourcePath));
+            }
+        } catch (\Exception $e) {
+            // Silent fail - don't clutter output
+        }
     }
 }
