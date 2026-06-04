@@ -55,15 +55,15 @@ services:
     depends_on:
       Duka_minio:
         condition: service_healthy
-    entrypoint: >
+    entrypoint: |
       /bin/sh -c "
       for i in 1 2 3 4 5; do
         if mc alias set local http://Duka_minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY}; then
-          mc mb local/${AWS_BUCKET} --ignore-existing && mc policy set public local/${AWS_BUCKET} && exit 0
-        fi
-        sleep 5
-      done
-      exit 1
+          mc mb local/${AWS_BUCKET} --ignore-existing && mc policy set public local/${AWS_BUCKET} && exit 0;
+        fi;
+        sleep 5;
+      done;
+      exit 1;
       "
     networks:
       - duka-network
