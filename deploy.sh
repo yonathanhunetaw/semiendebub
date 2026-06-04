@@ -355,6 +355,10 @@ fi
 # START SERVICES
 # =============================================================================
 
+# Clean up stale containers before starting
+log_info "Removing old containers..."
+docker_raw rm -f Duka_minio Duka_db duka_app nginx_proxy Duka_minio_setup 2>/dev/null || true
+
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     log_info "Starting observability stack..."
     log_info "Starting database and MinIO..."
