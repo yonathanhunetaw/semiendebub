@@ -42,32 +42,28 @@ services:
     volumes:
       - minio_data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   minio_setup:
     image: minio/mc:latest
     container_name: Duka_minio_setup
     depends_on:
-      - Duka_minio
+      Duka_minio:
+        condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://Duka_minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY};
-      TIMEOUT=30;
-      while [ $$TIMEOUT -gt 0 ]; do
-        if mc ls local >/dev/null 2>&1; then
-          break;
-        fi;
-        echo 'Waiting for MinIO...';
-        sleep 1;
-        TIMEOUT=$$(($$TIMEOUT - 1));
-      done;
-      if [ $$TIMEOUT -eq 0 ]; then
-        echo 'Error: MinIO did not become ready in 30 seconds';
-        exit 1;
-      fi;
-      mc mb local/${AWS_BUCKET} --ignore-existing;
-      mc policy set public local/${AWS_BUCKET};
-      echo '✅ MinIO bucket configured!';
-      exit 0;
+      for i in 1 2 3 4 5; do
+        if mc alias set local http://Duka_minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY}; then
+          mc mb local/${AWS_BUCKET} --ignore-existing && mc policy set public local/${AWS_BUCKET} && exit 0
+        fi
+        sleep 5
+      done
+      exit 1
       "
     networks:
       - duka-network
