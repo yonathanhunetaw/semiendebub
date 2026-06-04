@@ -57,14 +57,32 @@ services:
     depends_on:
       Duka_minio:
         condition: service_healthy
-    entrypoint: |
-      /bin/sh -c "
-      for i in 1 2 3 4 5; do
-        if mc alias set local http://Duka_minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY}; then
-          mc mb local/${AWS_BUCKET} --ignore-existing && mc policy set public local/${AWS_BUCKET} && exit 0;
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_BUCKET: ${AWS_BUCKET}
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      echo 'Starting MinIO setup...';
+      sleep 10;
+      
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        echo \"Attempt \$$i...\";
+        
+        if mc alias set local http://Duka_minio:9000 \"$$AWS_ACCESS_KEY_ID\" \"$$AWS_SECRET_ACCESS_KEY\" 2>&1; then
+          echo 'Connected to MinIO!';
+          mc mb local/\"$$AWS_BUCKET\" --ignore-existing;
+          mc policy set public local/\"$$AWS_BUCKET\";
+          echo 'MinIO setup complete!';
+          exit 0;
         fi;
+        
+        echo 'Failed, retrying in 5 seconds...';
         sleep 5;
       done;
+      
+      echo 'MinIO setup failed!';
       exit 1;
       "
     networks:
