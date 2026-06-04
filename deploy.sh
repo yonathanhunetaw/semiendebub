@@ -133,6 +133,16 @@ fi
 # VARIABLE LOADING WITH DEFAULTS
 # =============================================================================
 
+# Parse command-line flags
+SKIP_DB_RESET=0
+for arg in "$@"; do
+    case $arg in
+        --no-reset|--skip-reset|--no-seed)
+            SKIP_DB_RESET=1
+            ;;
+    esac
+done
+
 # Load from .env or use defaults
 APP_ENV="${APP_ENV:-}"
 RESET_DB="${RESET_DB:-$(env_value RESET_DB)}"
@@ -142,7 +152,6 @@ GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-$(env_value GLITCHTIP_DB_USER)}"
 GLITCHTIP_DB_NAME="${GLITCHTIP_DB_NAME:-$(env_value GLITCHTIP_DB_NAME)}"
 
 # Apply defaults
-RESET_DB="${RESET_DB:-0}"
 FORCE_BUILD="${FORCE_BUILD:-0}"
 ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY:-0}"
 GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-glitchtip}"
@@ -256,13 +265,8 @@ run_migration_with_retry() {
     while [ $attempt -le $max_attempts ]; do
         log_info "Migration attempt $attempt of $max_attempts"
         
-        if [ "$RESET_DB" = "1" ]; then
-            if [ "$APP_ENV" = "production" ]; then
-                log_error "RESET_DB=1 is not allowed in production"
-                return 1
-            fi
-            
-            log_info "Attempting to wipe database first..."
+        if [ "$SKIP_DB_RESET" = "0" ]; then
+            log_info "Attempting to refresh and seed database..."
             
             # Try db:wipe first (more reliable)
             if exec_in_app php artisan db:wipe --force 2>&1 | tee -a "$LOG_FILE"; then
@@ -276,11 +280,12 @@ run_migration_with_retry() {
                 
                 # Try migrate:fresh with deadlock handling
                 if exec_in_app php artisan migrate:fresh --seed --force 2>&1 | tee -a "$LOG_FILE"; then
-                    log_success "Migration completed successfully"
+                    log_success "Migration and seeding completed successfully"
                     return 0
                 fi
             fi
         else
+            log_info "Skipping database reset, running incremental migrations..."
             # Normal incremental migration
             if exec_in_app php artisan migrate --force 2>&1 | tee -a "$LOG_FILE"; then
                 log_success "Incremental migration completed successfully"
@@ -296,7 +301,7 @@ run_migration_with_retry() {
             sleep $wait_time
         fi
         
-        attempt=$((attempt + 1))
+        attempt=$attempt+1
     done
     
     log_error "Migration failed after $max_attempts attempts"
@@ -311,7 +316,7 @@ log_info "=========================================="
 log_info "Deployment Configuration"
 log_info "=========================================="
 log_info "Environment: $APP_ENV"
-log_info "Reset Database: $RESET_DB"
+log_info "Skip Database Reset: $SKIP_DB_RESET"
 log_info "Force Build: $FORCE_BUILD"
 log_info "Enable Observability: $ENABLE_OBSERVABILITY"
 log_info "=========================================="
