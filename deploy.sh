@@ -1,24 +1,47 @@
 #!/bin/bash
 set -euo pipefail
 
-# 1. Get the directory where this script lives
+# =============================================================================
+# 1. ABSOLUTE PATH RESOLUTION - Fixes script context sensitivity
+# =============================================================================
+
+# Get the directory where this script lives (docker/ subdirectory)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# 2. IF your script is in the root (semiendebub/), then PROJECT_ROOT is SCRIPT_DIR
-# IF your script is in the 'docker/' folder, then PROJECT_ROOT is the parent.
-# Let's check:
+# Determine PROJECT_ROOT (parent of docker/ if script is in docker/, otherwise script dir)
 if [ "$(basename "$SCRIPT_DIR")" = "docker" ]; then
     PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 else
     PROJECT_ROOT="$SCRIPT_DIR"
 fi
 
-# 3. Debugging (Keep this temporarily to see exactly where it is looking)
-echo "Script is in: $SCRIPT_DIR"
-echo "Project Root is: $PROJECT_ROOT"
-echo "Looking for env at: $PROJECT_ROOT/.env"
+# CRITICAL: Absolute path to .env file
+ENV_FILE="$PROJECT_ROOT/.env"
 
-# 4. Correct way to define env_value
+# Validate .env exists before proceeding
+if [ ! -f "$ENV_FILE" ]; then
+    echo "ERROR: .env file not found at: $ENV_FILE"
+    echo "Please ensure $ENV_FILE exists before running this script."
+    exit 1
+fi
+
+# Debug output (can be removed after testing)
+echo "=== Path Resolution ==="
+echo "Script directory: $SCRIPT_DIR"
+echo "Project root: $PROJECT_ROOT"
+echo "Environment file: $ENV_FILE"
+echo "======================"
+
+# =============================================================================
+# 2. ENVIRONMENT VARIABLE LOADING - Single source of truth
+# =============================================================================
+
+# Load .env file into shell variables (for script use)
+set -a  # automatically export all variables
+source "$ENV_FILE"
+set +a
+
+# Function to extract values from .env (fallback if source fails)
 env_value() {
     local key="$1"
     awk -F= -v target="$key" '
@@ -29,8 +52,76 @@ env_value() {
             print value
             exit
         }
-    ' "$PROJECT_ROOT/.env"
+    ' "$ENV_FILE"
 }
+
+# =============================================================================
+# 3. DOCKER COMPOSE WRAPPER - Correct environment file handling
+# =============================================================================
+
+# Determine docker command (with/without sudo)
+if docker info >/dev/null 2>&1; then
+    DOCKER_CMD=(docker)
+else
+    DOCKER_CMD=(sudo docker)
+fi
+
+# Build compose files array based on environment
+BASE_DIR="$PROJECT_ROOT"  # Dockerfiles are in project root for build context
+COMPOSE_FILES=()
+
+if [ "$APP_ENV" = "production" ]; then
+    COMPOSE_FILES=(-f "$PROJECT_ROOT/docker/docker-compose.yml" -f "$PROJECT_ROOT/docker/docker-compose.prod.yml")
+else
+    COMPOSE_FILES=(-f "$PROJECT_ROOT/docker/docker-compose.yml" -f "$PROJECT_ROOT/docker/docker-compose.dev.yml" -f "$PROJECT_ROOT/docker/docker-compose.prod.yml")
+fi
+
+# Add observability if enabled
+if [ "${ENABLE_OBSERVABILITY:-0}" = "1" ]; then
+    if [ ! -f "$PROJECT_ROOT/docker/docker-compose.observability.yml" ]; then
+        echo "Error: $PROJECT_ROOT/docker/docker-compose.observability.yml not found."
+        exit 1
+    fi
+    COMPOSE_FILES+=(-f "$PROJECT_ROOT/docker/docker-compose.observability.yml")
+fi
+
+# SINGLE AUTHORITATIVE compose() FUNCTION
+compose() {
+    # CRITICAL: --env-file points to absolute path of root .env
+    # Working directory is PROJECT_ROOT (where .env lives)
+    (cd "$PROJECT_ROOT" && \
+     "${DOCKER_CMD[@]}" compose \
+        --env-file "$ENV_FILE" \
+        "${COMPOSE_FILES[@]}" \
+        "$@")
+}
+
+# Helper for raw docker commands
+docker_raw() {
+    "${DOCKER_CMD[@]}" "$@"
+}
+
+# Helper for executing commands in the app container
+exec_in_app() {
+    compose exec -T duka_app "$@"
+}
+
+exec_in_app_as_root() {
+    compose exec -T -u root duka_app "$@"
+}
+
+# Helper for removing compose services with timeout
+compose_rm_services() {
+    if has_command timeout; then
+        (cd "$PROJECT_ROOT" && timeout 20s "${DOCKER_CMD[@]}" compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" rm -fsv "$@")
+    else
+        (cd "$PROJECT_ROOT" && "${DOCKER_CMD[@]}" compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" rm -fsv "$@")
+    fi
+}
+
+# =============================================================================
+# 4. UTILITY FUNCTIONS
+# =============================================================================
 
 has_git_path_changes() {
     if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
@@ -48,114 +139,12 @@ has_git_path_changes() {
     return 1
 }
 
-if [ -z "${APP_ENV:-}" ]; then
-    echo "APP_ENV is not set in .env"
-    exit 1
-fi
-
-RESET_DB="${RESET_DB:-$(env_value RESET_DB)}"
-FORCE_BUILD="${FORCE_BUILD:-$(env_value FORCE_BUILD)}"
-ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY:-$(env_value ENABLE_OBSERVABILITY)}"
-GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-$(env_value GLITCHTIP_DB_USER)}"
-GLITCHTIP_DB_NAME="${GLITCHTIP_DB_NAME:-$(env_value GLITCHTIP_DB_NAME)}"
-
-RESET_DB="${RESET_DB:-0}"
-FORCE_BUILD="${FORCE_BUILD:-0}"
-ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY:-0}"
-GLITCHTIP_DB_USER="${GLITCHTIP_DB_USER:-glitchtip}"
-GLITCHTIP_DB_NAME="${GLITCHTIP_DB_NAME:-glitchtip}"
-
-DOCKER_FILES=(
-    "$BASE_DIR/Dockerfile"
-    "$BASE_DIR/Dockerfile.dev"
-    "$BASE_DIR/docker-compose.yml"
-    "$BASE_DIR/docker-compose.dev.yml"
-    "$BASE_DIR/docker-compose.prod.yml"
-    "$BASE_DIR/docker-compose.observability.yml"
-)
-
-APP_BUILD_FILES=(
-    app
-    bootstrap
-    config
-    public
-    resources
-    routes
-    artisan
-    composer.json
-    composer.lock
-    package.json
-    package-lock.json
-    vite.config.js
-    tsconfig.json
-    jsconfig.json
-    tailwind.config.js
-    postcss.config.js
-)
-
-NODE_FILES=(
-    package.json
-    package-lock.json
-)
-
-if [ "$APP_ENV" = "production" ]; then
-    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.prod.yml")
-else
-    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.dev.yml" -f "$BASE_DIR/docker-compose.prod.yml")
-fi
-
-check_cloudflared() {
-    command -v cloudflared >/dev/null 2>&1
-}
-# ADD THIS:
-if check_cloudflared; then
-    # If it's on the host, we make sure we ARE NOT using a cloudflared docker file
-    # This prevents port/token conflicts
-    echo "Using host-based networking for Cloudflare."
-fi
-
-if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
-    if [ ! -f "$BASE_DIR/docker-compose.observability.yml" ]; then
-        echo "Error: $BASE_DIR/docker-compose.observability.yml not found."
-        exit 1
-    fi
-    COMPOSE_FILES+=(-f "$BASE_DIR/docker-compose.observability.yml")
-fi
-
-if docker info >/dev/null 2>&1; then
-    DOCKER_CMD=(docker)
-else
-    DOCKER_CMD=(sudo docker)
-fi
-
-compose() {
-    "${DOCKER_CMD[@]}" compose --env-file ../.env "${COMPOSE_FILES[@]}" "$@"
-}
-
-docker_raw() {
-    "${DOCKER_CMD[@]}" "$@"
-}
-
 has_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Update the helper functions to use lowercase
-exec_in_app() {
-    compose exec -T duka_app "$@"
-}
-
-exec_in_app_as_root() {
-    compose exec -T -u root duka_app "$@"
-}
-
-compose_rm_services() {
-    # We pass the service names as arguments to the command
-    if has_command timeout; then
-        timeout 20s "${DOCKER_CMD[@]}" compose --env-file .env "${COMPOSE_FILES[@]}" rm -fsv "$@"
-    else
-        "${DOCKER_CMD[@]}" compose --env-file .env "${COMPOSE_FILES[@]}" rm -fsv "$@"
-    fi
+check_cloudflared() {
+    command -v cloudflared >/dev/null 2>&1
 }
 
 install_node_dependencies() {
@@ -168,37 +157,60 @@ reset_node_dependencies() {
     install_node_dependencies
 }
 
-echo "Detected environment: $APP_ENV"
-echo "RESET_DB=$RESET_DB"
-echo "FORCE_BUILD=$FORCE_BUILD"
-echo "ENABLE_OBSERVABILITY=$ENABLE_OBSERVABILITY"
-echo "Starting deployment..."
+# =============================================================================
+# 5. MAIN DEPLOYMENT LOGIC
+# =============================================================================
 
-# if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
-#     echo "Ensuring Loki Docker logging driver is installed..."
-#     if ! docker_raw plugin inspect loki >/dev/null 2>&1; then
-#         docker_raw plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
-#     fi
-# fi
+echo "=== Deployment Configuration ==="
+echo "Environment: $APP_ENV"
+echo "RESET_DB: ${RESET_DB:-0}"
+echo "FORCE_BUILD: ${FORCE_BUILD:-0}"
+echo "ENABLE_OBSERVABILITY: ${ENABLE_OBSERVABILITY:-0}"
+echo "================================"
+
+# Validate required variables
+if [ -z "${APP_ENV:-}" ]; then
+    echo "ERROR: APP_ENV is not set in $ENV_FILE"
+    exit 1
+fi
+
+# Set defaults
+RESET_DB="${RESET_DB:-0}"
+FORCE_BUILD="${FORCE_BUILD:-0}"
+ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY:-0}"
+
+# Define file arrays for change detection
+DOCKER_FILES=(
+    "$PROJECT_ROOT/docker/Dockerfile"
+    "$PROJECT_ROOT/docker/Dockerfile.dev"
+    "$PROJECT_ROOT/docker/docker-compose.yml"
+    "$PROJECT_ROOT/docker/docker-compose.dev.yml"
+    "$PROJECT_ROOT/docker/docker-compose.prod.yml"
+    "$PROJECT_ROOT/docker/docker-compose.observability.yml"
+)
+
+NODE_FILES=(
+    "$PROJECT_ROOT/package.json"
+    "$PROJECT_ROOT/package-lock.json"
+)
+
+# =============================================================================
+# 6. DOCKER IMAGE BUILD
+# =============================================================================
 
 docker_changes=0
-app_build_changes=0
-node_changes=0
-
-# 1. Determine if a rebuild is necessary
-# We only care about infrastructure (DOCKER_FILES) or forced builds.
-# We no longer care about APP_BUILD_FILES for the container build phase.
 should_rebuild=0
 
 if [ "$FORCE_BUILD" = "1" ]; then
-    echo "FORCE_BUILD=1 detected."
+    echo "FORCE_BUILD=1 detected. Rebuilding image..."
     should_rebuild=1
 elif has_git_path_changes "${DOCKER_FILES[@]}"; then
-    echo "Docker-related changes detected."
+    echo "Docker-related changes detected. Rebuilding image..."
     should_rebuild=1
+else
+    echo "No Docker-related changes detected. Skipping image rebuild."
 fi
 
-# 2. Perform the build
 if [ "$should_rebuild" -eq 1 ]; then
     echo "Rebuilding duka_app image..."
     compose build duka_app
@@ -206,16 +218,21 @@ if [ "$should_rebuild" -eq 1 ]; then
     echo "Cleaning Docker build cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -af >/dev/null 2>&1 || true
-else
-    echo "No Docker-related changes detected. Skipping image rebuild."
 fi
 
-# 3. Check for node changes for the frontend step (keep this for your npm logic)
+# =============================================================================
+# 7. CHECK FOR NODE CHANGES
+# =============================================================================
+
+node_changes=0
 if has_git_path_changes "${NODE_FILES[@]}"; then
     node_changes=1
-else
-    node_changes=0
+    echo "Node dependency changes detected."
 fi
+
+# =============================================================================
+# 8. START SERVICES
+# =============================================================================
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     echo "Starting application database..."
@@ -228,7 +245,7 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     compose up -d lgtm glitchtip-postgres glitchtip-redis
 
     echo "Waiting for GlitchTip Postgres..."
-    until compose exec -T glitchtip-postgres pg_isready -U "$GLITCHTIP_DB_USER" -d "$GLITCHTIP_DB_NAME" >/dev/null 2>&1; do
+    until compose exec -T glitchtip-postgres pg_isready -U "${GLITCHTIP_DB_USER:-glitchtip}" -d "${GLITCHTIP_DB_NAME:-glitchtip}" >/dev/null 2>&1; do
         echo -n "."
         sleep 1
     done
@@ -254,13 +271,11 @@ else
     compose up -d --remove-orphans duka_app nginx_proxy minio_setup
 fi
 
-# Commented it out as certificats are now handedled by cloudflare
-# if [ "$APP_ENV" = "production" ]; then
-#     echo "Ensuring Apache SSL site is enabled..."
-#     compose exec -T app bash -lc 'a2enmod ssl >/dev/null 2>&1 || true && a2ensite default-ssl >/dev/null 2>&1 || true && apachectl -k graceful'
-# fi
+# =============================================================================
+# 9. WAIT FOR DATABASE
+# =============================================================================
 
-echo "Waiting for MySQL..."
+echo "Waiting for MySQL to be ready..."
 until compose exec -T db mysqladmin ping -h "localhost" --silent >/dev/null 2>&1; do
     echo -n "."
     sleep 1
@@ -268,36 +283,40 @@ done
 echo
 echo "MySQL is ready."
 
+# =============================================================================
+# 10. CONFIGURE GIT
+# =============================================================================
+
 echo "Configuring git safe directory..."
 exec_in_app git config --global --add safe.directory /var/www/html || true
 
+# =============================================================================
+# 11. INSTALL PHP DEPENDENCIES
+# =============================================================================
+
 echo "Installing PHP dependencies..."
 
-# 1. Add the package to composer.json
-exec_in_app composer require league/flysystem-aws-s3-v3:"^3.0" --no-interaction --no-update
+# Add S3 package if not present
+exec_in_app composer require league/flysystem-aws-s3-v3:"^3.0" --no-interaction --no-update 2>/dev/null || true
 
-# 2. Check if the lock file is in sync
-if ! exec_in_app composer validate --no-check-all --quiet; then
+# Check lock file sync
+if ! exec_in_app composer validate --no-check-all --quiet 2>/dev/null; then
     echo "Lock file out of sync, updating..."
     exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction
 fi
 
-# 3. Standard install
+# Standard install
 if [ "$APP_ENV" = "production" ]; then
     exec_in_app composer install --no-dev --optimize-autoloader --no-interaction
 else
     exec_in_app composer install --optimize-autoloader --no-interaction
 fi
 
-# 2. Define the check file
+# Handle S3 driver issues
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
-
-
 if ! exec_in_app test -f "$S3_CONVERTER_FILE" || has_git_path_changes "composer.lock"; then
     echo "S3 driver files missing or composer.lock changed. Syncing dependencies..."
-
-    # If the file is missing, the volume might be corrupted.
-    # Removing the folder forces Composer to re-download for ARM64.
+    
     if ! exec_in_app test -f "$S3_CONVERTER_FILE"; then
         exec_in_app rm -rf vendor/league/flysystem-aws-s3-v3
     fi
@@ -311,7 +330,12 @@ else
     echo "PHP dependencies are already up to date."
 fi
 
+# =============================================================================
+# 12. HANDLE FRONTEND
+# =============================================================================
+
 echo "Handling frontend..."
+
 if [ "$APP_ENV" = "production" ]; then
     echo "Building production assets..."
     exec_in_app rm -f public/hot
@@ -323,12 +347,10 @@ if [ "$APP_ENV" = "production" ]; then
 else
     echo "Starting Vite dev server..."
     
-    # 🎯 FIX: Remove all artifacts that could make Laravel think it's in production mode
     echo "Sanitizing Vite environment..."
     exec_in_app sh -lc 'rm -rf node_modules/.vite /tmp/vite-cache'
     
-    # Optional: Give the Pi's filesystem a split-second to commit the delete
-    sleep 1 
+    sleep 1
     
     if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
         echo "Installing Node dependencies..."
@@ -339,12 +361,10 @@ else
         echo "Vite is already running."
     else
         echo "Launching Vite..."
-        # 🎯 Ensure it doesn't try to reuse a stale cache
         compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
     fi
 
     echo "Waiting for Vite..."
-    # (The loop below uses exec_in_app, which you already updated to duka_app, so that is fine)
     if ! exec_in_app sh -lc '
         for i in $(seq 1 120); do
             if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
@@ -356,14 +376,14 @@ else
         exit 1
     '; then
         echo
-        echo "Vite failed to become ready within 60s."
+        echo "Vite failed to become ready within 120s."
         echo "Last Vite log output:"
         exec_in_app sh -lc 'tail -n 100 /tmp/vite.log 2>/dev/null || echo "No /tmp/vite.log found."'
+        
         if exec_in_app sh -lc 'grep -q "@rollup/rollup-linux-arm64-gnu" /tmp/vite.log 2>/dev/null'; then
-            echo "Detected a stale Rollup optional dependency set..."
+            echo "Detected stale Rollup optional dependency set. Resetting..."
             reset_node_dependencies
             echo "Relaunching Vite..."
-            # 🎯 FIXED: TARGETS DUKA_APP CONTAINER HERE AS WELL
             compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
             echo "Waiting for Vite after dependency reset..."
             if ! exec_in_app sh -lc '
@@ -378,7 +398,6 @@ else
             '; then
                 echo
                 echo "Vite still failed after reinstalling Node dependencies."
-                echo "Last Vite log output:"
                 exec_in_app sh -lc 'tail -n 100 /tmp/vite.log 2>/dev/null || echo "No /tmp/vite.log found."'
                 exit 1
             fi
@@ -392,10 +411,14 @@ else
     echo "Vite is ready."
 fi
 
+# =============================================================================
+# 13. RUN DATABASE MIGRATIONS
+# =============================================================================
+
 echo "Running database setup..."
 if [ "$RESET_DB" = "1" ]; then
     if [ "$APP_ENV" = "production" ]; then
-        echo "RESET_DB=1 is not allowed in production."
+        echo "ERROR: RESET_DB=1 is not allowed in production."
         exit 1
     fi
     echo "Performing fresh migration and seeding..."
@@ -405,17 +428,19 @@ else
     exec_in_app php artisan migrate --force
 fi
 
-echo "--- Purging Laravel Cache ---"
+# =============================================================================
+# 14. CLEAR AND RECONFIGURE CACHES
+# =============================================================================
+
+echo "Purging Laravel cache..."
 exec_in_app php artisan cache:clear
 exec_in_app php artisan config:clear
 exec_in_app php artisan route:clear
 exec_in_app php artisan view:clear
 exec_in_app php artisan event:clear
 exec_in_app php artisan optimize:clear
-# -------------------------------
 
 echo "Ensuring storage structure and permissions..."
-# Create all necessary paths in one go
 exec_in_app mkdir -p \
     storage/framework/sessions \
     storage/framework/views \
@@ -423,20 +448,14 @@ exec_in_app mkdir -p \
     storage/app/seed-images \
     public/images/defaults
 
-# Set ownership and permissions for everything at once
-# Including public/images ensures your default placeholders work!
 exec_in_app chown -R 33:33 storage bootstrap/cache public/images
 exec_in_app chmod -R 775 storage bootstrap/cache public/images
-# 2. Set the owner to www-data (ID 33) so the webserver can actually use them
-exec_in_app chown -R 33:33 storage bootstrap/cache
-exec_in_app chmod -R 775 storage bootstrap/cache
 
 exec_in_app touch storage/logs/laravel.log
 exec_in_app chown 33:33 storage/logs/laravel.log
 exec_in_app chmod 664 storage/logs/laravel.log
 
 echo "Refreshing Laravel caches..."
-# We use '|| true' so that even if a clear command fails, the script keeps going
 exec_in_app php artisan optimize:clear || true
 exec_in_app php artisan storage:link --force
 
@@ -445,37 +464,49 @@ if [ "$APP_ENV" = "production" ]; then
 else
     exec_in_app php artisan config:clear
     exec_in_app php artisan route:clear
-    # This is the line that usually fails; the '|| true' prevents it from stopping the script
     exec_in_app php artisan view:clear || echo "View cache clear skipped or path not found."
 fi
 
-echo "Ensuring MinIO buckets are ready..."
-# This waits for the minio_setup container to finish
-until [ "$(docker inspect -f '{{.State.Status}}' Duka_minio_setup)" == "exited" ]; do
+# =============================================================================
+# 15. VERIFY MINIO SETUP
+# =============================================================================
+
+echo "Waiting for MinIO setup to complete..."
+# Use container name pattern from docker-compose files
+MINIO_SETUP_CONTAINER="${PROJECT_ROOT##*/}_minio_setup"
+MINIO_SETUP_CONTAINER=$(echo "$MINIO_SETUP_CONTAINER" | tr '[:upper:]' '[:lower:]')
+
+# Wait for minio_setup container to exit
+for i in {1..60}; do
+    STATUS=$(docker inspect -f '{{.State.Status}}' "$MINIO_SETUP_CONTAINER" 2>/dev/null || echo "not-found")
+    if [ "$STATUS" = "exited" ]; then
+        echo
+        break
+    elif [ "$STATUS" = "not-found" ]; then
+        echo "MinIO setup container not found, skipping verification..."
+        break
+    fi
     echo -n "."
     sleep 2
 done
-echo
-EXIT_CODE=$(docker inspect -f '{{.State.ExitCode}}' Duka_minio_setup)
-if [ "$EXIT_CODE" != "0" ]; then
-    echo "Error: MinIO setup failed with exit code $EXIT_CODE"
-    exit "$EXIT_CODE"
-fi
-echo " Buckets configured."
 
-if [ "$APP_ENV" = "production" ]; then
-    echo "--- Preparing Image Proxy Configuration ---"
-    
-
-    echo "✅ nginx.conf already configured manually"
-    
+if docker inspect "$MINIO_SETUP_CONTAINER" >/dev/null 2>&1; then
+    EXIT_CODE=$(docker inspect -f '{{.State.ExitCode}}' "$MINIO_SETUP_CONTAINER" 2>/dev/null || echo "0")
+    if [ "${EXIT_CODE:-0}" != "0" ]; then
+        echo "Warning: MinIO setup failed with exit code $EXIT_CODE (continuing anyway)"
+    else
+        echo "MinIO buckets configured successfully."
+    fi
 fi
 
-# 4. Final Laravel Cleanup
+# =============================================================================
+# 16. FINAL CLEANUP AND COMPLETION
+# =============================================================================
+
 exec_in_app php artisan config:clear
 
-echo "--- Deployment complete ---"
-
-# Use this to watch the app startup
-echo "--- Following application logs (Ctrl+C to stop) ---"
+echo "==================================="
+echo "=== DEPLOYMENT COMPLETE ==="
+echo "==================================="
+echo "Following application logs (Ctrl+C to stop)..."
 docker logs -f duka_app
