@@ -558,14 +558,6 @@ fi
 # CACHE AND PERMISSIONS
 # =============================================================================
 
-log_info "Purging Laravel caches..."
-exec_in_app php artisan cache:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan config:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan route:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan view:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan event:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan optimize:clear 2>&1 | tee -a "$LOG_FILE"
-
 log_info "Setting up storage structure and permissions..."
 exec_in_app mkdir -p \
     storage/framework/sessions \
@@ -580,6 +572,14 @@ exec_in_app chmod -R 775 storage bootstrap/cache public/images
 exec_in_app touch storage/logs/laravel.log
 exec_in_app chown 33:33 storage/logs/laravel.log
 exec_in_app chmod 664 storage/logs/laravel.log
+
+log_info "Purging Laravel caches..."
+exec_in_app php artisan cache:clear 2>&1 | tee -a "$LOG_FILE"
+exec_in_app php artisan config:clear 2>&1 | tee -a "$LOG_FILE"
+exec_in_app php artisan route:clear 2>&1 | tee -a "$LOG_FILE"
+exec_in_app php artisan view:clear 2>&1 | tee -a "$LOG_FILE"
+exec_in_app php artisan event:clear 2>&1 | tee -a "$LOG_FILE"
+exec_in_app php artisan optimize:clear 2>&1 | tee -a "$LOG_FILE"
 
 log_info "Refreshing Laravel optimizations..."
 exec_in_app php artisan optimize:clear || true
