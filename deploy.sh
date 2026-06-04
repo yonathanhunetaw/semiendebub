@@ -1,24 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-
-cd "$(dirname "$0")"
-
-# 2. DEFINE BASE_DIR HERE BEFORE IT IS USED ANYWHERE ELSE
-BASE_DIR="docker"
-
-
-# Get the absolute path of the directory the script is in
+# 1. Get the absolute path of the directory the script is in
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# If the script is in /docker, the root is the parent:
+
+# 2. Determine project root (if script is in /docker, root is parent)
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# NOW, use $PROJECT_ROOT/.env everywhere:
-APP_ENV=$(awk -F= '$1 == "APP_ENV" { ... }' "$PROJECT_ROOT/.env")
-
-# 3. Then continue with the rest of your variables...
+# 3. Correct way to define APP_ENV (remove the placeholder)
 APP_ENV=$(awk -F= '$1 == "APP_ENV" {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' "$PROJECT_ROOT/.env")
 
+# 4. Correct way to define env_value
 env_value() {
     local key="$1"
     awk -F= -v target="$key" '
