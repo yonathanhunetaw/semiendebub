@@ -7,12 +7,20 @@ cd "$(dirname "$0")"
 # 2. DEFINE BASE_DIR HERE BEFORE IT IS USED ANYWHERE ELSE
 BASE_DIR="docker"
 
+
+# Get the absolute path of the directory the script is in
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# If the script is in /docker, the root is the parent:
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# NOW, use $PROJECT_ROOT/.env everywhere:
+APP_ENV=$(awk -F= '$1 == "APP_ENV" { ... }' "$PROJECT_ROOT/.env")
+
 # 3. Then continue with the rest of your variables...
-APP_ENV=$(awk -F= '$1 == "APP_ENV" {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' ../.env)
+APP_ENV=$(awk -F= '$1 == "APP_ENV" {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' "$PROJECT_ROOT/.env")
 
 env_value() {
     local key="$1"
-    # Note the use of ../.env here
     awk -F= -v target="$key" '
         $1 == target {
             value=$0
@@ -21,7 +29,7 @@ env_value() {
             print value
             exit
         }
-    ' ../.env
+    ' "$PROJECT_ROOT/.env"
 }
 
 has_git_path_changes() {
