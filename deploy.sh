@@ -8,19 +8,11 @@ cd "$(dirname "$0")"
 BASE_DIR="docker"
 
 # 3. Then continue with the rest of your variables...
-APP_ENV=$(
-    awk -F= '
-        $1 == "APP_ENV" {
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
-            print $2
-            exit
-        }
-    ' .env
-)
+APP_ENV=$(awk -F= '$1 == "APP_ENV" {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' ../.env)
 
 env_value() {
     local key="$1"
-
+    # Note the use of ../.env here
     awk -F= -v target="$key" '
         $1 == target {
             value=$0
@@ -29,7 +21,7 @@ env_value() {
             print value
             exit
         }
-    ' .env
+    ' ../.env
 }
 
 has_git_path_changes() {
@@ -52,11 +44,6 @@ if [ -z "${APP_ENV:-}" ]; then
     echo "APP_ENV is not set in .env"
     exit 1
 fi
-
-# Force the script to use both files, ensuring all services (including nginx_proxy) are seen
-compose() {
-    docker-compose -f docker-compose.yml -f docker-compose.prod.yml "$@"
-}
 
 RESET_DB="${RESET_DB:-$(env_value RESET_DB)}"
 FORCE_BUILD="${FORCE_BUILD:-$(env_value FORCE_BUILD)}"
@@ -134,7 +121,7 @@ else
 fi
 
 compose() {
-    "${DOCKER_CMD[@]}" compose --env-file .env "${COMPOSE_FILES[@]}" "$@"
+    "${DOCKER_CMD[@]}" compose --env-file ../.env "${COMPOSE_FILES[@]}" "$@"
 }
 
 docker_raw() {
