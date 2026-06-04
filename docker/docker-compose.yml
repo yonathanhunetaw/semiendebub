@@ -21,6 +21,8 @@ services:
   db:
     image: mysql:8.0
     container_name: Duka_db
+    env_file:
+      - ../.env
     restart: always
     ports:
       - "3306:3306"
