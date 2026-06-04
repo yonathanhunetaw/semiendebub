@@ -7,9 +7,6 @@ services:
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
       - ../storage/app/seed-images:/var/www/html/storage/app/seed-images
-    ports:
-      - "80:80"
-      - "443:443"
     environment:
       APP_ENV: production
     restart: unless-stopped
@@ -20,10 +17,11 @@ services:
     image: nginx:alpine
     container_name: nginx_proxy
     ports:
-      - "8080:80"
+      - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
+      - duka_app
       - Duka_minio
     networks:
       - duka-network
