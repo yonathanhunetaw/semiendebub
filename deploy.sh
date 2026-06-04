@@ -1,14 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-# 1. Get the absolute path of the directory the script is in
+# 1. Get the directory where this script lives
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# 2. Determine project root (if script is in /docker, root is parent)
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# 2. IF your script is in the root (semiendebub/), then PROJECT_ROOT is SCRIPT_DIR
+# IF your script is in the 'docker/' folder, then PROJECT_ROOT is the parent.
+# Let's check:
+if [ "$(basename "$SCRIPT_DIR")" = "docker" ]; then
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+else
+    PROJECT_ROOT="$SCRIPT_DIR"
+fi
 
-# 3. Correct way to define APP_ENV (remove the placeholder)
-APP_ENV=$(awk -F= '$1 == "APP_ENV" {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' "$PROJECT_ROOT/.env")
+# 3. Debugging (Keep this temporarily to see exactly where it is looking)
+echo "Script is in: $SCRIPT_DIR"
+echo "Project Root is: $PROJECT_ROOT"
+echo "Looking for env at: $PROJECT_ROOT/.env"
 
 # 4. Correct way to define env_value
 env_value() {
