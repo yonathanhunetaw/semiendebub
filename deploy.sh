@@ -596,7 +596,14 @@ exec_in_app chmod -R 775 storage bootstrap/cache public/images
 
 exec_in_app touch storage/logs/laravel.log
 exec_in_app chown 33:33 storage/logs/laravel.log
-exec_in_app chmod 664 storage/logs/laravel.log
+exec_in_app chmod 664 storage/logs/laravel.
+
+# ----------------------------------------
+log_info "Cleaning up old cache files..."
+exec_in_app rm -rf bootstrap/cache/*.php
+# -----------------------------------------
+
+
 
 log_info "Purging Laravel caches..."
 exec_in_app php artisan cache:clear 2>&1 | tee -a "$LOG_FILE"
