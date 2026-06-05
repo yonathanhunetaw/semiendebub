@@ -162,7 +162,7 @@ fi
 # Follow logs if requested
 if [ $FOLLOW_LOGS -eq 1 ]; then
     echo -e "${BLUE}Following application logs...${NC}"
-    docker logs -f duka_app
+    docker logs -f duka-app
 fi
 
 echo -e "${GREEN}Deployment script completed!${NC}"
