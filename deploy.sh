@@ -417,18 +417,17 @@ fi
 # =============================================================================
 
 log_info "Waiting for MySQL to be ready..."
-for i in {1..60}; do
-    # Use 'mysqladmin ping' but check via the container's internal networking
-    if compose exec -T duka-db mysqladmin ping -u root -p"${DB_PASSWORD}" --silent >/dev/null 2>&1; then
+for i in {1..30}; do
+    # 'nc -z' checks if the port is open without sending data
+    if compose exec -T duka-db nc -z localhost 3306 >/dev/null 2>&1; then
         log_success "MySQL is ready"
         break
     fi
     echo -n "."
     sleep 2
     
-    # If we hit the limit, stop the script
-    if [ $i -eq 60 ]; then
-        log_error "MySQL failed to become ready"
+    if [ $i -eq 30 ]; then
+        log_error "MySQL port 3306 failed to respond"
         exit 1
     fi
 done
@@ -638,7 +637,10 @@ MINIO_SETUP_CONTAINER=$(echo "$MINIO_SETUP_CONTAINER" | tr '[:upper:]' '[:lower:
 
 # Wait for setup container to finish
 for i in {1..60}; do
-    STATUS=$(docker inspect -f '{{.State.Status}}' "$MINIO_SETUP_CONTAINER" 2>/dev/null || echo "not-found")
+    # Ensure this name matches exactly what 'docker ps' says
+    STATUS=$(docker inspect -f '{{.State.Status}}' "minio-setup" 2>/dev/null || echo "not-found")
+    
+    # Sometimes it's 'exited', sometimes it's 'dead' or 'removing'
     if [ "$STATUS" = "exited" ]; then
         log_success "MinIO setup container finished."
         break
