@@ -418,18 +418,20 @@ fi
 
 log_info "Waiting for MySQL to be ready..."
 for i in {1..60}; do
-    if compose exec -T db mysqladmin ping -h "localhost" --silent >/dev/null 2>&1; then
+    # Use 'mysqladmin ping' but check via the container's internal networking
+    if compose exec -T duka-db mysqladmin ping -u root -p"${DB_PASSWORD}" --silent >/dev/null 2>&1; then
         log_success "MySQL is ready"
         break
     fi
     echo -n "."
-    sleep 1
+    sleep 2
+    
+    # If we hit the limit, stop the script
     if [ $i -eq 60 ]; then
-        log_error "MySQL failed to become ready within 60 seconds"
+        log_error "MySQL failed to become ready"
         exit 1
     fi
 done
-echo
 
 # =============================================================================
 # CONFIGURE GIT SAFE DIRECTORY
