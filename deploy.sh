@@ -408,8 +408,8 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
 else
     log_info "Observability is DISABLED"
     log_info "Starting application services..."
-    # The --force-recreate flag is the most important part here
-    docker compose -f docker/docker-compose.yml up -d --force-recreate --remove-orphans duka-app nginx minio_setup
+    # Update the names below to match your config output exactly
+    compose up -d --force-recreate --remove-orphans duka-a duka-db duka-minio minio-setup 2>&1 | tee -a "$LOG_FILE"
 fi
 
 # =============================================================================
