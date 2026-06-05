@@ -309,23 +309,6 @@ run_migration_with_retry() {
 }
 
 # =============================================================================
-# START SERVICES (FIXED)
-# =============================================================================
-log_info "Cleaning up old containers..."
-# Force remove the specific container that is causing your error
-docker rm -f duka-minio_setup duka-app duka-db duka-minio 2>/dev/null || true
-
-log_info "Starting application services with docker-compose..."
-# Explicitly run the compose command
-"${DOCKER_CMD[@]}" compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --build --remove-orphans
-
-if [ $? -ne 0 ]; then
-    log_error "docker-compose up failed!"
-    exit 1
-fi
-log_success "Services are starting..."
-
-# =============================================================================
 # MAIN DEPLOYMENT LOGIC
 # =============================================================================
 
