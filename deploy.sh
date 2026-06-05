@@ -580,23 +580,24 @@ if ! run_migration_with_retry; then
 fi
 
 # =============================================================================
-# CACHE AND PERMISSIONS
+# CACHE AND PERMISSIONS (FIXED)
 # =============================================================================
 
 log_info "Setting up storage structure and permissions..."
-exec_in_app mkdir -p \
-    storage/framework/sessions \
-    storage/framework/views \
-    storage/framework/cache/data \
-    storage/app/seed-images \
-    public/images/defaults
 
+# 1. Ensure the directories exist
+exec_in_app mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache/data storage/app/seed-images public/images/defaults storage/logs
+
+# 2. Create the log file if it doesn't exist
+exec_in_app touch storage/logs/laravel.log
+
+# 3. Set permissions
+# We target the specific folders and files
 exec_in_app chown -R 33:33 storage bootstrap/cache public/images
 exec_in_app chmod -R 775 storage bootstrap/cache public/images
 
-exec_in_app touch storage/logs/laravel.log
-exec_in_app chown 33:33 storage/logs/laravel.log
-exec_in_app chmod 664 storage/logs/laravel.
+# 4. Set specific log file permissions
+exec_in_app chmod 664 storage/logs/laravel.log
 
 # ----------------------------------------
 log_info "Cleaning up old cache files..."
