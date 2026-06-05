@@ -1,9 +1,9 @@
 services:
-  duka_app:
+  duka-app:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: duka_app
+    container_name: duka-app
     volumes:
       - ../:/var/www/html
       - storage_data:/var/www/html/storage
@@ -15,12 +15,12 @@ services:
     networks:
       - duka-network
     depends_on:
-      db:
+      duka-db:
         condition: service_healthy
       duka-minio:
         condition: service_healthy
 
-  db:
+  duka-db:
     image: mysql:8.0
     container_name: duka-db
     restart: unless-stopped

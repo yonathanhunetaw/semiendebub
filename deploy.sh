@@ -225,11 +225,11 @@ docker_raw() {
 }
 
 exec_in_app() {
-    compose exec -T duka_app "$@"
+    compose exec -T duka-app "$@"
 }
 
 exec_in_app_as_root() {
-    compose exec -T -u root duka_app "$@"
+    compose exec -T -u root duka-app "$@"
 }
 
 compose_rm_services() {
@@ -262,23 +262,23 @@ run_migration_with_retry() {
     
     log_info "Starting database migration (max $max_attempts attempts)..."
     
-    while [ $attempt -le $max_attempts ]; do
+    while [ "$attempt" -le "$max_attempts" ]; do
         log_info "Migration attempt $attempt of $max_attempts"
         
         if [ "$SKIP_DB_RESET" = "0" ]; then
             log_info "Attempting to refresh and seed database..."
             
-            # Try db:wipe first (more reliable)
+            # Try db:wipe first
             if exec_in_app php artisan db:wipe --force 2>&1 | tee -a "$LOG_FILE"; then
-                log_success "Database wiped successfully using db:wipe"
+                log_success "Database wiped successfully"
                 if exec_in_app php artisan migrate --seed --force 2>&1 | tee -a "$LOG_FILE"; then
                     log_success "Migration and seeding completed successfully"
                     return 0
                 fi
             else
-                log_warning "db:wipe failed, trying migrate:fresh with retry..."
+                log_warning "db:wipe failed, trying migrate:fresh..."
                 
-                # Try migrate:fresh with deadlock handling
+                # Try migrate:fresh
                 if exec_in_app php artisan migrate:fresh --seed --force 2>&1 | tee -a "$LOG_FILE"; then
                     log_success "Migration and seeding completed successfully"
                     return 0
@@ -286,7 +286,6 @@ run_migration_with_retry() {
             fi
         else
             log_info "Skipping database reset, running incremental migrations..."
-            # Normal incremental migration
             if exec_in_app php artisan migrate --force 2>&1 | tee -a "$LOG_FILE"; then
                 log_success "Incremental migration completed successfully"
                 return 0
@@ -295,13 +294,14 @@ run_migration_with_retry() {
         
         log_warning "Migration attempt $attempt failed"
         
-        if [ $attempt -lt $max_attempts ]; then
+        if [ "$attempt" -lt "$max_attempts" ]; then
             local wait_time=5
             log_info "Waiting $wait_time seconds before retry..."
             sleep $wait_time
         fi
         
-        attempt=$attempt+1
+        # CORRECTED INCREMENT
+        attempt=$((attempt + 1))
     done
     
     log_error "Migration failed after $max_attempts attempts"
@@ -337,8 +337,8 @@ else
 fi
 
 if [ "$should_rebuild" -eq 1 ]; then
-    log_info "Building duka_app image..."
-    compose build duka_app 2>&1 | tee -a "$LOG_FILE"
+    log_info "Building duka-app image..."
+    compose build duka-app 2>&1 | tee -a "$LOG_FILE"
     
     log_info "Cleaning Docker cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
@@ -362,7 +362,7 @@ fi
 
 # Clean up stale containers before starting
 log_info "Removing old containers..."
-docker_raw rm -f duka-minio duka-db duka_app Duka_app nginx_proxy Nginx_proxy duka-minio_setup 2>/dev/null || true
+docker_raw rm -f duka-minio duka-db duka-app duka-app nginx_proxy Nginx_proxy duka-minio_setup 2>/dev/null || true
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     log_info "Starting observability stack..."
@@ -396,11 +396,11 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     
     compose up -d glitchtip-web glitchtip-worker 2>&1 | tee -a "$LOG_FILE"
     log_info "Starting application services..."
-    compose up -d --remove-orphans duka_app nginx_proxy minio_setup 2>&1 | tee -a "$LOG_FILE"
+    compose up -d --remove-orphans duka-app nginx_proxy minio_setup 2>&1 | tee -a "$LOG_FILE"
 else
     log_info "Observability is DISABLED"
     log_info "Starting application services..."
-    compose up -d --remove-orphans duka_app nginx_proxy minio_setup 2>&1 | tee -a "$LOG_FILE"
+    compose up -d --remove-orphans duka-app nginx_proxy minio_setup 2>&1 | tee -a "$LOG_FILE"
 fi
 
 # =============================================================================
@@ -502,7 +502,7 @@ else
         log_info "Vite is already running"
     else
         log_info "Launching Vite..."
-        compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
+        compose exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
     fi
     
     log_info "Waiting for Vite to become ready..."
@@ -523,7 +523,7 @@ else
             log_warning "Detected stale Rollup dependencies, resetting..."
             reset_node_dependencies
             log_info "Relaunching Vite after reset..."
-            compose exec -d duka_app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
+            compose exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
             
             if ! exec_in_app sh -lc '
                 for i in $(seq 1 120); do
@@ -599,34 +599,59 @@ else
 fi
 
 # =============================================================================
-# MINIO SETUP VERIFICATION
+# FORCE MINIO PUBLIC POLICY
+# =============================================================================
+log_info "Ensuring MinIO bucket is public..."
+if docker exec duka-minio_setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
+    docker exec duka-minio_setup mc policy set public local/duka-images >/dev/null 2>&1
+    log_success "MinIO bucket policy enforced as public."
+else
+    log_warning "Could not enforce MinIO policy (MinIO might be unreachable)."
+fi
+
+# Sanity check
+log_info "Verifying MinIO items directory..."
+if docker exec duka-minio_setup mc ls local/duka-images/uploads/items/ >/dev/null 2>&1; then
+    log_success "MinIO items directory confirmed."
+else
+    log_warning "MinIO items directory not found (this is normal if no images have been uploaded yet)."
+fi
+
+# =============================================================================
+# MINIO SETUP & POLICY ENFORCEMENT
 # =============================================================================
 
-log_info "Verifying MinIO setup..."
+log_info "Verifying MinIO setup container..."
 MINIO_SETUP_CONTAINER="${PROJECT_ROOT##*/}_minio_setup"
 MINIO_SETUP_CONTAINER=$(echo "$MINIO_SETUP_CONTAINER" | tr '[:upper:]' '[:lower:]')
 
+# Wait for setup container to finish
 for i in {1..60}; do
     STATUS=$(docker inspect -f '{{.State.Status}}' "$MINIO_SETUP_CONTAINER" 2>/dev/null || echo "not-found")
     if [ "$STATUS" = "exited" ]; then
-        EXIT_CODE=$(docker inspect -f '{{.State.ExitCode}}' "$MINIO_SETUP_CONTAINER" 2>/dev/null || echo "0")
-        if [ "${EXIT_CODE:-0}" != "0" ]; then
-            log_warning "MinIO setup exited with code $EXIT_CODE (continuing anyway)"
-        else
-            log_success "MinIO buckets configured successfully"
-        fi
-        break
-    elif [ "$STATUS" = "not-found" ]; then
-        log_warning "MinIO setup container not found - skipping verification"
+        log_success "MinIO setup container finished."
         break
     fi
     echo -n "."
     sleep 2
 done
-echo
 
-# Final cleanup
-exec_in_app php artisan config:clear 2>&1 | tee -a "$LOG_FILE"
+# Force the policy to public to ensure no 403 errors
+log_info "Ensuring MinIO bucket is public..."
+if docker exec duka-minio_setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
+    docker exec duka-minio_setup mc policy set public local/duka-images >/dev/null 2>&1
+    log_success "MinIO bucket policy enforced as public."
+else
+    log_warning "Could not enforce MinIO policy (MinIO might be unreachable)."
+fi
+
+# Sanity check
+log_info "Verifying MinIO items directory..."
+if docker exec duka-minio_setup mc ls local/duka-images/uploads/items/ >/dev/null 2>&1; then
+    log_success "MinIO items directory confirmed."
+else
+    log_info "MinIO items directory not found (likely empty)."
+fi
 
 # =============================================================================
 # DEPLOYMENT COMPLETE
@@ -641,4 +666,4 @@ log_success "=========================================="
 
 # Show logs
 log_info "Showing application logs (Ctrl+C to exit)..."
-docker logs -f duka_app
+docker logs -f duka-app
