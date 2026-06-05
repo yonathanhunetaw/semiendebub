@@ -322,6 +322,8 @@ log_info "Enable Observability: $ENABLE_OBSERVABILITY"
 log_info "=========================================="
 
 # =============================================================================
+# DOCKER IMAGE BUILD
+# =============================================================================
 
 should_rebuild=0
 if [ "$FORCE_BUILD" = "1" ]; then
@@ -358,9 +360,17 @@ fi
 # START SERVICES
 # =============================================================================
 
-# Clean up stale containers before starting
+# Clean up stale containers and force-release their names
 log_info "Removing old containers..."
-docker_raw rm -f duka-minio duka-db duka-app duka-app nginx_proxy Nginx_proxy duka-minio_setup 2>/dev/null || true
+
+# Stop and remove all containers associated with this project
+# The --volumes flag is crucial here; it detaches the data lock
+compose down -v --remove-orphans 2>/dev/null || true
+
+# Explicitly wipe the container by name if it's still hanging around
+docker rm -f duka-minio_setup 2>/dev/null || true
+
+log_info "Starting application services..."
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     log_info "Starting observability stack..."
@@ -394,11 +404,12 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     
     compose up -d glitchtip-web glitchtip-worker 2>&1 | tee -a "$LOG_FILE"
     log_info "Starting application services..."
-    compose up -d --remove-orphans duka-app nginx_proxy minio_setup 2>&1 | tee -a "$LOG_FILE"
+    compose up -d --remove-orphans duka-app nginx minio_setup 2>&1 | tee -a "$LOG_FILE"
 else
     log_info "Observability is DISABLED"
     log_info "Starting application services..."
-    compose up -d --remove-orphans duka-app nginx_proxy minio_setup 2>&1 | tee -a "$LOG_FILE"
+    # The --force-recreate flag is the most important part here
+    docker compose -f docker/docker-compose.yml up -d --force-recreate --remove-orphans duka-app nginx minio_setup
 fi
 
 # =============================================================================
@@ -650,6 +661,8 @@ if docker exec duka-minio_setup mc ls local/duka-images/uploads/items/ >/dev/nul
 else
     log_info "MinIO items directory not found (likely empty)."
 fi
+
+# ... (rest of your script)
 
 # =============================================================================
 # DEPLOYMENT COMPLETE
