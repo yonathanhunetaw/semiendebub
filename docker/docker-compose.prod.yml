@@ -15,9 +15,9 @@ services:
     networks:
       - duka-network
 
-  nginx_proxy:
+  nginx:
     image: nginx:alpine
-    container_name: nginx_proxy
+    container_name: nginx
     ports:
       - "80:80"
     volumes:
