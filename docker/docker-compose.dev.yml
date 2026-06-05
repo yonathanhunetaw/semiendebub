@@ -4,10 +4,10 @@ services:
       context: .
       dockerfile: docker/Dockerfile.dev
     volumes:
-      - ../:/var/www/html
+      - ../:/var/www/html:delegated
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
-      - ../storage/app/seed-images:/var/www/html/storage/app/seed-images
+      - ../storage/app/seed-images:/var/www/html/storage/app/seed-images:delegated
     ports:
       - "8095:80"
       - "5177:5177"
@@ -57,3 +57,4 @@ volumes:
   storage_data:
   vendor_data:
   minio_data:
+  db_data:
