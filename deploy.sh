@@ -409,7 +409,7 @@ else
     log_info "Observability is DISABLED"
     log_info "Starting application services..."
     # Update the names below to match your config output exactly
-    compose up -d --force-recreate --remove-orphans duka-a duka-db duka-minio minio-setup 2>&1 | tee -a "$LOG_FILE"
+    compose up -d --force-recreate --remove-orphans duka-app duka-db duka-minio minio-setup 2>&1 | tee -a "$LOG_FILE"
 fi
 
 # =============================================================================
