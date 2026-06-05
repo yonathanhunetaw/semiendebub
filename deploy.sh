@@ -325,7 +325,7 @@ log_info "=========================================="
 # DOCKER IMAGE BUILD
 # =============================================================================
 
-#should_rebuild=0
+should_rebuild=0
 if [ "$FORCE_BUILD" = "1" ]; then
     log_info "FORCE_BUILD=1 detected - forcing rebuild"
     should_rebuild=1
