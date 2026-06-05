@@ -690,5 +690,5 @@ log_success "Log file saved to: $LOG_FILE"
 log_success "=========================================="
 
 # Show logs (This should be the very last thing in your file)
-log_info "Showing application logs (Ctrl+C to exit)..."
-docker logs -f duka-app
+# log_info "Showing application logs (Ctrl+C to exit)..."
+# docker logs -f duka-app
