@@ -368,7 +368,7 @@ log_info "Removing old containers..."
 compose down -v --remove-orphans 2>/dev/null || true
 
 # Explicitly wipe the container by name if it's still hanging around
-docker rm -f duka-minio_setup 2>/dev/null || true
+docker rm -f duka-minio-setup 2>/dev/null || true
 
 log_info "Starting application services..."
 
@@ -622,8 +622,8 @@ fi
 # FORCE MINIO PUBLIC POLICY
 # =============================================================================
 log_info "Ensuring MinIO bucket is public..."
-if docker exec duka-minio_setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
-    docker exec duka-minio_setup mc policy set public local/duka-images >/dev/null 2>&1
+if docker exec duka-minio-setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
+    docker exec duka-minio-setup mc policy set public local/duka-images >/dev/null 2>&1
     log_success "MinIO bucket policy enforced as public."
 else
     log_warning "Could not enforce MinIO policy (MinIO might be unreachable)."
@@ -631,7 +631,7 @@ fi
 
 # Sanity check
 log_info "Verifying MinIO items directory..."
-if docker exec duka-minio_setup mc ls local/duka-images/uploads/items/ >/dev/null 2>&1; then
+if docker exec duka-minio-setup mc ls local/duka-images/uploads/items/ >/dev/null 2>&1; then
     log_success "MinIO items directory confirmed."
 else
     log_warning "MinIO items directory not found (this is normal if no images have been uploaded yet)."
@@ -661,8 +661,8 @@ done
 
 # Force the policy to public to ensure no 403 errors
 log_info "Ensuring MinIO bucket is public..."
-if docker exec duka-minio_setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
-    docker exec duka-minio_setup mc policy set public local/duka-images >/dev/null 2>&1
+if docker exec duka-minio-setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
+    docker exec duka-minio-setup mc policy set public local/duka-images >/dev/null 2>&1
     log_success "MinIO bucket policy enforced as public."
 else
     log_warning "Could not enforce MinIO policy (MinIO might be unreachable)."
@@ -670,7 +670,7 @@ fi
 
 # Sanity check
 log_info "Verifying MinIO items directory..."
-if docker exec duka-minio_setup mc ls local/duka-images/uploads/items/ >/dev/null 2>&1; then
+if docker exec duka-minio-setup mc ls local/duka-images/uploads/items/ >/dev/null 2>&1; then
     log_success "MinIO items directory confirmed."
 else
     log_info "MinIO items directory not found (likely empty)."

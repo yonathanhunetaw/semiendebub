@@ -53,7 +53,7 @@ services:
 
   minio_setup:
     image: minio/mc:latest
-    container_name: duka-minio_setup
+    container_name: duka-minio-setup
     depends_on:
       duka-minio:
         condition: service_healthy
