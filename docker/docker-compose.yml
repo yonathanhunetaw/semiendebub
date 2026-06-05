@@ -4,6 +4,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: duka-app
+    ports:
+      - "8095:80"
     volumes:
       - ../:/var/www/html
       - storage_data:/var/www/html/storage
