@@ -49,7 +49,7 @@ RUN git config --global --add safe.directory /var/www/html
 
 # 7. Install dependencies
 # This command will now find and install the S3 adapter
-RUN composer install --no-interaction --prefer-dist --no-scripts
+RUN composer install --no-dev --optimize-autoloader --no-scripts
 
 
 # Install Node deps
