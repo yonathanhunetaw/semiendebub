@@ -17,8 +17,8 @@ services:
     depends_on:
       duka-db:
         condition: service_healthy
-      duka-minio:
-        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
 
   duka-db:
     image: mysql:8.0
@@ -34,11 +34,11 @@ services:
     networks:
       - duka-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-password}"]
+      test: ["CMD", "mysql", "-u", "root", "-p${DB_PASSWORD:-password}", "-e", "SELECT 1"]
       interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
 
   duka-minio:
     image: minio/minio
