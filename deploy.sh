@@ -416,18 +416,28 @@ fi
 # DATABASE READINESS
 # =============================================================================
 
-log_info "Waiting for MySQL to be ready..."
+log_info "Waiting for MySQL to be healthy..."
+# This asks Docker to tell us the status of the container, not try to login
 for i in {1..30}; do
-    # 'nc -z' checks if the port is open without sending data
-    if compose exec -T duka-db nc -z localhost 3306 >/dev/null 2>&1; then
-        log_success "MySQL is ready"
+    STATUS=$(docker inspect -f '{{.State.Health.Status}}' duka-db 2>/dev/null)
+    
+    if [ "$STATUS" = "healthy" ]; then
+        log_success "MySQL is healthy and ready"
         break
     fi
+    
+    # If healthchecks aren't configured in your YML, fallback to a simple sleep
+    if [ "$STATUS" = "<no value>" ]; then
+        log_info "Healthcheck not configured, waiting 5 seconds..."
+        sleep 5
+        break
+    fi
+    
     echo -n "."
     sleep 2
     
     if [ $i -eq 30 ]; then
-        log_error "MySQL port 3306 failed to respond"
+        log_error "MySQL timed out waiting for health."
         exit 1
     fi
 done
