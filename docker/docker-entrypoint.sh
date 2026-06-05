@@ -33,8 +33,8 @@ echo "✅ MySQL is ready!"
 echo "🖼️ Configuring image proxy to MinIO..."
 
 cat > /etc/apache2/conf-available/proxy-images.conf << 'PROXYEOF'
-ProxyPass /images/ http://Duka_minio:9000/duka-images/
-ProxyPassReverse /images/ http://Duka_minio:9000/duka-images/
+ProxyPass /images/ http://duka-minio:9000/duka-images/
+ProxyPassReverse /images/ http://duka-minio:9000/duka-images/
 
 <Location /images/>
     Header set Access-Control-Allow-Origin "*"
@@ -54,7 +54,7 @@ PROXYEOF
 a2enmod proxy proxy_http headers
 a2enconf proxy-images
 
-echo "✅ Image proxy configured to Duka_minio"
+echo "✅ Image proxy configured to duka-minio"
 # ===== END PROXY CONFIGURATION =====
 
 BASE_DOMAIN="${APP_SYSTEM_DOMAIN:-duka.local}"

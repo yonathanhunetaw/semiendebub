@@ -17,7 +17,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      Duka_minio:
+      duka-minio:
         condition: service_healthy
 
   db:
@@ -40,30 +40,25 @@ services:
       retries: 5
       start_period: 30s
 
-  Duka_minio:
-    image: minio/minio:latest
-    container_name: Duka_minio
+  duka-minio:
+    image: minio/minio
+    container_name: duka-minio
     command: server /data --console-address ":9001"
-    networks:
-      - duka-network
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     environment:
-      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-admin}
-      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-password123}
+      # Use these exact variables in your .env
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
     volumes:
       - minio_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
 
-  minio_setup:
+  minio-setup:
     image: minio/mc:latest
-    container_name: Duka_minio_setup
+    container_name: duka-minio_setup
     depends_on:
-      Duka_minio:
+      duka-minio:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
@@ -77,7 +72,7 @@ services:
         RETRY_COUNT=$$((RETRY_COUNT + 1));
         echo \"Attempt $$RETRY_COUNT of $$MAX_RETRIES to configure MinIO...\";
         
-        if mc alias set local http://Duka_minio:9000 ${AWS_ACCESS_KEY_ID:-admin} ${AWS_SECRET_ACCESS_KEY:-password123} 2>&1; then
+        if mc alias set local http://duka-minio:9000 ${AWS_ACCESS_KEY_ID:-admin} ${AWS_SECRET_ACCESS_KEY:-password123} 2>&1; then
           echo '✅ Connected to MinIO';
           
           mc mb local/${AWS_BUCKET:-duka-images} --ignore-existing 2>&1;

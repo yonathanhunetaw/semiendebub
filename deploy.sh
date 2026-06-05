@@ -362,7 +362,7 @@ fi
 
 # Clean up stale containers before starting
 log_info "Removing old containers..."
-docker_raw rm -f Duka_minio Duka_db duka_app Duka_app nginx_proxy Nginx_proxy Duka_minio_setup 2>/dev/null || true
+docker_raw rm -f duka-minio Duka_db duka_app Duka_app nginx_proxy Nginx_proxy duka-minio_setup 2>/dev/null || true
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     log_info "Starting observability stack..."
