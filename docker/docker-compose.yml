@@ -22,7 +22,7 @@ services:
 
   db:
     image: mysql:8.0
-    container_name: Duka_db
+    container_name: duka-db
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:-duka}
