@@ -526,25 +526,27 @@ if [ "$APP_ENV" = "production" ]; then
     exec_in_app npm run build 2>&1 | tee -a "$LOG_FILE"
     log_success "Production assets built"
 else
-    log_info "Starting Vite development server..."
+    log_info "Setting up Vite dependencies first..."
     
-    log_info "Sanitizing Vite environment..."
-    exec_in_app sh -lc 'rm -rf node_modules/.vite /tmp/vite-cache'
-    sleep 1
-    
+    # Install dependencies if needed
     if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
         install_node_dependencies
     fi
     
-    if exec_in_app sh -lc 'curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1'; then
-        log_info "Vite is already running"
-    else
-        log_info "Launching Vite..."
-        compose exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
-    fi
+    # CRITICAL: Fix hoist-non-react-statics BEFORE starting Vite
+    log_info "Fixing Vite dependencies..."
+    exec_in_app npm install hoist-non-react-statics@latest --no-save 2>&1 | tee -a "$LOG_FILE"
+    exec_in_app rm -rf node_modules/.vite /tmp/vite-cache
+    
+    log_info "Sanitizing Vite environment..."
+    exec_in_app sh -lc 'pkill -f vite || true'
+    sleep 1
+    
+    log_info "Launching Vite in background..."
+    compose exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
     
     log_info "Waiting for Vite to become ready..."
-    if ! exec_in_app sh -lc '
+    if ! exec_in_app sh -c '
         for i in $(seq 1 120); do
             if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
                 exit 0
@@ -555,41 +557,16 @@ else
         exit 1
     '; then
         echo
-        log_warning "Vite failed to become ready within 120 seconds"
-        
-        if exec_in_app sh -lc 'grep -q "@rollup/rollup-linux-arm64-gnu" /tmp/vite.log 2>/dev/null'; then
-            log_warning "Detected stale Rollup dependencies, resetting..."
-            reset_node_dependencies
-            log_info "Relaunching Vite after reset..."
-            compose exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
-            
-            if ! exec_in_app sh -lc '
-                for i in $(seq 1 120); do
-                    if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
-                        exit 0
-                    fi
-                    printf "."
-                    sleep 1
-                done
-                exit 1
-            '; then
-                echo
-                log_error "Vite still failed after dependency reset"
-                exit 1
-            fi
-            echo
-            log_success "Vite ready after dependency reset"
-        else
-            log_error "Vite failed to start"
-            exit 1
-        fi
+        log_error "Vite failed to start. Check /tmp/vite.log"
+        exec_in_app cat /tmp/vite.log 2>/dev/null | tail -20
+        exit 1
     fi
     echo
     log_success "Vite is ready"
 fi
 
 # =============================================================================
-# DATABASE MIGRATION (WITH DEADLOCK HANDLING)
+# DATABASE MIGRATION (NOW RUN AFTER VITE IS STABLE)
 # =============================================================================
 
 if ! run_migration_with_retry; then
