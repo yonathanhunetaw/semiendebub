@@ -292,11 +292,11 @@ docker_raw() {
 }
 
 exec_in_app() {
-    docker exec "$@" duka-app
+    docker exec duka-app "$@"
 }
 
 exec_in_app_as_root() {
-    docker exec -u root "$@" duka-app
+    docker exec -u root duka-app "$@"
 }
 compose_rm_services() {
     if has_command timeout; then
@@ -537,7 +537,7 @@ log_step "${ICON_PACKAGE} Installing PHP dependencies..."
 
 exec_in_app composer require league/flysystem-aws-s3-v3:"^3.0" --no-interaction --no-update 2>/dev/null || true
 
-if ! docker exec duka-app composer validate --no-check-all --quiet 2>/dev/null; then
+if ! docker exec duka-app sh -c "composer validate --no-check-all --quiet" 2>/dev/null; then
     log_warning "Composer lock file out of sync, updating..."
     exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction 2>&1 | tee -a "$LOG_FILE"
 fi
