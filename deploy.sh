@@ -542,12 +542,16 @@ else
     log_info "Sanitizing Vite environment..."
     exec_in_app sh -lc 'pkill -f vite || true'
     sleep 1
-    
+
+    log_info "Step 1: pkill done"
+
     log_info "Launching Vite in background..."
     compose exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1' || {
-    log_warning "Vite start command had issues, continuing anyway..."
-}
-    
+        log_warning "Vite start command had issues, continuing anyway..."
+    }
+
+    log_info "Step 2: Vite launch command issued"
+
     log_info "Waiting for Vite to become ready..."
     if ! exec_in_app sh -c '
         for i in $(seq 1 120); do
@@ -564,10 +568,10 @@ else
         exec_in_app cat /tmp/vite.log 2>/dev/null | tail -20
         exit 1
     fi
-    echo
-    log_success "Vite is ready"
-fi
 
+    log_info "Step 3: Vite is ready"
+
+fi
 # =============================================================================
 # DATABASE MIGRATION (NOW RUN AFTER VITE IS STABLE)
 # =============================================================================
