@@ -243,6 +243,14 @@ compose_rm_services() {
 install_node_dependencies() {
     log_info "Installing Node dependencies..."
     exec_in_app npm ci --no-audit --no-fund
+    
+    # Fix for hoist-non-react-statics on ARM/Raspberry Pi
+    if [ "$APP_ENV" != "production" ]; then
+        log_info "Fixing hoist-non-react-statics for Vite..."
+        exec_in_app npm install hoist-non-react-statics@latest --no-save
+        exec_in_app rm -rf node_modules/.vite
+    fi
+    
     log_success "Node dependencies installed"
 }
 
