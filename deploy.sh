@@ -244,11 +244,12 @@ install_node_dependencies() {
     log_info "Installing Node dependencies..."
     exec_in_app npm ci --no-audit --no-fund
     
-    # Fix for hoist-non-react-statics on ARM/Raspberry Pi
+    # Fix for hoist-non-react-statics on Raspberry Pi (ARM)
     if [ "$APP_ENV" != "production" ]; then
-        log_info "Fixing hoist-non-react-statics for Vite..."
-        exec_in_app npm install hoist-non-react-statics@latest --no-save
-        exec_in_app rm -rf node_modules/.vite
+        log_info "Fixing hoist-non-react-statics for ARM/Raspberry Pi..."
+        exec_in_app npm uninstall hoist-non-react-statics --no-save || true
+        exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save
+        exec_in_app rm -rf node_modules/.vite /tmp/vite-cache
     fi
     
     log_success "Node dependencies installed"
