@@ -6,10 +6,7 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
     const appDomain = env.APP_DOMAIN || 'duka2.pi';
     const devPort = 5177;
-    
-    // Detect ARM/Raspberry Pi
-    const isARM = process.arch === 'arm64' || process.arch === 'arm';
-    
+
     return {
         cacheDir: '/tmp/vite-cache',
         
@@ -27,6 +24,7 @@ export default defineConfig(({ mode }) => {
                 usePolling: true,
             },
         },
+        
         plugins: [
             laravel({
                 input: ['resources/css/app.css', 'resources/js/app.tsx'],
@@ -34,10 +32,36 @@ export default defineConfig(({ mode }) => {
             }),
             react(),
         ],
-        // Fix for Raspberry Pi - disable optimization
+        
+        // Fix for CommonJS modules
         optimizeDeps: {
-            disabled: isARM ? true : false,  // Disable on Pi
-            force: false,
+            include: [
+                'react',
+                'react-dom',
+                'react-dom/client',
+                '@emotion/react',
+                '@emotion/styled',
+                '@mui/material',
+                'hoist-non-react-statics',
+            ],
+            esbuildOptions: {
+                mainFields: ['module', 'main'],
+            },
+        },
+        
+        // Resolve CommonJS modules properly
+        resolve: {
+            alias: {
+                // Force ESM version
+                'hoist-non-react-statics': 'hoist-non-react-statics/dist/hoist-non-react-statics.cjs.js',
+            },
+        },
+        
+        build: {
+            commonjsOptions: {
+                include: [/node_modules/],
+                transformMixedEsModules: true,
+            },
         },
     };
 });
