@@ -599,8 +599,7 @@ else
     
     log_step "Sanitizing Vite environment..."
     log_info "Running: pkill -f vite"
-    exec_in_app sh -lc 'killall vite 2>/dev/null || pkill -9 -f vite 2>/dev/null || echo "No vite process to kill"'
-    sleep 1
+    exec_in_app sh -lc 'pkill -9 -f vite 2>/dev/null || true'sleep 1
     log_info "pkill command completed"
     log_done "Vite environment sanitized"
     
