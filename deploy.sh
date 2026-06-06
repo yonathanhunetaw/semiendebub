@@ -2,6 +2,42 @@
 set -euo pipefail
 
 # =============================================================================
+# COLOR CODES FOR LOGGING
+# =============================================================================
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+
+# Bold colors
+BOLD_RED='\033[1;31m'
+BOLD_GREEN='\033[1;32m'
+BOLD_YELLOW='\033[1;33m'
+BOLD_BLUE='\033[1;34m'
+BOLD_PURPLE='\033[1;35m'
+BOLD_CYAN='\033[1;36m'
+
+# Reset
+NC='\033[0m'
+
+# Icons
+ICON_SUCCESS="✅"
+ICON_ERROR="❌"
+ICON_WARNING="⚠️"
+ICON_INFO="📍"
+ICON_STEP="🔧"
+ICON_DONE="✨"
+ICON_ROCKET="🚀"
+ICON_DB="🗄️"
+ICON_PACKAGE="📦"
+ICON_VITE="⚡"
+
+# =============================================================================
 # CONFIGURATION & PATH RESOLUTION
 # =============================================================================
 
@@ -20,13 +56,36 @@ LOG_DIR="$PROJECT_ROOT/logs"
 LOG_FILE="$LOG_DIR/deploy_$(date +%Y%m%d_%H%M%S).log"
 mkdir -p "$LOG_DIR"
 
-# Logging function - outputs to both console and log file
+# Logging function - outputs to both console and log file with colors
 log() {
     local level="$1"
     shift
     local message="$*"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
+    
+    case "$level" in
+        "INFO")
+            echo -e "[$timestamp] ${BLUE}[INFO]${NC} ${ICON_INFO} $message" | tee -a "$LOG_FILE"
+            ;;
+        "SUCCESS")
+            echo -e "[$timestamp] ${GREEN}[SUCCESS]${NC} ${ICON_SUCCESS} $message" | tee -a "$LOG_FILE"
+            ;;
+        "ERROR")
+            echo -e "[$timestamp] ${RED}[ERROR]${NC} ${ICON_ERROR} $message" | tee -a "$LOG_FILE"
+            ;;
+        "WARNING")
+            echo -e "[$timestamp] ${YELLOW}[WARNING]${NC} ${ICON_WARNING} $message" | tee -a "$LOG_FILE"
+            ;;
+        "STEP")
+            echo -e "[$timestamp] ${CYAN}[STEP]${NC} ${ICON_STEP} $message" | tee -a "$LOG_FILE"
+            ;;
+        "DONE")
+            echo -e "[$timestamp] ${BOLD_GREEN}[DONE]${NC} ${ICON_DONE} $message" | tee -a "$LOG_FILE"
+            ;;
+        *)
+            echo -e "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
+            ;;
+    esac
 }
 
 log_info() {
@@ -43,6 +102,14 @@ log_warning() {
 
 log_success() {
     log "SUCCESS" "$@"
+}
+
+log_step() {
+    log "STEP" "$@"
+}
+
+log_done() {
+    log "DONE" "$@"
 }
 
 # Error handler
@@ -71,13 +138,13 @@ source "$ENV_FILE"
 set +a
 
 # Log deployment start
-log_info "=========================================="
-log_info "Deployment Started"
-log_info "=========================================="
+log_success "=========================================="
+log_success "${ICON_ROCKET} DEPLOYMENT STARTED ${ICON_ROCKET}"
+log_success "=========================================="
 log_info "Project Root: $PROJECT_ROOT"
 log_info "Environment: ${APP_ENV:-not set}"
 log_info "Log file: $LOG_FILE"
-log_info "=========================================="
+log_success "=========================================="
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -241,15 +308,16 @@ compose_rm_services() {
 }
 
 install_node_dependencies() {
-    log_info "Installing Node dependencies..."
+    log_step "Installing Node dependencies from lock file..."
     exec_in_app npm ci --no-audit --no-fund
     
     # Fix for hoist-non-react-statics on Raspberry Pi (ARM)
     if [ "$APP_ENV" != "production" ]; then
-        log_info "Fixing hoist-non-react-statics for ARM/Raspberry Pi..."
+        log_step "Fixing hoist-non-react-statics for ARM/Raspberry Pi..."
         exec_in_app npm uninstall hoist-non-react-statics --no-save || true
         exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save
         exec_in_app rm -rf node_modules/.vite /tmp/vite-cache
+        log_done "Hoist-non-react-statics fixed for ARM compatibility"
     fi
     
     log_success "Node dependencies installed"
@@ -269,7 +337,7 @@ run_migration_with_retry() {
     local max_attempts=3
     local attempt=1
     
-    log_info "Starting database migration (max $max_attempts attempts)..."
+    log_step "Starting database migration (max $max_attempts attempts)..."
     
     while [ "$attempt" -le "$max_attempts" ]; do
         log_info "Migration attempt $attempt of $max_attempts"
@@ -309,7 +377,6 @@ run_migration_with_retry() {
             sleep $wait_time
         fi
         
-        # CORRECTED INCREMENT
         attempt=$((attempt + 1))
     done
     
@@ -321,18 +388,20 @@ run_migration_with_retry() {
 # MAIN DEPLOYMENT LOGIC
 # =============================================================================
 
-log_info "=========================================="
-log_info "Deployment Configuration"
-log_info "=========================================="
+log_success "=========================================="
+log_success "${ICON_ROCKET} DEPLOYMENT CONFIGURATION ${ICON_ROCKET}"
+log_success "=========================================="
 log_info "Environment: $APP_ENV"
 log_info "Skip Database Reset: $SKIP_DB_RESET"
 log_info "Force Build: $FORCE_BUILD"
 log_info "Enable Observability: $ENABLE_OBSERVABILITY"
-log_info "=========================================="
+log_success "=========================================="
 
 # =============================================================================
 # DOCKER IMAGE BUILD
 # =============================================================================
+
+log_step "Checking Docker image status..."
 
 should_rebuild=0
 if [ "$FORCE_BUILD" = "1" ]; then
@@ -346,13 +415,13 @@ else
 fi
 
 if [ "$should_rebuild" -eq 1 ]; then
-    log_info "Building duka-app image..."
+    log_step "Building duka-app image..."
     compose build duka-app 2>&1 | tee -a "$LOG_FILE"
     
-    log_info "Cleaning Docker cache..."
+    log_step "Cleaning Docker cache..."
     docker_raw builder prune -af >/dev/null 2>&1 || true
     docker_raw image prune -af >/dev/null 2>&1 || true
-    log_success "Image build complete"
+    log_done "Image build complete"
 fi
 
 # =============================================================================
@@ -369,30 +438,25 @@ fi
 # START SERVICES
 # =============================================================================
 
-# Clean up stale containers and force-release their names
-log_info "Removing old containers..."
-
-# Stop and remove all containers associated with this project
-# The --volumes flag is crucial here; it detaches the data lock
+log_step "Removing old containers..."
 compose down -v --remove-orphans 2>/dev/null || true
-
-# Explicitly wipe the container by name if it's still hanging around
 docker rm -f duka-minio-setup 2>/dev/null || true
+log_done "Old containers removed"
 
-log_info "Starting application services..."
+log_step "Starting application services..."
 
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
-    log_info "Starting observability stack..."
-    log_info "Starting database and MinIO..."
+    log_step "Starting observability stack..."
+    log_step "Starting database and MinIO..."
     compose up -d db minio 2>&1 | tee -a "$LOG_FILE"
     
-    log_info "Removing stale observability containers..."
+    log_step "Removing stale observability containers..."
     compose_rm_services lgtm glitchtip-web glitchtip-worker || docker rm -f lgtm glitchtip-web glitchtip-worker 2>/dev/null || true
     
-    log_info "Starting LGTM stack and GlitchTip..."
+    log_step "Starting LGTM stack and GlitchTip..."
     compose up -d lgtm glitchtip-postgres glitchtip-redis 2>&1 | tee -a "$LOG_FILE"
     
-    log_info "Waiting for GlitchTip PostgreSQL..."
+    log_step "Waiting for GlitchTip PostgreSQL..."
     until compose exec -T glitchtip-postgres pg_isready -U "$GLITCHTIP_DB_USER" -d "$GLITCHTIP_DB_NAME" >/dev/null 2>&1; do
         echo -n "."
         sleep 1
@@ -400,10 +464,10 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     echo
     log_success "GlitchTip PostgreSQL is ready"
     
-    log_info "Running GlitchTip migrations..."
+    log_step "Running GlitchTip migrations..."
     compose run --rm glitchtip-web ./manage.py migrate 2>&1 | tee -a "$LOG_FILE"
     
-    log_info "Setting up GlitchTip admin user..."
+    log_step "Setting up GlitchTip admin user..."
     compose run --rm \
         -e DJANGO_SUPERUSER_USERNAME="${GLITCHTIP_ADMIN_USERNAME:-admin}" \
         -e DJANGO_SUPERUSER_EMAIL="${GLITCHTIP_ADMIN_EMAIL:-admin@example.com}" \
@@ -412,15 +476,14 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
         ./manage.py shell -c "import os; from django.contrib.auth import get_user_model; User = get_user_model(); name = os.environ['DJANGO_SUPERUSER_USERNAME']; email = os.environ['DJANGO_SUPERUSER_EMAIL']; password = os.environ['DJANGO_SUPERUSER_PASSWORD']; exists = User.objects.filter(email=email).exists(); None if exists else User.objects.create_superuser(email=email, password=password, name=name)" 2>&1 | tee -a "$LOG_FILE"
     
     compose up -d glitchtip-web glitchtip-worker 2>&1 | tee -a "$LOG_FILE"
-    log_info "Starting application services..."
+    log_step "Starting application services..."
     compose up -d --remove-orphans duka-app nginx minio_setup 2>&1 | tee -a "$LOG_FILE"
 else
     log_info "Observability is DISABLED"
-    log_info "Starting application services..."
-    # Update the names below to match your config output exactly
+    log_step "Starting application services..."
     compose up -d --force-recreate --remove-orphans duka-app duka-db duka-minio minio-setup 2>&1 | tee -a "$LOG_FILE"
-    # Wait for container to be healthy
-    log_info "Waiting for duka-app to be ready..."
+    
+    log_step "Waiting for duka-app to be ready..."
     for i in {1..30}; do
         if docker exec duka-app php artisan --version >/dev/null 2>&1; then
             log_success "duka-app is ready"
@@ -435,8 +498,7 @@ fi
 # DATABASE READINESS
 # =============================================================================
 
-log_info "Waiting for MySQL to be healthy..."
-# This asks Docker to tell us the status of the container, not try to login
+log_step "Waiting for MySQL to be healthy..."
 for i in {1..30}; do
     STATUS=$(docker inspect -f '{{.State.Health.Status}}' duka-db 2>/dev/null)
     
@@ -445,7 +507,6 @@ for i in {1..30}; do
         break
     fi
     
-    # If healthchecks aren't configured in your YML, fallback to a simple sleep
     if [ "$STATUS" = "<no value>" ]; then
         log_info "Healthcheck not configured, waiting 5 seconds..."
         sleep 5
@@ -465,25 +526,23 @@ done
 # CONFIGURE GIT SAFE DIRECTORY
 # =============================================================================
 
-log_info "Configuring git safe directory..."
+log_step "Configuring git safe directory..."
 exec_in_app git config --global --add safe.directory /var/www/html || true
+log_done "Git safe directory configured"
 
 # =============================================================================
 # PHP DEPENDENCIES
 # =============================================================================
 
-log_info "Installing PHP dependencies..."
+log_step "${ICON_PACKAGE} Installing PHP dependencies..."
 
-# Add S3 package if needed
 exec_in_app composer require league/flysystem-aws-s3-v3:"^3.0" --no-interaction --no-update 2>/dev/null || true
 
-# Validate composer
 if ! exec_in_app composer validate --no-check-all --quiet 2>/dev/null; then
     log_warning "Composer lock file out of sync, updating..."
     exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction 2>&1 | tee -a "$LOG_FILE"
 fi
 
-# Install dependencies
 if [ "$APP_ENV" = "production" ]; then
     log_info "Production mode: Installing without dev dependencies"
     exec_in_app composer install --no-dev --optimize-autoloader --no-interaction 2>&1 | tee -a "$LOG_FILE"
@@ -492,7 +551,6 @@ else
     exec_in_app composer install --optimize-autoloader --no-interaction 2>&1 | tee -a "$LOG_FILE"
 fi
 
-# Handle S3 driver issues
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
 if ! exec_in_app test -f "$S3_CONVERTER_FILE" || has_git_path_changes "composer.lock"; then
     log_warning "S3 driver files missing or composer.lock changed, reinstalling..."
@@ -510,14 +568,16 @@ else
     log_success "PHP dependencies up to date"
 fi
 
+log_done "PHP dependencies installed"
+
 # =============================================================================
 # FRONTEND ASSETS
 # =============================================================================
 
-log_info "Handling frontend assets..."
+log_step "${ICON_VITE} Handling frontend assets..."
 
 if [ "$APP_ENV" = "production" ]; then
-    log_info "Building production assets..."
+    log_step "Building production assets..."
     exec_in_app rm -f public/hot
     
     if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
@@ -527,32 +587,33 @@ if [ "$APP_ENV" = "production" ]; then
     exec_in_app npm run build 2>&1 | tee -a "$LOG_FILE"
     log_success "Production assets built"
 else
-    log_info "Setting up Vite dependencies first..."
+    log_step "Setting up Vite dependencies first..."
     
-    # Install dependencies if needed
     if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
         install_node_dependencies
     fi
     
-    # CRITICAL: Fix hoist-non-react-statics BEFORE starting Vite
-    log_info "Fixing Vite dependencies..."
-    exec_in_app npm install hoist-non-react-statics@latest --no-save 2>&1 | tee -a "$LOG_FILE"
+    log_step "Fixing Vite dependencies for development..."
+    exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save 2>&1 | tee -a "$LOG_FILE"
     exec_in_app rm -rf node_modules/.vite /tmp/vite-cache
+    log_done "Vite dependencies fixed"
     
-    log_info "Sanitizing Vite environment..."
+    log_step "Sanitizing Vite environment..."
     exec_in_app sh -lc 'pkill -f vite || true'
     sleep 1
-
-    log_info "Step 1: pkill done"
-
-    log_info "Launching Vite in background..."
-    compose exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1' || {
-        log_warning "Vite start command had issues, continuing anyway..."
-    }
-
-    log_info "Step 2: Vite launch command issued"
-
-    log_info "Waiting for Vite to become ready..."
+    log_done "Vite environment sanitized"
+    
+    log_step "Launching Vite in background..."
+    docker exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
+    VITE_EXIT=$?
+    
+    if [ $VITE_EXIT -ne 0 ]; then
+        log_warning "Vite start command had issues (exit code: $VITE_EXIT), continuing anyway..."
+    else
+        log_done "Vite launch command issued"
+    fi
+    
+    log_step "Waiting for Vite to become ready..."
     if ! exec_in_app sh -c '
         for i in $(seq 1 120); do
             if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
@@ -568,55 +629,51 @@ else
         exec_in_app cat /tmp/vite.log 2>/dev/null | tail -20
         exit 1
     fi
-
-    log_info "Step 3: Vite is ready"
-
+    echo
+    log_success "Vite is ready and running ${ICON_VITE}"
 fi
+
 # =============================================================================
-# DATABASE MIGRATION (NOW RUN AFTER VITE IS STABLE)
+# DATABASE MIGRATION
 # =============================================================================
+
+log_step "${ICON_DB} Running database migration..."
 
 if ! run_migration_with_retry; then
     log_error "Database migration failed - deployment aborted"
     exit 1
 fi
 
+log_done "Database migration completed"
+
 # =============================================================================
-# CACHE AND PERMISSIONS (FIXED)
+# CACHE AND PERMISSIONS
 # =============================================================================
 
-log_info "Setting up storage structure and permissions..."
+log_step "Setting up storage structure and permissions..."
 
-# 1. Ensure the directories exist
 exec_in_app mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache/data storage/app/seed-images public/images/defaults storage/logs
-
-# 2. Create the log file if it doesn't exist
 exec_in_app touch storage/logs/laravel.log
-
-# 3. Set permissions
-# We target the specific folders and files
 exec_in_app chown -R 33:33 storage bootstrap/cache public/images
 exec_in_app chmod -R 775 storage bootstrap/cache public/images
-
-# 4. Set specific log file permissions
 exec_in_app chmod 664 storage/logs/laravel.log
 
-# ----------------------------------------
-log_info "Cleaning up old cache files..."
+log_done "Storage permissions configured"
+
+log_step "Cleaning up old cache files..."
 exec_in_app rm -rf bootstrap/cache/*.php
-# -----------------------------------------
+log_done "Cache files cleaned"
 
-
-
-log_info "Purging Laravel caches..."
+log_step "Purging Laravel caches..."
 exec_in_app php artisan cache:clear 2>&1 | tee -a "$LOG_FILE"
 exec_in_app php artisan config:clear 2>&1 | tee -a "$LOG_FILE"
 exec_in_app php artisan route:clear 2>&1 | tee -a "$LOG_FILE"
 exec_in_app php artisan view:clear 2>&1 | tee -a "$LOG_FILE"
 exec_in_app php artisan event:clear 2>&1 | tee -a "$LOG_FILE"
 exec_in_app php artisan optimize:clear 2>&1 | tee -a "$LOG_FILE"
+log_done "Laravel caches purged"
 
-log_info "Refreshing Laravel optimizations..."
+log_step "Refreshing Laravel optimizations..."
 exec_in_app php artisan optimize:clear || true
 exec_in_app php artisan storage:link --force
 
@@ -628,77 +685,48 @@ else
     exec_in_app php artisan view:clear 2>&1 | tee -a "$LOG_FILE" || echo "View cache clear skipped"
 fi
 
-# =============================================================================
-# FORCE MINIO PUBLIC POLICY
-# =============================================================================
-log_info "Ensuring MinIO bucket is public..."
-if docker exec duka-minio-setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
-    docker exec duka-minio-setup mc policy set public local/duka-images >/dev/null 2>&1
-    log_success "MinIO bucket policy enforced as public."
-else
-    log_warning "Could not enforce MinIO policy (MinIO might be unreachable)."
-fi
-
-# Sanity check
-log_info "Verifying MinIO items directory..."
-if docker exec duka-minio-setup mc ls local/duka-images/uploads/items/ >/dev/null 2>&1; then
-    log_success "MinIO items directory confirmed."
-else
-    log_warning "MinIO items directory not found (this is normal if no images have been uploaded yet)."
-fi
+log_done "Laravel optimizations refreshed"
 
 # =============================================================================
 # MINIO SETUP & POLICY ENFORCEMENT
 # =============================================================================
 
-log_info "Verifying MinIO setup container..."
-MINIO_SETUP_CONTAINER="${PROJECT_ROOT##*/}_minio_setup"
-MINIO_SETUP_CONTAINER=$(echo "$MINIO_SETUP_CONTAINER" | tr '[:upper:]' '[:lower:]')
+log_step "Configuring MinIO bucket..."
 
-# Wait for setup container to finish
+if docker exec duka-minio-setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
+    docker exec duka-minio-setup mc policy set public local/duka-images >/dev/null 2>&1
+    log_success "MinIO bucket policy enforced as public"
+else
+    log_warning "Could not enforce MinIO policy (MinIO might be unreachable)"
+fi
+
+log_step "Verifying MinIO setup container..."
 for i in {1..60}; do
-    # Ensure this name matches exactly what 'docker ps' says
     STATUS=$(docker inspect -f '{{.State.Status}}' "minio-setup" 2>/dev/null || echo "not-found")
     
-    # Sometimes it's 'exited', sometimes it's 'dead' or 'removing'
     if [ "$STATUS" = "exited" ]; then
-        log_success "MinIO setup container finished."
+        log_success "MinIO setup container finished"
         break
     fi
     echo -n "."
     sleep 2
 done
+echo
 
-# Force the policy to public to ensure no 403 errors
-log_info "Ensuring MinIO bucket is public..."
-if docker exec duka-minio-setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
-    docker exec duka-minio-setup mc policy set public local/duka-images >/dev/null 2>&1
-    log_success "MinIO bucket policy enforced as public."
-else
-    log_warning "Could not enforce MinIO policy (MinIO might be unreachable)."
-fi
-
-# Sanity check
-log_info "Verifying MinIO items directory..."
+log_step "Verifying MinIO items directory..."
 if docker exec duka-minio-setup mc ls local/duka-images/uploads/items/ >/dev/null 2>&1; then
-    log_success "MinIO items directory confirmed."
+    log_success "MinIO items directory confirmed"
 else
-    log_info "MinIO items directory not found (likely empty)."
+    log_info "MinIO items directory not found (likely empty)"
 fi
-
-# ... (rest of your script)
 
 # =============================================================================
 # DEPLOYMENT COMPLETE
 # =============================================================================
 
 log_success "=========================================="
-log_success "DEPLOYMENT COMPLETE"
+log_success "${ICON_ROCKET} DEPLOYMENT COMPLETE ${ICON_ROCKET}"
 log_success "=========================================="
-log_success "Application is now running"
+log_success "Application is now running ${ICON_SUCCESS}"
 log_success "Log file saved to: $LOG_FILE"
 log_success "=========================================="
-
-# Show logs (This should be the very last thing in your file)
-# log_info "Showing application logs (Ctrl+C to exit)..."
-# docker logs -f duka-app
