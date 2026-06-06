@@ -598,10 +598,9 @@ else
     log_done "Vite dependencies fixed"
     
     log_step "Sanitizing Vite environment..."
-    log_info "Running: pkill -f vite"
-    exec_in_app sh -lc 'pkill -9 -f vite 2>/dev/null || true'sleep 1
-    log_info "pkill command completed"
-    log_done "Vite environment sanitized"
+    log_info "Skipping Vite process kill - starting fresh"
+    sleep 1
+    log_done "Vite environment ready"
     
     log_step "Launching Vite in background..."
     docker exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
