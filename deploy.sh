@@ -292,13 +292,12 @@ docker_raw() {
 }
 
 exec_in_app() {
-    compose exec -T duka-app "$@"
+    docker exec "$@" duka-app
 }
 
 exec_in_app_as_root() {
-    compose exec -T -u root duka-app "$@"
+    docker exec -u root "$@" duka-app
 }
-
 compose_rm_services() {
     if has_command timeout; then
         (cd "$PROJECT_ROOT" && timeout 20s "${DOCKER_CMD[@]}" compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" rm -fsv "$@")
