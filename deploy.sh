@@ -544,7 +544,9 @@ else
     sleep 1
     
     log_info "Launching Vite in background..."
-    compose exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
+    compose exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1' || {
+    log_warning "Vite start command had issues, continuing anyway..."
+}
     
     log_info "Waiting for Vite to become ready..."
     if ! exec_in_app sh -c '
