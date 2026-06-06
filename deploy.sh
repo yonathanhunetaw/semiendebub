@@ -526,7 +526,7 @@ done
 # =============================================================================
 
 log_step "Configuring git safe directory..."
-exec_in_app git config --global --add safe.directory /var/www/html || true
+docker exec duka-app git config --global --add safe.directory /var/www/html || true
 log_done "Git safe directory configured"
 
 # =============================================================================
@@ -537,7 +537,7 @@ log_step "${ICON_PACKAGE} Installing PHP dependencies..."
 
 exec_in_app composer require league/flysystem-aws-s3-v3:"^3.0" --no-interaction --no-update 2>/dev/null || true
 
-if ! exec_in_app composer validate --no-check-all --quiet 2>/dev/null; then
+if ! docker exec duka-app composer validate --no-check-all --quiet 2>/dev/null; then
     log_warning "Composer lock file out of sync, updating..."
     exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction 2>&1 | tee -a "$LOG_FILE"
 fi
