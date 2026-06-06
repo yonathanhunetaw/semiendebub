@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
-
+    
     const appDomain = env.APP_DOMAIN || 'duka2.pi';
     const devPort = 5177;
 
@@ -15,15 +15,13 @@ export default defineConfig(({ mode }) => {
             host: true,
             port: devPort,
             strictPort: true,
-
             cors: true,
-
-            origin: `http://${appDomain}:${devPort}`,
-
+            
+            // CHANGE THIS - use the actual domain for HMR
             hmr: {
-                host: appDomain,
+                host: appDomain,  // This should be 'duka.test' on Mac, 'duka2.pi' on Pi
+                port: devPort,
                 protocol: 'ws',
-                clientPort: devPort,
             },
 
             watch: {
@@ -37,8 +35,5 @@ export default defineConfig(({ mode }) => {
             }),
             react(),
         ],
-        // optimizeDeps: {
-        //     force: true,
-        // },
     };
 });
