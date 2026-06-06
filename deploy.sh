@@ -410,6 +410,16 @@ else
     log_info "Starting application services..."
     # Update the names below to match your config output exactly
     compose up -d --force-recreate --remove-orphans duka-app duka-db duka-minio minio-setup 2>&1 | tee -a "$LOG_FILE"
+    # Wait for container to be healthy
+    log_info "Waiting for duka-app to be ready..."
+    for i in {1..30}; do
+        if docker exec duka-app php artisan --version >/dev/null 2>&1; then
+            log_success "duka-app is ready"
+            break
+        fi
+        echo -n "."
+        sleep 2
+    done
 fi
 
 # =============================================================================
