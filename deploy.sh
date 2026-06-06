@@ -598,8 +598,10 @@ else
     log_done "Vite dependencies fixed"
     
     log_step "Sanitizing Vite environment..."
-    exec_in_app sh -lc 'pkill -f vite || true'
+    log_info "Running: pkill -f vite"
+    exec_in_app sh -lc 'pkill -f vite || echo "No vite process to kill"'
     sleep 1
+    log_info "pkill command completed"
     log_done "Vite environment sanitized"
     
     log_step "Launching Vite in background..."
