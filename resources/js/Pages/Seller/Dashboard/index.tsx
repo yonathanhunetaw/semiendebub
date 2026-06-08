@@ -221,11 +221,18 @@ export default function Index({
                                                 [item.id]: true,
                                             }));
                                         }}
+                                        // index.tsx inside your <img /> tag
                                         onError={(e) => {
-                                            console.warn("⚠️ image failed:", img);
+                                            const target = e.currentTarget as HTMLImageElement;
 
-                                            (e.currentTarget as HTMLImageElement).src =
-                                                FALLBACK_IMAGE;
+                                            // Only attempt to set the fallback if we aren't already trying to load it
+                                            if (target.src.includes(FALLBACK_IMAGE)) {
+                                                console.error("Fallback image also failed to load.");
+                                                return;
+                                            }
+
+                                            console.warn("⚠️ image failed:", img);
+                                            target.src = FALLBACK_IMAGE; // This triggers one retry
 
                                             setLoaded((p) => ({
                                                 ...p,

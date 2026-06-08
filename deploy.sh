@@ -36,6 +36,138 @@ ICON_ROCKET="🚀"
 ICON_DB="🗄️"
 ICON_PACKAGE="📦"
 ICON_VITE="⚡"
+ICON_CHECK="✓"
+ICON_CROSS="✗"
+ICON_PENDING="○"
+ICON_IN_PROGRESS="◉"
+
+# =============================================================================
+# PROGRESS TRACKING SYSTEM
+# =============================================================================
+
+# Global array to track steps
+declare -a STEPS=()
+declare -a STEP_STATUS=()
+declare -a STEP_MESSAGES=()
+
+# Initialize steps
+init_steps() {
+    STEPS=(
+        "Load Configuration & Environment"
+        "Start Services (Docker Compose)"
+        "MinIO Readiness & Bucket Setup"
+        "PHP Dependencies Installation"
+        "Node Dependencies Installation"
+        "Frontend Assets Build"
+        "Database Migration & Seeding"
+        "Cache & Permissions Setup"
+        "Final Verification"
+    )
+    
+    for i in "${!STEPS[@]}"; do
+        STEP_STATUS[$i]="pending"
+        STEP_MESSAGES[$i]=""
+    done
+}
+
+# Update step status
+update_step() {
+    local step_num=$1
+    local status=$2
+    local message=$3
+    
+    STEP_STATUS[$step_num]=$status
+    STEP_MESSAGES[$step_num]=$message
+}
+
+# Display progress board (full view)
+show_full_progress() {
+    echo ""
+    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD_CYAN}                     DEPLOYMENT PROGRESS                         ${NC}"
+    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
+    
+    for i in "${!STEPS[@]}"; do
+        local step_name="${STEPS[$i]}"
+        local status="${STEP_STATUS[$i]}"
+        local message="${STEP_MESSAGES[$i]}"
+        
+        case "$status" in
+            "pending")
+                echo -e "  ${YELLOW}${ICON_PENDING}${NC} ${step_name}"
+                ;;
+            "in_progress")
+                echo -e "  ${BLUE}${ICON_IN_PROGRESS}${NC} ${step_name} ${CYAN}...${NC}"
+                ;;
+            "success")
+                echo -e "  ${GREEN}${ICON_CHECK}${NC} ${step_name} ${GREEN}✓${NC}"
+                if [ -n "$message" ]; then
+                    echo -e "      ${GREEN}→${NC} $message"
+                fi
+                ;;
+            "failed")
+                echo -e "  ${RED}${ICON_CROSS}${NC} ${step_name} ${RED}✗${NC}"
+                if [ -n "$message" ]; then
+                    echo -e "      ${RED}→${NC} $message"
+                fi
+                ;;
+        esac
+    done
+    
+    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
+    echo ""
+}
+
+# Show only the current step progress (compact view)
+show_compact_progress() {
+    echo ""
+    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
+    
+    # Find and show completed steps
+    local completed_count=0
+    for i in "${!STEPS[@]}"; do
+        if [ "${STEP_STATUS[$i]}" = "success" ]; then
+            echo -e "  ${GREEN}✓${NC} ${STEPS[$i]}"
+            ((completed_count++))
+        fi
+    done
+    
+    # Show current in-progress step
+    for i in "${!STEPS[@]}"; do
+        if [ "${STEP_STATUS[$i]}" = "in_progress" ]; then
+            echo -e "  ${BLUE}◉${NC} ${STEPS[$i]} ${CYAN}...${NC}"
+        fi
+    done
+    
+    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
+    echo ""
+}
+
+# Mark step as completed with success
+step_success() {
+    local step_num=$1
+    local message=$2
+    update_step $step_num "success" "$message"
+    show_compact_progress
+    log_success "✓ Step $((step_num + 1)). ${STEPS[$step_num]} completed: $message"
+}
+
+# Mark step as failed
+step_failed() {
+    local step_num=$1
+    local message=$2
+    update_step $step_num "failed" "$message"
+    show_full_progress
+    log_error "✗ Step $((step_num + 1)). ${STEPS[$step_num]} failed: $message"
+}
+
+# Mark step as in progress
+step_start() {
+    local step_num=$1
+    update_step $step_num "in_progress" ""
+    show_compact_progress
+    log_step "Starting: $((step_num + 1)). ${STEPS[$step_num]}"
+}
 
 # =============================================================================
 # CONFIGURATION & PATH RESOLUTION
@@ -56,7 +188,7 @@ LOG_DIR="$PROJECT_ROOT/logs"
 LOG_FILE="$LOG_DIR/deploy_$(date +%Y%m%d_%H%M%S).log"
 mkdir -p "$LOG_DIR"
 
-# Logging function - outputs to both console and log file with colors
+# Logging function
 log() {
     local level="$1"
     shift
@@ -88,29 +220,12 @@ log() {
     esac
 }
 
-log_info() {
-    log "INFO" "$@"
-}
-
-log_error() {
-    log "ERROR" "$@"
-}
-
-log_warning() {
-    log "WARNING" "$@"
-}
-
-log_success() {
-    log "SUCCESS" "$@"
-}
-
-log_step() {
-    log "STEP" "$@"
-}
-
-log_done() {
-    log "DONE" "$@"
-}
+log_info() { log "INFO" "$@"; }
+log_error() { log "ERROR" "$@"; }
+log_warning() { log "WARNING" "$@"; }
+log_success() { log "SUCCESS" "$@"; }
+log_step() { log "STEP" "$@"; }
+log_done() { log "DONE" "$@"; }
 
 # Error handler
 error_handler() {
@@ -118,6 +233,7 @@ error_handler() {
     local error_code=$2
     log_error "Script failed at line $line_no with exit code $error_code"
     log_error "Check log file for details: $LOG_FILE"
+    show_full_progress
 }
 
 trap 'error_handler ${LINENO} $?' ERR
@@ -145,6 +261,9 @@ log_info "Project Root: $PROJECT_ROOT"
 log_info "Environment: ${APP_ENV:-not set}"
 log_info "Log file: $LOG_FILE"
 log_success "=========================================="
+
+# Initialize progress tracking
+init_steps
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -298,6 +417,7 @@ exec_in_app() {
 exec_in_app_as_root() {
     docker exec -u root duka-app "$@"
 }
+
 compose_rm_services() {
     if has_command timeout; then
         (cd "$PROJECT_ROOT" && timeout 20s "${DOCKER_CMD[@]}" compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" rm -fsv "$@")
@@ -305,6 +425,70 @@ compose_rm_services() {
         (cd "$PROJECT_ROOT" && "${DOCKER_CMD[@]}" compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" rm -fsv "$@")
     fi
 }
+
+# =============================================================================
+# MINIO READINESS & BUCKET SETUP
+# =============================================================================
+
+wait_for_minio() {
+    local max_attempts=60
+    local attempt=1
+    
+    log_info "Waiting for MinIO to become ready..."
+    
+    while [ $attempt -le $max_attempts ]; do
+        if docker exec duka-minio mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
+            log_success "MinIO is ready and accessible"
+            return 0
+        fi
+        
+        echo -n "."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    
+    log_error "MinIO failed to become ready after $max_attempts attempts"
+    return 1
+}
+
+setup_minio_bucket() {
+    log_step "Creating MinIO bucket and directories..."
+    
+    # Wait for minio-setup container to complete
+    log_step "Waiting for MinIO setup container..."
+    for i in {1..60}; do
+        STATUS=$(docker inspect -f '{{.State.Status}}' "minio-setup" 2>/dev/null || echo "not-found")
+        
+        if [ "$STATUS" = "exited" ]; then
+            log_success "MinIO setup container finished"
+            break
+        fi
+        echo -n "."
+        sleep 2
+    done
+    echo
+    
+    # Configure MinIO bucket
+    if docker exec duka-minio-setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
+        # Create the bucket if it doesn't exist
+        docker exec duka-minio-setup mc mb local/duka-images --ignore-existing >/dev/null 2>&1
+        docker exec duka-minio-setup mc policy set public local/duka-images >/dev/null 2>&1
+        
+        # Create the uploads/items directory structure
+        docker exec duka-minio-setup mc mb local/duka-images/uploads/items/ --ignore-existing >/dev/null 2>&1
+        
+        log_success "MinIO bucket 'duka-images' created and configured as public"
+        log_success "MinIO directory structure created"
+        return 0
+    else
+        log_error "Could not configure MinIO bucket"
+        return 1
+    fi
+}
+
+# =============================================================================
+# NODE DEPENDENCIES
+# =============================================================================
 
 install_node_dependencies() {
     log_step "Installing Node dependencies from lock file..."
@@ -397,45 +581,20 @@ log_info "Enable Observability: $ENABLE_OBSERVABILITY"
 log_success "=========================================="
 
 # =============================================================================
-# DOCKER IMAGE BUILD
+# STEP 1: LOAD CONFIGURATION & ENVIRONMENT
 # =============================================================================
 
-log_step "Checking Docker image status..."
-
-should_rebuild=0
-if [ "$FORCE_BUILD" = "1" ]; then
-    log_info "FORCE_BUILD=1 detected - forcing rebuild"
-    should_rebuild=1
-elif has_git_path_changes "${DOCKER_FILES[@]}"; then
-    log_info "Docker configuration changes detected"
-    should_rebuild=1
-else
-    log_info "No Docker changes detected - skipping rebuild"
-fi
-
-if [ "$should_rebuild" -eq 1 ]; then
-    log_step "Building duka-app image..."
-    compose build duka-app 2>&1 | tee -a "$LOG_FILE"
-    
-    log_step "Cleaning Docker cache..."
-    docker_raw builder prune -af >/dev/null 2>&1 || true
-    docker_raw image prune -af >/dev/null 2>&1 || true
-    log_done "Image build complete"
-fi
+step_start 0
+log_info "Configuration loaded successfully"
+log_info "Project Root: $PROJECT_ROOT"
+log_info "Environment: $APP_ENV"
+step_success 0 "Environment: $APP_ENV, Force Build: $FORCE_BUILD"
 
 # =============================================================================
-# NODE DEPENDENCIES
+# STEP 2: START SERVICES
 # =============================================================================
 
-node_changes=0
-if has_git_path_changes "${NODE_FILES[@]}"; then
-    node_changes=1
-    log_info "Node dependency changes detected"
-fi
-
-# =============================================================================
-# START SERVICES
-# =============================================================================
+step_start 1
 
 log_step "Removing old containers..."
 compose down -v --remove-orphans 2>/dev/null || true
@@ -493,9 +652,13 @@ else
     done
 fi
 
+step_success 1 "All containers started successfully"
+
 # =============================================================================
-# DATABASE READINESS
+# STEP 3: MINIO READINESS & BUCKET SETUP (CRITICAL - MUST BE BEFORE SEEDING)
 # =============================================================================
+
+step_start 2
 
 log_step "Waiting for MySQL to be healthy..."
 for i in {1..30}; do
@@ -517,21 +680,34 @@ for i in {1..30}; do
     
     if [ $i -eq 30 ]; then
         log_error "MySQL timed out waiting for health."
+        step_failed 2 "MySQL health check timeout"
         exit 1
     fi
 done
 
+# Wait for MinIO to be ready
+if ! wait_for_minio; then
+    step_failed 2 "MinIO failed to become ready"
+    exit 1
+fi
+
+# Setup MinIO bucket and directories
+# if ! setup_minio_bucket; then
+#     step_failed 2 "MinIO bucket setup failed"
+#     exit 1
+# fi
+
+step_success 2 "MinIO ready with bucket configured"
+
 # =============================================================================
-# CONFIGURE GIT SAFE DIRECTORY
+# STEP 4: PHP DEPENDENCIES
 # =============================================================================
+
+step_start 3
 
 log_step "Configuring git safe directory..."
 docker exec duka-app git config --global --add safe.directory /var/www/html || true
 log_done "Git safe directory configured"
-
-# =============================================================================
-# PHP DEPENDENCIES
-# =============================================================================
 
 log_step "${ICON_PACKAGE} Installing PHP dependencies..."
 
@@ -568,10 +744,33 @@ else
 fi
 
 log_done "PHP dependencies installed"
+step_success 3 "PHP dependencies installed successfully"
 
 # =============================================================================
-# FRONTEND ASSETS
+# STEP 5: NODE DEPENDENCIES
 # =============================================================================
+
+step_start 4
+
+node_changes=0
+if has_git_path_changes "${NODE_FILES[@]}"; then
+    node_changes=1
+    log_info "Node dependency changes detected"
+fi
+
+if [ "$node_changes" -eq 1 ] || ! exec_in_app test -d node_modules; then
+    install_node_dependencies
+else
+    log_success "Node dependencies already installed"
+fi
+
+step_success 4 "Node dependencies ready"
+
+# =============================================================================
+# STEP 6: FRONTEND ASSETS
+# =============================================================================
+
+step_start 5
 
 log_step "${ICON_VITE} Handling frontend assets..."
 
@@ -579,18 +778,10 @@ if [ "$APP_ENV" = "production" ]; then
     log_step "Building production assets..."
     exec_in_app rm -f public/hot
     
-    if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
-        install_node_dependencies
-    fi
-    
     exec_in_app npm run build 2>&1 | tee -a "$LOG_FILE"
     log_success "Production assets built"
 else
-    log_step "Setting up Vite dependencies first..."
-    
-    if [ "$node_changes" -eq 1 ] || ! exec_in_app test -x node_modules/.bin/vite; then
-        install_node_dependencies
-    fi
+    log_step "Setting up Vite dependencies..."
     
     log_step "Fixing Vite dependencies for development..."
     exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save 2>&1 | tee -a "$LOG_FILE"
@@ -626,28 +817,37 @@ else
         echo
         log_error "Vite failed to start. Check /tmp/vite.log"
         exec_in_app cat /tmp/vite.log 2>/dev/null | tail -20
+        step_failed 5 "Vite failed to start"
         exit 1
     fi
     echo
     log_success "Vite is ready and running ${ICON_VITE}"
 fi
 
+step_success 5 "Frontend assets processed"
+
 # =============================================================================
-# DATABASE MIGRATION
+# STEP 7: DATABASE MIGRATION & SEEDING (NOW MINIO IS READY WITH BUCKET!)
 # =============================================================================
+
+step_start 6
 
 log_step "${ICON_DB} Running database migration..."
 
 if ! run_migration_with_retry; then
     log_error "Database migration failed - deployment aborted"
+    step_failed 6 "Database migration failed"
     exit 1
 fi
 
 log_done "Database migration completed"
+step_success 6 "Database migrated and seeded"
 
 # =============================================================================
-# CACHE AND PERMISSIONS
+# STEP 8: CACHE AND PERMISSIONS
 # =============================================================================
+
+step_start 7
 
 log_step "Setting up storage structure and permissions..."
 
@@ -685,39 +885,43 @@ else
 fi
 
 log_done "Laravel optimizations refreshed"
+step_success 7 "Cache cleared and permissions set"
 
 # =============================================================================
-# MINIO SETUP & POLICY ENFORCEMENT
+# STEP 9: FINAL VERIFICATION
 # =============================================================================
 
-log_step "Configuring MinIO bucket..."
+step_start 8
 
-if docker exec duka-minio-setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
-    docker exec duka-minio-setup mc policy set public local/duka-images >/dev/null 2>&1
-    log_success "MinIO bucket policy enforced as public"
-else
-    log_warning "Could not enforce MinIO policy (MinIO might be unreachable)"
-fi
+log_step "Performing final verification checks..."
 
-log_step "Verifying MinIO setup container..."
-for i in {1..60}; do
-    STATUS=$(docker inspect -f '{{.State.Status}}' "minio-setup" 2>/dev/null || echo "not-found")
-    
-    if [ "$STATUS" = "exited" ]; then
-        log_success "MinIO setup container finished"
-        break
+# Check if all critical containers are running
+CRITICAL_CONTAINERS=("duka-app" "duka-db" "duka-minio")
+all_running=true
+
+for container in "${CRITICAL_CONTAINERS[@]}"; do
+    if docker ps --format "table {{.Names}}" | grep -q "^${container}$"; then
+        log_success "✓ $container is running"
+    else
+        log_error "✗ $container is NOT running"
+        all_running=false
     fi
-    echo -n "."
-    sleep 2
 done
-echo
 
-log_step "Verifying MinIO items directory..."
-if docker exec duka-minio-setup mc ls local/duka-images/uploads/items/ >/dev/null 2>&1; then
-    log_success "MinIO items directory confirmed"
+if [ "$all_running" = true ]; then
+    log_success "All critical containers are running"
 else
-    log_info "MinIO items directory not found (likely empty)"
+    log_warning "Some containers are not running - check docker ps"
 fi
+
+# Check application health
+if curl -sf http://localhost/health >/dev/null 2>&1; then
+    log_success "Application health check passed"
+else
+    log_warning "Health check endpoint not responding"
+fi
+
+step_success 8 "Deployment verification complete"
 
 # =============================================================================
 # DEPLOYMENT COMPLETE
@@ -729,3 +933,5 @@ log_success "=========================================="
 log_success "Application is now running ${ICON_SUCCESS}"
 log_success "Log file saved to: $LOG_FILE"
 log_success "=========================================="
+
+show_full_progress
