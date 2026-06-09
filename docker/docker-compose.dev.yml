@@ -14,7 +14,6 @@ services:
     networks:
       - duka-network
 
-  # Add MinIO for local development
   duka-minio:
     image: minio/minio
     container_name: duka-minio
@@ -31,20 +30,23 @@ services:
       - minio_data:/data
     restart: unless-stopped
 
-  minio_setup:
+  minio-setup:
     image: minio/mc:latest
-    container_name: duka-minio_setup
+    container_name: duka-minio-setup
     depends_on:
       - duka-minio
     entrypoint: >
       /bin/sh -c "
+      echo '=== MinIO Setup Starting ===';
       sleep 5;
-      if mc alias set local http://duka-minio:9000 miniophotokulfadmin miniophotokulfmistir 2>&1; then
-      mc mb local/duka-images --ignore-existing;
-      mc policy set download local/duka-images;
-      echo '✅ MinIO bucket configured!';
-      exit 0;
-      "
+      if mc alias set local http://duka-minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} 2>&1; then
+        mc mb local/${AWS_BUCKET:-duka-images} --ignore-existing;
+        mc anonymous set download local/${AWS_BUCKET:-duka-images};
+        echo '=== MinIO Setup Complete ===';
+      else
+        echo '=== MinIO Setup Failed ===';
+        exit 1;
+      fi"
     networks:
       - duka-network
     restart: "no"

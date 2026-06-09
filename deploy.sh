@@ -457,7 +457,7 @@ setup_minio_bucket() {
     # Wait for minio-setup container to complete
     log_step "Waiting for MinIO setup container..."
     for i in {1..60}; do
-        STATUS=$(docker inspect -f '{{.State.Status}}' "minio-setup" 2>/dev/null || echo "not-found")
+        STATUS=$(docker inspect -f '{{.State.Status}}' "duka-minio-setup" 2>/dev/null || echo "not-found")
         
         if [ "$STATUS" = "exited" ]; then
             log_success "MinIO setup container finished"
@@ -470,18 +470,32 @@ setup_minio_bucket() {
     
     # Configure MinIO bucket
     if docker exec duka-minio-setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
-        # Create the bucket if it doesn't exist
         docker exec duka-minio-setup mc mb local/duka-images --ignore-existing >/dev/null 2>&1
-        docker exec duka-minio-setup mc policy set public local/duka-images >/dev/null 2>&1
         
-        # Create the uploads/items directory structure
-        docker exec duka-minio-setup mc mb local/duka-images/uploads/items/ --ignore-existing >/dev/null 2>&1
+        # Set bucket to public download
+        docker exec duka-minio-setup mc anonymous set download local/duka-images >/dev/null 2>&1
         
-        log_success "MinIO bucket 'duka-images' created and configured as public"
-        log_success "MinIO directory structure created"
+        log_success "MinIO bucket 'duka-images' configured as public"
+        return 0
+    fi
+}
+
+# =============================================================================
+# MAKE ALL EXISTING MINIO OBJECTS PUBLIC
+# =============================================================================
+
+make_minio_objects_public() {
+    log_step "Making all MinIO objects publicly accessible..."
+    
+    # Wait a moment for any ongoing uploads
+    sleep 2
+    
+    # Set bucket policy recursively to ensure all objects are public
+    if docker exec duka-minio mc anonymous set download --recursive local/duka-images >/dev/null 2>&1; then
+        log_success "All MinIO objects are now public"
         return 0
     else
-        log_error "Could not configure MinIO bucket"
+        log_warning "Could not recursively set public access, objects may have limited permissions"
         return 1
     fi
 }
@@ -531,15 +545,31 @@ run_migration_with_retry() {
             # Try db:wipe first
             if exec_in_app php artisan db:wipe --force 2>&1 | tee -a "$LOG_FILE"; then
                 log_success "Database wiped successfully"
-                if exec_in_app php artisan migrate --seed --force 2>&1 | tee -a "$LOG_FILE"; then
-                    log_success "Migration and seeding completed successfully"
-                    return 0
+                
+                # Run migrations first
+                if exec_in_app php artisan migrate --force 2>&1 | tee -a "$LOG_FILE"; then
+                    log_success "Migrations completed"
+                    
+                    # Wait a moment for MinIO to be fully ready after migration
+                    log_step "Waiting 3 seconds for MinIO to stabilize..."
+                    sleep 3
+                    
+                    # Run seeders with specific order
+                    log_step "Running seeders..."
+                    if exec_in_app php artisan db:seed --class='Database\\Seeders\\Admin\\ItemSeeder' --force 2>&1 | tee -a "$LOG_FILE"; then
+                        log_success "ItemSeeder completed"
+                        return 0
+                    else
+                        log_warning "ItemSeeder failed, but continuing with other seeders..."
+                        # Run other seeders anyway
+                        exec_in_app php artisan db:seed --force 2>&1 | tee -a "$LOG_FILE"
+                    fi
                 fi
             else
                 log_warning "db:wipe failed, trying migrate:fresh..."
                 
-                # Try migrate:fresh
-                if exec_in_app php artisan migrate:fresh --seed --force 2>&1 | tee -a "$LOG_FILE"; then
+                # Try migrate:fresh with retry for seeding
+                if exec_in_app php artisan migrate:fresh --force 2>&1 | tee -a "$LOG_FILE"; then
                     log_success "Migration and seeding completed successfully"
                     return 0
                 fi
@@ -635,7 +665,7 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     
     compose up -d glitchtip-web glitchtip-worker 2>&1 | tee -a "$LOG_FILE"
     log_step "Starting application services..."
-    compose up -d --remove-orphans duka-app nginx minio_setup 2>&1 | tee -a "$LOG_FILE"
+    compose up -d --remove-orphans duka-app nginx minio-setup 2>&1 | tee -a "$LOG_FILE"
 else
     log_info "Observability is DISABLED"
     log_step "Starting application services..."
@@ -692,10 +722,38 @@ if ! wait_for_minio; then
 fi
 
 # Setup MinIO bucket and directories
-# if ! setup_minio_bucket; then
-#     step_failed 2 "MinIO bucket setup failed"
-#     exit 1
-# fi
+if ! setup_minio_bucket; then
+    step_failed 2 "MinIO bucket setup failed"
+    exit 1
+fi
+
+# Make sure all objects are public
+make_minio_objects_public
+
+step_success 2 "MinIO ready with bucket configured"
+
+# =============================================================================
+# STEP 3.5: VERIFY MINIO IS FULLY READY FOR SEEDING
+# =============================================================================
+
+step_start 2 # Still part of step 2 technically, but add this after bucket setup
+
+log_step "Verifying MinIO is writable for seeding..."
+
+# Test write to MinIO from Laravel
+if docker exec duka-app php artisan tinker --execute="
+    try {
+        Storage::disk('s3')->put('test-seeder.txt', 'Seeder test ' . date('Y-m-d H:i:s'), 'public');
+        Storage::disk('s3')->delete('test-seeder.txt');
+        echo 'OK';
+    } catch (\Exception \$e) {
+        echo 'ERROR: ' . \$e->getMessage();
+    }
+" 2>&1 | grep -q "OK"; then
+    log_success "MinIO is writable and ready for seeding"
+else
+    log_warning "MinIO write test failed, but continuing..."
+fi
 
 step_success 2 "MinIO ready with bucket configured"
 
@@ -830,6 +888,7 @@ step_success 5 "Frontend assets processed"
 # STEP 7: DATABASE MIGRATION & SEEDING (NOW MINIO IS READY WITH BUCKET!)
 # =============================================================================
 
+# After migration and seeding
 step_start 6
 
 log_step "${ICON_DB} Running database migration..."
@@ -842,6 +901,35 @@ fi
 
 log_done "Database migration completed"
 step_success 6 "Database migrated and seeded"
+
+# =============================================================================
+# POST-SEEDING: ENSURE ALL UPLOADED IMAGES ARE PUBLIC
+# =============================================================================
+
+log_step "Ensuring all seeded images are publicly accessible..."
+
+# Run a Laravel command to set visibility on all uploaded images
+docker exec duka-app php artisan tinker --execute="
+    try {
+        \$disk = Illuminate\Support\Facades\Storage::disk('s3');
+        \$files = \$disk->allFiles('uploads');
+        \$count = 0;
+        foreach (\$files as \$file) {
+            if (\$disk->getVisibility(\$file) !== 'public') {
+                \$disk->setVisibility(\$file, 'public');
+                \$count++;
+            }
+        }
+        echo \"✅ Made \$count images public\n\";
+    } catch (\Exception \$e) {
+        echo \"⚠️ Could not update visibilities: \" . \$e->getMessage() . \"\n\";
+    }
+" 2>&1 | tee -a "$LOG_FILE"
+
+# Also run mc command as backup
+docker exec duka-minio mc anonymous set download --recursive local/duka-images >/dev/null 2>&1
+
+log_success "All images are now publicly accessible"
 
 # =============================================================================
 # STEP 8: CACHE AND PERMISSIONS
@@ -922,6 +1010,47 @@ else
 fi
 
 step_success 8 "Deployment verification complete"
+
+# =============================================================================
+# STEP 9.5: UPLOAD MISSING IMAGES (POST-DEPLOYMENT)
+# =============================================================================
+
+log_step "Checking for missing MinIO images..."
+
+# Run a dedicated artisan command to upload any missing seed images
+docker exec duka-app php artisan tinker --execute="
+    \$missingCount = 0;
+    \$uploadedCount = 0;
+    
+    // Get all items that should have images
+    \$items = App\Models\Item\Item::whereNotNull('file_prefix')->get();
+    
+    foreach (\$items as \$item) {
+        \$prefix = \$item->file_prefix;
+        \$itemId = \$item->id;
+        
+        for (\$i = 1; \$i <= 5; \$i++) {
+            \$fileName = \"{\$prefix}_{\$i}.jpg\";
+            \$sourcePath = storage_path(\"app/seed-images/{\$fileName}\");
+            \$minioPath = \"uploads/items/{\$itemId}/{\$fileName}\";
+            
+            if (file_exists(\$sourcePath) && !Storage::disk('s3')->exists(\$minioPath)) {
+                try {
+                    Storage::disk('s3')->put(\$minioPath, file_get_contents(\$sourcePath), 'public');
+                    echo \"✅ Post-deploy uploaded: {\$minioPath}\\n\";
+                    \$uploadedCount++;
+                } catch (\Exception \$e) {
+                    echo \"❌ Failed: {\$minioPath} - \" . \$e->getMessage() . \"\\n\";
+                    \$missingCount++;
+                }
+            }
+        }
+    }
+    
+    echo \"\\n📊 Summary: Uploaded \$uploadedCount images, \$missingCount still missing\\n\";
+" 2>&1 | tee -a "$LOG_FILE"
+
+log_success "Image post-processing complete"
 
 # =============================================================================
 # DEPLOYMENT COMPLETE

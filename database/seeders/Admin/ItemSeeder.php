@@ -280,26 +280,16 @@ class ItemSeeder extends Seeder
 
     private function seedDeterministicVariantImages(Item $item, array $data): array
     {
-        // Check if MinIO is available
-        try {
-            $disk = Storage::disk('s3');
-            if (!$disk->exists('/')) {
-                echo "⚠️ MinIO not available, skipping image uploads for {$item->product_name}\n";
-                return [];
-            }
-        } catch (\Exception $e) {
-            echo "⚠️ MinIO not available (" . $e->getMessage() . "), skipping image uploads for {$item->product_name}\n";
-            return [];
-        }
-
+        $disk = Storage::disk('s3');
         $prefix = $data['file_prefix'];
         $itemImagesArray = [];
 
         // 1. Seed General Images
         for ($i = 1; $i <= 5; $i++) {
             $name = "{$prefix}_{$i}.jpg";
-            $this->uploadToMinio($disk, $item->id, $name);
-            $itemImagesArray[] = "uploads/items/{$item->id}/{$name}";
+            if ($this->uploadToMinio($disk, $item->id, $name)) {
+                $itemImagesArray[] = "uploads/items/{$item->id}/{$name}";
+            }
         }
 
         // 2. Seed Variant Images
@@ -320,29 +310,20 @@ class ItemSeeder extends Seeder
         $minioPath = "uploads/items/{$itemId}/{$fileName}";
 
         if (!File::exists($sourcePath)) {
-            echo "⚠️ Warning: Source file not found: {$sourcePath}\n";
+            // Don't warn for every missing file - it's expected
             return false;
         }
 
         try {
-            // Check if disk is available
-            if (!$disk) {
-                echo "⚠️ Warning: S3 disk not available, skipping upload for {$fileName}\n";
-                return false;
-            }
-
-            // Check if MinIO is connected
-            if (!$disk->exists('/')) {
-                echo "⚠️ Warning: MinIO not reachable, skipping upload for {$fileName}\n";
-                return false;
-            }
-
+            // Check if file already exists in MinIO
             if (!$disk->exists($minioPath)) {
-                $disk->put($minioPath, File::get($sourcePath));
+                $disk->put($minioPath, File::get($sourcePath), 'public');
                 echo "✅ Uploaded: {$minioPath}\n";
+                return true;
             }
         } catch (\Exception $e) {
-            echo "❌ Error uploading {$fileName}: " . $e->getMessage() . "\n";
+            // Silently fail - don't break the seed
+            echo "⚠️ Could not upload {$fileName}: " . $e->getMessage() . "\n";
             return false;
         }
 

@@ -50,7 +50,7 @@ services:
       timeout: 3s
       retries: 3
 
-  minio_setup:
+  minio-setup:
     image: minio/mc:latest
     container_name: duka-minio-setup
     depends_on:
