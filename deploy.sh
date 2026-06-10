@@ -1,5 +1,5 @@
 #!/bin/bash -x
-set -euo pipefail
+set -uo pipefail
 
 # =============================================================================
 # COLOR CODES FOR LOGGING
@@ -618,6 +618,9 @@ log_info "Configuration loaded successfully"
 log_info "Project Root: $PROJECT_ROOT"
 log_info "Environment: $APP_ENV"
 step_success 0 "Environment: $APP_ENV, Force Build: $FORCE_BUILD"
+echo "DEBUG: Step 1 completed, about to start Step 2"
+echo "DEBUG: Current directory: $(pwd)"
+echo "DEBUG: COMPOSE_FILES: ${COMPOSE_FILES[@]}"
 # =============================================================================
 # STEP 2: START SERVICES (FIXED FOR RASPBERRY PI)
 # =============================================================================
