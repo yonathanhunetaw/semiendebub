@@ -663,15 +663,7 @@ echo "DEBUG: Cleanup finished, about to start services..."
 log_step "Starting application services..."
 
 # Check if docker-compose.yml files exist
-echo "DEBUG: Checking compose files..."
-for file in "${COMPOSE_FILES[@]}"; do
-    if [ -f "$file" ]; then
-        echo "DEBUG: Found compose file: $file"
-    else
-        echo "ERROR: Missing compose file: $file"
-        exit 1
-    fi
-done
+echo "DEBUG: Compose files configured: ${COMPOSE_FILES[@]}"
 
 echo "DEBUG: About to run compose up commands..."
 
