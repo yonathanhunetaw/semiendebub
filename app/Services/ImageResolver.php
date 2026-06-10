@@ -44,13 +44,33 @@ class ImageResolver
         // Storage::disk('s3')->url() does NOT hit the network — it just builds the URL
         // from your AWS_URL / AWS_ENDPOINT config. This is safe even when MinIO is down.
         try {
-            return Storage::disk('s3')->url($key);
+            $url = Storage::disk('s3')->url($key);
+            
+            // Remove any accidental /storage/ that might get added from misconfiguration
+            $url = str_replace('/storage/duka-images', '/duka-images', $url);
+            $url = str_replace('/storage/', '/', $url);
+            
+            return $url;
         } catch (\Throwable $e) {
             Log::warning("ImageResolver: could not build URL for [{$key}]: " . $e->getMessage());
         }
 
-        // Legacy public-disk paths (images/product_images/..., uploads/...)
+        // Fallback: Try to construct URL directly from AWS_URL config
+        $awsUrl = config('filesystems.disks.s3.url');
+        if ($awsUrl && (str_starts_with($key, 'uploads/') || str_starts_with($key, 'images/'))) {
+            // Clean the AWS URL first
+            $cleanUrl = rtrim($awsUrl, '/');
+            $cleanUrl = str_replace('/storage', '', $cleanUrl);
+            return $cleanUrl . '/' . ltrim($key, '/');
+        }
+
+        // Last resort fallback for legacy public-disk paths
         if (str_starts_with($key, 'images/') || str_starts_with($key, 'uploads/')) {
+            // Don't add /storage/ for MinIO images - use direct URL
+            $directUrl = config('filesystems.disks.s3.url');
+            if ($directUrl) {
+                return rtrim($directUrl, '/') . '/' . ltrim($key, '/');
+            }
             return asset('storage/' . $key);
         }
 
