@@ -145,11 +145,15 @@ show_compact_progress() {
 
 # Mark step as completed with success
 step_success() {
+    echo "DEBUG step_success: Starting for step $1 with message '$2'"
     local step_num=$1
     local message=$2
     update_step $step_num "success" "$message"
+    echo "DEBUG step_success: After update_step"
     show_compact_progress
+    echo "DEBUG step_success: After show_compact_progress"
     log_success "✓ Step $((step_num + 1)). ${STEPS[$step_num]} completed: $message"
+    echo "DEBUG step_success: Done"
 }
 
 # Mark step as failed
