@@ -154,7 +154,7 @@ step_success() {
     local message=$2
     update_step $step_num "success" "$message"
     echo "DEBUG step_success: After update_step"
-    show_compact_progress
+    #show_compact_progress
     echo "DEBUG step_success: After show_compact_progress"
     log_success "✓ Step $((step_num + 1)). ${STEPS[$step_num]} completed: $message"
     echo "DEBUG step_success: Done"
@@ -165,7 +165,7 @@ step_failed() {
     local step_num=$1
     local message=$2
     update_step $step_num "failed" "$message"
-    show_full_progress
+    #show_full_progress
     log_error "✗ Step $((step_num + 1)). ${STEPS[$step_num]} failed: $message"
 }
 
@@ -173,7 +173,7 @@ step_failed() {
 step_start() {
     local step_num=$1
     update_step $step_num "in_progress" ""
-    show_compact_progress
+    #show_compact_progress
     log_step "Starting: $((step_num + 1)). ${STEPS[$step_num]}"
 }
 
