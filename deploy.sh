@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash a-x
 set -euo pipefail
 
 # =============================================================================
@@ -618,128 +618,103 @@ log_info "Configuration loaded successfully"
 log_info "Project Root: $PROJECT_ROOT"
 log_info "Environment: $APP_ENV"
 step_success 0 "Environment: $APP_ENV, Force Build: $FORCE_BUILD"
-
 # =============================================================================
-# STEP 2: START SERVICES (REPLACE THIS ENTIRE SECTION)
+# STEP 2: START SERVICES (FIXED FOR RASPBERRY PI)
 # =============================================================================
 
 step_start 1
 
+echo "========================================="
+echo "DEBUG: Entering Step 2"
+echo "========================================="
+
 log_step "Forcefully stopping and cleaning containers (PI optimized)..."
 
-# Capture exit codes but don't let set -e kill us silently
-set +e  # Temporarily disable set -e for cleanup commands
+# Temporarily disable set -e to see what's failing
+set +e
 
-# 1. Stop and remove containers with timeout and error logging
-log_info "Running compose down..."
-compose down -v --remove-orphans --timeout 10 2>&1 | tee -a "$LOG_FILE"
+echo "DEBUG: About to run: compose down -v --remove-orphans --timeout 10"
+
+# Run compose down and capture exit code
+compose down -v --remove-orphans --timeout 10
 DOWN_EXIT=$?
+
+echo "DEBUG: compose down exited with code: $DOWN_EXIT"
+
 if [ $DOWN_EXIT -ne 0 ]; then
-    log_warning "Compose down exited with code $DOWN_EXIT (continuing anyway)"
+    echo "ERROR: compose down failed with code $DOWN_EXIT"
+    log_error "compose down failed with code $DOWN_EXIT"
 fi
 
-# 2. Safety cleanup - ignore all errors here
-log_info "Cleaning up straggler containers..."
-docker rm -f duka-minio-setup 2>/dev/null || true
-docker stop duka-app duka-db duka-minio 2>/dev/null || true
-docker rm -f duka-app duka-db duka-minio 2>/dev/null || true
+echo "DEBUG: About to clean up containers..."
+
+# Safety cleanup (ignore errors)
+docker rm -f duka-minio-setup 2>/dev/null
+docker stop duka-app duka-db duka-minio 2>/dev/null
+docker rm -f duka-app duka-db duka-minio 2>/dev/null
 
 log_done "Cleanup complete"
 
+echo "DEBUG: Cleanup finished, about to start services..."
+
 log_step "Starting application services..."
 
-# Re-enable set -e for critical operations
+# Check if docker-compose.yml files exist
+echo "DEBUG: Checking compose files..."
+for file in "${COMPOSE_FILES[@]}"; do
+    if [ -f "$file" ]; then
+        echo "DEBUG: Found compose file: $file"
+    else
+        echo "ERROR: Missing compose file: $file"
+        exit 1
+    fi
+done
+
+echo "DEBUG: About to run compose up commands..."
+
+# For Raspberry Pi, start services one by one
+echo "DEBUG: Starting database first..."
+compose up -d duka-db
+DB_EXIT=$?
+echo "DEBUG: Database start exit code: $DB_EXIT"
+
+if [ $DB_EXIT -ne 0 ]; then
+    echo "ERROR: Failed to start database!"
+    log_error "Failed to start database with exit code $DB_EXIT"
+    exit 1
+fi
+
+echo "DEBUG: Waiting for MySQL to initialize (10 seconds)..."
+sleep 10
+
+echo "DEBUG: Starting MinIO..."
+compose up -d duka-minio
+MINIO_EXIT=$?
+echo "DEBUG: MinIO start exit code: $MINIO_EXIT"
+
+sleep 5
+
+echo "DEBUG: Starting minio-setup..."
+compose up -d minio-setup
+SETUP_EXIT=$?
+echo "DEBUG: minio-setup start exit code: $SETUP_EXIT"
+
+echo "DEBUG: Starting duka-app..."
+compose up -d --force-recreate duka-app
+APP_EXIT=$?
+echo "DEBUG: duka-app start exit code: $APP_EXIT"
+
+# Re-enable set -e
 set -e
 
-# Add retry logic for Docker commands on slow hardware
-retry_docker_compose() {
-    local max_attempts=3
-    local attempt=1
-    local wait_time=5
-    
-    while [ $attempt -le $max_attempts ]; do
-        log_info "Docker compose attempt $attempt of $max_attempts"
-        
-        if compose "$@" 2>&1 | tee -a "$LOG_FILE"; then
-            return 0
-        fi
-        
-        log_warning "Attempt $attempt failed, waiting ${wait_time}s..."
-        sleep $wait_time
-        attempt=$((attempt + 1))
-        wait_time=$((wait_time * 2))  # Exponential backoff
-    done
-    
-    log_error "Docker compose command failed after $max_attempts attempts"
-    return 1
-}
-
-if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
-    log_step "Starting observability stack..."
-    retry_docker_compose up -d db minio
-    
-    log_step "Removing stale observability containers..."
-    set +e
-    compose_rm_services lgtm glitchtip-web glitchtip-worker || docker rm -f lgtm glitchtip-web glitchtip-worker 2>/dev/null || true
-    set -e
-    
-    retry_docker_compose up -d lgtm glitchtip-postgres glitchtip-redis
-    
-    log_step "Waiting for GlitchTip PostgreSQL (giving extra time for Pi)..."
-    # Longer timeout for Raspberry Pi
-    for i in {1..60}; do
-        if compose exec -T glitchtip-postgres pg_isready -U "$GLITCHTIP_DB_USER" -d "$GLITCHTIP_DB_NAME" >/dev/null 2>&1; then
-            log_success "GlitchTip PostgreSQL is ready"
-            break
-        fi
-        echo -n "."
-        sleep 2
-    done
-    echo
-    
-    log_step "Running GlitchTip migrations..."
-    compose run --rm glitchtip-web ./manage.py migrate 2>&1 | tee -a "$LOG_FILE"
-    
-    retry_docker_compose up -d glitchtip-web glitchtip-worker
-    retry_docker_compose up -d --remove-orphans duka-app nginx minio-setup
-else
-    log_info "Observability is DISABLED"
-    
-    # For Raspberry Pi, start services one by one with delays
-    log_step "Starting database (critical first)..."
-    retry_docker_compose up -d duka-db
-    
-    # Give MySQL extra time to initialize on slow hardware
-    log_info "Waiting 10 seconds for MySQL to initialize on Pi..."
-    sleep 10
-    
-    log_step "Starting MinIO..."
-    retry_docker_compose up -d duka-minio
-    
-    sleep 5  # Give MinIO time to start
-    
-    log_step "Starting application and setup containers..."
-    retry_docker_compose up -d minio-setup
-    
-    # Use force-recreate for app to ensure clean state
-    retry_docker_compose up -d --force-recreate duka-app
-    
-    log_step "Waiting for duka-app to be ready (giving extra time for Pi)..."
-    for i in {1..60}; do
-        if docker exec duka-app php artisan --version >/dev/null 2>&1; then
-            log_success "duka-app is ready"
-            break
-        fi
-        echo -n "."
-        sleep 3  # Longer sleep for Pi
-        if [ $i -eq 60 ]; then
-            log_warning "duka-app not ready after 180 seconds, but continuing..."
-        fi
-    done
-fi
+echo "DEBUG: All services started, checking container status..."
+docker ps -a | grep duka
 
 step_success 1 "All containers started successfully"
 
+echo "========================================="
+echo "DEBUG: Successfully completed Step 2!"
+echo "========================================="
 # =============================================================================
 # STEP 3: MINIO READINESS & BUCKET SETUP (CRITICAL - MUST BE BEFORE SEEDING)
 # =============================================================================
