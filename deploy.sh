@@ -625,10 +625,18 @@ step_success 0 "Environment: $APP_ENV, Force Build: $FORCE_BUILD"
 
 step_start 1
 
-log_step "Removing old containers..."
-compose down -v --remove-orphans 2>/dev/null || true
+log_step "Forcefully stopping and cleaning containers (PI optimized)..."
+
+# 1. Stop and remove containers, volumes, and networks cleanly
+# This handles the cleanup in one efficient pass
+compose down -v --remove-orphans --timeout 10 2>&1 | tee -a "$LOG_FILE"
+
+# 2. Safety cleanup for specific persistent containers or stragglers
 docker rm -f duka-minio-setup 2>/dev/null || true
-log_done "Old containers removed"
+docker stop duka-app duka-db duka-minio 2>/dev/null || true
+docker rm -f duka-app duka-db duka-minio 2>/dev/null || true
+
+log_done "Cleanup complete"
 
 log_step "Starting application services..."
 

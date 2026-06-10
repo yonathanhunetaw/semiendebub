@@ -19,7 +19,9 @@ class DashboardController extends Controller
      */
     public function index(Request $request)
     {
-        $store = Auth::user()->store;
+        $user = Auth::user();
+        $store = $user->store;
+
         if (!$store) {
             return Inertia::render('Seller/Dashboard/Index', [
                 'items' => [],
@@ -27,17 +29,20 @@ class DashboardController extends Controller
                 'error' => 'No store associated with this account.'
             ]);
         }
-        $storeId = $store->id;
-        Log::info('Seller Store ID: ' . $storeId);
 
-        $sellerId = $request->input('seller_id');
+        $storeId = $store->id;
+        $sellerId = $user->id;
         $customerId = $request->input('customer_id');
 
-        // 1️⃣ Load items with updated database relationship configurations
+        Log::info('Seller Dashboard Loaded', [
+            'store_id' => $storeId,
+            'seller_id' => $sellerId,
+        ]);
+
+        // 1️⃣ Load items with relationships
         $items = Item::with([
             'variants.itemColor',
             'variants.itemSize',
-            // 🎯 FIXED: Removed obsolete variants.itemPackagingType connection layer
             'variants.storeVariants' => function ($q) use ($storeId) {
                 $q->where('store_id', $storeId);
             },
@@ -50,7 +55,7 @@ class DashboardController extends Controller
             })
             ->get();
 
-        // 2️⃣ Load stock levels safely for the store pool
+        // 2️⃣ Load stock levels
         $storeVariantIds = $items->flatMap(fn($item) => $item->variants->pluck('storeVariants.*.id'))
             ->flatten()
             ->unique();
@@ -61,12 +66,10 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('item_variant_id');
 
-        // 3️⃣ Process each product unit line using structural matrix layers
+        // 3️⃣ Process each item and variant using PriceProvider
         foreach ($items as $item) {
-            // 1. Add image processing logic similar to your Admin controller
+            // Process images
             $generalImages = $item->general_images ?? [];
-
-            // Resolve images
             $item->image_urls = collect($generalImages)
                 ->map(fn($path) => ImageResolver::resolve($path))
                 ->merge($item->variants->map(fn($v) => ImageResolver::resolve($v->images[0] ?? null)))
@@ -74,12 +77,9 @@ class DashboardController extends Controller
                 ->unique()
                 ->values();
 
-            // ADD THIS: Find the minimum price among all variants for this item
-            // We map the variant prices and take the min()
-            $item->store_price = $item->variants
-                ->map(fn($v) => $v->storeVariants->where('store_id', $storeId)->first()?->pricing_matrix['price'] ?? 0)
-                ->filter()
-                ->min();
+            $variantPrices = [];
+
+            // Process each variant
             foreach ($item->variants as $variant) {
                 $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
 
@@ -87,27 +87,48 @@ class DashboardController extends Controller
                     $variant->store_stock = $stocks[$storeVariant->id]->quantity ?? 0;
                     $variant->store_variant_id = $storeVariant->id;
 
-                    // 🎯 FIXED: Pulling from JSON pricing matrix fallback arrays instead of dead columns
-                    $matrix = $storeVariant->pricing_matrix ?? [];
-                    $baseRow = $matrix[0] ?? null;
+                    // ✅ FORCE the pricing_matrix to be included
+                    $matrix = $storeVariant->pricing_matrix;
+                    if (is_string($matrix)) {
+                        $matrix = json_decode($matrix, true);
+                    }
+                    $variant->pricing_matrix = $matrix;
 
-                    $variant->store_price = $baseRow['price'] ?? 0.00;
-                    $variant->store_discount_price = $baseRow['discount_price'] ?? null;
-                    $variant->discount_ends_at = $baseRow['discount_ends_at'] ?? null;
-
-                    $variant->manual_status = $storeVariant->manual_status ?? 'auto';
-                    $variant->forced_status = $storeVariant->forced_status;
-                    $variant->status = $storeVariant->computed_status ?? ($storeVariant->active ? 'active' : 'inactive');
-                    $variant->store_active = $variant->status === 'active';
-
-                    // Dynamic price ladders computed by system micro-engines
+                    // ✅ USE PRICE PROVIDER for the price ladder
                     $variant->price_ladder = PriceProvider::getPriceLadder(
                         storeVariantId: $storeVariant->id,
                         storeId: $storeId,
                         sellerId: $sellerId,
                         customerId: $customerId
                     );
+
+                    // ✅ Get the final price from the ladder
                     $variant->final_price = PriceProvider::getFinalPrice($variant->price_ladder);
+
+                    // ✅ Get store base price (first level of the ladder)
+                    $basePriceLevel = $variant->price_ladder[0] ?? null;
+                    $variant->store_price = $basePriceLevel['price'] ?? 0;
+                    $variant->store_discount_price = $basePriceLevel['discount_price'] ?? null;
+                    $variant->discount_ends_at = $basePriceLevel['discount_ends_at'] ?? null;
+
+                    // ✅ Also set from matrix directly (fallback)
+                    if (!$variant->store_price) {
+                        $variant->store_price = $matrix['price'] ?? 0;
+                    }
+                    if (!$variant->store_discount_price) {
+                        $variant->store_discount_price = $matrix['discount_price'] ?? null;
+                    }
+                    if (!$variant->discount_ends_at) {
+                        $variant->discount_ends_at = $matrix['discount_ends_at'] ?? null;
+                    }
+
+                    // ✅ Track final price for item-level min calculation
+                    $variantPrices[] = $variant->final_price;
+
+                    $variant->manual_status = $storeVariant->manual_status ?? 'auto';
+                    $variant->forced_status = $storeVariant->forced_status;
+                    $variant->status = $storeVariant->computed_status ?? ($storeVariant->active ? 'active' : 'inactive');
+                    $variant->store_active = $variant->status === 'active';
                 } else {
                     $variant->manual_status = 'auto';
                     $variant->forced_status = null;
@@ -115,15 +136,42 @@ class DashboardController extends Controller
                     $variant->store_active = false;
                     $variant->price_ladder = [];
                     $variant->final_price = null;
+                    $variant->store_price = null;
+                    $variant->store_discount_price = null;
+                    $variant->discount_ends_at = null;
+                    $variant->pricing_matrix = null;
                 }
+            }
+
+            // ✅ Calculate item-level min price using final prices from PriceProvider
+            $item->store_price = !empty($variantPrices) ? min($variantPrices) : null;
+
+            // ✅ Get the first variant's discount info for the item card
+            $firstVariant = $item->variants->first();
+            if ($firstVariant) {
+                $item->discount_ends_at = $firstVariant->discount_ends_at;
+                $item->pricing_matrix = $firstVariant->pricing_matrix; // ✅ Add this
+                $item->original_price = $firstVariant->store_price; // ✅ Add this for crossed-out price
             }
         }
 
-        Log::info('Seller Items Loaded on Dashboard', [
-            'store_id' => $storeId,
-            'items_count' => $items->count(),
+        // Debug log
+        if ($items->isNotEmpty()) {
+            $firstItem = $items->first();
+            $firstVariant = $firstItem->variants->first();
+            
+            Log::info('Dashboard Debug - First Item', [
+                'item_name' => $firstItem->product_name,
+                'item_store_price' => $firstItem->store_price,
+                'item_discount_ends_at' => $firstItem->discount_ends_at ?? null,
+                'has_pricing_matrix' => isset($firstVariant->pricing_matrix),
+                'pricing_matrix' => $firstVariant->pricing_matrix ?? null,
+            ]);
+        }
+        
+        return Inertia::render('Seller/Dashboard/Index', [
+            'items' => $items,
+            'store' => $store,
         ]);
-
-        return Inertia::render('Seller/Dashboard/Index', compact('items', 'store'));
     }
 }

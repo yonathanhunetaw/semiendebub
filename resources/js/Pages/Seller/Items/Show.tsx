@@ -30,6 +30,9 @@ import { useTheme } from "@mui/material/styles";
 
 import React from "react";
 
+// SVG placeholder for missing images
+const NO_IMAGE_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='500' height='500' viewBox='0 0 500 500'%3E%3Crect width='500' height='500' fill='%23f5f5f5'/%3E%3Ctext x='250' y='250' font-family='Arial, sans-serif' font-size='20' text-anchor='middle' fill='%23999'%3ENo Image%3C/text%3E%3C/svg%3E";
+
 interface SellerVariantData {
     id: number;
     color?: string | null;
@@ -346,22 +349,19 @@ export default function Show({
                             }}
                             onClick={() => activeMainImage && openImageViewer()}
                         >
-                            {activeMainImage ? (
-                                <Box
-                                    component="img"
-                                    src={activeMainImage}
-                                    alt={item.product_name}
-                                    sx={{
-                                        width: "100%",
-                                        height: "100%",
-                                        objectFit: "contain",
-                                    }}
-                                />
-                            ) : (
-                                <Typography color="text.secondary">
-                                    No images available.
-                                </Typography>
-                            )}
+                            <Box
+                                component="img"
+                                src={activeMainImage || NO_IMAGE_PLACEHOLDER}
+                                alt={item.product_name}
+                                onError={(e) => {
+                                    e.currentTarget.src = NO_IMAGE_PLACEHOLDER;
+                                }}
+                                sx={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "contain",
+                                }}
+                            />
                         </Box>
 
                         {/* Main Gallery Thumbnails (Product images only) */}
@@ -400,6 +400,9 @@ export default function Show({
                                             component="img"
                                             src={image}
                                             alt={item.product_name}
+                                            onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                                                e.currentTarget.src = NO_IMAGE_PLACEHOLDER;
+                                            }}
                                             loading="eager"
                                             sx={{
                                                 width: "100%",
@@ -578,18 +581,19 @@ export default function Show({
                         justifyContent: "center",
                     }}
                 >
-                    {activeMainImage && (
-                        <Box
-                            component="img"
-                            src={activeMainImage}
-                            alt={item.product_name}
-                            sx={{
-                                maxWidth: "100%",
-                                maxHeight: "100%",
-                                objectFit: "contain",
-                            }}
-                        />
-                    )}
+                    <Box
+                        component="img"
+                        src={activeMainImage || NO_IMAGE_PLACEHOLDER}
+                        alt={item.product_name}
+                        onError={(e) => {
+                            e.currentTarget.src = NO_IMAGE_PLACEHOLDER;
+                        }}
+                        sx={{
+                            maxWidth: "100%",
+                            maxHeight: "100%",
+                            objectFit: "contain",
+                        }}
+                    />
                 </Box>
             </Dialog>
 
@@ -629,7 +633,7 @@ export default function Show({
                                 src={img}
                                 onClick={() => setSelectedVariantImage(img)}
                                 onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                                    e.currentTarget.src = "/images/defaults/no-image.png";
+                                    e.currentTarget.src = NO_IMAGE_PLACEHOLDER;
                                 }}
                                 sx={{
                                     width: 64,
@@ -663,20 +667,21 @@ export default function Show({
                     }}
                     onDoubleClick={() => setViewerZoom((z) => z < 2 ? 2 : 1)}
                 >
-                    {activeVariantImage && (
-                        <Box
-                            component="img"
-                            src={activeVariantImage}
-                            alt={item.product_name}
-                            sx={{
-                                maxWidth: "none",
-                                width: `${viewerZoom * 100}%`,
-                                maxHeight: viewerZoom === 1 ? "100%" : "none",
-                                objectFit: "contain",
-                                transition: "width 0.2s ease",
-                            }}
-                        />
-                    )}
+                    <Box
+                        component="img"
+                        src={activeVariantImage || NO_IMAGE_PLACEHOLDER}
+                        alt={item.product_name}
+                        onError={(e) => {
+                            e.currentTarget.src = NO_IMAGE_PLACEHOLDER;
+                        }}
+                        sx={{
+                            maxWidth: "none",
+                            width: `${viewerZoom * 100}%`,
+                            maxHeight: viewerZoom === 1 ? "100%" : "none",
+                            objectFit: "contain",
+                            transition: "width 0.2s ease",
+                        }}
+                    />
                 </Box>
             </Dialog>
 
@@ -731,23 +736,15 @@ export default function Show({
                             mb: -2,
                         }}
                     >
-                        {activeVariantImage ? (
-                            <Box
-                                component="img"
-                                src={activeVariantImage}
-                                alt={item.product_name}
-                                sx={{ width: "100%", height: "100%", objectFit: "contain" }}
-                            />
-                        ) : activeMainImage ? (
-                            <Box
-                                component="img"
-                                src={activeMainImage}
-                                alt={item.product_name}
-                                sx={{ width: "100%", height: "100%", objectFit: "contain" }}
-                            />
-                        ) : (
-                            <Box sx={{ width: "100%", height: "100%", bgcolor: "#f0f0f0" }} />
-                        )}
+                        <Box
+                            component="img"
+                            src={activeVariantImage || NO_IMAGE_PLACEHOLDER}
+                            alt={item.product_name}
+                            onError={(e) => {
+                                e.currentTarget.src = NO_IMAGE_PLACEHOLDER;
+                            }}
+                            sx={{ width: "100%", height: "100%", objectFit: "contain" }}
+                        />
                     </Box>
 
                     {/* Price + name */}

@@ -11,23 +11,23 @@ import {
 } from "@mui/material";
 import React from "react";
 
-export const SELLER_BRAND = "#f6a45d";
-export const SELLER_BRAND_DARK = "#d97706";
-export const SELLER_BG = "#f5f2ed";
-export const SELLER_SURFACE = "#ffffff";
-export const SELLER_CITY_OPTIONS = [
-    "Addis Ababa",
-    "Adama",
-    "Dire Dawa",
-    "Bahir Dar",
-    "Bishoftu",
-    "Dessie",
-    "Gondar",
-    "Jimma",
-    "Jijiga",
-    "Mekele",
-    "Shashamane",
-];
+// At the top of sellerUi.tsx
+import { 
+    SELLER_BRAND, 
+    SELLER_BRAND_DARK, 
+    SELLER_BG, 
+    SELLER_SURFACE, 
+    SELLER_CITY_OPTIONS 
+} from "./sellerConstants";
+
+// Re-export them
+export { 
+    SELLER_BRAND, 
+    SELLER_BRAND_DARK, 
+    SELLER_BG, 
+    SELLER_SURFACE, 
+    SELLER_CITY_OPTIONS 
+};
 
 export interface SellerHeaderProps {
     title: string;
@@ -51,8 +51,8 @@ export function SellerHeader({
         <Box
             sx={{
                 px: 2,
-                pt: "calc(16px + env(safe-area-inset-top))",
-                pb: children ? 2.5 : 2,
+                pt: 0, // Changed from "calc(16px + env(safe-area-inset-top))" to 0
+                pb: children ? 2 : 1.5,
                 color: "#fff",
                 background: `linear-gradient(180deg, ${brandColor} 0%, ${brandColor}dd 100%)`,
                 borderBottomLeftRadius: 24,

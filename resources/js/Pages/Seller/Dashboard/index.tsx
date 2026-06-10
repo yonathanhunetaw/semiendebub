@@ -4,13 +4,14 @@ import {
     sellerHeaderButtonSx,
     sellerImage,
     sellerPrice,
+    SELLER_BRAND_DARK,
 } from "@/Components/Seller/sellerUi";
-
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import BarcodeIcon from "@mui/icons-material/QrCode2";
+import ImageNotSupportedIcon from "@mui/icons-material/ImageNotSupported";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
 
 import {
     Box,
@@ -20,11 +21,11 @@ import {
     Stack,
     Typography,
     useTheme,
+    CircularProgress,
+    Tooltip,
 } from "@mui/material";
 
 import React from "react";
-
-/* ================= TYPES ================= */
 
 /* ================= TYPES ================= */
 
@@ -38,144 +39,339 @@ interface SellerItem {
     category?: {
         category_name?: string;
     } | null;
-
-    // ✅ ADD THIS: Define the shape of your variants
     variants: Array<{
         storeVariants: Array<{
             pricing_matrix: any;
         }>;
     }>;
-
     store_price?: number | string;
     final_price?: number | string | null;
     store_stock?: number;
+    discount_ends_at?: string | null;
+    original_price?: number | string | null;
+    pricing_matrix?: {
+        price: number;
+        discount_price: number | null;
+        discount_ends_at: string | null;
+    };
 }
 
 interface SellerItemFilters {
     search?: string;
     cart_id?: number | null;
+    page?: number;
 }
 
-const FALLBACK_IMAGE = "/images/defaults/no-image.png";
+// Custom Barcode Icon SVG
+const BarcodeIcon = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="6" width="2" height="12" fill="currentColor"/>
+        <rect x="7" y="6" width="1" height="12" fill="currentColor"/>
+        <rect x="9" y="6" width="3" height="12" fill="currentColor"/>
+        <rect x="13" y="6" width="1" height="12" fill="currentColor"/>
+        <rect x="15" y="6" width="2" height="12" fill="currentColor"/>
+        <rect x="18" y="6" width="2" height="12" fill="currentColor"/>
+        <rect x="21" y="6" width="1" height="12" fill="currentColor"/>
+    </svg>
+);
+
+// SVG placeholder with camera/photo icon
+const NO_IMAGE_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23f5f5f5'/%3E%3Cpath d='M160 160 L240 160 M200 120 L200 200' stroke='%23999' stroke-width='8' fill='none'/%3E%3Ccircle cx='200' cy='200' r='80' fill='none' stroke='%23999' stroke-width='8'/%3E%3C/svg%3E";
+
+// Helper function to convert price to number
+const toNumber = (value: string | number | null | undefined): number => {
+    if (value === null || value === undefined) return 0;
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return isNaN(num) ? 0 : num;
+};
+
+// Countdown Timer Component
+function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
+    const [timeLeft, setTimeLeft] = React.useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
+    const [isExpired, setIsExpired] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!endsAt) return;
+
+        const calculateTimeLeft = () => {
+            const now = new Date().getTime();
+            const endDate = new Date(endsAt).getTime();
+            const difference = endDate - now;
+
+            if (difference <= 0) {
+                setIsExpired(true);
+                return null;
+            }
+
+            return {
+                days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                hours: Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+                minutes: Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)),
+                seconds: Math.floor((difference % (1000 * 60)) / 1000),
+            };
+        };
+
+        const updateTimer = () => {
+            const newTimeLeft = calculateTimeLeft();
+            setTimeLeft(newTimeLeft);
+        };
+
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+
+        return () => clearInterval(interval);
+    }, [endsAt]);
+
+    if (isExpired || !endsAt || !timeLeft) return null;
+
+    const { days, hours, minutes, seconds } = timeLeft;
+
+    let timeString = "";
+    if (days > 0) timeString = `${days}d ${hours}h`;
+    else if (hours > 0) timeString = `${hours}h ${minutes}m`;
+    else if (minutes > 0) timeString = `${minutes}m ${seconds}s`;
+    else timeString = `${seconds}s`;
+
+    return (
+        <Tooltip title={`Discount ends on ${new Date(endsAt).toLocaleString()}`}>
+            <Chip
+                icon={<AccessTimeIcon sx={{ fontSize: 12 }} />}
+                label={timeString}
+                size="small"
+                sx={{
+                    height: 20,
+                    fontSize: "0.65rem",
+                    bgcolor: "#EAB308",
+                    color: "#fff",
+                    "& .MuiChip-icon": { color: "#fff", fontSize: 12, marginLeft: 0.5 },
+                }}
+            />
+        </Tooltip>
+    );
+}
 
 /* ================= COMPONENT ================= */
 
 export default function Index({
-    items = [],
+    items: initialItems = [],
     filters = {},
+    nextPageUrl = null,
 }: {
     items?: SellerItem[];
     filters?: SellerItemFilters;
+    nextPageUrl?: string | null;
 }) {
     const { data, setData } = useForm({
         search: filters.search ?? "",
     });
 
     const theme = useTheme();
-
     const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
+    const [items, setItems] = React.useState<SellerItem[]>(() => initialItems);
+    const [hasNextPage, setHasNextPage] = React.useState<boolean>(!!nextPageUrl);
+    const [isLoading, setIsLoading] = React.useState<boolean>(false);
+    const [page, setPage] = React.useState<number>(2);
+    const observerRef = React.useRef<HTMLDivElement | null>(null);
+
+    // Debug: Log initial items
+    React.useEffect(() => {
+        console.log("🔍 Initial items received:", initialItems.length);
+        if (initialItems.length > 0) {
+            console.log("📦 First item sample:", {
+                id: initialItems[0].id,
+                name: initialItems[0].product_name,
+                store_price: initialItems[0].store_price,
+                original_price: initialItems[0].original_price,
+                discount_ends_at: initialItems[0].discount_ends_at,
+                pricing_matrix: initialItems[0].pricing_matrix,
+            });
+        }
+    }, [initialItems]);
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-
-        console.log("🔍 Seller search submit:", data.search);
-
+        setItems([]);
+        setPage(2);
+        setHasNextPage(true);
+        
         router.get(route("seller.items.index"), {
             search: data.search,
             cart_id: filters.cart_id || undefined,
+            page: 1,
+        }, {
+            preserveState: true,
+            preserveScroll: true,
+            onSuccess: (response: any) => {
+                const newItems = response.props.items || [];
+                const newNextPageUrl = response.props.nextPageUrl;
+                console.log("📦 Search response items:", newItems.length);
+                setItems(newItems);
+                setHasNextPage(!!newNextPageUrl);
+                setPage(2);
+            },
         });
     };
+
+    const loadMore = () => {
+        if (isLoading || !hasNextPage) return;
+        
+        setIsLoading(true);
+        
+        router.get(route("seller.items.index"), {
+            search: data.search,
+            cart_id: filters.cart_id || undefined,
+            page: page,
+        }, {
+            preserveState: true,
+            preserveScroll: true,
+            only: ['items', 'nextPageUrl'],
+            onSuccess: (response: any) => {
+                const newItems = response.props.items || [];
+                const newNextPageUrl = response.props.nextPageUrl;
+                
+                console.log("📦 Loaded more items:", newItems.length);
+                setItems(prev => [...prev, ...newItems]);
+                setHasNextPage(!!newNextPageUrl);
+                setPage(prev => prev + 1);
+                setIsLoading(false);
+            },
+            onError: () => {
+                setIsLoading(false);
+            },
+        });
+    };
+
+    React.useEffect(() => {
+        if (!observerRef.current) return;
+        
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasNextPage && !isLoading) {
+                    loadMore();
+                }
+            },
+            { threshold: 0.1, rootMargin: "100px" }
+        );
+        
+        observer.observe(observerRef.current);
+        
+        return () => {
+            if (observerRef.current) {
+                observer.unobserve(observerRef.current);
+            }
+        };
+    }, [hasNextPage, isLoading, items.length]);
+
+    React.useEffect(() => {
+        setItems(initialItems);
+    }, [initialItems]);
 
     return (
         <Box sx={{ bgcolor: "background.default", minHeight: "100vh" }}>
             <Head title="Seller Items" />
 
-            {/* ================= HEADER ================= */}
-            <SellerHeader title="">
-                <Box component="form" onSubmit={submit}>
-                    <Stack direction="row" spacing={1}>
+            {/* ================= SEARCH HEADER ================= */}
+            <Box sx={{ px: 2, pt: 1, pb: 2 }}>
+                <Box component="form" onSubmit={submit} sx={{ width: "100%" }}>
+                    <Stack direction="row" spacing={1} alignItems="center">
                         <Box
                             sx={{
                                 flex: 1,
                                 display: "flex",
                                 alignItems: "center",
                                 px: 1.5,
+                                py: 0.5,
                                 borderRadius: 999,
-                                backgroundColor: "rgba(255,255,255,0.14)",
-                                border: "1px solid rgba(255,255,255,0.44)",
+                                backgroundColor: theme.palette.mode === "dark" 
+                                    ? "rgba(255,255,255,0.1)" 
+                                    : "#f5f5f5",
+                                border: "1px solid",
+                                borderColor: theme.palette.mode === "dark" 
+                                    ? "rgba(255,255,255,0.2)" 
+                                    : "rgba(0,0,0,0.1)",
                             }}
                         >
-                            <SearchRoundedIcon sx={{ color: "#fff", mr: 1 }} />
-
+                            <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
                             <InputBase
                                 fullWidth
                                 placeholder="Search items"
                                 value={data.search}
-                                onChange={(e) => {
-                                    console.log("⌨️ typing:", e.target.value);
-                                    setData("search", e.target.value);
-                                }}
-                                sx={{ color: "#fff" }}
+                                onChange={(e) => setData("search", e.target.value)}
+                                sx={{ color: "text.primary" }}
                             />
                         </Box>
-
-                        <IconButton type="submit" sx={sellerHeaderButtonSx}>
+                        <IconButton 
+                            type="submit" 
+                            sx={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 2,
+                                bgcolor: SELLER_BRAND_DARK,
+                                color: "#fff",
+                                "&:hover": { bgcolor: SELLER_BRAND_DARK, opacity: 0.9 },
+                            }}
+                        >
                             <SearchRoundedIcon />
                         </IconButton>
-
-                        {/* BARCODE ICON */}
-                        <IconButton sx={sellerHeaderButtonSx}>
+                        <IconButton 
+                            sx={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 2,
+                                border: "1px solid",
+                                borderColor: "divider",
+                            }}
+                        >
                             <BarcodeIcon />
                         </IconButton>
                     </Stack>
                 </Box>
-            </SellerHeader>
+            </Box>
 
             {/* ================= GRID ================= */}
-            <Box sx={{ px: 2, pt: 2 }}>
+            <Box sx={{ px: 2 }}>
                 <Box
                     sx={{
                         display: "grid",
                         gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                         gap: 1.5,
+                        [theme.breakpoints.up("sm")]: {
+                            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        },
+                        [theme.breakpoints.up("md")]: {
+                            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                        },
+                        [theme.breakpoints.up("lg")]: {
+                            gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+                        },
                     }}
                 >
                     {items.map((item) => {
-                        // 1. Traverse safely through the structure
-                        const variant = item.variants?.[0];
-                        const storeVariant = variant?.storeVariants?.[0];
-                        let matrix = storeVariant?.pricing_matrix;
-                        const sv = item.variants?.[0]?.storeVariants?.[0];
-                        const price = item.store_price
-                            || (sv?.pricing_matrix?.price)
-                            || (Array.isArray(sv?.pricing_matrix) ? sv?.pricing_matrix[0]?.price : null);
-
-                        // 2. Normalize: If it's a JSON string, parse it
-                        if (typeof matrix === 'string') {
-                            try { matrix = JSON.parse(matrix); } catch { matrix = null; }
-                        }
-
-                        // 3. Extract the price
-                        // Check: 1. Item-level price, 2. Flat object price, 3. Array-based price
-
-
-                        // 4. Debug to see what's happening
-                        console.log("EXTRACTED PRICE DEBUG:", {
-                            itemId: item.id,
-                            matrix: matrix,
-                            foundPrice: price
+                        // ✅ Convert all prices to numbers safely
+                        const originalPriceNum = toNumber(item.original_price || item.store_price);
+                        const discountPriceNum = toNumber(item.pricing_matrix?.discount_price);
+                        const discountEndsAt = item.discount_ends_at;
+                        
+                        // Check if discount exists and is valid
+                        const hasDiscount = discountPriceNum > 0 && discountPriceNum < originalPriceNum;
+                        const displayPrice = hasDiscount ? discountPriceNum : originalPriceNum;
+                        const discountPercent = hasDiscount && originalPriceNum > 0 
+                            ? Math.round(((originalPriceNum - discountPriceNum) / originalPriceNum) * 100) 
+                            : 0;
+                        
+                        // Debug log for each item
+                        console.log(`💰 Price debug for ${item.product_name}:`, {
+                            originalPriceNum,
+                            discountPriceNum,
+                            discountEndsAt,
+                            hasDiscount,
+                            displayPrice,
+                            discountPercent,
+                            pricing_matrix: item.pricing_matrix,
                         });
-                        // Use the 'image_urls' property created in the Controller
+
                         const images = item.image_urls || [];
-
-                        const img = images?.[0] || FALLBACK_IMAGE;
-
-                        console.log("🖼️ ITEM IMAGE DEBUG:", {
-                            id: item.id,
-                            processed: item.processed_images,
-                            general: item.general_images,
-                            final: img,
-                        });
+                        const img = images?.[0] || NO_IMAGE_PLACEHOLDER;
 
                         return (
                             <SellerCard
@@ -185,6 +381,12 @@ export default function Index({
                                 sx={{
                                     p: 0,
                                     overflow: "hidden",
+                                    cursor: "pointer",
+                                    transition: "transform 0.2s, box-shadow 0.2s",
+                                    "&:hover": {
+                                        transform: "translateY(-4px)",
+                                        boxShadow: theme.shadows[8],
+                                    },
                                 }}
                             >
                                 {/* ================= IMAGE ================= */}
@@ -196,6 +398,9 @@ export default function Index({
                                             theme.palette.mode === "dark"
                                                 ? "rgba(255,255,255,0.02)"
                                                 : "#f8fafc",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
                                     }}
                                 >
                                     {!loaded[item.id] && (
@@ -215,25 +420,17 @@ export default function Index({
                                         src={img}
                                         alt={item.product_name}
                                         onLoad={() => {
-                                            console.log("✅ image loaded:", item.id);
                                             setLoaded((p) => ({
                                                 ...p,
                                                 [item.id]: true,
                                             }));
                                         }}
-                                        // index.tsx inside your <img /> tag
                                         onError={(e) => {
                                             const target = e.currentTarget as HTMLImageElement;
-
-                                            // Only attempt to set the fallback if we aren't already trying to load it
-                                            if (target.src.includes(FALLBACK_IMAGE)) {
-                                                console.error("Fallback image also failed to load.");
+                                            if (target.src.includes(NO_IMAGE_PLACEHOLDER)) {
                                                 return;
                                             }
-
-                                            console.warn("⚠️ image failed:", img);
-                                            target.src = FALLBACK_IMAGE; // This triggers one retry
-
+                                            target.src = NO_IMAGE_PLACEHOLDER;
                                             setLoaded((p) => ({
                                                 ...p,
                                                 [item.id]: true,
@@ -249,38 +446,67 @@ export default function Index({
                                     />
                                 </Box>
 
-
                                 {/* ================= CONTENT ================= */}
                                 <Box sx={{ p: 1.5 }}>
-                                    <Typography fontWeight={800} noWrap>
+                                    <Typography 
+                                        fontWeight={800} 
+                                        noWrap
+                                        sx={{
+                                            fontSize: "0.85rem",
+                                            [theme.breakpoints.up("sm")]: {
+                                                fontSize: "0.95rem",
+                                            },
+                                        }}
+                                    >
                                         {item.product_name}
                                     </Typography>
 
-                                    {/* ================= PRICE ================= */}
-                                    <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <Typography
-                                            fontWeight={900}
-                                            sx={{ color: "primary.main", fontSize: "1.1rem" }}
-                                        >
-                                            {/* Show discount price if it exists, otherwise base price */}
-                                            {sv?.pricing_matrix?.discount_price
-                                                ? `${sv.pricing_matrix.discount_price} Birr`
-                                                : (price ? `${price} Birr` : "Price N/A")
-                                            }
-                                        </Typography>
-
-                                        {/* Show crossed-out base price ONLY if there is a discount */}
-                                        {sv?.pricing_matrix?.discount_price && (
+                                    {/* ================= PRICE WITH DISCOUNT AND COUNTDOWN ================= */}
+                                    <Box sx={{ mt: 1 }}>
+                                        <Stack direction="row" alignItems="baseline" flexWrap="wrap" spacing={0.5}>
                                             <Typography
-                                                variant="caption"
-                                                sx={{
-                                                    textDecoration: "line-through",
-                                                    color: "text.secondary",
-                                                    ml: 1
+                                                fontWeight={900}
+                                                sx={{ 
+                                                    color: hasDiscount ? "error.main" : "text.primary",
+                                                    fontSize: "0.95rem",
+                                                    [theme.breakpoints.up("sm")]: {
+                                                        fontSize: "1.1rem",
+                                                    },
                                                 }}
                                             >
-                                                {price} Birr
+                                                {displayPrice > 0 ? `${displayPrice.toFixed(2)} Birr` : "Price N/A"}
                                             </Typography>
+                                            
+                                            {hasDiscount && originalPriceNum > 0 && (
+                                                <Typography
+                                                    variant="caption"
+                                                    sx={{
+                                                        textDecoration: "line-through",
+                                                        color: "text.disabled",
+                                                        fontSize: "0.7rem",
+                                                    }}
+                                                >
+                                                    {originalPriceNum.toFixed(2)} Birr
+                                                </Typography>
+                                            )}
+                                        </Stack>
+                                        
+                                        {/* Discount badge and countdown */}
+                                        {hasDiscount && discountEndsAt && discountPercent > 0 && (
+                                            <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }} flexWrap="wrap">
+                                                <Chip
+                                                    label={`-${discountPercent}% OFF`}
+                                                    size="small"
+                                                    sx={{ 
+                                                        bgcolor: "#EAB308", 
+                                                        color: "#fff", 
+                                                        fontWeight: 700, 
+                                                        fontSize: "0.65rem",
+                                                        height: 20,
+                                                    }}
+                                                />
+                                                <DiscountCountdown endsAt={discountEndsAt} />
+                                            </Stack>
                                         )}
                                     </Box>
 
@@ -289,7 +515,7 @@ export default function Index({
                                         justifyContent="space-between"
                                         sx={{ mt: 1 }}
                                     >
-                                        <Typography variant="caption">
+                                        <Typography variant="caption" color="text.secondary">
                                             {item.sold_count ?? 0} sold
                                         </Typography>
 
@@ -298,6 +524,7 @@ export default function Index({
                                                 label={item.category.category_name}
                                                 size="small"
                                                 variant="outlined"
+                                                sx={{ height: 20, fontSize: "0.65rem" }}
                                             />
                                         )}
                                     </Stack>
@@ -306,6 +533,60 @@ export default function Index({
                         );
                     })}
                 </Box>
+
+                {/* Loading indicator */}
+                {isLoading && (
+                    <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                        <CircularProgress size={40} />
+                    </Box>
+                )}
+
+                {/* End of content message */}
+                {!hasNextPage && items.length > 0 && (
+                    <Typography 
+                        textAlign="center" 
+                        color="text.secondary" 
+                        sx={{ py: 4 }}
+                    >
+                        You've reached the end
+                    </Typography>
+                )}
+
+                {/* Empty state */}
+                {items.length === 0 && !isLoading && (
+                    <Box
+                        sx={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            py: 8,
+                        }}
+                    >
+                        <ImageNotSupportedIcon sx={{ fontSize: 64, color: "text.secondary", mb: 2 }} />
+                        <Typography color="text.secondary" align="center">
+                            No items found
+                        </Typography>
+                        {data.search && (
+                            <IconButton
+                                onClick={() => {
+                                    setData("search", "");
+                                    router.get(route("seller.items.index"), {
+                                        cart_id: filters.cart_id || undefined,
+                                    });
+                                }}
+                                sx={{ mt: 2 }}
+                            >
+                                Clear search
+                            </IconButton>
+                        )}
+                    </Box>
+                )}
+
+                {/* Observer trigger for infinite scroll */}
+                {hasNextPage && items.length > 0 && (
+                    <div ref={observerRef} style={{ height: "20px" }} />
+                )}
             </Box>
 
             {/* ================= SHIMMER ================= */}
