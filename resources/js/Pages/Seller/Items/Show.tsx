@@ -26,6 +26,7 @@ import {
     TextField,
     Typography,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 
 import React from "react";
 
@@ -81,19 +82,10 @@ function availablePackaging(
     variants: SellerVariantData[],
     color: string,
     size: string,
-    packagingType?: string, // Add this
 ) {
-    let filtered = variants.filter(
+    const filtered = variants.filter(
         (variant) => variant.color === color && variant.size === size
     );
-
-    // If packaging type specified, filter further
-    if (packagingType) {
-        filtered = filtered.filter(
-            (variant) => variant.packaging === packagingType
-        );
-    }
-
     return uniqueValues(filtered.map((variant) => variant.packaging));
 }
 
@@ -152,13 +144,17 @@ export default function Show({
     openCarts?: OpenCart[];
     selectedCartId?: number | string | null;
 }) {
+    const theme = useTheme();
     const initialVariant = firstVariant(variantData) as
         | SellerVariantData
         | undefined;
 
+    // State for pricing mode
     const [pricingMode, setPricingMode] = React.useState<"normal" | "seller">(
         "normal",
     );
+    
+    // State for variant selections
     const [selectedColor, setSelectedColor] = React.useState(
         initialVariant?.color ?? "",
     );
@@ -169,14 +165,70 @@ export default function Show({
         initialVariant?.packaging ?? "",
     );
 
-    const [selectedImage, setSelectedImage] = React.useState<string | null>(
-        null,
-    );
-
+    // State for images - MAIN product images (don't change with variant)
+    const [selectedMainImage, setSelectedMainImage] = React.useState<string | null>(null);
+    const [variantImageViewerOpen, setVariantImageViewerOpen] = React.useState(false);
+    const [selectedVariantImage, setSelectedVariantImage] = React.useState<string | null>(null);
+    
+    // State for UI
     const [sheetOpen, setSheetOpen] = React.useState(false);
     const [priceTapCount, setPriceTapCount] = React.useState(0);
     const [imageViewerOpen, setImageViewerOpen] = React.useState(false);
     const [viewerZoom, setViewerZoom] = React.useState(1);
+    const [showAllThumbs, setShowAllThumbs] = React.useState(false);
+    
+    // Cart selection
+    const [selectedCart, setSelectedCart] = React.useState(
+        selectedCartId
+            ? String(selectedCartId)
+            : openCarts[0]?.id
+                ? String(openCarts[0].id)
+                : "",
+    );
+
+    // Get current variant based on selections
+    const variant = findVariant(
+        variantData,
+        selectedColor,
+        selectedSize,
+        selectedPackaging,
+    );
+
+    // MAIN PRODUCT IMAGES (never change with variant)
+    const mainImages = React.useMemo(() => {
+        return allImages
+            .map((image) => {
+                if (typeof image === "string" && (image.startsWith("http") || image.startsWith("//"))) {
+                    return image;
+                }
+                return sellerImage(image);
+            })
+            .filter(Boolean) as string[];
+    }, [allImages]);
+
+    // VARIANT-SPECIFIC IMAGES (change when variant changes)
+    const variantImages = React.useMemo(() => {
+        if (variant?.images && variant.images.length > 0) {
+            return variant.images
+                .map((image) => {
+                    if (typeof image === "string" && (image.startsWith("http") || image.startsWith("//"))) {
+                        return image;
+                    }
+                    return sellerImage(image);
+                })
+                .filter(Boolean) as string[];
+        }
+        return [];
+    }, [variant?.id, variant?.images]);
+
+    // Active main image (for the top gallery)
+    const activeMainImage = selectedMainImage || mainImages[0] || null;
+    
+    // Active variant image (for the drawer header)
+    const activeVariantImage = selectedVariantImage || variantImages[0] || null;
+    
+    // Displayed thumbnails for the image viewer
+    const displayedThumbs = showAllThumbs ? variantImages : variantImages.slice(0, 8);
 
     const priceTapped = () => {
         const next = priceTapCount + 1;
@@ -192,49 +244,11 @@ export default function Show({
         setViewerZoom(1);
         setImageViewerOpen(true);
     };
-    const [selectedCart, setSelectedCart] = React.useState(
-        selectedCartId
-            ? String(selectedCartId)
-            : openCarts[0]?.id
-                ? String(openCarts[0].id)
-                : "",
-    );
-
-    const variant = findVariant(
-        variantData,
-        selectedColor,
-        selectedSize,
-        selectedPackaging,
-    );
-
-    // 🔹 CALCULATE ACTIVE IMAGE (Prevents the flash/disappear effect)
-    // 🔹 Update activeImage
-    // 🔹 Replace your current activeImage useMemo with this:
-    const activeImage = React.useMemo(() => {
-        if (selectedImage) return selectedImage;
-
-        const source = allImages[0] || variant?.images?.[0] || null;
-
-        if (!source) return null;
-
-        // IF IT STARTS WITH HTTP, IT IS ALREADY RESOLVED. DO NOT USE sellerImage().
-        if (typeof source === "string" && source.startsWith("http")) {
-            return source;
-        }
-
-        return sellerImage(source);
-    }, [selectedImage, variant?.id, allImages]);
-
-    // 🔹 Replace your current images constant with this:
-    const images = allImages
-        .map((image) => {
-            // If it's already a full URL, return as is
-            if (typeof image === "string" && (image.startsWith("http") || image.startsWith("//"))) {
-                return image;
-            }
-            return sellerImage(image);
-        })
-        .filter(Boolean) as string[];
+    
+    const openVariantImageViewer = () => {
+        setViewerZoom(1);
+        setVariantImageViewerOpen(true);
+    };
 
     const selectedPrice = visiblePrice(variant, pricingMode);
     const perPiece =
@@ -244,8 +258,8 @@ export default function Show({
     const isCartoon = (variant?.packaging ?? "").toLowerCase().includes("cartoon");
     const perPacket = isCartoon && selectedPrice != null ? selectedPrice : null;
 
-    const { data, setData, post, processing, errors } = useForm({
-        variant_id: initialVariant?.id ?? 0,
+    const { data, setData, post, processing } = useForm({
+        variant_id: variant?.id ?? 0,
         quantity: 1,
         price: selectedPrice ?? displayPrice ?? 0,
     });
@@ -257,7 +271,7 @@ export default function Show({
 
     const colors = uniqueValues(variantData.map((entry) => entry.color));
     const sizes = availableSizes(variantData, selectedColor);
-    const packaging = availablePackaging(
+    const packagingOptions = availablePackaging(
         variantData,
         selectedColor,
         selectedSize,
@@ -266,19 +280,26 @@ export default function Show({
     const chooseColor = (color: string) => {
         const nextSizes = availableSizes(variantData, color);
         const nextSize = nextSizes[0] ?? "";
-        const nextPackaging =
-            availablePackaging(variantData, color, nextSize)[0] ?? "";
+        const nextPackaging = availablePackaging(variantData, color, nextSize)[0] ?? "";
         setSelectedColor(color);
         setSelectedSize(nextSize);
         setSelectedPackaging(nextPackaging);
-        setSelectedImage(null); // Reset manual choice to snap to new variant image
+        setSelectedVariantImage(null);
     };
 
     const chooseSize = (size: string) => {
-        const nextPackaging =
-            availablePackaging(variantData, selectedColor, size)[0] ?? "";
+        const nextPackagingOptions = availablePackaging(variantData, selectedColor, size);
+        const nextPackaging = nextPackagingOptions.includes(selectedPackaging) 
+            ? selectedPackaging 
+            : nextPackagingOptions[0] ?? "";
         setSelectedSize(size);
         setSelectedPackaging(nextPackaging);
+        setSelectedVariantImage(null);
+    };
+
+    const choosePackaging = (packaging: string) => {
+        setSelectedPackaging(packaging);
+        setSelectedVariantImage(null);
     };
 
     const addToCart = () => {
@@ -312,6 +333,7 @@ export default function Show({
 
             <Box sx={{ px: 2, pt: 2 }}>
                 <Stack spacing={1.5}>
+                    {/* Main Product Image Gallery */}
                     <SellerCard sx={{ p: 0, overflow: "hidden" }}>
                         <Box
                             sx={{
@@ -319,15 +341,15 @@ export default function Show({
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                backgroundColor: "#fff7ed",
-                                cursor: activeImage ? "zoom-in" : "default",
+                                backgroundColor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#fff7ed',
+                                cursor: activeMainImage ? "zoom-in" : "default",
                             }}
-                            onClick={() => activeImage && openImageViewer()}
+                            onClick={() => activeMainImage && openImageViewer()}
                         >
-                            {activeImage ? (
+                            {activeMainImage ? (
                                 <Box
                                     component="img"
-                                    src={activeImage}
+                                    src={activeMainImage}
                                     alt={item.product_name}
                                     sx={{
                                         width: "100%",
@@ -342,30 +364,36 @@ export default function Show({
                             )}
                         </Box>
 
-                        {images.length > 1 ? (
+                        {/* Main Gallery Thumbnails (Product images only) */}
+                        {mainImages.length > 1 && (
                             <Stack
                                 direction="row"
                                 spacing={1}
                                 sx={{ p: 1.5, overflowX: "auto" }}
                             >
-                                {images.map((image) => (
+                                {mainImages.map((image) => (
                                     <Box
                                         key={image}
                                         component="button"
                                         type="button"
-                                        onClick={() => setSelectedImage(image)}
+                                        onClick={() => setSelectedMainImage(image)}
                                         sx={{
                                             width: 64,
                                             height: 64,
                                             p: 0,
                                             border:
-                                                activeImage === image
+                                                activeMainImage === image
                                                     ? `2px solid ${SELLER_BRAND_DARK}`
                                                     : "1px solid rgba(148, 163, 184, 0.24)",
                                             borderRadius: 2,
                                             overflow: "hidden",
-                                            background: "#fff",
+                                            background: theme.palette.mode === 'dark' ? '#333' : '#fff',
                                             flexShrink: 0,
+                                            cursor: "pointer",
+                                            transition: "all 0.2s",
+                                            "&:hover": {
+                                                transform: "scale(1.05)",
+                                            },
                                         }}
                                     >
                                         <Box
@@ -382,9 +410,10 @@ export default function Show({
                                     </Box>
                                 ))}
                             </Stack>
-                        ) : null}
+                        )}
                     </SellerCard>
 
+                    {/* Product Info Card */}
                     <SellerCard>
                         <Stack spacing={1}>
                             <Typography variant="body2" color="text.secondary">
@@ -447,6 +476,7 @@ export default function Show({
                         </Stack>
                     </SellerCard>
 
+                    {/* Stock Info Card */}
                     <SellerCard>
                         <Stack
                             direction="row"
@@ -499,6 +529,7 @@ export default function Show({
                         </Stack>
                     </SellerCard>
 
+                    {/* Action Buttons */}
                     <Stack direction="row" spacing={1.5} sx={{ pb: 1 }}>
                         <Button
                             fullWidth
@@ -527,23 +558,76 @@ export default function Show({
                 </Stack>
             </Box>
 
-            {/* ── Image Viewer Dialog ── */}
+            {/* Main Image Viewer Dialog (for product images) */}
             <Dialog
                 open={imageViewerOpen}
                 onClose={() => setImageViewerOpen(false)}
                 fullScreen
                 PaperProps={{ sx: { bgcolor: "#000", display: "flex", flexDirection: "column" } }}
             >
+                <Box sx={{ display: "flex", justifyContent: "flex-end", p: 2 }}>
+                    <IconButton onClick={() => setImageViewerOpen(false)} sx={{ color: "#fff" }}>
+                        <CloseRoundedIcon />
+                    </IconButton>
+                </Box>
+                <Box
+                    sx={{
+                        flex: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
+                    {activeMainImage && (
+                        <Box
+                            component="img"
+                            src={activeMainImage}
+                            alt={item.product_name}
+                            sx={{
+                                maxWidth: "100%",
+                                maxHeight: "100%",
+                                objectFit: "contain",
+                            }}
+                        />
+                    )}
+                </Box>
+            </Dialog>
+
+            {/* Variant Image Viewer Dialog (for variant images) */}
+            <Dialog
+                open={variantImageViewerOpen}
+                onClose={() => setVariantImageViewerOpen(false)}
+                fullScreen
+                PaperProps={{ sx: { bgcolor: "#000", display: "flex", flexDirection: "column" } }}
+            >
                 {/* Toolbar */}
-                <Box sx={{ display: "flex", flexWrap: showAllThumbs ? "wrap" : "nowrap", gap: 1.5, overflowX: showAllThumbs ? "unset" : "auto", pb: 1 }}>
-                    {displayedThumbs.map((img, i) => {
-                        const src = img; // Backend already resolved the URL
-                        return (
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 2 }}>
+                    <IconButton onClick={() => setShowAllThumbs(!showAllThumbs)} sx={{ color: "#fff" }}>
+                        {showAllThumbs ? "Show Less" : "Show All"}
+                    </IconButton>
+                    <Box sx={{ display: "flex", gap: 2 }}>
+                        <IconButton onClick={() => setViewerZoom(z => Math.max(0.5, z - 0.25))} sx={{ color: "#fff" }}>
+                            <ZoomOutRoundedIcon />
+                        </IconButton>
+                        <Typography sx={{ color: "#fff", alignSelf: "center" }}>{Math.round(viewerZoom * 100)}%</Typography>
+                        <IconButton onClick={() => setViewerZoom(z => Math.min(3, z + 0.25))} sx={{ color: "#fff" }}>
+                            <ZoomInRoundedIcon />
+                        </IconButton>
+                    </Box>
+                    <IconButton onClick={() => setVariantImageViewerOpen(false)} sx={{ color: "#fff" }}>
+                        <CloseRoundedIcon />
+                    </IconButton>
+                </Box>
+
+                {/* Thumbnail strip */}
+                {variantImages.length > 0 && (
+                    <Box sx={{ display: "flex", flexWrap: showAllThumbs ? "wrap" : "nowrap", gap: 1.5, overflowX: showAllThumbs ? "unset" : "auto", pb: 1, px: 2 }}>
+                        {displayedThumbs.map((img, i) => (
                             <Box
                                 key={i}
                                 component="img"
-                                src={src}
-                                onClick={() => setSelectedImage(src)}
+                                src={img}
+                                onClick={() => setSelectedVariantImage(img)}
                                 onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
                                     e.currentTarget.src = "/images/defaults/no-image.png";
                                 }}
@@ -554,7 +638,7 @@ export default function Show({
                                     borderRadius: 1.5,
                                     cursor: "pointer",
                                     border: "2px solid",
-                                    borderColor: selectedImage === src ? "primary.main" : "transparent",
+                                    borderColor: selectedVariantImage === img ? "primary.main" : "transparent",
                                     bgcolor: "background.paper",
                                     objectFit: "cover",
                                     transition: "0.2s",
@@ -564,9 +648,9 @@ export default function Show({
                                     },
                                 }}
                             />
-                        );
-                    })}
-                </Box>
+                        ))}
+                    </Box>
+                )}
 
                 {/* Zoomable image */}
                 <Box
@@ -579,10 +663,10 @@ export default function Show({
                     }}
                     onDoubleClick={() => setViewerZoom((z) => z < 2 ? 2 : 1)}
                 >
-                    {activeImage && (
+                    {activeVariantImage && (
                         <Box
                             component="img"
-                            src={activeImage}
+                            src={activeVariantImage}
                             alt={item.product_name}
                             sx={{
                                 maxWidth: "none",
@@ -594,42 +678,9 @@ export default function Show({
                         />
                     )}
                 </Box>
-
-                {/* Thumbnail strip */}
-                {images.length > 1 && (
-                    <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ p: 1.5, overflowX: "auto", bgcolor: "rgba(255,255,255,0.05)" }}
-                    >
-                        {images.map((img) => (
-                            <Box
-                                key={img}
-                                component="button"
-                                type="button"
-                                onClick={() => { setSelectedImage(img); }}
-                                sx={{
-                                    width: 56,
-                                    height: 56,
-                                    flexShrink: 0,
-                                    p: 0,
-                                    border: activeImage === img ? "2px solid #fff" : "2px solid transparent",
-                                    borderRadius: 1.5,
-                                    overflow: "hidden",
-                                    background: "#111",
-                                    cursor: "pointer",
-                                    opacity: activeImage === img ? 1 : 0.55,
-                                    transition: "opacity 0.15s, border-color 0.15s",
-                                }}
-                            >
-                                <Box component="img" src={img} sx={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                            </Box>
-                        ))}
-                    </Stack>
-                )}
             </Dialog>
 
-            {/* ── Taobao-style Add-to-Cart Bottom Sheet ── */}
+            {/* Add to Cart Bottom Sheet with Dark Mode */}
             <Drawer
                 anchor="bottom"
                 open={sheetOpen}
@@ -645,10 +696,11 @@ export default function Show({
                         flexDirection: "column",
                         pb: "calc(0px + env(safe-area-inset-bottom))",
                         overflow: "hidden",
+                        bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
                     },
                 }}
             >
-                {/* Header row: image + price + close */}
+                {/* Header row: variant image + price + close */}
                 <Box
                     sx={{
                         display: "flex",
@@ -656,15 +708,15 @@ export default function Show({
                         gap: 1.5,
                         p: 2,
                         pb: 1.5,
-                        bgcolor: "#fff7ed",
+                        bgcolor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#fff7ed',
                         position: "relative",
                     }}
                 >
-                    {/* Variant thumbnail — tappable to open viewer */}
+                    {/* Variant thumbnail - clickable to open variant image viewer */}
                     <Box
                         component="button"
                         type="button"
-                        onClick={() => activeImage && openImageViewer()}
+                        onClick={() => variantImages.length > 0 && openVariantImageViewer()}
                         sx={{
                             width: 88,
                             height: 88,
@@ -672,17 +724,24 @@ export default function Show({
                             border: "none",
                             borderRadius: 2,
                             overflow: "hidden",
-                            background: "#fff",
+                            background: theme.palette.mode === 'dark' ? '#333' : '#fff',
                             p: 0,
-                            cursor: activeImage ? "zoom-in" : "default",
+                            cursor: variantImages.length > 0 ? "zoom-in" : "default",
                             boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
-                            mb: -2, // overlap the white body below
+                            mb: -2,
                         }}
                     >
-                        {activeImage ? (
+                        {activeVariantImage ? (
                             <Box
                                 component="img"
-                                src={activeImage}
+                                src={activeVariantImage}
+                                alt={item.product_name}
+                                sx={{ width: "100%", height: "100%", objectFit: "contain" }}
+                            />
+                        ) : activeMainImage ? (
+                            <Box
+                                component="img"
+                                src={activeMainImage}
                                 alt={item.product_name}
                                 sx={{ width: "100%", height: "100%", objectFit: "contain" }}
                             />
@@ -731,14 +790,15 @@ export default function Show({
                     </IconButton>
                 </Box>
 
-                {/* Scrollable body */}
+                {/* Scrollable body with variant options */}
                 <Box sx={{ overflowY: "auto", flex: 1 }}>
                     <Box sx={{ p: 2, pt: 3 }}>
                         <Stack spacing={2}>
-
                             {openCarts.length === 0 ? (
                                 <Box>
-                                    <Typography sx={{ fontWeight: 700 }}>No open carts yet.</Typography>
+                                    <Typography sx={{ fontWeight: 700, color: theme.palette.mode === 'dark' ? '#fff' : 'inherit' }}>
+                                        No open carts yet.
+                                    </Typography>
                                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                                         Create a cart first, then come back to add this item.
                                     </Typography>
@@ -759,24 +819,27 @@ export default function Show({
                                 </Box>
                             ) : (
                                 <>
-                                    {/* Color */}
-                                    {uniqueValues(variantData.map((e) => e.color)).length > 0 && (
+                                    {/* Color Selection */}
+                                    {colors.length > 0 && (
                                         <Box>
-                                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: theme.palette.mode === 'dark' ? '#fff' : 'inherit' }}>
                                                 Color
                                             </Typography>
                                             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                                                {uniqueValues(variantData.map((e) => e.color)).map((color) => (
+                                                {colors.map((color) => (
                                                     <Chip
                                                         key={color}
                                                         label={color}
                                                         clickable
                                                         onClick={() => chooseColor(color)}
                                                         sx={{
-                                                            bgcolor: selectedColor === color ? SELLER_BRAND_DARK : "#f5f5f5",
+                                                            bgcolor: selectedColor === color ? SELLER_BRAND_DARK : theme.palette.mode === 'dark' ? '#333' : "#f5f5f5",
                                                             color: selectedColor === color ? "#fff" : "text.primary",
                                                             fontWeight: 700,
                                                             border: selectedColor === color ? `1.5px solid ${SELLER_BRAND_DARK}` : "1.5px solid transparent",
+                                                            "&:hover": {
+                                                                bgcolor: selectedColor === color ? SELLER_BRAND_DARK : theme.palette.mode === 'dark' ? '#444' : "#e0e0e0",
+                                                            },
                                                         }}
                                                     />
                                                 ))}
@@ -784,24 +847,27 @@ export default function Show({
                                         </Box>
                                     )}
 
-                                    {/* Size */}
-                                    {availableSizes(variantData, selectedColor).length > 0 && (
+                                    {/* Size Selection */}
+                                    {sizes.length > 0 && (
                                         <Box>
-                                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: theme.palette.mode === 'dark' ? '#fff' : 'inherit' }}>
                                                 Size
                                             </Typography>
                                             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                                                {availableSizes(variantData, selectedColor).map((size) => (
+                                                {sizes.map((size) => (
                                                     <Chip
                                                         key={size}
                                                         label={size}
                                                         clickable
                                                         onClick={() => chooseSize(size)}
                                                         sx={{
-                                                            bgcolor: selectedSize === size ? SELLER_BRAND_DARK : "#f5f5f5",
+                                                            bgcolor: selectedSize === size ? SELLER_BRAND_DARK : theme.palette.mode === 'dark' ? '#333' : "#f5f5f5",
                                                             color: selectedSize === size ? "#fff" : "text.primary",
                                                             fontWeight: 700,
                                                             border: selectedSize === size ? `1.5px solid ${SELLER_BRAND_DARK}` : "1.5px solid transparent",
+                                                            "&:hover": {
+                                                                bgcolor: selectedSize === size ? SELLER_BRAND_DARK : theme.palette.mode === 'dark' ? '#444' : "#e0e0e0",
+                                                            },
                                                         }}
                                                     />
                                                 ))}
@@ -809,24 +875,27 @@ export default function Show({
                                         </Box>
                                     )}
 
-                                    {/* Packaging */}
-                                    {availablePackaging(variantData, selectedColor, selectedSize).length > 0 && (
+                                    {/* Packaging Selection */}
+                                    {packagingOptions.length > 0 && (
                                         <Box>
-                                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: theme.palette.mode === 'dark' ? '#fff' : 'inherit' }}>
                                                 Packaging
                                             </Typography>
                                             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                                                {availablePackaging(variantData, selectedColor, selectedSize).map((pack) => (
+                                                {packagingOptions.map((pack) => (
                                                     <Chip
                                                         key={pack}
                                                         label={pack}
                                                         clickable
-                                                        onClick={() => setSelectedPackaging(pack)}
+                                                        onClick={() => choosePackaging(pack)}
                                                         sx={{
-                                                            bgcolor: selectedPackaging === pack ? SELLER_BRAND_DARK : "#f5f5f5",
+                                                            bgcolor: selectedPackaging === pack ? SELLER_BRAND_DARK : theme.palette.mode === 'dark' ? '#333' : "#f5f5f5",
                                                             color: selectedPackaging === pack ? "#fff" : "text.primary",
                                                             fontWeight: 700,
                                                             border: selectedPackaging === pack ? `1.5px solid ${SELLER_BRAND_DARK}` : "1.5px solid transparent",
+                                                            "&:hover": {
+                                                                bgcolor: selectedPackaging === pack ? SELLER_BRAND_DARK : theme.palette.mode === 'dark' ? '#444' : "#e0e0e0",
+                                                            },
                                                         }}
                                                     />
                                                 ))}
@@ -834,9 +903,9 @@ export default function Show({
                                         </Box>
                                     )}
 
-                                    <Divider />
+                                    <Divider sx={{ bgcolor: theme.palette.mode === 'dark' ? '#444' : 'rgba(0,0,0,0.12)' }} />
 
-                                    {/* Cart selector */}
+                                    {/* Cart Selector */}
                                     <TextField
                                         select
                                         fullWidth
@@ -844,6 +913,17 @@ export default function Show({
                                         value={selectedCart}
                                         onChange={(e) => setSelectedCart(e.target.value)}
                                         size="small"
+                                        sx={{
+                                            '& .MuiInputLabel-root': {
+                                                color: theme.palette.mode === 'dark' ? '#aaa' : 'inherit',
+                                            },
+                                            '& .MuiOutlinedInput-root': {
+                                                color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                                                '& fieldset': {
+                                                    borderColor: theme.palette.mode === 'dark' ? '#444' : 'rgba(0,0,0,0.23)',
+                                                },
+                                            },
+                                        }}
                                     >
                                         {openCarts.map((cart) => (
                                             <MenuItem key={cart.id} value={cart.id}>
@@ -855,24 +935,36 @@ export default function Show({
                                         ))}
                                     </TextField>
 
-                                    {/* Quantity */}
+                                    {/* Quantity Selector */}
                                     <Stack direction="row" alignItems="center" justifyContent="space-between">
-                                        <Typography sx={{ fontWeight: 700 }}>Quantity</Typography>
+                                        <Typography sx={{ fontWeight: 700, color: theme.palette.mode === 'dark' ? '#fff' : 'inherit' }}>
+                                            Quantity
+                                        </Typography>
                                         <Stack direction="row" spacing={1} alignItems="center">
                                             <IconButton
                                                 size="small"
                                                 onClick={() => setData("quantity", Math.max(1, data.quantity - 1))}
-                                                sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}
+                                                sx={{ 
+                                                    border: "1px solid", 
+                                                    borderColor: theme.palette.mode === 'dark' ? '#555' : "divider", 
+                                                    borderRadius: 2,
+                                                    color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                                                }}
                                             >
                                                 <RemoveRoundedIcon fontSize="small" />
                                             </IconButton>
-                                            <Typography sx={{ minWidth: 28, textAlign: "center", fontWeight: 700 }}>
+                                            <Typography sx={{ minWidth: 28, textAlign: "center", fontWeight: 700, color: theme.palette.mode === 'dark' ? '#fff' : 'inherit' }}>
                                                 {data.quantity}
                                             </Typography>
                                             <IconButton
                                                 size="small"
                                                 onClick={() => setData("quantity", data.quantity + 1)}
-                                                sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}
+                                                sx={{ 
+                                                    border: "1px solid", 
+                                                    borderColor: theme.palette.mode === 'dark' ? '#555' : "divider", 
+                                                    borderRadius: 2,
+                                                    color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
+                                                }}
                                             >
                                                 <AddRoundedIcon fontSize="small" />
                                             </IconButton>
@@ -891,8 +983,8 @@ export default function Show({
                             p: 2,
                             pt: 1,
                             borderTop: "1px solid",
-                            borderColor: "divider",
-                            bgcolor: "#fff",
+                            borderColor: theme.palette.mode === 'dark' ? '#444' : "divider",
+                            bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
                             pb: "calc(16px + env(safe-area-inset-bottom))",
                         }}
                     >

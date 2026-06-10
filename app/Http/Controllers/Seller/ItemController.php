@@ -273,7 +273,8 @@ class ItemController extends Controller
             $payload = [
                 'id' => $variant->id,
                 // ... (other fields)
-                'img' => $variantImages->first() ?: ($variant->itemColor ? asset(ltrim($variant->itemColor->image_path, '/')) : '/img/default.jpg'),'images' => $variantImages->toArray(),
+                'img' => $variantImages->first() ?: ($variant->itemColor ? asset(ltrim($variant->itemColor->image_path, '/')) : '/img/default.jpg'),
+                'images' => $variantImages->toArray(),
                 'color' => $variant->itemColor?->name,
                 'size' => $variant->itemSize?->name,
                 'packaging' => $variant->itemPackagingType?->name,
@@ -367,9 +368,13 @@ class ItemController extends Controller
         if (str_starts_with($path, 'http'))
             return $path;
 
-        // Use your MinIO/S3 domain base instead of the local storage/app URL
-        // Replace 'duka2.pi:9000/duka-images' with your actual bucket/MinIO base URL
-        $baseUrl = "http://duka2.pi:9000/duka-images";
+        // Get base URL from Laravel config (which reads from .env)
+        $baseUrl = config('filesystems.disks.s3.url');
+
+        // Or directly from env (fallback to default)
+        if (!$baseUrl) {
+            $baseUrl = env('AWS_URL', 'http://duka.test:9000/duka-images');
+        }
 
         return $baseUrl . '/' . ltrim($path, '/');
     }

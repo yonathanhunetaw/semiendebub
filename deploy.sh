@@ -529,7 +529,6 @@ reset_node_dependencies() {
 # =============================================================================
 # MIGRATION WITH DEADLOCK HANDLING
 # =============================================================================
-
 run_migration_with_retry() {
     local max_attempts=3
     local attempt=1
@@ -554,21 +553,21 @@ run_migration_with_retry() {
                     log_step "Waiting 3 seconds for MinIO to stabilize..."
                     sleep 3
                     
-                    # Run seeders with specific order
+                    # Run all seeders
                     log_step "Running seeders..."
-                    if exec_in_app php artisan db:seed --class='Database\\Seeders\\Admin\\ItemSeeder' --force 2>&1 | tee -a "$LOG_FILE"; then
-                        log_success "ItemSeeder completed"
+                    if exec_in_app php artisan db:seed --force 2>&1 | tee -a "$LOG_FILE"; then
+                        log_success "All seeders completed successfully"
                         return 0
                     else
-                        log_warning "ItemSeeder failed, but continuing with other seeders..."
-                        # Run other seeders anyway
-                        exec_in_app php artisan db:seed --force 2>&1 | tee -a "$LOG_FILE"
+                        log_warning "Seeders failed, but continuing with migration retry..."
                     fi
+                else
+                    log_warning "Migrations failed"
                 fi
             else
                 log_warning "db:wipe failed, trying migrate:fresh..."
                 
-                # Try migrate:fresh with retry for seeding
+                # Try migrate:fresh
                 if exec_in_app php artisan migrate:fresh --force 2>&1 | tee -a "$LOG_FILE"; then
                     log_success "Migration and seeding completed successfully"
                     return 0

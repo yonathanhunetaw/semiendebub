@@ -11,18 +11,7 @@ class ItemImageSeeder extends Seeder
 {
     public function run(): void
     {
-        // Check if MinIO is available
-        try {
-            $disk = Storage::disk('s3');
-            if (!$disk->exists('/')) {
-                echo "⚠️ MinIO not available, skipping ItemImageSeeder\n";
-                return;
-            }
-        } catch (\Exception $e) {
-            echo "⚠️ MinIO not available (" . $e->getMessage() . "), skipping ItemImageSeeder\n";
-            return;
-        }
-
+        $disk = Storage::disk('s3');
         $items = Item::all();
 
         foreach ($items as $item) {
@@ -41,10 +30,10 @@ class ItemImageSeeder extends Seeder
             $this->uploadImage($disk, $item, $fileName, $minioPath);
         }
 
-        // Upload variant images
-        foreach ($item->variants as $variantIndex => $variant) {
+        // Upload variant images (v1 to v9)
+        for ($v = 1; $v <= 9; $v++) {
             for ($i = 1; $i <= 5; $i++) {
-                $fileName = "{$prefix}_v" . ($variantIndex + 1) . "_{$i}.jpg";
+                $fileName = "{$prefix}_v{$v}_{$i}.jpg";
                 $minioPath = "uploads/items/{$item->id}/{$fileName}";
                 $this->uploadImage($disk, $item, $fileName, $minioPath);
             }
@@ -57,15 +46,17 @@ class ItemImageSeeder extends Seeder
         
         // Skip if source file doesn't exist
         if (!File::exists($sourcePath)) {
-            return; // Silent skip
+            return; // Silent skip - many files won't exist
         }
 
         try {
             if (!$disk->exists($minioPath)) {
-                $disk->put($minioPath, File::get($sourcePath));
+                $disk->put($minioPath, File::get($sourcePath), 'public');
+                echo "✅ Uploaded: {$minioPath}\n";
             }
         } catch (\Exception $e) {
             // Silent fail - don't clutter output
+            echo "⚠️ Could not upload {$fileName}: " . $e->getMessage() . "\n";
         }
     }
 }
