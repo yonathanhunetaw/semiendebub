@@ -660,10 +660,9 @@ fi
 echo "DEBUG: About to clean up containers..."
 
 # Safety cleanup (ignore errors)
-docker rm -f duka-minio-setup 2>/dev/null
-docker stop duka-app duka-db duka-minio 2>/dev/null
-docker rm -f duka-app duka-db duka-minio 2>/dev/null
-
+docker rm -f duka-minio-setup 2>/dev/null || true
+docker stop duka-app duka-db duka-minio 2>/dev/null || true
+docker rm -f duka-app duka-db duka-minio 2>/dev/null || true
 log_done "Cleanup complete"
 
 echo "DEBUG: Cleanup finished, about to start services..."
