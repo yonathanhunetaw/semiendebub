@@ -119,6 +119,7 @@ show_full_progress() {
 }
 
 # Show only the current step progress (compact view)
+# Show only the current step progress (compact view)
 show_compact_progress() {
     echo ""
     echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
@@ -141,6 +142,9 @@ show_compact_progress() {
     
     echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
     echo ""
+    
+    # Force flush output
+    sync
 }
 
 # Mark step as completed with success
