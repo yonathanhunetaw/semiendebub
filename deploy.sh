@@ -1,5 +1,5 @@
 #!/bin/bash -x
-sed -i '2 s/set -uo pipefail/set -o pipefail/' deploy.sh
+sed -i '1 s/bash.*/bash -x/' deploy.sh
 
 # =============================================================================
 # COLOR CODES FOR LOGGING
@@ -236,7 +236,7 @@ error_handler() {
     show_full_progress
 }
 
-trap 'error_handler ${LINENO} $?' ERR
+#trap 'error_handler ${LINENO} $?' ERR
 
 # Paths
 ENV_FILE="$PROJECT_ROOT/.env"
