@@ -1,5 +1,5 @@
 #!/bin/bash -x
-set -uo pipefail
+sed -i '2 s/set -uo pipefail/set -o pipefail/' deploy.sh
 
 # =============================================================================
 # COLOR CODES FOR LOGGING
@@ -126,7 +126,7 @@ show_compact_progress() {
     # Find and show completed steps
     local completed_count=0
     for i in "${!STEPS[@]}"; do
-        if [ "${STEP_STATUS[$i]}" = "success" ]; then
+        if [ "${STEP_STATUS[$i]:-pending}" = "success" ]; then
             echo -e "  ${GREEN}✓${NC} ${STEPS[$i]}"
             ((completed_count++))
         fi
@@ -134,7 +134,7 @@ show_compact_progress() {
     
     # Show current in-progress step
     for i in "${!STEPS[@]}"; do
-        if [ "${STEP_STATUS[$i]}" = "in_progress" ]; then
+        if [ "${STEP_STATUS[$i]:-pending}" = "in_progress" ]; then
             echo -e "  ${BLUE}◉${NC} ${STEPS[$i]} ${CYAN}...${NC}"
         fi
     done
