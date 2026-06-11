@@ -2768,12 +2768,12 @@ class ItemSeeder extends Seeder
         [
             'product_name' => 'Stapler - Kangaroo (335/435)',
             'product_description' => 'Kangaroo stapler models 335/435.',
-            'packaging_details' => 'Piece or box.',
-            'item_category_id' => 26,
+            'packaging_details' => 'Piece, Packet or Cartoon.',
+            'item_category_id' => 26, 
             'status' => 'active',
             'picsum_id' => 365,
             'file_prefix' => 'stapler-kangaroo',
-            'color_ids' => [1, 5, 6],
+            'color_ids' => [2, 5, 6],
             'size_ids' => [34, 35],    // 335/435 placeholder
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0012],
