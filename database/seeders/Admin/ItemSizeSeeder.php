@@ -53,6 +53,10 @@ class ItemSizeSeeder extends Seeder
             ['id' => 32, 'name' => '32mm'],
             ['id' => 33, 'name' => '34mm'],
             ['id' => 34, 'name' => '36mm'],
+
+            // Inch-based (No 'mm')
+            ['id' => 35, 'name' => '335'],
+            ['id' => 36, 'name' => '435'],
         ];
 
         foreach ($sizes as $size) {  // Changed from $sizeName to $size

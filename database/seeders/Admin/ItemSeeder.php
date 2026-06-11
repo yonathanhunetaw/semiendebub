@@ -73,8 +73,9 @@ class ItemSeeder extends Seeder
     //    │ 8  → Extra Large          │ 20 → 8mm                  │ 32 → 32mm                 │
     //    │ 9  → A1                   │ 21 → 10mm                 │ 33 → 34mm                 │
     //    │ 10 → A2                   │ 22 → 12mm                 │ 34 → 36mm                 │
-    //    │ 11 → A3                   │ 23 → 14mm                 │                           │
-    //    │ 12 → A4                   │ 24 → 16mm                 │ ... (Leave [] for None)   │
+    //    │ 11 → A3                   │ 23 → 14mm                 │ 35 → 335                  │
+    //    │ 12 → A4                   │ 24 → 16mm                 │ 36 → 435                  │
+    //    |                           |                           |   ... (Leave [] for None) │
     //    └───────────────────────────┴───────────────────────────┴───────────────────────────┘
     //
     // 4. PACKAGING UNIT TYPES & MULTIPLIERS (`packaging`)
@@ -2772,11 +2773,12 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 365,
             'file_prefix' => 'stapler-kangaroo',
-            'color_ids' => [5, 6],
-            'size_ids' => [],
+            'color_ids' => [1, 5, 6],
+            'size_ids' => [34, 35],    // 335/435 placeholder
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0012],
-                ['item_packaging_type_id' => 4, 'quantity' => 12, 'cbm' => 0.0140],
+                ['item_packaging_type_id' => 2, 'quantity' => 12, 'cbm' => 0.0140],
+                ['item_packaging_type_id' => 3, 'quantity' => 144, 'cbm' => 0.0140],
             ],
         ],
         // 169
