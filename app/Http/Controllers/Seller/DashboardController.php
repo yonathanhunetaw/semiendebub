@@ -23,7 +23,7 @@ class DashboardController extends Controller
         $store = $user->store;
 
         if (!$store) {
-            return Inertia::render('Seller/Dashboard/Index', [
+            return Inertia::render('Seller/Items/Index', [
                 'items' => [],
                 'store' => null,
                 'error' => 'No store associated with this account.'
@@ -175,7 +175,7 @@ class DashboardController extends Controller
             ]);
         }
         
-        return Inertia::render('Seller/Dashboard/Index', [
+        return Inertia::render('Seller/Items/Index', [
             'items' => $items,
             'store' => $store,
             'nextPageUrl' => $paginator->nextPageUrl(),
