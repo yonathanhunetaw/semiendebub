@@ -34,13 +34,13 @@ class ItemController extends Controller
             'cart_id' => $cartId,
         ]);
         
-        if (!$storeId) {
-            return Inertia::render('Seller/Items/Index', [
-                'items' => [],
-                'nextPageUrl' => null,
-                'filters' => ['search' => $search, 'cart_id' => $cartId],
-            ]);
-        }
+        // if (!$storeId) {
+        //     return Inertia::render('Seller/Items/Index', [
+        //         'items' => [],
+        //         'nextPageUrl' => null,
+        //         'filters' => ['search' => $search, 'cart_id' => $cartId],
+        //     ]);
+        // }
 
         $query = Item::where('status', 'active')
             ->with([
