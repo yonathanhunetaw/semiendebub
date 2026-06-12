@@ -149,9 +149,27 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 1
 fi
 
+# Force build Docker images if requested
+if [ $FORCE_BUILD -eq 1 ]; then
+    echo -e "${YELLOW}Forcefully rebuilding Docker images...${NC}"
+    ENV_VAL="${APP_ENV:-$(grep APP_ENV .env | cut -d '=' -f2)}"
+    
+    COMPOSE_ARGS=(-f docker/docker-compose.yml)
+    if [ "$ENV_VAL" != "production" ]; then
+        COMPOSE_ARGS+=(-f docker/docker-compose.dev.yml)
+    fi
+    COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
+    
+    if [ $NO_CACHE -eq 1 ]; then
+        docker compose "${COMPOSE_ARGS[@]}" build --no-cache
+    else
+        docker compose "${COMPOSE_ARGS[@]}" build
+    fi
+fi
+
 # Run deployment
 echo -e "${GREEN}Starting deployment...${NC}"
-./docker/deploy.sh
+./deploy.sh
 
 # Restore original .env if modified
 if [ -n "$APP_ENV" ] && [ -f ".env.bak" ]; then
