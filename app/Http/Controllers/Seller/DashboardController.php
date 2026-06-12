@@ -39,8 +39,8 @@ class DashboardController extends Controller
             'seller_id' => $sellerId,
         ]);
 
-        // 1️⃣ Load items with relationships
-        $items = Item::with([
+        // 1️⃣ Load items with relationships (paginated)
+        $query = Item::with([
             'variants.itemColor',
             'variants.itemSize',
             'variants.storeVariants' => function ($q) use ($storeId) {
@@ -52,8 +52,11 @@ class DashboardController extends Controller
             ->where('status', 'active')
             ->whereHas('variants.storeVariants', function ($q) use ($storeId) {
                 $q->where('store_id', $storeId);
-            })
-            ->get();
+            });
+
+        $perPage = 20;
+        $paginator = $query->orderBy('product_name')->paginate($perPage);
+        $items = collect($paginator->items());
 
         // 2️⃣ Load stock levels
         $storeVariantIds = $items->flatMap(fn($item) => $item->variants->pluck('storeVariants.*.id'))
@@ -172,6 +175,7 @@ class DashboardController extends Controller
         return Inertia::render('Seller/Dashboard/Index', [
             'items' => $items,
             'store' => $store,
+            'nextPageUrl' => $paginator->nextPageUrl(),
         ]);
     }
 }

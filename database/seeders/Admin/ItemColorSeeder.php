@@ -9,7 +9,7 @@ class ItemColorSeeder extends Seeder
 {
     public function run()
     {
-        $colors = ['Red', 'Blue', 'Green', 'Yellow', 'Black', 'White', 'Purple', 'Orange', 'Pink', 'Brown', 'Mixed'];
+        $colors = ['Red', 'Blue', 'Green', 'Yellow', 'Black', 'White', 'Purple', 'Orange', 'Pink', 'Brown', 'Gray', 'Glitter', 'Mixed'];
         foreach ($colors as $colorName) {
             ItemColor::firstOrCreate(['name' => $colorName]);
         }

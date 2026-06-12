@@ -57,6 +57,7 @@ class ItemSizeSeeder extends Seeder
             // Inch-based (No 'mm')
             ['id' => 35, 'name' => '335'],
             ['id' => 36, 'name' => '435'],
+            ['id' => 37, 'name' => '520'],
         ];
 
         foreach ($sizes as $size) {  // Changed from $sizeName to $size

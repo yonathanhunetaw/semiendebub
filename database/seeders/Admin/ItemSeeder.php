@@ -53,12 +53,13 @@ class ItemSeeder extends Seeder
     // 2. CORE SYSTEM COLORS (`color_ids`)
     //     
     //    ┌───────────────────────────┬───────────────────────────┐ 
-    //    │ 1  → Red                  │ 7  → Purple               │
-    //    │ 2  → Blue                 │ 8  → Orange               │
-    //    │ 3  → Green                | 9  → Pink                 |
-    //    | 4  → Yellow               │ 10 → Brown                │
-    //    | 5  → Black                | 11 → Mixed                |
-    //    | 6  → White                |                           |
+    //    │ 1  → Red                  │ 8  → Orange               │
+    //    │ 2  → Blue                 │ 9  → Pink                 │
+    //    │ 3  → Green                │ 10 → Brown                │
+    //    │ 4  → Yellow               │ 11 → Gray                 │
+    //    │ 5  → Black                │ 12 → Glitter              │
+    //    │ 6  → White                │ 13 → Mixed                |
+    //    | 7  → Purple               |                           │
     //    └───────────────────────────┴───────────────────────────┘
     //     
     // 3. COMPONENT SIZES (`size_ids`)
@@ -74,7 +75,8 @@ class ItemSeeder extends Seeder
     //    │ 9  → A1                   │ 21 → 10mm                 │ 33 → 34mm                 │
     //    │ 10 → A2                   │ 22 → 12mm                 │ 34 → 36mm                 │
     //    │ 11 → A3                   │ 23 → 14mm                 │ 35 → 335                  │
-    //    │ 12 → A4                   │ 24 → 16mm                 │ 36 → 435                  │
+    //    │ 12 → A4                   │ 24 → 16mm                 │ 36 → 435                  |
+    //    |                           │                           │ 37 → 520                  │
     //    |                           |                           |   ... (Leave [] for None) │
     //    └───────────────────────────┴───────────────────────────┴───────────────────────────┘
     //
@@ -109,15 +111,15 @@ class ItemSeeder extends Seeder
         [
             'product_name' => '2025 - ብልጭልጭ',
             'product_description' => 'Premium quality distribution catalog ledger item for 2025 - ብልጭልጭ.',
-            'packaging_details' => 'Available in individual pieces, boxes of 12, and master cartons of 120.',
+            'packaging_details' => 'Available in individual pieces and cartoons.',
             'item_category_id' => 45,
             'status' => 'active',
             'picsum_id' => 202,
-            'file_prefix' => '2025-ብልጭልጭ',
-            'color_ids' => [5, 10],
-            'size_ids' => [13],
+            'file_prefix' => '2025-glitter',
+            'color_ids' => [11],         // Glitter
+            'size_ids' => [13],         // A5
             'packaging' => [
-                ['item_packaging_type_id' => 5, 'quantity' => 1, 'cbm' => 0.0015],
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0015],      
                 ['item_packaging_type_id' => 3, 'quantity' => 120, 'cbm' => 0.2000],
             ],
         ],
@@ -166,7 +168,7 @@ class ItemSeeder extends Seeder
             'size_ids' => [11],          // A3
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0025],
-                ['item_packaging_type_id' => 3, 'quantity' => 80, 'cbm' => 0.2000],
+                ['item_packaging_type_id' => 3, 'quantity' => 5, 'cbm' => 0.2000],
             ],
         ],
         // 6
@@ -226,11 +228,11 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 209,
             'file_prefix' => 'a4-paperlaola',
-            'color_ids' => [6],
+            'color_ids' => [6],  
             'size_ids' => [12],
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0030],
-                ['item_packaging_type_id' => 3, 'quantity' => 500, 'cbm' => 0.3500],
+                ['item_packaging_type_id' => 3, 'quantity' => 5, 'cbm' => 0.3500],
             ],
         ],
         // 10
@@ -242,7 +244,7 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 210,
             'file_prefix' => 'a4-post',
-            'color_ids' => [1, 2, 3],
+            'color_ids' => [6],          // White
             'size_ids' => [12],
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0010],
@@ -259,7 +261,7 @@ class ItemSeeder extends Seeder
             'picsum_id' => 211,
             'file_prefix' => 'a5-10-balekelebet',
             'color_ids' => [1, 2, 3, 5],
-            'size_ids' => [13],
+            'size_ids' => [13],         // A5
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0009],
                 ['item_packaging_type_id' => 3, 'quantity' => 100, 'cbm' => 0.1000],
@@ -563,7 +565,7 @@ class ItemSeeder extends Seeder
             'picsum_id' => 230,
             'file_prefix' => 'agenda',
             'color_ids' => [1, 2, 3, 5],
-            'size_ids' => [13],
+            'size_ids' => [13], 
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0010],
                 ['item_packaging_type_id' => 3, 'quantity' => 50, 'cbm' => 0.0550],
@@ -1091,11 +1093,12 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 263,
             'file_prefix' => 'crayon-normal',
-            'color_ids' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            'color_ids' => [12], // mixed  
             'size_ids' => [],
             'packaging' => [
-                ['item_packaging_type_id' => 4, 'quantity' => 12, 'cbm' => 0.0080],
-                ['item_packaging_type_id' => 4, 'quantity' => 24, 'cbm' => 0.0160],
+                ['item_packaging_type_id' => 5, 'quantity' => 8, 'cbm' => 0.0080],
+                ['item_packaging_type_id' => 2, 'quantity' => 12, 'cbm' => 0.0160],
+                ['item_packaging_type_id' => 3, 'quantity' => 144, 'cbm' => 0.0160],
             ],
         ],
         // 64
@@ -1107,11 +1110,12 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 264,
             'file_prefix' => 'crayon-container',
-            'color_ids' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            'color_ids' => [12], // mixed
             'size_ids' => [],
             'packaging' => [
-                ['item_packaging_type_id' => 4, 'quantity' => 1, 'cbm' => 0.0120],
-                ['item_packaging_type_id' => 3, 'quantity' => 48, 'cbm' => 0.6000],
+                ['item_packaging_type_id' => 5, 'quantity' => 12, 'cbm' => 0.0120],
+                ['item_packaging_type_id' => 2, 'quantity' => 12, 'cbm' => 0.6000],
+                ['item_packaging_type_id' => 3, 'quantity' => 144, 'cbm' => 0.1500],
             ],
         ],
         // 65
@@ -1122,28 +1126,30 @@ class ItemSeeder extends Seeder
             'item_category_id' => 28,
             'status' => 'active',
             'picsum_id' => 265,
-            'file_prefix' => 'cutter-large',
-            'color_ids' => [5, 6],
-            'size_ids' => [],
+            'file_prefix' => 'cutter-small',
+            'color_ids' => [4],
+            'size_ids' => [5],
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0005],
-                ['item_packaging_type_id' => 4, 'quantity' => 12, 'cbm' => 0.0060],
+                ['item_packaging_type_id' => 5, 'quantity' => 12, 'cbm' => 0.0060],
+                ['item_packaging_type_id' => 6, 'quantity' => 144, 'cbm' => 0.0120],
             ],
         ],
         // 66
         [
-            'product_name' => 'Cutter - Small ከተር ትንሹ',
+            'product_name' => 'Cutter - large ከተር ትልቁ',
             'product_description' => 'Small cutter.',
             'packaging_details' => 'Piece or box.',
             'item_category_id' => 28,
             'status' => 'active',
             'picsum_id' => 266,
-            'file_prefix' => 'cutter-small',
-            'color_ids' => [5],
-            'size_ids' => [],
+            'file_prefix' => 'cutter-large',
+            'color_ids' => [4],
+            'size_ids' => [6],
             'packaging' => [
-                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0003],
-                ['item_packaging_type_id' => 4, 'quantity' => 24, 'cbm' => 0.0070],
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0005],
+                ['item_packaging_type_id' => 5, 'quantity' => 12, 'cbm' => 0.0060],
+                ['item_packaging_type_id' => 6, 'quantity' => 144, 'cbm' => 0.0120],
             ],
         ],
         // 67
@@ -2189,9 +2195,9 @@ class ItemSeeder extends Seeder
         ],
         // 132  (Existing 'Bic' moved here)
         [
-            'product_name' => 'Pen - Bic Pen - (Black/Blue/Red) ቢክ እስኪብርቶ - (ጥቁር/ሰማያዊ/ቀይ)',
-            'product_description' => 'Classic fine-point industrial high-fluid retail ballpoint pen lines.',
-            'packaging_details' => 'Sold in individual pieces, intermediate packets of 50, or master cases of 1000.',
+            'product_name' => 'Pen - Bic Pen - (Blue/Black/Red) ቢክ እስኪብርቶ - (ሰማያዊ/ጥቁር/ቀይ)',
+            'product_description' => 'Classic fine-point industrial high-fluid retail ballpoint pen, Made in Kenya.',
+            'packaging_details' => 'Sold in individual pieces, intermediate packets of 50, or Cartoon of 1000.',
             'item_category_id' => 12,
             'status' => 'active',
             'picsum_id' => 203,
@@ -2213,11 +2219,12 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 331,
             'file_prefix' => 'pen-box-hello',
-            'color_ids' => [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            'color_ids' => [2, 5, 1],
             'size_ids' => [],
             'packaging' => [
-                ['item_packaging_type_id' => 4, 'quantity' => 10, 'cbm' => 0.0050],
-                ['item_packaging_type_id' => 3, 'quantity' => 200, 'cbm' => 0.1000],
+                ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0050],
+                ['item_packaging_type_id' => 2, 'quantity' => 10, 'cbm' => 0.1000],
+                ['item_packaging_type_id' => 3, 'quantity' => 1000, 'cbm' => 0.3400],
             ],
         ],
         // 134
@@ -2229,7 +2236,7 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 332,
             'file_prefix' => 'pen-diamond',
-            'color_ids' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            'color_ids' => [2, 5, 1],
             'size_ids' => [],
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0004],
@@ -2437,10 +2444,10 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 345,
             'file_prefix' => 'price-tag',
-            'color_ids' => [6, 1, 2, 3],
+            'color_ids' => [5],  // White
             'size_ids' => [],
             'packaging' => [
-                ['item_packaging_type_id' => 2, 'quantity' => 100, 'cbm' => 0.0020],
+                ['item_packaging_type_id' => 2, 'quantity' => 10, 'cbm' => 0.0020],
                 ['item_packaging_type_id' => 3, 'quantity' => 1000, 'cbm' => 0.0200],
             ],
         ],
@@ -2453,8 +2460,8 @@ class ItemSeeder extends Seeder
             'status' => 'active',
             'picsum_id' => 346,
             'file_prefix' => 'puncher-520',
-            'color_ids' => [5, 6],
-            'size_ids' => [],
+            'color_ids' => [2, 5, 11],
+            'size_ids' => [37],
             'packaging' => [
                 ['item_packaging_type_id' => 1, 'quantity' => 1, 'cbm' => 0.0010],
                 ['item_packaging_type_id' => 4, 'quantity' => 12, 'cbm' => 0.0120],
@@ -2992,12 +2999,12 @@ class ItemSeeder extends Seeder
         // 182
         [
             'product_name' => 'የውብዳር ከለር',
-            'product_description' => 'Ubdar color set.',
+            'product_description' => 'Yewbdar color set.',
             'packaging_details' => 'Box or carton.',
             'item_category_id' => 45,
             'status' => 'active',
             'picsum_id' => 379,
-            'file_prefix' => 'ubdar-color',
+            'file_prefix' => 'yewbdar-color',
             'color_ids' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
             'size_ids' => [],
             'packaging' => [

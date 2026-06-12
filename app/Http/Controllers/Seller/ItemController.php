@@ -11,6 +11,7 @@ use App\Services\PriceProvider;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 use Inertia\Inertia;
 
 class ItemController extends Controller
@@ -32,97 +33,227 @@ class ItemController extends Controller
             'search' => $search,
             'cart_id' => $cartId,
         ]);
+        
+        if (!$storeId) {
+            return Inertia::render('Seller/Items/Index', [
+                'items' => [],
+                'nextPageUrl' => null,
+                'filters' => ['search' => $search, 'cart_id' => $cartId],
+            ]);
+        }
 
         $query = Item::where('status', 'active')
             ->with([
                 'category',
-                'variants.itemColor',
-                'variants.itemSize',
-                'variants.storeVariants' => function ($q) use ($storeId) {
-                    if ($storeId) {
-                        $q->where('store_id', $storeId)
-                            ->with('stocks');
-                    }
+                'variants' => function ($q) use ($storeId) {
+                    $q->with([
+                        'storeVariants' => function ($sq) use ($storeId) {
+                            $sq->where('store_id', $storeId)
+                                ->with([
+                                    'stocks' => function ($stockQuery) use ($storeId) {
+                                        $stockQuery->where('location_type', 'App\Models\Store\Store')
+                                            ->where('location_id', $storeId);
+                                    }
+                                ]);
+                        }
+                    ]);
                 },
             ]);
 
-        if ($storeId) {
-            $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
-                $q->where('store_id', $storeId);
-            });
-        }
+        $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
+            $q->where('store_id', $storeId);
+        });
 
         if ($search) {
             $query->where('product_name', 'LIKE', '%' . $search . '%');
         }
 
-        // 🪵 LOG 2: Benchmark query execution time
         $startTime = microtime(true);
-
-        $items = $query->orderBy('product_name')->get();
-
+        $perPage = 20;
+        $paginator = $query->orderBy('product_name')->paginate($perPage);
         $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
-        // 🪵 LOG 3
-        if ($items->isEmpty()) {
-            Log::warning("No items found matching the criteria", [
-                'store_id' => $storeId ?? 'N/A',
-                'search_term' => $search,
-                'execution_ms' => $executionTime,
-                'items' => []
-            ]);
-        } else {
-            Log::info("Items retrieved successfully", [
-                'count' => $items->count(),
-                'store_id' => $storeId ?? 'N/A',
-                'execution_ms' => $executionTime,
-                'items' => $items->map(fn($item) => [
-                    'id' => $item->id,
-                    'name' => $item->product_name,
-                    'status' => $item->status,
-                    'variants_count' => $item->variants->count(),
-                ])->values()->all()
-            ]);
-        }
-
-        // 🔥 IMAGE + TRANSFORM LAYER (FIXED)
-        $items = $items->map(function ($item) {
-
-            $generalImages = $item->general_images ?? [];
-
-            if (is_string($generalImages)) {
-                $decoded = json_decode($generalImages, true);
-                $generalImages = is_array($decoded) ? $decoded : [];
-            }
-
-            $previewImages = collect($generalImages)
-                ->map(fn($path) => $this->resolveImageUrl($path))
-                ->merge(
-                    $item->variants->map(
-                        fn($v) => $this->resolveImageUrl($v->images[0] ?? null)
-                    )
-                )
-                ->filter()
-                ->unique()
-                ->values()
-                ->toArray();
-
-            return [
-                'id' => $item->id,
-                'product_name' => $item->product_name,
-                'sold_count' => $item->sold_count ?? 0,
-                'category' => $item->category,
-                'variants' => $item->variants,
-                'processed_images' => $previewImages,
-            ];
+        $items = collect($paginator->items())->map(function ($item) use ($storeId) {
+            return $this->enrichItemForIndex($item, $storeId);
         });
+
+        Log::info("Items index (paginated)", [
+            'store_id' => $storeId,
+            'page' => $paginator->currentPage(),
+            'per_page' => $perPage,
+            'total' => $paginator->total(),
+            'execution_ms' => $executionTime,
+        ]);
 
         return Inertia::render('Seller/Items/Index', [
             'items' => $items,
+            'nextPageUrl' => $paginator->nextPageUrl(),
             'filters' => [
                 'search' => $search ?? '',
                 'cart_id' => $cartId,
             ],
+        ]);
+    }
+
+    private function enrichItemForIndex(Item $item, int $storeId): array
+    {
+        $bestPrice = null;
+        $bestDiscountPrice = null;
+        $bestDiscountEndsAt = null;
+        $totalStock = 0;
+
+        $generalImages = $item->general_images ?? [];
+        if (is_string($generalImages)) {
+            $decoded = json_decode($generalImages, true);
+            $generalImages = is_array($decoded) ? $decoded : [];
+        }
+
+        $variantImages = collect();
+        foreach ($item->variants as $variant) {
+            $raw = $variant->images ?? [];
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                $raw = is_array($decoded) ? $decoded : [];
+            }
+            foreach ($raw as $img) {
+                if (!empty($img)) {
+                    $variantImages->push($this->resolveImageUrl($img));
+                }
+            }
+
+            foreach ($variant->storeVariants as $storeVariant) {
+                foreach ($storeVariant->stocks as $stock) {
+                    $totalStock += (int) $stock->quantity;
+                }
+
+                $basePrice = (float) ($storeVariant->price ?? 0);
+                $discountPrice = $storeVariant->discount_price ? (float) $storeVariant->discount_price : null;
+                $discountEndsAt = $storeVariant->discount_ends_at;
+
+                $isDiscountActive = $discountPrice !== null
+                    && $discountPrice > 0
+                    && $discountPrice < $basePrice
+                    && ($discountEndsAt === null || Carbon::now()->lt(Carbon::parse($discountEndsAt)));
+
+                $finalPrice = $isDiscountActive ? $discountPrice : $basePrice;
+
+                if ($bestPrice === null || $finalPrice < $bestPrice) {
+                    $bestPrice = $finalPrice;
+                    $bestDiscountPrice = $isDiscountActive ? $discountPrice : null;
+                    $bestDiscountEndsAt = $isDiscountActive ? $discountEndsAt : null;
+                }
+            }
+        }
+
+        $originalPrice = $bestPrice ?? 0;
+        $finalPrice = ($bestDiscountPrice !== null && $bestDiscountPrice < $originalPrice)
+            ? $bestDiscountPrice
+            : $originalPrice;
+
+        $imageUrls = collect($generalImages)
+            ->map(fn($path) => $this->resolveImageUrl($path))
+            ->merge($variantImages)
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        return [
+            'id' => $item->id,
+            'product_name' => $item->product_name,
+            'sold_count' => $item->sold_count ?? 0,
+            'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
+            'image_urls' => $imageUrls,
+            'original_price' => $originalPrice,
+            'final_price' => $finalPrice,
+            'discount_ends_at' => $bestDiscountEndsAt,
+            'store_stock' => $totalStock,
+            'pricing_matrix' => [
+                'price' => $originalPrice,
+                'discount_price' => $bestDiscountPrice,
+                'discount_ends_at' => $bestDiscountEndsAt,
+            ],
+        ];
+    }
+
+    private function resolveImageUrl(?string $path): ?string
+    {
+        if (empty($path))
+            return null;
+        if (str_starts_with($path, 'http'))
+            return $path;
+
+        $baseUrl = config('filesystems.disks.s3.url') ?? env('AWS_URL', 'http://duka.test:9000/duka-images');
+        return $baseUrl . '/' . ltrim($path, '/');
+    }
+
+    public function search(Request $request)
+    {
+        $query = $request->input('search');
+        $storeId = Auth::user()->store?->id;
+        $page = $request->integer('page', 1);
+        $perPage = 20;
+
+        if (!$storeId) {
+            return redirect()->route('seller.items.index');
+        }
+
+        $selectedCategoryId = $request->input('category_id');
+
+        $queryBuilder = Item::where('status', 'active')
+            ->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId))
+            ->with([
+                'category',
+                'variants' => function ($q) use ($storeId) {
+                    $q->with([
+                        'storeVariants' => function ($sq) use ($storeId) {
+                            $sq->where('store_id', $storeId)
+                                ->with([
+                                    'stocks' => function ($stockQuery) use ($storeId) {
+                                        $stockQuery->where('location_type', 'App\Models\Store\Store')
+                                            ->where('location_id', $storeId);
+                                    }
+                                ]);
+                        }
+                    ]);
+                },
+            ]);
+
+        if ($query) {
+            $queryBuilder->where('product_name', 'LIKE', "%{$query}%");
+        }
+
+        if ($selectedCategoryId) {
+            $queryBuilder->where('category_id', $selectedCategoryId);
+        }
+
+        $paginator = $queryBuilder->orderBy('product_name')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        $items = collect($paginator->items())->map(fn($item) => $this->enrichItemForIndex($item, $storeId));
+
+        // Get categories of items matching search query or matching active items
+        $categoryQuery = Item::where('status', 'active')
+            ->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId))
+            ->whereNotNull('category_id');
+
+        if ($query) {
+            $categoryQuery->where('product_name', 'LIKE', "%{$query}%");
+        }
+
+        $categoryIds = $categoryQuery->distinct()->pluck('category_id');
+
+        $categories = \App\Models\Item\ItemCategory::whereIn('id', $categoryIds)
+            ->select('id', 'category_name')
+            ->orderBy('category_name')
+            ->get();
+
+        return Inertia::render('Seller/Items/SearchResults', [
+            'query' => $query ?? '',
+            'items' => $items,
+            'nextPageUrl' => $paginator->nextPageUrl(),
+            'categories' => $categories,
+            'selectedCategoryId' => $selectedCategoryId ? (int) $selectedCategoryId : null,
         ]);
     }
 
@@ -359,23 +490,4 @@ class ItemController extends Controller
      *   - /images/product_images/...  → legacy public → asset('storage/...')
      *   - storage/...                 → strip prefix  → asset('storage/...')
      */
-    private function resolveImageUrl(?string $path): ?string
-    {
-        if (empty($path))
-            return null;
-
-        // If it's already a full URL, return it
-        if (str_starts_with($path, 'http'))
-            return $path;
-
-        // Get base URL from Laravel config (which reads from .env)
-        $baseUrl = config('filesystems.disks.s3.url');
-
-        // Or directly from env (fallback to default)
-        if (!$baseUrl) {
-            $baseUrl = env('AWS_URL', 'http://duka.test:9000/duka-images');
-        }
-
-        return $baseUrl . '/' . ltrim($path, '/');
-    }
 }
