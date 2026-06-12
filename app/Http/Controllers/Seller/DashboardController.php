@@ -33,6 +33,9 @@ class DashboardController extends Controller
         $storeId = $store->id;
         $sellerId = $user->id;
         $customerId = $request->input('customer_id');
+        if ($customerId === 'null' || $customerId === 'undefined' || !$customerId) {
+            $customerId = null;
+        }
 
         Log::info('Seller Dashboard Loaded', [
             'store_id' => $storeId,

@@ -7,10 +7,14 @@ import {
     Stack,
     Chip,
     useTheme,
-    Tooltip
+    Tooltip,
+    InputBase
 } from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
+import ExpandLessRoundedIcon from "@mui/icons-material/ExpandLessRounded";
 import React from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { SellerCard } from "@/Components/Seller/sellerUi";
@@ -103,6 +107,8 @@ export default function SearchResults({ query, items: initialItems, nextPageUrl,
     const [page, setPage] = React.useState(2);
     const observerRef = React.useRef<HTMLDivElement | null>(null);
     const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
+    const [searchInput, setSearchInput] = React.useState(query || "");
+    const [categoriesExpanded, setCategoriesExpanded] = React.useState(false);
 
     React.useEffect(() => {
         setItems(initialItems);
@@ -115,7 +121,7 @@ export default function SearchResults({ query, items: initialItems, nextPageUrl,
         setIsLoading(true);
         router.get(
             route("seller.items.search"),
-            { search: query, category_id: selectedCategoryId || undefined, page },
+            { search: searchInput, category_id: selectedCategoryId || undefined, page },
             {
                 preserveState: true,
                 preserveScroll: true,
@@ -142,8 +148,16 @@ export default function SearchResults({ query, items: initialItems, nextPageUrl,
 
     const handleCategorySelect = (categoryId: number | null) => {
         router.get(route("seller.items.search"), {
-            search: query,
+            search: searchInput,
             category_id: categoryId || undefined
+        });
+    };
+
+    const handleSearchSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        router.get(route("seller.items.search"), {
+            search: searchInput,
+            category_id: selectedCategoryId || undefined
         });
     };
 
@@ -151,31 +165,69 @@ export default function SearchResults({ query, items: initialItems, nextPageUrl,
         <SellerLayout>
             <Head title={`Search: ${query || 'All Items'}`} />
             <Box sx={{ p: 2, bgcolor: "background.default", minHeight: "100vh" }}>
-                <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                {/* Search Bar header with autofocus */}
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
                     <IconButton component={Link} href={route("seller.items.index")}><ArrowBackRoundedIcon /></IconButton>
-                    <Typography variant="h6">Results for "{query || 'All Items'}" ({items.length})</Typography>
+                    <Box component="form" onSubmit={handleSearchSubmit} sx={{ flex: 1, display: "flex", alignItems: "center", px: 1.5, py: 0.5, borderRadius: 999, bgcolor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.1)" : "#f5f5f5", border: "1px solid", borderColor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" }}>
+                        <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
+                        <InputBase
+                            fullWidth
+                            autoFocus
+                            placeholder="Search items..."
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                        />
+                    </Box>
                 </Stack>
 
-                {/* Categories Filter List */}
+                {/* Categories Filter list (collapsed by default) */}
                 {categories.length > 0 && (
-                    <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap', overflowX: 'auto', pb: 1 }}>
-                        <Chip
-                            label="All"
-                            clickable
-                            color={selectedCategoryId === null ? "primary" : "default"}
-                            onClick={() => handleCategorySelect(null)}
-                            sx={{ fontWeight: 'bold' }}
-                        />
-                        {categories.map((cat) => (
-                            <Chip
-                                key={cat.id}
-                                label={cat.category_name}
-                                clickable
-                                color={selectedCategoryId === cat.id ? "primary" : "default"}
-                                onClick={() => handleCategorySelect(cat.id)}
-                                sx={{ fontWeight: 'bold' }}
-                            />
-                        ))}
+                    <Box sx={{ mb: 3 }}>
+                        <Stack
+                            direction="row"
+                            alignItems="center"
+                            justifyContent="space-between"
+                            onClick={() => setCategoriesExpanded(!categoriesExpanded)}
+                            sx={{ cursor: 'pointer', py: 1, borderBottom: '1px solid', borderColor: 'divider', mb: 1 }}
+                        >
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                                <Typography variant="body2" fontWeight="bold" color="text.secondary">
+                                    Filter by Category
+                                </Typography>
+                                {selectedCategoryId !== null && !categoriesExpanded && (
+                                    <Chip
+                                        size="small"
+                                        color="primary"
+                                        label={categories.find(c => c.id === selectedCategoryId)?.category_name || "Filtered"}
+                                    />
+                                )}
+                            </Stack>
+                            <IconButton size="small">
+                                {categoriesExpanded ? <ExpandLessRoundedIcon /> : <ExpandMoreRoundedIcon />}
+                            </IconButton>
+                        </Stack>
+
+                        {categoriesExpanded && (
+                            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', pt: 1 }}>
+                                <Chip
+                                    label="All"
+                                    clickable
+                                    color={selectedCategoryId === null ? "primary" : "default"}
+                                    onClick={() => handleCategorySelect(null)}
+                                    sx={{ fontWeight: 'bold' }}
+                                />
+                                {categories.map((cat) => (
+                                    <Chip
+                                        key={cat.id}
+                                        label={cat.category_name}
+                                        clickable
+                                        color={selectedCategoryId === cat.id ? "primary" : "default"}
+                                        onClick={() => handleCategorySelect(cat.id)}
+                                        sx={{ fontWeight: 'bold' }}
+                                    />
+                                ))}
+                            </Box>
+                        )}
                     </Box>
                 )}
 
@@ -184,15 +236,14 @@ export default function SearchResults({ query, items: initialItems, nextPageUrl,
                     <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1.5, [theme.breakpoints.up("sm")]: { gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }, [theme.breakpoints.up("md")]: { gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }, [theme.breakpoints.up("lg")]: { gridTemplateColumns: "repeat(6, minmax(0, 1fr))" } }}>
                         {items.map((item) => {
                             const originalPrice = item.original_price ?? 0;
-                            const discountPrice = item.pricing_matrix?.discount_price ?? null;
-                            const hasDiscount = !!discountPrice && discountPrice < originalPrice;
-                            const displayPrice = hasDiscount ? discountPrice : originalPrice;
-                            const discountPercent = hasDiscount && originalPrice > 0 ? Math.round(((originalPrice - discountPrice!) / originalPrice) * 100) : 0;
+                            const displayPrice = item.final_price ?? originalPrice;
+                            const hasDiscount = displayPrice < originalPrice;
+                            const discountPercent = hasDiscount && originalPrice > 0 ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100) : 0;
                             const imgSrc = item.image_urls?.[0] ? resolveImageUrl(item.image_urls[0]) : NO_IMAGE_PLACEHOLDER;
 
                             return (
                                 <SellerCard key={item.id} component={Link} href={route("seller.items.show", item.id)} sx={{ p: 0, overflow: "hidden", cursor: "pointer" }}>
-                                    {/* Image container without height: 140 constraint so images fit fully */}
+                                    {/* Image container without height constraint so images fit fully */}
                                     <Box sx={{ position: "relative", bgcolor: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                         {!loaded[item.id] && (
                                             <Box sx={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.05) 63%)", backgroundSize: "400% 100%", animation: "shimmer 1.2s infinite" }} />

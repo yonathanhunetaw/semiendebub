@@ -121,6 +121,12 @@ export default function Index({ items: initialItems, nextPageUrl, filters }: Pro
     // Image loaded state (your original logic)
     const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
 
+    React.useEffect(() => {
+        setItems(initialItems);
+        setHasNextPage(!!nextPageUrl);
+        setPage(2);
+    }, [initialItems, nextPageUrl]);
+
     // Barcode scanner state
     const [scannerOpen, setScannerOpen] = React.useState(false);
     const scannerRef = React.useRef<Html5QrcodeScanner | null>(null);

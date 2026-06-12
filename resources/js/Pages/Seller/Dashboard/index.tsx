@@ -116,6 +116,12 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl }: P
     const observerRef = React.useRef<HTMLDivElement | null>(null);
     const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
 
+    React.useEffect(() => {
+        setItems(initialItems);
+        setHasNextPage(!!nextPageUrl);
+        setPage(2);
+    }, [initialItems, nextPageUrl]);
+
     // Barcode scanner state
     const [scannerOpen, setScannerOpen] = React.useState(false);
     const scannerRef = React.useRef<Html5QrcodeScanner | null>(null);

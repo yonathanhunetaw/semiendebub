@@ -224,24 +224,128 @@ class ItemController extends Controller
         }
 
         if ($selectedCategoryId) {
-            $queryBuilder->where('category_id', $selectedCategoryId);
+            $queryBuilder->where('item_category_id', $selectedCategoryId);
         }
 
         $paginator = $queryBuilder->orderBy('product_name')
             ->paginate($perPage, ['*'], 'page', $page);
 
-        $items = collect($paginator->items())->map(fn($item) => $this->enrichItemForIndex($item, $storeId));
+        $itemsCollection = collect($paginator->items());
+
+        // 2️⃣ Load stock levels
+        $storeVariantIds = $itemsCollection->flatMap(fn($item) => $item->variants->pluck('storeVariants.*.id'))
+            ->flatten()
+            ->unique();
+
+        $stocks = \App\Models\StockKeeper\ItemStock::where('location_id', $storeId)
+            ->where('location_type', 'App\Models\Store\Store')
+            ->whereIn('item_variant_id', $storeVariantIds)
+            ->get()
+            ->keyBy('item_variant_id');
+
+        $sellerId = Auth::user()->id;
+        $customerId = $request->input('customer_id');
+        if ($customerId === 'null' || $customerId === 'undefined' || !$customerId) {
+            $customerId = null;
+        }
+
+        $items = $itemsCollection->map(function ($item) use ($storeId, $sellerId, $customerId, $stocks) {
+            // Process images
+            $generalImages = $item->general_images ?? [];
+            if (is_string($generalImages)) {
+                $generalImages = json_decode($generalImages, true) ?: [];
+            }
+            $item->image_urls = collect($generalImages)
+                ->map(fn($path) => $this->resolveImageUrl($path))
+                ->merge($item->variants->map(fn($v) => $this->resolveImageUrl($v->images[0] ?? null)))
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $variantPrices = [];
+            $totalStock = 0;
+
+            // Process each variant
+            foreach ($item->variants as $variant) {
+                $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
+
+                if ($storeVariant) {
+                    $stockQty = $stocks[$storeVariant->id]->quantity ?? 0;
+                    $totalStock += $stockQty;
+                    $variant->store_stock = $stockQty;
+
+                    $matrix = $storeVariant->pricing_matrix;
+                    if (is_string($matrix)) {
+                        $matrix = json_decode($matrix, true);
+                    }
+                    $variant->pricing_matrix = $matrix;
+
+                    $variant->price_ladder = PriceProvider::getPriceLadder(
+                        storeVariantId: $storeVariant->id,
+                        storeId: $storeId,
+                        sellerId: $sellerId,
+                        customerId: $customerId
+                    );
+
+                    $variant->final_price = PriceProvider::getFinalPrice($variant->price_ladder);
+
+                    $basePriceLevel = $variant->price_ladder[0] ?? null;
+                    $variant->store_price = $basePriceLevel['price'] ?? 0;
+                    $variant->store_discount_price = $basePriceLevel['discount_price'] ?? null;
+                    $variant->discount_ends_at = $basePriceLevel['discount_ends_at'] ?? null;
+
+                    if (!$variant->store_price) {
+                        $variant->store_price = $matrix['price'] ?? 0;
+                    }
+                    if (!$variant->store_discount_price) {
+                        $variant->store_discount_price = $matrix['discount_price'] ?? null;
+                    }
+                    if (!$variant->discount_ends_at) {
+                        $variant->discount_ends_at = $matrix['discount_ends_at'] ?? null;
+                    }
+
+                    $variantPrices[] = $variant->final_price;
+                }
+            }
+
+            $item->store_price = !empty($variantPrices) ? min($variantPrices) : null;
+            $item->store_stock = $totalStock;
+
+            $firstVariant = $item->variants->first();
+            if ($firstVariant) {
+                $item->discount_ends_at = $firstVariant->discount_ends_at;
+                $item->pricing_matrix = $firstVariant->pricing_matrix;
+                $item->original_price = $firstVariant->store_price;
+            }
+
+            $item->original_price = $item->store_price ?? 0;
+            $item->final_price = !empty($variantPrices) ? min($variantPrices) : null;
+
+            return [
+                'id' => $item->id,
+                'product_name' => $item->product_name,
+                'sold_count' => $item->sold_count ?? 0,
+                'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
+                'image_urls' => $item->image_urls,
+                'original_price' => $item->original_price,
+                'final_price' => $item->final_price,
+                'discount_ends_at' => $item->discount_ends_at,
+                'store_stock' => $item->store_stock,
+                'pricing_matrix' => $item->pricing_matrix,
+            ];
+        });
 
         // Get categories of items matching search query or matching active items
         $categoryQuery = Item::where('status', 'active')
             ->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId))
-            ->whereNotNull('category_id');
+            ->whereNotNull('item_category_id');
 
         if ($query) {
             $categoryQuery->where('product_name', 'LIKE', "%{$query}%");
         }
 
-        $categoryIds = $categoryQuery->distinct()->pluck('category_id');
+        $categoryIds = $categoryQuery->distinct()->pluck('item_category_id');
 
         $categories = \App\Models\Item\ItemCategory::whereIn('id', $categoryIds)
             ->select('id', 'category_name')
