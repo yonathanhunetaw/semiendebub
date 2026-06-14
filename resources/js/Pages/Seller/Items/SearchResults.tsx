@@ -109,8 +109,15 @@ export default function SearchResults({ query, items: initialItems, nextPageUrl,
     const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
     const [searchInput, setSearchInput] = React.useState(query || "");
     const [categoriesExpanded, setCategoriesExpanded] = React.useState(false);
+    // Track whether the next prop update is from infinite scroll (append) vs fresh navigation (reset)
+    const isScrollingRef = React.useRef(false);
 
     React.useEffect(() => {
+        // Skip the reset when we just finished an infinite-scroll append
+        if (isScrollingRef.current) {
+            isScrollingRef.current = false;
+            return;
+        }
         setItems(initialItems);
         setHasNextPage(!!nextPageUrl);
         setPage(2);
@@ -119,6 +126,8 @@ export default function SearchResults({ query, items: initialItems, nextPageUrl,
     const loadMore = () => {
         if (isLoading || !hasNextPage) return;
         setIsLoading(true);
+        // Mark that the upcoming prop update is from infinite scroll, not a fresh navigation
+        isScrollingRef.current = true;
         router.get(
             route("seller.items.search"),
             { search: searchInput, category_id: selectedCategoryId || undefined, page },
@@ -132,7 +141,10 @@ export default function SearchResults({ query, items: initialItems, nextPageUrl,
                     setPage(p => p + 1);
                     setIsLoading(false);
                 },
-                onError: () => setIsLoading(false)
+                onError: () => {
+                    isScrollingRef.current = false;
+                    setIsLoading(false);
+                }
             }
         );
     };
@@ -167,7 +179,7 @@ export default function SearchResults({ query, items: initialItems, nextPageUrl,
             <Box sx={{ p: 2, bgcolor: "background.default", minHeight: "100vh" }}>
                 {/* Search Bar header with autofocus */}
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                    <IconButton component={Link} href={route("seller.items.index")}><ArrowBackRoundedIcon /></IconButton>
+                    <IconButton component={Link} href={route("seller.dashboard")}><ArrowBackRoundedIcon /></IconButton>
                     <Box component="form" onSubmit={handleSearchSubmit} sx={{ flex: 1, display: "flex", alignItems: "center", px: 1.5, py: 0.5, borderRadius: 999, bgcolor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.1)" : "#f5f5f5", border: "1px solid", borderColor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" }}>
                         <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
                         <InputBase

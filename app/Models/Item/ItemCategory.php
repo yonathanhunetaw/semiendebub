@@ -29,7 +29,7 @@ class ItemCategory extends Model
     // One-to-many: category → items
     public function items()
     {
-        return $this->hasMany(Item::class, 'category_id')
+        return $this->hasMany(Item::class, 'item_category_id')
             ->where('status', 'active'); // only active items
     }
 }

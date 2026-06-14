@@ -109,6 +109,8 @@ class ItemController extends Controller
         }
 
         $variantImages = collect();
+        $bestMatrix = null;
+
         foreach ($item->variants as $variant) {
             $raw = $variant->images ?? [];
             if (is_string($raw)) {
@@ -126,9 +128,18 @@ class ItemController extends Controller
                     $totalStock += (int) $stock->quantity;
                 }
 
-                $basePrice = (float) ($storeVariant->price ?? 0);
-                $discountPrice = $storeVariant->discount_price ? (float) $storeVariant->discount_price : null;
-                $discountEndsAt = $storeVariant->discount_ends_at;
+                // Read price from pricing_matrix JSON (the flat price/discount_price
+                // columns no longer exist on this table — the schema uses pricing_matrix)
+                $matrix = $storeVariant->pricing_matrix;
+                if (is_string($matrix)) {
+                    $matrix = json_decode($matrix, true);
+                }
+
+                $basePrice    = (float) ($matrix['price'] ?? 0);
+                $discountPrice = isset($matrix['discount_price']) && $matrix['discount_price'] !== null
+                    ? (float) $matrix['discount_price']
+                    : null;
+                $discountEndsAt = $matrix['discount_ends_at'] ?? null;
 
                 $isDiscountActive = $discountPrice !== null
                     && $discountPrice > 0
@@ -138,15 +149,16 @@ class ItemController extends Controller
                 $finalPrice = $isDiscountActive ? $discountPrice : $basePrice;
 
                 if ($bestPrice === null || $finalPrice < $bestPrice) {
-                    $bestPrice = $finalPrice;
+                    $bestPrice        = $finalPrice;
                     $bestDiscountPrice = $isDiscountActive ? $discountPrice : null;
                     $bestDiscountEndsAt = $isDiscountActive ? $discountEndsAt : null;
+                    $bestMatrix       = $matrix;
                 }
             }
         }
 
         $originalPrice = $bestPrice ?? 0;
-        $finalPrice = ($bestDiscountPrice !== null && $bestDiscountPrice < $originalPrice)
+        $finalPrice    = ($bestDiscountPrice !== null && $bestDiscountPrice < $originalPrice)
             ? $bestDiscountPrice
             : $originalPrice;
 
@@ -159,22 +171,23 @@ class ItemController extends Controller
             ->toArray();
 
         return [
-            'id' => $item->id,
+            'id'           => $item->id,
             'product_name' => $item->product_name,
-            'sold_count' => $item->sold_count ?? 0,
-            'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
-            'image_urls' => $imageUrls,
+            'sold_count'   => $item->sold_count ?? 0,
+            'category'     => $item->category ? ['category_name' => $item->category->category_name] : null,
+            'image_urls'   => $imageUrls,
             'original_price' => $originalPrice,
-            'final_price' => $finalPrice,
+            'final_price'  => $finalPrice,
             'discount_ends_at' => $bestDiscountEndsAt,
-            'store_stock' => $totalStock,
+            'store_stock'  => $totalStock,
             'pricing_matrix' => [
-                'price' => $originalPrice,
-                'discount_price' => $bestDiscountPrice,
+                'price'           => $originalPrice,
+                'discount_price'  => $bestDiscountPrice,
                 'discount_ends_at' => $bestDiscountEndsAt,
             ],
         ];
     }
+
 
     private function resolveImageUrl(?string $path): ?string
     {
@@ -363,11 +376,58 @@ class ItemController extends Controller
 
 
     /**
-     * Show the form for creating a new resource.
+     * JSON-only endpoint for infinite scroll pagination.
+     * Called directly via fetch() — does NOT go through Inertia.
      */
-    public function create()
+    public function pageItems(Request $request)
     {
-        //
+        $user = Auth::user();
+        $storeId = $user->store?->id;
+
+        if (!$storeId) {
+            return response()->json(['items' => [], 'nextPageUrl' => null]);
+        }
+
+        $page    = $request->integer('page', 2);
+        $perPage = 20;
+        $search  = $request->filled('search') ? trim($request->search) : null;
+        $cartId  = $request->integer('cart_id') ?: null;
+
+        $query = Item::where('status', 'active')
+            ->with([
+                'category',
+                'variants' => function ($q) use ($storeId) {
+                    $q->with([
+                        'storeVariants' => function ($sq) use ($storeId) {
+                            $sq->where('store_id', $storeId)
+                                ->with([
+                                    'stocks' => function ($stockQuery) use ($storeId) {
+                                        $stockQuery->where('location_type', 'App\Models\Store\Store')
+                                            ->where('location_id', $storeId);
+                                    }
+                                ]);
+                        }
+                    ]);
+                },
+            ])
+            ->whereHas('variants.storeVariants', function ($q) use ($storeId) {
+                $q->where('store_id', $storeId);
+            });
+
+        if ($search) {
+            $query->where('product_name', 'LIKE', '%' . $search . '%');
+        }
+
+        $paginator = $query->orderBy('product_name')->paginate($perPage, ['*'], 'page', $page);
+
+        $items = collect($paginator->items())->map(function ($item) use ($storeId) {
+            return $this->enrichItemForIndex($item, $storeId);
+        });
+
+        return response()->json([
+            'items'       => $items,
+            'nextPageUrl' => $paginator->nextPageUrl(),
+        ]);
     }
 
     /**

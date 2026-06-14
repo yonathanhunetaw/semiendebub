@@ -118,7 +118,7 @@ export default function Index({ items: initialItems, nextPageUrl, filters }: Pro
     const [searchInput, setSearchInput] = React.useState(filters?.search || "");
     const observerRef = React.useRef<HTMLDivElement | null>(null);
 
-    // Image loaded state (your original logic)
+    // Image loaded state (for shimmer effect)
     const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
 
     React.useEffect(() => {
@@ -139,27 +139,27 @@ export default function Index({ items: initialItems, nextPageUrl, filters }: Pro
     const [resultsLoading, setResultsLoading] = React.useState(false);
     const resultsObserverRef = React.useRef<HTMLDivElement | null>(null);
 
-    // Infinite scroll
-    const loadMore = () => {
+    // Infinite scroll — uses plain fetch() so Inertia props are never mutated
+    const loadMore = async () => {
         if (isLoading || !hasNextPage) return;
         setIsLoading(true);
-        router.get(
-            route("seller.items.index"),
-            { page, cart_id: filters?.cart_id || undefined },
-            {
-                preserveState: true,
-                preserveScroll: true,
-                only: ["items", "nextPageUrl"],
-                onSuccess: (resp: any) => {
-                    const newItems = resp.props.items || [];
-                    setItems((prev) => [...prev, ...newItems]);
-                    setHasNextPage(!!resp.props.nextPageUrl);
-                    setPage((p) => p + 1);
-                    setIsLoading(false);
-                },
-                onError: () => setIsLoading(false),
-            }
-        );
+        try {
+            const params = new URLSearchParams({ page: String(page) });
+            if (filters?.cart_id) params.set('cart_id', String(filters.cart_id));
+            const res = await fetch(
+                route('seller.items.page-json') + '?' + params.toString(),
+                { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } }
+            );
+            if (!res.ok) throw new Error('Failed to load page');
+            const data = await res.json();
+            setItems((prev) => [...prev, ...(data.items || [])]);
+            setHasNextPage(!!data.nextPageUrl);
+            setPage((p) => p + 1);
+        } catch (e) {
+            console.error('loadMore error', e);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     React.useEffect(() => {
@@ -260,7 +260,7 @@ export default function Index({ items: initialItems, nextPageUrl, filters }: Pro
                         <Stack direction="row" spacing={1} alignItems="center">
                             <Box sx={{ flex: 1, display: "flex", alignItems: "center", px: 1.5, py: 0.5, borderRadius: 999, bgcolor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.1)" : "#f5f5f5", border: "1px solid", borderColor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" }}>
                                 <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
-                                <InputBase fullWidth placeholder="Search items" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} onClick={() => router.get(route("seller.items.search"), { search: searchInput })} />
+                                <InputBase fullWidth placeholder="Search items" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} onFocus={() => router.get(route("seller.items.search"), { search: searchInput || '' })} />
                             </Box>
                             <IconButton type="submit" sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: SELLER_BRAND_DARK, color: "#fff" }}>
                                 <SearchRoundedIcon />
@@ -288,9 +288,11 @@ export default function Index({ items: initialItems, nextPageUrl, filters }: Pro
 
                             return (
                                 <SellerCard key={item.id} component={Link} href={route("seller.items.show", item.id)} sx={{ p: 0, overflow: "hidden", cursor: "pointer" }}>
-                                    <Box sx={{ position: "relative", bgcolor: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    {/* Square placeholder box — reserves space & shows shimmer before image loads */}
+                                    <Box sx={{ position: "relative", width: "100%", aspectRatio: "1 / 1", bgcolor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.06)" : "#f0f0f0", overflow: "hidden" }}>
+                                        {/* Shimmer overlay while loading */}
                                         {!loaded[item.id] && (
-                                            <Box sx={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.05) 63%)", backgroundSize: "400% 100%", animation: "shimmer 1.2s infinite" }} />
+                                            <Box sx={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.18) 50%, transparent 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.4s infinite" }} />
                                         )}
                                         <img
                                             src={imgSrc}
@@ -302,7 +304,7 @@ export default function Index({ items: initialItems, nextPageUrl, filters }: Pro
                                                 target.src = NO_IMAGE_PLACEHOLDER;
                                                 setLoaded(prev => ({ ...prev, [item.id]: true }));
                                             }}
-                                            style={{ width: "100%", height: "auto", display: "block", opacity: loaded[item.id] ? 1 : 0, transition: "opacity 0.3s ease" }}
+                                            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: loaded[item.id] ? 1 : 0, transition: "opacity 0.35s ease" }}
                                         />
                                     </Box>
                                     <Box sx={{ p: 1.5 }}>
@@ -312,10 +314,10 @@ export default function Index({ items: initialItems, nextPageUrl, filters }: Pro
                                                 <Typography fontWeight={900} sx={{ color: hasDiscount ? "error.main" : "text.primary" }}>{displayPrice.toFixed(2)} Birr</Typography>
                                                 {hasDiscount && <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled" }}>{originalPrice.toFixed(2)} Birr</Typography>}
                                             </Stack>
-                                            {hasDiscount && item.discount_ends_at && (
-                                                <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
-                                                    <Chip label={`-${discountPercent}% OFF`} size="small" sx={{ bgcolor: "#EAB308", color: "#fff", height: 20 }} />
-                                                    <DiscountCountdown endsAt={item.discount_ends_at} />
+                                            {hasDiscount && (
+                                                <Stack direction="row" alignItems="center" spacing={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>
+                                                    <Chip label={`-${discountPercent}% OFF`} size="small" sx={{ bgcolor: "#EAB308", color: "#fff", height: 20, fontSize: "0.62rem" }} />
+                                                    {item.discount_ends_at && <DiscountCountdown endsAt={item.discount_ends_at} />}
                                                 </Stack>
                                             )}
                                         </Box>

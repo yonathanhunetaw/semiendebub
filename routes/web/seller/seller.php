@@ -33,6 +33,7 @@ Route::domain("seller.$baseDomain")
             Route::get('/orders', [CartController::class, 'index'])->name('orders.index');
             Route::get('/carts', [CartController::class, 'index'])->name('carts.index');
             Route::get('/items/search', [ItemController::class, 'search'])->name('items.search');
+            Route::get('/items/page-json', [ItemController::class, 'pageItems'])->name('items.page-json');
             Route::get('/items', [ItemController::class, 'index'])->name('items.index');
             Route::get('/items/{item}', [ItemController::class, 'show'])->name('items.show');
             Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);

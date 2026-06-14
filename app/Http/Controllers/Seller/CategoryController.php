@@ -53,17 +53,15 @@ class CategoryController extends Controller
     public function show(ItemCategory $category)
     {
         // Get immediate subcategories and count only active items per subcategory
+        // (the items() relationship already scopes to status='active')
         $subcategories = $category->children()
-            ->withCount(['items as active_items_count' => function ($query) {
-                $query->where('status', 'active');
-            }])
+            ->withCount('items as active_items_count')
             ->orderBy('category_name')
             ->get();
 
-        // Get only active items in this category
+        // Get only active items in this category (relationship already scopes to active)
         $items = $category->items()
             ->with(['category', 'variants.storeVariants'])
-            ->where('status', 'active')
             ->orderBy('product_name')
             ->get();
 
