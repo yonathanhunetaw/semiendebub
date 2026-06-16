@@ -13,7 +13,7 @@ const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 // 1. Create a Context so child pages (like Profile) can change the theme
 export const ThemeContext = React.createContext({
     toggleTheme: (newMode: 'light' | 'dark' | 'system') => {},
-    currentSetting: 'dark'
+    currentSetting: 'light'
 });
 
 const THEME_STORAGE_KEY = 'duka.theme.mode';
@@ -87,7 +87,7 @@ createInertiaApp({
                 } catch {
                     // ignore storage errors
                 }
-                return 'system';
+                return 'light';
             });
 
             const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
