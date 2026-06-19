@@ -23,6 +23,7 @@ class Cart extends Model
         'customer_id',
         'session_id',
         'status',
+        'priority',
     ];
 
     /*
@@ -85,7 +86,11 @@ class Cart extends Model
 
     public function getNameAttribute(): string
     {
-        return $this->customer ? $this->customer->name . "'s Cart" : 'Cart ' . $this->id;
+        // 1. Accessing ->id property directly (not as a function)
+        // 2. Adding a null-coalescing check for the customer name
+        return ($this->customer && $this->customer->name)
+            ? $this->customer->name . "'s Cart"
+            : 'Cart ' . $this->getAttribute('id');
     }
 
     // Scopes for easy filtering in your Admin Dashboard
@@ -126,5 +131,10 @@ class Cart extends Model
         }
 
         $this->update(['seller_id' => $seller->id]);
+    }
+
+    public function scopeOrderedByPriority($query)
+    {
+        return $query->orderBy('priority', 'asc');
     }
 }

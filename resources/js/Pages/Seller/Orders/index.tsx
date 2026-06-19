@@ -21,11 +21,10 @@ interface CartItem {
 
 interface SellerCart {
     id: number;
-    status?: string;
     customer?: {
         first_name?: string;
         last_name?: string;
-        email?: string;
+        active_pricing_customer_type?: string; // Add this line
     } | null;
     seller?: {
         first_name?: string;

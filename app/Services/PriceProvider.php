@@ -78,7 +78,8 @@ class PriceProvider
 
     public static function getFinalPrice(array $priceLadder): ?float
     {
-        if (empty($priceLadder)) return null;
+        if (empty($priceLadder))
+            return null;
         return end($priceLadder)['final'];
     }
 
@@ -100,7 +101,21 @@ class PriceProvider
             'price' => $price,
             'discount_price' => $discount,
             'discount_ends_at' => $endsAt,
-            'final' => (float)$final,
+            'final' => (float) $final,
         ];
+    }
+
+    // Add this method to PriceProvider.php
+
+    public static function getFinalPriceWithTax(array $priceLadder, string $customerType): float
+    {
+        $basePrice = self::getFinalPrice($priceLadder) ?? 0.00;
+
+        // Only apply 15% VAT for business accounts
+        if ($customerType === 'business') {
+            return round($basePrice * 1.15, 2);
+        }
+
+        return (float) $basePrice;
     }
 }

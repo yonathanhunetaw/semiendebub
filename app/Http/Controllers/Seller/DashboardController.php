@@ -5,12 +5,12 @@ namespace App\Http\Controllers\Seller;
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Item\Item;
 use App\Models\StockKeeper\ItemStock;
-use App\Services\PriceProvider;
 use App\Services\ImageResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
+use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
@@ -26,159 +26,182 @@ class DashboardController extends Controller
             return Inertia::render('Seller/Items/Index', [
                 'items' => [],
                 'store' => null,
-                'error' => 'No store associated with this account.'
+                'error' => 'No store associated with this account.',
+                'nextPageUrl' => null,
+                'filters' => ['search' => '', 'cart_id' => null],
+                'categories' => [],
             ]);
         }
 
         $storeId = $store->id;
-        $sellerId = $user->id;
-        $customerId = $request->input('customer_id');
-        if ($customerId === 'null' || $customerId === 'undefined' || !$customerId) {
-            $customerId = null;
-        }
-
-        Log::info('Seller Dashboard Loaded', [
-            'store_id' => $storeId,
-            'seller_id' => $sellerId,
-        ]);
-
-        // 1️⃣ Load items with relationships (paginated)
-        $query = Item::with([
-            'variants.itemColor',
-            'variants.itemSize',
-            'variants.storeVariants' => function ($q) use ($storeId) {
-                $q->where('store_id', $storeId);
-            },
-            'variants.storeVariants.sellerPrices',
-            'variants.storeVariants.customerPrices',
-        ])
-            ->where('status', 'active')
-            ->whereHas('variants.storeVariants', function ($q) use ($storeId) {
-                $q->where('store_id', $storeId);
-            });
-
         $perPage = 20;
-        $paginator = $query->orderBy('product_name')->paginate($perPage);
-        $items = collect($paginator->items());
+        $search = $request->filled('search') ? trim($request->search) : null;
 
-        // 2️⃣ Load stock levels
-        $storeVariantIds = $items->flatMap(fn($item) => $item->variants->pluck('storeVariants.*.id'))
-            ->flatten()
-            ->unique();
-
-        $stocks = ItemStock::where('location_id', $storeId)
-            ->where('location_type', get_class($store))
-            ->whereIn('item_variant_id', $storeVariantIds)
-            ->get()
-            ->keyBy('item_variant_id');
-
-        // 3️⃣ Process each item and variant using PriceProvider
-        foreach ($items as $item) {
-            // Process images
-            $generalImages = $item->general_images ?? [];
-            $item->image_urls = collect($generalImages)
-                ->map(fn($path) => ImageResolver::resolve($path))
-                ->merge($item->variants->map(fn($v) => ImageResolver::resolve($v->images[0] ?? null)))
-                ->filter()
-                ->unique()
-                ->values();
-
-            $variantPrices = [];
-
-            // Process each variant
-            foreach ($item->variants as $variant) {
-                $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
-
-                if ($storeVariant) {
-                    $variant->store_stock = $stocks[$storeVariant->id]->quantity ?? 0;
-                    $variant->store_variant_id = $storeVariant->id;
-
-                    // ✅ FORCE the pricing_matrix to be included
-                    $matrix = $storeVariant->pricing_matrix;
-                    if (is_string($matrix)) {
-                        $matrix = json_decode($matrix, true);
-                    }
-                    $variant->pricing_matrix = $matrix;
-
-                    // ✅ USE PRICE PROVIDER for the price ladder
-                    $variant->price_ladder = PriceProvider::getPriceLadder(
-                        storeVariantId: $storeVariant->id,
-                        storeId: $storeId,
-                        sellerId: $sellerId,
-                        customerId: $customerId
-                    );
-
-                    // ✅ Get the final price from the ladder
-                    $variant->final_price = PriceProvider::getFinalPrice($variant->price_ladder);
-
-                    // ✅ Get store base price (first level of the ladder)
-                    $basePriceLevel = $variant->price_ladder[0] ?? null;
-                    $variant->store_price = $basePriceLevel['price'] ?? 0;
-                    $variant->store_discount_price = $basePriceLevel['discount_price'] ?? null;
-                    $variant->discount_ends_at = $basePriceLevel['discount_ends_at'] ?? null;
-
-                    // ✅ Also set from matrix directly (fallback)
-                    if (!$variant->store_price) {
-                        $variant->store_price = $matrix['price'] ?? 0;
-                    }
-                    if (!$variant->store_discount_price) {
-                        $variant->store_discount_price = $matrix['discount_price'] ?? null;
-                    }
-                    if (!$variant->discount_ends_at) {
-                        $variant->discount_ends_at = $matrix['discount_ends_at'] ?? null;
-                    }
-
-                    // ✅ Track final price for item-level min calculation
-                    $variantPrices[] = $variant->final_price;
-
-                    $variant->manual_status = $storeVariant->manual_status ?? 'auto';
-                    $variant->forced_status = $storeVariant->forced_status;
-                    $variant->status = $storeVariant->computed_status ?? ($storeVariant->active ? 'active' : 'inactive');
-                    $variant->store_active = $variant->status === 'active';
-                } else {
-                    $variant->manual_status = 'auto';
-                    $variant->forced_status = null;
-                    $variant->status = 'inactive';
-                    $variant->store_active = false;
-                    $variant->price_ladder = [];
-                    $variant->final_price = null;
-                    $variant->store_price = null;
-                    $variant->store_discount_price = null;
-                    $variant->discount_ends_at = null;
-                    $variant->pricing_matrix = null;
-                }
-            }
-
-            // ✅ Calculate item-level min price using final prices from PriceProvider
-            $item->store_price = !empty($variantPrices) ? min($variantPrices) : null;
-
-            // ✅ Get the first variant's discount info for the item card
-            $firstVariant = $item->variants->first();
-            if ($firstVariant) {
-                $item->discount_ends_at = $firstVariant->discount_ends_at;
-                $item->pricing_matrix = $firstVariant->pricing_matrix; // ✅ Add this
-                $item->original_price = $firstVariant->store_price; // ✅ Add this for crossed-out price
-            }
-        }
-
-        // Debug log
-        if ($items->isNotEmpty()) {
-            $firstItem = $items->first();
-            $firstVariant = $firstItem->variants->first();
-            
-            Log::info('Dashboard Debug - First Item', [
-                'item_name' => $firstItem->product_name,
-                'item_store_price' => $firstItem->store_price,
-                'item_discount_ends_at' => $firstItem->discount_ends_at ?? null,
-                'has_pricing_matrix' => isset($firstVariant->pricing_matrix),
-                'pricing_matrix' => $firstVariant->pricing_matrix ?? null,
+        // 🔹 1. Build the query – identical to ItemController::index
+        $query = Item::where('status', 'active')
+            ->with([
+                'category',
+                'variants' => function ($q) use ($storeId) {
+                    $q->with([
+                        'storeVariants' => function ($sq) use ($storeId) {
+                            $sq->where('store_id', $storeId)
+                                ->with([
+                                    'stocks' => function ($stockQuery) use ($storeId) {
+                                        $stockQuery->where('location_type', 'App\Models\Store\Store')
+                                            ->where('location_id', $storeId);
+                                    }
+                                ]);
+                        }
+                    ]);
+                },
             ]);
+
+        $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
+            $q->where('store_id', $storeId);
+        });
+
+        if ($search) {
+            $query->where('product_name', 'LIKE', '%' . $search . '%');
         }
-        
+
+        $paginator = $query->orderBy('product_name')->paginate($perPage);
+        $items = collect($paginator->items())->map(function ($item) use ($storeId) {
+            return $this->enrichItemForIndex($item, $storeId);
+        });
+
+        // 🔹 2. Extract categories from the enriched items
+        $categoryNames = $items
+            ->pluck('category.category_name')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // 🔹 3. Return the exact same structure as ItemController::index
         return Inertia::render('Seller/Items/Index', [
             'items' => $items,
             'store' => $store,
             'nextPageUrl' => $paginator->nextPageUrl(),
+            'filters' => [
+                'search' => $search ?? '',
+                'cart_id' => $request->integer('cart_id') ?: null,
+            ],
+            'categories' => $categoryNames,  // 👈 now passed to the frontend
         ]);
+    }
+
+    /**
+     * Enrich a single item with all required fields for the index page.
+     * Now correctly sets original_price to the base price (non‑discounted)
+     * and discount_price in the pricing_matrix.
+     */
+    private function enrichItemForIndex(Item $item, int $storeId): array
+    {
+        $bestFinalPrice = null;
+        $bestBasePrice = null;
+        $bestDiscountPrice = null;
+        $bestDiscountEndsAt = null;
+        $totalStock = 0;
+        $bestMatrix = null;
+
+        $generalImages = $item->general_images ?? [];
+        if (is_string($generalImages)) {
+            $decoded = json_decode($generalImages, true);
+            $generalImages = is_array($decoded) ? $decoded : [];
+        }
+
+        $variantImages = collect();
+
+        foreach ($item->variants as $variant) {
+            // Variant images
+            $raw = $variant->images ?? [];
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                $raw = is_array($decoded) ? $decoded : [];
+            }
+            foreach ($raw as $img) {
+                if (!empty($img)) {
+                    $variantImages->push($this->resolveImageUrl($img));
+                }
+            }
+
+            foreach ($variant->storeVariants as $storeVariant) {
+                // Stock
+                foreach ($storeVariant->stocks as $stock) {
+                    $totalStock += (int) $stock->quantity;
+                }
+
+                // Pricing matrix
+                $matrix = $storeVariant->pricing_matrix;
+                if (is_string($matrix)) {
+                    $matrix = json_decode($matrix, true);
+                }
+
+                $basePrice = (float) ($matrix['price'] ?? 0);
+                $discountPrice = isset($matrix['discount_price']) && $matrix['discount_price'] !== null
+                    ? (float) $matrix['discount_price']
+                    : null;
+                $discountEndsAt = $matrix['discount_ends_at'] ?? null;
+
+                $isDiscountActive = $discountPrice !== null
+                    && $discountPrice > 0
+                    && $discountPrice < $basePrice
+                    && ($discountEndsAt === null || Carbon::now()->lt(Carbon::parse($discountEndsAt)));
+
+                $finalPrice = $isDiscountActive ? $discountPrice : $basePrice;
+
+                // We want the lowest final price across all variants
+                if ($bestFinalPrice === null || $finalPrice < $bestFinalPrice) {
+                    $bestFinalPrice = $finalPrice;
+                    $bestBasePrice = $basePrice;
+                    $bestDiscountPrice = $isDiscountActive ? $discountPrice : null;
+                    $bestDiscountEndsAt = $isDiscountActive ? $discountEndsAt : null;
+                    $bestMatrix = $matrix;
+                }
+            }
+        }
+
+        // Now set the item-level fields
+        $originalPrice = $bestBasePrice ?? 0;
+        $finalPrice = $bestFinalPrice ?? $originalPrice;
+
+        // If there's a discount, ensure the matrix reflects it
+        $discountPriceForMatrix = ($bestDiscountPrice !== null && $bestDiscountPrice < $originalPrice)
+            ? $bestDiscountPrice
+            : null;
+
+        $imageUrls = collect($generalImages)
+            ->map(fn($path) => $this->resolveImageUrl($path))
+            ->merge($variantImages)
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        return [
+            'id'           => $item->id,
+            'product_name' => $item->product_name,
+            'sold_count'   => $item->sold_count ?? 0,
+            'category'     => $item->category ? ['category_name' => $item->category->category_name] : null,
+            'image_urls'   => $imageUrls,
+            'original_price' => $originalPrice,
+            'final_price'  => $finalPrice,
+            'discount_ends_at' => $bestDiscountEndsAt, // also at top level for convenience
+            'store_stock'  => $totalStock,
+            'pricing_matrix' => [
+                'price'           => $originalPrice,
+                'discount_price'  => $discountPriceForMatrix,
+                'discount_ends_at' => $bestDiscountEndsAt,
+            ],
+        ];
+    }
+
+    private function resolveImageUrl(?string $path): ?string
+    {
+        if (empty($path)) return null;
+        if (str_starts_with($path, 'http')) return $path;
+
+        $baseUrl = config('filesystems.disks.s3.url') ?? env('AWS_URL', 'http://duka.test:9000/duka-images');
+        return $baseUrl . '/' . ltrim($path, '/');
     }
 }

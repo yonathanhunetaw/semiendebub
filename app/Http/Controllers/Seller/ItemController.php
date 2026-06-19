@@ -33,7 +33,7 @@ class ItemController extends Controller
             'search' => $search,
             'cart_id' => $cartId,
         ]);
-        
+
         if (!$storeId) {
             return Inertia::render('Seller/Items/Index', [
                 'items' => [],
@@ -85,19 +85,26 @@ class ItemController extends Controller
             'execution_ms' => $executionTime,
         ]);
 
+        // After $items = collect(...)->map(...)
+        $categoryNames = $items
+            ->pluck('category.category_name')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
         return Inertia::render('Seller/Items/Index', [
             'items' => $items,
             'nextPageUrl' => $paginator->nextPageUrl(),
-            'filters' => [
-                'search' => $search ?? '',
-                'cart_id' => $cartId,
-            ],
+            'filters' => ['search' => $search ?? '', 'cart_id' => $cartId],
+            'categories' => $categoryNames, // 👈 add this
         ]);
     }
 
     private function enrichItemForIndex(Item $item, int $storeId): array
     {
-        $bestPrice = null;
+        $bestFinalPrice = null;
+        $bestBasePrice = null;
         $bestDiscountPrice = null;
         $bestDiscountEndsAt = null;
         $totalStock = 0;
@@ -128,14 +135,12 @@ class ItemController extends Controller
                     $totalStock += (int) $stock->quantity;
                 }
 
-                // Read price from pricing_matrix JSON (the flat price/discount_price
-                // columns no longer exist on this table — the schema uses pricing_matrix)
                 $matrix = $storeVariant->pricing_matrix;
                 if (is_string($matrix)) {
                     $matrix = json_decode($matrix, true);
                 }
 
-                $basePrice    = (float) ($matrix['price'] ?? 0);
+                $basePrice = (float) ($matrix['price'] ?? 0);
                 $discountPrice = isset($matrix['discount_price']) && $matrix['discount_price'] !== null
                     ? (float) $matrix['discount_price']
                     : null;
@@ -148,19 +153,26 @@ class ItemController extends Controller
 
                 $finalPrice = $isDiscountActive ? $discountPrice : $basePrice;
 
-                if ($bestPrice === null || $finalPrice < $bestPrice) {
-                    $bestPrice        = $finalPrice;
+                // Track the variant with the lowest final price,
+                // and also remember its base price and discount info.
+                if ($bestFinalPrice === null || $finalPrice < $bestFinalPrice) {
+                    $bestFinalPrice = $finalPrice;
+                    $bestBasePrice = $basePrice;
                     $bestDiscountPrice = $isDiscountActive ? $discountPrice : null;
                     $bestDiscountEndsAt = $isDiscountActive ? $discountEndsAt : null;
-                    $bestMatrix       = $matrix;
+                    $bestMatrix = $matrix;
                 }
             }
         }
 
-        $originalPrice = $bestPrice ?? 0;
-        $finalPrice    = ($bestDiscountPrice !== null && $bestDiscountPrice < $originalPrice)
+        // Now set the item-level fields correctly:
+        $originalPrice = $bestBasePrice ?? 0;
+        $finalPrice = $bestFinalPrice ?? $originalPrice;
+
+        // If a discount is active, use the discount price; otherwise null
+        $discountPriceForMatrix = ($bestDiscountPrice !== null && $bestDiscountPrice < $originalPrice)
             ? $bestDiscountPrice
-            : $originalPrice;
+            : null;
 
         $imageUrls = collect($generalImages)
             ->map(fn($path) => $this->resolveImageUrl($path))
@@ -171,23 +183,22 @@ class ItemController extends Controller
             ->toArray();
 
         return [
-            'id'           => $item->id,
+            'id' => $item->id,
             'product_name' => $item->product_name,
-            'sold_count'   => $item->sold_count ?? 0,
-            'category'     => $item->category ? ['category_name' => $item->category->category_name] : null,
-            'image_urls'   => $imageUrls,
+            'sold_count' => $item->sold_count ?? 0,
+            'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
+            'image_urls' => $imageUrls,
             'original_price' => $originalPrice,
-            'final_price'  => $finalPrice,
+            'final_price' => $finalPrice,
             'discount_ends_at' => $bestDiscountEndsAt,
-            'store_stock'  => $totalStock,
+            'store_stock' => $totalStock,
             'pricing_matrix' => [
-                'price'           => $originalPrice,
-                'discount_price'  => $bestDiscountPrice,
+                'price' => $originalPrice,
+                'discount_price' => $discountPriceForMatrix,
                 'discount_ends_at' => $bestDiscountEndsAt,
             ],
         ];
     }
-
 
     private function resolveImageUrl(?string $path): ?string
     {
@@ -388,10 +399,10 @@ class ItemController extends Controller
             return response()->json(['items' => [], 'nextPageUrl' => null]);
         }
 
-        $page    = $request->integer('page', 2);
+        $page = $request->integer('page', 2);
         $perPage = 20;
-        $search  = $request->filled('search') ? trim($request->search) : null;
-        $cartId  = $request->integer('cart_id') ?: null;
+        $search = $request->filled('search') ? trim($request->search) : null;
+        $cartId = $request->integer('cart_id') ?: null;
 
         $query = Item::where('status', 'active')
             ->with([
@@ -425,7 +436,7 @@ class ItemController extends Controller
         });
 
         return response()->json([
-            'items'       => $items,
+            'items' => $items,
             'nextPageUrl' => $paginator->nextPageUrl(),
         ]);
     }

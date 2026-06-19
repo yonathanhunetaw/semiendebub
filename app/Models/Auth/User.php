@@ -33,6 +33,7 @@ class User extends Authenticatable
         'store_id',
         'inventory_location_id',
         'created_by',
+        'active_pricing_customer_type',
     ];
 
     /**

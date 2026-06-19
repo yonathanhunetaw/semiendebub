@@ -6,35 +6,37 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void
-{
-    Schema::create('carts', function (Blueprint $table) {
-        $table->id();
+    {
+        Schema::create('carts', function (Blueprint $table) {
+            $table->id();
 
-        $table->foreignId('store_id')
-            ->constrained()
-            ->onDelete('cascade');
+            $table->foreignId('store_id')
+                ->constrained()
+                ->onDelete('cascade');
 
-        $table->foreignId('user_id')
-            ->nullable()
-            ->constrained()
-            ->onDelete('cascade');
+            $table->foreignId('user_id')
+                ->nullable()
+                ->constrained()
+                ->onDelete('cascade');
 
-        // Just place it here—it will naturally be "after" user_id
-        $table->string('session_id')->nullable()->index();
+            $table->string('session_id')->nullable()->index();
+            
+            // Add priority here
+            $table->integer('priority')->default(0);
 
-        $table->foreignId('customer_id')
-            ->nullable()
-            ->constrained()
-            ->onDelete('set null');
+            $table->foreignId('customer_id')
+                ->nullable()
+                ->constrained()
+                ->onDelete('set null');
 
-        $table->foreignId('seller_id')
-            ->nullable()
-            ->constrained('users')
-            ->onDelete('set null');
+            $table->foreignId('seller_id')
+                ->nullable()
+                ->constrained('users')
+                ->onDelete('set null');
 
-        $table->timestamps();
-    });
-}
+            $table->timestamps();
+        });
+    }
 
     public function down(): void
     {

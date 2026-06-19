@@ -27,47 +27,57 @@ class CartSeeder extends Seeder
 
         // SCENARIO A: The Professional Seller Cart (For a specific Customer)
         $sellerCart = Cart::create([
-            'store_id'    => $store->id,
-            'user_id'     => $seller->id,
-            'seller_id'   => $seller->id,
+            'store_id' => $store->id,
+            'user_id' => $seller->id,
+            'seller_id' => $seller->id,
             'customer_id' => $customer->id,
-            'status'      => 'pending',
+            'status' => 'pending',
+            'priority' => 1,
+        ]);
+
+        // SCENARIO B: The Guest Visitor Cart
+        $guestCart = Cart::create([
+            'store_id' => $store->id,
+            'user_id' => null,
+            'session_id' => Str::random(40),
+            'status' => 'pending',
+            'priority' => 2, // Added priority
         ]);
 
         // Add 3 variants to this cart
         foreach ($variants->random(3) as $variant) {
             $sellerCart->variants()->attach($variant->id, [
                 'quantity' => rand(1, 10),
-                'price'    => 150.00, // Captured price
+                'price' => 150.00, // Captured price
                 'store_id' => $store->id,
             ]);
         }
 
         // SCENARIO B: The Guest Visitor Cart (Anonymous)
         $guestCart = Cart::create([
-            'store_id'   => $store->id,
-            'user_id'    => null,
+            'store_id' => $store->id,
+            'user_id' => null,
             'session_id' => Str::random(40),
-            'status'     => 'pending',
+            'status' => 'pending',
         ]);
 
         $guestCart->variants()->attach($variants->first()->id, [
             'quantity' => 1,
-            'price'    => 200.00,
+            'price' => 200.00,
             'store_id' => $store->id,
         ]);
 
         // SCENARIO C: A Completed Transaction
         $oldCart = Cart::create([
-            'store_id'    => $store->id,
-            'user_id'     => $seller->id,
+            'store_id' => $store->id,
+            'user_id' => $seller->id,
             'customer_id' => $customer->id,
-            'status'      => 'completed',
+            'status' => 'completed',
         ]);
 
         $oldCart->variants()->attach($variants->last()->id, [
             'quantity' => 5,
-            'price'    => 120.50,
+            'price' => 120.50,
             'store_id' => $store->id,
         ]);
     }

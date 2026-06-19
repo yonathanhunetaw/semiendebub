@@ -10,6 +10,7 @@ use App\Models\Seller\Cart;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use App\Services\CartService;
 
@@ -43,9 +44,9 @@ class CartController extends Controller
     {
         $user = auth()->user();
 
-        $carts = Cart::with(['customer', 'seller', 'variants']) // MUST load 'variants'
+        $carts = Cart::with(['customer', 'seller', 'variants'])
             ->visibleTo($user)
-            ->latest()
+            ->orderedByPriority() // Changed from ->latest()
             ->paginate(15);
 
         return Inertia::render('Seller/Carts/Index', [
@@ -102,30 +103,28 @@ class CartController extends Controller
      */
     public function show(Cart $cart)
     {
-        // Authorization check
         $this->authorize('view', $cart);
-
-        // Load 'variants' and the 'item' they belong to
         $cart->load(['customer', 'variants.item']);
+
+        // Determine type: business or individual (fallback to individual)
+        $customerType = $cart->customer->active_pricing_customer_type ?? 'individual';
 
         $cartData = [
             'id' => $cart->id,
             'status' => $cart->status,
-            'session_id' => $cart->session_id,
             'customer' => $cart->customer,
-            'items' => $cart->variants->map(function ($variant) {
+            'items' => $cart->variants->map(function ($variant) use ($customerType) {
                 return [
                     'id' => $variant->id,
-                    'product_name' => $variant->item?->product_name ?? 'Unknown Item',
-                    'price' => $variant->pivot->price,
+                    'product_name' => $variant->item?->product_name ?? 'Unknown',
+                    // Use the calculation engine here
+                    'price' => \App\Services\PriceProvider::getFinalPriceWithTax([$variant->pivot->price], $customerType),
                     'quantity' => $variant->pivot->quantity,
                 ];
             }),
         ];
 
-        return Inertia::render('Seller/Carts/Show', [
-            'cart' => $cartData
-        ]);
+        return Inertia::render('Seller/Carts/Show', ['cart' => $cartData]);
     }
 
     /**
@@ -271,5 +270,19 @@ class CartController extends Controller
         $cart->variants()->detach($variant->id);
 
         return back()->with('success', 'Item removed from cart.');
+    }
+
+    public function reorder(Request $request)
+    {
+        $request->validate(['order' => 'required|array']);
+
+        DB::transaction(function () use ($request) {
+            foreach ($request->order as $index => $cartId) {
+                Cart::where('id', $cartId)->update(['priority' => $index]);
+            }
+        });
+
+        // CHANGE THIS LINE: Return back() instead of json()
+        return redirect()->back();
     }
 }
