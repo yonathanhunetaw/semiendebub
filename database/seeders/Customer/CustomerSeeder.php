@@ -16,6 +16,7 @@ class CustomerSeeder extends Seeder
         // You can insert sample customers here, using a factory or manually
         DB::table('customers')->insert([
             [
+                'tin_number' => '0001234567',
                 'first_name' => 'Abebe',
                 'last_name' => 'Damtew',
                 'email' => 'abebe.damtew@mail.com',
@@ -35,6 +36,17 @@ class CustomerSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+            [
+                'tin_number' => '0009998887', // Added a new customer
+                'first_name' => 'Tigist',
+                'last_name' => 'Bekele',
+                'email' => 'tigist.bekele@mail.com',
+                'phone_number' => '0911223344',
+                'city' => 'Dire Dawa',
+                'created_by' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
             // Add more customers as needed
         ]);
         // Use the factory to generate additional users
