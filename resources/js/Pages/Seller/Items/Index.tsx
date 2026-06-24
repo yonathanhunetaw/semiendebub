@@ -51,6 +51,7 @@ interface Props {
     store: any;
     nextPageUrl?: string | null;
     filters?: { search: string };
+    has_tin_cart?: boolean;
 }
 
 // ======================== IMAGE RESOLVER ========================
@@ -113,7 +114,7 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
 }
 
 // ======================== MAIN DASHBOARD ========================
-export default function Dashboard({ items: initialItems, store, nextPageUrl, filters = { search: '' } }: Props) {
+export default function Dashboard({ items: initialItems, store, nextPageUrl, filters = { search: '' }, has_tin_cart = false }: Props) {
     const theme = useTheme();
     const [items, setItems] = React.useState(initialItems);
     const [hasNextPage, setHasNextPage] = React.useState(!!nextPageUrl);
@@ -122,8 +123,13 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
     const [searchInput, setSearchInput] = React.useState(filters?.search || "");
     const observerRef = React.useRef<HTMLDivElement | null>(null);
     const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
+    const isScrollingRef = React.useRef(false);
 
     React.useEffect(() => {
+        if (isScrollingRef.current) {
+            isScrollingRef.current = false;
+            return;
+        }
         setItems(initialItems);
         setHasNextPage(!!nextPageUrl);
         setPage(2);
@@ -138,6 +144,7 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
     const loadMore = () => {
         if (isLoading || !hasNextPage) return;
         setIsLoading(true);
+        isScrollingRef.current = true;
         router.get(
             route("seller.dashboard"),
             { page, search: searchInput },
@@ -306,9 +313,17 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                         }}
                     >
                         {items.map((item) => {
-                            // ---- 🔥 DISCOUNT LOGIC ----
-                            const originalPrice = item.store_price ?? 0;
-                            const discountFromMatrix = item.pricing_matrix?.discount_price ?? null;
+                            // ---- 🔥 DISCOUNT & VAT LOGIC ----
+                            let originalPrice = item.store_price ?? 0;
+                            let discountFromMatrix = item.pricing_matrix?.discount_price ?? null;
+                            
+                            if (has_tin_cart) {
+                                originalPrice = originalPrice * 1.15;
+                                if (discountFromMatrix !== null) {
+                                    discountFromMatrix = discountFromMatrix * 1.15;
+                                }
+                            }
+
                             const discountEnds = item.pricing_matrix?.discount_ends_at ?? item.discount_ends_at ?? null;
                             const hasDiscount = discountFromMatrix !== null && discountFromMatrix < originalPrice;
                             const displayPrice = hasDiscount ? discountFromMatrix! : originalPrice;
@@ -449,7 +464,7 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                             {item.product_name}
                                         </Typography>
 
-                                        <Stack direction="row" alignItems="baseline" spacing={0.5}>
+                                        <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mb: 0.5 }}>
                                             <Typography
                                                 fontWeight={700}
                                                 fontSize="1.1rem"
@@ -466,6 +481,11 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                                     }}
                                                 >
                                                     ${originalPrice.toFixed(2)}
+                                                </Typography>
+                                            )}
+                                            {has_tin_cart && (
+                                                <Typography variant="caption" color="success.main" sx={{ ml: 'auto !important', fontWeight: 600, fontSize: '0.65rem' }}>
+                                                    incl. 15% VAT
                                                 </Typography>
                                             )}
                                         </Stack>

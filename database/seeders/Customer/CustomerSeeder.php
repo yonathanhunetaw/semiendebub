@@ -22,16 +22,19 @@ class CustomerSeeder extends Seeder
                 'email' => 'abebe.damtew@mail.com',
                 'phone_number' => '0912345679',
                 'city' => 'Addis Ababa',
+                'store_id' => 1,
                 'created_by' => 1, // Assuming a user with ID 1 exists in the 'users' table
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
+                'tin_number' => null,
                 'first_name' => 'Chala',
                 'last_name' => 'Mulatu',
                 'email' => 'chala.mulatu@mail.com',
                 'phone_number' => '0912345678',
                 'city' => 'Awassa',
+                'store_id' => 1,
                 'created_by' => 2, // Assuming a user with ID 2 exists
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -43,6 +46,7 @@ class CustomerSeeder extends Seeder
                 'email' => 'tigist.bekele@mail.com',
                 'phone_number' => '0911223344',
                 'city' => 'Dire Dawa',
+                'store_id' => 1,
                 'created_by' => 1,
                 'created_at' => now(),
                 'updated_at' => now(),

@@ -312,7 +312,7 @@ export default function Show({
                 backHref={
                     selectedCart
                         ? route("seller.carts.show", selectedCart)
-                        : route("seller.items.index")
+                        : route("seller.dashboard")
                 }
                 subtitle={
                     selectedCart ? `Adding into Cart #${selectedCart}` : undefined

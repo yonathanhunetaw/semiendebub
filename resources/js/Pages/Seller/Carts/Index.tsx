@@ -13,6 +13,8 @@ import { CSS } from "@dnd-kit/utilities";
 import DragHandleIcon from "@mui/icons-material/DragHandle";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
+import ArrowUpwardRoundedIcon from "@mui/icons-material/ArrowUpwardRounded";
+import ArrowDownwardRoundedIcon from "@mui/icons-material/ArrowDownwardRounded";
 import { Avatar, Box, Chip, IconButton, Stack, Typography, useTheme } from "@mui/material";
 import SellerLayout from "@/Layouts/SellerLayout";
 
@@ -21,7 +23,7 @@ const formatName = (first?: string, last?: string) => [first, last].filter(Boole
 const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").toUpperCase().substring(0, 2);
 
 // 1. Fixed Layout for the Row
-function SortableCartRow({ cart, children }: { cart: any, children: React.ReactNode }) {
+function SortableCartRow({ cart, index, total, onMove, children }: { cart: any, index: number, total: number, onMove: (from: number, to: number) => void, children: React.ReactNode }) {
     const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: cart.id });
     const style = { transform: CSS.Transform.toString(transform), transition };
 
@@ -35,21 +37,38 @@ function SortableCartRow({ cart, children }: { cart: any, children: React.ReactN
                 gap: 1 // Natural spacing between handle and card
             }}
         >
-            {/* The Drag Handle - Now inline flex, not absolute */}
-            <Box
-                {...attributes}
-                {...listeners}
-                sx={{
-                    cursor: 'grab',
-                    display: 'flex',
-                    p: 1, // Larger touch target for mobile/mouse
-                    color: 'text.secondary',
-                    opacity: 0.5,
-                    '&:hover': { opacity: 1, color: 'text.primary' }
-                }}
-            >
-                <DragHandleIcon />
-            </Box>
+            <Stack sx={{ alignItems: 'center', justifyContent: 'center' }}>
+                <IconButton 
+                    size="small" 
+                    onClick={() => onMove(index, index - 1)}
+                    disabled={index === 0}
+                    sx={{ p: 0.5, visibility: index === 0 ? 'hidden' : 'visible' }}
+                >
+                    <ArrowUpwardRoundedIcon fontSize="small" />
+                </IconButton>
+                <Box
+                    {...attributes}
+                    {...listeners}
+                    sx={{
+                        cursor: 'grab',
+                        display: 'flex',
+                        p: 0.5, 
+                        color: 'text.secondary',
+                        opacity: 0.5,
+                        '&:hover': { opacity: 1, color: 'text.primary' }
+                    }}
+                >
+                    <DragHandleIcon />
+                </Box>
+                <IconButton 
+                    size="small" 
+                    onClick={() => onMove(index, index + 1)}
+                    disabled={index === total - 1}
+                    sx={{ p: 0.5, visibility: index === total - 1 ? 'hidden' : 'visible' }}
+                >
+                    <ArrowDownwardRoundedIcon fontSize="small" />
+                </IconButton>
+            </Stack>
 
             {/* The Card Container */}
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -75,6 +94,12 @@ export default function Index({ carts }: { carts: any }) {
         router.post(route('seller.carts.reorder'), { order: newOrder.map((c: any) => c.id) }, { preserveScroll: true });
     };
 
+    const handleMove = (from: number, to: number) => {
+        const newOrder = arrayMove(cartList, from, to);
+        setCartList(newOrder);
+        router.post(route('seller.carts.reorder'), { order: newOrder.map((c: any) => c.id) }, { preserveScroll: true });
+    };
+
     const isDark = theme.palette.mode === 'dark';
     const contrastText = isDark ? "#000" : "#fff";
     const subtextOpacity = isDark ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.7)";
@@ -95,12 +120,12 @@ export default function Index({ carts }: { carts: any }) {
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <SortableContext items={cartList} strategy={verticalListSortingStrategy}>
                         <Stack spacing={1.5}>
-                            {cartList.map((cart: any) => {
+                            {cartList.map((cart: any, index: number) => {
                                 const customerName = formatName(cart.customer?.first_name, cart.customer?.last_name);
                                 const sellerLabel = formatName(cart.seller?.first_name, cart.seller?.last_name);
 
                                 return (
-                                    <SortableCartRow key={cart.id} cart={cart}>
+                                    <SortableCartRow key={cart.id} cart={cart} index={index} total={cartList.length} onMove={handleMove}>
                                         {/* 3. Restored display: 'block' so the background doesn't collapse */}
                                         <Box
                                             component={Link}

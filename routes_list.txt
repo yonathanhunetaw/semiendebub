@@ -1,0 +1,21 @@
+
+   UnexpectedValueException 
+
+  There is no existing directory at "/var/www/html/storage/logs" and it could not be created: Permission denied
+
+  at vendor/monolog/monolog/src/Monolog/Handler/StreamHandler.php:253
+    249▕             });
+    250▕             $status = mkdir($dir, 0777, true);
+    251▕             restore_error_handler();
+    252▕             if (false === $status && !is_dir($dir) && strpos((string) $this->errorMessage, 'File exists') === false) {
+  ➜ 253▕                 throw new \UnexpectedValueException(sprintf('There is no existing directory at "%s" and it could not be created: '.$this->errorMessage, $dir));
+    254▕             }
+    255▕         }
+    256▕         $this->dirCreated = true;
+    257▕     }
+
+      [2m+13 vendor frames [22m
+
+  14  artisan:16
+      Illuminate\Foundation\Application::handleCommand(Object(Symfony\Component\Console\Input\ArgvInput))
+

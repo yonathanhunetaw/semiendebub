@@ -15,10 +15,10 @@ import {
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import React from "react";
-
 interface Customer {
     id: number;
     name: string;
+    tin_number?: string | null;
 }
 
 interface Props {
@@ -82,7 +82,7 @@ export default function Create({ customers, auth }: Props) {
                                 </MenuItem>
                                 {customers.map((customer) => (
                                     <MenuItem key={customer.id} value={customer.id}>
-                                        {customer.name}
+                                        {customer.name} {customer.tin_number ? `(TIN: ${customer.tin_number})` : '(No TIN)'}
                                     </MenuItem>
                                 ))}
                             </TextField>

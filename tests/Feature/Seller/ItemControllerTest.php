@@ -54,14 +54,14 @@ class ItemControllerTest extends TestCase
             'active' => true,
         ]);
 
-        $response = $this->get(route('seller.items.index'));
+        $response = $this->get(route('seller.dashboard'));
 
         $response->assertStatus(200);
 
         // Item B: Not linked to any store
         Item::factory()->create(['product_name' => 'Other Item']);
 
-        $response = $this->get(route('seller.items.index'));
+        $response = $this->get(route('seller.dashboard'));
 
         $response->assertStatus(200);
         $response->assertInertia(
@@ -83,7 +83,7 @@ class ItemControllerTest extends TestCase
             'item_variant_id' => $variant->id
         ]);
 
-        $response = $this->get(route('seller.items.index', ['search' => 'Gadget']));
+        $response = $this->get(route('seller.dashboard', ['search' => 'Gadget']));
 
         $response->assertInertia(
             fn(Assert $page) => $page
@@ -91,7 +91,7 @@ class ItemControllerTest extends TestCase
                 ->where('items.0.product_name', 'Specific Gadget')
         );
 
-        $responseEmpty = $this->get(route('seller.items.index', ['search' => 'NonExistent']));
+        $responseEmpty = $this->get(route('seller.dashboard', ['search' => 'NonExistent']));
         $responseEmpty->assertInertia(fn(Assert $page) => $page->has('items', 0));
     }
 

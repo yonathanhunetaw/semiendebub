@@ -103,78 +103,19 @@ class ItemController extends Controller
 
     private function enrichItemForIndex(Item $item, int $storeId): array
     {
-        $bestFinalPrice = null;
-        $bestBasePrice = null;
-        $bestDiscountPrice = null;
-        $bestDiscountEndsAt = null;
-        $totalStock = 0;
-
-        $generalImages = $item->general_images ?? [];
-        if (is_string($generalImages)) {
-            $decoded = json_decode($generalImages, true);
-            $generalImages = is_array($decoded) ? $decoded : [];
-        }
+        // 1. Restore Image Resolution Logic
+        $generalImages = is_string($item->general_images) ? json_decode($item->general_images, true) : ($item->general_images ?? []);
 
         $variantImages = collect();
-        $bestMatrix = null;
-
         foreach ($item->variants as $variant) {
-            $raw = $variant->images ?? [];
-            if (is_string($raw)) {
-                $decoded = json_decode($raw, true);
-                $raw = is_array($decoded) ? $decoded : [];
-            }
-            foreach ($raw as $img) {
-                if (!empty($img)) {
+            $raw = is_string($variant->images) ? json_decode($variant->images, true) : ($variant->images ?? []);
+            foreach ((array) $raw as $img) {
+                if (!empty($img))
                     $variantImages->push($this->resolveImageUrl($img));
-                }
-            }
-
-            foreach ($variant->storeVariants as $storeVariant) {
-                foreach ($storeVariant->stocks as $stock) {
-                    $totalStock += (int) $stock->quantity;
-                }
-
-                $matrix = $storeVariant->pricing_matrix;
-                if (is_string($matrix)) {
-                    $matrix = json_decode($matrix, true);
-                }
-
-                $basePrice = (float) ($matrix['price'] ?? 0);
-                $discountPrice = isset($matrix['discount_price']) && $matrix['discount_price'] !== null
-                    ? (float) $matrix['discount_price']
-                    : null;
-                $discountEndsAt = $matrix['discount_ends_at'] ?? null;
-
-                $isDiscountActive = $discountPrice !== null
-                    && $discountPrice > 0
-                    && $discountPrice < $basePrice
-                    && ($discountEndsAt === null || Carbon::now()->lt(Carbon::parse($discountEndsAt)));
-
-                $finalPrice = $isDiscountActive ? $discountPrice : $basePrice;
-
-                // Track the variant with the lowest final price,
-                // and also remember its base price and discount info.
-                if ($bestFinalPrice === null || $finalPrice < $bestFinalPrice) {
-                    $bestFinalPrice = $finalPrice;
-                    $bestBasePrice = $basePrice;
-                    $bestDiscountPrice = $isDiscountActive ? $discountPrice : null;
-                    $bestDiscountEndsAt = $isDiscountActive ? $discountEndsAt : null;
-                    $bestMatrix = $matrix;
-                }
             }
         }
 
-        // Now set the item-level fields correctly:
-        $originalPrice = $bestBasePrice ?? 0;
-        $finalPrice = $bestFinalPrice ?? $originalPrice;
-
-        // If a discount is active, use the discount price; otherwise null
-        $discountPriceForMatrix = ($bestDiscountPrice !== null && $bestDiscountPrice < $originalPrice)
-            ? $bestDiscountPrice
-            : null;
-
-        $imageUrls = collect($generalImages)
+        $imageUrls = collect((array) $generalImages)
             ->map(fn($path) => $this->resolveImageUrl($path))
             ->merge($variantImages)
             ->filter()
@@ -182,24 +123,34 @@ class ItemController extends Controller
             ->values()
             ->toArray();
 
+        // 2. Pricing and Stock logic
+        $storeVariant = $item->variants->flatMap->storeVariants
+            ->where('store_id', $storeId)
+            ->first();
+
+        $totalStock = 0;
+        foreach ($item->variants as $variant) {
+            foreach ($variant->storeVariants->where('store_id', $storeId) as $sv) {
+                $totalStock += (int) $sv->stocks->sum('quantity');
+            }
+        }
+
+        $priceLadder = $storeVariant ? PriceProvider::getPriceLadder($storeVariant->id, $storeId) : [];
+        $finalPrice = PriceProvider::getFinalPrice($priceLadder);
+        $basePrice = $priceLadder[0]['price'] ?? 0;
+
         return [
             'id' => $item->id,
             'product_name' => $item->product_name,
             'sold_count' => $item->sold_count ?? 0,
             'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
-            'image_urls' => $imageUrls,
-            'original_price' => $originalPrice,
+            'image_urls' => $imageUrls, // Now correctly populated
+            'store_price' => $basePrice,
             'final_price' => $finalPrice,
-            'discount_ends_at' => $bestDiscountEndsAt,
             'store_stock' => $totalStock,
-            'pricing_matrix' => [
-                'price' => $originalPrice,
-                'discount_price' => $discountPriceForMatrix,
-                'discount_ends_at' => $bestDiscountEndsAt,
-            ],
+            'pricing_matrix' => $priceLadder,
         ];
     }
-
     private function resolveImageUrl(?string $path): ?string
     {
         if (empty($path))
@@ -219,7 +170,7 @@ class ItemController extends Controller
         $perPage = 20;
 
         if (!$storeId) {
-            return redirect()->route('seller.items.index');
+            return redirect()->route('seller.dashboard');
         }
 
         $selectedCategoryId = $request->input('category_id');

@@ -40,10 +40,12 @@ interface DashboardItem {
     store_stock?: number;
     category?: { category_name: string } | null;
     pricing_matrix?: {
+        level: string;
         price: number;
         discount_price: number | null;
         discount_ends_at: string | null;
-    };
+        final: number;
+    }[];
 }
 
 interface Props {
@@ -389,12 +391,20 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                         }}
                     >
                         {items.map((item) => {
-                            // 🔥 Use the same discount logic as in Items page
-                            const originalPrice = item.store_price ?? 0;
-                            const discountFromMatrix = item.pricing_matrix?.discount_price ?? null;
-                            const discountEnds = item.pricing_matrix?.discount_ends_at ?? item.discount_ends_at ?? null;
+                            // 1. Get the store price from the ladder (first item in array)
+                            const storeLevel = item.pricing_matrix?.[0];
+
+                            // 2. Fallback to top-level properties if the matrix is empty
+                            const originalPrice = storeLevel?.price ?? item.store_price ?? 0;
+
+                            // 3. Get the discount from the matrix
+                            const discountFromMatrix = storeLevel?.discount_price ?? null;
+                            const discountEnds = storeLevel?.discount_ends_at ?? item.discount_ends_at ?? null;
+
+                            // 4. Calculate display price
                             const hasDiscount = discountFromMatrix !== null && discountFromMatrix < originalPrice;
-                            const displayPrice = hasDiscount ? discountFromMatrix! : originalPrice;
+                            const displayPrice = storeLevel?.final ?? (hasDiscount ? discountFromMatrix! : originalPrice);
+
                             const discountPercent =
                                 hasDiscount && originalPrice > 0
                                     ? Math.round(((originalPrice - discountFromMatrix!) / originalPrice) * 100)
