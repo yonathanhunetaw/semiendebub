@@ -33,7 +33,7 @@ interface DashboardItem {
     id: number;
     product_name: string;
     image_urls: string[];
-    store_price: number | null;        // original price
+    store_price: number | null;        // base store price
     final_price: number | null;        // discounted price (if any)
     discount_ends_at: string | null;   // when discount ends
     sold_count: number;
@@ -44,6 +44,11 @@ interface DashboardItem {
         discount_price: number | null;
         discount_ends_at: string | null;
     };
+    individual_price?: {
+        price: number | null;
+        discount_price: number | null;
+        discount_ends_at: string | null;
+    } | null;
 }
 
 interface Props {
@@ -52,6 +57,7 @@ interface Props {
     nextPageUrl?: string | null;
     filters?: { search: string };
     has_tin_cart?: boolean;
+    top_cart_is_individual?: boolean;
 }
 
 // ======================== IMAGE RESOLVER ========================
@@ -114,7 +120,7 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
 }
 
 // ======================== MAIN DASHBOARD ========================
-export default function Dashboard({ items: initialItems, store, nextPageUrl, filters = { search: '' }, has_tin_cart = false }: Props) {
+export default function Dashboard({ items: initialItems, store, nextPageUrl, filters = { search: '' }, has_tin_cart = false, top_cart_is_individual = false }: Props) {
     const theme = useTheme();
     const [items, setItems] = React.useState(initialItems);
     const [hasNextPage, setHasNextPage] = React.useState(!!nextPageUrl);
@@ -313,18 +319,34 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                         }}
                     >
                         {items.map((item) => {
-                            // ---- 🔥 DISCOUNT & VAT LOGIC ----
-                            let originalPrice = item.store_price ?? 0;
-                            let discountFromMatrix = item.pricing_matrix?.discount_price ?? null;
-                            
+                            // ---- 🔥 PRICE RESOLUTION ----
+                            // Priority: individual price (when top cart is guest/individual)
+                            //           → then base store pricing_matrix
+                            //           → VAT on top if business (TIN) cart
+
+                            let originalPrice: number;
+                            let discountFromMatrix: number | null;
+                            let discountEnds: string | null;
+
+                            if (top_cart_is_individual && item.individual_price?.price != null) {
+                                // Use the individual pricing tier
+                                originalPrice     = item.individual_price.price ?? 0;
+                                discountFromMatrix = item.individual_price.discount_price ?? null;
+                                discountEnds      = item.individual_price.discount_ends_at ?? null;
+                            } else {
+                                // Fall back to base store price
+                                originalPrice     = item.store_price ?? 0;
+                                discountFromMatrix = item.pricing_matrix?.discount_price ?? null;
+                                discountEnds      = item.pricing_matrix?.discount_ends_at ?? item.discount_ends_at ?? null;
+                            }
+
+                            // Apply VAT for business (TIN) carts
                             if (has_tin_cart) {
                                 originalPrice = originalPrice * 1.15;
                                 if (discountFromMatrix !== null) {
                                     discountFromMatrix = discountFromMatrix * 1.15;
                                 }
                             }
-
-                            const discountEnds = item.pricing_matrix?.discount_ends_at ?? item.discount_ends_at ?? null;
                             const hasDiscount = discountFromMatrix !== null && discountFromMatrix < originalPrice;
                             const displayPrice = hasDiscount ? discountFromMatrix! : originalPrice;
                             const discountPercent =
@@ -485,7 +507,7 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                             )}
                                             {has_tin_cart && (
                                                 <Typography variant="caption" color="success.main" sx={{ ml: 'auto !important', fontWeight: 600, fontSize: '0.65rem' }}>
-                                                    incl. 15% VAT
+                                                    incl. VAT
                                                 </Typography>
                                             )}
                                         </Stack>

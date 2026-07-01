@@ -40,7 +40,8 @@ export default function SellerLayout({
 
             <Box
                 sx={{
-                    width: "min(100%, 480px)",
+                    width: "100%",
+                    maxWidth: { xs: "480px", sm: "100%", md: "1200px" },
                     mx: "auto",
                     minHeight: "100vh",
                     position: "relative",
@@ -83,7 +84,8 @@ export default function SellerLayout({
                     left: "50%",
                     bottom: 0,
                     transform: "translateX(-50%)",
-                    width: "min(100%, 480px)",
+                    width: "100%",
+                    maxWidth: { xs: "480px", sm: "100%", md: "1200px" },
                     px: 2,
                     pb: "calc(12px + env(safe-area-inset-bottom))",
                     pointerEvents: "none",

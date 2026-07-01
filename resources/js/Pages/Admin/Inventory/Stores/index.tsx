@@ -23,6 +23,7 @@ import {
     TableRow,
     Tooltip,
     Typography,
+    Pagination,
 } from "@mui/material";
 
 interface Store {
@@ -34,8 +35,15 @@ interface Store {
     store_variants_count: number;
 }
 
+interface PaginatedStores {
+    data: Store[];
+    current_page: number;
+    last_page: number;
+    total: number;
+}
+
 interface Props {
-    stores: Store[];
+    stores: PaginatedStores;
 }
 
 export default function StoresIndex({ stores }: Props) {
@@ -99,9 +107,11 @@ export default function StoresIndex({ stores }: Props) {
                     borderRadius: "16px",
                     border: "1px solid",
                     borderColor: "divider",
+                    overflowX: "auto",
+                    width: "100%",
                 }}
             >
-                <Table>
+                <Table sx={{ minWidth: 600 }}>
                     <TableHead sx={{ bgcolor: "action.hover" }}>
                         <TableRow>
                             <TableCell sx={{ fontWeight: 800 }}>
@@ -122,8 +132,8 @@ export default function StoresIndex({ stores }: Props) {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {stores.length > 0 ? (
-                            stores.map((store) => (
+                        {stores.data.length > 0 ? (
+                            stores.data.map((store) => (
                                 <TableRow key={store.id} hover>
                                     <TableCell>
                                         <Typography
@@ -275,6 +285,19 @@ export default function StoresIndex({ stores }: Props) {
                         )}
                     </TableBody>
                 </Table>
+                
+                {stores.last_page > 1 && (
+                    <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', borderTop: '1px solid', borderColor: 'divider' }}>
+                        <Pagination 
+                            count={stores.last_page} 
+                            page={stores.current_page} 
+                            color="primary"
+                            onChange={(e, page) => {
+                                router.get(route('store.index'), { page }, { preserveState: true });
+                            }} 
+                        />
+                    </Box>
+                )}
             </TableContainer>
         </Box>
     );

@@ -53,6 +53,14 @@ class StoreVariant extends Model
         return $this->hasMany(StoreVariantCustomerPrice::class, 'store_variant_id');
     }
 
+    /**
+     * Get the individual price (if stored separately).
+     */
+    public function individualPrice()
+    {
+        return $this->hasOne(StoreVariantIndividualPrice::class, 'store_variant_id');
+    }
+
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);

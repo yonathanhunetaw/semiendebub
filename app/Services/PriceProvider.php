@@ -36,7 +36,20 @@ class PriceProvider
         $base = self::normalizeMatrix($matrix);
         $prices[] = self::formatMatrixPrice('store', $base);
 
-        // 2️⃣ Seller override
+        // 2️⃣ Individual override
+        if (Schema::hasTable('store_variants_individual_prices')) {
+            $individual = DB::table('store_variants_individual_prices')
+                ->where('store_variant_id', $storeVariantId)
+                ->where('active', true)
+                ->first();
+
+            if ($individual && !empty($individual->pricing_matrix)) {
+                $indMatrix = json_decode($individual->pricing_matrix, true);
+                $prices[] = self::formatMatrixPrice('individual', self::normalizeMatrix($indMatrix));
+            }
+        }
+
+        // 3️⃣ Seller override
         if ($sellerId && Schema::hasTable('store_variants_seller_prices')) {
             $seller = DB::table('store_variants_seller_prices')
                 ->where('store_variant_id', $storeVariantId)
@@ -50,7 +63,7 @@ class PriceProvider
             }
         }
 
-        // 3️⃣ Customer override
+        // 4️⃣ Customer override
         if ($customerId && Schema::hasTable('store_variants_customer_prices')) {
             $customer = DB::table('store_variants_customer_prices')
                 ->where('store_variant_id', $storeVariantId)

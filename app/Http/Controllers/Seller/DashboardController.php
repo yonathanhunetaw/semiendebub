@@ -46,8 +46,12 @@ class DashboardController extends Controller
             ->where('status', 'open')
             ->orderBy('priority', 'asc')
             ->first();
-            
-        $hasTinCart = $topCart && $topCart->customer && !empty($topCart->customer->tin_number);
+
+        $hasTinCart = $topCart && $topCart->customer && !empty($topCart->customer->tin_number); // HAS tin = Individual = VAT
+
+        // Business (no TIN / guest) → show individual price tier, no VAT badge
+        $topCartIsIndividual = $topCart && (is_null($topCart->customer_id) || empty($topCart->customer?->tin_number));
+        $topCartIsGuest      = $topCart && is_null($topCart->customer_id);
 
         // 🔹 1. Build the query – identical to ItemController::index
         $query = Item::where('status', 'active')
@@ -91,15 +95,16 @@ class DashboardController extends Controller
 
         // 🔹 3. Return the exact same structure as ItemController::index
         return Inertia::render('Seller/Items/Index', [
-            'items' => $items,
-            'store' => $store,
+            'items'       => $items,
+            'store'       => $store,
             'nextPageUrl' => $paginator->nextPageUrl(),
-            'filters' => [
-                'search' => $search ?? '',
+            'filters'     => [
+                'search'  => $search ?? '',
                 'cart_id' => $request->integer('cart_id') ?: null,
             ],
-            'categories' => $categoryNames,
-            'has_tin_cart' => $hasTinCart,
+            'categories'           => $categoryNames,
+            'has_tin_cart'         => $hasTinCart,
+            'top_cart_is_individual' => $topCartIsIndividual,
         ]);
     }
 
@@ -142,14 +147,23 @@ class DashboardController extends Controller
             }
         }
 
-        // 3. USE THE PRICE PROVIDER (Matches your Frontend expectation)
+        // 3. USE THE PRICE PROVIDER
         $priceLadder = $storeVariant
             ? PriceProvider::getPriceLadder($storeVariant->id, $storeId)
             : [];
 
-        $finalPrice = PriceProvider::getFinalPrice($priceLadder);
-        $basePrice = $priceLadder[0]['price'] ?? 0;
-        
+        // Find each pricing level by key
+        $levelMap = collect($priceLadder)->keyBy('level');
+
+        $storeLevel      = $levelMap->get('store')      ?? [];
+        $individualLevel = $levelMap->get('individual')  ?? null;
+
+        $basePrice      = $storeLevel['price'] ?? 0;
+        $baseDiscount   = $storeLevel['discount_price'] ?? null;
+        $baseEndsAt     = $storeLevel['discount_ends_at'] ?? null;
+
+        // Build the pricing_matrix that the TSX already knows how to render
+        // We tag it with individual_price so the frontend can pick it up separately
         $matrix = $storeVariant ? $storeVariant->pricing_matrix : null;
         if (is_string($matrix)) {
             $matrix = json_decode($matrix, true);
@@ -157,17 +171,23 @@ class DashboardController extends Controller
         $discountEndsAt = $matrix['discount_ends_at'] ?? null;
 
         return [
-            'id' => $item->id,
-            'product_name' => $item->product_name,
-            'sold_count' => $item->sold_count ?? 0,
-            'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
-            'image_urls' => $imageUrls,
-            'store_price' => $basePrice,
+            'id'            => $item->id,
+            'product_name'  => $item->product_name,
+            'sold_count'    => $item->sold_count ?? 0,
+            'category'      => $item->category ? ['category_name' => $item->category->category_name] : null,
+            'image_urls'    => $imageUrls,
+            'store_price'   => $basePrice,
             'original_price' => $basePrice,
-            'final_price' => $finalPrice,
-            'store_stock' => $totalStock,
+            'final_price'   => PriceProvider::getFinalPrice($priceLadder),
+            'store_stock'   => $totalStock,
             'pricing_matrix' => $matrix ?: null,
             'discount_ends_at' => $discountEndsAt,
+            // Individual price override — a separate flat object the TSX can use
+            'individual_price' => $individualLevel ? [
+                'price'            => $individualLevel['price'] ?? null,
+                'discount_price'   => $individualLevel['discount_price'] ?? null,
+                'discount_ends_at' => $individualLevel['discount_ends_at'] ?? null,
+            ] : null,
         ];
     }
 

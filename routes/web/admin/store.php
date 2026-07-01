@@ -39,6 +39,13 @@ Route::domain("admin.{$baseDomain}")
         Route::delete('store-variant-seller-prices/{price}', [StoreController::class, 'destroySellerPrice'])
             ->name('store-variant.seller-price.destroy');
 
+        // Individual-price upsert / delete (one per variant, no user FK)
+        Route::post('store-variants/{storeVariant}/individual-price', [StoreController::class, 'upsertIndividualPrice'])
+            ->name('store-variant.individual-price.upsert');
+
+        Route::delete('store-variant-individual-prices/{storeVariant}', [StoreController::class, 'destroyIndividualPrice'])
+            ->name('store-variant.individual-price.destroy');
+
         // ── Inventory sidebar sub-routes ──────────────────────────────────────
         Route::prefix('inventory')->name('inventory.')->group(function () {
             Route::get('/stores',    [StoreController::class, 'index'])->name('stores');

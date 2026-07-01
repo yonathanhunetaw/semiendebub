@@ -8,11 +8,14 @@ import { Head, useForm } from "@inertiajs/react";
 import {
     Box,
     Button,
+    Chip,
     MenuItem,
     Stack,
     TextField,
     Typography,
 } from "@mui/material";
+import StorefrontRoundedIcon from "@mui/icons-material/StorefrontRounded";
+import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import SaveIcon from "@mui/icons-material/Save";
 import React from "react";
 interface Customer {
@@ -78,11 +81,42 @@ export default function Create({ customers, auth }: Props) {
                                 variant="outlined"
                             >
                                 <MenuItem value="">
-                                    <em>None (Guest Cart)</em>
+                                    <Stack direction="row" spacing={1} alignItems="center">
+                                        <PersonRoundedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                                        <em>None (Guest Cart — Individual Pricing)</em>
+                                    </Stack>
                                 </MenuItem>
-                                {customers.map((customer) => (
+
+                                {/* Group: Individual customers (HAS TIN) */}
+                                {customers.some(c => c.tin_number) && (
+                                    <MenuItem disabled sx={{ opacity: 0.5, fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>
+                                        — Individual Customers —
+                                    </MenuItem>
+                                )}
+                                {customers.filter(c => c.tin_number).map((customer) => (
                                     <MenuItem key={customer.id} value={customer.id}>
-                                        {customer.name} {customer.tin_number ? `(TIN: ${customer.tin_number})` : '(No TIN)'}
+                                        <Stack direction="row" spacing={1} alignItems="center" width="100%" justifyContent="space-between">
+                                            <Stack direction="row" spacing={1} alignItems="center">
+                                                <PersonRoundedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                                                <Typography variant="body2">{customer.name}</Typography>
+                                            </Stack>
+                                            <Chip label={`TIN: ${customer.tin_number}`} size="small" sx={{ fontSize: 10, height: 18, bgcolor: "#edf7ed" }} />
+                                        </Stack>
+                                    </MenuItem>
+                                ))}
+
+                                {/* Group: Business customers (NO TIN) */}
+                                {customers.some(c => !c.tin_number) && (
+                                    <MenuItem disabled sx={{ opacity: 0.5, fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>
+                                        — Business Customers —
+                                    </MenuItem>
+                                )}
+                                {customers.filter(c => !c.tin_number).map((customer) => (
+                                    <MenuItem key={customer.id} value={customer.id}>
+                                        <Stack direction="row" spacing={1} alignItems="center">
+                                            <StorefrontRoundedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                                            <Typography variant="body2">{customer.name}</Typography>
+                                        </Stack>
                                     </MenuItem>
                                 ))}
                             </TextField>

@@ -26,6 +26,10 @@ services:
     image: mysql:8.0
     container_name: duka-db
     restart: unless-stopped
+
+    ports:
+    - "${MYSQL_EXPOSE_PORT:-3306}:3306"
+    
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:-duka}
       MYSQL_USER: ${DB_USERNAME:-duka_user}

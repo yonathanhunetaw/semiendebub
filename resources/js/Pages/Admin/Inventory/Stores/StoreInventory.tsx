@@ -25,6 +25,7 @@ interface CustomerPrice {
     id: number;
     customer_id: number;
     customer_name: string;
+    tin_number: string | null;
     price: string | number;
     discount_price: string | number | null;
     discount_ends_at: string | null;
@@ -39,6 +40,14 @@ interface SellerPrice {
     discount_ends_at: string | null;
 }
 
+interface IndividualPrice {
+    id: number;
+    price: string | number | null;
+    discount_price: string | number | null;
+    discount_ends_at: string | null;
+    active: boolean;
+}
+
 interface Variant {
     id: number;
     sku: string;
@@ -51,6 +60,7 @@ interface Variant {
     status: string;
     customer_prices: CustomerPrice[];
     seller_prices: SellerPrice[];
+    individual_price: IndividualPrice | null;
 }
 
 interface InventoryItem {
@@ -66,6 +76,7 @@ interface Person {
     id: number;
     first_name: string;
     last_name?: string;
+    tin_number?: string | null;
 }
 
 interface Props {
@@ -141,6 +152,13 @@ function EditDrawer({
     const [customerPrices, setCustomerPrices] = useState<CustomerPrice[]>(variant.customer_prices);
     const [sellerPrices, setSellerPrices] = useState<SellerPrice[]>(variant.seller_prices);
 
+    // ── Individual price state ───────────────────────────────────────────────
+    const [indPrice, setIndPrice] = useState(String(variant.individual_price?.price ?? ""));
+    const [indDiscount, setIndDiscount] = useState(String(variant.individual_price?.discount_price ?? ""));
+    const [indEndsAt, setIndEndsAt] = useState(variant.individual_price?.discount_ends_at?.substring(0, 10) ?? "");
+    const [indActive, setIndActive] = useState(variant.individual_price?.active ?? true);
+    const [individualPrice, setIndividualPrice] = useState<IndividualPrice | null>(variant.individual_price ?? null);
+
     // ── Add-customer-price form ──────────────────────────────────────────────
     const [cpCustomer, setCpCustomer] = useState("");
     const [cpPrice, setCpPrice] = useState("");
@@ -214,9 +232,12 @@ function EditDrawer({
                 customer_name: data.customer?.first_name 
                     ? `${data.customer.first_name} ${data.customer.last_name ?? ''}`.trim()
                     : `Customer #${data.customer_id}`,
-                price: data.price,
-                discount_price: data.discount_price,
-                discount_ends_at: data.discount_ends_at,
+                tin_number: data.customer?.tin_number ?? null,
+                price: data.pricing_matrix?.price ?? data.price ?? 0,
+                individual_price: null,
+                business_price: null,
+                discount_price: data.pricing_matrix?.discount_price ?? data.discount_price,
+                discount_ends_at: data.pricing_matrix?.discount_ends_at ?? data.discount_ends_at,
             };
             return idx >= 0 ? prev.map((cp, i) => i === idx ? row : cp) : [...prev, row];
         });
@@ -259,6 +280,27 @@ function EditDrawer({
         await axios.delete(`/store-variant-seller-prices/${id}`);
         setSellerPrices(prev => prev.filter(sp => sp.id !== id));
     }, "Seller price deleted successfully!");
+
+    // Save / update individual price
+    const saveIndividualPrice = () => wrap(async () => {
+        const { data } = await axios.post(`/store-variants/${variant.id}/individual-price`, {
+            price: indPrice,
+            discount_price: indDiscount || null,
+            discount_ends_at: indEndsAt || null,
+            active: indActive,
+        });
+        setIndividualPrice(data);
+    }, "Individual price saved successfully!");
+
+    // Clear individual price override
+    const clearIndividualPrice = () => wrap(async () => {
+        await axios.delete(`/store-variant-individual-prices/${variant.id}`);
+        setIndividualPrice(null);
+        setIndPrice("");
+        setIndDiscount("");
+        setIndEndsAt("");
+        setIndActive(true);
+    }, "Individual price cleared!");
 
     return (
         <>
@@ -359,7 +401,7 @@ function EditDrawer({
                     {tab === 1 && (
                         <Box mt={1}>
                             <Typography variant="subtitle2" color="text.secondary" mb={2}>
-                                Per-customer price overrides for this variant in this store.
+                                                Per-customer price overrides for this variant in this store.
                             </Typography>
 
                             {customerPrices.length > 0 ? (
@@ -416,15 +458,32 @@ function EditDrawer({
                                     <Select
                                         value={cpCustomer}
                                         label="Customer"
-                                        onChange={e => setCpCustomer(String(e.target.value))}
+                                        onChange={e => {
+                                            setCpCustomer(String(e.target.value));
+                                            setCpPrice(""); setCpIndividualPrice(""); setCpBusinessPrice("");
+                                            setCpDiscount(""); setCpEndsAt("");
+                                        }}
                                     >
-                                        {customers.map(c => (
-                                            <MenuItem key={c.id} value={c.id}>
-                                                {getPersonName(c)}
-                                            </MenuItem>
-                                        ))}
+                                        {customers.map(c => {
+                                            const hasTin = !!c.tin_number;
+                                            return (
+                                                <MenuItem key={c.id} value={c.id}>
+                                                    <Stack direction="row" spacing={1} alignItems="center" width="100%" justifyContent="space-between">
+                                                        <Typography variant="body2">{getPersonName(c)}</Typography>
+                                                        <Chip
+                                                            label={hasTin ? "Individual" : "Business"}
+                                                            size="small"
+                                                            color={hasTin ? "info" : "warning"}
+                                                            variant="outlined"
+                                                            sx={{ fontSize: 9, height: 18 }}
+                                                        />
+                                                    </Stack>
+                                                </MenuItem>
+                                            );
+                                        })}
                                     </Select>
                                 </FormControl>
+
                                 <TextField
                                     label="Price"
                                     type="number"
@@ -571,6 +630,120 @@ function EditDrawer({
                                 >
                                     Save Seller Price
                                 </Button>
+                            </Stack>
+                        </Box>
+                    )}
+
+                    {/* ── TAB 3: Individual Price ────────────────────────────────── */}
+                    {tab === 3 && (
+                        <Box mt={1}>
+                            <Typography variant="subtitle2" color="text.secondary" mb={2}>
+                                Override for walk-in / individual customers. One price applies to this variant regardless of who is buying.
+                            </Typography>
+
+                            {individualPrice ? (
+                                <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+                                    <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                                        <Typography variant="subtitle2" fontWeight={700}>Current Individual Price</Typography>
+                                        <Chip
+                                            label={individualPrice.active ? "Active" : "Inactive"}
+                                            size="small"
+                                            color={individualPrice.active ? "success" : "default"}
+                                            variant="outlined"
+                                        />
+                                    </Stack>
+                                    <Stack direction="row" spacing={3}>
+                                        <Box>
+                                            <Typography variant="caption" color="text.secondary">Price</Typography>
+                                            <Typography fontWeight={700}>{fmt(individualPrice.price)}</Typography>
+                                        </Box>
+                                        {individualPrice.discount_price && (
+                                            <Box>
+                                                <Typography variant="caption" color="text.secondary">Discount</Typography>
+                                                <Typography fontWeight={700} color="error.main">{fmt(individualPrice.discount_price)}</Typography>
+                                            </Box>
+                                        )}
+                                        {individualPrice.discount_ends_at && (
+                                            <Box>
+                                                <Typography variant="caption" color="text.secondary">Ends</Typography>
+                                                <Typography fontWeight={600} fontSize={13}>{individualPrice.discount_ends_at.substring(0, 10)}</Typography>
+                                            </Box>
+                                        )}
+                                    </Stack>
+                                </Paper>
+                            ) : (
+                                <Alert severity="info" sx={{ mb: 2 }}>No individual price override set. Base price applies.</Alert>
+                            )}
+
+                            <Divider sx={{ mb: 2 }} />
+                            <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
+                                {individualPrice ? "Update Individual Price" : "Set Individual Price"}
+                            </Typography>
+
+                            <Stack spacing={2}>
+                                <TextField
+                                    label="Individual Price"
+                                    type="number"
+                                    value={indPrice}
+                                    onChange={e => setIndPrice(e.target.value)}
+                                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                    size="small"
+                                    fullWidth
+                                />
+                                <TextField
+                                    label="Discount Price"
+                                    type="number"
+                                    value={indDiscount}
+                                    onChange={e => setIndDiscount(e.target.value)}
+                                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                    size="small"
+                                    fullWidth
+                                    helperText="Leave blank for no discount"
+                                />
+                                <TextField
+                                    label="Discount Ends At"
+                                    type="date"
+                                    value={indEndsAt}
+                                    onChange={e => setIndEndsAt(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    size="small"
+                                    fullWidth
+                                />
+                                <FormControl size="small" fullWidth>
+                                    <InputLabel>Status</InputLabel>
+                                    <Select
+                                        value={indActive ? "active" : "inactive"}
+                                        label="Status"
+                                        onChange={e => setIndActive(e.target.value === "active")}
+                                    >
+                                        <MenuItem value="active">Active</MenuItem>
+                                        <MenuItem value="inactive">Inactive</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <Stack direction="row" spacing={1}>
+                                    <Button
+                                        variant="contained"
+                                        startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+                                        onClick={saveIndividualPrice}
+                                        disabled={saving || !indPrice}
+                                        sx={{ flex: 1 }}
+                                    >
+                                        {individualPrice ? "Update" : "Set"} Individual Price
+                                    </Button>
+                                    {individualPrice && (
+                                        <Tooltip title="Clear individual price override">
+                                            <Button
+                                                variant="outlined"
+                                                color="error"
+                                                startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <DeleteIcon />}
+                                                onClick={clearIndividualPrice}
+                                                disabled={saving}
+                                            >
+                                                Clear
+                                            </Button>
+                                        </Tooltip>
+                                    )}
+                                </Stack>
                             </Stack>
                         </Box>
                     )}

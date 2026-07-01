@@ -22,9 +22,10 @@ class StoreVariantSeeder extends Seeder
         $stores = Store::all();
         $now = Carbon::now();
         
-        // Optional: set to true if you also want seller/customer prices (can be very heavy)
+        // Optional: set to true if you also want seller/customer/individual prices (can be very heavy)
         $createSellerPrices = false;
         $createCustomerPrices = false;
+        $createIndividualPrices = true; // One override per variant — lightweight
 
         foreach ($stores as $store) {
             $this->command->info("Processing store: {$store->name} (ID: {$store->id})");
@@ -139,6 +140,34 @@ class StoreVariantSeeder extends Seeder
                 foreach (array_chunk($customerPriceData, 200) as $chunk) {
                     DB::table('store_variants_customer_prices')->upsert($chunk, ['store_variant_id', 'customer_id'], ['pricing_matrix', 'active', 'updated_at']);
                 }
+            }
+
+            // Optional individual prices — one row per store_variant, no user FK needed
+            if ($createIndividualPrices) {
+                $individualPriceData = [];
+                $storeVariantsForStore = StoreVariant::where('store_id', $store->id)->get();
+                foreach ($storeVariantsForStore as $sv) {
+                    $matrix = $sv->pricing_matrix;
+                    $basePrice = is_array($matrix) ? ($matrix['price'] ?? 0) : 0;
+                    // Individual price: ~3% below base, no discount expiry
+                    $indPrice = round($basePrice * 0.97, 2);
+                    $individualPriceData[] = [
+                        'store_variant_id' => $sv->id,
+                        'pricing_matrix'   => json_encode([
+                            'price'            => $indPrice,
+                            'discount_price'   => null,
+                            'discount_ends_at' => null,
+                        ]),
+                        'active'     => true,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+                foreach (array_chunk($individualPriceData, 200) as $chunk) {
+                    DB::table('store_variants_individual_prices')
+                        ->upsert($chunk, ['store_variant_id'], ['pricing_matrix', 'active', 'updated_at']);
+                }
+                $this->command->info("  └─ Individual prices seeded: " . count($individualPriceData));
             }
 
             $this->command->info("Finished store {$store->id}: created " . count($storeVariantsData) . " store variants.");

@@ -7,6 +7,7 @@ use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Models\Store\StoreVariantCustomerPrice;
 use App\Models\Store\StoreVariantSellerPrice;
+use App\Models\Store\StoreVariantIndividualPrice;
 use App\Models\Auth\Customer;
 use App\Services\PriceProvider;
 use App\Models\Auth\User;
@@ -20,10 +21,11 @@ class StoreController extends Controller
      */
     public function index()
     {
-        $stores = Store::withCount('storeVariants')
+        $paginator = Store::withCount('storeVariants')
             ->orderBy('name')
-            ->get()
-            ->map(fn($s) => [
+            ->paginate(10);
+            
+        $paginator->through(fn($s) => [
                 'id' => $s->id,
                 'name' => $s->name,
                 'location' => $s->location,
@@ -33,7 +35,7 @@ class StoreController extends Controller
             ]);
 
         return Inertia::render('Admin/Inventory/Stores/index', [
-            'stores' => $stores,
+            'stores' => $paginator,
         ]);
     }
 
@@ -61,6 +63,7 @@ class StoreController extends Controller
                     'stocks',
                     'customerPrices.customer',
                     'sellerPrices.seller',
+                    'individualPrice',
                 ]);
             }
         ]);
@@ -123,6 +126,7 @@ class StoreController extends Controller
                                 'id' => $cp->id,
                                 'customer_id' => $cp->customer_id,
                                 'customer_name' => $cp->customer?->first_name ?? "Customer #{$cp->customer_id}",
+                                'tin_number' => $cp->customer?->tin_number ?? null,
                                 'price' => $cp->pricing_matrix['price'] ?? 0,
                                 'discount_price' => $cp->pricing_matrix['discount_price'] ?? null,
                                 'discount_ends_at' => $cp->pricing_matrix['discount_ends_at'] ?? null,
@@ -136,12 +140,20 @@ class StoreController extends Controller
                                 'discount_price' => $sp->pricing_matrix['discount_price'] ?? null,
                                 'discount_ends_at' => $sp->pricing_matrix['discount_ends_at'] ?? null,
                             ])->values(),
+
+                            'individual_price' => $sv->individualPrice ? [
+                                'id'              => $sv->individualPrice->id,
+                                'price'           => $sv->individualPrice->pricing_matrix['price'] ?? null,
+                                'discount_price'  => $sv->individualPrice->pricing_matrix['discount_price'] ?? null,
+                                'discount_ends_at'=> $sv->individualPrice->pricing_matrix['discount_ends_at'] ?? null,
+                                'active'          => (bool) $sv->individualPrice->active,
+                            ] : null,
                         ];
                     })->values(),
                 ];
             })->values();
 
-        $customers = Customer::orderBy('first_name')->get(['id', 'first_name', 'last_name']);
+        $customers = Customer::orderBy('first_name')->get(['id', 'first_name', 'last_name', 'tin_number']);
         $sellers = User::where('role', 'seller')
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name']);
@@ -294,6 +306,7 @@ class StoreController extends Controller
                     'id' => $cp->id,
                     'customer_id' => $cp->customer_id,
                     'customer_name' => $cp->customer?->first_name ?? "Customer #{$cp->customer_id}",
+                    'tin_number' => $cp->customer?->tin_number ?? null,
                     'price' => $cp->pricing_matrix['price'] ?? 0,
                     'discount_price' => $cp->pricing_matrix['discount_price'] ?? null,
                     'discount_ends_at' => $cp->pricing_matrix['discount_ends_at'] ?? null,
@@ -306,6 +319,13 @@ class StoreController extends Controller
                     'discount_price' => $sp->pricing_matrix['discount_price'] ?? null,
                     'discount_ends_at' => $sp->pricing_matrix['discount_ends_at'] ?? null,
                 ]),
+                'individual_price' => $storeVariant->individualPrice ? [
+                    'id'               => $storeVariant->individualPrice->id,
+                    'price'            => $storeVariant->individualPrice->pricing_matrix['price'] ?? null,
+                    'discount_price'   => $storeVariant->individualPrice->pricing_matrix['discount_price'] ?? null,
+                    'discount_ends_at' => $storeVariant->individualPrice->pricing_matrix['discount_ends_at'] ?? null,
+                    'active'           => (bool) $storeVariant->individualPrice->active,
+                ] : null,
             ],
         ]);
     }
@@ -316,21 +336,25 @@ class StoreController extends Controller
     public function upsertCustomerPrice(Request $request, StoreVariant $storeVariant)
     {
         $validated = $request->validate([
-            'customer_id' => 'required|exists:customers,id',
-            'price' => 'required|numeric|min:0',
-            'discount_price' => 'nullable|numeric|min:0',
+            'customer_id'      => 'required|exists:customers,id',
+            'price'            => 'required|numeric|min:0',
+            'discount_price'   => 'nullable|numeric|min:0',
             'discount_ends_at' => 'nullable|date',
         ]);
+
+        $pricingMatrix = [
+            'price'            => (float) $validated['price'],
+            'discount_price'   => isset($validated['discount_price']) ? (float) $validated['discount_price'] : null,
+            'discount_ends_at' => $validated['discount_ends_at'] ?? null,
+        ];
 
         $record = StoreVariantCustomerPrice::updateOrCreate(
             [
                 'store_variant_id' => $storeVariant->id,
-                'customer_id' => $validated['customer_id'],
+                'customer_id'      => $validated['customer_id'],
             ],
             [
-                'price' => $validated['price'],
-                'discount_price' => $validated['discount_price'] ?? null,
-                'discount_ends_at' => $validated['discount_ends_at'] ?? null,
+                'pricing_matrix' => $pricingMatrix,
             ]
         );
 
@@ -383,6 +407,51 @@ class StoreController extends Controller
     public function destroySellerPrice(StoreVariantSellerPrice $price)
     {
         $price->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Upsert the individual price for a store variant.
+     * POST /store-variants/{storeVariant}/individual-price
+     */
+    public function upsertIndividualPrice(Request $request, StoreVariant $storeVariant)
+    {
+        $validated = $request->validate([
+            'price'            => 'required|numeric|min:0',
+            'discount_price'   => 'nullable|numeric|min:0',
+            'discount_ends_at' => 'nullable|date',
+            'active'           => 'boolean',
+        ]);
+
+        $record = StoreVariantIndividualPrice::updateOrCreate(
+            ['store_variant_id' => $storeVariant->id],
+            [
+                'pricing_matrix' => [
+                    'price'            => (float) $validated['price'],
+                    'discount_price'   => isset($validated['discount_price']) ? (float) $validated['discount_price'] : null,
+                    'discount_ends_at' => $validated['discount_ends_at'] ?? null,
+                ],
+                'active' => $validated['active'] ?? true,
+            ]
+        );
+
+        return response()->json([
+            'id'               => $record->id,
+            'price'            => $record->pricing_matrix['price'] ?? null,
+            'discount_price'   => $record->pricing_matrix['discount_price'] ?? null,
+            'discount_ends_at' => $record->pricing_matrix['discount_ends_at'] ?? null,
+            'active'           => (bool) $record->active,
+        ]);
+    }
+
+    /**
+     * Remove the individual price override for a store variant.
+     * DELETE /store-variant-individual-prices/{storeVariant}
+     */
+    public function destroyIndividualPrice(StoreVariant $storeVariant)
+    {
+        $storeVariant->individualPrice?->delete();
 
         return response()->json(['ok' => true]);
     }
