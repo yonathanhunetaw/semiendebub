@@ -5,6 +5,7 @@ services:
       dockerfile: docker/Dockerfile.dev
     volumes:
       - ../:/var/www/html:delegated
+      - /var/www/html/node_modules
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
       - ../storage/app/seed-images:/var/www/html/storage/app/seed-images:delegated

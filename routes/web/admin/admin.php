@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\Store\StoreController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\Inventory\WarehouseController;
 use App\Http\Controllers\Admin\Inventory\TransferController;
+use App\Http\Controllers\Admin\CanvasController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -66,6 +67,12 @@ Route::domain("admin.{$baseDomain}")
                 Route::get('/transfers/{transfer}', [TransferController::class, 'show'])->name('transfers.show');
                 Route::patch('/transfers/{transfer}/complete', [TransferController::class, 'complete'])->name('transfers.complete');
                 Route::patch('/transfers/{transfer}/cancel', [TransferController::class, 'cancel'])->name('transfers.cancel');
+            });
+
+            // ── Canvas ──
+            Route::prefix('canvas')->name('canvas.')->group(function () {
+                Route::get('/', fn () => Inertia::render('Admin/Canvas'))->name('index');
+                Route::post('/save', [CanvasController::class, 'save'])->name('save');
             });
         });
     });
