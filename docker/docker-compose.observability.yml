@@ -23,7 +23,7 @@ services:
       - glitchtip-web
     logging: *loki-logging
 
-  db:
+  duka-db:
     logging: *loki-logging
 
   lgtm:
