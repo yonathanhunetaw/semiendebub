@@ -116,7 +116,7 @@ if [ $CLEAN_VOLUMES -eq 1 ]; then
     COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
     
     # USE COMPOSE_ARGS HERE
-    docker compose "${COMPOSE_ARGS[@]}" down -v
+    docker compose --env-file .env "${COMPOSE_ARGS[@]}" down -v
     echo -e "${GREEN}Volumes cleaned${NC}"
 fi
 
@@ -171,9 +171,9 @@ if [ $FORCE_BUILD -eq 1 ]; then
     COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
     
     if [ $NO_CACHE -eq 1 ]; then
-        docker compose "${COMPOSE_ARGS[@]}" build --no-cache
+        docker compose --env-file .env "${COMPOSE_ARGS[@]}" build --no-cache
     else
-        docker compose "${COMPOSE_ARGS[@]}" build
+        docker compose --env-file .env "${COMPOSE_ARGS[@]}" build
     fi
 fi
 
@@ -189,7 +189,7 @@ fi
 COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
 
 # Use these arguments when calling docker compose up
-docker compose "${COMPOSE_ARGS[@]}" up -d
+docker compose --env-file .env "${COMPOSE_ARGS[@]}" up -d
 
 # Now call your main deploy.sh
 ./deploy.sh
