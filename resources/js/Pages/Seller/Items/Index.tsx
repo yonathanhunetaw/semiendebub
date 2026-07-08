@@ -62,10 +62,19 @@ interface Props {
 
 // ======================== IMAGE RESOLVER ========================
 const resolveImageUrl = (path?: string): string => {
-    if (!path) return NO_IMAGE_PLACEHOLDER;
-    if (path.startsWith("http") || path.startsWith("data:")) return path;
+    console.log("[resolveImageUrl] path:", path);
+    if (!path) {
+        console.log("[resolveImageUrl] No path, using placeholder");
+        return NO_IMAGE_PLACEHOLDER;
+    }
+    if (path.startsWith("http") || path.startsWith("data:")) {
+        console.log("[resolveImageUrl] Using absolute URL:", path);
+        return path;
+    }
     const baseUrl = import.meta.env.VITE_AWS_URL || "http://duka.test:9000/duka-images";
-    return `${baseUrl}/${path.replace(/^\//, "")}`;
+    const resolved = `${baseUrl}/${path.replace(/^\//, "")}`;
+    console.log("[resolveImageUrl] Resolved:", resolved);
+    return resolved;
 };
 
 // ======================== DISCOUNT COUNTDOWN (full‑width) ========================
@@ -78,10 +87,14 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
     } | null>(null);
     const [isExpired, setIsExpired] = React.useState(false);
 
+    console.log("[DiscountCountdown] rendered with endsAt:", endsAt);
+
     React.useEffect(() => {
+        console.log("[DiscountCountdown] useEffect - endsAt:", endsAt);
         if (!endsAt) return;
         const calculate = () => {
             const diff = new Date(endsAt).getTime() - Date.now();
+            console.log("[DiscountCountdown] diff (ms):", diff);
             if (diff <= 0) {
                 setIsExpired(true);
                 return null;
@@ -96,16 +109,24 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
         const update = () => setTimeLeft(calculate());
         update();
         const interval = setInterval(update, 1000);
-        return () => clearInterval(interval);
+        return () => {
+            console.log("[DiscountCountdown] clearing interval");
+            clearInterval(interval);
+        };
     }, [endsAt]);
 
-    if (isExpired || !endsAt || !timeLeft) return null;
+    if (isExpired || !endsAt || !timeLeft) {
+        if (isExpired) console.log("[DiscountCountdown] expired");
+        return null;
+    }
     const { days, hours, minutes, seconds } = timeLeft;
     let label = "";
     if (days > 0) label = `${days}d ${hours}h`;
     else if (hours > 0) label = `${hours}h ${minutes}m`;
     else if (minutes > 0) label = `${minutes}m ${seconds}s`;
     else label = `${seconds}s`;
+
+    console.log("[DiscountCountdown] timeLeft:", timeLeft, "label:", label);
 
     return (
         <Tooltip title={`Discount ends on ${new Date(endsAt).toLocaleString()}`}>
@@ -121,6 +142,8 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
 
 // ======================== MAIN DASHBOARD ========================
 export default function Dashboard({ items: initialItems, store, nextPageUrl, filters = { search: '' }, has_tin_cart = false, top_cart_is_individual = false }: Props) {
+    console.log("[Dashboard] Component rendered with props:", { initialItems: initialItems?.length, store, nextPageUrl, filters, has_tin_cart, top_cart_is_individual });
+
     const theme = useTheme();
     const [items, setItems] = React.useState(initialItems);
     const [hasNextPage, setHasNextPage] = React.useState(!!nextPageUrl);
@@ -131,14 +154,19 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
     const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
     const isScrollingRef = React.useRef(false);
 
+    console.log("[Dashboard] Initial state:", { itemsCount: items.length, hasNextPage, page, searchInput });
+
     React.useEffect(() => {
+        console.log("[Dashboard] useEffect - props updated, resetting state");
         if (isScrollingRef.current) {
+            console.log("[Dashboard] skipping reset due to scroll load");
             isScrollingRef.current = false;
             return;
         }
         setItems(initialItems);
         setHasNextPage(!!nextPageUrl);
         setPage(2);
+        console.log("[Dashboard] State reset: items count", initialItems.length, "nextPageUrl:", nextPageUrl);
     }, [initialItems, nextPageUrl]);
 
     // Barcode scanner
@@ -146,11 +174,18 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
     const scannerRef = React.useRef<Html5QrcodeScanner | null>(null);
     const [scannerInitialized, setScannerInitialized] = React.useState(false);
 
+    console.log("[Dashboard] scanner state:", { scannerOpen, scannerInitialized });
+
     // ========== INFINITE SCROLL ==========
     const loadMore = () => {
-        if (isLoading || !hasNextPage) return;
+        console.log("[loadMore] called, isLoading:", isLoading, "hasNextPage:", hasNextPage);
+        if (isLoading || !hasNextPage) {
+            console.log("[loadMore] skipping because loading or no next page");
+            return;
+        }
         setIsLoading(true);
         isScrollingRef.current = true;
+        console.log("[loadMore] fetching page:", page, "search:", searchInput);
         router.get(
             route("seller.dashboard"),
             { page, search: searchInput },
@@ -159,54 +194,85 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                 preserveScroll: true,
                 only: ["items", "nextPageUrl"],
                 onSuccess: (resp: any) => {
+                    console.log("[loadMore] onSuccess, response props:", resp.props);
                     const newItems = resp.props.items || [];
-                    setItems((prev) => [...prev, ...newItems]);
+                    console.log("[loadMore] new items count:", newItems.length);
+                    setItems((prev) => {
+                        console.log("[loadMore] previous items count:", prev.length);
+                        const merged = [...prev, ...newItems];
+                        console.log("[loadMore] merged items count:", merged.length);
+                        return merged;
+                    });
                     setHasNextPage(!!resp.props.nextPageUrl);
-                    setPage((p) => p + 1);
+                    setPage((p) => {
+                        console.log("[loadMore] incrementing page from", p, "to", p + 1);
+                        return p + 1;
+                    });
                     setIsLoading(false);
                 },
-                onError: () => setIsLoading(false),
+                onError: (error) => {
+                    console.error("[loadMore] onError:", error);
+                    setIsLoading(false);
+                },
             }
         );
     };
 
     React.useEffect(() => {
+        console.log("[Dashboard] useEffect - setting up intersection observer, hasNextPage:", hasNextPage);
         if (!observerRef.current || !hasNextPage) return;
         const observer = new IntersectionObserver(
             (entries) => {
-                if (entries[0].isIntersecting && !isLoading) loadMore();
+                console.log("[IntersectionObserver] entries:", entries);
+                if (entries[0].isIntersecting && !isLoading) {
+                    console.log("[IntersectionObserver] intersecting, loading more");
+                    loadMore();
+                }
             },
             { threshold: 0.1, rootMargin: "100px" }
         );
         observer.observe(observerRef.current);
-        return () => observer.disconnect();
+        console.log("[Dashboard] observer attached");
+        return () => {
+            console.log("[Dashboard] observer disconnected");
+            observer.disconnect();
+        };
     }, [hasNextPage, isLoading]);
 
     // ========== SEARCH ==========
     const navigateToSearch = (query: string) => {
-        if (!query.trim()) return;
+        console.log("[navigateToSearch] query:", query);
+        if (!query.trim()) {
+            console.log("[navigateToSearch] empty query, ignoring");
+            return;
+        }
         router.get(route("seller.items.search"), { search: query }, {
             preserveState: true,
         });
     };
 
     const handleSearchIconClick = () => {
+        console.log("[handleSearchIconClick] searchInput:", searchInput);
         navigateToSearch(searchInput);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === "Enter") {
             e.preventDefault();
+            console.log("[handleKeyDown] Enter pressed, searchInput:", searchInput);
             navigateToSearch(searchInput);
         }
     };
 
     // ========== BARCODE SCANNER ==========
     React.useEffect(() => {
+        console.log("[Dashboard] scanner useEffect - scannerOpen:", scannerOpen, "scannerInitialized:", scannerInitialized);
         if (scannerOpen && !scannerInitialized) {
+            console.log("[Dashboard] initializing scanner");
             setTimeout(() => {
                 const element = document.getElementById("barcode-reader-dashboard");
                 if (element) {
+                    console.log("[Dashboard] scanner element found, creating scanner");
                     scannerRef.current = new Html5QrcodeScanner(
                         "barcode-reader-dashboard",
                         { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
@@ -214,19 +280,26 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                     );
                     scannerRef.current.render(
                         (decodedText) => {
+                            console.log("[Scanner] decoded text:", decodedText);
                             setScannerOpen(false);
                             if (decodedText.trim()) {
+                                console.log("[Scanner] navigating to search with:", decodedText);
                                 router.get(route("seller.items.search"), { search: decodedText });
                             }
                         },
-                        (error) => console.warn(error)
+                        (error) => {
+                            console.warn("[Scanner] error:", error);
+                        }
                     );
                     setScannerInitialized(true);
+                } else {
+                    console.warn("[Dashboard] scanner element not found");
                 }
             }, 100);
         }
         return () => {
             if (scannerOpen === false && scannerRef.current) {
+                console.log("[Dashboard] cleaning up scanner");
                 scannerRef.current.clear();
                 scannerRef.current = null;
                 setScannerInitialized(false);
@@ -260,7 +333,10 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                 fullWidth
                                 placeholder="Search products..."
                                 value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
+                                onChange={(e) => {
+                                    console.log("[SearchInput] onChange, value:", e.target.value);
+                                    setSearchInput(e.target.value);
+                                }}
                                 onKeyDown={handleKeyDown}
                                 sx={{ fontSize: "0.95rem" }}
                             />
@@ -281,7 +357,10 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                         </IconButton>
 
                         <IconButton
-                            onClick={() => setScannerOpen(true)}
+                            onClick={() => {
+                                console.log("[Scanner] button clicked, opening scanner");
+                                setScannerOpen(true);
+                            }}
                             sx={{
                                 width: 48,
                                 height: 48,
@@ -333,11 +412,13 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                 originalPrice     = item.individual_price.price ?? 0;
                                 discountFromMatrix = item.individual_price.discount_price ?? null;
                                 discountEnds      = item.individual_price.discount_ends_at ?? null;
+                                console.log(`[Price] item ${item.id} using individual price: original=${originalPrice}, discount=${discountFromMatrix}, ends=${discountEnds}`);
                             } else {
                                 // Fall back to base store price
                                 originalPrice     = item.store_price ?? 0;
                                 discountFromMatrix = item.pricing_matrix?.discount_price ?? null;
                                 discountEnds      = item.pricing_matrix?.discount_ends_at ?? item.discount_ends_at ?? null;
+                                console.log(`[Price] item ${item.id} using store price: original=${originalPrice}, discount=${discountFromMatrix}, ends=${discountEnds}`);
                             }
 
                             // Apply VAT for business (TIN) carts
@@ -346,6 +427,7 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                 if (discountFromMatrix !== null) {
                                     discountFromMatrix = discountFromMatrix * 1.15;
                                 }
+                                console.log(`[Price] item ${item.id} applied VAT: original=${originalPrice}, discount=${discountFromMatrix}`);
                             }
                             const hasDiscount = discountFromMatrix !== null && discountFromMatrix < originalPrice;
                             const displayPrice = hasDiscount ? discountFromMatrix! : originalPrice;
@@ -353,6 +435,10 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                 hasDiscount && originalPrice > 0
                                     ? Math.round(((originalPrice - discountFromMatrix!) / originalPrice) * 100)
                                     : 0;
+
+                            if (hasDiscount) {
+                                console.log(`[Price] item ${item.id} has discount: displayPrice=${displayPrice}, discountPercent=${discountPercent}`);
+                            }
 
                             const imgSrc = item.image_urls?.[0]
                                 ? resolveImageUrl(item.image_urls[0])
@@ -404,10 +490,12 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                         <img
                                             src={imgSrc}
                                             alt={item.product_name}
-                                            onLoad={() =>
-                                                setLoaded((prev) => ({ ...prev, [item.id]: true }))
-                                            }
+                                            onLoad={() => {
+                                                console.log(`[Image] item ${item.id} loaded`);
+                                                setLoaded((prev) => ({ ...prev, [item.id]: true }));
+                                            }}
                                             onError={(e) => {
+                                                console.error(`[Image] item ${item.id} failed to load, src:`, imgSrc);
                                                 const target = e.currentTarget;
                                                 if (target.src.includes(NO_IMAGE_PLACEHOLDER)) return;
                                                 target.src = NO_IMAGE_PLACEHOLDER;
@@ -529,32 +617,50 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
 
                     {/* Loading / End indicators */}
                     {isLoading && (
-                        <CircularProgress sx={{ display: "block", mx: "auto", my: 4 }} />
+                        <>
+                            {console.log("[Dashboard] Rendering loading spinner")}
+                            <CircularProgress sx={{ display: "block", mx: "auto", my: 4 }} />
+                        </>
                     )}
                     {!hasNextPage && items.length > 0 && (
-                        <Typography textAlign="center" color="text.secondary" sx={{ py: 4 }}>
-                            🏁 End of catalog
-                        </Typography>
+                        <>
+                            {console.log("[Dashboard] End of catalog")}
+                            <Typography textAlign="center" color="text.secondary" sx={{ py: 4 }}>
+                                🏁 End of catalog
+                            </Typography>
+                        </>
                     )}
                     {items.length === 0 && !isLoading && (
-                        <Box sx={{ textAlign: "center", py: 8 }}>
-                            <ImageNotSupportedIcon sx={{ fontSize: 64, color: "text.secondary", mb: 2 }} />
-                            <Typography color="text.secondary">No items found</Typography>
-                        </Box>
+                        <>
+                            {console.log("[Dashboard] No items found")}
+                            <Box sx={{ textAlign: "center", py: 8 }}>
+                                <ImageNotSupportedIcon sx={{ fontSize: 64, color: "text.secondary", mb: 2 }} />
+                                <Typography color="text.secondary">No items found</Typography>
+                            </Box>
+                        </>
                     )}
                     {hasNextPage && items.length > 0 && (
-                        <div ref={observerRef} style={{ height: 20 }} />
+                        <>
+                            {console.log("[Dashboard] Rendering observer target")}
+                            <div ref={observerRef} style={{ height: 20 }} />
+                        </>
                     )}
                 </Box>
 
                 {/* ========== BARCODE SCANNER MODAL ========== */}
-                <Dialog open={scannerOpen} onClose={() => setScannerOpen(false)} maxWidth="sm" fullWidth>
+                <Dialog open={scannerOpen} onClose={() => {
+                    console.log("[Dialog] closing scanner");
+                    setScannerOpen(false);
+                }} maxWidth="sm" fullWidth>
                     <DialogTitle>Scan Barcode</DialogTitle>
                     <DialogContent>
                         <div id="barcode-reader-dashboard" style={{ width: "100%", minHeight: "300px" }}></div>
                     </DialogContent>
                     <DialogActions>
-                        <Button onClick={() => setScannerOpen(false)}>Cancel</Button>
+                        <Button onClick={() => {
+                            console.log("[Dialog] Cancel button clicked");
+                            setScannerOpen(false);
+                        }}>Cancel</Button>
                     </DialogActions>
                 </Dialog>
             </Box>

@@ -1,0 +1,16 @@
+services:
+  tldraw-sync:
+    # Use a community-maintained image that packages the sync server
+    image: ghcr.io/amirandalibi/tldraw-docker:latest 
+    container_name: tldraw-sync
+    restart: "no" # This ensures it stays off when you run 'down'
+    ports:
+      - "8080:80"
+    volumes:
+      - ./tldraw-data:/app/data
+    networks:
+      - duka-network # Connects to your existing Duka network
+
+networks:
+  duka-network:
+    external: true

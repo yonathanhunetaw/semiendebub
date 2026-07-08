@@ -53,7 +53,7 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts
 
 
 # Install Node deps
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # 8. Copy full project
 COPY . .
