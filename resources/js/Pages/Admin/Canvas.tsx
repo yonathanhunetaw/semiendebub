@@ -3,7 +3,12 @@ import { Tldraw, Editor } from 'tldraw';
 import 'tldraw/tldraw.css';
 import { Head } from '@inertiajs/react';
 
-export default function Canvas() {
+// 1. Add an interface to accept the prop passed from Laravel
+interface CanvasProps {
+    latestSnapshot: any;
+}
+
+export default function Canvas({ latestSnapshot }: CanvasProps) {
     const handleMount = (editor: Editor) => {
         // Store the editor instance globally for your save/load functions
         (window as any).editor = editor;
@@ -41,7 +46,8 @@ export default function Canvas() {
                 </button>
             </div>
 
-            <Tldraw onMount={handleMount} />
+            {/* 2. Bind the initial state to the snapshot prop */}
+            <Tldraw onMount={handleMount} snapshot={latestSnapshot || undefined} />
         </div>
     );
 }

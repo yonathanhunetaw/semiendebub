@@ -19,15 +19,15 @@ Route::domain("admin.{$baseDomain}")
 
         // Guest routes
         Route::middleware(['guest.subdomain.login'])->group(function () {
-            Route::middleware('notify.public.visit')->get('/', fn () => Inertia::render('Admin/Welcome/index'))->name('welcome');
-            Route::get('/login', fn () => Inertia::render('Admin/Login/index'))->name('login');
+            Route::middleware('notify.public.visit')->get('/', fn() => Inertia::render('Admin/Welcome/index'))->name('welcome');
+            Route::get('/login', fn() => Inertia::render('Admin/Login/index'))->name('login');
         });
 
         // Authenticated Admin routes
         Route::middleware(['auth', 'verified', 'role.subdomain:admin'])->group(function () {
 
-            Route::get('/dashboard', fn () => Inertia::render('Admin/Dashboard/index'))->name('dashboard');
-            Route::get('/settings', fn () => Inertia::render('Admin/Settings/index'))->name('settings');
+            Route::get('/dashboard', fn() => Inertia::render('Admin/Dashboard/index'))->name('dashboard');
+            Route::get('/settings', fn() => Inertia::render('Admin/Settings/index'))->name('settings');
 
             // ── Items ──
             Route::post('items/inline-options', [ItemController::class, 'storeInlineOption'])->name('items.inline-options');
@@ -71,7 +71,8 @@ Route::domain("admin.{$baseDomain}")
 
             // ── Canvas ──
             Route::prefix('canvas')->name('canvas.')->group(function () {
-                Route::get('/', fn () => Inertia::render('Admin/Canvas'))->name('index');
+                // CHANGE THIS LINE to use the controller:
+                Route::get('/', [CanvasController::class, 'index'])->name('index');
                 Route::post('/save', [CanvasController::class, 'save'])->name('save');
             });
         });
