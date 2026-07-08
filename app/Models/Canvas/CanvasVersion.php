@@ -4,6 +4,7 @@ namespace App\Models\Canvas;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\Auth\User;
 
 class CanvasVersion extends Model
 {

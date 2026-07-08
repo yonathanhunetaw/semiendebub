@@ -10,16 +10,37 @@ use Inertia\Inertia; // <-- Make sure to add this import!
 
 class CanvasController extends Controller
 {
-    // 1. ADD THIS METHOD TO FETCH DATA ON REFRESH
     public function index()
     {
-        $latestVersion = CanvasVersion::where('user_id', Auth::id())
+        // 1. Fetch the latest snapshot to show automatically on page refresh
+        // Assuming this is a collaborative canvas, we fetch the latest global version and include the user who made it
+        $latestVersion = CanvasVersion::with('user:id,first_name,last_name')
             ->latest()
             ->first();
 
+        // 2. Fetch all historical metadata so the user can see a list of their saves
+        $history = CanvasVersion::with('user:id,first_name,last_name')
+            ->latest()
+            ->get(['id', 'user_id', 'comment', 'created_at']);
+
         return Inertia::render('Admin/Canvas', [
-            'latestSnapshot' => $latestVersion ? $latestVersion->snapshot_json : null
+            'latestSnapshot' => $latestVersion ? $latestVersion->snapshot_json : null,
+            'latestVersionInfo' => $latestVersion ? [
+                'id' => $latestVersion->id,
+                'user' => $latestVersion->user,
+                'created_at' => $latestVersion->created_at,
+            ] : null,
+            'history'        => $history
         ]);
+    }
+
+    // 3. ADD THIS NEW ENDPOINT to fetch any historical snapshot dynamically
+    public function getVersion($id)
+    {
+        // Removed Auth::id() scope so collaborative history can be fetched
+        $version = CanvasVersion::findOrFail($id);
+        
+        return response()->json($version->snapshot_json);
     }
 
     public function save(Request $request)

@@ -71,9 +71,10 @@ Route::domain("admin.{$baseDomain}")
 
             // ── Canvas ──
             Route::prefix('canvas')->name('canvas.')->group(function () {
-                // CHANGE THIS LINE to use the controller:
                 Route::get('/', [CanvasController::class, 'index'])->name('index');
                 Route::post('/save', [CanvasController::class, 'save'])->name('save');
+                // ADD THIS NEW LINE:
+                Route::get('/version/{id}', [CanvasController::class, 'getVersion'])->name('version');
             });
         });
     });

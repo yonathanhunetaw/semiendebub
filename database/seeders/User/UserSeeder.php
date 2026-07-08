@@ -31,6 +31,23 @@ class UserSeeder extends Seeder
         ]);
         $yonathan->assignRole('admin');
 
+        $nani = User::create([
+            'first_name' => 'Nani',
+            'last_name' => 'Solomon',
+            'phone_number' => '0932142452',
+            'email' => 'nani@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'admin',
+            'password' => Hash::make('43295299'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $nani->assignRole('admin');
+
         $hulala = User::create([
             'first_name' => 'Hulala',
             'last_name' => 'Sinqe',

@@ -21,10 +21,10 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     mysqli opcache pcntl pdo_mysql pdo_pgsql \
     shmop snmp soap sockets sodium tidy xsl zip
 
-# 3. Install Node (ONLY for build step)
-RUN curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
+# 3. Install Node 22 LTS (ONLY for build step)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
-    && apt-get install -y npm
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 4. Apache config (KEEP THIS 🔥)
 RUN a2enmod rewrite headers ssl \
