@@ -3,6 +3,7 @@ import { Tldraw, Editor } from 'tldraw';
 import 'tldraw/tldraw.css';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
+import { Menu, Save, History, Check, X } from 'lucide-react';
 
 interface HistoryItem {
     id: number;
@@ -32,26 +33,19 @@ interface CanvasProps {
 export default function Canvas({ latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
     const [showFlash, setShowFlash] = useState(false);
     const [history, setHistory] = useState<HistoryItem[]>(initialHistory || []);
-    const [isOpenHistory, setIsOpenHistory] = useState(false);
+    const [isFabOpen, setIsFabOpen] = useState(false);
     const [activeVersionId, setActiveVersionId] = useState<number | null>(latestVersionInfo?.id || null);
 
-    // Centralized safe loading utility that handles both legacy records and modern snapshots
-    // Centralized safe loading utility that handles both legacy records and modern snapshots
-    // Centralized safe loading utility that handles both legacy records and modern snapshots
     const cleanAndLoadSnapshot = (editor: Editor, rawData: any) => {
         if (!rawData) return;
         try {
             let clean = JSON.parse(JSON.stringify(rawData));
             
-            // 1. Unpack database layer if present
             if (clean && clean.snapshot_json) {
                 clean = clean.snapshot_json;
             }
 
-            // 2. Structural Fix: Ensure top-level document structure exists
-            // tldraw expects a TLEditorSnapshot containing a "document" property.
             if (!clean.document) {
-                // If we have a raw store direct map, wrap it appropriately
                 const records = clean.store ? clean.store : clean;
                 let schema = clean.schema;
                 
@@ -67,18 +61,15 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 };
             }
 
-            // 3. Document validation patch
             if (clean.document && clean.document.store) {
                 const store = clean.document.store;
                 
-                // Ensure essential canvas page context items exist to prevent currentPageId crashes
                 const hasPage = Object.values(store).some((r: any) => r && r.typeName === 'page');
                 if (!hasPage) {
                     editor.loadSnapshot(editor.getSnapshot()); 
                     return;
                 }
 
-                // Patch missing or invalid data on store records to prevent tldraw validation crashes
                 Object.keys(store).forEach(key => {
                     const record = store[key];
                     if (!record || typeof record !== 'object') {
@@ -92,54 +83,38 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                     }
 
                     if (record.name === null || record.name === undefined) {
-                        if (record.typeName === 'document') {
-                            record.name = 'Canvas';
-                        } else if (record.typeName === 'user') {
-                            record.name = 'User';
-                        } else if (record.typeName === 'page') {
-                            record.name = 'Page';
-                        } else if ('name' in record) {
-                            record.name = '';
-                        }
+                        if (record.typeName === 'document') record.name = 'Canvas';
+                        else if (record.typeName === 'user') record.name = 'User';
+                        else if (record.typeName === 'page') record.name = 'Page';
+                        else if ('name' in record) record.name = '';
                     }
                 });
 
-                // Partition historical records into document and session stores
-                // Tldraw v5 strictly expects local/meta records to be in 'session', and shared records in 'document'.
                 const documentRecords: Record<string, any> = {};
-                const sessionRecords: Record<string, any> = {};
-                
                 const DOCUMENT_TYPES = new Set(['document', 'page', 'shape', 'asset', 'binding']);
 
                 Object.keys(store).forEach(key => {
                     const record = store[key];
                     if (DOCUMENT_TYPES.has(record.typeName)) {
                         documentRecords[key] = record;
-                    } else {
-                        sessionRecords[key] = record;
                     }
                 });
 
-                // 4. Merge into a pristine snapshot to ensure meta-records exist
                 const pristineSnapshot = editor.getSnapshot();
                 
-                // Keep the pristine document records, overlay our historical shared records
-                clean.document.store = { ...pristineSnapshot.document.store, ...documentRecords };
+                // FIX: Instead of merging pristine document store (which retains current shapes),
+                // we ONLY keep the base document record and inject our historical records.
+                // This ensures the canvas slate is wiped clean of any active drawings.
+                clean.document.store = { 
+                    'document:document': (pristineSnapshot.document.store as any)['document:document'],
+                    ...documentRecords 
+                };
                 
-                // If historical schema is missing or invalid, fallback to pristine schema
                 if (!clean.document.schema || !clean.document.schema.sequences) {
                     clean.document.schema = pristineSnapshot.document.schema;
                 }
-
-
-                // We DO NOT patch or pass a session object at all. 
-                // Passing a raw session object or adding a "store" property to it causes
-                // strict validation errors like "At store: Unexpected property".
-                // Instead, we will pass ONLY the clean document snapshot.
             }
 
-            // 6. Pass ONLY the validated, merged document snapshot directly into the engine.
-            // Tldraw will automatically generate a perfectly valid session for this document.
             editor.loadSnapshot(clean.document);
 
             setTimeout(() => {
@@ -153,8 +128,6 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
 
     const handleMount = (editor: Editor) => {
         (window as any).editor = editor;
-
-        // Safely load the initial state right after mounting completes
         if (latestSnapshot) {
             cleanAndLoadSnapshot(editor, latestSnapshot);
         }
@@ -176,6 +149,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
             if (response.status === 200) {
                 setShowFlash(true);
                 setTimeout(() => setShowFlash(false), 3000);
+                setIsFabOpen(false);
 
                 const newVersionId = response.data.version_id;
                 setHistory(prev => [
@@ -183,8 +157,6 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                         id: newVersionId,
                         comment: comment,
                         created_at: new Date().toISOString()
-                        // Currently omits eager-loaded user info for immediately saved optimistic updates,
-                        // but it will refresh on page load. Or we can just let it display without name temporarily.
                     },
                     ...prev
                 ]);
@@ -204,6 +176,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
             if (response.data) {
                 cleanAndLoadSnapshot(editor, response.data);
                 setActiveVersionId(id);
+                setIsFabOpen(false);
             }
         } catch (error) {
             console.error('Failed to load snapshot version:', error);
@@ -212,153 +185,184 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
     };
 
     return (
-        <div style={{ position: 'fixed', inset: 0 }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#0f172a' }}>
             <Head title="Canvas Admin" />
 
-            {/* Success Notification */}
+            {/* Flash Notification */}
             {showFlash && (
                 <div style={{
                     position: 'absolute',
-                    top: '20px',
-                    right: '20px',
-                    backgroundColor: '#22c55e',
-                    color: 'white',
+                    top: '24px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #ffffff1f',
+                    color: '#ffffff',
                     padding: '12px 24px',
                     borderRadius: '8px',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
                     zIndex: 2000,
                     fontWeight: '600',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px'
                 }}>
-                    <span>✓</span> Saved
+                    <Check size={18} color="#22c55e" /> Canvas Saved Successfully
                 </div>
             )}
 
-            {/* Control Layout Panels */}
+            {/* FAB Control Anchor - Placed Top Right safe zone */}
             <div style={{
                 position: 'absolute',
-                bottom: 20,
-                right: 20,
+                top: 64, // below standard top navs
+                right: 24,
                 zIndex: 1000,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-                alignItems: 'flex-end'
             }}>
-                {/* Save Button */}
                 <button
-                    onClick={handleSave}
+                    onClick={() => setIsFabOpen(!isFabOpen)}
                     style={{
-                        padding: '12px 24px',
-                        backgroundColor: '#2f60e6',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '24px',
+                        backgroundColor: '#1e293b',
+                        color: '#ffffff',
+                        border: '1px solid #ffffff1f',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         cursor: 'pointer',
-                        fontWeight: 'bold',
-                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                        fontSize: '14px',
-                        width: '100%'
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                        transition: 'all 0.2s ease',
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#2d3748')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1e293b')}
                 >
-                    Save
+                    {isFabOpen ? <X size={24} /> : <Menu size={24} />}
                 </button>
 
-                {/* Versions dropdown opening upwards */}
-                <div style={{ position: 'relative', width: '100%' }}>
-                    <button
-                        onClick={() => setIsOpenHistory(!isOpenHistory)}
-                        style={{
-                            padding: '10px 16px',
-                            backgroundColor: '#1f2937',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                            fontSize: '13px',
-                            width: '100%',
-                            whiteSpace: 'nowrap'
-                        }}
-                    >
-                        {activeVersionId 
-                            ? `📂 Version #${activeVersionId} ${history.find(h => h.id === activeVersionId)?.user ? `by ${history.find(h => h.id === activeVersionId)?.user?.first_name}` : ''}`
-                            : `📂 Load Saved Versions (${history.length})`
-                        }
-                    </button>
+                {/* Dropdown Panel */}
+                {isFabOpen && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '60px',
+                        right: 0,
+                        backgroundColor: '#1e293b',
+                        border: '1px solid #ffffff1f',
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.5)',
+                        width: '320px',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column'
+                    }}>
+                        {/* Header Actions */}
+                        <div style={{ padding: '16px', borderBottom: '1px solid #ffffff1f' }}>
+                            <button
+                                onClick={handleSave}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                    padding: '12px',
+                                    backgroundColor: '#c05800',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: 'bold',
+                                    width: '100%',
+                                    fontSize: '14px',
+                                    transition: 'background 0.2s',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#e06a00')}
+                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#c05800')}
+                            >
+                                <Save size={18} /> Save Canvas Snapshot
+                            </button>
+                        </div>
 
-                    {isOpenHistory && (
+                        {/* History List */}
                         <div style={{
-                            position: 'absolute',
-                            bottom: '100%',
-                            right: 0,
-                            marginBottom: '8px',
-                            backgroundColor: 'white',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                            width: '280px',
-                            maxHeight: '300px',
+                            maxHeight: '350px',
                             overflowY: 'auto',
-                            padding: '8px'
+                            backgroundColor: '#0f172a'
                         }}>
-                            <div style={{ padding: '4px 8px 8px 8px', fontSize: '11px', fontWeight: 'bold', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
-                                SELECT A VERSION TO OPEN
+                            <div style={{
+                                padding: '12px 16px 8px 16px',
+                                fontSize: '11px',
+                                fontWeight: 'bold',
+                                color: '#a1a1aa',
+                                letterSpacing: '0.05em',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}>
+                                <History size={14} /> VERSION HISTORY
                             </div>
+
                             {history.length === 0 ? (
-                                <div style={{ padding: '12px 8px', color: '#9ca3af', fontSize: '13px' }}>No saves found.</div>
+                                <div style={{ padding: '16px', color: '#71717a', fontSize: '13px', textAlign: 'center' }}>
+                                    No saves found.
+                                </div>
                             ) : (
-                                history.map((item) => (
-                                    <button
-                                        key={item.id}
-                                        onClick={() => {
-                                            handleLoadVersion(item.id);
-                                            setIsOpenHistory(false);
-                                        }}
-                                        style={{
-                                            display: 'block',
-                                            width: '100%',
-                                            textAlign: 'left',
-                                            padding: '8px 8px',
-                                            background: 'none',
-                                            border: 'none',
-                                            borderBottom: '1px solid #f3f4f6',
-                                            cursor: 'pointer',
-                                            borderRadius: '4px',
-                                            transition: 'background 0.2s',
-                                            backgroundColor: activeVersionId === item.id ? '#f0fdf4' : 'transparent'
-                                        }}
-                                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = activeVersionId === item.id ? '#f0fdf4' : '#f3f4f6')}
-                                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = activeVersionId === item.id ? '#f0fdf4' : 'transparent')}
-                                    >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div style={{ fontWeight: '600', fontSize: '13px', color: activeVersionId === item.id ? '#166534' : '#111827' }}>
-                                                Version #{item.id} {activeVersionId === item.id && <span style={{ color: '#22c55e', marginLeft: '4px' }}>✓</span>}
-                                            </div>
-                                            {item.user && (
-                                                <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'normal' }}>
-                                                    {item.user.first_name} {item.user.last_name}
+                                history.map((item) => {
+                                    const isActive = activeVersionId === item.id;
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => handleLoadVersion(item.id)}
+                                            style={{
+                                                display: 'block',
+                                                width: '100%',
+                                                textAlign: 'left',
+                                                padding: '12px 16px',
+                                                background: isActive ? '#6366f11a' : 'transparent',
+                                                border: 'none',
+                                                borderBottom: '1px solid #ffffff0a',
+                                                cursor: 'pointer',
+                                                transition: 'background 0.2s'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                if (!isActive) e.currentTarget.style.backgroundColor = '#ffffff0a';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                                <div style={{ 
+                                                    fontWeight: '600', 
+                                                    fontSize: '14px', 
+                                                    color: isActive ? '#6366f1' : '#ffffff',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px'
+                                                }}>
+                                                    Version #{item.id}
+                                                    {isActive && <Check size={14} />}
                                                 </div>
-                                            )}
-                                        </div>
-                                        <div style={{ fontSize: '12px', color: '#4b5563', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                            {item.comment}
-                                        </div>
-                                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>
-                                            {new Date(item.created_at).toLocaleString()}
-                                        </div>
-                                    </button>
-                                ))
+                                                {item.user && (
+                                                    <div style={{ fontSize: '12px', color: '#a1a1aa' }}>
+                                                        {item.user.first_name} {item.user.last_name}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div style={{ fontSize: '13px', color: '#a1a1aa', marginBottom: '6px', lineHeight: '1.4' }}>
+                                                {item.comment}
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: '#71717a' }}>
+                                                {new Date(item.created_at).toLocaleString()}
+                                            </div>
+                                        </button>
+                                    );
+                                })
                             )}
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
-            {/* Tldraw Workspace Component - Safe initialization */}
             <Tldraw onMount={handleMount} />
         </div>
     );

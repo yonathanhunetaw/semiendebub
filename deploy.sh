@@ -522,6 +522,7 @@ install_node_dependencies() {
         exec_in_app npm uninstall hoist-non-react-statics --no-save || true
         exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save
         exec_in_app rm -rf node_modules/.vite /tmp/vite-cache
+        exec_in_app npm rebuild
         log_done "Hoist-non-react-statics fixed for ARM compatibility"
     fi
     
