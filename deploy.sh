@@ -818,19 +818,24 @@ else
     exec_in_app composer install --optimize-autoloader --no-interaction 2>&1 | tee -a "$LOG_FILE"
 fi
 
+# Define files path
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
-if ! exec_in_app test -f "$S3_CONVERTER_FILE" || has_git_path_changes "composer.lock"; then
-    log_warning "S3 driver files missing or composer.lock changed, reinstalling..."
+
+# Detect if we need to run composer (vendor is empty, file missing, or lockfile changed)
+if [ ! -d "vendor" ] || [ ! -f "$S3_CONVERTER_FILE" ] || has_git_path_changes "composer.lock"; then
+    log_warning "Dependencies are missing or composer.lock changed. Pre-populating vendor directory..."
     
-    if ! exec_in_app test -f "$S3_CONVERTER_FILE"; then
-        exec_in_app rm -rf vendor/league/flysystem-aws-s3-v3
-    fi
-    
+    # Define composition flags
+    COMPOSE_CMD="composer install --optimize-autoloader --no-interaction"
     if [ "$APP_ENV" = "production" ]; then
-        exec_in_app composer install --no-dev --optimize-autoloader --no-interaction 2>&1 | tee -a "$LOG_FILE"
+        log_info "Production mode: Installing without dev dependencies"
+        COMPOSE_CMD="composer install --no-dev --optimize-autoloader --no-interaction"
     else
-        exec_in_app composer install --optimize-autoloader --no-interaction 2>&1 | tee -a "$LOG_FILE"
+        log_info "Development mode: Installing with dev dependencies"
     fi
+
+    # CRITICAL FIX: Run it via a standalone container bypass so a broken/dead duka-app doesn't block it
+    docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml run --rm --entrypoint "$COMPOSE_CMD" duka-app 2>&1 | tee -a "$LOG_FILE"
 else
     log_success "PHP dependencies up to date"
 fi
