@@ -63,6 +63,8 @@ services:
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
     volumes:
       - minio_data:/data
+    networks:
+      - duka-network  
 
   minio-setup:
     image: minio/mc:latest
@@ -70,6 +72,8 @@ services:
     depends_on:
       duka-minio:
         condition: service_started
+    networks:
+      - duka-network    
     entrypoint: >
       /bin/sh -c "
       echo '=== MinIO Setup Starting ===';
@@ -103,8 +107,6 @@ services:
         sleep 5;
       done;
       exit 1;"
-    networks:
-      - duka-network
     restart: "no"
 
 networks:
