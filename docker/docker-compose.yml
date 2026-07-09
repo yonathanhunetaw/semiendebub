@@ -6,6 +6,8 @@ services:
     container_name: duka-app
     ports:
       - "8095:80"
+    env_file:
+      - ../.env  
     volumes:
       - ../:/var/www/html
       - storage_data:/var/www/html/storage
@@ -14,6 +16,8 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-local}
       APP_DEBUG: ${APP_DEBUG:-true}
+      DB_HOST: duka-db
+      VITE_TLDRAW_LICENSE_KEY: ${VITE_TLDRAW_LICENSE_KEY}
     networks:
       - duka-network
     depends_on:

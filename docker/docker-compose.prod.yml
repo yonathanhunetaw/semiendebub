@@ -11,6 +11,7 @@ services:
       - ../storage/app/seed-images:/var/www/html/storage/app/seed-images
     environment:
       APP_ENV: production
+      VITE_TLDRAW_LICENSE_KEY: ${VITE_TLDRAW_LICENSE_KEY}
     restart: unless-stopped
     networks:
       - duka-network
