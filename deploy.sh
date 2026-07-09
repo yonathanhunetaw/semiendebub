@@ -803,20 +803,29 @@ log_done "Git safe directory configured"
 
 log_step "${ICON_PACKAGE} Installing PHP dependencies..."
 
-exec_in_app composer require league/flysystem-aws-s3-v3:"^3.0" --no-interaction --no-update 2>/dev/null || true
-
-if ! docker exec duka-app sh -c "composer validate --no-check-all --quiet" 2>/dev/null; then
-    log_warning "Composer lock file out of sync, updating..."
-    exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction 2>&1 | tee -a "$LOG_FILE"
-fi
-
+# Define your Docker Compose command arguments based on environment
+COMPOSE_BASE="docker compose -f docker/docker-compose.yml"
 if [ "$APP_ENV" = "production" ]; then
+    COMPOSE_BASE="$COMPOSE_BASE -f docker/docker-compose.prod.yml"
+    INSTALL_FLAGS="--no-dev --optimize-autoloader --no-interaction"
     log_info "Production mode: Installing without dev dependencies"
-    exec_in_app composer install --no-dev --optimize-autoloader --no-interaction 2>&1 | tee -a "$LOG_FILE"
 else
+    COMPOSE_BASE="$COMPOSE_BASE -f docker/docker-compose.dev.yml"
+    INSTALL_FLAGS="--optimize-autoloader --no-interaction"
     log_info "Development mode: Installing with dev dependencies"
-    exec_in_app composer install --optimize-autoloader --no-interaction 2>&1 | tee -a "$LOG_FILE"
 fi
+
+# 1. Require the S3 Driver package without updating yet
+$COMPOSE_BASE run --rm --entrypoint "composer require league/flysystem-aws-s3-v3:^3.0 --no-interaction --no-update" duka-app 2>/dev/null || true
+
+# 2. Check if composer.lock is valid using a standalone check
+if ! $COMPOSE_BASE run --rm --entrypoint "composer validate --no-check-all --quiet" duka-app 2>/dev/null; then
+    log_warning "Composer lock file out of sync, updating package tracking..."
+    $COMPOSE_BASE run --rm --entrypoint "composer update league/flysystem-aws-s3-v3 --no-interaction" duka-app 2>&1 | tee -a "$LOG_FILE"
+fi
+
+# 3. Perform the clean master dependency installation
+$COMPOSE_BASE run --rm --entrypoint "composer install $INSTALL_FLAGS" duka-app 2>&1 | tee -a "$LOG_FILE"
 
 # Define files path
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
