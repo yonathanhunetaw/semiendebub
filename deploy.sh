@@ -384,7 +384,7 @@ COMPOSE_FILES=()
 if [ "$APP_ENV" = "production" ]; then
     COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.prod.yml")
 else
-    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.dev.yml" -f "$BASE_DIR/docker-compose.prod.yml")
+    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.dev.yml")
 fi
 
 # Add observability if enabled

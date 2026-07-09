@@ -110,10 +110,11 @@ if [ $CLEAN_VOLUMES -eq 1 ]; then
     # ADD THESE LINES
     ENV_VAL="${APP_ENV:-$(grep APP_ENV .env | cut -d '=' -f2)}"
     COMPOSE_ARGS=(-f docker/docker-compose.yml)
-    if [ "$ENV_VAL" != "production" ]; then
+    if [ "$ENV_VAL" == "production" ]; then
+        COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
+    else
         COMPOSE_ARGS+=(-f docker/docker-compose.dev.yml)
     fi
-    COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
     
     # USE COMPOSE_ARGS HERE
     docker compose --env-file .env "${COMPOSE_ARGS[@]}" down -v
@@ -165,10 +166,11 @@ if [ $FORCE_BUILD -eq 1 ]; then
     
     # Ensure these point to the 'docker/' subdirectory
     COMPOSE_ARGS=(-f docker/docker-compose.yml)
-    if [ "$ENV_VAL" != "production" ]; then
+    if [ "$ENV_VAL" == "production" ]; then
+        COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
+    else
         COMPOSE_ARGS+=(-f docker/docker-compose.dev.yml)
     fi
-    COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
     
     if [ $NO_CACHE -eq 1 ]; then
         docker compose --env-file .env "${COMPOSE_ARGS[@]}" build --no-cache
@@ -183,10 +185,11 @@ echo -e "${GREEN}Starting deployment...${NC}"
 # Define the same compose arguments used in the build section
 ENV_VAL="${APP_ENV:-$(grep APP_ENV .env | cut -d '=' -f2)}"
 COMPOSE_ARGS=(-f docker/docker-compose.yml)
-if [ "$ENV_VAL" != "production" ]; then
-    COMPOSE_ARGS+=(-f docker/docker-compose.dev.yml)
-fi
-COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
+    if [ "$ENV_VAL" == "production" ]; then
+        COMPOSE_ARGS+=(-f docker/docker-compose.prod.yml)
+    else
+        COMPOSE_ARGS+=(-f docker/docker-compose.dev.yml)
+    fi
 
 # Use these arguments when calling docker compose up
 docker compose --env-file .env "${COMPOSE_ARGS[@]}" up -d
