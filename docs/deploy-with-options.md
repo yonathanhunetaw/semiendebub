@@ -47,9 +47,12 @@ Standard Daily Run: ./deploy-with-options.sh --development
 
 When you pull heavy database changes: ./deploy-with-options.sh --development --reset-db
 
-When Docker files or underlying dependencies alter: ./deploy-with-options.sh --development --force-build
+When Docker files or underlying dependencies alter: 
 
 
 
 Works for sure on 2026.07.10
-on production -> 
+on production -> sudo bash deploy-with-options.sh --production
+
+zerothir one ubuntu addreess
+ssh starvin@10.216.254.10
