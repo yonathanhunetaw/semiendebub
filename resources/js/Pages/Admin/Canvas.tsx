@@ -41,8 +41,22 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
         try {
             let clean = JSON.parse(JSON.stringify(rawData));
             
+            // Pitfall A: Handle double-encoded JSON if it arrives as a string
+            if (typeof clean === 'string') {
+                try { clean = JSON.parse(clean); } catch(e) {}
+            }
+
             if (clean && clean.snapshot_json) {
                 clean = clean.snapshot_json;
+            }
+
+            if (typeof clean === 'string') {
+                try { clean = JSON.parse(clean); } catch(e) {}
+            }
+
+            // Pitfall C: Empty or Null Snapshots on Creation
+            if (!clean || Object.keys(clean).length === 0 || (Array.isArray(clean) && clean.length === 0)) {
+                return; // Let tldraw initialize a fresh, empty canvas natively
             }
 
             if (!clean.document) {
