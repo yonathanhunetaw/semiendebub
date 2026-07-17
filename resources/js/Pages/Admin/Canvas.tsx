@@ -142,8 +142,35 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
         }
     };
 
+    const customAssetOptions: any = {
+        onAssetCreate: async (asset: any) => {
+            return asset;
+        },
+        upload: async (_asset: any, file: File) => {
+            const src = URL.createObjectURL(file);
+            return {
+                id: `asset:${Math.random().toString(36).substring(2, 11)}`,
+                type: 'image',
+                typeName: 'asset',
+                props: {
+                    name: file.name,
+                    src: src,
+                    w: 300,
+                    h: 300,
+                    mimeType: file.type,
+                    isAnimated: false,
+                },
+                meta: {},
+            };
+        }
+    };
+
     const handleMount = (editor: Editor) => {
         (window as any).editor = editor;
+        
+        // Force an instant update to establish stable page boundaries
+        (editor as any).updatePageState?.({ id: editor.getCurrentPageId() });
+        
         if (latestSnapshot) {
             cleanAndLoadSnapshot(editor, latestSnapshot);
         }
@@ -379,7 +406,11 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 )}
             </div>
 
-            <Tldraw onMount={handleMount} />
+            <Tldraw 
+                key={activeVersionId ? `version-${activeVersionId}` : 'initial-canvas'}
+                assets={customAssetOptions}
+                onMount={handleMount} 
+            />
         </div>
     );
 }
