@@ -30,6 +30,18 @@ interface CanvasProps {
     history: HistoryItem[];
 }
 
+const customAssetStore: any = {
+    async upload(_asset: any, file: File) {
+        const objectUrl = URL.createObjectURL(file);
+        return { 
+            src: objectUrl 
+        };
+    },
+    async resolve(asset: any) {
+        return asset.props.src;
+    }
+};
+
 export default function Canvas({ latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
     const [showFlash, setShowFlash] = useState(false);
     const [history, setHistory] = useState<HistoryItem[]>(initialHistory || []);
@@ -139,30 +151,6 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
 
         } catch (e) {
             console.error('Failed to parse or sanitize canvas data:', e);
-        }
-    };
-
-    const customAssetOptions: any = {
-        onAssetCreate: async (asset: any) => {
-            return asset;
-        },
-        upload: async (_asset: any, file: File) => {
-            const src = URL.createObjectURL(file);
-            return {
-                id: `asset:${Math.random().toString(36).substring(2, 11)}`,
-                type: 'image',
-                typeName: 'asset',
-                props: {
-                    name: file.name,
-                    src: src,
-                    url: '',
-                    w: 300,
-                    h: 300,
-                    mimeType: file.type,
-                    isAnimated: false,
-                },
-                meta: {},
-            };
         }
     };
 
@@ -409,7 +397,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
 
             <Tldraw 
                 key={activeVersionId ? `version-${activeVersionId}` : 'initial-canvas'}
-                assets={customAssetOptions}
+                assetStore={customAssetStore}
                 onMount={handleMount} 
             />
         </div>
