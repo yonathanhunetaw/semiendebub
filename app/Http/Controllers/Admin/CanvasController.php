@@ -15,12 +15,12 @@ class CanvasController extends Controller
         // 1. Fetch the latest snapshot to show automatically on page refresh
         // Assuming this is a collaborative canvas, we fetch the latest global version and include the user who made it
         $latestVersion = CanvasVersion::with('user:id,first_name,last_name')
-            ->latest()
+            ->orderByDesc('id')
             ->first();
 
         // 2. Fetch all historical metadata so the user can see a list of their saves
         $history = CanvasVersion::with('user:id,first_name,last_name')
-            ->latest()
+            ->orderByDesc('id')
             ->get(['id', 'user_id', 'comment', 'created_at']);
 
         return Inertia::render('Admin/Canvas', [
