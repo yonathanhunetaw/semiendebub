@@ -43,126 +43,57 @@ const customAssetStore: any = {
 };
 
 export default function Canvas({ latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
+    const getSanitizedSnapshot = (rawData: any) => {
+        if (!rawData) return undefined;
+        let clean = rawData;
+        if (typeof clean === 'string') {
+            try { clean = JSON.parse(clean); } catch (e) { }
+        }
+        if (clean && clean.snapshot_json) {
+            clean = clean.snapshot_json;
+        }
+        if (typeof clean === 'string') {
+            try { clean = JSON.parse(clean); } catch (e) { }
+        }
+
+        const finalDoc = clean.document || clean;
+        
+        if (finalDoc && finalDoc.store) {
+            Object.values(finalDoc.store).forEach((record: any) => {
+                if (!record || typeof record !== 'object') return;
+                
+                // Fix corrupted image urls in historical data
+                if (record.typeName === 'shape' && record.type === 'image') {
+                    if (record.props && record.props.url === null) {
+                        record.props.url = '';
+                    }
+                }
+                
+                // Fix corrupted names
+                if (record.name === null || record.name === undefined) {
+                    if (record.typeName === 'document') record.name = 'Canvas';
+                    else if (record.typeName === 'user') record.name = 'User';
+                    else if (record.typeName === 'page') record.name = 'Page';
+                    else if ('name' in record) record.name = '';
+                }
+            });
+        }
+
+        return finalDoc;
+    };
+
     const [showFlash, setShowFlash] = useState(false);
     const [history, setHistory] = useState<HistoryItem[]>(initialHistory || []);
     const [isFabOpen, setIsFabOpen] = useState(false);
     const [activeVersionId, setActiveVersionId] = useState<number | null>(latestVersionInfo?.id || null);
-
-    const cleanAndLoadSnapshot = (editor: Editor, rawData: any) => {
-        if (!rawData) return;
-        try {
-            let clean = JSON.parse(JSON.stringify(rawData));
-
-            // Pitfall A: Handle double-encoded JSON if it arrives as a string
-            if (typeof clean === 'string') {
-                try { clean = JSON.parse(clean); } catch (e) { }
-            }
-
-            if (clean && clean.snapshot_json) {
-                clean = clean.snapshot_json;
-            }
-
-            if (typeof clean === 'string') {
-                try { clean = JSON.parse(clean); } catch (e) { }
-            }
-
-            // Pitfall C: Empty or Null Snapshots on Creation
-            if (!clean || Object.keys(clean).length === 0 || (Array.isArray(clean) && clean.length === 0)) {
-                return; // Let tldraw initialize a fresh, empty canvas natively
-            }
-
-            if (!clean.document) {
-                const records = clean.store ? clean.store : clean;
-                let schema = clean.schema;
-
-                if (!schema || !schema.sequences) {
-                    schema = editor.store.schema.serialize();
-                }
-
-                clean = {
-                    document: {
-                        store: records,
-                        schema: schema
-                    }
-                };
-            }
-
-            if (clean.document && clean.document.store) {
-                const store = clean.document.store;
-
-                const hasPage = Object.values(store).some((r: any) => r && r.typeName === 'page');
-                if (!hasPage) {
-                    editor.loadSnapshot(editor.getSnapshot());
-                    return;
-                }
-
-                Object.keys(store).forEach(key => {
-                    const record = store[key];
-                    if (!record || typeof record !== 'object') {
-                        delete store[key];
-                        return;
-                    }
-
-                    if (record.typeName === undefined) {
-                        delete store[key];
-                        return;
-                    }
-
-                    if (record.name === null || record.name === undefined) {
-                        if (record.typeName === 'document') record.name = 'Canvas';
-                        else if (record.typeName === 'user') record.name = 'User';
-                        else if (record.typeName === 'page') record.name = 'Page';
-                        else if ('name' in record) record.name = '';
-                    }
-                });
-
-                const documentRecords: Record<string, any> = {};
-                const DOCUMENT_TYPES = new Set(['document', 'page', 'shape', 'asset', 'binding']);
-
-                Object.keys(store).forEach(key => {
-                    const record = store[key];
-                    if (DOCUMENT_TYPES.has(record.typeName)) {
-                        documentRecords[key] = record;
-                    }
-                });
-
-                const pristineSnapshot = editor.getSnapshot();
-
-                // FIX: Instead of merging pristine document store (which retains current shapes),
-                // we ONLY keep the base document record and inject our historical records.
-                // This ensures the canvas slate is wiped clean of any active drawings.
-                clean.document.store = {
-                    // Keep everything that tldraw naturally expects on mount (ui state, instance details, camera positions)
-                    ...pristineSnapshot.document.store,
-                    // Safely inject your historical blueprint elements over it
-                    ...documentRecords
-                };
-
-                if (!clean.document.schema || !clean.document.schema.sequences) {
-                    clean.document.schema = pristineSnapshot.document.schema;
-                }
-            }
-
-            editor.loadSnapshot(clean.document);
-
-            setTimeout(() => {
-                editor.zoomToFit({ animation: { duration: 200 } });
-            }, 100);
-
-        } catch (e) {
-            console.error('Failed to parse or sanitize canvas data:', e);
-        }
-    };
+    const [currentSnapshot, setCurrentSnapshot] = useState(() => getSanitizedSnapshot(latestSnapshot));
 
     const handleMount = (editor: Editor) => {
         (window as any).editor = editor;
         
-        // Force an instant update to establish stable page boundaries
-        (editor as any).updatePageState?.({ id: editor.getCurrentPageId() });
-        
-        if (latestSnapshot) {
-            cleanAndLoadSnapshot(editor, latestSnapshot);
-        }
+        setTimeout(() => {
+            editor.zoomToFit({ animation: { duration: 200 } });
+        }, 100);
     };
 
     const handleSave = async () => {
@@ -200,13 +131,10 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
     };
 
     const handleLoadVersion = async (id: number) => {
-        const editor = (window as any).editor;
-        if (!editor) return;
-
         try {
             const response = await axios.get(`/canvas/version/${id}`);
             if (response.data) {
-                cleanAndLoadSnapshot(editor, response.data);
+                setCurrentSnapshot(getSanitizedSnapshot(response.data));
                 setActiveVersionId(id);
                 setIsFabOpen(false);
             }
@@ -397,7 +325,8 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
 
             <Tldraw 
                 key={activeVersionId ? `version-${activeVersionId}` : 'initial-canvas'}
-                assetStore={customAssetStore}
+                snapshot={currentSnapshot}
+                assets={customAssetStore}
                 onMount={handleMount} 
             />
         </div>
