@@ -40,10 +40,10 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
         if (!rawData) return;
         try {
             let clean = JSON.parse(JSON.stringify(rawData));
-            
+
             // Pitfall A: Handle double-encoded JSON if it arrives as a string
             if (typeof clean === 'string') {
-                try { clean = JSON.parse(clean); } catch(e) {}
+                try { clean = JSON.parse(clean); } catch (e) { }
             }
 
             if (clean && clean.snapshot_json) {
@@ -51,7 +51,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
             }
 
             if (typeof clean === 'string') {
-                try { clean = JSON.parse(clean); } catch(e) {}
+                try { clean = JSON.parse(clean); } catch (e) { }
             }
 
             // Pitfall C: Empty or Null Snapshots on Creation
@@ -62,7 +62,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
             if (!clean.document) {
                 const records = clean.store ? clean.store : clean;
                 let schema = clean.schema;
-                
+
                 if (!schema || !schema.sequences) {
                     schema = editor.store.schema.serialize();
                 }
@@ -77,10 +77,10 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
 
             if (clean.document && clean.document.store) {
                 const store = clean.document.store;
-                
+
                 const hasPage = Object.values(store).some((r: any) => r && r.typeName === 'page');
                 if (!hasPage) {
-                    editor.loadSnapshot(editor.getSnapshot()); 
+                    editor.loadSnapshot(editor.getSnapshot());
                     return;
                 }
 
@@ -115,15 +115,17 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 });
 
                 const pristineSnapshot = editor.getSnapshot();
-                
+
                 // FIX: Instead of merging pristine document store (which retains current shapes),
                 // we ONLY keep the base document record and inject our historical records.
                 // This ensures the canvas slate is wiped clean of any active drawings.
-                clean.document.store = { 
-                    'document:document': (pristineSnapshot.document.store as any)['document:document'],
-                    ...documentRecords 
+                clean.document.store = {
+                    // Keep everything that tldraw naturally expects on mount (ui state, instance details, camera positions)
+                    ...pristineSnapshot.document.store,
+                    // Safely inject your historical blueprint elements over it
+                    ...documentRecords
                 };
-                
+
                 if (!clean.document.schema || !clean.document.schema.sequences) {
                     clean.document.schema = pristineSnapshot.document.schema;
                 }
@@ -345,9 +347,9 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                                             }}
                                         >
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                                <div style={{ 
-                                                    fontWeight: '600', 
-                                                    fontSize: '14px', 
+                                                <div style={{
+                                                    fontWeight: '600',
+                                                    fontSize: '14px',
                                                     color: isActive ? '#6366f1' : '#ffffff',
                                                     display: 'flex',
                                                     alignItems: 'center',

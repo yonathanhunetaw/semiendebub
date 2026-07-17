@@ -707,6 +707,13 @@ compose up -d --force-recreate duka-app
 APP_EXIT=$?
 echo "DEBUG: duka-app start exit code: $APP_EXIT"
 
+log_step "Pre-creating storage structures to prevent Blade cache errors..."
+exec_in_app mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache/data storage/app/seed-images public/images/defaults storage/logs
+exec_in_app touch storage/logs/laravel.log
+exec_in_app chown -R 33:33 storage bootstrap/cache public/images
+exec_in_app chmod -R 775 storage bootstrap/cache public/images
+log_done "Pre-deployment storage structures are ready"
+
 # Re-enable set -e
 set -e
 

@@ -1,20 +1,26 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
-echo "🔧 Fixing Laravel permissions..."
+# =============================================================================
+# 🔧 FIX LARAVEL DIRECTORIES & PERMISSIONS BEFORE RUNNING ANY COMMANDS
+# =============================================================================
+echo "🔧 Fixing Laravel storage directories and permissions..."
 
 mkdir -p \
-  storage/logs \
-  storage/framework/cache \
-  storage/framework/sessions \
-  storage/framework/views \
-  bootstrap/cache
+  /var/www/html/storage/logs \
+  /var/www/html/storage/framework/cache/data \
+  /var/www/html/storage/framework/sessions \
+  /var/www/html/storage/framework/views \
+  /var/www/html/bootstrap/cache
 
-chown -R www-data:www-data storage bootstrap/cache
-chmod -R 775 storage bootstrap/cache
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 echo "✅ Permissions OK"
 
+# =============================================================================
+# ⏳ SERVICE READINESS
+# =============================================================================
 echo "⏳ Waiting for MySQL..."
 
 until mysqladmin ping \
@@ -29,7 +35,9 @@ done
 
 echo "✅ MySQL is ready!"
 
-# ===== PROXY CONFIGURATION =====
+# =============================================================================
+# 🖼️ PROXY CONFIGURATION 
+# =============================================================================
 echo "🖼️ Configuring image proxy to MinIO..."
 
 cat > /etc/apache2/conf-available/proxy-images.conf << 'PROXYEOF'
@@ -55,8 +63,10 @@ a2enmod proxy proxy_http headers
 a2enconf proxy-images
 
 echo "✅ Image proxy configured to duka-minio"
-# ===== END PROXY CONFIGURATION =====
 
+# =============================================================================
+# 🌐 APACHE SITE VHOSTS & VIRTUAL HOST CONFIG
+# =============================================================================
 BASE_DOMAIN="${APP_SYSTEM_DOMAIN:-duka.local}"
 
 sed -i "/ServerName/d" /etc/apache2/sites-available/000-default.conf
@@ -72,7 +82,9 @@ sed -i "/ServerAlias \\*\\./d" /etc/apache2/sites-available/default-ssl.conf
 sed -i "/DocumentRoot/a ServerName ${BASE_DOMAIN}" /etc/apache2/sites-available/default-ssl.conf
 sed -i "/ServerName/a ServerAlias *.${BASE_DOMAIN}" /etc/apache2/sites-available/default-ssl.conf
 
-# Laravel setup
+# =============================================================================
+# 🚀 LARAVEL CONFIGURATION & MIGRATIONS
+# =============================================================================
 if [ "$APP_ENV" = "production" ]; then
     echo "🚀 Production mode..."
 
@@ -88,7 +100,9 @@ else
     php artisan config:clear
 fi
 
-# SSL (production only)
+# =============================================================================
+# 🔒 SSL SETUP
+# =============================================================================
 if [ "$APP_ENV" = "production" ] \
    && [ -f /etc/apache2/ssl/fullchain.pem ] \
    && [ -f /etc/apache2/ssl/privkey.pem ]; then
@@ -104,4 +118,8 @@ else
     echo "🌐 Running HTTP only"
 fi
 
-exec apache2-foreground
+# =============================================================================
+# 🚀 HAND CONTROL OFF TO APACHE
+# =============================================================================
+# "$@" evaluates to whatever command Docker passes (which is "apache2-foreground" via CMD)
+exec "$@"

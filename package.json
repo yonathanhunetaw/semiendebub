@@ -46,5 +46,15 @@
         "react-icons": "^5.5.0",
         "three": "^0.183.2",
         "tldraw": "^2.4.4"
+    },
+    "overrides": {
+        "tldraw": {
+            "react": "$react",
+            "react-dom": "$react-dom"
+        },
+        "@radix-ui/react-select": {
+            "react": "$react",
+            "react-dom": "$react-dom"
+        }
     }
 }
