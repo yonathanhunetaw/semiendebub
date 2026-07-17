@@ -155,6 +155,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 props: {
                     name: file.name,
                     src: src,
+                    url: '',
                     w: 300,
                     h: 300,
                     mimeType: file.type,
