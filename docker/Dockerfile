@@ -52,8 +52,8 @@ RUN git config --global --add safe.directory /var/www/html
 RUN composer install --no-dev --optimize-autoloader --no-scripts
 
 
-# Install Node deps
-RUN npm install --legacy-peer-deps
+# Install Node deps exactly from package-lock.json so prod and dev use the same tldraw schema
+RUN npm ci --legacy-peer-deps
 
 # 8. Copy full project
 COPY . .

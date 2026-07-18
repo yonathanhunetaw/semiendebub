@@ -45,7 +45,7 @@
         "npm": "^11.9.0",
         "react-icons": "^5.5.0",
         "three": "^0.183.2",
-        "tldraw": "^2.4.4"
+        "tldraw": "2.4.4"
     },
     "overrides": {
         "tldraw": {
