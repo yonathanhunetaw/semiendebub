@@ -31,7 +31,7 @@ interface CanvasProps {
 }
 
 const customAssetStore: any = {
-    async upload(_asset: any, file: File): Promise<string> {
+    async upload(_asset: any, file: File): Promise<{ src: string }> {
         const formData = new FormData();
         formData.append('file', file);
 
@@ -45,7 +45,8 @@ const customAssetStore: any = {
             throw new Error(response.data?.error || 'Canvas image upload did not return a URL.');
         }
 
-        return url;
+        // 🟢 FIX: Return an object matching the expected schema instead of a plain string
+        return { src: url };
     },
     async resolve(asset: any): Promise<string> {
         return asset.props?.src ?? '';
