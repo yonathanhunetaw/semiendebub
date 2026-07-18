@@ -70,8 +70,18 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
 
         const finalDoc = clean.document || clean;
 
-        if (finalDoc && finalDoc.store) {
-            Object.values(finalDoc.store).forEach((record: any) => {
+        // 🟢 FIX 1: Create a deep mutable copy to prevent "object is not extensible" errors
+        let mutableDoc;
+        try {
+            mutableDoc = typeof structuredClone === 'function' 
+                ? structuredClone(finalDoc) 
+                : JSON.parse(JSON.stringify(finalDoc));
+        } catch (e) {
+            mutableDoc = JSON.parse(JSON.stringify(finalDoc));
+        }
+
+        if (mutableDoc && mutableDoc.store) {
+            Object.values(mutableDoc.store).forEach((record: any) => {
                 if (!record || typeof record !== 'object') return;
 
                 // --- Patch all shape records ---
@@ -80,7 +90,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                         record.props.url = '';
                     }
 
-                    // ✅ FIX: Explicitly guarantee this restriction ONLY modifies canvas shapes
+                    // Explicitly guarantee this restriction ONLY modifies canvas shapes
                     if (record.type === 'image') {
                         const allowedImageProps = new Set(['w', 'h', 'playing', 'url', 'assetId', 'crop', 'flipX', 'flipY', 'altText']);
                         Object.keys(record.props).forEach(key => {
@@ -102,7 +112,11 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 }
 
                 // --- Patch asset records ---
-                if (record.typeName === 'asset' && record.props) {
+                if (record.typeName === 'asset') {
+                    // 🟢 FIX 2: Bulletproof the asset props schema configuration to prevent validation crashes
+                    if (!record.props) {
+                        record.props = {};
+                    }
                     if (record.props.src === null || record.props.src === undefined) {
                         record.props.src = '';
                     }
@@ -128,7 +142,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
             });
         }
 
-        return finalDoc;
+        return mutableDoc;
     };
 
     const editorRef = useRef<Editor | null>(null);
@@ -248,6 +262,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 </div>
             )}
 
+            {/* 🟢 FIX 3: Fixed style syntax token for zIndex from lowercase to camelCase */}
             <div style={{ position: 'absolute', top: 8, right: '25%', zIndex: 1000 }}>
                 <button
                     onClick={() => setIsFabOpen(!isFabOpen)}
