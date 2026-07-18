@@ -97,21 +97,17 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                     if ('url' in record.props && (record.props.url === null || record.props.url === undefined)) {
                         record.props.url = '';
                     }
-                    if (record.type === 'image') {
-                        // 1. Add 'altText' to the allowed set so the cleanup loop doesn't delete it!
-                        const allowedImageProps = new Set(['w', 'h', 'playing', 'url', 'assetId', 'crop', 'flipX', 'flipY', 'altText']);
 
+                    // CRITICAL: Ensure this only filters canvas SHAPES, not assets!
+                    if (record.type === 'image') {
+                        const allowedImageProps = new Set(['w', 'h', 'playing', 'url', 'assetId', 'crop', 'flipX', 'flipY', 'altText']);
                         Object.keys(record.props).forEach(key => {
                             if (!allowedImageProps.has(key)) {
                                 delete record.props[key];
                             }
                         });
 
-                        // 2. Ensure altText defaults to a valid string instead of being undefined
-                        if (record.props.altText === undefined || record.props.altText === null) {
-                            record.props.altText = '';
-                        }
-
+                        if (record.props.altText === undefined || record.props.altText === null) record.props.altText = '';
                         if (record.props.url === null || record.props.url === undefined) record.props.url = '';
                         if (record.props.assetId === undefined) record.props.assetId = null;
                         if (record.props.crop === undefined) record.props.crop = null;

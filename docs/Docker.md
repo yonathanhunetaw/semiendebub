@@ -153,5 +153,5 @@ docker compose exec app npm run dev -- --host 0.0.0.0 --port 5177
 
 docker compose exec app sh -lc "NODE_OPTIONS=--max-old-space-size=4096 npm run build"
 
-
+docker exec -it duka-app php artisan tinker
 ```
