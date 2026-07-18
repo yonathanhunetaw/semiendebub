@@ -159,4 +159,6 @@ docker exec -it duka-app php artisan tinker
 docker exec -it duka-app npm run build
 
 docker exec -it duka-app php artisan migrate:fresh --seed
+
+docker exec -it duka-app tail -f storage/logs/laravel.log
 ```

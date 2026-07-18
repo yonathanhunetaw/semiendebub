@@ -17,6 +17,13 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # PHP extensions
 RUN docker-php-ext-install -j$(nproc) pdo pdo_mysql
 
+# Match production upload limits for image-heavy admin workflows.
+RUN { \
+        echo 'upload_max_filesize = 20M'; \
+        echo 'post_max_size = 25M'; \
+        echo 'max_file_uploads = 20'; \
+    } > /usr/local/etc/php/conf.d/uploads.ini
+
 # Apache config (same as prod)
 RUN a2enmod rewrite headers ssl \
     && sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf

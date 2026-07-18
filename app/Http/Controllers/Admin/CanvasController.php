@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Throwable;
 
@@ -67,13 +68,35 @@ class CanvasController extends Controller
 
     public function uploadAsset(Request $request)
     {
-        $request->validate([
-            'file' => 'required|image|max:10240', // 10MB limit
-        ]);
+        try {
+            // 🟢 Try running the validation rules
+            $request->validate([
+                'file' => 'required|image|max:10240', // 10MB limit
+            ]);
+        } catch (ValidationException $validationException) {
+            // 🚨 LOG CAT 1: Validation failed (e.g., failed 'image' rule or extension mismatch)
+            Log::error('Canvas Upload Validation Failed:', [
+                'errors' => $validationException->errors(),
+                'has_file' => $request->hasFile('file'),
+                'mime_type_detected' => $request->file('file') ? $request->file('file')->getMimeType() : 'No file',
+                'client_mime_type' => $request->file('file') ? $request->file('file')->getClientMimeType() : 'No file',
+                'client_original_name' => $request->file('file') ? $request->file('file')->getClientOriginalName() : 'No file',
+            ]);
+
+            throw $validationException; // Re-throw so frontend gets the 422
+        }
 
         $file = $request->file('file');
 
+        // 🟢 Check if the file wrapper is valid or missing entirely
         if (!$file || !$file->isValid()) {
+            // 🚨 LOG CAT 2: File is structural corrupted or failed OS temporary directory allocation
+            Log::error('Canvas Upload File Reference Invalid:', [
+                'is_null' => is_null($file),
+                'error_code' => $file ? $file->getError() : 'No file instance',
+                'error_message' => $file ? $file->getErrorMessage() : 'No file instance',
+            ]);
+
             return response()->json(['error' => 'Uploaded image file is invalid.'], 422);
         }
 

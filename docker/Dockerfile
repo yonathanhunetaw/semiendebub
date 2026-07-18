@@ -21,6 +21,13 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     mysqli opcache pcntl pdo_mysql pdo_pgsql \
     shmop snmp soap sockets sodium tidy xsl zip
 
+# Allow canvas/product image uploads through PHP in production.
+RUN { \
+        echo 'upload_max_filesize = 20M'; \
+        echo 'post_max_size = 25M'; \
+        echo 'max_file_uploads = 20'; \
+    } > /usr/local/etc/php/conf.d/uploads.ini
+
 # 3. Install Node 22 LTS (ONLY for build step)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
