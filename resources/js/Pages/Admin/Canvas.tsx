@@ -71,11 +71,15 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
             Object.values(finalDoc.store).forEach((record: any) => {
                 if (!record || typeof record !== 'object') return;
 
-                // Patch corrupted image url: null from old snapshots before MinIO
-                if (record.typeName === 'shape' && record.type === 'image') {
-                    if (record.props && record.props.url === null) {
-                        record.props.url = '';
-                    }
+                // Patch corrupted image shape props: null values must be empty strings
+                if (record.typeName === 'shape' && record.type === 'image' && record.props) {
+                    const stringProps = ['url', 'altText', 'src', 'crop'];
+                    stringProps.forEach(key => {
+                        if (record.props[key] === null || record.props[key] === undefined) {
+                            // 'crop' can be null legitimately — only patch string fields
+                            if (key !== 'crop') record.props[key] = '';
+                        }
+                    });
                 }
 
                 // Patch null imageUrl on user records — prevents save validation crash
