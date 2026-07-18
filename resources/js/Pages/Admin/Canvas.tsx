@@ -385,6 +385,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 snapshot={initialSnapshot}
                 assets={customAssetStore}
                 onMount={handleMount}
+                components={{ DebugMenu: null }}
             />
         </div>
     );
