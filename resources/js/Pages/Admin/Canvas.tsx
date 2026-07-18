@@ -98,12 +98,19 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                         record.props.url = '';
                     }
                     if (record.type === 'image') {
-                        const allowedImageProps = new Set(['w', 'h', 'playing', 'url', 'assetId', 'crop', 'flipX', 'flipY']);
+                        // 1. Add 'altText' to the allowed set so the cleanup loop doesn't delete it!
+                        const allowedImageProps = new Set(['w', 'h', 'playing', 'url', 'assetId', 'crop', 'flipX', 'flipY', 'altText']);
+
                         Object.keys(record.props).forEach(key => {
                             if (!allowedImageProps.has(key)) {
                                 delete record.props[key];
                             }
                         });
+
+                        // 2. Ensure altText defaults to a valid string instead of being undefined
+                        if (record.props.altText === undefined || record.props.altText === null) {
+                            record.props.altText = '';
+                        }
 
                         if (record.props.url === null || record.props.url === undefined) record.props.url = '';
                         if (record.props.assetId === undefined) record.props.assetId = null;
@@ -135,9 +142,9 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 // --- Patch null/missing name props on structural records ---
                 if (record.name === null || record.name === undefined) {
                     if (record.typeName === 'document') record.name = 'Canvas';
-                    else if (record.typeName === 'user')     record.name = 'Admin';
-                    else if (record.typeName === 'page')     record.name = 'Page';
-                    else if ('name' in record)               record.name = '';
+                    else if (record.typeName === 'user') record.name = 'Admin';
+                    else if (record.typeName === 'page') record.name = 'Page';
+                    else if ('name' in record) record.name = '';
                 }
             });
         }
@@ -145,12 +152,12 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
         return finalDoc;
     };
 
-    const editorRef   = useRef<Editor | null>(null);
-    const tldrawKey   = 'canvas-root'; // static — we use imperative loadSnapshot for switching
+    const editorRef = useRef<Editor | null>(null);
+    const tldrawKey = 'canvas-root'; // static — we use imperative loadSnapshot for switching
 
-    const [showFlash, setShowFlash]            = useState(false);
-    const [history, setHistory]                = useState<HistoryItem[]>(initialHistory || []);
-    const [isFabOpen, setIsFabOpen]            = useState(false);
+    const [showFlash, setShowFlash] = useState(false);
+    const [history, setHistory] = useState<HistoryItem[]>(initialHistory || []);
+    const [isFabOpen, setIsFabOpen] = useState(false);
     const [activeVersionId, setActiveVersionId] = useState<number | null>(latestVersionInfo?.id || null);
 
     const initialSnapshot = getSanitizedSnapshot(latestSnapshot);
