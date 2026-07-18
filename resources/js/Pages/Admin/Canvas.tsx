@@ -30,14 +30,6 @@ interface CanvasProps {
     history: HistoryItem[];
 }
 
-// ----------------------------------------------------------------------------
-// MinIO-backed asset store.
-//
-// IMPORTANT: In tldraw v2, TLAssetStore.upload() MUST return a plain string
-// URL — not an object. Returning { src: url } causes the schema validator to
-// throw "Expected string, got an object" when the value is written into
-// asset.props.src. The resolve() method handles reading it back from the asset.
-// ----------------------------------------------------------------------------
 const customAssetStore: any = {
     async upload(_asset: any, file: File): Promise<string> {
         const formData = new FormData();
@@ -56,21 +48,12 @@ const customAssetStore: any = {
         return url;
     },
     async resolve(asset: any): Promise<string> {
-        // asset.props.src is the URL string we returned from upload()
         return asset.props?.src ?? '';
     }
 };
 
 export default function Canvas({ latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
 
-    // -------------------------------------------------------------------------
-    // Sanitize a raw snapshot from the DB into a valid tldraw payload.
-    //
-    // Old snapshots (saved before MinIO integration) contain null values on
-    // many shape and asset props that tldraw's strict schema now rejects.
-    // We patch ALL known nullable string fields across all shape types here
-    // so we don't have to chase individual ValidationErrors one by one.
-    // -------------------------------------------------------------------------
     const getSanitizedSnapshot = (rawData: any): any => {
         if (!rawData) return undefined;
 
@@ -91,14 +74,13 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
             Object.values(finalDoc.store).forEach((record: any) => {
                 if (!record || typeof record !== 'object') return;
 
-                // --- Patch all shape types with a url prop (geo, image, text, etc.) ---
+                // --- Patch all shape records ---
                 if (record.typeName === 'shape' && record.props) {
-                    // Every tldraw shape that has a `url` prop requires it to be a string
                     if ('url' in record.props && (record.props.url === null || record.props.url === undefined)) {
                         record.props.url = '';
                     }
 
-                    // CRITICAL: Ensure this only filters canvas SHAPES, not assets!
+                    // ✅ FIX: Explicitly guarantee this restriction ONLY modifies canvas shapes
                     if (record.type === 'image') {
                         const allowedImageProps = new Set(['w', 'h', 'playing', 'url', 'assetId', 'crop', 'flipX', 'flipY', 'altText']);
                         Object.keys(record.props).forEach(key => {
@@ -107,7 +89,9 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                             }
                         });
 
-                        if (record.props.altText === undefined || record.props.altText === null) record.props.altText = '';
+                        if (record.props.altText === undefined || record.props.altText === null) {
+                            record.props.altText = '';
+                        }
                         if (record.props.url === null || record.props.url === undefined) record.props.url = '';
                         if (record.props.assetId === undefined) record.props.assetId = null;
                         if (record.props.crop === undefined) record.props.crop = null;
@@ -117,25 +101,24 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                     }
                 }
 
-                // --- Patch asset records: asset.props.src must be a string ---
+                // --- Patch asset records ---
                 if (record.typeName === 'asset' && record.props) {
                     if (record.props.src === null || record.props.src === undefined) {
                         record.props.src = '';
                     }
-                    // src must not be an object (old blob store returned { src: url })
                     if (typeof record.props.src === 'object') {
                         record.props.src = (record.props.src as any)?.src ?? '';
                     }
                 }
 
-                // --- Patch user records: imageUrl must be a string ---
+                // --- Patch user records ---
                 if (record.typeName === 'user') {
                     if (record.imageUrl === null || record.imageUrl === undefined) {
                         record.imageUrl = '';
                     }
                 }
 
-                // --- Patch null/missing name props on structural records ---
+                // --- Patch structural names ---
                 if (record.name === null || record.name === undefined) {
                     if (record.typeName === 'document') record.name = 'Canvas';
                     else if (record.typeName === 'user') record.name = 'Admin';
@@ -149,7 +132,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
     };
 
     const editorRef = useRef<Editor | null>(null);
-    const tldrawKey = 'canvas-root'; // static — we use imperative loadSnapshot for switching
+    const tldrawKey = 'canvas-root';
 
     const [showFlash, setShowFlash] = useState(false);
     const [history, setHistory] = useState<HistoryItem[]>(initialHistory || []);
@@ -162,8 +145,6 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
         editorRef.current = editor;
         (window as any).editor = editor;
 
-        // Patch any null imageUrl on user records in the store.
-        // (editor.setUserPreferences does NOT exist in tldraw v2 — must use store API)
         try {
             const allRecords = Object.values(editor.store.allRecords());
             const userPatches = allRecords
@@ -245,7 +226,6 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
         <div style={{ position: 'fixed', inset: 0, backgroundColor: '#0f172a' }}>
             <Head title="Canvas Admin" />
 
-            {/* ── Flash Notification ── */}
             {showFlash && (
                 <div style={{
                     position: 'absolute',
@@ -268,33 +248,15 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 </div>
             )}
 
-            {/*
-              ── FAB Hamburger ──
-              Screen is divided into 4 equal quarters.
-              Button sits at the START of the 4th quarter = 75% from left = 25% from right.
-              top: 8px keeps it tight to the top edge, out of the canvas drawing area.
-            */}
-            <div style={{
-                position: 'absolute',
-                top: 8,
-                right: '25%',
-                zIndex: 1000,
-            }}>
+            <div style={{ position: 'absolute', top: 8, right: '25%', zIndex: 1000 }}>
                 <button
                     onClick={() => setIsFabOpen(!isFabOpen)}
                     title={isFabOpen ? 'Close menu' : 'Save / History'}
                     style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '22px',
-                        backgroundColor: '#1e293b',
-                        color: '#ffffff',
-                        border: '1px solid #ffffff25',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+                        width: '44px', height: '44px', borderRadius: '22px',
+                        backgroundColor: '#1e293b', color: '#ffffff', border: '1px solid #ffffff25',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
                         transition: 'background 0.2s, transform 0.15s',
                     }}
                     onMouseEnter={(e) => {
@@ -309,41 +271,22 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                     {isFabOpen ? <X size={20} /> : <Menu size={20} />}
                 </button>
 
-                {/* ── Dropdown Panel ── */}
                 {isFabOpen && (
                     <div style={{
-                        position: 'absolute',
-                        top: '52px',
-                        right: 0,
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #ffffff1a',
-                        borderRadius: '14px',
-                        boxShadow: '0 16px 40px rgba(0, 0, 0, 0.6)',
-                        width: '300px',
-                        overflow: 'hidden',
-                        display: 'flex',
-                        flexDirection: 'column',
+                        position: 'absolute', top: '52px', right: 0,
+                        backgroundColor: '#1e293b', border: '1px solid #ffffff1a',
+                        borderRadius: '14px', boxShadow: '0 16px 40px rgba(0, 0, 0, 0.6)',
+                        width: '300px', overflow: 'hidden', display: 'flex', flexDirection: 'column',
                     }}>
-                        {/* Save Button */}
                         <div style={{ padding: '14px', borderBottom: '1px solid #ffffff12' }}>
                             <button
                                 onClick={handleSave}
                                 style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '8px',
-                                    padding: '11px',
-                                    backgroundColor: '#c05800',
-                                    color: '#ffffff',
-                                    border: 'none',
-                                    borderRadius: '9px',
-                                    cursor: 'pointer',
-                                    fontWeight: '700',
-                                    width: '100%',
-                                    fontSize: '13px',
-                                    letterSpacing: '0.02em',
-                                    transition: 'background 0.2s',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    gap: '8px', padding: '11px', backgroundColor: '#c05800',
+                                    color: '#ffffff', border: 'none', borderRadius: '9px',
+                                    cursor: 'pointer', fontWeight: '700', width: '100%',
+                                    fontSize: '13px', letterSpacing: '0.02em', transition: 'background 0.2s',
                                 }}
                                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#e06a00')}
                                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#c05800')}
@@ -352,20 +295,11 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                             </button>
                         </div>
 
-                        {/* Version History */}
                         <div style={{ maxHeight: '380px', overflowY: 'auto', backgroundColor: '#0f172a' }}>
-
-                            {/* Section header */}
                             <div style={{
-                                padding: '10px 14px 6px',
-                                fontSize: '10px',
-                                fontWeight: '700',
-                                color: '#64748b',
-                                letterSpacing: '0.08em',
-                                textTransform: 'uppercase',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px',
+                                padding: '10px 14px 6px', fontSize: '10px', fontWeight: '700',
+                                color: '#64748b', letterSpacing: '0.08em', textTransform: 'uppercase',
+                                display: 'flex', alignItems: 'center', gap: '5px',
                             }}>
                                 <History size={12} /> Version History
                             </div>
@@ -382,15 +316,10 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                                             key={item.id}
                                             onClick={() => handleLoadVersion(item.id)}
                                             style={{
-                                                display: 'block',
-                                                width: '100%',
-                                                textAlign: 'left',
-                                                padding: '10px 14px',
-                                                background: isActive ? '#6366f115' : 'transparent',
-                                                border: 'none',
-                                                borderBottom: '1px solid #ffffff08',
-                                                cursor: 'pointer',
-                                                transition: 'background 0.15s',
+                                                display: 'block', width: '100%', textAlign: 'left',
+                                                padding: '10px 14px', background: isActive ? '#6366f115' : 'transparent',
+                                                border: 'none', borderBottom: '1px solid #ffffff08',
+                                                cursor: 'pointer', transition: 'background 0.15s',
                                             }}
                                             onMouseEnter={(e) => {
                                                 if (!isActive) e.currentTarget.style.backgroundColor = '#ffffff08';
@@ -399,45 +328,32 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                                                 if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
                                             }}
                                         >
-                                            {/* Version ID + active badge */}
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
                                                 <span style={{
-                                                    fontWeight: '700',
-                                                    fontSize: '13px',
+                                                    fontWeight: '700', fontSize: '13px',
                                                     color: isActive ? '#818cf8' : '#e2e8f0',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '5px',
+                                                    display: 'flex', alignItems: 'center', gap: '5px',
                                                 }}>
                                                     v{item.id}
                                                     {isActive && (
                                                         <span style={{
-                                                            fontSize: '9px',
-                                                            backgroundColor: '#6366f1',
-                                                            color: '#fff',
-                                                            padding: '1px 6px',
-                                                            borderRadius: '10px',
-                                                            fontWeight: '600',
+                                                            fontSize: '9px', backgroundColor: '#6366f1',
+                                                            color: '#fff', padding: '1px 6px',
+                                                            borderRadius: '10px', fontWeight: '600',
                                                             letterSpacing: '0.04em',
                                                         }}>ACTIVE</span>
                                                     )}
                                                 </span>
                                             </div>
 
-                                            {/* Comment */}
                                             <div style={{
-                                                fontSize: '12px',
-                                                color: '#94a3b8',
-                                                marginBottom: '6px',
-                                                lineHeight: '1.4',
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
+                                                fontSize: '12px', color: '#94a3b8', marginBottom: '6px',
+                                                lineHeight: '1.4', whiteSpace: 'nowrap',
+                                                overflow: 'hidden', textOverflow: 'ellipsis',
                                             }}>
                                                 {item.comment || 'No comment'}
                                             </div>
 
-                                            {/* Saved by + time */}
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                                 {item.user && (
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#64748b' }}>
