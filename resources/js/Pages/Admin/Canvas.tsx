@@ -47,8 +47,13 @@ const customAssetStore: any = {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
 
-        // Must return a plain URL string — NOT { src: url }
-        return response.data.url as string;
+        const url = response.data?.url;
+        if (typeof url !== 'string' || url.length === 0) {
+            console.error('Canvas image upload returned an invalid response:', response.data);
+            throw new Error(response.data?.error || 'Canvas image upload did not return a URL.');
+        }
+
+        return url;
     },
     async resolve(asset: any): Promise<string> {
         // asset.props.src is the URL string we returned from upload()

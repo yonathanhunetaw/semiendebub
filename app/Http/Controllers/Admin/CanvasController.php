@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Canvas\CanvasVersion;
+use App\Services\ImageResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Throwable;
 
 class CanvasController extends Controller
 {
@@ -68,16 +71,40 @@ class CanvasController extends Controller
             'file' => 'required|image|max:10240', // 10MB limit
         ]);
 
-        if ($request->file('file')) {
-            // Store the file in the canvas-assets folder on the s3 (MinIO) disk
-            $path = Storage::disk('s3')->putFile('canvas-assets', $request->file('file'), 'public');
+        $file = $request->file('file');
 
-            // Generate the absolute public URL for the browser to load
-            $url = Storage::disk('s3')->url($path);
-
-            return response()->json(['url' => $url]);
+        if (!$file || !$file->isValid()) {
+            return response()->json(['error' => 'Uploaded image file is invalid.'], 422);
         }
 
-        return response()->json(['error' => 'File upload failed'], 400);
+        try {
+            $path = Storage::disk('s3')->putFile('canvas-assets', $file, 'public');
+
+            if (!is_string($path) || $path === '') {
+                Log::error('Canvas asset upload did not return a storage path.', [
+                    'original_name' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'size' => $file->getSize(),
+                ]);
+
+                return response()->json(['error' => 'Image upload did not return a storage path.'], 500);
+            }
+
+            return response()->json([
+                'path' => $path,
+                'url' => ImageResolver::resolve($path),
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('Canvas asset upload failed.', [
+                'message' => $exception->getMessage(),
+                'original_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize(),
+            ]);
+
+            return response()->json([
+                'error' => 'Image upload failed. Check MinIO/S3 configuration and Laravel logs.',
+            ], 500);
+        }
     }
 }
