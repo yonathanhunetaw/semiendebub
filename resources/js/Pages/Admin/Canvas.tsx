@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Tldraw, Editor } from 'tldraw';
+import { Tldraw, Editor, setUserPreferences } from 'tldraw';
 import 'tldraw/tldraw.css';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
@@ -115,13 +115,23 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
         editorRef.current = editor;
         (window as any).editor = editor;
 
-        // Fix Issue 1: Explicitly set user preferences to prevent schema validation
-        // crashes on null imageUrl when calling editor.getSnapshot() to save.
-        editor.setUserPreferences({
-            id: 'admin-user',
-            name: 'Admin',
-            imageUrl: '', // Must be an empty string — NOT null
-        });
+        // Fix Issue 1: Patch null imageUrl on user records in the store.
+        // editor.setUserPreferences() does NOT exist on Editor in tldraw v2 —
+        // the correct API is to update the user records directly in the store.
+        try {
+            const userRecords = (editor.store as any).query?.records('user')?.get?.() ?? [];
+            if (Array.isArray(userRecords) && userRecords.length > 0) {
+                const patched = userRecords
+                    .filter((u: any) => u.imageUrl === null || u.imageUrl === undefined)
+                    .map((u: any) => ({ ...u, imageUrl: '' }));
+                if (patched.length > 0) {
+                    editor.store.put(patched);
+                }
+            }
+        } catch (e) {
+            // Non-fatal — if the query API isn't available just continue
+            console.warn('Could not patch user imageUrl records:', e);
+        }
 
         setTimeout(() => {
             editor.zoomToFit({ animation: { duration: 200 } });
