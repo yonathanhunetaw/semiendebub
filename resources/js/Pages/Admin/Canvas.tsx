@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { Tldraw, Editor } from 'tldraw';
 import 'tldraw/tldraw.css';
 import { Head } from '@inertiajs/react';
@@ -154,7 +154,10 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
     const [isFabOpen, setIsFabOpen] = useState(false);
     const [activeVersionId, setActiveVersionId] = useState<number | null>(latestVersionInfo?.id || null);
 
-    const initialSnapshot = getSanitizedSnapshot(latestSnapshot);
+    // 🟢 FIX: Memoize the initial load snapshot so component state changes (like menu toggling) do not re-evaluate or wipe current canvas modifications
+    const stableInitialSnapshot = useMemo(() => {
+        return getSanitizedSnapshot(latestSnapshot);
+    }, [latestSnapshot]);
 
     const handleMount = (editor: Editor) => {
         editorRef.current = editor;
@@ -263,7 +266,6 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 </div>
             )}
 
-            {/* 🟢 FIX 3: Fixed style syntax token for zIndex from lowercase to camelCase */}
             <div style={{ position: 'absolute', top: 8, right: '25%', zIndex: 1000 }}>
                 <button
                     onClick={() => setIsFabOpen(!isFabOpen)}
@@ -393,7 +395,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
 
             <Tldraw
                 key={tldrawKey}
-                snapshot={initialSnapshot}
+                snapshot={stableInitialSnapshot}
                 assets={customAssetStore}
                 onMount={handleMount}
                 components={{ DebugMenu: null }}
