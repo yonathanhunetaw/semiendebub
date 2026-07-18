@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Tldraw, Editor } from 'tldraw';
 import 'tldraw/tldraw.css';
 import { Head } from '@inertiajs/react';
@@ -30,12 +30,18 @@ interface CanvasProps {
     history: HistoryItem[];
 }
 
+// MinIO-backed asset store: uploads images to your S3/MinIO bucket for persistent URLs
 const customAssetStore: any = {
     async upload(_asset: any, file: File) {
-        const objectUrl = URL.createObjectURL(file);
-        return { 
-            src: objectUrl 
-        };
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await axios.post('/canvas/upload-asset', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        // Returns a permanent public MinIO URL — safe to persist in snapshot_json
+        return { src: response.data.url };
     },
     async resolve(asset: any) {
         return asset.props.src;
@@ -43,8 +49,11 @@ const customAssetStore: any = {
 };
 
 export default function Canvas({ latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
-    const getSanitizedSnapshot = (rawData: any) => {
+
+    // Sanitize a raw snapshot payload from the DB into a clean object tldraw can consume
+    const getSanitizedSnapshot = (rawData: any): any => {
         if (!rawData) return undefined;
+
         let clean = rawData;
         if (typeof clean === 'string') {
             try { clean = JSON.parse(clean); } catch (e) { }
@@ -57,22 +66,29 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
         }
 
         const finalDoc = clean.document || clean;
-        
+
         if (finalDoc && finalDoc.store) {
             Object.values(finalDoc.store).forEach((record: any) => {
                 if (!record || typeof record !== 'object') return;
-                
-                // Fix corrupted image urls in historical data
+
+                // Patch corrupted image url: null from old snapshots before MinIO
                 if (record.typeName === 'shape' && record.type === 'image') {
                     if (record.props && record.props.url === null) {
                         record.props.url = '';
                     }
                 }
-                
-                // Fix corrupted names
+
+                // Patch null imageUrl on user records — prevents save validation crash
+                if (record.typeName === 'user') {
+                    if (record.imageUrl === null || record.imageUrl === undefined) {
+                        record.imageUrl = '';
+                    }
+                }
+
+                // Patch null/missing names on structural records
                 if (record.name === null || record.name === undefined) {
                     if (record.typeName === 'document') record.name = 'Canvas';
-                    else if (record.typeName === 'user') record.name = 'User';
+                    else if (record.typeName === 'user') record.name = 'Admin';
                     else if (record.typeName === 'page') record.name = 'Page';
                     else if ('name' in record) record.name = '';
                 }
@@ -82,31 +98,49 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
         return finalDoc;
     };
 
-    const [showFlash, setShowFlash] = useState(false);
-    const [history, setHistory] = useState<HistoryItem[]>(initialHistory || []);
-    const [isFabOpen, setIsFabOpen] = useState(false);
-    const [activeVersionId, setActiveVersionId] = useState<number | null>(latestVersionInfo?.id || null);
-    const [currentSnapshot, setCurrentSnapshot] = useState(() => getSanitizedSnapshot(latestSnapshot));
+    const editorRef = useRef<Editor | null>(null);
+
+    const [showFlash, setShowFlash]             = useState(false);
+    const [history, setHistory]                  = useState<HistoryItem[]>(initialHistory || []);
+    const [isFabOpen, setIsFabOpen]              = useState(false);
+    const [activeVersionId, setActiveVersionId]  = useState<number | null>(latestVersionInfo?.id || null);
+    const [tldrawKey, setTldrawKey]              = useState('initial-canvas');
+
+    // We hold the initial snapshot in state only for the very first mount.
+    // After that, we use the imperative editor.loadSnapshot() for switching versions,
+    // because updating the `snapshot` prop after mount does NOT reload the canvas.
+    const initialSnapshot = getSanitizedSnapshot(latestSnapshot);
 
     const handleMount = (editor: Editor) => {
+        editorRef.current = editor;
         (window as any).editor = editor;
-        
+
+        // Fix Issue 1: Explicitly set user preferences to prevent schema validation
+        // crashes on null imageUrl when calling editor.getSnapshot() to save.
+        editor.setUserPreferences({
+            id: 'admin-user',
+            name: 'Admin',
+            imageUrl: '', // Must be an empty string — NOT null
+        });
+
         setTimeout(() => {
             editor.zoomToFit({ animation: { duration: 200 } });
-        }, 100);
+        }, 150);
     };
 
     const handleSave = async () => {
-        const editor = (window as any).editor;
+        const editor = editorRef.current;
         if (!editor) return;
 
-        const snapshot = editor.getSnapshot();
-        const comment = prompt("Enter a comment for this save:", "Updated canvas blueprint") || "Submitted for review";
+        const comment = prompt('Enter a comment for this save:', 'Updated canvas blueprint') || 'Submitted for review';
 
         try {
+            // Now that imageUrl is always a string, getSnapshot() won't throw
+            const snapshot = editor.getSnapshot();
+
             const response = await axios.post('/canvas/save', {
                 snapshot_json: snapshot,
-                comment: comment
+                comment: comment,
             });
 
             if (response.status === 200) {
@@ -116,25 +150,33 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
 
                 const newVersionId = response.data.version_id;
                 setHistory(prev => [
-                    {
-                        id: newVersionId,
-                        comment: comment,
-                        created_at: new Date().toISOString()
-                    },
-                    ...prev
+                    { id: newVersionId, comment, created_at: new Date().toISOString() },
+                    ...prev,
                 ]);
                 setActiveVersionId(newVersionId);
             }
         } catch (error) {
             console.error('Failed to save canvas data:', error);
+            alert('Save failed — check the console for details.');
         }
     };
 
     const handleLoadVersion = async (id: number) => {
+        const editor = editorRef.current;
+        if (!editor) return;
+
         try {
             const response = await axios.get(`/canvas/version/${id}`);
             if (response.data) {
-                setCurrentSnapshot(getSanitizedSnapshot(response.data));
+                // Fix Issue 2: Use the imperative API — updating the `snapshot` prop
+                // after mount silently does nothing in tldraw v2.
+                const sanitized = getSanitizedSnapshot(response.data);
+                if (sanitized) {
+                    editor.loadSnapshot(sanitized);
+                    setTimeout(() => {
+                        editor.zoomToFit({ animation: { duration: 200 } });
+                    }, 100);
+                }
                 setActiveVersionId(id);
                 setIsFabOpen(false);
             }
@@ -171,40 +213,45 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 </div>
             )}
 
-            {/* FAB Control Anchor - Placed Top Right safe zone */}
+            {/*
+              FAB Control Anchor
+              Positioned at top: 12px so it sits at the very top edge.
+              right: '28%' puts it in the middle of the right half of the screen,
+              safely away from tldraw's native right-side toolbar/color chooser.
+            */}
             <div style={{
                 position: 'absolute',
-                top: 64, // below standard top navs
-                right: 24,
+                top: 12,
+                right: '28%',
                 zIndex: 1000,
             }}>
                 <button
                     onClick={() => setIsFabOpen(!isFabOpen)}
                     style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: '24px',
+                        width: '46px',
+                        height: '46px',
+                        borderRadius: '23px',
                         backgroundColor: '#1e293b',
                         color: '#ffffff',
-                        border: '1px solid #ffffff1f',
+                        border: '1px solid #ffffff2a',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         cursor: 'pointer',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
                         transition: 'all 0.2s ease',
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#2d3748')}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1e293b')}
                 >
-                    {isFabOpen ? <X size={24} /> : <Menu size={24} />}
+                    {isFabOpen ? <X size={22} /> : <Menu size={22} />}
                 </button>
 
-                {/* Dropdown Panel */}
+                {/* Dropdown Panel — opens downward from the FAB */}
                 {isFabOpen && (
                     <div style={{
                         position: 'absolute',
-                        top: '60px',
+                        top: '56px',
                         right: 0,
                         backgroundColor: '#1e293b',
                         border: '1px solid #ffffff1f',
@@ -215,7 +262,7 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                         display: 'flex',
                         flexDirection: 'column'
                     }}>
-                        {/* Header Actions */}
+                        {/* Save Action */}
                         <div style={{ padding: '16px', borderBottom: '1px solid #ffffff1f' }}>
                             <button
                                 onClick={handleSave}
@@ -323,11 +370,11 @@ export default function Canvas({ latestSnapshot, latestVersionInfo, history: ini
                 )}
             </div>
 
-            <Tldraw 
-                key={activeVersionId ? `version-${activeVersionId}` : 'initial-canvas'}
-                snapshot={currentSnapshot}
+            <Tldraw
+                key={tldrawKey}
+                snapshot={initialSnapshot}
                 assets={customAssetStore}
-                onMount={handleMount} 
+                onMount={handleMount}
             />
         </div>
     );

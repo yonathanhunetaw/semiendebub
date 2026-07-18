@@ -73,8 +73,8 @@ Route::domain("admin.{$baseDomain}")
             Route::prefix('canvas')->name('canvas.')->group(function () {
                 Route::get('/', [CanvasController::class, 'index'])->name('index');
                 Route::post('/save', [CanvasController::class, 'save'])->name('save');
-                // ADD THIS NEW LINE:
                 Route::get('/version/{id}', [CanvasController::class, 'getVersion'])->name('version');
+                Route::post('/upload-asset', [CanvasController::class, 'uploadAsset'])->name('upload-asset');
             });
         });
     });
