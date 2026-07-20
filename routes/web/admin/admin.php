@@ -69,12 +69,20 @@ Route::domain("admin.{$baseDomain}")
                 Route::patch('/transfers/{transfer}/cancel', [TransferController::class, 'cancel'])->name('transfers.cancel');
             });
 
-            // ── Canvas ──
-            Route::prefix('canvas')->name('canvas.')->group(function () {
-                Route::get('/', [CanvasController::class, 'index'])->name('index');
-                Route::post('/save', [CanvasController::class, 'save'])->name('save');
-                Route::get('/version/{id}', [CanvasController::class, 'getVersion'])->name('version');
-                Route::post('/upload-asset', [CanvasController::class, 'uploadAsset'])->name('upload-asset');
-            });
+        });
+    });
+
+Route::domain("{subdomain}.{$baseDomain}")
+    ->middleware(['auth', 'verified'])
+    ->group(function () {
+        // ── Canvas ──
+        Route::prefix('canvas')->name('canvas.')->group(function () {
+            Route::get('/', [CanvasController::class, 'index'])->name('index');
+            Route::post('/create', [CanvasController::class, 'create'])->name('create');
+            Route::post('/share', [CanvasController::class, 'share'])->name('share');
+            Route::post('/unshare', [CanvasController::class, 'unshare'])->name('unshare');
+            Route::post('/save', [CanvasController::class, 'save'])->name('save');
+            Route::get('/version/{id}', [CanvasController::class, 'getVersion'])->name('version');
+            Route::post('/upload-asset', [CanvasController::class, 'uploadAsset'])->name('upload-asset');
         });
     });

@@ -48,6 +48,91 @@ class UserSeeder extends Seeder
         ]);
         $nani->assignRole('admin');
 
+        $mili = User::create([
+            'first_name' => 'Mili',
+            'last_name' => 'Hunetaw',
+            'phone_number' => '0952953824',
+            'email' => 'mili@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'admin',
+            'password' => Hash::make('0952953824'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $mili->assignRole('admin');
+
+        $lina = User::create([
+            'first_name' => 'Lina',
+            'last_name' => 'Hunetaw',
+            'phone_number' => '0911515660',
+            'email' => 'lina@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'admin',
+            'password' => Hash::make('0911515660'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $lina->assignRole('admin');
+
+        $selam = User::create([
+            'first_name' => 'Selam',
+            'last_name' => 'Hunetaw',
+            'phone_number' => '0911179657',
+            'email' => 'selam@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'admin',
+            'password' => Hash::make('0911179657'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $selam->assignRole('admin');
+
+        $abush = User::create([
+            'first_name' => 'Abush',
+            'last_name' => 'Hunetaw',
+            'phone_number' => '0912669526',
+            'email' => 'abush@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'admin',
+            'password' => Hash::make('0912669526'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $abush->assignRole('admin');
+
+        $bubu = User::create([
+            'first_name' => 'Bubu',
+            'last_name' => 'Hunetaw',
+            'phone_number' => '0920853335',
+            'email' => 'bubu@mezgebedirijit.com',
+            'email_verified_at' => now(),
+            'role' => 'admin',
+            'password' => Hash::make('0920853335'),
+            'remember_token' => Str::random(10),
+            'store_id' => null,
+            'inventory_location_id' => null,
+            'created_by' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $bubu->assignRole('admin');
+
         $hulala = User::create([
             'first_name' => 'Hulala',
             'last_name' => 'Sinqe',

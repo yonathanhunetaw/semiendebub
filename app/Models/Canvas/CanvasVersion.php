@@ -14,6 +14,7 @@ class CanvasVersion extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'canvas_id',
         'user_id', 
         'snapshot_json', 
         'status', 
@@ -35,5 +36,13 @@ class CanvasVersion extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the canvas this version belongs to.
+     */
+    public function canvas(): BelongsTo
+    {
+        return $this->belongsTo(Canvas::class);
     }
 }
