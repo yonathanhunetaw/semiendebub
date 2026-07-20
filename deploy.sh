@@ -1,5 +1,4 @@
-#!/bin/bash -x
-sed -i '1 s/bash.*/bash -x/' deploy.sh
+#!/bin/bash
 
 # =============================================================================
 # COLOR CODES FOR LOGGING
