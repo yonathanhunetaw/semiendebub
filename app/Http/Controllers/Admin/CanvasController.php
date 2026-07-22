@@ -21,7 +21,8 @@ class CanvasController extends Controller
         $user = Auth::user();
 
         // Fetch user's personal and shared canvases
-        $canvases = Canvas::where('user_id', $user->id)
+        $canvases = Canvas::with('user:id,first_name,last_name')
+            ->where('user_id', $user->id)
             ->orWhereHas('shares', function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             })
@@ -54,6 +55,7 @@ class CanvasController extends Controller
         return Inertia::render('Admin/Canvas', [
             'canvases'         => $canvases,
             'activeCanvasId'   => $canvas->id,
+            'currentUserId'    => $user->id,
             'allUsers'         => $allUsers,
             'sharedUsers'      => $sharedUsers,
             'latestSnapshot'   => $latestVersion ? $latestVersion->snapshot_json : null,
@@ -73,7 +75,7 @@ class CanvasController extends Controller
         ]);
         
         $canvas = Canvas::create(['user_id' => Auth::id(), 'title' => $request->title]);
-        return back();
+        return redirect('/canvas?canvas_id=' . $canvas->id)->with('success', 'Canvas created successfully!');
     }
 
     public function share(Request $request)
@@ -102,7 +104,7 @@ class CanvasController extends Controller
         return back()->with('success', 'User removed from canvas successfully!');
     }
 
-    public function getVersion($id)
+    public function getVersion($subdomain, $id)
     {
         $version = CanvasVersion::findOrFail($id);
 

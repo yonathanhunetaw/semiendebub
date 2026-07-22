@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { Tldraw, Editor } from 'tldraw';
 import 'tldraw/tldraw.css';
 import { Head, router } from '@inertiajs/react';
@@ -76,6 +76,7 @@ interface HistoryItem {
 interface CanvasProps {
     canvases: any[];
     activeCanvasId: number;
+    currentUserId: number;
     allUsers: any[];
     sharedUsers?: any[];
     latestSnapshot: any;
@@ -113,7 +114,7 @@ const customAssetStore: any = {
     }
 };
 
-export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId, allUsers, sharedUsers: initialSharedUsers, latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
+export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId, currentUserId, allUsers, sharedUsers: initialSharedUsers, latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
 
     const getSanitizedSnapshot = (rawData: any): any => {
         if (!rawData) return undefined;
@@ -224,6 +225,32 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
     const [newCanvasTitle, setNewCanvasTitle] = useState('');
     const [selectedUserToShare, setSelectedUserToShare] = useState('');
     const [sharedUsers, setSharedUsers] = useState<any[]>(initialSharedUsers || []);
+    
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = ''; // Standard way to show browser's native dialog
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [hasUnsavedChanges]);
+
+    useEffect(() => {
+        const unsubscribe = router.on('before', (event) => {
+            if (hasUnsavedChanges) {
+                if (!window.confirm('You have unsaved changes. Are you sure you want to leave this canvas without saving?')) {
+                    event.preventDefault();
+                }
+            }
+        });
+
+        return unsubscribe;
+    }, [hasUnsavedChanges]);
 
     const handleCreateCanvas = () => {
         if (!newCanvasTitle.trim()) return;
@@ -278,6 +305,24 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         editorRef.current = editor;
         (window as any).editor = editor;
 
+        editor.store.listen((update) => {
+            if (update.source !== 'user') return;
+            
+            const changedRecords = [
+                ...Object.values(update.changes.added),
+                ...Object.values(update.changes.updated).map(([_, to]) => to),
+                ...Object.values(update.changes.removed)
+            ];
+            
+            const isSignificantChange = changedRecords.some((r: any) => 
+                r.typeName === 'shape' || r.typeName === 'asset' || r.typeName === 'page'
+            );
+            
+            if (isSignificantChange) {
+                setHasUnsavedChanges(true);
+            }
+        });
+
         try {
             const allRecords = Object.values(editor.store.allRecords());
             const userPatches = allRecords
@@ -312,6 +357,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             if (response.status === 200) {
                 setSnackbar({ open: true, message: 'Canvas snapshot saved!', severity: 'success' });
                 setIsDrawerOpen(false);
+                setHasUnsavedChanges(false);
 
                 const newVersionId = response.data.version_id;
                 setHistory(prev => [
@@ -340,6 +386,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 }
                 setActiveVersionId(id);
                 setIsDrawerOpen(false);
+                setHasUnsavedChanges(false);
                 setSnackbar({ open: true, message: `Loaded version ${id}`, severity: 'success' });
             }
         } catch (error: any) {
@@ -361,20 +408,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'background.default' }}>
                 <Head title="Canvas Admin" />
 
-                {/* Left Side Plus Button for creating new canvas */}
-                <Box sx={{ position: 'absolute', top: 72, left: 16, zIndex: 1000 }}>
-                    <Tooltip title="Create New Canvas" placement="right">
-                        <Fab 
-                            size="medium" 
-                            color="primary" 
-                            onClick={() => setIsCreateDialogOpen(true)}
-                            sx={{ boxShadow: 3 }}
-                        >
-                            <AddIcon />
-                        </Fab>
-                    </Tooltip>
-                </Box>
-
                 <Tldraw
                     key={tldrawKey}
                     snapshot={stableInitialSnapshot}
@@ -382,20 +415,46 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     onMount={handleMount}
                     components={{ 
                         DebugMenu: null,
-                        SharePanel: () => (
-                            <Box sx={{ pointerEvents: 'all', display: 'flex', alignItems: 'center', ml: 1, mr: 1 }}>
-                                <Button 
-                                    variant="contained" 
-                                    color="primary" 
-                                    startIcon={<MenuIcon />} 
-                                    onClick={() => setIsDrawerOpen(true)}
-                                    size="small"
-                                    sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, boxShadow: 0, height: 36 }}
-                                >
-                                    Admin Menu
-                                </Button>
-                            </Box>
-                        )
+                        SharePanel: () => {
+                            const activeCanvas = canvases.find(c => c.id === initialActiveCanvasId);
+                            return (
+                                <Box sx={{ pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: 1.5, mr: 1, my: 1.5 }}>
+                                    {activeCanvas && (
+                                        <Box sx={{ bgcolor: 'background.paper', px: 2, py: 0.75, borderRadius: 2, boxShadow: 1, border: '1px solid', borderColor: 'divider' }}>
+                                            <Typography variant="body2" fontWeight="bold" color="text.secondary" sx={{ lineHeight: 1 }}>
+                                                {activeCanvas.title}
+                                            </Typography>
+                                        </Box>
+                                    )}
+                                    <Tooltip title="Create New Canvas">
+                                        <IconButton
+                                            onClick={() => setIsCreateDialogOpen(true)}
+                                            sx={{
+                                                width: 40, height: 40,
+                                                bgcolor: 'primary.main', color: 'white',
+                                                boxShadow: 2,
+                                                '&:hover': { bgcolor: 'primary.dark' },
+                                            }}
+                                        >
+                                            <AddIcon fontSize="small" />
+                                        </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Admin Menu">
+                                        <IconButton
+                                            onClick={() => setIsDrawerOpen(true)}
+                                            sx={{
+                                                width: 40, height: 40,
+                                                bgcolor: '#e2e8f0', color: '#1e293b',
+                                                boxShadow: 2,
+                                                '&:hover': { bgcolor: '#cbd5e1' },
+                                            }}
+                                        >
+                                            <MenuIcon fontSize="small" />
+                                        </IconButton>
+                                    </Tooltip>
+                                </Box>
+                            );
+                        }
                     }}
                 />
 
@@ -422,9 +481,24 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                 label="Active Canvas"
                                 onChange={(e) => router.get('/canvas', { canvas_id: e.target.value })}
                             >
-                                {canvases.map(c => (
+                                <ListSubheader sx={{ fontWeight: 'bold', color: 'primary.main', lineHeight: '36px' }}>My Canvases</ListSubheader>
+                                {canvases.filter(c => c.user_id === currentUserId).map(c => (
                                     <MenuItem key={c.id} value={c.id}>{c.title}</MenuItem>
                                 ))}
+
+                                {canvases.filter(c => c.user_id !== currentUserId).length > 0 && [
+                                    <ListSubheader key="shared-header" sx={{ fontWeight: 'bold', color: 'secondary.main', lineHeight: '36px' }}>Shared with me</ListSubheader>,
+                                    ...canvases.filter(c => c.user_id !== currentUserId).map(c => (
+                                        <MenuItem key={c.id} value={c.id}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span>{c.title}</span>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    by {c.user?.first_name} {c.user?.last_name}
+                                                </Typography>
+                                            </Box>
+                                        </MenuItem>
+                                    ))
+                                ]}
                             </Select>
                         </FormControl>
 

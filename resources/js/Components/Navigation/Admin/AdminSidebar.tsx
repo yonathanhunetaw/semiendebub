@@ -16,6 +16,7 @@ import {
     Settings,
     ExpandLess,
     ExpandMore,
+    Draw,
 } from "@mui/icons-material";
 import { Link, usePage } from "@inertiajs/react";
 import {
@@ -231,6 +232,17 @@ export default function AdminSidebar({
                 >
                     <ListItemIcon><TaskAlt /></ListItemIcon>
                     <ListItemText primary="Tasks" />
+                </ListItemButton>
+                {/* White Board / Canvas */}
+                <ListItemButton
+                    component="a"
+                    href="/canvas"
+                    target="_blank"
+                    selected={url.includes("/canvas")}
+                    sx={mainItemStyle}
+                >
+                    <ListItemIcon><Draw /></ListItemIcon>
+                    <ListItemText primary="White Board" />
                 </ListItemButton>
             </List>
 
