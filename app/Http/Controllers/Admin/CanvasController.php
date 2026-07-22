@@ -83,10 +83,11 @@ class CanvasController extends Controller
         $request->validate([
             'canvas_id' => 'required|exists:canvases,id',
             'user_id' => 'required|exists:users,id',
+            'permission' => 'required|in:view,edit',
         ]);
         
         $canvas = Canvas::where('user_id', Auth::id())->findOrFail($request->canvas_id);
-        $canvas->shares()->syncWithoutDetaching([$request->user_id => ['permission' => 'edit']]);
+        $canvas->shares()->syncWithoutDetaching([$request->user_id => ['permission' => $request->permission]]);
         
         return back()->with('success', 'Canvas shared successfully!');
     }
