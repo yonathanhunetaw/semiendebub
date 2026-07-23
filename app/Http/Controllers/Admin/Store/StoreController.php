@@ -54,104 +54,118 @@ class StoreController extends Controller
 
     public function show(Store $store)
     {
-        $store->load([
-            'storeVariants' => function ($query) {
-                $query->with([
-                    'itemVariant' => function ($q) {
-                        $q->with(['item.category', 'itemColor', 'itemSize', 'packagingQuantities']);
-                    },
-                    'stocks',
-                    'customerPrices.customer',
-                    'sellerPrices.seller',
-                    'individualPrice',
+        $paginatedItems = \App\Models\Item\Item::whereHas('variants.storeVariants', function($q) use ($store) {
+            $q->where('store_id', $store->id);
+        })
+        ->with([
+            'category',
+            'variants' => function($q) use ($store) {
+                $q->whereHas('storeVariants', function($q2) use ($store) {
+                    $q2->where('store_id', $store->id);
+                })
+                ->with([
+                    'itemColor', 'itemSize', 'packagingQuantities',
+                    'storeVariants' => function($q2) use ($store) {
+                        $q2->where('store_id', $store->id)
+                           ->with([
+                               'stocks',
+                               'customerPrices.customer',
+                               'sellerPrices.seller',
+                               'individualPrice'
+                           ]);
+                    }
                 ]);
             }
-        ]);
+        ])
+        ->paginate(25);
 
-        $inventory = $store->storeVariants
-            ->groupBy(fn($sv) => $sv->itemVariant->item_id)
-            ->map(function ($variants, $itemId) use ($store) {
-                $firstVariant = $variants->first();
-                $item = $firstVariant->itemVariant->item;
-                $category = $item?->category;
+        $inventory = $paginatedItems->through(function ($item) use ($store) {
+            $storeVariants = collect();
+            foreach ($item->variants as $itemVariant) {
+                foreach ($itemVariant->storeVariants as $sv) {
+                    $sv->setRelation('itemVariant', $itemVariant);
+                    $itemVariant->setRelation('item', $item);
+                    $storeVariants->push($sv);
+                }
+            }
 
-                return [
-                    'item_id' => $itemId,
-                    'item_name' => $item->product_name ?? 'Unknown Item',
-                    'category' => $category->category_name ?? 'N/A',
-                    'total_variants' => $variants->count(),
-                    'total_stock' => $variants->reduce(
-                        fn($carry, $sv) => $carry + $sv->stocks->sum('quantity'),
-                        0
-                    ),
-                    'variants' => $variants->map(function ($sv) use ($store) {
-                        // Use PriceProvider to get the price ladder
-                        $priceLadder = PriceProvider::getPriceLadder(
-                            $sv->id,
-                            $store->id,
-                            null, // sellerId - can be passed from request if needed
-                            null  // customerId - can be passed from request if needed
-                        );
+            return [
+                'item_id' => $item->id,
+                'item_name' => $item->product_name ?? 'Unknown Item',
+                'category' => $item->category->category_name ?? 'N/A',
+                'total_variants' => $storeVariants->count(),
+                'total_stock' => $storeVariants->reduce(
+                    fn($carry, $sv) => $carry + $sv->stocks->sum('quantity'),
+                    0
+                ),
+                'variants' => $storeVariants->map(function ($sv) use ($store) {
+                    // Use PriceProvider to get the price ladder
+                    $priceLadder = PriceProvider::getPriceLadder(
+                        $sv->id,
+                        $store->id,
+                        null, // sellerId - can be passed from request if needed
+                        null  // customerId - can be passed from request if needed
+                    );
 
-                        // Get the final price (highest priority - customer > seller > store)
-                        $finalPrice = PriceProvider::getFinalPrice($priceLadder);
+                    // Get the final price (highest priority - customer > seller > store)
+                    $finalPrice = PriceProvider::getFinalPrice($priceLadder);
 
-                        // Get the store-level base price (first in ladder)
-                        $basePrice = $priceLadder[0]['price'] ?? 0;
-                        $discountPrice = $priceLadder[0]['discount_price'] ?? null;
-                        $discountEndsAt = $priceLadder[0]['discount_ends_at'] ?? null;
+                    // Get the store-level base price (first in ladder)
+                    $basePrice = $priceLadder[0]['price'] ?? 0;
+                    $discountPrice = $priceLadder[0]['discount_price'] ?? null;
+                    $discountEndsAt = $priceLadder[0]['discount_ends_at'] ?? null;
 
-                        return [
-                            'id' => $sv->id,
-                            'sku' => $sv->itemVariant->sku ?? '—',
-                            'label' => implode(' / ', array_filter([
-                                $sv->itemVariant->itemColor?->name,
-                                $sv->itemVariant->itemSize?->name,
-                                $sv->itemVariant->packagingQuantities->first()?->name,
-                            ])) ?: $sv->itemVariant->sku,
+                    return [
+                        'id' => $sv->id,
+                        'sku' => $sv->itemVariant->sku ?? '—',
+                        'label' => implode(' / ', array_filter([
+                            $sv->itemVariant->itemColor?->name,
+                            $sv->itemVariant->itemSize?->name,
+                            $sv->itemVariant->packagingQuantities->first()?->name,
+                        ])) ?: $sv->itemVariant->sku,
 
-                            // Base store prices
-                            'price' => $basePrice,
-                            'discount_price' => $discountPrice,
-                            'discount_ends_at' => $discountEndsAt,
-                            'final_price' => $finalPrice, // Add this for convenience
-                            'active' => (bool) $sv->active,
-                            'stock' => (int) $sv->stocks->sum('quantity'),
-                            'status' => $sv->active ? 'active' : 'inactive',
+                        // Base store prices
+                        'price' => $basePrice,
+                        'discount_price' => $discountPrice,
+                        'discount_ends_at' => $discountEndsAt,
+                        'final_price' => $finalPrice, // Add this for convenience
+                        'active' => (bool) $sv->active,
+                        'stock' => (int) $sv->stocks->sum('quantity'),
+                        'status' => $sv->active ? 'active' : 'inactive',
 
-                            // Full price ladder (for debugging or advanced UI)
-                            'price_ladder' => $priceLadder,
+                        // Full price ladder (for debugging or advanced UI)
+                        'price_ladder' => $priceLadder,
 
-                            'customer_prices' => $sv->customerPrices->map(fn($cp) => [
-                                'id' => $cp->id,
-                                'customer_id' => $cp->customer_id,
-                                'customer_name' => $cp->customer?->first_name ?? "Customer #{$cp->customer_id}",
-                                'tin_number' => $cp->customer?->tin_number ?? null,
-                                'price' => $cp->pricing_matrix['price'] ?? 0,
-                                'discount_price' => $cp->pricing_matrix['discount_price'] ?? null,
-                                'discount_ends_at' => $cp->pricing_matrix['discount_ends_at'] ?? null,
-                            ])->values(),
+                        'customer_prices' => $sv->customerPrices->map(fn($cp) => [
+                            'id' => $cp->id,
+                            'customer_id' => $cp->customer_id,
+                            'customer_name' => $cp->customer?->first_name ?? "Customer #{$cp->customer_id}",
+                            'tin_number' => $cp->customer?->tin_number ?? null,
+                            'price' => $cp->pricing_matrix['price'] ?? 0,
+                            'discount_price' => $cp->pricing_matrix['discount_price'] ?? null,
+                            'discount_ends_at' => $cp->pricing_matrix['discount_ends_at'] ?? null,
+                        ])->values(),
 
-                            'seller_prices' => $sv->sellerPrices->map(fn($sp) => [
-                                'id' => $sp->id,
-                                'seller_id' => $sp->seller_id,
-                                'seller_name' => trim(($sp->seller?->first_name ?? '') . ' ' . ($sp->seller?->last_name ?? '')),
-                                'price' => $sp->pricing_matrix['price'] ?? 0,
-                                'discount_price' => $sp->pricing_matrix['discount_price'] ?? null,
-                                'discount_ends_at' => $sp->pricing_matrix['discount_ends_at'] ?? null,
-                            ])->values(),
+                        'seller_prices' => $sv->sellerPrices->map(fn($sp) => [
+                            'id' => $sp->id,
+                            'seller_id' => $sp->seller_id,
+                            'seller_name' => trim(($sp->seller?->first_name ?? '') . ' ' . ($sp->seller?->last_name ?? '')),
+                            'price' => $sp->pricing_matrix['price'] ?? 0,
+                            'discount_price' => $sp->pricing_matrix['discount_price'] ?? null,
+                            'discount_ends_at' => $sp->pricing_matrix['discount_ends_at'] ?? null,
+                        ])->values(),
 
-                            'individual_price' => $sv->individualPrice ? [
-                                'id'              => $sv->individualPrice->id,
-                                'price'           => $sv->individualPrice->pricing_matrix['price'] ?? null,
-                                'discount_price'  => $sv->individualPrice->pricing_matrix['discount_price'] ?? null,
-                                'discount_ends_at'=> $sv->individualPrice->pricing_matrix['discount_ends_at'] ?? null,
-                                'active'          => (bool) $sv->individualPrice->active,
-                            ] : null,
-                        ];
-                    })->values(),
-                ];
-            })->values();
+                        'individual_price' => $sv->individualPrice ? [
+                            'id'              => $sv->individualPrice->id,
+                            'price'           => $sv->individualPrice->pricing_matrix['price'] ?? null,
+                            'discount_price'  => $sv->individualPrice->pricing_matrix['discount_price'] ?? null,
+                            'discount_ends_at'=> $sv->individualPrice->pricing_matrix['discount_ends_at'] ?? null,
+                            'active'          => (bool) $sv->individualPrice->active,
+                        ] : null,
+                    ];
+                })->values(),
+            ];
+        });
 
         $customers = Customer::orderBy('first_name')->get(['id', 'first_name', 'last_name', 'tin_number']);
         $sellers = User::where('role', 'seller')

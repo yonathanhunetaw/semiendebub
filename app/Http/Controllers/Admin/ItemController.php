@@ -51,7 +51,21 @@ class ItemController extends Controller
 
         $startTime = microtime(true);
 
-        $items = Item::with(['variants.storeVariants'])->get();
+        $query = Item::with(['variants.storeVariants']);
+
+        // Apply Status Filter
+        if (request('filter') && request('filter') !== 'all') {
+            $query->where('status', request('filter'));
+        }
+
+        // Apply Sorting
+        $sort = request('sort', 'name');
+        $direction = request('direction', 'asc');
+        
+        $sortColumn = $sort === 'name' ? 'product_name' : $sort;
+        $query->orderBy($sortColumn, $direction);
+
+        $items = $query->paginate(25)->withQueryString();
         $stores = Store::all();
 
         // 🪵 LOG 2: Benchmark initial database pull
@@ -64,43 +78,45 @@ class ItemController extends Controller
 
         $mappingStartTime = microtime(true);
 
-        $processedItems = $items->map(function ($item) {
-            // Fallback to empty array if general_images is null
-            $generalImages = $item->general_images ?? [];
+        $processedItems = tap(clone $items)->setCollection(
+            $items->getCollection()->map(function ($item) {
+                // Fallback to empty array if general_images is null
+                $generalImages = $item->general_images ?? [];
 
-            // Safety check if the JSON/cast failed and returned a string instead of an array
-            if (is_string($generalImages)) {
-                Log::warning("Item ID {$item->id} has 'general_images' stored as a string instead of array.", [
-                    'raw_value' => $generalImages
-                ]);
-                $generalImages = json_decode($generalImages, true) ?? [];
-            }
+                // Safety check if the JSON/cast failed and returned a string instead of an array
+                if (is_string($generalImages)) {
+                    Log::warning("Item ID {$item->id} has 'general_images' stored as a string instead of array.", [
+                        'raw_value' => $generalImages
+                    ]);
+                    $generalImages = json_decode($generalImages, true) ?? [];
+                }
 
-            $previewImages = collect($generalImages)
-                ->map(fn($path) => ImageResolver::resolve($path))
-                ->merge($item->variants->map(fn($v) => ImageResolver::resolve($v->images[0] ?? null)))
-                ->filter()
-                ->unique()
-                ->take(5)
-                ->values()
-                ->toArray();
+                $previewImages = collect($generalImages)
+                    ->map(fn($path) => ImageResolver::resolve($path))
+                    ->merge($item->variants->map(fn($v) => ImageResolver::resolve($v->images[0] ?? null)))
+                    ->filter()
+                    ->unique()
+                    ->take(5)
+                    ->values()
+                    ->toArray();
 
-            $variantsCount = $item->variants->count();
+                $variantsCount = $item->variants->count();
 
-            $activeVariantsCount = $item->variants->filter(function ($v) {
-                return $v->status === 'active' &&
-                    $v->storeVariants->where('active', true)->isNotEmpty();
-            })->count();
+                $activeVariantsCount = $item->variants->filter(function ($v) {
+                    return $v->status === 'active' &&
+                        $v->storeVariants->where('active', true)->isNotEmpty();
+                })->count();
 
-            return [
-                'id' => $item->id,
-                'product_name' => $item->product_name,
-                'status' => $item->status,
-                'variants_count' => $variantsCount,
-                'active_variants_count' => $activeVariantsCount,
-                'processed_images' => $previewImages,
-            ];
-        });
+                return [
+                    'id' => $item->id,
+                    'product_name' => $item->product_name,
+                    'status' => $item->status,
+                    'variants_count' => $variantsCount,
+                    'active_variants_count' => $activeVariantsCount,
+                    'processed_images' => $previewImages,
+                ];
+            })
+        );
 
         $totalTimeMs = round((microtime(true) - $startTime) * 1000, 2);
         $mappingTimeMs = round((microtime(true) - $mappingStartTime) * 1000, 2);
@@ -113,7 +129,7 @@ class ItemController extends Controller
                 'processed_count' => $processedItems->count(),
                 'mapping_time_ms' => $mappingTimeMs,
                 'total_time_ms' => $totalTimeMs,
-                'items' => $processedItems->map(fn($item) => [
+                'items' => $processedItems->getCollection()->map(fn($item) => [
                     'id' => $item['id'],
                     'name' => $item['product_name'],
                     'status' => $item['status'],
@@ -124,13 +140,14 @@ class ItemController extends Controller
         );
         //####################################################################################################
 
-        // 🚨 ADD THIS DIE AND DUMP LINE HERE:
-        // dd($processedItems->toArray());
-
         return Inertia::render('Admin/Items/Index', [
             'items' => $processedItems,
             'stores' => $stores,
-            'filters' => request()->only(['filter', 'sort', 'direction']),
+            'filters' => [
+                'filter' => request('filter', 'all'),
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
         ]);
     }
 

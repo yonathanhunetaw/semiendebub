@@ -18,6 +18,7 @@ import {
     TableRow,
     Typography,
     useTheme,
+    Pagination,
 } from "@mui/material";
 
 interface Item {
@@ -30,7 +31,14 @@ interface Item {
 }
 
 interface Props {
-    items: Item[];
+    items: {
+        data: Item[];
+        current_page: number;
+        last_page: number;
+        from: number;
+        to: number;
+        total: number;
+    };
     filters: {
         filter: string;
         sort: string;
@@ -50,7 +58,7 @@ const sortIcon = (filters: Props["filters"]) =>
 export default function ItemIndex({ items, filters }: Props) {
     const theme = useTheme();
     
-    const updateParams = (newParams: Record<string, string>) => {
+    const updateParams = (newParams: Record<string, any>) => {
         router.get(
             route("admin.items.index"),
             { ...filters, ...newParams },
@@ -85,8 +93,6 @@ export default function ItemIndex({ items, filters }: Props) {
     return (
         <Box sx={{ p: 0 }}>
             <Head title="Items Management" />
-            
-            {/* Remove the test H1 - it's not needed anymore */}
             
             <Stack
                 direction={{ xs: "column", sm: "row" }}
@@ -145,7 +151,7 @@ export default function ItemIndex({ items, filters }: Props) {
                         <Chip
                             key={option}
                             label={option.toUpperCase()}
-                            onClick={() => updateParams({ filter: option })}
+                            onClick={() => updateParams({ filter: option, page: 1 })}
                             color={filters.filter === option ? "primary" : "default"}
                             variant={filters.filter === option ? "filled" : "outlined"}
                             sx={{ cursor: "pointer", fontWeight: 600 }}
@@ -156,8 +162,8 @@ export default function ItemIndex({ items, filters }: Props) {
 
             {/* Mobile View */}
             <Box sx={{ display: { xs: "grid", md: "none" }, gap: 2 }}>
-                {items.length > 0 ? (
-                    items.map((item) => (
+                {items.data.length > 0 ? (
+                    items.data.map((item) => (
                         <Paper
                             key={item.id}
                             elevation={0}
@@ -200,7 +206,6 @@ export default function ItemIndex({ items, filters }: Props) {
                                         alignSelf: "flex-start",
                                         textTransform: "none",
                                         fontWeight: 700,
-                                        // FIX: Make button visible in dark mode
                                         color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
                                         borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.5)' : undefined,
                                         '&:hover': {
@@ -258,8 +263,8 @@ export default function ItemIndex({ items, filters }: Props) {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {items.length > 0 ? (
-                            items.map((item) => (
+                        {items.data.length > 0 ? (
+                            items.data.map((item) => (
                                 <TableRow key={item.id} hover>
                                     <TableCell>
                                         <Stack direction="row" spacing={2} alignItems="center">
@@ -297,7 +302,6 @@ export default function ItemIndex({ items, filters }: Props) {
                                             sx={{ 
                                                 textTransform: "none", 
                                                 fontWeight: 700,
-                                                // FIX: Make button visible in dark mode
                                                 color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
                                                 borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.5)' : undefined,
                                                 '&:hover': {
@@ -321,6 +325,18 @@ export default function ItemIndex({ items, filters }: Props) {
                     </TableBody>
                 </Table>
             </TableContainer>
+
+            {items.last_page > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
+                    <Pagination 
+                        count={items.last_page} 
+                        page={items.current_page} 
+                        onChange={(e, page) => updateParams({ page })} 
+                        color="primary"
+                        shape="rounded"
+                    />
+                </Box>
+            )}
         </Box>
     );
 }

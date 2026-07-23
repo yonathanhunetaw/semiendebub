@@ -821,9 +821,9 @@ function MobileCard({
     return (
         <Card sx={{ mb: 2, borderRadius: 3 }}>
             <CardContent>
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                    <Box>
-                        <Typography variant="h6" fontWeight={700}>{item.item_name}</Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ flexWrap: 'wrap', gap: 1 }}>
+                    <Box sx={{ minWidth: 0, flex: 1, pr: 1 }}>
+                        <Typography variant="h6" fontWeight={700} sx={{ wordBreak: 'break-word' }}>{item.item_name}</Typography>
                         <Typography variant="body2" color="text.secondary">{item.category}</Typography>
                     </Box>
                     <Chip
@@ -861,8 +861,8 @@ function MobileCard({
                             sx={{ p: 1.5, mb: 1.5, borderRadius: 2 }}
                         >
                             <Stack spacing={1}>
-                                <Stack direction="row" justifyContent="space-between">
-                                    <Typography variant="subtitle2" fontWeight={600}>{v.label}</Typography>
+                                <Stack direction="row" justifyContent="space-between" sx={{ flexWrap: 'wrap', gap: 1 }}>
+                                    <Typography variant="subtitle2" fontWeight={600} sx={{ wordBreak: 'break-word', flex: 1, minWidth: 0 }}>{v.label}</Typography>
                                     <Chip
                                         label={v.active ? "Active" : "Inactive"}
                                         size="small"
@@ -985,15 +985,22 @@ export default function StoreInventory({ store, inventory, customers = [], selle
         ];
         console.log("[StoreInventory] Inventory is an array, using single page");
     } else {
-        // Assume it's PaginatedData
+        // Assume it's PaginatedData from Laravel Resource or raw LengthAwarePaginator
         items = inventory.data || [];
-        meta = inventory.meta || null;
-        links = inventory.links || [];
+        meta = inventory.meta || (inventory.current_page !== undefined ? {
+            current_page: inventory.current_page,
+            from: inventory.from,
+            last_page: inventory.last_page,
+            per_page: inventory.per_page,
+            to: inventory.to,
+            total: inventory.total,
+        } : null);
+        links = (inventory.meta && inventory.meta.links) || inventory.links || [];
         console.log("[StoreInventory] Inventory is paginated, total items:", items.length, "meta:", meta);
     }
 
     return (
-        <Box p={3}>
+        <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
             <Head title={`${store?.name} Inventory`} />
 
             <Stack direction="row" spacing={2} alignItems="center" mb={3} flexWrap="wrap">

@@ -69,14 +69,14 @@ export default function AdminSidebar({
     const menuItems = (
         <Box
             sx={{
-                pt: 2,
+                pt: { xs: 0, sm: 2 },
                 height: "100%",
                 display: "flex",
                 flexDirection: "column",
             }}
             onClick={variant === "temporary" ? onClose : undefined}
         >
-            <List sx={{ flexGrow: 1 }}>
+            <List sx={{ flexGrow: 1, overflowY: "scroll" }}>
                 {/* 1. Dashboard */}
                 <ListItemButton
                     component={Link}
@@ -281,13 +281,13 @@ export default function AdminSidebar({
                     color: "text.primary",
                     borderRight: "1px solid",
                     borderColor: "divider",
-                    "&::-webkit-scrollbar": { width: "8px" },
-                    "&::-webkit-scrollbar-track": { background: "transparent" },
-                    "&::-webkit-scrollbar-thumb": {
+                    "&::-webkit-scrollbar, & *::-webkit-scrollbar": { width: "8px" },
+                    "&::-webkit-scrollbar-track, & *::-webkit-scrollbar-track": { background: "transparent" },
+                    "&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb": {
                         background: "#717171",
                         borderRadius: "4px",
                     },
-                    "&::-webkit-scrollbar-thumb:hover": {
+                    "&::-webkit-scrollbar-thumb:hover, & *::-webkit-scrollbar-thumb:hover": {
                         background: "#a0a0a0",
                     },
                     "& .MuiListItemIcon-root": {
@@ -299,7 +299,7 @@ export default function AdminSidebar({
                 ...sx,
             }}
         >
-            <Toolbar />
+            {variant === "permanent" && <Toolbar />}
             {menuItems}
         </Drawer>
     );
