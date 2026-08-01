@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\SessionController;
 use App\Http\Controllers\Admin\Store\StoreController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\Inventory\WarehouseController;
 use App\Http\Controllers\Admin\Inventory\TransferController;
 use App\Http\Controllers\Admin\CanvasController;
@@ -26,7 +27,7 @@ Route::domain("admin.{$baseDomain}")
         // Authenticated Admin routes
         Route::middleware(['auth', 'verified', 'role.subdomain:admin'])->group(function () {
 
-            Route::get('/dashboard', fn() => Inertia::render('Admin/Dashboard/index'))->name('dashboard');
+            Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
             Route::get('/settings', fn() => Inertia::render('Admin/Settings/index'))->name('settings');
 
             // ── Items ──

@@ -1,10 +1,11 @@
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Head } from "@inertiajs/react";
-import { Box, Paper, Typography, Divider, Chip, Stack } from "@mui/material"; // Put Stack here
+import { Box, Paper, Typography, Divider, Chip, Stack } from "@mui/material";
 import PeopleIcon from '@mui/icons-material/People';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 
 interface LowStockItem {
     item_id: number;
@@ -15,6 +16,9 @@ interface LowStockItem {
 
 interface Props {
     sessionsCount: number;
+    rolesBreakdown: Record<string, number>;
+    openCartsCount: number;
+    cartsBreakdown: Record<string, number>;
     customersCount: number;
     productsCount: number;
     activeVariantsCount: number;
@@ -23,30 +27,38 @@ interface Props {
 
 export default function Dashboard({
     sessionsCount,
+    rolesBreakdown = {},
+    openCartsCount = 0,
+    cartsBreakdown = {},
     customersCount,
     productsCount,
     activeVariantsCount,
     lowStockItems = [] // Add default value to prevent map errors
 }: Props) {
-    // ... rest of your code
-
     // Helper for Stat Cards
-    const StatCard = ({ title, value, icon, color }: any) => (
+    const StatCard = ({ title, value, icon, color, children }: any) => (
         <Paper elevation={0} sx={{
             p: 3, borderRadius: '12px', border: '1px solid', borderColor: 'divider',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+            display: 'flex', flexDirection: 'column'
         }}>
-            <Box>
-                <Typography variant="body2" color="text.secondary" fontWeight={500}>
-                    {title}
-                </Typography>
-                <Typography variant="h4" fontWeight={700} sx={{ mt: 1 }}>
-                    {value}
-                </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <Box>
+                    <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                        {title}
+                    </Typography>
+                    <Typography variant="h4" fontWeight={700} sx={{ mt: 1 }}>
+                        {value}
+                    </Typography>
+                </Box>
+                <Box sx={{ bgcolor: `${color}.main`, p: 1.5, borderRadius: '10px', color: 'white', display: 'flex' }}>
+                    {icon}
+                </Box>
             </Box>
-            <Box sx={{ bgcolor: `${color}.main`, p: 1.5, borderRadius: '10px', color: 'white', display: 'flex' }}>
-                {icon}
-            </Box>
+            {children && (
+                <Box sx={{ mt: 2, pt: 2, borderTop: '1px dashed', borderColor: 'divider' }}>
+                    {children}
+                </Box>
+            )}
         </Paper>
     );
 
@@ -59,17 +71,47 @@ export default function Dashboard({
             {/* Statistics Row using Box Grid */}
             <Box sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr 1fr' },
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(5, 1fr)' },
                 gap: 3,
                 mb: 4
             }}>
                 <StatCard
                     title="Active Sessions" value={sessionsCount}
                     icon={<MonitorHeartIcon />} color="success"
-                />
+                >
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        {Object.entries(rolesBreakdown).map(([role, count]) => (
+                            <Chip 
+                                key={role} 
+                                label={`${count} ${role}`} 
+                                size="small" 
+                                color={count > 0 ? "success" : "default"} 
+                                variant={count > 0 ? "filled" : "outlined"}
+                                sx={{ textTransform: 'capitalize' }}
+                            />
+                        ))}
+                    </Stack>
+                </StatCard>
+                <StatCard
+                    title="Open Carts" value={openCartsCount}
+                    icon={<ShoppingCartIcon />} color="primary"
+                >
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        {Object.entries(cartsBreakdown).map(([type, count]) => (
+                            <Chip 
+                                key={type} 
+                                label={`${count} ${type}`} 
+                                size="small" 
+                                color={count > 0 ? "primary" : "default"} 
+                                variant={count > 0 ? "filled" : "outlined"}
+                                sx={{ textTransform: 'capitalize' }}
+                            />
+                        ))}
+                    </Stack>
+                </StatCard>
                 <StatCard
                     title="Total Customers" value={customersCount}
-                    icon={<PeopleIcon />} color="primary"
+                    icon={<PeopleIcon />} color="info"
                 />
                 <StatCard
                     title="Active Products" value={productsCount}
