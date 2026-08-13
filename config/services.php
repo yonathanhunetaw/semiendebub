@@ -46,4 +46,8 @@ return [
         'release' => env('GLITCHTIP_RELEASE'),
     ],
 
+    'google' => [
+        'analytics_id' => env('GOOGLE_ANALYTICS_ID'),
+    ],
+
 ];

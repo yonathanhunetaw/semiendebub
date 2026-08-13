@@ -1,16 +1,67 @@
 services:
+
   duka-app:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.dev
+
     volumes:
       - ../:/var/www/html:delegated
       - /var/www/html/node_modules
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
       - ../storage/app/seed-images:/var/www/html/storage/app/seed-images:delegated
+
     ports:
-      - "8095:80"
-      - "5177:5177"
+      - "${APP_PORT:-8095}:80"
+      - "${VITE_PORT:-5177}:5177"
+
     networks:
       - duka-network
+
+
+  duka-minio:
+    image: minio/minio
+
+    container_name: ${COMPOSE_PROJECT_NAME:-duka}-minio
+
+    command:
+      - server
+      - /data
+      - --console-address
+      - ":9001"
+
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
+
+    volumes:
+      - minio_dev_data:/data
+
+    networks:
+      - duka-network
+
+    restart: unless-stopped
+
+
+
+
+volumes:
+
+  storage_data:
+
+  vendor_data:
+
+  minio_dev_data:
+
+  db_data:
+
+
+networks:
+
+  duka-network:
+    driver: bridge

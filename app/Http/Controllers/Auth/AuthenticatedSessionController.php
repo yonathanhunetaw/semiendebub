@@ -112,7 +112,11 @@ class AuthenticatedSessionController extends Controller
             $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
 
             // Build the absolute URL for the correct subdomain
-            $url = $protocol . $targetHost . $portSuffix . '/dashboard';
+            // Preserve the originally intended path (e.g. /canvas) rather than always going to /dashboard
+            $intendedPath = $request->session()->get('url.intended')
+                ? parse_url($request->session()->get('url.intended'), PHP_URL_PATH)
+                : '/dashboard';
+            $url = $protocol . $targetHost . $portSuffix . $intendedPath;
 
             // LOG: Specifically trace the redirection to the new domain
             \Log::warning('Subdomain mismatch - Redirecting user', [
@@ -147,10 +151,9 @@ class AuthenticatedSessionController extends Controller
             'request_cookies' => $request->cookies->all(),
         ]);
 
-        // Prevent "intended" logic from hijacking the final destination
-        $request->session()->forget('url.intended');
-
-        return redirect('/dashboard');
+        // Redirect back to the page the user originally tried to visit (e.g. /canvas),
+        // falling back to /dashboard if no intended URL was stored.
+        return redirect()->intended('/dashboard');
     }
 
     /**

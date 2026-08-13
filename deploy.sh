@@ -246,19 +246,45 @@ error_handler() {
 #trap 'error_handler ${LINENO} $?' ERR
 
 # Paths
-ENV_FILE="$PROJECT_ROOT/.env"
 BASE_DIR="$PROJECT_ROOT/docker"
 
-# Validate .env exists
-if [ ! -f "$ENV_FILE" ]; then
-    log_error ".env file not found at: $ENV_FILE"
+# =============================================================================
+# ENVIRONMENT SELECTION & CONFIGURATION
+# =============================================================================
+
+ENVIRONMENT="$1"
+
+if [ "$ENVIRONMENT" = "prod" ]; then
+    echo "🚀 Deploying PRODUCTION environment..."
+    ENV_FILE="$PROJECT_ROOT/.env.production"
+    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.prod.yml")
+elif [ "$ENVIRONMENT" = "dev" ]; then
+    echo "💻 Deploying DEVELOPMENT environment..."
+    ENV_FILE="$PROJECT_ROOT/.env"
+    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.dev.yml")
+else
+    echo "❌ Please specify an environment!"
+    echo "Usage: ./deploy.sh dev  OR  ./deploy.sh prod"
     exit 1
 fi
 
-# Source .env file
+# Validate target env file exists
+if [ ! -f "$ENV_FILE" ]; then
+    log_error "Environment file not found at: $ENV_FILE"
+    exit 1
+fi
+
+# Source target env file so all variables (including COMPOSE_PROJECT_NAME) are available
 set -a
 source "$ENV_FILE"
 set +a
+
+# Resolve container names from COMPOSE_PROJECT_NAME so dev and prod stacks
+# never collide. These variables are used throughout the rest of the script.
+APP_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-app"
+DB_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-db"
+MINIO_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-minio"
+MINIO_SETUP_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-minio-setup"
 
 # Log deployment start
 log_success "=========================================="
@@ -266,6 +292,7 @@ log_success "${ICON_ROCKET} DEPLOYMENT STARTED ${ICON_ROCKET}"
 log_success "=========================================="
 log_info "Project Root: $PROJECT_ROOT"
 log_info "Environment: ${APP_ENV:-not set}"
+log_info "Compose Project: ${COMPOSE_PROJECT_NAME:-default}"
 log_info "Log file: $LOG_FILE"
 log_success "=========================================="
 
@@ -326,15 +353,23 @@ fi
 # VARIABLE LOADING WITH DEFAULTS
 # =============================================================================
 
-# Parse command-line flags
-SKIP_DB_RESET=0
-for arg in "$@"; do
+# Default to skipping the database reset
+SKIP_DB_RESET=1
+
+for arg in "${@:2}"; do
     case $arg in
+        -r|--reset-db)
+            SKIP_DB_RESET=0
+            ;;
         --no-reset|--skip-reset|--no-seed)
             SKIP_DB_RESET=1
             ;;
     esac
-done
+done    
+
+# Load from .env but ignore any accidental RESET_DB=1 settings unless flags are used
+APP_ENV="${APP_ENV:-}"
+RESET_DB="${RESET_DB:-0}"
 
 # Load from .env or use defaults
 APP_ENV="${APP_ENV:-}"
@@ -378,15 +413,8 @@ NODE_FILES=(
 # DOCKER COMPOSE CONFIGURATION
 # =============================================================================
 
-# Build compose files array
-COMPOSE_FILES=()
-if [ "$APP_ENV" = "production" ]; then
-    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.prod.yml")
-else
-    COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.dev.yml")
-fi
-
-# Add observability if enabled
+# COMPOSE_FILES array was already set during environment selection above.
+# Add observability overlay if enabled.
 if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     if [ ! -f "$BASE_DIR/docker-compose.observability.yml" ]; then
         log_error "$BASE_DIR/docker-compose.observability.yml not found"
@@ -418,11 +446,37 @@ docker_raw() {
 }
 
 exec_in_app() {
-    docker exec duka-app "$@"
+    docker exec "$APP_CONTAINER" "$@"
 }
 
 exec_in_app_as_root() {
-    docker exec -u root duka-app "$@"
+    docker exec -u root "$APP_CONTAINER" "$@"
+}
+
+# Wait until the app container is in 'running' state (not created/restarting)
+wait_for_app_container() {
+    local max_attempts=60
+    local attempt=1
+    log_step "Waiting for app container to be in running state..."
+    while [ $attempt -le $max_attempts ]; do
+        local status
+        status=$(docker inspect -f '{{.State.Status}}' "$APP_CONTAINER" 2>/dev/null || echo "not-found")
+        if [ "$status" = "running" ]; then
+            log_success "App container is running"
+            return 0
+        fi
+        if [ "$status" = "exited" ] || [ "$status" = "dead" ]; then
+            log_error "App container exited unexpectedly (status: $status)"
+            docker logs "$APP_CONTAINER" 2>&1 | tail -30 | tee -a "$LOG_FILE"
+            return 1
+        fi
+        echo -n "."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    log_error "App container did not reach running state after ${max_attempts} attempts"
+    docker logs "$APP_CONTAINER" 2>&1 | tail -30 | tee -a "$LOG_FILE"
+    return 1
 }
 
 compose_rm_services() {
@@ -444,8 +498,10 @@ wait_for_minio() {
     log_info "Waiting for MinIO to become ready..."
     
     while [ $attempt -le $max_attempts ]; do
-        if docker exec duka-minio mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
-            log_success "MinIO is ready and accessible"
+        if docker exec "$MINIO_CONTAINER" \
+        mc ls local >/dev/null 2>&1
+        then
+            log_success "MinIO is ready and authenticated"
             return 0
         fi
         
@@ -464,7 +520,7 @@ setup_minio_bucket() {
     # Wait for minio-setup container to complete
     log_step "Waiting for MinIO setup container..."
     for i in {1..60}; do
-        STATUS=$(docker inspect -f '{{.State.Status}}' "duka-minio-setup" 2>/dev/null || echo "not-found")
+        STATUS=$(docker inspect -f '{{.State.Status}}' "$MINIO_SETUP_CONTAINER" 2>/dev/null || echo "not-found")
         
         if [ "$STATUS" = "exited" ]; then
             log_success "MinIO setup container finished"
@@ -476,14 +532,17 @@ setup_minio_bucket() {
     echo
     
     # Configure MinIO bucket
-    if docker exec duka-minio-setup mc alias set local http://duka-minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
-        docker exec duka-minio-setup mc mb local/duka-images --ignore-existing >/dev/null 2>&1
-        
-        # Set bucket to public download
-        docker exec duka-minio-setup mc anonymous set download local/duka-images >/dev/null 2>&1
-        
-        log_success "MinIO bucket 'duka-images' configured as public"
-        return 0
+    if [ "$STATUS" = "exited" ]; then
+        EXIT_CODE=$(docker inspect -f '{{.State.ExitCode}}' "$MINIO_SETUP_CONTAINER")
+
+        if [ "$EXIT_CODE" = "0" ]; then
+            log_success "MinIO bucket configured"
+            return 0
+        else
+            log_error "MinIO setup failed"
+            docker logs "$MINIO_SETUP_CONTAINER"
+            return 1
+        fi
     fi
 }
 
@@ -493,16 +552,29 @@ setup_minio_bucket() {
 
 make_minio_objects_public() {
     log_step "Making all MinIO objects publicly accessible..."
-    
-    # Wait a moment for any ongoing uploads
+
     sleep 2
-    
-    # Set bucket policy recursively to ensure all objects are public
-    if docker exec duka-minio mc anonymous set download --recursive local/duka-images >/dev/null 2>&1; then
-        log_success "All MinIO objects are now public"
+
+    # The minio-setup container already exited (restart: "no"), so spin up a
+    # fresh temporary mc container.
+    # KEY POINTS:
+    #   1. --entrypoint /bin/sh  because minio/mc sets `mc` as its ENTRYPOINT
+    #   2. Use service name `duka-minio` (Docker DNS), NOT the container name
+    #   3. Pass credentials and bucket as -e vars so no shell quoting nightmares
+    local MC_OUTPUT
+    MC_OUTPUT=$(docker run --rm \
+        --entrypoint /bin/sh \
+        --network "${COMPOSE_PROJECT_NAME:-duka}_duka-network" \
+        -e MC_HOST_local="http://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@duka-minio:9000" \
+        -e BUCKET="${AWS_BUCKET}" \
+        minio/mc:latest \
+        -c 'mc anonymous set download local/$BUCKET' 2>&1)
+
+    if [ $? -eq 0 ]; then
+        log_success "MinIO bucket is publicly accessible"
         return 0
     else
-        log_warning "Could not recursively set public access, objects may have limited permissions"
+        log_warning "Could not set public access: $MC_OUTPUT"
         return 1
     fi
 }
@@ -513,18 +585,19 @@ make_minio_objects_public() {
 
 install_node_dependencies() {
     log_step "Installing Node dependencies from lock file..."
-    exec_in_app npm ci --no-audit --no-fund
-    
+    exec_in_app npm install --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"
+
     # Fix for hoist-non-react-statics on Raspberry Pi (ARM)
     if [ "$APP_ENV" != "production" ]; then
         log_step "Fixing hoist-non-react-statics for ARM/Raspberry Pi..."
-        exec_in_app npm uninstall hoist-non-react-statics --no-save || true
-        exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save
+        exec_in_app npm uninstall hoist-non-react-statics --no-save 2>&1 | tee -a "$LOG_FILE" || true
+        exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save 2>&1 | tee -a "$LOG_FILE"
         exec_in_app rm -rf node_modules/.vite /tmp/vite-cache
-        exec_in_app npm rebuild
+        # npm rebuild can exit non-zero on ARM even when it succeeds; use || true
+        exec_in_app npm rebuild 2>&1 | tee -a "$LOG_FILE" || true
         log_done "Hoist-non-react-statics fixed for ARM compatibility"
     fi
-    
+
     log_success "Node dependencies installed"
 }
 
@@ -647,7 +720,9 @@ set +e
 echo "DEBUG: About to run: compose down -v --remove-orphans --timeout 10"
 
 # Run compose down and capture exit code
-compose down -v --remove-orphans --timeout 10
+# We changed this as it was deleting all the db data
+# compose down -v --remove-orphans --timeout 10
+compose down --remove-orphans --timeout 10
 DOWN_EXIT=$?
 
 echo "DEBUG: compose down exited with code: $DOWN_EXIT"
@@ -659,10 +734,13 @@ fi
 
 echo "DEBUG: About to clean up containers..."
 
-# Safety cleanup (ignore errors)
-docker rm -f duka-minio-setup 2>/dev/null || true
-docker stop duka-app duka-db duka-minio 2>/dev/null || true
-docker rm -f duka-app duka-db duka-minio 2>/dev/null || true
+# Safety cleanup — stop/remove THIS namespace's containers, plus legacy bare-named
+# ones for the one-time migration away from the old un-namespaced setup.
+docker rm -f "$MINIO_SETUP_CONTAINER" duka-minio-setup 2>/dev/null || true
+docker stop "$APP_CONTAINER" "$DB_CONTAINER" "$MINIO_CONTAINER" \
+             duka-app duka-db duka-minio 2>/dev/null || true
+docker rm -f "$APP_CONTAINER" "$DB_CONTAINER" "$MINIO_CONTAINER" \
+             duka-app duka-db duka-minio 2>/dev/null || true
 log_done "Cleanup complete"
 
 echo "DEBUG: Cleanup finished, about to start services..."
@@ -706,6 +784,9 @@ compose up -d --force-recreate duka-app
 APP_EXIT=$?
 echo "DEBUG: duka-app start exit code: $APP_EXIT"
 
+log_step "Waiting for app container to be ready before pre-creating storage..."
+wait_for_app_container
+
 log_step "Pre-creating storage structures to prevent Blade cache errors..."
 exec_in_app mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache/data storage/app/seed-images public/images/defaults storage/logs
 exec_in_app touch storage/logs/laravel.log
@@ -732,7 +813,7 @@ step_start 2
 
 log_step "Waiting for MySQL to be healthy..."
 for i in {1..30}; do
-    STATUS=$(docker inspect -f '{{.State.Health.Status}}' duka-db 2>/dev/null)
+    STATUS=$(docker inspect -f '{{.State.Health.Status}}' "$DB_CONTAINER" 2>/dev/null)
     
     if [ "$STATUS" = "healthy" ]; then
         log_success "MySQL is healthy and ready"
@@ -755,13 +836,7 @@ for i in {1..30}; do
     fi
 done
 
-# Wait for MinIO to be ready
-if ! wait_for_minio; then
-    step_failed 2 "MinIO failed to become ready"
-    exit 1
-fi
-
-# Setup MinIO bucket and directories
+# Configure bucket
 if ! setup_minio_bucket; then
     step_failed 2 "MinIO bucket setup failed"
     exit 1
@@ -781,7 +856,7 @@ step_start 2 # Still part of step 2 technically, but add this after bucket setup
 log_step "Verifying MinIO is writable for seeding..."
 
 # Test write to MinIO from Laravel
-if docker exec duka-app php artisan tinker --execute="
+if docker exec "$APP_CONTAINER" php artisan tinker --execute="
     try {
         Storage::disk('s3')->put('test-seeder.txt', 'Seeder test ' . date('Y-m-d H:i:s'), 'public');
         Storage::disk('s3')->delete('test-seeder.txt');
@@ -804,34 +879,31 @@ step_success 2 "MinIO ready with bucket configured"
 step_start 3
 
 log_step "Configuring git safe directory..."
-docker exec duka-app git config --global --add safe.directory /var/www/html || true
+docker exec "$APP_CONTAINER" git config --global --add safe.directory /var/www/html || true
 log_done "Git safe directory configured"
 
 log_step "${ICON_PACKAGE} Installing PHP dependencies..."
 
-# Define your Docker Compose command arguments based on environment
-COMPOSE_BASE="docker compose -f docker/docker-compose.yml"
+# Set composer install flags based on environment
 if [ "$APP_ENV" = "production" ]; then
-    COMPOSE_BASE="$COMPOSE_BASE -f docker/docker-compose.prod.yml"
     INSTALL_FLAGS="--no-dev --optimize-autoloader --no-interaction"
     log_info "Production mode: Installing without dev dependencies"
 else
-    COMPOSE_BASE="$COMPOSE_BASE -f docker/docker-compose.dev.yml"
     INSTALL_FLAGS="--optimize-autoloader --no-interaction"
     log_info "Development mode: Installing with dev dependencies"
 fi
 
 # 1. Require the S3 Driver package without updating yet
-$COMPOSE_BASE run --rm --entrypoint "composer require league/flysystem-aws-s3-v3:^3.0 --no-interaction --no-update" duka-app 2>/dev/null || true
+exec_in_app composer require league/flysystem-aws-s3-v3:^3.0 --no-interaction --no-update 2>/dev/null || true
 
 # 2. Check if composer.lock is valid using a standalone check
-if ! $COMPOSE_BASE run --rm --entrypoint "composer validate --no-check-all --quiet" duka-app 2>/dev/null; then
+if ! exec_in_app composer validate --no-check-all --quiet 2>/dev/null; then
     log_warning "Composer lock file out of sync, updating package tracking..."
-    $COMPOSE_BASE run --rm --entrypoint "composer update league/flysystem-aws-s3-v3 --no-interaction" duka-app 2>&1 | tee -a "$LOG_FILE"
+    exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction 2>&1 | tee -a "$LOG_FILE"
 fi
 
 # 3. Perform the clean master dependency installation
-$COMPOSE_BASE run --rm --entrypoint "composer install $INSTALL_FLAGS" duka-app 2>&1 | tee -a "$LOG_FILE"
+exec_in_app composer install $INSTALL_FLAGS 2>&1 | tee -a "$LOG_FILE"
 
 # Define files path
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
@@ -839,18 +911,16 @@ S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConve
 # Detect if we need to run composer (vendor is empty, file missing, or lockfile changed)
 if [ ! -d "vendor" ] || [ ! -f "$S3_CONVERTER_FILE" ] || has_git_path_changes "composer.lock"; then
     log_warning "Dependencies are missing or composer.lock changed. Pre-populating vendor directory..."
-    
+
     # Define composition flags
     COMPOSE_CMD="composer install --optimize-autoloader --no-interaction"
     if [ "$APP_ENV" = "production" ]; then
         log_info "Production mode: Installing without dev dependencies"
         COMPOSE_CMD="composer install --no-dev --optimize-autoloader --no-interaction"
-    else
-        log_info "Development mode: Installing with dev dependencies"
     fi
 
-    # CRITICAL FIX: Run it via a standalone container bypass so a broken/dead duka-app doesn't block it
-    docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml run --rm --entrypoint "$COMPOSE_CMD" duka-app 2>&1 | tee -a "$LOG_FILE"
+    # Run inside the container
+    exec_in_app $COMPOSE_CMD 2>&1 | tee -a "$LOG_FILE"
 else
     log_success "PHP dependencies up to date"
 fi
@@ -901,28 +971,32 @@ else
     log_done "Vite dependencies fixed"
     
     log_step "Sanitizing Vite environment..."
+    log_step "Fixing esbuild architecture for Docker..."
+    exec_in_app node node_modules/esbuild/install.js || true
     log_info "Skipping Vite process kill - starting fresh"
     sleep 1
     log_done "Vite environment ready"
     
     log_step "Launching Vite in background..."
-    docker exec -d duka-app sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
+    docker exec -d "$APP_CONTAINER" sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
     VITE_EXIT=$?
     
     if [ $VITE_EXIT -ne 0 ]; then
-        log_warning "Vite start command had issues (exit code: $VITE_EXIT), continuing anyway..."
+        log_warning "Vite start command had issues with exit code $VITE_EXIT, continuing anyway..."
     else
         log_done "Vite launch command issued"
     fi
     
     log_step "Waiting for Vite to become ready..."
     if ! exec_in_app sh -c '
-        for i in $(seq 1 120); do
+        i=1
+        while [ $i -le 120 ]; do
             if curl -sf http://127.0.0.1:5177/@vite/client >/dev/null 2>&1; then
                 exit 0
             fi
             printf "."
             sleep 1
+            i=$((i + 1))
         done
         exit 1
     '; then
@@ -963,7 +1037,7 @@ step_success 6 "Database migrated and seeded"
 log_step "Ensuring all seeded images are publicly accessible..."
 
 # Run a Laravel command to set visibility on all uploaded images
-docker exec duka-app php artisan tinker --execute="
+docker exec "$APP_CONTAINER" php artisan tinker --execute="
     try {
         \$disk = Illuminate\Support\Facades\Storage::disk('s3');
         \$files = \$disk->allFiles('uploads');
@@ -980,8 +1054,15 @@ docker exec duka-app php artisan tinker --execute="
     }
 " 2>&1 | tee -a "$LOG_FILE"
 
-# Also run mc command as backup
-docker exec duka-minio mc anonymous set download --recursive local/duka-images >/dev/null 2>&1
+# Also ensure all bucket objects are public via a fresh mc container.
+# Uses MC_HOST_local env var (no alias setup needed, avoids shell quoting issues).
+docker run --rm \
+    --entrypoint /bin/sh \
+    --network "${COMPOSE_PROJECT_NAME:-duka}_duka-network" \
+    -e MC_HOST_local="http://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@duka-minio:9000" \
+    -e BUCKET="${AWS_BUCKET}" \
+    minio/mc:latest \
+    -c 'mc anonymous set download --recursive local/$BUCKET' 2>&1 | tee -a "$LOG_FILE" || true
 
 log_success "All images are now publicly accessible"
 
@@ -1038,7 +1119,7 @@ step_start 8
 log_step "Performing final verification checks..."
 
 # Check if all critical containers are running
-CRITICAL_CONTAINERS=("duka-app" "duka-db" "duka-minio")
+CRITICAL_CONTAINERS=("$APP_CONTAINER" "$DB_CONTAINER" "$MINIO_CONTAINER")
 all_running=true
 
 for container in "${CRITICAL_CONTAINERS[@]}"; do
@@ -1072,7 +1153,7 @@ step_success 8 "Deployment verification complete"
 log_step "Checking for missing MinIO images..."
 
 # Run a dedicated artisan command to upload any missing seed images
-docker exec duka-app php artisan tinker --execute="
+docker exec "$APP_CONTAINER" php artisan tinker --execute="
     \$missingCount = 0;
     \$uploadedCount = 0;
     

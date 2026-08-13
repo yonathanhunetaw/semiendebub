@@ -60,7 +60,7 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts
 
 
 # Install Node deps exactly from package-lock.json so prod and dev use the same tldraw schema
-RUN npm ci --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # 8. Copy full project
 COPY . .
@@ -79,3 +79,4 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 80 443
 
 ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["apache2-foreground"]

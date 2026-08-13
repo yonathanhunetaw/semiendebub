@@ -2,49 +2,69 @@ services:
   duka-app:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
-    container_name: duka-app
+      dockerfile: docker/Dockerfile.dev
+
+    container_name: ${COMPOSE_PROJECT_NAME:-duka}-app
+
     ports:
-      - "8095:80"
-    env_file:
-      - ../.env  
+      - "${APP_PORT:-8095}:80"
+      - "${VITE_PORT:-5177}:5177"
+
     volumes:
-      - ../:/var/www/html
+      - ../:/var/www/html:delegated
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
-      - ../storage/app/seed-images:/var/www/html/storage/app/seed-images
+      - ../storage/app/seed-images:/var/www/html/storage/app/seed-images:delegated
+
     environment:
-      APP_ENV: ${APP_ENV:-local}
-      APP_DEBUG: ${APP_DEBUG:-true}
       DB_HOST: duka-db
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_BUCKET: ${AWS_BUCKET}
+      AWS_ENDPOINT: http://duka-minio:9000
+      AWS_USE_PATH_STYLE_ENDPOINT: "true"
       VITE_TLDRAW_LICENSE_KEY: ${VITE_TLDRAW_LICENSE_KEY}
+
     networks:
       - duka-network
+
     depends_on:
       duka-db:
-        condition: service_started
+        condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
 
   duka-db:
     image: mysql:8.0
-    container_name: duka-db
+    container_name: ${COMPOSE_PROJECT_NAME:-duka}-db
     restart: unless-stopped
 
     ports:
-    - "${MYSQL_EXPOSE_PORT:-3306}:3306"
-    
+      - "${MYSQL_EXPOSE_PORT:-3308}:3306"
+
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:-duka}
       MYSQL_USER: ${DB_USERNAME:-duka_user}
       MYSQL_PASSWORD: ${DB_PASSWORD:-password}
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-password}
+
     volumes:
       - database_data:/var/lib/mysql
+
     networks:
       - duka-network
+
     healthcheck:
-      test: ["CMD", "mysql", "-u", "root", "-p${DB_PASSWORD:-password}", "-e", "SELECT 1"]
+      test:
+        [
+          "CMD",
+          "mysql",
+          "-u",
+          "root",
+          "-p${DB_PASSWORD:-password}",
+          "-e",
+          "SELECT 1"
+        ]
       interval: 10s
       timeout: 10s
       retries: 10
@@ -52,61 +72,77 @@ services:
 
   duka-minio:
     image: minio/minio
-    container_name: duka-minio
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    container_name: ${COMPOSE_PROJECT_NAME:-duka}-minio
+
+    command:
+      - server
+      - /data
+      - --console-address
+      - ":9001"
+
+    # NOTE: ports are defined in the environment-specific overlay files
+    # (docker-compose.dev.yml / docker-compose.prod.yml) to avoid
+    # conflicts when dev and prod run simultaneously on the same host.
+
     environment:
-      # Use these exact variables in your .env
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
+
     volumes:
-      - minio_data:/data
+      - minio_dev_data:/data
+
     networks:
-      - duka-network  
+      - duka-network
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:9000/minio/health/live"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   minio-setup:
     image: minio/mc:latest
-    container_name: duka-minio-setup
+    container_name: ${COMPOSE_PROJECT_NAME:-duka}-minio-setup
+
     depends_on:
       duka-minio:
-        condition: service_started
+        condition: service_healthy
+
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
+      AWS_BUCKET: ${AWS_BUCKET:-duka-images}
+
     networks:
-      - duka-network    
-    entrypoint: >
-      /bin/sh -c "
-      echo '=== MinIO Setup Starting ===';
-      sleep 10;
-      MAX_RETRIES=10; RETRY_COUNT=0;
-      while [ $$RETRY_COUNT -lt $$MAX_RETRIES ]; do
-        RETRY_COUNT=$$((RETRY_COUNT + 1));
-        if mc alias set local http://duka-minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} 2>&1; then
-          mc mb local/${AWS_BUCKET:-duka-images} --ignore-existing;
-          
-          # FIX: Use correct command for public access (download AND upload if needed)
-          # Option 1: Make bucket completely public (download only)
-          mc anonymous set download local/${AWS_BUCKET:-duka-images};
-          
-          # Option 2: Set a proper bucket policy (better for production)
-          # echo '{
-          #   "Version": "2012-10-17",
-          #   "Statement": [
-          #     {
-          #       "Effect": "Allow",
-          #       "Principal": {"AWS": ["*"]},
-          #       "Action": ["s3:GetObject"],
-          #       "Resource": ["arn:aws:s3:::${AWS_BUCKET:-duka-images}/*"]
-          #     }
-          #   ]
-          # }' | mc policy set-json /dev/stdin local/${AWS_BUCKET:-duka-images};
-          
-          echo '=== MinIO Setup Complete ===';
-          exit 0;
-        fi;
-        sleep 5;
-      done;
-      exit 1;"
+      - duka-network
+
+    entrypoint:
+      - /bin/sh
+
+    command:
+      - -c
+      - |
+        echo "=== MinIO Setup Starting ==="
+
+        mc alias set local \
+          http://duka-minio:9000 \
+          "$$MINIO_ROOT_USER" \
+          "$$MINIO_ROOT_PASSWORD"
+
+        mc mb local/$$AWS_BUCKET --ignore-existing
+
+        mc anonymous set download local/$$AWS_BUCKET
+
+        echo "=== MinIO Setup Complete ==="
+
     restart: "no"
 
 networks:
@@ -116,5 +152,5 @@ networks:
 volumes:
   storage_data:
   vendor_data:
-  minio_data:
   database_data:
+  minio_dev_data:

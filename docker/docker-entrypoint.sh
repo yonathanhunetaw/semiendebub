@@ -85,19 +85,23 @@ sed -i "/ServerName/a ServerAlias *.${BASE_DOMAIN}" /etc/apache2/sites-available
 # =============================================================================
 # 🚀 LARAVEL CONFIGURATION & MIGRATIONS
 # =============================================================================
+# NOTE: migrations are run here for convenience but are NOT fatal — the
+# deploy.sh script runs them again (with retry logic) after all services
+# are confirmed healthy.  Using `|| true` prevents a crash-restart loop
+# if the DB is momentarily unavailable at container start.
 if [ "$APP_ENV" = "production" ]; then
     echo "🚀 Production mode..."
 
-    php artisan migrate --force
-    php artisan config:cache
-    php artisan route:cache
-    php artisan view:cache
+    php artisan migrate --force || true
+    php artisan config:cache || true
+    php artisan route:cache || true
+    php artisan view:cache || true
 else
     echo "🧪 Development mode..."
 
-    php artisan migrate --force
-    php artisan cache:clear
-    php artisan config:clear
+    php artisan migrate --force || true
+    php artisan cache:clear || true
+    php artisan config:clear || true
 fi
 
 # =============================================================================

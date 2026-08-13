@@ -1,0 +1,10 @@
+/vendor/
+/node_modules/
+/public/build/
+/public/hot
+/storage/*.key
+/bootstrap/cache/
+/.env
+/.env.*
+/.git/
+/docker-compose*.yml
