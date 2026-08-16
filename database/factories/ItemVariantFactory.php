@@ -29,7 +29,6 @@ class ItemVariantFactory extends Factory
             'item_packaging_type_id' => ItemPackagingType::factory(),
             'owner_id'               => User::factory(),
             'status'                 => 'active',
-            'packaging_total_pieces' => 1,
             'barcode'                => $this->faker->ean13(),
             'images'                 => [],
 

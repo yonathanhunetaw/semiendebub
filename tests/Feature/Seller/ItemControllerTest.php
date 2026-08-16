@@ -139,14 +139,14 @@ class ItemControllerTest extends TestCase
         $storeVariant = StoreVariant::factory()->create([
             'store_id' => $this->store->id,
             'item_variant_id' => $variant->id,
-            'price' => 100.00
+            'pricing_matrix' => ['price' => 100.00, 'discount_price' => null, 'discount_ends_at' => null],
         ]);
 
         // Create a specific price for this seller in the store_variants_seller_prices table
         \DB::table('store_variants_seller_prices')->insert([
             'store_variant_id' => $storeVariant->id,
             'seller_id' => $this->seller->id,
-            'price' => 85.00,
+            'pricing_matrix' => json_encode(['price' => 85.00, 'discount_price' => null, 'discount_ends_at' => null]),
             'active' => true,
             'created_at' => now(),
             'updated_at' => now(),

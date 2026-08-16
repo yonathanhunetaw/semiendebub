@@ -42,6 +42,7 @@ Route::domain("admin.{$baseDomain}")
             Route::resource('customers', \App\Http\Controllers\Admin\CustomerController::class);
             Route::prefix('sessions')->group(function () {
                 Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
+                Route::post('/{id}/extend', [SessionController::class, 'extend'])->name('sessions.extend');
                 Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
             });
 

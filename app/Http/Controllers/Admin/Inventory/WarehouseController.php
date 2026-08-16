@@ -32,17 +32,14 @@ class WarehouseController extends Controller
         // 2. Get Stock across ALL warehouses
         $stockLines = ItemStock::whereHasMorph('location', [Warehouse::class])
             ->with([
-                // Reach: ItemStock -> StoreVariant -> ItemVariant -> Item/Color/Size
-                'itemVariant.itemVariant.item',
-                'itemVariant.itemVariant.itemColor',
-                'itemVariant.itemVariant.itemSize',
+                'itemVariant.item',
+                'itemVariant.itemColor',
+                'itemVariant.itemSize',
                 'location'
             ])
             ->get()
             ->map(function ($stock) {
-                // Since $stock->itemVariant is actually a StoreVariant model:
-                $storeVariant = $stock->itemVariant;
-                $itemVariant = $storeVariant->itemVariant; // The global variant blueprint
+                $itemVariant = $stock->itemVariant;
 
                 return [
                     'id' => $stock->id,

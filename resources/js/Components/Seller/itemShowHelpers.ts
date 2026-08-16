@@ -16,6 +16,13 @@ export interface SellerVariantData {
     status?: string | null;
     images?: string[];
     quantity?: number | null;
+    price_ladder?: Array<{
+        level: string;
+        price: number;
+        discount_price: number | null;
+        discount_ends_at: string | null;
+        final: number;
+    }>;
 }
 
 export interface SellerItem {

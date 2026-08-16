@@ -11,19 +11,16 @@ class StoreVariantFactory extends Factory
     public function definition(): array
     {
         return [
-            'store_id' => \App\Models\Store\Store::factory(),
+            'store_id'        => \App\Models\Store\Store::factory(),
             'item_variant_id' => \App\Models\Item\ItemVariant::factory(),
-            'price' => $this->faker->randomFloat(2, 10, 1000),
-            'stock' => $this->faker->numberBetween(0, 100),
-
-            // ✅ Match your migration's $table->boolean('active')
-            'active' => true,
-
-            // ✅ Match your migration's $table->enum('manual_status', ['auto', 'forced'])
+            'pricing_matrix'  => [
+                'price'            => $this->faker->randomFloat(2, 10, 1000),
+                'discount_price'   => null,
+                'discount_ends_at' => null,
+            ],
+            'stock'        => $this->faker->numberBetween(0, 100),
+            'active'       => true,
             'manual_status' => 'auto',
-
-            'updated_at' => now(),
-            'created_at' => now(),
         ];
     }
 }

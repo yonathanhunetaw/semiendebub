@@ -241,7 +241,6 @@ export default function SettingsIndex() {
     );
 }
 
-// Fixed SettingItem with TypeScript href prop and Inertia Link
 function SettingItem({
     icon,
     title,
@@ -254,35 +253,57 @@ function SettingItem({
     href?: string;
 }) {
     return (
-        <Stack
-            direction="row"
-            spacing={2}
-            alignItems="center"
+        <Box
+            component={href ? Link : "button"}
+            href={href}
             sx={{
-                p: 1,
-                borderRadius: 1,
+                width: '100%',
+                p: 1.5,
+                borderRadius: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                textAlign: 'left',
+                textDecoration: 'none',
+                color: 'inherit',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
                 "&:hover": { bgcolor: "action.hover" },
             }}
         >
-            <Box sx={{ color: "text.secondary", display: "flex" }}>{icon}</Box>
-            <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="body2" fontWeight={700}>
-                    {title}
-                </Typography>
-                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                    {desc}
-                </Typography>
-            </Box>
-            <Button
-                component={href ? Link : "button"}
-                href={href}
-                size="small"
-                variant="outlined"
-                sx={{ borderRadius: "8px", textTransform: "none" }}
+            <Stack direction="row" spacing={2} alignItems="center" sx={{ flexGrow: 1 }}>
+                <Box sx={{ color: "text.secondary", display: "flex" }}>{icon}</Box>
+                <Box>
+                    <Typography variant="body2" fontWeight={700}>
+                        {title}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: "text.secondary", display: 'block' }}>
+                        {desc}
+                    </Typography>
+                </Box>
+            </Stack>
+            <Box
+                sx={{ 
+                    display: { xs: 'none', sm: 'inline-flex' },
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    px: 2,
+                    py: 0.5,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: '8px',
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                    color: 'text.primary',
+                    "&:hover": {
+                        backgroundColor: 'action.hover'
+                    }
+                }}
             >
                 Open
-            </Button>
-        </Stack>
+            </Box>
+        </Box>
     );
 }
 

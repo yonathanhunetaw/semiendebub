@@ -107,7 +107,9 @@ class CartController extends Controller
         $cart->load(['customer', 'variants.item']);
 
         // Determine type: business or individual (fallback to individual)
-        $customerType = $cart->customer->active_pricing_customer_type ?? 'individual';
+        $customer = $cart->customer;
+        $isBusiness = $customer && (!empty($customer->is_business) || !empty($customer->tin_number));
+        $customerType = $isBusiness ? 'business' : 'individual';
 
         $cartData = [
             'id' => $cart->id,

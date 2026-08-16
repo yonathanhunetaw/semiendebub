@@ -80,9 +80,13 @@ class DashboardController extends Controller
             $query->where('product_name', 'LIKE', '%' . $search . '%');
         }
 
+        $cartId = $request->integer('cart_id') ?: null;
+        $cart = $cartId ? \App\Models\Seller\Cart::with('customer')->find($cartId) : $topCart;
+        $customer = $cart ? $cart->customer : null;
+
         $paginator = $query->orderBy('product_name')->paginate($perPage);
-        $items = collect($paginator->items())->map(function ($item) use ($storeId) {
-            return $this->enrichItemForIndex($item, $storeId);
+        $items = collect($paginator->items())->map(function ($item) use ($storeId, $customer) {
+            return $this->enrichItemForIndex($item, $storeId, $customer);
         });
 
         // 🔹 2. Extract categories from the enriched items
@@ -113,7 +117,7 @@ class DashboardController extends Controller
      * Now correctly sets original_price to the base price (non‑discounted)
      * and discount_price in the pricing_matrix.
      */
-    private function enrichItemForIndex(Item $item, int $storeId): array
+    private function enrichItemForIndex(Item $item, int $storeId, $customer = null): array
     {
         // 1. Restore Image Resolution Logic
         $generalImages = is_string($item->general_images) ? json_decode($item->general_images, true) : ($item->general_images ?? []);
@@ -135,10 +139,8 @@ class DashboardController extends Controller
             ->values()
             ->toArray();
 
-        // 2. Pricing and Stock logic
-        $storeVariant = $item->variants->flatMap->storeVariants
-            ->where('store_id', $storeId)
-            ->first();
+        $sellerId = Auth::id();
+        $priceInfo = PriceProvider::getItemPriceRange($item, $storeId, $sellerId, $customer);
 
         $totalStock = 0;
         foreach ($item->variants as $variant) {
@@ -147,47 +149,18 @@ class DashboardController extends Controller
             }
         }
 
-        // 3. USE THE PRICE PROVIDER
-        $priceLadder = $storeVariant
-            ? PriceProvider::getPriceLadder($storeVariant->id, $storeId)
-            : [];
-
-        // Find each pricing level by key
-        $levelMap = collect($priceLadder)->keyBy('level');
-
-        $storeLevel      = $levelMap->get('store')      ?? [];
-        $individualLevel = $levelMap->get('individual')  ?? null;
-
-        $basePrice      = $storeLevel['price'] ?? 0;
-        $baseDiscount   = $storeLevel['discount_price'] ?? null;
-        $baseEndsAt     = $storeLevel['discount_ends_at'] ?? null;
-
-        // Build the pricing_matrix that the TSX already knows how to render
-        // We tag it with individual_price so the frontend can pick it up separately
-        $matrix = $storeVariant ? $storeVariant->pricing_matrix : null;
-        if (is_string($matrix)) {
-            $matrix = json_decode($matrix, true);
-        }
-        $discountEndsAt = $matrix['discount_ends_at'] ?? null;
-
         return [
-            'id'            => $item->id,
-            'product_name'  => $item->product_name,
-            'sold_count'    => $item->sold_count ?? 0,
-            'category'      => $item->category ? ['category_name' => $item->category->category_name] : null,
-            'image_urls'    => $imageUrls,
-            'store_price'   => $basePrice,
-            'original_price' => $basePrice,
-            'final_price'   => PriceProvider::getFinalPrice($priceLadder),
-            'store_stock'   => $totalStock,
-            'pricing_matrix' => $matrix ?: null,
-            'discount_ends_at' => $discountEndsAt,
-            // Individual price override — a separate flat object the TSX can use
-            'individual_price' => $individualLevel ? [
-                'price'            => $individualLevel['price'] ?? null,
-                'discount_price'   => $individualLevel['discount_price'] ?? null,
-                'discount_ends_at' => $individualLevel['discount_ends_at'] ?? null,
-            ] : null,
+            'id' => $item->id,
+            'product_name' => $item->product_name,
+            'sold_count' => $item->sold_count ?? 0,
+            'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
+            'image_urls' => $imageUrls,
+            'original_price' => $priceInfo['store_price'],
+            'store_price' => $priceInfo['store_price'],
+            'final_price' => $priceInfo['final_price'],
+            'discount_ends_at' => $priceInfo['discount_ends_at'],
+            'pricing_matrix' => $priceInfo['pricing_matrix'],
+            'store_stock' => $totalStock,
         ];
     }
 

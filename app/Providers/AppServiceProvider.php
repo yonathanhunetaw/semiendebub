@@ -25,5 +25,15 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
         Vite::prefetch(concurrency: 3);
+
+        \Illuminate\Support\Facades\Session::extend('database', function ($app) {
+            $table = config('session.table');
+            $lifetime = config('session.lifetime');
+            $connection = $app['db']->connection(config('session.connection'));
+
+            return new \App\Extensions\CustomDatabaseSessionHandler(
+                $connection, $table, $lifetime, $app
+            );
+        });
     }
 }

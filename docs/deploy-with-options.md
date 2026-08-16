@@ -42,3 +42,9 @@ When developing locally or on a development environment (like your folder on the
 * **Standard Daily Run:** `./deploy-with-options.sh --development` [cite: 3]
 * **When you pull heavy database changes:** `./deploy-with-options.sh --development --reset-db` [cite: 3]
 * **When Docker files or underlying dependencies alter:** Append `--force-build` or `--clean`.
+
+## For quick frontend/UI updates (without a full redeploy): 
+`docker exec -it duka-prod-app npm run build`
+`docker exec -it duka-prod-app php artisan optimize:clear`
+`docker exec -it duka-prod-app php artisan view:cache`
+Why: npm run build generates the new frontend files, but Laravel in production caches the old filenames. The two artisan commands force Laravel to dump its memory and link the newly built files from the updated Vite manifest.

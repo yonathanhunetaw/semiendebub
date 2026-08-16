@@ -963,6 +963,9 @@ if [ "$APP_ENV" = "production" ]; then
     exec_in_app npm run build 2>&1 | tee -a "$LOG_FILE"
     log_success "Production assets built"
 else
+    log_step "Cleaning up production assets for development mode..."
+    exec_in_app rm -rf public/build
+    
     log_step "Setting up Vite dependencies..."
     
     log_step "Fixing Vite dependencies for development..."

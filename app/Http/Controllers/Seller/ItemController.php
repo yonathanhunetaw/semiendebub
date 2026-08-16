@@ -73,8 +73,17 @@ class ItemController extends Controller
         $paginator = $query->orderBy('product_name')->paginate($perPage);
         $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
-        $items = collect($paginator->items())->map(function ($item) use ($storeId) {
-            return $this->enrichItemForIndex($item, $storeId);
+        $topCart = \App\Models\Seller\Cart::with('customer')
+            ->where('seller_id', $user->id)
+            ->where('status', 'open')
+            ->orderBy('priority', 'asc')
+            ->first();
+
+        $cart = $cartId ? \App\Models\Seller\Cart::with('customer')->find($cartId) : $topCart;
+        $customer = $cart ? $cart->customer : null;
+
+        $items = collect($paginator->items())->map(function ($item) use ($storeId, $customer) {
+            return $this->enrichItemForIndex($item, $storeId, $customer);
         });
 
         Log::info("Items index (paginated)", [
@@ -101,7 +110,7 @@ class ItemController extends Controller
         ]);
     }
 
-    private function enrichItemForIndex(Item $item, int $storeId): array
+    private function enrichItemForIndex(Item $item, int $storeId, $customer = null): array
     {
         // 1. Restore Image Resolution Logic
         $generalImages = is_string($item->general_images) ? json_decode($item->general_images, true) : ($item->general_images ?? []);
@@ -123,10 +132,8 @@ class ItemController extends Controller
             ->values()
             ->toArray();
 
-        // 2. Pricing and Stock logic
-        $storeVariant = $item->variants->flatMap->storeVariants
-            ->where('store_id', $storeId)
-            ->first();
+        $sellerId = Auth::id();
+        $priceInfo = PriceProvider::getItemPriceRange($item, $storeId, $sellerId, $customer);
 
         $totalStock = 0;
         foreach ($item->variants as $variant) {
@@ -135,20 +142,18 @@ class ItemController extends Controller
             }
         }
 
-        $priceLadder = $storeVariant ? PriceProvider::getPriceLadder($storeVariant->id, $storeId) : [];
-        $finalPrice = PriceProvider::getFinalPrice($priceLadder);
-        $basePrice = $priceLadder[0]['price'] ?? 0;
-
         return [
             'id' => $item->id,
             'product_name' => $item->product_name,
             'sold_count' => $item->sold_count ?? 0,
             'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
-            'image_urls' => $imageUrls, // Now correctly populated
-            'store_price' => $basePrice,
-            'final_price' => $finalPrice,
+            'image_urls' => $imageUrls,
+            'original_price' => $priceInfo['store_price'],
+            'store_price' => $priceInfo['store_price'],
+            'final_price' => $priceInfo['final_price'],
+            'discount_ends_at' => $priceInfo['discount_ends_at'],
+            'pricing_matrix' => $priceInfo['pricing_matrix'],
             'store_stock' => $totalStock,
-            'pricing_matrix' => $priceLadder,
         ];
     }
     private function resolveImageUrl(?string $path): ?string
@@ -238,64 +243,22 @@ class ItemController extends Controller
                 ->values()
                 ->toArray();
 
-            $variantPrices = [];
-            $totalStock = 0;
+            $priceInfo = \App\Services\PriceProvider::getItemPriceRange($item, $storeId, $sellerId, $customerId);
 
-            // Process each variant
+            $totalStock = 0;
             foreach ($item->variants as $variant) {
                 $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
-
                 if ($storeVariant) {
-                    $stockQty = $stocks[$storeVariant->id]->quantity ?? 0;
-                    $totalStock += $stockQty;
-                    $variant->store_stock = $stockQty;
-
-                    $matrix = $storeVariant->pricing_matrix;
-                    if (is_string($matrix)) {
-                        $matrix = json_decode($matrix, true);
-                    }
-                    $variant->pricing_matrix = $matrix;
-
-                    $variant->price_ladder = PriceProvider::getPriceLadder(
-                        storeVariantId: $storeVariant->id,
-                        storeId: $storeId,
-                        sellerId: $sellerId,
-                        customerId: $customerId
-                    );
-
-                    $variant->final_price = PriceProvider::getFinalPrice($variant->price_ladder);
-
-                    $basePriceLevel = $variant->price_ladder[0] ?? null;
-                    $variant->store_price = $basePriceLevel['price'] ?? 0;
-                    $variant->store_discount_price = $basePriceLevel['discount_price'] ?? null;
-                    $variant->discount_ends_at = $basePriceLevel['discount_ends_at'] ?? null;
-
-                    if (!$variant->store_price) {
-                        $variant->store_price = $matrix['price'] ?? 0;
-                    }
-                    if (!$variant->store_discount_price) {
-                        $variant->store_discount_price = $matrix['discount_price'] ?? null;
-                    }
-                    if (!$variant->discount_ends_at) {
-                        $variant->discount_ends_at = $matrix['discount_ends_at'] ?? null;
-                    }
-
-                    $variantPrices[] = $variant->final_price;
+                    $totalStock += $stocks[$storeVariant->id]->quantity ?? 0;
                 }
             }
 
-            $item->store_price = !empty($variantPrices) ? min($variantPrices) : null;
+            $item->original_price = $priceInfo['store_price'];
+            $item->store_price = $priceInfo['store_price'];
+            $item->final_price = $priceInfo['final_price'];
+            $item->discount_ends_at = $priceInfo['discount_ends_at'];
+            $item->pricing_matrix = $priceInfo['pricing_matrix'];
             $item->store_stock = $totalStock;
-
-            $firstVariant = $item->variants->first();
-            if ($firstVariant) {
-                $item->discount_ends_at = $firstVariant->discount_ends_at;
-                $item->pricing_matrix = $firstVariant->pricing_matrix;
-                $item->original_price = $firstVariant->store_price;
-            }
-
-            $item->original_price = $item->store_price ?? 0;
-            $item->final_price = !empty($variantPrices) ? min($variantPrices) : null;
 
             return [
                 'id' => $item->id,
@@ -382,8 +345,11 @@ class ItemController extends Controller
 
         $paginator = $query->orderBy('product_name')->paginate($perPage, ['*'], 'page', $page);
 
-        $items = collect($paginator->items())->map(function ($item) use ($storeId) {
-            return $this->enrichItemForIndex($item, $storeId);
+        $cart = $cartId ? \App\Models\Seller\Cart::with('customer')->find($cartId) : null;
+        $customer = $cart ? $cart->customer : null;
+
+        $items = collect($paginator->items())->map(function ($item) use ($storeId, $customer) {
+            return $this->enrichItemForIndex($item, $storeId, $customer);
         });
 
         return response()->json([
@@ -488,8 +454,6 @@ class ItemController extends Controller
 
             $store_stock = $stockRecord?->quantity ?? 0;
 
-            $price = $storeVariant?->price;
-            $discount_price = $storeVariant?->discount_price;
             $status = $storeVariant?->computed_status ?? 'inactive';
             $store_active = $status === 'active';
 
@@ -503,6 +467,18 @@ class ItemController extends Controller
                 )
                 : [];
             $final_price = $storeVariant ? PriceProvider::getFinalPrice($price_ladder) : null;
+
+            $basePriceLevel = $price_ladder[0] ?? null;
+            $price = $basePriceLevel['price'] ?? null;
+            $discount_price = $basePriceLevel['discount_price'] ?? null;
+
+            // Handle fallback to raw matrix just in case
+            if ($storeVariant && !$price) {
+                $matrix = is_string($storeVariant->pricing_matrix) ? json_decode($storeVariant->pricing_matrix, true) : $storeVariant->pricing_matrix;
+                $matrix = (isset($matrix[0]) && is_array($matrix[0])) ? $matrix[0] : ($matrix ?? []);
+                $price = $matrix['price'] ?? null;
+                $discount_price = $matrix['discount_price'] ?? null;
+            }
 
             // Handle Variant Images
             // Handle Variant Images
@@ -525,7 +501,14 @@ class ItemController extends Controller
                     ->first()
                 : null;
 
-            $seller_price = $seller_price_record?->price ?? null;
+            $seller_price = null;
+            $seller_discount_price = null;
+            if ($seller_price_record && !empty($seller_price_record->pricing_matrix)) {
+                $sellerMatrix = is_string($seller_price_record->pricing_matrix) ? json_decode($seller_price_record->pricing_matrix, true) : $seller_price_record->pricing_matrix;
+                $sellerMatrix = (isset($sellerMatrix[0]) && is_array($sellerMatrix[0])) ? $sellerMatrix[0] : ($sellerMatrix ?? []);
+                $seller_price = $sellerMatrix['price'] ?? null;
+                $seller_discount_price = $sellerMatrix['discount_price'] ?? null;
+            }
 
             $payload = [
                 'id' => $variant->id,
@@ -544,7 +527,7 @@ class ItemController extends Controller
                 'price_ladder' => $price_ladder,
                 'final_price' => $final_price,
                 'seller_price' => $seller_price,
-                'seller_discount_price' => $seller_price_record?->discount_price ?? null,
+                'seller_discount_price' => $seller_discount_price,
             ];
 
             // 🚀 LOG 2: Variant Image Debug

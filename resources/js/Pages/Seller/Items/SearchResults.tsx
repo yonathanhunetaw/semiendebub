@@ -315,15 +315,16 @@ export default function SearchResults({
                         }}
                     >
                         {items.map((item) => {
-                            // ---- Price & discount logic (same as Index) ----
-                            const originalPrice = item.original_price ?? 0;
-                            const discountPrice = item.pricing_matrix?.discount_price ?? null;
-                            const discountEnds = item.pricing_matrix?.discount_ends_at ?? item.discount_ends_at ?? null;
-                            const hasDiscount = discountPrice !== null && discountPrice < originalPrice;
-                            const displayPrice = hasDiscount ? discountPrice! : originalPrice;
+                            // The backend (search controller) already resolved everything:
+                            // Individual carts, Business VAT, Customer prices, and Seller prices.
+                            const originalPrice = item.store_price ?? item.original_price ?? 0;
+                            const displayPrice = item.final_price ?? originalPrice;
+                            const discountEnds = item.discount_ends_at ?? null;
+                            
+                            const hasDiscount = displayPrice < originalPrice;
                             const discountPercent =
                                 hasDiscount && originalPrice > 0
-                                    ? Math.round(((originalPrice - discountPrice!) / originalPrice) * 100)
+                                    ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100)
                                     : 0;
 
                             const imgSrc = item.image_urls?.[0]

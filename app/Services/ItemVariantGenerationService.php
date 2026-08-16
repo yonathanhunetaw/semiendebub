@@ -38,12 +38,15 @@ class ItemVariantGenerationService
                     }
 
                     // 2. Set Images (Using the current variantIndex)
-                    $variantSpecificImages = [];
-                    for ($i = 1; $i <= 5; $i++) {
-                        $variantSpecificImages[] = "uploads/items/{$item->id}/{$item->file_prefix}_v{$variantIndex}_{$i}.jpg";
+                    if (empty($variant->images)) {
+                        $variantSpecificImages = [];
+                        for ($i = 1; $i <= 5; $i++) {
+                            $variantSpecificImages[] = "uploads/items/{$item->id}/{$item->file_prefix}_v{$variantIndex}_{$i}.jpg";
+                        }
+                        $variant->images = $variantSpecificImages;
+                    } else {
+                        $variantSpecificImages = is_array($variant->images) ? $variant->images : (json_decode($variant->images, true) ?: []);
                     }
-
-                    $variant->images = $variantSpecificImages;
                     $variant->status = $item->status;
 
                     // Construct a robust SKU including the packaging ID
@@ -103,12 +106,21 @@ class ItemVariantGenerationService
         $firstStoreId = $storeIds->first();
 
         // 1. Create/Update the StoreVariant FIRST so we have an ID
-        $storeVariant = StoreVariant::updateOrCreate(
-            [
+        $existing = StoreVariant::where('store_id', $firstStoreId)
+            ->where('item_variant_id', $variant->id)
+            ->first();
+
+        if ($existing) {
+            $existing->update([
+                'active' => $variant->status === 'active',
+                'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
+                'forced_status' => $variant->status === 'active' ? null : 'inactive',
+            ]);
+            $storeVariant = $existing;
+        } else {
+            $storeVariant = StoreVariant::create([
                 'store_id' => $firstStoreId,
                 'item_variant_id' => $variant->id,
-            ],
-            [
                 'active' => $variant->status === 'active',
                 'manual_status' => $variant->status === 'active' ? 'auto' : 'forced',
                 'forced_status' => $variant->status === 'active' ? null : 'inactive',
@@ -117,27 +129,10 @@ class ItemVariantGenerationService
                     'discount_price' => null,
                     'discount_ends_at' => null,
                 ],
-            ]
-        );
+            ]);
+        }
 
-        // 2. Now use $storeVariant->id for the prices
-        DB::table('store_variants_seller_prices')->updateOrInsert(
-            ['store_variant_id' => $storeVariant->id, 'seller_id' => 1],
-            [
-                'pricing_matrix' => json_encode(['price' => round($totalPrice * 0.85, 2), 'active' => true]),
-                'active' => true,
-                'updated_at' => now()
-            ]
-        );
-
-        DB::table('store_variants_customer_prices')->updateOrInsert(
-            ['store_variant_id' => $storeVariant->id, 'customer_id' => 1],
-            [
-                'pricing_matrix' => json_encode(['price' => round($totalPrice * 0.95, 2), 'active' => true]),
-                'active' => true,
-                'updated_at' => now()
-            ]
-        );
+        // Store variant created/updated cleanly with base store pricing_matrix
     }
 
     private function variantKey(?int $colorId, ?int $sizeId): string

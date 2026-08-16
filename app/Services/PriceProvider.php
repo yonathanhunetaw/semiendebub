@@ -40,7 +40,7 @@ class PriceProvider
         if (Schema::hasTable('store_variants_individual_prices')) {
             $individual = DB::table('store_variants_individual_prices')
                 ->where('store_variant_id', $storeVariantId)
-                ->where('active', true)
+                ->where('active', 1)
                 ->first();
 
             if ($individual && !empty($individual->pricing_matrix)) {
@@ -54,7 +54,7 @@ class PriceProvider
             $seller = DB::table('store_variants_seller_prices')
                 ->where('store_variant_id', $storeVariantId)
                 ->where('seller_id', $sellerId)
-                ->where('active', true)
+                ->where('active', 1)
                 ->first();
 
             if ($seller && !empty($seller->pricing_matrix)) {
@@ -68,7 +68,7 @@ class PriceProvider
             $customer = DB::table('store_variants_customer_prices')
                 ->where('store_variant_id', $storeVariantId)
                 ->where('customer_id', $customerId)
-                ->where('active', true)
+                ->where('active', 1)
                 ->first();
 
             if ($customer && !empty($customer->pricing_matrix)) {
@@ -93,7 +93,18 @@ class PriceProvider
     {
         if (empty($priceLadder))
             return null;
-        return end($priceLadder)['final'];
+
+        $last = end($priceLadder);
+
+        if (is_numeric($last)) {
+            return (float) $last;
+        }
+
+        if (is_array($last)) {
+            return (float) ($last['final'] ?? $last['price'] ?? 0);
+        }
+
+        return null;
     }
 
     protected static function formatMatrixPrice(string $level, array $row): array
@@ -130,5 +141,103 @@ class PriceProvider
         }
 
         return (float) $basePrice;
+    }
+
+    // Add this to PriceProvider.php
+
+    /**
+     * Get the starting price (smallest denomination) for a parent item/product.
+     * This stops dashboards from showing averaged prices like $9.41.
+     */
+    public static function getStartingPriceForItem(int $itemId, int $storeId, ?int $sellerId = null, $customer = null): float
+    {
+        // 1. Fetch all store variants for this parent item
+        $storeVariants = DB::table('store_variants')
+            ->join('item_variants', 'store_variants.item_variant_id', '=', 'item_variants.id')
+            ->where('item_variants.item_id', $itemId)
+            ->where('store_variants.store_id', $storeId)
+            ->select('store_variants.id', 'store_variants.pricing_matrix')
+            ->get();
+
+        if ($storeVariants->isEmpty()) {
+            return 0.00;
+        }
+
+        // 2. Sort by base price to find the smallest packaging denomination (e.g., P1/Piece)
+        $smallestVariant = $storeVariants->sortBy(function ($sv) {
+            $matrix = json_decode($sv->pricing_matrix, true) ?? [];
+            $normalized = self::normalizeMatrix($matrix);
+            return $normalized['price'] ?? 999999;
+        })->first();
+
+        // 3. Resolve the strict hierarchy: Customer > Seller > Individual > Store Base
+        $customerId = $customer->id ?? null;
+        $ladder = self::getPriceLadder($smallestVariant->id, $storeId, $sellerId, $customerId);
+
+        // 4. Apply Business vs Individual Tax logic
+        $isBusiness = is_object($customer) && (!empty($customer->is_business) || !empty($customer->tin_number));
+        $customerType = $isBusiness ? 'business' : 'individual';
+        
+        return self::getFinalPriceWithTax($ladder, $customerType);
+    }
+
+    /**
+     * Get the aggregated pricing info for an entire item based on its variants.
+     * Iterates over all store variants to compute the absolute minimum final price.
+     */
+    public static function getItemPriceRange(\App\Models\Item\Item $item, int $storeId, ?int $sellerId = null, $customer = null): array
+    {
+        $customerId = is_object($customer) ? ($customer->id ?? null) : $customer;
+        $isBusiness = is_object($customer) && (!empty($customer->is_business) || !empty($customer->tin_number));
+        $customerType = $isBusiness ? 'business' : 'individual';
+
+        $variantPrices = [];
+        $basePrices = [];
+        $ladders = [];
+        
+        foreach ($item->variants as $variant) {
+            foreach ($variant->storeVariants as $sv) {
+                if ($sv->store_id !== $storeId) continue;
+                // Only consider active store variants if we have a computed_status, else default to including it
+                if (isset($sv->computed_status) && $sv->computed_status !== 'active') continue;
+                if (isset($sv->active) && !$sv->active) continue;
+
+                $ladder = self::getPriceLadder($sv->id, $storeId, $sellerId, $customerId);
+                if (empty($ladder)) continue;
+                
+                $finalPrice = self::getFinalPriceWithTax($ladder, $customerType);
+                $basePrice = $ladder[0]['price'] ?? 0;
+                
+                $variantPrices[] = $finalPrice;
+                $basePrices[] = $basePrice;
+                $ladders[] = $ladder;
+            }
+        }
+
+        if (empty($variantPrices)) {
+            return [
+                'store_price' => 0,
+                'final_price' => 0,
+                'discount_ends_at' => null,
+                'pricing_matrix' => [],
+            ];
+        }
+
+        $minFinalPrice = min($variantPrices);
+        
+        // Find the ladder that yielded the min final price (approximate by index)
+        $minIndex = array_search($minFinalPrice, $variantPrices);
+        $bestLadder = $ladders[$minIndex] ?? [];
+        
+        // In the best ladder, the first tier is the store tier
+        $basePrice = $bestLadder[0]['price'] ?? min($basePrices);
+        $discountEndsAt = $bestLadder[0]['discount_ends_at'] ?? null;
+
+        return [
+            'store_price' => $basePrice,
+            'final_price' => $minFinalPrice,
+            'discount_ends_at' => $discountEndsAt,
+            'pricing_matrix' => $bestLadder,
+        ];
     }
 }

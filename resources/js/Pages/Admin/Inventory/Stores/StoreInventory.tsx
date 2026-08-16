@@ -68,6 +68,7 @@ interface InventoryItem {
     item_id: number;
     item_name: string;
     category: string;
+    starting_price: number;
     total_variants: number;
     total_stock: number;
     variants: Variant[];
@@ -956,6 +957,7 @@ function InventoryPagination({ meta, links }: { meta: PaginationMeta; links: Pag
 // ─────────────────────────────────────────────────────────────────────────────
 export default function StoreInventory({ store, inventory, customers = [], sellers = [] }: Props) {
     console.log("[StoreInventory] Rendering with store:", store?.name);
+    console.log("[StoreInventory] RAW INVENTORY DUMP:", inventory);
     console.log("[StoreInventory] inventory type:", Array.isArray(inventory) ? 'array' : 'paginated');
 
     const theme = useTheme();

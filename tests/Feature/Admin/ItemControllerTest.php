@@ -30,6 +30,7 @@ class ItemControllerTest extends TestCase
 
         // If you use Spatie Roles, this is required for middleware
         if (method_exists($admin, 'assignRole')) {
+            \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
             $admin->assignRole('admin');
         }
 
@@ -103,15 +104,19 @@ class ItemControllerTest extends TestCase
     public function it_forces_status_to_draft_if_variants_lack_required_images()
     {
         // Setup: Item with a variant that has 0 or 1 image
+        $color = ItemColor::factory()->create();
         $item = Item::factory()->create(['status' => 'draft']);
+        $item->colors()->attach($color);
         $item->variants()->create([
             'sku' => 'SKU-INCOMPLETE',
+            'item_color_id' => $color->id,
             'images' => ['only-one-image.jpg'] // Needs 2 to be active
         ]);
 
         $payload = [
             'product_name' => $item->product_name,
             'item_category_id' => $item->item_category_id,
+            'color_ids' => [$color->id],
             'status' => 'active', // User tries to set it to active
         ];
 

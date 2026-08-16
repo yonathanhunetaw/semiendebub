@@ -18,15 +18,17 @@ class CanvasAssetUploadTest extends TestCase
         // 1. Mock S3/MinIO disk virtualization
         Storage::fake('s3');
 
+        $this->withServerVariables(['HTTP_HOST' => 'admin.localhost']);
+
         // 2. Create a test user
         $user = User::factory()->create();
 
         // 3. Generate a dummy image asset file mock
         $fakeImage = UploadedFile::fake()->image('canvas_diagram.jpg', 800, 600);
 
-        // 4. Hit the asset upload API endpoint using the designated route profile
+        $url = route('canvas.upload-asset', ['subdomain' => 'admin']);
         $response = $this->actingAs($user)
-            ->json('POST', '/admin/canvas/upload-asset', [
+            ->post($url, [
                 'file' => $fakeImage
             ]);
 

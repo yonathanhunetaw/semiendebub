@@ -143,6 +143,7 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
 // ======================== MAIN DASHBOARD ========================
 export default function Dashboard({ items: initialItems, store, nextPageUrl, filters = { search: '' }, has_tin_cart = false, top_cart_is_individual = false }: Props) {
     console.log("[Dashboard] Component rendered with props:", { initialItems: initialItems?.length, store, nextPageUrl, filters, has_tin_cart, top_cart_is_individual });
+    console.log("🔥 [INDEX] RAW ITEMS DUMP:", JSON.stringify(initialItems, null, 2));
 
     const theme = useTheme();
     const [items, setItems] = React.useState(initialItems);
@@ -398,42 +399,16 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                         }}
                     >
                         {items.map((item) => {
-                            // ---- 🔥 PRICE RESOLUTION ----
-                            // Priority: individual price (when top cart is guest/individual)
-                            //           → then base store pricing_matrix
-                            //           → VAT on top if business (TIN) cart
-
-                            let originalPrice: number;
-                            let discountFromMatrix: number | null;
-                            let discountEnds: string | null;
-
-                            if (top_cart_is_individual && item.individual_price?.price != null) {
-                                // Use the individual pricing tier
-                                originalPrice     = item.individual_price.price ?? 0;
-                                discountFromMatrix = item.individual_price.discount_price ?? null;
-                                discountEnds      = item.individual_price.discount_ends_at ?? null;
-                                console.log(`[Price] item ${item.id} using individual price: original=${originalPrice}, discount=${discountFromMatrix}, ends=${discountEnds}`);
-                            } else {
-                                // Fall back to base store price
-                                originalPrice     = item.store_price ?? 0;
-                                discountFromMatrix = item.pricing_matrix?.discount_price ?? null;
-                                discountEnds      = item.pricing_matrix?.discount_ends_at ?? item.discount_ends_at ?? null;
-                                console.log(`[Price] item ${item.id} using store price: original=${originalPrice}, discount=${discountFromMatrix}, ends=${discountEnds}`);
-                            }
-
-                            // Apply VAT for business (TIN) carts
-                            if (has_tin_cart) {
-                                originalPrice = originalPrice * 1.15;
-                                if (discountFromMatrix !== null) {
-                                    discountFromMatrix = discountFromMatrix * 1.15;
-                                }
-                                console.log(`[Price] item ${item.id} applied VAT: original=${originalPrice}, discount=${discountFromMatrix}`);
-                            }
-                            const hasDiscount = discountFromMatrix !== null && discountFromMatrix < originalPrice;
-                            const displayPrice = hasDiscount ? discountFromMatrix! : originalPrice;
+                            // The backend (enrichItemForIndex) already resolved everything:
+                            // Individual carts, Business VAT, Customer prices, and Seller prices.
+                            const originalPrice = item.store_price ?? 0;
+                            const displayPrice = item.final_price ?? originalPrice;
+                            const discountEnds = item.discount_ends_at ?? null;
+                            
+                            const hasDiscount = displayPrice < originalPrice;
                             const discountPercent =
                                 hasDiscount && originalPrice > 0
-                                    ? Math.round(((originalPrice - discountFromMatrix!) / originalPrice) * 100)
+                                    ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100)
                                     : 0;
 
                             if (hasDiscount) {

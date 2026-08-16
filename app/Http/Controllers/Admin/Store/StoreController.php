@@ -89,31 +89,22 @@ class StoreController extends Controller
                 }
             }
 
-            return [
-                'item_id' => $item->id,
-                'item_name' => $item->product_name ?? 'Unknown Item',
-                'category' => $item->category->category_name ?? 'N/A',
-                'total_variants' => $storeVariants->count(),
-                'total_stock' => $storeVariants->reduce(
-                    fn($carry, $sv) => $carry + $sv->stocks->sum('quantity'),
-                    0
-                ),
-                'variants' => $storeVariants->map(function ($sv) use ($store) {
-                    // Use PriceProvider to get the price ladder
-                    $priceLadder = PriceProvider::getPriceLadder(
-                        $sv->id,
-                        $store->id,
-                        null, // sellerId - can be passed from request if needed
-                        null  // customerId - can be passed from request if needed
-                    );
+            $mappedVariants = $storeVariants->map(function ($sv) use ($store) {
+                // Use PriceProvider to get the price ladder
+                $priceLadder = PriceProvider::getPriceLadder(
+                    $sv->id,
+                    $store->id,
+                    null, // sellerId - can be passed from request if needed
+                    null  // customerId - can be passed from request if needed
+                );
 
-                    // Get the final price (highest priority - customer > seller > store)
-                    $finalPrice = PriceProvider::getFinalPrice($priceLadder);
+                // Get the final price (highest priority - customer > seller > store)
+                $finalPrice = PriceProvider::getFinalPrice($priceLadder);
 
-                    // Get the store-level base price (first in ladder)
-                    $basePrice = $priceLadder[0]['price'] ?? 0;
-                    $discountPrice = $priceLadder[0]['discount_price'] ?? null;
-                    $discountEndsAt = $priceLadder[0]['discount_ends_at'] ?? null;
+                // Get the store-level base price (first in ladder)
+                $basePrice = $priceLadder[0]['price'] ?? 0;
+                $discountPrice = $priceLadder[0]['discount_price'] ?? null;
+                $discountEndsAt = $priceLadder[0]['discount_ends_at'] ?? null;
 
                     return [
                         'id' => $sv->id,
@@ -163,7 +154,19 @@ class StoreController extends Controller
                             'active'          => (bool) $sv->individualPrice->active,
                         ] : null,
                     ];
-                })->values(),
+                })->values();
+
+            return [
+                'item_id' => $item->id,
+                'item_name' => $item->product_name ?? 'Unknown Item',
+                'category' => $item->category->category_name ?? 'N/A',
+                'starting_price' => $mappedVariants->min('final_price'),
+                'total_variants' => $storeVariants->count(),
+                'total_stock' => $storeVariants->reduce(
+                    fn($carry, $sv) => $carry + $sv->stocks->sum('quantity'),
+                    0
+                ),
+                'variants' => $mappedVariants,
             ];
         });
 
@@ -399,15 +402,19 @@ class StoreController extends Controller
             'discount_ends_at' => 'nullable|date',
         ]);
 
+        $pricingMatrix = [
+            'price'            => (float) $validated['price'],
+            'discount_price'   => isset($validated['discount_price']) ? (float) $validated['discount_price'] : null,
+            'discount_ends_at' => $validated['discount_ends_at'] ?? null,
+        ];
+
         $record = StoreVariantSellerPrice::updateOrCreate(
             [
                 'store_variant_id' => $storeVariant->id,
                 'seller_id' => $validated['seller_id'],
             ],
             [
-                'price' => $validated['price'],
-                'discount_price' => $validated['discount_price'] ?? null,
-                'discount_ends_at' => $validated['discount_ends_at'] ?? null,
+                'pricing_matrix' => $pricingMatrix,
             ]
         );
 

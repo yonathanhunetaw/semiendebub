@@ -103,18 +103,30 @@ const customAssetStore: any = {
     async upload(_asset: any, file: File): Promise<{ src: string }> {
         const formData = new FormData();
         formData.append('file', file);
+        
+        window.dispatchEvent(new CustomEvent('canvas-upload-start'));
 
-        const response = await axios.post('/canvas/upload-asset', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        try {
+            const response = await axios.post('/canvas/upload-asset', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (progressEvent) => {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+                    window.dispatchEvent(new CustomEvent('canvas-upload-progress', { detail: { progress: percentCompleted } }));
+                }
+            });
 
-        const url = response.data?.url;
-        if (typeof url !== 'string' || url.length === 0) {
-            console.error('Canvas image upload returned an invalid response:', response.data);
-            throw new Error(response.data?.error || 'Canvas image upload did not return a URL.');
+            const url = response.data?.url;
+            if (typeof url !== 'string' || url.length === 0) {
+                console.error('Canvas image upload returned an invalid response:', response.data);
+                throw new Error(response.data?.error || 'Canvas image upload did not return a URL.');
+            }
+
+            window.dispatchEvent(new CustomEvent('canvas-upload-success'));
+            return { src: url };
+        } catch (error) {
+            window.dispatchEvent(new CustomEvent('canvas-upload-error'));
+            throw error;
         }
-
-        return { src: url };
     },
     async resolve(asset: any): Promise<string> {
         return asset.props?.src ?? '';
@@ -237,6 +249,66 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
     
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+    // Upload Progress
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
+    // Snapshot Reminders & Canvas Size
+    const [unsavedChangesCount, setUnsavedChangesCount] = useState(0);
+    const [canvasSizeWarning, setCanvasSizeWarning] = useState<string | null>(null);
+    const lastSaveTime = useRef<number>(Date.now());
+    const [snapshotReminder, setSnapshotReminder] = useState(false);
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+    const [saveComment, setSaveComment] = useState('Updated canvas blueprint');
+    const [saveAnimKey, setSaveAnimKey] = useState(0);
+
+    useEffect(() => {
+        const handleStart = () => setUploadProgress(0);
+        const handleProgress = (e: any) => setUploadProgress(e.detail.progress);
+        const handleEnd = () => {
+            setUploadProgress(100);
+            setTimeout(() => setUploadProgress(null), 1000);
+        };
+        const handleError = () => setUploadProgress(null);
+
+        window.addEventListener('canvas-upload-start', handleStart);
+        window.addEventListener('canvas-upload-progress', handleProgress);
+        window.addEventListener('canvas-upload-success', handleEnd);
+        window.addEventListener('canvas-upload-error', handleError);
+
+        return () => {
+            window.removeEventListener('canvas-upload-start', handleStart);
+            window.removeEventListener('canvas-upload-progress', handleProgress);
+            window.removeEventListener('canvas-upload-success', handleEnd);
+            window.removeEventListener('canvas-upload-error', handleError);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!hasUnsavedChanges) {
+            setSnapshotReminder(false);
+            return;
+        }
+
+        const interval = setInterval(() => {
+            if (hasUnsavedChanges && Date.now() - lastSaveTime.current >= 3 * 60 * 1000) {
+                setSnapshotReminder(prev => {
+                    if (!prev) setSaveAnimKey(k => k + 1);
+                    return true;
+                });
+            }
+        }, 30000);
+
+        if (unsavedChangesCount >= 20) {
+            setSnapshotReminder(prev => {
+                if (!prev) setSaveAnimKey(k => k + 1);
+                return true;
+            });
+            setUnsavedChangesCount(0);
+        }
+
+        return () => clearInterval(interval);
+    }, [hasUnsavedChanges, unsavedChangesCount]);
+
     const isFirstMount = useRef(true);
     useEffect(() => {
         if (isFirstMount.current) {
@@ -324,6 +396,8 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         return getSanitizedSnapshot(latestSnapshot);
     }, [latestSnapshot]);
 
+    const sizeCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const handleMount = (editor: Editor) => {
         editorRef.current = editor;
         (window as any).editor = editor;
@@ -343,6 +417,22 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             
             if (isSignificantChange) {
                 setHasUnsavedChanges(true);
+                setUnsavedChangesCount(prev => prev + 1);
+
+                if (sizeCheckTimeout.current) clearTimeout(sizeCheckTimeout.current);
+                sizeCheckTimeout.current = setTimeout(() => {
+                    const snapshot = editor.getSnapshot();
+                    const size = new Blob([JSON.stringify(snapshot)]).size;
+                    const mb = size / (1024 * 1024);
+                    
+                    if (mb >= 2.5) {
+                        setCanvasSizeWarning(`Warning: Canvas is getting very large (${mb.toFixed(1)}MB). Please take a snapshot soon to prevent data loss.`);
+                    } else if (mb >= 1.5) {
+                        setCanvasSizeWarning(`Notice: Canvas size is ${mb.toFixed(1)}MB. Consider taking a snapshot.`);
+                    } else {
+                        setCanvasSizeWarning(null);
+                    }
+                }, 2000);
             }
         });
 
@@ -363,12 +453,15 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         }, 150);
     };
 
-    const handleSave = async () => {
+    const handleSave = () => {
+        setSaveComment('Updated canvas blueprint');
+        setSaveDialogOpen(true);
+    };
+
+    const performSave = async (comment: string) => {
         const editor = editorRef.current;
         if (!editor) return;
-
-        const comment = prompt('Enter a comment for this save:', 'Updated canvas blueprint') || 'Submitted for review';
-
+        setSaveDialogOpen(false);
         try {
             const snapshot = getSanitizedSnapshot(editor.getSnapshot());
             const response = await axios.post('/canvas/save', {
@@ -381,6 +474,9 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 setSnackbar({ open: true, message: 'Canvas snapshot saved!', severity: 'success' });
                 setIsDrawerOpen(false);
                 setHasUnsavedChanges(false);
+                setUnsavedChangesCount(0);
+                lastSaveTime.current = Date.now();
+                setSnapshotReminder(false);
 
                 const newVersionId = response.data.version_id;
                 setHistory(prev => [
@@ -442,6 +538,22 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'background.default' }}>
                 <Head title="Canvas Admin" />
 
+                {/* Upload Progress Bar */}
+                {uploadProgress !== null && (
+                    <Box sx={{ 
+                        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, height: '4px',
+                        bgcolor: 'rgba(53, 37, 205, 0.2)', transition: 'opacity 0.5s ease',
+                        opacity: uploadProgress === 100 ? 0 : 1
+                    }}>
+                        <Box sx={{
+                            height: '100%',
+                            width: `${uploadProgress}%`,
+                            background: 'linear-gradient(90deg, #4f46e5 0%, #3525cd 100%)',
+                            transition: 'width 0.2s ease-out'
+                        }} />
+                    </Box>
+                )}
+
                 <Tldraw
                     key={tldrawKey}
                     snapshot={stableInitialSnapshot}
@@ -454,9 +566,17 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                             return (
                                 <Box sx={{ pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: 1.5, mr: 1, my: 1.5 }}>
                                     <style>{`
-                                        @keyframes popInOut {
+                                        @keyframes canvasPop {
                                             0%, 100% { transform: scale(1); opacity: 1; }
                                             50% { transform: scale(0.85); opacity: 0; }
+                                        }
+                                        @keyframes saveBounce {
+                                            0%   { transform: scale(1);    }
+                                            20%  { transform: scale(1.25); }
+                                            40%  { transform: scale(0.9);  }
+                                            60%  { transform: scale(1.15); }
+                                            80%  { transform: scale(0.95); }
+                                            100% { transform: scale(1);    }
                                         }
                                     `}</style>
                                     {activeCanvas && (
@@ -464,7 +584,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                             key={activeCanvas.id}
                                             sx={{ 
                                                 bgcolor: 'background.paper', px: 2, py: 0.75, borderRadius: 2, boxShadow: 1, border: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column',
-                                                animation: 'popInOut 0.35s ease-in-out 3'
+                                                animation: 'canvasPop 0.35s ease-in-out 3'
                                             }}
                                         >
                                             <Typography variant="body2" fontWeight="bold" color="text.primary" sx={{ lineHeight: 1.2 }}>
@@ -474,6 +594,24 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                                 Owned by {activeCanvas.user_id === currentUserId ? 'you' : (activeCanvas.user?.first_name || 'Admin')}
                                             </Typography>
                                         </Box>
+                                    )}
+                                    {snapshotReminder && (
+                                        <Tooltip title="Unsaved changes — click to save a snapshot">
+                                            <IconButton
+                                                key={saveAnimKey}
+                                                onClick={handleSave}
+                                                sx={{
+                                                    width: 40, height: 40,
+                                                    bgcolor: 'primary.main',
+                                                    color: 'white',
+                                                    boxShadow: 2,
+                                                    '&:hover': { bgcolor: 'primary.dark' },
+                                                    animation: 'saveBounce 0.6s ease-in-out 3',
+                                                }}
+                                            >
+                                                <CameraAlt fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
                                     )}
                                     <Tooltip title="Create New Canvas">
                                         <IconButton
@@ -685,7 +823,14 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                                         <Typography sx={{ fontSize: '14px', fontWeight: 700, color: isActive ? '#3525cd' : '#111c2d' }}>
                                                             v{item.id} {isActive && '(Active)'}
                                                         </Typography>
-                                                        <Typography sx={{ fontSize: '11px', color: '#464555' }}>{formatDate(item.created_at)}</Typography>
+                                                        <Box sx={{ textAlign: 'right' }}>
+                                                            <Typography sx={{ fontSize: '11px', color: '#464555' }}>{formatDate(item.created_at)}</Typography>
+                                                            {item.user && (
+                                                                <Typography sx={{ fontSize: '10px', color: '#888', fontWeight: 600, mt: 0.5 }}>
+                                                                    by {item.user.first_name} {item.user.last_name}
+                                                                </Typography>
+                                                            )}
+                                                        </Box>
                                                     </Box>
                                                     <Typography sx={{ fontSize: '11px', color: '#464555', fontStyle: 'italic', mt: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                         {item.comment || 'No comment'}
@@ -789,6 +934,56 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         {snackbar.message}
                     </Alert>
                 </Snackbar>
+
+
+
+                {/* Save Comment Dialog */}
+                <Dialog
+                    open={saveDialogOpen}
+                    onClose={() => setSaveDialogOpen(false)}
+                    maxWidth="xs"
+                    fullWidth
+                >
+                    <DialogTitle sx={{ fontWeight: 700 }}>Save Snapshot</DialogTitle>
+                    <DialogContent>
+                        <TextField
+                            autoFocus
+                            label="Comment for this save"
+                            fullWidth
+                            variant="outlined"
+                            value={saveComment}
+                            onChange={(e) => setSaveComment(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && saveComment.trim()) {
+                                    performSave(saveComment.trim());
+                                }
+                            }}
+                            sx={{ mt: 1 }}
+                        />
+                    </DialogContent>
+                    <DialogActions sx={{ px: 3, pb: 2 }}>
+                        <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+                        <Button
+                            variant="contained"
+                            onClick={() => performSave(saveComment.trim() || 'Updated canvas blueprint')}
+                            disabled={!saveComment.trim()}
+                        >
+                            Save
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Canvas Size Warning */}
+                {canvasSizeWarning && (
+                    <Box sx={{
+                        position: 'fixed', bottom: 16, right: 16, zIndex: 9999,
+                        bgcolor: canvasSizeWarning.includes('Warning') ? '#ef4444' : '#f59e0b',
+                        color: 'white', px: 2, py: 1, borderRadius: 2, boxShadow: 3,
+                        fontSize: '13px', fontWeight: 600, maxWidth: 300
+                    }}>
+                        {canvasSizeWarning}
+                    </Box>
+                )}
 
             </Box>
         </ThemeProvider>
