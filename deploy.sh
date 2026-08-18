@@ -809,9 +809,21 @@ SETUP_EXIT=$?
 echo "DEBUG: minio-setup start exit code: $SETUP_EXIT"
 
 echo "DEBUG: Starting duka-app..."
-compose up -d --force-recreate duka-app
-APP_EXIT=$?
-echo "DEBUG: duka-app start exit code: $APP_EXIT"
+if ! compose up -d --force-recreate duka-app; then
+    log_error "Failed to start duka-app container. Exit code: $?"
+    log_error "Check port conflicts and container logs:"
+    docker logs "$APP_CONTAINER" 2>&1 | tail -30 | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+# Verify the container is actually running
+sleep 2
+if [ "$(docker inspect -f '{{.State.Status}}' "$APP_CONTAINER" 2>/dev/null)" != "running" ]; then
+    log_error "Container $APP_CONTAINER is not running. Aborting."
+    docker logs "$APP_CONTAINER" 2>&1 | tail -30 | tee -a "$LOG_FILE"
+    exit 1
+fi
+log_success "App container started successfully"
 
 log_step "Waiting for app container to be ready before pre-creating storage..."
 wait_for_app_container
