@@ -132,7 +132,7 @@ export default function TransfersIndex({
                         icon: <CheckCircleIcon />,
                     },
                 ].map((card) => (
-                    <Grid item xs={12} sm={4} key={card.label}>
+                    <Grid size={{ xs: 12, sm: 4 }} key={card.label}>
                         <Paper
                             elevation={0}
                             sx={{

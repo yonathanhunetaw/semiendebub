@@ -39,7 +39,7 @@ export default function CreateUser() {
             <Paper sx={{ p: 4, maxWidth: 800, mx: 'auto', boxShadow: 3 }}>
                 <form onSubmit={handleSubmit}>
                     <Grid container spacing={3}>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12 }}>
                             <TextField
                                 fullWidth label="First Name"
                                 value={data.first_name}
@@ -48,7 +48,7 @@ export default function CreateUser() {
                                 helperText={errors.first_name}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12 }}>
                             <TextField
                                 fullWidth label="Last Name"
                                 value={data.last_name}
@@ -57,7 +57,7 @@ export default function CreateUser() {
                                 helperText={errors.last_name}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12 }}>
                             <TextField
                                 fullWidth label="Email" type="email"
                                 value={data.email}
@@ -66,7 +66,7 @@ export default function CreateUser() {
                                 helperText={errors.email}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12 }}>
                             <TextField
                                 fullWidth select label="Role"
                                 value={data.role}
@@ -77,14 +77,14 @@ export default function CreateUser() {
                                 ))}
                             </TextField>
                         </Grid>
-                        <Grid item xs={12}>
+                        <Grid size={{ xs: 12 }}>
                             <TextField
                                 fullWidth label="Phone Number"
                                 value={data.phone_number}
                                 onChange={e => setData('phone_number', e.target.value)}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12 }}>
                             <TextField
                                 fullWidth label="Password" type="password"
                                 value={data.password}
@@ -93,14 +93,14 @@ export default function CreateUser() {
                                 helperText={errors.password}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12 }}>
                             <TextField
                                 fullWidth label="Confirm Password" type="password"
                                 value={data.password_confirmation}
                                 onChange={e => setData('password_confirmation', e.target.value)}
                             />
                         </Grid>
-                        <Grid item xs={12}>
+                        <Grid size={{ xs: 12 }}>
                             <Button
                                 type="submit" variant="contained"
                                 size="large" startIcon={<SaveIcon />}

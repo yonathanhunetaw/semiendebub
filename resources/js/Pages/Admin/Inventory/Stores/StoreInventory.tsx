@@ -28,6 +28,7 @@ interface CustomerPrice {
     customer_name: string;
     tin_number: string | null;
     price: string | number;
+    individual_price: number | null;
     discount_price: string | number | null;
     discount_ends_at: string | null;
 }

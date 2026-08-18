@@ -274,10 +274,39 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Source target env file so all variables (including COMPOSE_PROJECT_NAME) are available
+# Source target env file while preserving values explicitly supplied
+# by the deployment wrapper/environment.
+#
+# Important:
+#   ./deploy-with-options.sh --observability
+#   sets ENABLE_OBSERVABILITY=1 before calling this script.
+#
+# We must not allow .env / .env.production to overwrite that explicit
+# command-line wrapper choice.
+
+_OVERRIDE_ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY+x}"
+_OVERRIDE_ENABLE_OBSERVABILITY_VALUE="${ENABLE_OBSERVABILITY:-}"
+
+_OVERRIDE_FORCE_BUILD="${FORCE_BUILD+x}"
+_OVERRIDE_FORCE_BUILD_VALUE="${FORCE_BUILD:-}"
+
 set -a
 source "$ENV_FILE"
 set +a
+
+# Restore explicit overrides from the wrapper.
+if [ "$_OVERRIDE_ENABLE_OBSERVABILITY" = "x" ]; then
+    ENABLE_OBSERVABILITY="$_OVERRIDE_ENABLE_OBSERVABILITY_VALUE"
+fi
+
+if [ "$_OVERRIDE_FORCE_BUILD" = "x" ]; then
+    FORCE_BUILD="$_OVERRIDE_FORCE_BUILD_VALUE"
+fi
+
+unset _OVERRIDE_ENABLE_OBSERVABILITY
+unset _OVERRIDE_ENABLE_OBSERVABILITY_VALUE
+unset _OVERRIDE_FORCE_BUILD
+unset _OVERRIDE_FORCE_BUILD_VALUE
 
 # Resolve container names from COMPOSE_PROJECT_NAME so dev and prod stacks
 # never collide. These variables are used throughout the rest of the script.

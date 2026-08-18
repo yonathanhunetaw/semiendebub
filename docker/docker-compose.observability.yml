@@ -28,7 +28,7 @@ services:
 
   lgtm:
     image: grafana/otel-lgtm:latest
-    container_name: Duka_lgtm
+    # container_name: Duka_lgtm        # <-- removed
     restart: unless-stopped
     ports:
       - "${LGTM_GRAFANA_PORT:-3000}:3000"
@@ -44,7 +44,7 @@ services:
 
   glitchtip-postgres:
     image: postgres:16-alpine
-    container_name: Duka_glitchtip_postgres
+    # container_name: Duka_glitchtip_postgres   # <-- removed
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${GLITCHTIP_DB_NAME:-glitchtip}
@@ -58,7 +58,7 @@ services:
 
   glitchtip-redis:
     image: redis:7-alpine
-    container_name: Duka_glitchtip_redis
+    # container_name: Duka_glitchtip_redis      # <-- removed
     restart: unless-stopped
     command: redis-server --save 60 1 --loglevel warning
     volumes:
@@ -69,7 +69,7 @@ services:
 
   glitchtip-web:
     image: glitchtip/glitchtip:latest
-    container_name: Duka_glitchtip
+    # container_name: Duka_glitchtip            # <-- removed
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${GLITCHTIP_DB_USER:-glitchtip}:${GLITCHTIP_DB_PASSWORD:-glitchtip}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME:-glitchtip}
@@ -96,7 +96,7 @@ services:
 
   glitchtip-worker:
     image: glitchtip/glitchtip:latest
-    container_name: Duka_glitchtip_worker
+    # container_name: Duka_glitchtip_worker     # <-- removed
     restart: unless-stopped
     command: ./bin/run-celery-with-beat.sh
     environment:

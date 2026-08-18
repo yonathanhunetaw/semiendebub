@@ -80,7 +80,7 @@ export default function Show({ item }: Props) {
 
             <Grid container spacing={4}>
                 {/* GALLERY SECTION */}
-                <Grid item xs={12} md={5}>
+                <Grid size={{ xs: 12, md: 5 }}>
                     <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: 'background.paper' }}>
                         <Box sx={{ width: '100%', height: '450px', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
                             <Box
@@ -111,7 +111,11 @@ export default function Show({ item }: Props) {
                                     key={`variant-${i}`}
                                     component="img"
                                     src={v.images[0]}
-                                    onClick={() => setSelectedImage(v.images[0])}
+                                    onClick={() => {
+                                        if (v.images?.length) {
+                                            setSelectedImage(v.images[0]);
+                                        }
+                                    }}
                                     sx={{
                                         width: 70, height: 70, borderRadius: 1, cursor: 'pointer',
                                         border: selectedImage === v.images[0] ? '2px solid #1976d2' : '2px solid transparent',

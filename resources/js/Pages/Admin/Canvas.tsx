@@ -103,7 +103,7 @@ const customAssetStore: any = {
     async upload(_asset: any, file: File): Promise<{ src: string }> {
         const formData = new FormData();
         formData.append('file', file);
-        
+
         window.dispatchEvent(new CustomEvent('canvas-upload-start'));
 
         try {
@@ -135,26 +135,130 @@ const customAssetStore: any = {
 
 export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId, currentUserId, allUsers, sharedUsers: initialSharedUsers, latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
 
+    // -------------------------------------------------------------------------
+    // Helper: Sanitize a TipTap rich-text document
+    // -------------------------------------------------------------------------
+    const sanitizeRichText = (value: any): any => {
+        // If value is not an object or is null, return a default doc
+        if (!value || typeof value !== 'object') {
+            return { type: 'doc', content: [{ type: 'paragraph', content: [] }] };
+        }
+
+        // If value is an array, wrap it in a doc? Not expected, but we'll default.
+        if (Array.isArray(value)) {
+            return { type: 'doc', content: [{ type: 'paragraph', content: [] }] };
+        }
+
+        // Ensure root is a doc
+        let doc = value;
+        if (doc.type !== 'doc' || !Array.isArray(doc.content)) {
+            // If it has content as array, wrap; otherwise default
+            if (Array.isArray(doc.content)) {
+                doc = { type: 'doc', content: doc.content };
+            } else {
+                return { type: 'doc', content: [{ type: 'paragraph', content: [] }] };
+            }
+        }
+
+        // Recursively sanitize nodes
+        const sanitizeNode = (node: any): any => {
+            if (!node || typeof node !== 'object') {
+                return null;
+            }
+
+            // --- Text node ---
+            if (node.type === 'text') {
+                if (typeof node.text !== 'string') {
+                    if (node.text === null || node.text === undefined) {
+                        return null;
+                    }
+                    try {
+                        node.text = String(node.text);
+                    } catch {
+                        return null;
+                    }
+                }
+                // Empty text nodes are invalid in TipTap
+                if (node.text.length === 0) {
+                    return null;
+                }
+                // Marks must be an array when present
+                if (node.marks !== undefined) {
+                    if (!Array.isArray(node.marks)) {
+                        delete node.marks;
+                    } else {
+                        node.marks = node.marks.filter(
+                            (mark: any) =>
+                                mark && typeof mark === 'object' && typeof mark.type === 'string'
+                        );
+                    }
+                }
+                return node;
+            }
+
+            // --- Non-text node ---
+            if (typeof node.type !== 'string') {
+                return null;
+            }
+
+            // Recurse into content
+            if (Array.isArray(node.content)) {
+                node.content = node.content
+                    .map((child: any) => sanitizeNode(child))
+                    .filter((child: any) => child !== null);
+            }
+
+            return node;
+        };
+
+        // Sanitize top-level content
+        doc.content = doc.content
+            .map((child: any) => sanitizeNode(child))
+            .filter((child: any) => child !== null);
+
+        // Ensure at least one paragraph
+        if (doc.content.length === 0) {
+            doc.content = [{ type: 'paragraph', content: [] }];
+        }
+
+        return doc;
+    };
+
+    // -------------------------------------------------------------------------
+    // Snapshot sanitizer
+    // -------------------------------------------------------------------------
     const getSanitizedSnapshot = (rawData: any): any => {
         if (!rawData) return undefined;
 
         let clean = rawData;
+
         if (typeof clean === 'string') {
-            try { clean = JSON.parse(clean); } catch (e) { }
+            try {
+                clean = JSON.parse(clean);
+            } catch (e) {
+                return undefined;
+            }
         }
+
         if (clean && clean.snapshot_json) {
             clean = clean.snapshot_json;
         }
+
         if (typeof clean === 'string') {
-            try { clean = JSON.parse(clean); } catch (e) { }
+            try {
+                clean = JSON.parse(clean);
+            } catch (e) {
+                return undefined;
+            }
         }
 
-        const finalDoc = clean.document || clean;
+        const finalDoc = clean?.document || clean;
 
         let mutableDoc;
+
         try {
-            mutableDoc = typeof structuredClone === 'function' 
-                ? structuredClone(finalDoc) 
+            mutableDoc = typeof structuredClone === 'function'
+                ? structuredClone(finalDoc)
                 : JSON.parse(JSON.stringify(finalDoc));
         } catch (e) {
             mutableDoc = JSON.parse(JSON.stringify(finalDoc));
@@ -164,41 +268,90 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             Object.values(mutableDoc.store).forEach((record: any) => {
                 if (!record || typeof record !== 'object') return;
 
+                /*
+                 * Tldraw SHAPES
+                 */
                 if (record.typeName === 'shape' && record.props) {
-                    if ('url' in record.props && (record.props.url === null || record.props.url === undefined)) {
+
+                    // -----------------------------------------------------------------
+                    // RICH TEXT SHAPES
+                    // Modern tldraw stores text content in props.richText
+                    // Applies to: text, note, geo, arrow
+                    // -----------------------------------------------------------------
+                    if (
+                        record.type === 'text' ||
+                        record.type === 'note' ||
+                        record.type === 'geo' ||
+                        record.type === 'arrow'
+                    ) {
+                        record.props.richText = sanitizeRichText(record.props.richText);
+                    }
+
+                    // Generic URL cleanup (for any shape that might have a url)
+                    if (
+                        'url' in record.props &&
+                        (record.props.url === null || record.props.url === undefined)
+                    ) {
                         record.props.url = '';
                     }
 
-                    if (record.type === 'embed') {
-                        const allowedEmbedProps = new Set(['w', 'h', 'url']);
-                        Object.keys(record.props).forEach(key => {
-                            if (!allowedEmbedProps.has(key)) {
-                                delete record.props[key];
-                            }
-                        });
-                        if (record.props.url === null || record.props.url === undefined) record.props.url = '';
+                    // -----------------------------------------------------------------
+                    // FRAME
+                    // -----------------------------------------------------------------
+                    if (record.type === 'frame') {
+                        if (typeof record.props.name !== 'string') {
+                            record.props.name = '';
+                        }
+                        if (typeof record.props.w !== 'number' || !Number.isFinite(record.props.w)) {
+                            record.props.w = 100;
+                        }
+                        if (typeof record.props.h !== 'number' || !Number.isFinite(record.props.h)) {
+                            record.props.h = 100;
+                        }
                     }
 
-                    if (record.type === 'image') {
-                        const allowedImageProps = new Set(['w', 'h', 'playing', 'url', 'assetId', 'crop', 'flipX', 'flipY', 'altText']);
-                        Object.keys(record.props).forEach(key => {
-                            if (!allowedImageProps.has(key)) {
-                                delete record.props[key];
-                            }
-                        });
+                    // -----------------------------------------------------------------
+                    // EMBED
+                    // No aggressive deletion; just ensure url is a string
+                    // -----------------------------------------------------------------
+                    if (record.type === 'embed') {
+                        if (record.props.url === null || record.props.url === undefined) {
+                            record.props.url = '';
+                        }
+                    }
 
+                    // -----------------------------------------------------------------
+                    // IMAGE
+                    // No aggressive deletion; set defaults for known props
+                    // -----------------------------------------------------------------
+                    if (record.type === 'image') {
                         if (record.props.altText === undefined || record.props.altText === null) {
                             record.props.altText = '';
                         }
-                        if (record.props.url === null || record.props.url === undefined) record.props.url = '';
-                        if (record.props.assetId === undefined) record.props.assetId = null;
-                        if (record.props.crop === undefined) record.props.crop = null;
-                        if (record.props.playing === undefined) record.props.playing = true;
-                        if (record.props.flipX === undefined) record.props.flipX = false;
-                        if (record.props.flipY === undefined) record.props.flipY = false;
+                        if (record.props.url === null || record.props.url === undefined) {
+                            record.props.url = '';
+                        }
+                        if (record.props.assetId === undefined) {
+                            record.props.assetId = null;
+                        }
+                        if (record.props.crop === undefined) {
+                            record.props.crop = null;
+                        }
+                        if (record.props.playing === undefined) {
+                            record.props.playing = true;
+                        }
+                        if (record.props.flipX === undefined) {
+                            record.props.flipX = false;
+                        }
+                        if (record.props.flipY === undefined) {
+                            record.props.flipY = false;
+                        }
                     }
                 }
 
+                /*
+                 * Tldraw ASSETS
+                 */
                 if (record.typeName === 'asset') {
                     if (!record.props) {
                         record.props = {};
@@ -207,21 +360,57 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         record.props.src = '';
                     }
                     if (typeof record.props.src === 'object') {
-                        record.props.src = (record.props.src as any)?.src ?? '';
+                        record.props.src = record.props.src?.src ?? '';
                     }
                 }
 
+                /*
+                 * Tldraw USERS
+                 */
                 if (record.typeName === 'user') {
                     if (record.imageUrl === null || record.imageUrl === undefined) {
                         record.imageUrl = '';
                     }
                 }
 
+                /*
+                 * Generic record-level name cleanup
+                 */
                 if (record.name === null || record.name === undefined) {
-                    if (record.typeName === 'document') record.name = 'Canvas';
-                    else if (record.typeName === 'user') record.name = 'Admin';
-                    else if (record.typeName === 'page') record.name = 'Page';
-                    else if ('name' in record) record.name = '';
+                    if (record.typeName === 'document') {
+                        record.name = 'Canvas';
+                    } else if (record.typeName === 'user') {
+                        record.name = 'Admin';
+                    } else if (record.typeName === 'page') {
+                        record.name = 'Page';
+                    } else if ('name' in record) {
+                        record.name = '';
+                    }
+                }
+            });
+        }
+
+        /*
+         * DEBUG: inspect tldraw rich‑text records after sanitization.
+         */
+        if (mutableDoc?.store) {
+            Object.values(mutableDoc.store).forEach((record: any) => {
+                if (
+                    record?.typeName === 'shape' &&
+                    (
+                        record?.type === 'text' ||
+                        record?.type === 'note' ||
+                        record?.type === 'geo' ||
+                        record?.type === 'arrow'
+                    )
+                ) {
+                    console.log('[Canvas RICH TEXT RECORD]', {
+                        id: record.id,
+                        shapeType: record.type,
+                        richText: record.props?.richText,
+                        richTextType: typeof record.props?.richText,
+                        props: record.props,
+                    });
                 }
             });
         }
@@ -229,24 +418,27 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         return mutableDoc;
     };
 
+    // -------------------------------------------------------------------------
+    // Component state & hooks (unchanged)
+    // -------------------------------------------------------------------------
     const editorRef = useRef<Editor | null>(null);
     const tldrawKey = 'canvas-root';
 
     const [history, setHistory] = useState<HistoryItem[]>(initialHistory || []);
     const [activeVersionId, setActiveVersionId] = useState<number | null>(latestVersionInfo?.id || null);
-    
+
     // MUI Specific State
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-    const [userToDelete, setUserToDelete] = useState<any>(null); // For deletion confirmation
+    const [userToDelete, setUserToDelete] = useState<any>(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
     const [newCanvasTitle, setNewCanvasTitle] = useState('');
     const [selectedUserToShare, setSelectedUserToShare] = useState('');
-    const [selectedPermission, setSelectedPermission] = useState<'view'|'edit'>('edit');
+    const [selectedPermission, setSelectedPermission] = useState<'view' | 'edit'>('edit');
     const [sharedUsers, setSharedUsers] = useState<any[]>(initialSharedUsers || []);
-    
+
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
     // Upload Progress
@@ -322,7 +514,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             if (hasUnsavedChanges) {
                 e.preventDefault();
-                e.returnValue = ''; // Standard way to show browser's native dialog
+                e.returnValue = '';
             }
         };
 
@@ -357,8 +549,8 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
     const handleShareCanvas = () => {
         if (!selectedUserToShare) return;
         const sharedUser = allUsers?.find((u: any) => String(u.id) === String(selectedUserToShare));
-        router.post('/canvas/share', { 
-            canvas_id: initialActiveCanvasId, 
+        router.post('/canvas/share', {
+            canvas_id: initialActiveCanvasId,
             user_id: selectedUserToShare,
             permission: selectedPermission
         }, {
@@ -366,8 +558,8 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 if (sharedUser) {
                     const userWithPivot = { ...sharedUser, pivot: { permission: selectedPermission } };
                     setSharedUsers(prev => (
-                        prev.some(u => String(u.id) === String(sharedUser.id)) 
-                            ? prev.map(u => String(u.id) === String(sharedUser.id) ? userWithPivot : u) 
+                        prev.some(u => String(u.id) === String(sharedUser.id))
+                            ? prev.map(u => String(u.id) === String(sharedUser.id) ? userWithPivot : u)
                             : [...prev, userWithPivot]
                     ));
                 }
@@ -404,17 +596,17 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
 
         editor.store.listen((update) => {
             if (update.source !== 'user') return;
-            
+
             const changedRecords = [
                 ...Object.values(update.changes.added),
                 ...Object.values(update.changes.updated).map(([_, to]) => to),
                 ...Object.values(update.changes.removed)
             ];
-            
-            const isSignificantChange = changedRecords.some((r: any) => 
+
+            const isSignificantChange = changedRecords.some((r: any) =>
                 r.typeName === 'shape' || r.typeName === 'asset' || r.typeName === 'page'
             );
-            
+
             if (isSignificantChange) {
                 setHasUnsavedChanges(true);
                 setUnsavedChangesCount(prev => prev + 1);
@@ -424,7 +616,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     const snapshot = editor.getSnapshot();
                     const size = new Blob([JSON.stringify(snapshot)]).size;
                     const mb = size / (1024 * 1024);
-                    
+
                     if (mb >= 2.5) {
                         setCanvasSizeWarning(`Warning: Canvas is getting very large (${mb.toFixed(1)}MB). Please take a snapshot soon to prevent data loss.`);
                     } else if (mb >= 1.5) {
@@ -540,7 +732,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
 
                 {/* Upload Progress Bar */}
                 {uploadProgress !== null && (
-                    <Box sx={{ 
+                    <Box sx={{
                         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, height: '4px',
                         bgcolor: 'rgba(53, 37, 205, 0.2)', transition: 'opacity 0.5s ease',
                         opacity: uploadProgress === 100 ? 0 : 1
@@ -559,7 +751,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     snapshot={stableInitialSnapshot}
                     assets={customAssetStore}
                     onMount={handleMount}
-                    components={{ 
+                    components={{
                         DebugMenu: null,
                         SharePanel: () => {
                             const activeCanvas = canvases.find(c => c.id === initialActiveCanvasId);
@@ -580,9 +772,9 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                         }
                                     `}</style>
                                     {activeCanvas && (
-                                        <Box 
+                                        <Box
                                             key={activeCanvas.id}
-                                            sx={{ 
+                                            sx={{
                                                 bgcolor: 'background.paper', px: 2, py: 0.75, borderRadius: 2, boxShadow: 1, border: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column',
                                                 animation: 'canvasPop 0.35s ease-in-out 3'
                                             }}
@@ -646,16 +838,16 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 />
 
                 {/* Right Side Drawer for Admin Settings */}
-                <Drawer 
-                    anchor="right" 
-                    open={isDrawerOpen} 
-                    onClose={() => setIsDrawerOpen(false)} 
+                <Drawer
+                    anchor="right"
+                    open={isDrawerOpen}
+                    onClose={() => setIsDrawerOpen(false)}
                     PaperProps={{ sx: { width: { xs: '100%', md: 800 }, bgcolor: '#f9f9ff' } }}
                 >
                     <Box sx={{ p: { xs: 3, md: 4 } }}>
                         {/* 1. Header Section */}
                         <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 3 }}>
-                            <Button 
+                            <Button
                                 onClick={() => setIsDrawerOpen(false)}
                                 sx={{ bgcolor: '#e2dfff', color: '#3525cd', px: 2, py: 1, borderRadius: 2, textTransform: 'none', '&:hover': { bgcolor: '#c9c4ff' } }}
                                 startIcon={<CloseIcon />}
@@ -666,7 +858,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
 
                         {/* Bento Grid */}
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(12, 1fr)' }, gap: 3 }}>
-                            
+
                             {/* 2. Active Canvas Card */}
                             <Box sx={{ gridColumn: { xs: 'span 1', md: 'span 8' }, bgcolor: '#fff', border: '1px solid #c7c4d8', borderRadius: 3, p: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: 'center', justifyContent: 'space-between', gap: 2, transition: 'all 0.2s', '&:hover': { borderColor: '#4f46e5', boxShadow: '0 4px 12px -2px rgba(79, 70, 229, 0.08)' } }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -702,9 +894,9 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                                 }
                                                 return <span style={{ fontSize: '14px', paddingBottom: '2px', paddingTop: '2px' }}>{c.title}</span>;
                                             }}
-                                            sx={{ 
+                                            sx={{
                                                 bgcolor: '#3525cd', color: '#fff', borderRadius: 2, fontWeight: 600,
-                                                '& .MuiSelect-icon': { color: '#fff' }, 
+                                                '& .MuiSelect-icon': { color: '#fff' },
                                                 '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
                                                 '&:hover': { bgcolor: '#2b1da8' }
                                             }}
@@ -739,7 +931,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                 </Box>
                                 <Typography sx={{ fontSize: '20px', fontWeight: 600, color: '#fff', mb: 0.5 }}>Save State</Typography>
                                 <Typography sx={{ fontSize: '14px', color: '#c7c4d8', mb: 3 }}>Preserve current configuration.</Typography>
-                                <Button 
+                                <Button
                                     onClick={handleSave}
                                     fullWidth
                                     sx={{ bgcolor: '#4f46e5', color: '#dad7ff', py: 1.5, borderRadius: 2, fontSize: '12px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', '&:hover': { bgcolor: '#3525cd' } }}
@@ -756,7 +948,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                         <Typography sx={{ fontSize: { xs: '16px', sm: '20px' }, fontWeight: 600, color: '#111c2d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Sharing & Team</Typography>
                                     </Box>
                                     {isOwner && (
-                                        <Button 
+                                        <Button
                                             onClick={() => setIsShareDialogOpen(true)}
                                             startIcon={<PersonAdd />}
                                             sx={{ color: '#3525cd', fontSize: { xs: '11px', sm: '12px' }, fontWeight: 600, textTransform: 'none', flexShrink: 0, minWidth: 'auto' }}
@@ -781,7 +973,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                         </Box>
                                         <Box sx={{ bgcolor: '#e2dfff', color: '#3323cc', px: 1, py: 0.5, borderRadius: 1, fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Owner</Box>
                                     </Box>
-                                    
+
                                     {/* Shared Users */}
                                     {sharedUsers.length === 0 && canvases.find(c => c.id === initialActiveCanvasId)?.user_id === currentUserId && (
                                         <Typography sx={{ fontSize: '13px', color: '#464555', fontStyle: 'italic', mt: 1 }}>Not shared with anyone yet.</Typography>
@@ -809,7 +1001,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                     <HistoryIcon sx={{ color: '#3525cd' }} />
                                     <Typography sx={{ fontSize: '20px', fontWeight: 600, color: '#111c2d' }}>Version History</Typography>
                                 </Box>
-                                
+
                                 <Box sx={{ pl: 2, borderLeft: '2px solid #c7c4d8', ml: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
                                     {history.length === 0 ? (
                                         <Typography sx={{ fontSize: '14px', color: '#464555', fontStyle: 'italic' }}>No saves yet.</Typography>
@@ -889,7 +1081,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                             <Select
                                 value={selectedPermission}
                                 label="Permission"
-                                onChange={e => setSelectedPermission(e.target.value as 'view'|'edit')}
+                                onChange={e => setSelectedPermission(e.target.value as 'view' | 'edit')}
                             >
                                 <MenuItem value="edit">Editor (Can make changes)</MenuItem>
                                 <MenuItem value="view">Viewer (Read-only)</MenuItem>
@@ -917,16 +1109,16 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 </Dialog>
 
                 {/* Global Snackbar Alerts */}
-                <Snackbar 
-                    open={snackbar.open} 
-                    autoHideDuration={4000} 
-                    onClose={() => setSnackbar({ ...snackbar, open: false })} 
+                <Snackbar
+                    open={snackbar.open}
+                    autoHideDuration={4000}
+                    onClose={() => setSnackbar({ ...snackbar, open: false })}
                     anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
                     sx={{ mt: { xs: 7, sm: 8 }, ml: { xs: 1, sm: 2 } }}
                 >
-                    <Alert 
-                        onClose={() => setSnackbar({ ...snackbar, open: false })} 
-                        severity={snackbar.severity} 
+                    <Alert
+                        onClose={() => setSnackbar({ ...snackbar, open: false })}
+                        severity={snackbar.severity}
                         sx={{ width: '100%', boxShadow: 3 }}
                         elevation={6}
                         variant="filled"
@@ -934,8 +1126,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         {snackbar.message}
                     </Alert>
                 </Snackbar>
-
-
 
                 {/* Save Comment Dialog */}
                 <Dialog

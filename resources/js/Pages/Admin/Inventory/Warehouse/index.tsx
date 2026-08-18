@@ -145,7 +145,7 @@ export default function WarehouseIndex({
                             lowStockCount > 0 ? "warning.main" : "success.main",
                     },
                 ].map((card) => (
-                    <Grid item xs={12} sm={4} key={card.label}>
+                    <Grid size={{ xs: 12, sm: 4 }} key={card.label}>
                         <Paper
                             elevation={0}
                             sx={{
