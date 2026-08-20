@@ -66,18 +66,18 @@ Use these commands from your **Mac terminal** (not inside the container) to mana
 
 | Task                     | Command                                           |
 |:-------------------------|:--------------------------------------------------|
-| **Start Dev Server**     | `docker exec -it Duka npm run dev -- --host`      |
-| **Build for Production** | `docker exec -it Duka npm run build`              |
-| **Install JS Package**   | `docker exec -it Duka npm install <package-name>` |
+| **Start Dev Server**     | `docker exec -it duka-dev-app npm run dev -- --host`      |
+| **Build for Production** | `docker exec -it duka-dev-app npm run build`              |
+| **Install JS Package**   | `docker exec -it duka-dev-app npm install <package-name>` |
 
 ### 🐘 PHP & Laravel
 
 | Task                     | Command                                                |
 |:-------------------------|:-------------------------------------------------------|
-| **Run Migrations**       | `docker exec -it Duka php artisan migrate`             |
-| **Install PHP Package**  | `docker exec -it Duka composer require <package-name>` |
-| **Clear All Caches**     | `docker exec -it Duka php artisan optimize:clear`      |
-| **Open Container Shell** | `docker exec -it Duka /bin/sh`                         |
+| **Run Migrations**       | `docker exec -it duka-dev-app php artisan migrate`             |
+| **Install PHP Package**  | `docker exec -it duka-dev-app composer require <package-name>` |
+| **Clear All Caches**     | `docker exec -it duka-dev-app php artisan optimize:clear`      |
+| **Open Container Shell** | `docker exec -it duka-dev-app /bin/sh`                         |
 
 ---
 
@@ -85,26 +85,28 @@ Use these commands from your **Mac terminal** (not inside the container) to mana
 
 If the site is white while running `npm run dev`, try these in order:
 
-1. **Nuke Build folder:** `docker exec -it Duka rm -rf public/build`
-2. **Clear Views:** `docker exec -it Duka php artisan view:clear`
-3. **Restart Vite:** `docker exec -it Duka npm run dev -- --host`
+1. **Nuke Build folder:** `docker exec -it duka-dev-app rm -rf public/build`
+2. **Clear Views:** `docker exec -it duka-dev-app php artisan view:clear`
+3. **Restart Vite:** `docker exec -it duka-dev-app npm run dev -- --host`
 
 > **Note:** Never run `npm install` or `npm run dev` directly on your Mac. Always use the `docker exec` commands above
 > to prevent architecture mismatches.
 
 Docker Commands (Using Duka Container Name)
 
-• Composer: `docker exec -it Duka composer install`
+• Composer: `docker exec -it duka-dev-app composer install`
 
-• Artisan cache clear: `docker exec -it Duka php artisan config:clear`
+• Artisan cache clear: `docker exec -it duka-dev-app php artisan config:clear`
 
-• Migrate: `docker exec -it Duka php artisan migrate`
+• Migrate: `docker exec -it duka-dev-app php artisan migrate`
 
-• Run Vite dev: `docker exec -it Duka npm run dev`
+• Run Vite dev: `docker exec -it duka-dev-app npm run dev`
 
-• Build assets: `docker exec -it Duka npm run build`
+• Build assets: `docker exec -it duka-dev-app npm run build`
 
-• Open shell: `docker exec -it Duka /bin/sh`
+• Open shell: `docker exec -it duka-dev-app /bin/sh`
+
+• Open Logs: `docker exec -it duka-dev-app tail -n 50 storage/logs/laravel.log`
 
 ================================================================================
 
