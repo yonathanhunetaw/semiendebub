@@ -2,13 +2,28 @@
 # deploy-with-options.sh - Interactive wrapper around deploy.sh
 # Usage: ./deploy-with-options.sh -e <dev|prod> [OPTIONS]
 
+# Track how long the deployment takes (like npm run build)
+DEPLOY_START_TIME=$(date +%s)
+
 set -e
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+BOLD_GREEN='\033[1;32m'
+BOLD_CYAN='\033[1;36m'
 NC='\033[0m'
+
+# Print the final "Done in Xm Xs" banner like npm run build
+finish_banner() {
+    local elapsed=$(( $(date +%s) - DEPLOY_START_TIME ))
+    local mins=$(( elapsed / 60 ))
+    local secs=$(( elapsed % 60 ))
+    echo ""
+    echo -e "${BOLD_GREEN}✨ Done in ${mins}m ${secs}s${NC}"
+    echo ""
+}
 
 print_usage() {
     echo -e "${BLUE}Duka Deployment Wrapper${NC}"
@@ -164,6 +179,7 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 # ── Run core deployment ───────────────────────────────────────────────────────
+echo -e "${BOLD_CYAN}⏱  Elapsed: 0m 0s${NC}"
 echo -e "${GREEN}🚀 Starting deployment...${NC}"
 ./deploy.sh "$ENVIRONMENT" "${PASSTHROUGH_FLAGS[@]}"
 
@@ -173,4 +189,4 @@ if [ $FOLLOW_LOGS -eq 1 ]; then
     docker logs -f "$APP_CONTAINER"
 fi
 
-echo -e "${GREEN}✅ Deployment complete!${NC}"
+finish_banner

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Track how long the deployment takes (like npm run build)
+DEPLOY_START_TIME=$(date +%s)
+
 # =============================================================================
 # COLOR CODES FOR LOGGING
 # =============================================================================
@@ -48,6 +51,10 @@ ICON_IN_PROGRESS="◉"
 declare -a STEPS=()
 declare -a STEP_STATUS=()
 declare -a STEP_MESSAGES=()
+
+# Step timing / indentation state
+IN_STEP=0               # 1 while inside a step block — log() uses this to indent
+CURRENT_STEP_START_TIME=0  # epoch seconds when current step started
 
 # Initialize steps
 init_steps() {
@@ -117,64 +124,52 @@ show_full_progress() {
     echo ""
 }
 
-# Show only the current step progress (compact view)
-# Show only the current step progress (compact view)
-show_compact_progress() {
+# Mark step as in progress — prints the opening ┌─ header with total elapsed time
+step_start() {
+    local step_num=$1
+    update_step "$step_num" "in_progress" ""
+    CURRENT_STEP_START_TIME=$(date +%s)
+    IN_STEP=1
+
+    local total_elapsed=$(( $(date +%s) - DEPLOY_START_TIME ))
+    local total_mins=$(( total_elapsed / 60 ))
+    local total_secs=$(( total_elapsed % 60 ))
+    local step_label="Step $((step_num + 1)): ${STEPS[$step_num]}"
+
+    # Box-drawing header with right-aligned elapsed time
     echo ""
-    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
-    
-    # Find and show completed steps
-    local completed_count=0
-    for i in "${!STEPS[@]}"; do
-        if [ "${STEP_STATUS[$i]:-pending}" = "success" ]; then
-            echo -e "  ${GREEN}✓${NC} ${STEPS[$i]}"
-            ((completed_count++))
-        fi
-    done
-    
-    # Show current in-progress step
-    for i in "${!STEPS[@]}"; do
-        if [ "${STEP_STATUS[$i]:-pending}" = "in_progress" ]; then
-            echo -e "  ${BLUE}◉${NC} ${STEPS[$i]} ${CYAN}...${NC}"
-        fi
-    done
-    
-    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
-    echo ""
-    
-    # Force flush output
-    sync
+    echo -e "${BOLD_CYAN}┌─ ${step_label} $(printf '%.0s─' {1..20}) [${total_mins}m ${total_secs}s elapsed]${NC}"
+    echo "$(echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STEP] Starting: $((step_num + 1)). ${STEPS[$step_num]}")" >> "$LOG_FILE"
 }
 
-# Mark step as completed with success
+# Mark step as completed with success — prints the closing └─ footer with step time
 step_success() {
-    echo "DEBUG step_success: Starting for step $1 with message '$2'"
     local step_num=$1
     local message=$2
-    update_step $step_num "success" "$message"
-    echo "DEBUG step_success: After update_step"
-    #show_compact_progress
-    echo "DEBUG step_success: After show_compact_progress"
-    log_success "✓ Step $((step_num + 1)). ${STEPS[$step_num]} completed: $message"
-    echo "DEBUG step_success: Done"
+    local step_elapsed=$(( $(date +%s) - CURRENT_STEP_START_TIME ))
+    local step_mins=$(( step_elapsed / 60 ))
+    local step_secs=$(( step_elapsed % 60 ))
+    update_step "$step_num" "success" "$message"
+    IN_STEP=0
+    echo -e "${GREEN}└─ ✓ done in ${step_mins}m ${step_secs}s${NC}"
+    echo "$(echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] ✓ Step $((step_num + 1)). ${STEPS[$step_num]} completed in ${step_mins}m ${step_secs}s: $message")" >> "$LOG_FILE"
+    echo ""
 }
 
-# Mark step as failed
+# Mark step as failed — prints the closing └─ footer in red with step time
 step_failed() {
     local step_num=$1
     local message=$2
-    update_step $step_num "failed" "$message"
-    #show_full_progress
-    log_error "✗ Step $((step_num + 1)). ${STEPS[$step_num]} failed: $message"
+    local step_elapsed=$(( $(date +%s) - CURRENT_STEP_START_TIME ))
+    local step_mins=$(( step_elapsed / 60 ))
+    local step_secs=$(( step_elapsed % 60 ))
+    update_step "$step_num" "failed" "$message"
+    IN_STEP=0
+    echo -e "${RED}└─ ✗ failed after ${step_mins}m ${step_secs}s — ${message}${NC}"
+    echo "$(echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] ✗ Step $((step_num + 1)). ${STEPS[$step_num]} failed after ${step_mins}m ${step_secs}s: $message")" >> "$LOG_FILE"
+    echo ""
 }
 
-# Mark step as in progress
-step_start() {
-    local step_num=$1
-    update_step $step_num "in_progress" ""
-    #show_compact_progress
-    log_step "Starting: $((step_num + 1)). ${STEPS[$step_num]}"
-}
 
 # =============================================================================
 # CONFIGURATION & PATH RESOLUTION
@@ -201,31 +196,40 @@ log() {
     shift
     local message="$*"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
+
+    # When inside a step block, indent terminal output under the ┌─ header
+    local indent=""
+    [ "${IN_STEP:-0}" = "1" ] && indent="  │  "
+
+    # Log file always gets the full unindented timestamped line
+    echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
+
+    # Terminal gets the grouped/indented view
     case "$level" in
         "INFO")
-            echo -e "[$timestamp] ${BLUE}[INFO]${NC} ${ICON_INFO} $message" | tee -a "$LOG_FILE"
+            echo -e "${indent}[$timestamp] ${BLUE}[INFO]${NC} ${ICON_INFO} $message"
             ;;
         "SUCCESS")
-            echo -e "[$timestamp] ${GREEN}[SUCCESS]${NC} ${ICON_SUCCESS} $message" | tee -a "$LOG_FILE"
+            echo -e "${indent}[$timestamp] ${GREEN}[SUCCESS]${NC} ${ICON_SUCCESS} $message"
             ;;
         "ERROR")
-            echo -e "[$timestamp] ${RED}[ERROR]${NC} ${ICON_ERROR} $message" | tee -a "$LOG_FILE"
+            echo -e "${indent}[$timestamp] ${RED}[ERROR]${NC} ${ICON_ERROR} $message"
             ;;
         "WARNING")
-            echo -e "[$timestamp] ${YELLOW}[WARNING]${NC} ${ICON_WARNING} $message" | tee -a "$LOG_FILE"
+            echo -e "${indent}[$timestamp] ${YELLOW}[WARNING]${NC} ${ICON_WARNING} $message"
             ;;
         "STEP")
-            echo -e "[$timestamp] ${CYAN}[STEP]${NC} ${ICON_STEP} $message" | tee -a "$LOG_FILE"
+            echo -e "${indent}[$timestamp] ${CYAN}[STEP]${NC} ${ICON_STEP} $message"
             ;;
         "DONE")
-            echo -e "[$timestamp] ${BOLD_GREEN}[DONE]${NC} ${ICON_DONE} $message" | tee -a "$LOG_FILE"
+            echo -e "${indent}[$timestamp] ${BOLD_GREEN}[DONE]${NC} ${ICON_DONE} $message"
             ;;
         *)
-            echo -e "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
+            echo -e "${indent}[$timestamp] [$level] $message"
             ;;
     esac
 }
+
 
 log_info() { log "INFO" "$@"; }
 log_error() { log "ERROR" "$@"; }
@@ -233,6 +237,35 @@ log_warning() { log "WARNING" "$@"; }
 log_success() { log "SUCCESS" "$@"; }
 log_step() { log "STEP" "$@"; }
 log_done() { log "DONE" "$@"; }
+
+# Stream raw output from commands, indenting it for the terminal
+log_stream() {
+    local indent=""
+    [ "${IN_STEP:-0}" = "1" ] && indent="  │  "
+    while IFS= read -r line; do
+        echo -e "${indent}${NC}${line}"
+        echo "$line" >> "$LOG_FILE"
+    done
+}
+
+
+# Print elapsed time in Xm Xs format (like npm run build)
+elapsed_time() {
+    local elapsed=$(( $(date +%s) - DEPLOY_START_TIME ))
+    local mins=$(( elapsed / 60 ))
+    local secs=$(( elapsed % 60 ))
+    echo "${mins}m ${secs}s"
+}
+
+# Print the final "Done in Xm Xs" banner like npm
+finish_banner() {
+    local elapsed=$(( $(date +%s) - DEPLOY_START_TIME ))
+    local mins=$(( elapsed / 60 ))
+    local secs=$(( elapsed % 60 ))
+    echo ""
+    echo -e "${BOLD_GREEN}✨ Done in ${mins}m ${secs}s${NC}"
+    echo ""
+}
 
 # Error handler
 error_handler() {
@@ -324,6 +357,8 @@ log_info "Environment: ${APP_ENV:-not set}"
 log_info "Compose Project: ${COMPOSE_PROJECT_NAME:-default}"
 log_info "Log file: $LOG_FILE"
 log_success "=========================================="
+
+
 
 # Initialize progress tracking
 init_steps
@@ -496,7 +531,7 @@ wait_for_app_container() {
         fi
         if [ "$status" = "exited" ] || [ "$status" = "dead" ]; then
             log_error "App container exited unexpectedly (status: $status)"
-            docker logs "$APP_CONTAINER" 2>&1 | tail -30 | tee -a "$LOG_FILE"
+            docker logs "$APP_CONTAINER" 2>&1 | tail -30 | log_stream
             return 1
         fi
         echo -n "."
@@ -504,7 +539,7 @@ wait_for_app_container() {
         attempt=$((attempt + 1))
     done
     log_error "App container did not reach running state after ${max_attempts} attempts"
-    docker logs "$APP_CONTAINER" 2>&1 | tail -30 | tee -a "$LOG_FILE"
+    docker logs "$APP_CONTAINER" 2>&1 | tail -30 | log_stream
     return 1
 }
 
@@ -614,16 +649,16 @@ make_minio_objects_public() {
 
 install_node_dependencies() {
     log_step "Installing Node dependencies from lock file..."
-    exec_in_app npm install --no-audit --no-fund 2>&1 | tee -a "$LOG_FILE"
+    exec_in_app npm install --no-audit --no-fund --loglevel=info 2>&1 | log_stream
 
     # Fix for hoist-non-react-statics on Raspberry Pi (ARM)
     if [ "$APP_ENV" != "production" ]; then
         log_step "Fixing hoist-non-react-statics for ARM/Raspberry Pi..."
-        exec_in_app npm uninstall hoist-non-react-statics --no-save 2>&1 | tee -a "$LOG_FILE" || true
-        exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save 2>&1 | tee -a "$LOG_FILE"
+        exec_in_app npm uninstall hoist-non-react-statics --no-save 2>&1 | log_stream || true
+        exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save 2>&1 | log_stream
         exec_in_app rm -rf node_modules/.vite /tmp/vite-cache
         # npm rebuild can exit non-zero on ARM even when it succeeds; use || true
-        exec_in_app npm rebuild 2>&1 | tee -a "$LOG_FILE" || true
+        exec_in_app npm rebuild 2>&1 | log_stream || true
         log_done "Hoist-non-react-statics fixed for ARM compatibility"
     fi
 
@@ -652,11 +687,11 @@ run_migration_with_retry() {
             log_info "Attempting to refresh and seed database..."
             
             # Try db:wipe first
-            if exec_in_app php artisan db:wipe --force 2>&1 | tee -a "$LOG_FILE"; then
+            if exec_in_app php artisan db:wipe --force 2>&1 | log_stream; then
                 log_success "Database wiped successfully"
                 
                 # Run migrations first
-                if exec_in_app php artisan migrate --force 2>&1 | tee -a "$LOG_FILE"; then
+                if exec_in_app php artisan migrate --force 2>&1 | log_stream; then
                     log_success "Migrations completed"
                     
                     # Wait a moment for MinIO to be fully ready after migration
@@ -665,7 +700,7 @@ run_migration_with_retry() {
                     
                     # Run all seeders
                     log_step "Running seeders..."
-                    if exec_in_app php artisan db:seed --force 2>&1 | tee -a "$LOG_FILE"; then
+                    if exec_in_app php artisan db:seed --force 2>&1 | log_stream; then
                         log_success "All seeders completed successfully"
                         return 0
                     else
@@ -678,14 +713,14 @@ run_migration_with_retry() {
                 log_warning "db:wipe failed, trying migrate:fresh..."
                 
                 # Try migrate:fresh
-                if exec_in_app php artisan migrate:fresh --force 2>&1 | tee -a "$LOG_FILE"; then
+                if exec_in_app php artisan migrate:fresh --force 2>&1 | log_stream; then
                     log_success "Migration and seeding completed successfully"
                     return 0
                 fi
             fi
         else
             log_info "Skipping database reset, running incremental migrations..."
-            if exec_in_app php artisan migrate --force 2>&1 | tee -a "$LOG_FILE"; then
+            if exec_in_app php artisan migrate --force 2>&1 | log_stream; then
                 log_success "Incremental migration completed successfully"
                 return 0
             fi
@@ -728,40 +763,29 @@ log_info "Configuration loaded successfully"
 log_info "Project Root: $PROJECT_ROOT"
 log_info "Environment: $APP_ENV"
 step_success 0 "Environment: $APP_ENV, Force Build: $FORCE_BUILD"
-echo "DEBUG: Step 1 completed, about to start Step 2"
-echo "DEBUG: Current directory: $(pwd)"
-echo "DEBUG: COMPOSE_FILES: ${COMPOSE_FILES[@]}"
+
 # =============================================================================
 # STEP 2: START SERVICES (FIXED FOR RASPBERRY PI)
 # =============================================================================
 
 step_start 1
 
-echo "========================================="
-echo "DEBUG: Entering Step 2"
-echo "========================================="
-
 log_step "Forcefully stopping and cleaning containers (PI optimized)..."
 
-# Temporarily disable set -e to see what's failing
+# Temporarily disable set -e while bringing services down
 set +e
 
-echo "DEBUG: About to run: compose down -v --remove-orphans --timeout 10"
+log_info "Running: compose down --remove-orphans --timeout 10"
 
-# Run compose down and capture exit code
-# We changed this as it was deleting all the db data
-# compose down -v --remove-orphans --timeout 10
+# We use plain 'down' (no -v) to preserve database data between deploys
 compose down --remove-orphans --timeout 10
 DOWN_EXIT=$?
 
-echo "DEBUG: compose down exited with code: $DOWN_EXIT"
-
 if [ $DOWN_EXIT -ne 0 ]; then
-    echo "ERROR: compose down failed with code $DOWN_EXIT"
-    log_error "compose down failed with code $DOWN_EXIT"
+    log_warning "compose down exited with code $DOWN_EXIT — continuing cleanup"
 fi
 
-echo "DEBUG: About to clean up containers..."
+log_info "Cleaning up any remaining containers..."
 
 # Safety cleanup — stop/remove THIS namespace's containers, plus legacy bare-named
 # ones for the one-time migration away from the old un-namespaced setup.
@@ -772,47 +796,39 @@ docker rm -f "$APP_CONTAINER" "$DB_CONTAINER" "$MINIO_CONTAINER" \
              duka-app duka-db duka-minio 2>/dev/null || true
 log_done "Cleanup complete"
 
-echo "DEBUG: Cleanup finished, about to start services..."
-
 log_step "Starting application services..."
 
-# Check if docker-compose.yml files exist
-echo "DEBUG: Compose files configured: ${COMPOSE_FILES[@]}"
-
-echo "DEBUG: About to run compose up commands..."
-
 # For Raspberry Pi, start services one by one
-echo "DEBUG: Starting database first..."
+log_info "Starting database first..."
 compose up -d duka-db
 DB_EXIT=$?
-echo "DEBUG: Database start exit code: $DB_EXIT"
+log_info "Database start exit code: $DB_EXIT"
 
 if [ $DB_EXIT -ne 0 ]; then
-    echo "ERROR: Failed to start database!"
     log_error "Failed to start database with exit code $DB_EXIT"
     exit 1
 fi
 
-echo "DEBUG: Waiting for MySQL to initialize (10 seconds)..."
+log_info "Waiting for MySQL to initialize (10 seconds)..."
 sleep 10
 
-echo "DEBUG: Starting MinIO..."
+log_info "Starting MinIO..."
 compose up -d duka-minio
 MINIO_EXIT=$?
-echo "DEBUG: MinIO start exit code: $MINIO_EXIT"
+log_info "MinIO start exit code: $MINIO_EXIT"
 
 sleep 5
 
-echo "DEBUG: Starting minio-setup..."
+log_info "Starting minio-setup..."
 compose up -d minio-setup
 SETUP_EXIT=$?
-echo "DEBUG: minio-setup start exit code: $SETUP_EXIT"
+log_info "minio-setup start exit code: $SETUP_EXIT"
 
-echo "DEBUG: Starting duka-app..."
+log_info "Starting duka-app..."
 if ! compose up -d --force-recreate duka-app; then
     log_error "Failed to start duka-app container. Exit code: $?"
     log_error "Check port conflicts and container logs:"
-    docker logs "$APP_CONTAINER" 2>&1 | tail -30 | tee -a "$LOG_FILE"
+    docker logs "$APP_CONTAINER" 2>&1 | tail -30 | log_stream
     exit 1
 fi
 
@@ -820,9 +836,34 @@ fi
 sleep 2
 if [ "$(docker inspect -f '{{.State.Status}}' "$APP_CONTAINER" 2>/dev/null)" != "running" ]; then
     log_error "Container $APP_CONTAINER is not running. Aborting."
-    docker logs "$APP_CONTAINER" 2>&1 | tail -30 | tee -a "$LOG_FILE"
+    docker logs "$APP_CONTAINER" 2>&1 | tail -30 | log_stream
     exit 1
 fi
+
+# =============================================================================
+# UPDATED OBSERVABILITY BLOCK: Run Migrations & Setup Superuser
+# =============================================================================
+if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
+    log_step "Running GlitchTip database migrations..."
+    if compose -f "$BASE_DIR/docker-compose.observability.yml" run --rm glitchtip-migrate; then
+        log_success "GlitchTip database migrations completed successfully"
+    else
+        log_error "GlitchTip database migrations failed"
+        exit 1
+    fi
+    
+    log_step "Ensuring GlitchTip superuser exists..."
+    if compose --env-file "$ENV_FILE" -f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.observability.yml" run --rm glitchtip-web python manage.py createsuperuser --noinput 2>&1 | log_stream; then
+        log_success "GlitchTip superuser created successfully"
+    else
+        log_info "Superuser already exists, proceeding..."
+    fi
+
+    log_info "Starting remaining observability services (GlitchTip web/worker, LGTM)..."
+    compose -f "$BASE_DIR/docker-compose.observability.yml" up -d
+fi
+# =============================================================================
+
 log_success "App container started successfully"
 
 log_step "Waiting for app container to be ready before pre-creating storage..."
@@ -838,14 +879,12 @@ log_done "Pre-deployment storage structures are ready"
 # Re-enable set -e
 set -e
 
-echo "DEBUG: All services started, checking container status..."
-docker ps -a | grep duka
+log_info "All services started — current container status:"
+docker ps -a | grep duka | log_stream
 
 step_success 1 "All containers started successfully"
 
-echo "========================================="
-echo "DEBUG: Successfully completed Step 2!"
-echo "========================================="
+
 # =============================================================================
 # STEP 3: MINIO READINESS & BUCKET SETUP (CRITICAL - MUST BE BEFORE SEEDING)
 # =============================================================================
@@ -940,11 +979,11 @@ exec_in_app composer require league/flysystem-aws-s3-v3:^3.0 --no-interaction --
 # 2. Check if composer.lock is valid using a standalone check
 if ! exec_in_app composer validate --no-check-all --quiet 2>/dev/null; then
     log_warning "Composer lock file out of sync, updating package tracking..."
-    exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction 2>&1 | tee -a "$LOG_FILE"
+    exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction 2>&1 | log_stream
 fi
 
 # 3. Perform the clean master dependency installation
-exec_in_app composer install $INSTALL_FLAGS 2>&1 | tee -a "$LOG_FILE"
+exec_in_app composer install $INSTALL_FLAGS 2>&1 | log_stream
 
 # Define files path
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
@@ -961,7 +1000,7 @@ if [ ! -d "vendor" ] || [ ! -f "$S3_CONVERTER_FILE" ] || has_git_path_changes "c
     fi
 
     # Run inside the container
-    exec_in_app $COMPOSE_CMD 2>&1 | tee -a "$LOG_FILE"
+    exec_in_app $COMPOSE_CMD 2>&1 | log_stream
 else
     log_success "PHP dependencies up to date"
 fi
@@ -981,13 +1020,21 @@ if has_git_path_changes "${NODE_FILES[@]}"; then
     log_info "Node dependency changes detected"
 fi
 
+# Also check the vite binary exists — node_modules dir can exist but be incomplete
+# (e.g. after a failed previous deploy or a fresh container with a mounted volume)
+if ! exec_in_app test -f node_modules/.bin/vite; then
+    log_warning "node_modules/.bin/vite missing — forcing full install"
+    node_changes=1
+fi
+
 if [ "$node_changes" -eq 1 ] || ! exec_in_app test -d node_modules; then
     install_node_dependencies
 else
-    log_success "Node dependencies already installed"
+    log_success "Node dependencies already installed and complete"
 fi
 
 step_success 4 "Node dependencies ready"
+
 
 # =============================================================================
 # STEP 6: FRONTEND ASSETS
@@ -1001,36 +1048,42 @@ if [ "$APP_ENV" = "production" ]; then
     log_step "Building production assets..."
     exec_in_app rm -f public/hot
     
-    exec_in_app npm run build 2>&1 | tee -a "$LOG_FILE"
+    exec_in_app npm run build 2>&1 | log_stream
     log_success "Production assets built"
 else
     log_step "Cleaning up production assets for development mode..."
     exec_in_app rm -rf public/build
-    
-    log_step "Setting up Vite dependencies..."
-    
-    log_step "Fixing Vite dependencies for development..."
-    exec_in_app npm install hoist-non-react-statics@3.3.2 --no-save 2>&1 | tee -a "$LOG_FILE"
+
+    log_step "Checking Vite dependencies..."
+    # Only run install if node_modules is missing or package.json changed
+    if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules" ]; then
+        log_info "Installing fresh dependencies..."
+        docker exec "$APP_CONTAINER" bash -lc 'npm ci --no-audit --no-fund'
+    else
+        log_info "Dependencies already up to date, skipping install."
+    fi
+
+    # Pre-flight: ensure vite binary exists — force reinstall if missing
+    if ! exec_in_app test -f node_modules/.bin/vite; then
+        log_warning "Vite binary not found in node_modules/.bin — running npm install to fix..."
+        docker exec "$APP_CONTAINER" bash -lc 'npm install --no-audit --no-fund' 2>&1 | log_stream
+    fi
+
     exec_in_app rm -rf node_modules/.vite /tmp/vite-cache
-    log_done "Vite dependencies fixed"
-    
-    log_step "Sanitizing Vite environment..."
+    log_done "Vite dependencies checked"
+
     log_step "Fixing esbuild architecture for Docker..."
-    exec_in_app node node_modules/esbuild/install.js || true
-    log_info "Skipping Vite process kill - starting fresh"
+    # esbuild v0.17+ removed install.js — npm rebuild re-links the correct native binary
+    exec_in_app npm rebuild esbuild 2>&1 | log_stream || true
     sleep 1
     log_done "Vite environment ready"
-    
+
     log_step "Launching Vite in background..."
-    docker exec -d "$APP_CONTAINER" sh -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
-    VITE_EXIT=$?
-    
-    if [ $VITE_EXIT -ne 0 ]; then
-        log_warning "Vite start command had issues with exit code $VITE_EXIT, continuing anyway..."
-    else
-        log_done "Vite launch command issued"
-    fi
-    
+    # Use bash (not sh/dash) so node_modules/.bin is on PATH via npm run
+    # docker exec -d is already detached — no & needed
+    docker exec -d "$APP_CONTAINER" bash -lc 'npm run dev -- --host 0.0.0.0 --force >/tmp/vite.log 2>&1'
+    log_done "Vite launch command issued"
+
     log_step "Waiting for Vite to become ready..."
     if ! exec_in_app sh -c '
         i=1
@@ -1045,14 +1098,15 @@ else
         exit 1
     '; then
         echo
-        log_error "Vite failed to start. Check /tmp/vite.log"
-        exec_in_app cat /tmp/vite.log 2>/dev/null | tail -20
+        log_error "Vite failed to start. Last 20 lines of /tmp/vite.log:"
+        exec_in_app cat /tmp/vite.log 2>/dev/null | tail -20 | log_stream
         step_failed 5 "Vite failed to start"
         exit 1
     fi
     echo
     log_success "Vite is ready and running ${ICON_VITE}"
 fi
+
 
 step_success 5 "Frontend assets processed"
 
@@ -1096,7 +1150,7 @@ docker exec "$APP_CONTAINER" php artisan tinker --execute="
     } catch (\Exception \$e) {
         echo \"⚠️ Could not update visibilities: \" . \$e->getMessage() . \"\n\";
     }
-" 2>&1 | tee -a "$LOG_FILE"
+" 2>&1 | log_stream
 
 # Also ensure all bucket objects are public via a fresh mc container.
 # Uses MC_HOST_local env var (no alias setup needed, avoids shell quoting issues).
@@ -1106,7 +1160,7 @@ docker run --rm \
     -e MC_HOST_local="http://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@duka-minio:9000" \
     -e BUCKET="${AWS_BUCKET}" \
     minio/mc:latest \
-    -c 'mc anonymous set download --recursive local/$BUCKET' 2>&1 | tee -a "$LOG_FILE" || true
+    -c 'mc anonymous set download --recursive local/$BUCKET' 2>&1 | log_stream || true
 
 log_success "All images are now publicly accessible"
 
@@ -1131,12 +1185,12 @@ exec_in_app rm -rf bootstrap/cache/*.php
 log_done "Cache files cleaned"
 
 log_step "Purging Laravel caches..."
-exec_in_app php artisan cache:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan config:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan route:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan view:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan event:clear 2>&1 | tee -a "$LOG_FILE"
-exec_in_app php artisan optimize:clear 2>&1 | tee -a "$LOG_FILE"
+exec_in_app php artisan cache:clear 2>&1 | log_stream
+exec_in_app php artisan config:clear 2>&1 | log_stream
+exec_in_app php artisan route:clear 2>&1 | log_stream
+exec_in_app php artisan view:clear 2>&1 | log_stream
+exec_in_app php artisan event:clear 2>&1 | log_stream
+exec_in_app php artisan optimize:clear 2>&1 | log_stream
 log_done "Laravel caches purged"
 
 log_step "Refreshing Laravel optimizations..."
@@ -1144,11 +1198,11 @@ exec_in_app php artisan optimize:clear || true
 exec_in_app php artisan storage:link --force
 
 if [ "$APP_ENV" = "production" ]; then
-    exec_in_app php artisan optimize 2>&1 | tee -a "$LOG_FILE"
+    exec_in_app php artisan optimize 2>&1 | log_stream
 else
-    exec_in_app php artisan config:clear 2>&1 | tee -a "$LOG_FILE"
-    exec_in_app php artisan route:clear 2>&1 | tee -a "$LOG_FILE"
-    exec_in_app php artisan view:clear 2>&1 | tee -a "$LOG_FILE" || echo "View cache clear skipped"
+    exec_in_app php artisan config:clear 2>&1 | log_stream
+    exec_in_app php artisan route:clear 2>&1 | log_stream
+    exec_in_app php artisan view:clear 2>&1 | log_stream || echo "View cache clear skipped"
 fi
 
 log_done "Laravel optimizations refreshed"
@@ -1227,7 +1281,7 @@ docker exec "$APP_CONTAINER" php artisan tinker --execute="
     }
     
     echo \"\\n📊 Summary: Uploaded \$uploadedCount images, \$missingCount still missing\\n\";
-" 2>&1 | tee -a "$LOG_FILE"
+" 2>&1 | log_stream
 
 log_success "Image post-processing complete"
 
@@ -1243,3 +1297,5 @@ log_success "Log file saved to: $LOG_FILE"
 log_success "=========================================="
 
 show_full_progress
+
+finish_banner

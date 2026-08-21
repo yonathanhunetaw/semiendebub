@@ -68,6 +68,22 @@ services:
       - duka-network
     logging: *loki-logging
 
+  # Dedicated one-off migration service for GlitchTip
+  glitchtip-migrate:
+    image: glitchtip/glitchtip:latest
+    env_file: ../.env.observability
+    command: ./manage.py migrate
+    environment:
+      DATABASE_URL: postgres://${GLITCHTIP_DB_USER:-glitchtip}:${GLITCHTIP_DB_PASSWORD:-glitchtip}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME:-glitchtip}
+      REDIS_URL: redis://glitchtip-redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:-change-this-secret}
+    depends_on:
+      - glitchtip-postgres
+      - glitchtip-redis
+    networks:
+      - duka-network
+    logging: *loki-logging
+
   glitchtip-web:
     image: glitchtip/glitchtip:latest
     env_file: ../.env.observability
