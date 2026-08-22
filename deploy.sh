@@ -486,6 +486,13 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     fi
     COMPOSE_FILES+=(-f "$BASE_DIR/docker-compose.observability.yml")
     log_info "Observability stack is ENABLED"
+
+    # Ensure Loki Docker driver is installed on the host
+    if ! "${DOCKER_CMD[@]}" plugin ls | grep -q "loki"; then
+        log_step "Installing Loki Docker driver..."
+        "${DOCKER_CMD[@]}" plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
+        log_success "Loki driver installed"
+    fi
 fi
 
 # Cloudflared check
@@ -853,11 +860,31 @@ if [ "$ENABLE_OBSERVABILITY" = "1" ]; then
     fi
     
     log_step "Ensuring GlitchTip superuser exists..."
-    if compose --env-file "$ENV_FILE" -f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.observability.yml" run --rm glitchtip-web python manage.py createsuperuser --noinput 2>&1 | log_stream; then
-        log_success "GlitchTip superuser created successfully"
-    else
-        log_info "Superuser already exists, proceeding..."
-    fi
+    
+    # We use Django's shell to safely get_or_create the user, which prevents crashes 
+    # if the user already exists, and ensures the password is up to date.
+    compose --env-file "$ENV_FILE" -f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.observability.yml" run --rm glitchtip-web python manage.py shell <<'EOF' 2>&1 | log_stream
+import os
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+email = os.environ.get('GLITCHTIP_ADMIN_EMAIL')
+password = os.environ.get('GLITCHTIP_ADMIN_PASSWORD')
+
+if email and password:
+    user, created = User.objects.get_or_create(email=email)
+    user.set_password(password)
+    user.is_superuser = True
+    user.is_staff = True
+    user.save()
+    status = "Created" if created else "Updated password for"
+    print(f"==> {status} superuser: {email}")
+else:
+    print("==> Skipped: GLITCHTIP_ADMIN_EMAIL or GLITCHTIP_ADMIN_PASSWORD not set in environment.")
+EOF
+
+    # Since the python script handles its own logic gracefully, we can just log success
+    log_success "GlitchTip superuser configured successfully"
 
     log_info "Starting remaining observability services (GlitchTip web/worker, LGTM)..."
     compose -f "$BASE_DIR/docker-compose.observability.yml" up -d

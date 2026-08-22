@@ -1,6 +1,6 @@
 import AdminLayout from '@/Layouts/AdminLayout';
-import { Head } from "@inertiajs/react";
-import { Box, Paper, Typography, Divider, Chip, Stack, IconButton, Menu, MenuItem } from "@mui/material";
+import { Head, router } from "@inertiajs/react";
+import { Box, Paper, Typography, Divider, Chip, Stack, IconButton, Menu, MenuItem, Pagination, useMediaQuery, useTheme } from "@mui/material";
 import { useState } from 'react';
 import PeopleIcon from '@mui/icons-material/People';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
@@ -18,6 +18,33 @@ interface LowStockItem {
     low_stock_total: number;
 }
 
+interface PaginationMeta {
+    current_page: number;
+    from: number;
+    last_page: number;
+    per_page: number;
+    to: number;
+    total: number;
+}
+
+interface PaginationLink {
+    url: string | null;
+    label: string;
+    active: boolean;
+}
+
+interface PaginatedData<T> {
+    data: T[];
+    links: PaginationLink[];
+    meta?: PaginationMeta;
+    current_page?: number;
+    from?: number;
+    last_page?: number;
+    per_page?: number;
+    to?: number;
+    total?: number;
+}
+
 interface Props {
     sessionsCount: number;
     rolesBreakdown: Record<string, number>;
@@ -26,8 +53,38 @@ interface Props {
     customersCount: number;
     productsCount: number;
     activeVariantsCount: number;
-    lowStockItems: LowStockItem[];
+    lowStockItems: PaginatedData<LowStockItem> | LowStockItem[];
     stores: Array<{ id: number; name: string }>;
+    currentStore?: string;
+}
+
+function DashboardPagination({ meta, links }: { meta: PaginationMeta; links: PaginationLink[] }) {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+    const handlePageChange = (event: React.ChangeEvent<unknown>, page: number) => {
+        if (page === meta.current_page) return;
+        const link = links.find(l => l.label === String(page) && !l.active);
+        if (link && link.url) {
+            router.get(link.url, {}, { preserveState: true, preserveScroll: true });
+        }
+    };
+
+    if (meta.last_page <= 1) return null;
+
+    return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+            <Pagination
+                count={meta.last_page}
+                page={meta.current_page}
+                onChange={handlePageChange}
+                color="primary"
+                size={isMobile ? "small" : "medium"}
+                showFirstButton={!isMobile}
+                showLastButton={!isMobile}
+            />
+        </Box>
+    );
 }
 
 export default function Dashboard({
@@ -39,11 +96,15 @@ export default function Dashboard({
     productsCount,
     activeVariantsCount,
     lowStockItems = [],
-    stores = []
+    stores = [],
+    currentStore = 'all'
 }: Props) {
-    const [selectedStore, setSelectedStore] = useState<string>('all');
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuTarget, setMenuTarget] = useState<string | null>(null);
+
+    const handleStoreChange = (storeName: string) => {
+        router.get(window.location.pathname, { store: storeName }, { preserveState: true, preserveScroll: true });
+    };
 
     const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, target: string) => {
         setAnchorEl(event.currentTarget);
@@ -54,6 +115,26 @@ export default function Dashboard({
         setAnchorEl(null);
         setMenuTarget(null);
     };
+
+    // Normalize paginated data
+    let items: LowStockItem[] = [];
+    let meta: PaginationMeta | null = null;
+    let links: PaginationLink[] = [];
+
+    if (Array.isArray(lowStockItems)) {
+        items = lowStockItems;
+    } else if (lowStockItems) {
+        items = lowStockItems.data || [];
+        meta = lowStockItems.meta || (lowStockItems.current_page !== undefined ? {
+            current_page: lowStockItems.current_page,
+            from: lowStockItems.from || 1,
+            last_page: lowStockItems.last_page || 1,
+            per_page: lowStockItems.per_page || 10,
+            to: lowStockItems.to || items.length,
+            total: lowStockItems.total || items.length,
+        } : null);
+        links = (lowStockItems.meta && lowStockItems.meta.links) || lowStockItems.links || [];
+    }
 
     const StatCard = ({ title, value, icon, color, cardKey, children }: any) => (
         <Paper elevation={0} sx={{
@@ -104,18 +185,18 @@ export default function Dashboard({
                     <Stack direction="row" spacing={0.5}>
                         <Chip 
                             label="All Stores" 
-                            onClick={() => setSelectedStore('all')} 
-                            color={selectedStore === 'all' ? 'primary' : 'default'}
-                            variant={selectedStore === 'all' ? 'filled' : 'outlined'}
+                            onClick={() => handleStoreChange('all')} 
+                            color={currentStore === 'all' ? 'primary' : 'default'}
+                            variant={currentStore === 'all' ? 'filled' : 'outlined'}
                             size="small"
                         />
                         {stores.map((store) => (
                             <Chip 
                                 key={store.id} 
                                 label={store.name} 
-                                onClick={() => setSelectedStore(store.name)} 
-                                color={selectedStore === store.name ? 'primary' : 'default'}
-                                variant={selectedStore === store.name ? 'filled' : 'outlined'}
+                                onClick={() => handleStoreChange(store.name)} 
+                                color={currentStore === store.name ? 'primary' : 'default'}
+                                variant={currentStore === store.name ? 'filled' : 'outlined'}
                                 size="small"
                             />
                         ))}
@@ -201,25 +282,28 @@ export default function Dashboard({
                     </Stack>
                     <Divider sx={{ mb: 2 }} />
 
-                    {lowStockItems.length > 0 ? (
-                        lowStockItems.map((item) => (
-                            <Box key={item.item_id} sx={{
-                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                py: 1.5, borderBottom: '1px solid', borderColor: 'divider',
-                                '&:last-child': { borderBottom: 'none' }
-                            }}>
-                                <Box>
-                                    <Typography variant="body1" fontWeight={500}>{item.product_name}</Typography>
-                                    <Chip label={item.store_name} size="small" variant="outlined" sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }} />
+                    {items.length > 0 ? (
+                        <>
+                            {items.map((item) => (
+                                <Box key={item.item_id} sx={{
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                    py: 1.5, borderBottom: '1px solid', borderColor: 'divider',
+                                    '&:last-child': { borderBottom: 'none' }
+                                }}>
+                                    <Box>
+                                        <Typography variant="body1" fontWeight={500}>{item.product_name}</Typography>
+                                        <Chip label={item.store_name} size="small" variant="outlined" sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }} />
+                                    </Box>
+                                    <Stack direction="row" spacing={2} alignItems="center">
+                                        <Typography variant="body2" color="text.secondary">
+                                            Remaining: {item.total_stock}
+                                        </Typography>
+                                        <Chip label="Refill Needed" size="small" color="error" variant="outlined" />
+                                    </Stack>
                                 </Box>
-                                <Stack direction="row" spacing={2} alignItems="center">
-                                    <Typography variant="body2" color="text.secondary">
-                                        Remaining: {item.total_stock}
-                                    </Typography>
-                                    <Chip label="Refill Needed" size="small" color="error" variant="outlined" />
-                                </Stack>
-                            </Box>
-                        ))
+                            ))}
+                            {meta && <DashboardPagination meta={meta} links={links} />}
+                        </>
                     ) : (
                         <Typography color="text.secondary">All items are sufficiently stocked across all locations.</Typography>
                     )}

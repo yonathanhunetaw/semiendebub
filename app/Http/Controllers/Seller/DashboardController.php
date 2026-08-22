@@ -98,7 +98,7 @@ class DashboardController extends Controller
             ->toArray();
 
         // 🔹 3. Return the exact same structure as ItemController::index
-        return Inertia::render('Seller/Items/Index', [
+        $props = [
             'items'       => $items,
             'store'       => $store,
             'nextPageUrl' => $paginator->nextPageUrl(),
@@ -109,7 +109,11 @@ class DashboardController extends Controller
             'categories'           => $categoryNames,
             'has_tin_cart'         => $hasTinCart,
             'top_cart_is_individual' => $topCartIsIndividual,
-        ]);
+        ];
+
+        \Log::info('Seller Dashboard Props', $props);
+
+        return Inertia::render('Seller/Items/Index', $props);
     }
 
     /**

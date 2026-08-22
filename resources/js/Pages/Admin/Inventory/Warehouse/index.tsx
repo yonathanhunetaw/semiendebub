@@ -1,5 +1,5 @@
 // resources/js/Pages/Admin/Inventory/Warehouse/index.tsx
-import AdminLayout from "@/Layouts/AppLayout";
+import AdminLayout from "@/Layouts/AdminLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";

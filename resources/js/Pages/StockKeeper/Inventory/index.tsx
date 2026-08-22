@@ -1,18 +1,29 @@
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
-import { Head } from "@inertiajs/react";
+import { Head, useForm } from "@inertiajs/react";
 import {
     Box,
+    Button,
     Chip,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    FormControl,
     Grid,
+    InputLabel,
+    MenuItem,
     Paper,
+    Select,
     Table,
     TableBody,
     TableCell,
     TableHead,
     TableRow,
+    TextField,
     Typography,
 } from "@mui/material";
-import React from "react";
+import React, { useState } from "react";
+import AddIcon from "@mui/icons-material/Add";
 
 interface StockItem {
     id: number;
@@ -21,18 +32,61 @@ interface StockItem {
     sold_count?: number;
 }
 
-export default function Index({ items = [] }: { items?: StockItem[] }) {
+interface Warehouse {
+    id: number;
+    name: string;
+}
+
+interface Variant {
+    id: number;
+    name: string;
+}
+
+interface Props {
+    items?: StockItem[];
+    warehouses?: Warehouse[];
+    variants?: Variant[];
+}
+
+export default function Index({ items = [], warehouses = [], variants = [] }: Props) {
+    const [open, setOpen] = useState(false);
+    const { data, setData, post, processing, errors, reset } = useForm({
+        warehouse_id: "",
+        item_variant_id: "",
+        quantity: 1,
+    });
+
+    const handleOpen = () => setOpen(true);
+    const handleClose = () => {
+        setOpen(false);
+        reset();
+    };
+
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
+        post(route("stock_keeper.inventory.receive"), {
+            onSuccess: () => {
+                handleClose();
+            },
+        });
+    };
+
     return (
         <>
             <Head title="Inventory" />
 
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                    Inventory
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                    Live catalog view for stocked items and selling activity.
-                </Typography>
+            <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <Box>
+                    <Typography variant="h4" sx={{ fontWeight: 800 }}>
+                        Inventory
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        Live catalog view for stocked items and selling activity.
+                    </Typography>
+                </Box>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpen}>
+                    Receive Stock
+                </Button>
             </Box>
 
             <Grid container spacing={3}>
@@ -66,6 +120,76 @@ export default function Index({ items = [] }: { items?: StockItem[] }) {
                     </Paper>
                 </Grid>
             </Grid>
+
+            {/* Receive Stock Dialog */}
+            <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
+                <form onSubmit={submit}>
+                    <DialogTitle>Receive Stock</DialogTitle>
+                    <DialogContent dividers>
+                        <FormControl fullWidth margin="normal" error={!!errors.warehouse_id}>
+                            <InputLabel id="warehouse-select-label">Warehouse</InputLabel>
+                            <Select
+                                labelId="warehouse-select-label"
+                                value={data.warehouse_id}
+                                label="Warehouse"
+                                onChange={(e) => setData("warehouse_id", e.target.value)}
+                            >
+                                {warehouses.map((w) => (
+                                    <MenuItem key={w.id} value={w.id}>
+                                        {w.name}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                            {errors.warehouse_id && (
+                                <Typography variant="caption" color="error">
+                                    {errors.warehouse_id}
+                                </Typography>
+                            )}
+                        </FormControl>
+
+                        <FormControl fullWidth margin="normal" error={!!errors.item_variant_id}>
+                            <InputLabel id="variant-select-label">Item Variant</InputLabel>
+                            <Select
+                                labelId="variant-select-label"
+                                value={data.item_variant_id}
+                                label="Item Variant"
+                                onChange={(e) => setData("item_variant_id", e.target.value)}
+                            >
+                                {variants.map((v) => (
+                                    <MenuItem key={v.id} value={v.id}>
+                                        {v.name}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                            {errors.item_variant_id && (
+                                <Typography variant="caption" color="error">
+                                    {errors.item_variant_id}
+                                </Typography>
+                            )}
+                        </FormControl>
+
+                        <TextField
+                            fullWidth
+                            margin="normal"
+                            label="Quantity"
+                            type="number"
+                            inputProps={{ min: 1 }}
+                            value={data.quantity}
+                            onChange={(e) => setData("quantity", Number(e.target.value))}
+                            error={!!errors.quantity}
+                            helperText={errors.quantity}
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleClose} color="inherit">
+                            Cancel
+                        </Button>
+                        <Button type="submit" variant="contained" disabled={processing}>
+                            Receive
+                        </Button>
+                    </DialogActions>
+                </form>
+            </Dialog>
         </>
     );
 }

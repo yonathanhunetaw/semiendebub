@@ -46,10 +46,5 @@ Route::domain("admin.{$baseDomain}")
         Route::delete('store-variant-individual-prices/{storeVariant}', [StoreController::class, 'destroyIndividualPrice'])
             ->name('store-variant.individual-price.destroy');
 
-        // ── Inventory sidebar sub-routes ──────────────────────────────────────
-        Route::prefix('inventory')->name('inventory.')->group(function () {
-            Route::get('/stores',    [StoreController::class, 'index'])->name('stores');
-            Route::get('/warehouse', fn () => inertia('Admin/Inventory/Warehouse/index'))->name('warehouse');
-            Route::get('/transfers', fn () => inertia('Admin/Inventory/Transfers/index'))->name('transfers');
-        });
+
     });

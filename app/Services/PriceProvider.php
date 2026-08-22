@@ -77,6 +77,11 @@ class PriceProvider
             }
         }
 
+        \Illuminate\Support\Facades\Log::debug('PriceProvider::getPriceLadder Result', [
+            'store_variant_id' => $storeVariantId,
+            'ladder' => $prices
+        ]);
+
         return $prices;
     }
 
@@ -191,6 +196,14 @@ class PriceProvider
         $isBusiness = is_object($customer) && (!empty($customer->is_business) || !empty($customer->tin_number));
         $customerType = $isBusiness ? 'business' : 'individual';
 
+        \Illuminate\Support\Facades\Log::info('PriceProvider::getItemPriceRange Called', [
+            'item_id' => $item->id,
+            'store_id' => $storeId,
+            'seller_id' => $sellerId,
+            'customer_id' => $customerId,
+            'customer_type' => $customerType
+        ]);
+
         $variantPrices = [];
         $basePrices = [];
         $ladders = [];
@@ -215,12 +228,19 @@ class PriceProvider
         }
 
         if (empty($variantPrices)) {
-            return [
+            $emptyResult = [
                 'store_price' => 0,
                 'final_price' => 0,
                 'discount_ends_at' => null,
                 'pricing_matrix' => [],
             ];
+            
+            \Illuminate\Support\Facades\Log::info('PriceProvider::getItemPriceRange Result (Empty)', [
+                'item_id' => $item->id,
+                'result' => $emptyResult
+            ]);
+
+            return $emptyResult;
         }
 
         $minFinalPrice = min($variantPrices);
@@ -233,11 +253,18 @@ class PriceProvider
         $basePrice = $bestLadder[0]['price'] ?? min($basePrices);
         $discountEndsAt = $bestLadder[0]['discount_ends_at'] ?? null;
 
-        return [
+        $result = [
             'store_price' => $basePrice,
             'final_price' => $minFinalPrice,
             'discount_ends_at' => $discountEndsAt,
             'pricing_matrix' => $bestLadder,
         ];
+
+        \Illuminate\Support\Facades\Log::info('PriceProvider::getItemPriceRange Result', [
+            'item_id' => $item->id,
+            'result' => $result
+        ]);
+
+        return $result;
     }
 }

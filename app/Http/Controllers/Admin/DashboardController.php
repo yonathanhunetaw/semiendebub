@@ -86,23 +86,28 @@ class DashboardController extends Controller
             ->where('status', 'active')
             ->count();
 
-        $lowStockItems = Item::with(['variants.storeVariants.stocks'])
-            ->get()
-            ->map(function ($item) {
-                $totalStock = $item->variants->flatMap->stocks->sum('quantity');
-                $lowStockTotal = $item->variants->flatMap->stocks
-                    ->where('quantity', '<=', 5)
-                    ->sum('quantity');
+        $stores = \App\Models\Store\Store::select('id', 'name')->get();
+        $storeName = request()->query('store', 'all');
 
-                return [
-                    'item_id' => $item->id,
-                    'product_name' => $item->product_name,
-                    'total_stock' => $totalStock,
-                    'low_stock_total' => $lowStockTotal,
-                    'is_low' => $totalStock <= 5, // or any threshold you want
-                ];
-            })
-            ->filter(fn($item) => $item['low_stock_total'] > 0);
+        $lowStockQuery = \App\Models\Store\StoreVariant::with(['item', 'store'])
+            ->where('stock', '<=', 5);
+
+        if ($storeName && $storeName !== 'all') {
+            $lowStockQuery->whereHas('store', function($q) use ($storeName) {
+                $q->where('name', $storeName);
+            });
+        }
+
+        $lowStockItems = $lowStockQuery->paginate(5)->withQueryString()->through(function ($sv) {
+            return [
+                'item_id' => $sv->id,
+                'product_name' => $sv->item ? $sv->item->product_name : 'Unknown Product',
+                'store_name' => $sv->store ? $sv->store->name : 'Unknown Store',
+                'total_stock' => $sv->stock,
+                'low_stock_total' => $sv->stock,
+                'is_low' => true,
+            ];
+        });
 
         // DashboardController.php
 
@@ -114,8 +119,10 @@ class DashboardController extends Controller
             'customersCount' => $customersCount,
             'productsCount' => $productsCount,
             'activeVariantsCount' => $activeVariantsCount,
-            'lowStockItems' => $lowStockItems->values(), // values() resets keys for JSON
+            'lowStockItems' => $lowStockItems,
             'groupedProducts' => $groupedProducts,
+            'stores' => $stores,
+            'currentStore' => $storeName,
         ]);
 
     }

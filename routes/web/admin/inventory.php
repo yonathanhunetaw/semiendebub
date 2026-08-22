@@ -4,7 +4,12 @@ use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\Inventory\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('inventory')->group(function () {
+$baseDomain = config('app.system_domain', 'duka.local');
+
+Route::domain("admin.{$baseDomain}")
+    ->middleware(['auth', 'verified', 'role.subdomain:admin'])
+    ->prefix('inventory')
+    ->group(function () {
 
     // --- General Inventory ---
     Route::get('/', [InventoryController::class, 'index'])->name('inventory.index');

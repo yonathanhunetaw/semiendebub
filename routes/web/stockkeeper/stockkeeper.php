@@ -26,6 +26,7 @@ Route::domain("stockkeeper.{$baseDomain}")
         Route::middleware(['auth', 'verified', 'role.subdomain:stock_keeper'])->group(function () {
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
             Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory.index');
+            Route::post('/inventory/receive', [InventoryController::class, 'receive'])->name('inventory.receive');
             Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
             Route::get('/stock-alerts', function () {
                 return Inertia::render('StockKeeper/StockAlerts/index');

@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers\StockKeeper;
 
-use App\Http\Controllers\Admin\Controller;
+use App\Http\Controllers\Controller;
 use App\Models\Item\Item;
+use App\Models\Item\ItemVariant;
+use App\Models\Inventory\Warehouse;
+use App\Models\Inventory\ItemStock;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -15,55 +18,46 @@ class InventoryController extends Controller
     public function index()
     {
         $items = Item::all();
+        $warehouses = Warehouse::all();
+        $variants = ItemVariant::with('item', 'itemColor', 'itemSize')->get()->map(function ($v) {
+            $label = collect([$v->itemColor?->name, $v->itemSize?->name])->filter()->join(' / ') ?: 'Standard';
+            return [
+                'id' => $v->id,
+                'name' => ($v->item->product_name ?? 'Unknown') . ' - ' . $label . ' (SKU: ' . $v->sku . ')',
+            ];
+        });
 
-        return Inertia::render('StockKeeper/Inventory/index', compact('items'));
+        return Inertia::render('StockKeeper/Inventory/index', [
+            'items' => $items,
+            'warehouses' => $warehouses,
+            'variants' => $variants,
+        ]);
     }
 
     /**
-     * Show the form for creating a new resource.
+     * Receive stock into a warehouse.
      */
-    public function create()
+    public function receive(Request $request)
     {
-        //
-    }
+        $validated = $request->validate([
+            'warehouse_id' => 'required|exists:warehouses,id',
+            'item_variant_id' => 'required|exists:item_variants,id',
+            'quantity' => 'required|integer|min:1',
+        ]);
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
-    }
+        $stock = ItemStock::firstOrCreate(
+            [
+                'location_id' => $validated['warehouse_id'],
+                'location_type' => Warehouse::class,
+                'item_variant_id' => $validated['item_variant_id'],
+            ],
+            [
+                'quantity' => 0,
+            ]
+        );
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
+        $stock->increment('quantity', $validated['quantity']);
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
+        return back()->with('success', 'Stock received successfully in warehouse.');
     }
 }

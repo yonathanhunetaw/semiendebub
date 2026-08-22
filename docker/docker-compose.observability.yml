@@ -1,6 +1,8 @@
 x-loki-logging: &loki-logging
-  driver: json-file
+  driver: loki
   options:
+    loki-url: "http://127.0.0.1:3100/loki/api/v1/push"
+    loki-retries: "2"
     max-size: "10m"
     max-file: "3"
 
@@ -40,6 +42,7 @@ services:
       - "${LGTM_PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - lgtm_data:/data
+      - ./logs:/var/log/host-deploy-logs:ro
     networks:
       - duka-network
 
