@@ -12,10 +12,10 @@ return new class extends Migration {
     {
         Schema::create('canvas_versions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained();
-            $table->json('snapshot_json');
-            $table->string('status')->default('draft');
-            $table->string('comment')->nullable();
+            $table->unsignedBigInteger('version');
+            $table->longText('snapshot');
+            $table->string('status')->default('pending');
+            $table->string('room_id')->nullable();
             $table->timestamps();
         });
     }
