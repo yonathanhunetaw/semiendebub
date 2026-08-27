@@ -618,9 +618,8 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
     }, [isViewer]);
 
     return (
-        <ThemeProvider theme={theme}>
-            <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'background.default' }}>
-                <Head title="Canvas Admin" />
+    <ThemeProvider theme={theme}>
+        <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'background.default', touchAction: 'none' }}>            <Head title="Canvas Admin" />
 
                 {uploadProgress !== null && (
                     <Box sx={{
