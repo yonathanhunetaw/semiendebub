@@ -53,15 +53,15 @@ class CanvasController extends Controller
         $sharedUsers = $canvas->shares()->get(['users.id', 'users.first_name', 'users.last_name']);
 
         return Inertia::render('Admin/Canvas', [
-            'canvases'         => $canvases,
-            'activeCanvasId'   => $canvas->id,
-            'currentUserId'    => $user->id,
-            'allUsers'         => $allUsers,
-            'sharedUsers'      => $sharedUsers,
-            'latestSnapshot'   => $latestVersion ? $latestVersion->snapshot_json : null,
+            'canvases' => $canvases,
+            'activeCanvasId' => $canvas->id,
+            'currentUserId' => $user->id,
+            'allUsers' => $allUsers,
+            'sharedUsers' => $sharedUsers,
+            'latestSnapshot' => $latestVersion ? $latestVersion->snapshot_json : null,
             'latestVersionInfo' => $latestVersion ? [
-                'id'         => $latestVersion->id,
-                'user'       => $latestVersion->user,
+                'id' => $latestVersion->id,
+                'user' => $latestVersion->user,
                 'created_at' => $latestVersion->created_at,
             ] : null,
             'history' => $history
@@ -73,7 +73,7 @@ class CanvasController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
         ]);
-        
+
         $canvas = Canvas::create(['user_id' => Auth::id(), 'title' => $request->title]);
         return redirect('/canvas?canvas_id=' . $canvas->id)->with('success', 'Canvas created successfully!');
     }
@@ -85,10 +85,10 @@ class CanvasController extends Controller
             'user_id' => 'required|exists:users,id',
             'permission' => 'required|in:view,edit',
         ]);
-        
+
         $canvas = Canvas::where('user_id', Auth::id())->findOrFail($request->canvas_id);
         $canvas->shares()->syncWithoutDetaching([$request->user_id => ['permission' => $request->permission]]);
-        
+
         return back()->with('success', 'Canvas shared successfully!');
     }
 
@@ -98,39 +98,37 @@ class CanvasController extends Controller
             'canvas_id' => 'required|exists:canvases,id',
             'user_id' => 'required|exists:users,id',
         ]);
-        
+
         $canvas = Canvas::where('user_id', Auth::id())->findOrFail($request->canvas_id);
         $canvas->shares()->detach($request->user_id);
-        
+
         return back()->with('success', 'User removed from canvas successfully!');
     }
 
-    public function getVersion($subdomain, $id)
+    public function getVersion($id)
     {
         $version = CanvasVersion::findOrFail($id);
-
-        // Return the raw snapshot_json directly — the frontend will sanitize it
         return response()->json($version->snapshot_json);
     }
 
     public function save(Request $request)
     {
         $request->validate([
-            'canvas_id'     => 'required|exists:canvases,id',
+            'canvas_id' => 'required|exists:canvases,id',
             'snapshot_json' => 'required|array',
-            'comment'       => 'nullable|string|max:255',
+            'comment' => 'nullable|string|max:255',
         ]);
 
         $version = CanvasVersion::create([
-            'canvas_id'     => $request->canvas_id,
-            'user_id'       => Auth::id(),
+            'canvas_id' => $request->canvas_id,
+            'user_id' => Auth::id(),
             'snapshot_json' => $request->snapshot_json,
-            'status'        => 'pending',
-            'comment'       => $request->input('comment', 'Submitted for review'),
+            'status' => 'pending',
+            'comment' => $request->input('comment', 'Submitted for review'),
         ]);
 
         return response()->json([
-            'message'    => 'Canvas saved for review!',
+            'message' => 'Canvas saved for review!',
             'version_id' => $version->id
         ]);
     }
