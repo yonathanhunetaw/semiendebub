@@ -139,20 +139,16 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
     // Helper: Sanitize a TipTap rich-text document
     // -------------------------------------------------------------------------
     const sanitizeRichText = (value: any): any => {
-        // If value is not an object or is null, return a default doc
         if (!value || typeof value !== 'object') {
             return { type: 'doc', content: [{ type: 'paragraph', content: [] }] };
         }
 
-        // If value is an array, wrap it in a doc? Not expected, but we'll default.
         if (Array.isArray(value)) {
             return { type: 'doc', content: [{ type: 'paragraph', content: [] }] };
         }
 
-        // Ensure root is a doc
         let doc = value;
         if (doc.type !== 'doc' || !Array.isArray(doc.content)) {
-            // If it has content as array, wrap; otherwise default
             if (Array.isArray(doc.content)) {
                 doc = { type: 'doc', content: doc.content };
             } else {
@@ -160,13 +156,11 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             }
         }
 
-        // Recursively sanitize nodes
         const sanitizeNode = (node: any): any => {
             if (!node || typeof node !== 'object') {
                 return null;
             }
 
-            // --- Text node ---
             if (node.type === 'text') {
                 if (typeof node.text !== 'string') {
                     if (node.text === null || node.text === undefined) {
@@ -178,11 +172,9 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         return null;
                     }
                 }
-                // Empty text nodes are invalid in TipTap
                 if (node.text.length === 0) {
                     return null;
                 }
-                // Marks must be an array when present
                 if (node.marks !== undefined) {
                     if (!Array.isArray(node.marks)) {
                         delete node.marks;
@@ -196,12 +188,10 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 return node;
             }
 
-            // --- Non-text node ---
             if (typeof node.type !== 'string') {
                 return null;
             }
 
-            // Recurse into content
             if (Array.isArray(node.content)) {
                 node.content = node.content
                     .map((child: any) => sanitizeNode(child))
@@ -211,12 +201,10 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             return node;
         };
 
-        // Sanitize top-level content
         doc.content = doc.content
             .map((child: any) => sanitizeNode(child))
             .filter((child: any) => child !== null);
 
-        // Ensure at least one paragraph
         if (doc.content.length === 0) {
             doc.content = [{ type: 'paragraph', content: [] }];
         }
@@ -268,16 +256,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             Object.values(mutableDoc.store).forEach((record: any) => {
                 if (!record || typeof record !== 'object') return;
 
-                /*
-                 * Tldraw SHAPES
-                 */
                 if (record.typeName === 'shape' && record.props) {
-
-                    // -----------------------------------------------------------------
-                    // RICH TEXT SHAPES
-                    // Modern tldraw stores text content in props.richText
-                    // Applies to: text, note, geo, arrow
-                    // -----------------------------------------------------------------
                     if (
                         record.type === 'text' ||
                         record.type === 'note' ||
@@ -287,7 +266,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         record.props.richText = sanitizeRichText(record.props.richText);
                     }
 
-                    // Generic URL cleanup (for any shape that might have a url)
                     if (
                         'url' in record.props &&
                         (record.props.url === null || record.props.url === undefined)
@@ -295,9 +273,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         record.props.url = '';
                     }
 
-                    // -----------------------------------------------------------------
-                    // FRAME
-                    // -----------------------------------------------------------------
                     if (record.type === 'frame') {
                         if (typeof record.props.name !== 'string') {
                             record.props.name = '';
@@ -310,20 +285,12 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         }
                     }
 
-                    // -----------------------------------------------------------------
-                    // EMBED
-                    // No aggressive deletion; just ensure url is a string
-                    // -----------------------------------------------------------------
                     if (record.type === 'embed') {
                         if (record.props.url === null || record.props.url === undefined) {
                             record.props.url = '';
                         }
                     }
 
-                    // -----------------------------------------------------------------
-                    // IMAGE
-                    // No aggressive deletion; set defaults for known props
-                    // -----------------------------------------------------------------
                     if (record.type === 'image') {
                         if (record.props.altText === undefined || record.props.altText === null) {
                             record.props.altText = '';
@@ -349,9 +316,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     }
                 }
 
-                /*
-                 * Tldraw ASSETS
-                 */
                 if (record.typeName === 'asset') {
                     if (!record.props) {
                         record.props = {};
@@ -364,18 +328,12 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     }
                 }
 
-                /*
-                 * Tldraw USERS
-                 */
                 if (record.typeName === 'user') {
                     if (record.imageUrl === null || record.imageUrl === undefined) {
                         record.imageUrl = '';
                     }
                 }
 
-                /*
-                 * Generic record-level name cleanup
-                 */
                 if (record.name === null || record.name === undefined) {
                     if (record.typeName === 'document') {
                         record.name = 'Canvas';
@@ -390,36 +348,11 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             });
         }
 
-        /*
-         * DEBUG: inspect tldraw rich‑text records after sanitization.
-         */
-        if (mutableDoc?.store) {
-            Object.values(mutableDoc.store).forEach((record: any) => {
-                if (
-                    record?.typeName === 'shape' &&
-                    (
-                        record?.type === 'text' ||
-                        record?.type === 'note' ||
-                        record?.type === 'geo' ||
-                        record?.type === 'arrow'
-                    )
-                ) {
-                    console.log('[Canvas RICH TEXT RECORD]', {
-                        id: record.id,
-                        shapeType: record.type,
-                        richText: record.props?.richText,
-                        richTextType: typeof record.props?.richText,
-                        props: record.props,
-                    });
-                }
-            });
-        }
-
         return mutableDoc;
     };
 
     // -------------------------------------------------------------------------
-    // Component state & hooks (unchanged)
+    // Component state & hooks
     // -------------------------------------------------------------------------
     const editorRef = useRef<Editor | null>(null);
     const tldrawKey = 'canvas-root';
@@ -706,14 +639,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         }
     };
 
-    const formatDate = (dateStr: string) => {
-        const d = new Date(dateStr);
-        return d.toLocaleString(undefined, {
-            month: 'short', day: 'numeric',
-            hour: '2-digit', minute: '2-digit'
-        });
-    };
-
     const activeCanvas = canvases.find(c => c.id === initialActiveCanvasId);
     const isOwner = activeCanvas?.user_id === currentUserId;
     const currentUserShare = sharedUsers.find((u: any) => String(u.id) === String(currentUserId));
@@ -805,376 +730,310 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                             </IconButton>
                                         </Tooltip>
                                     )}
-                                    <Tooltip title="Create New Canvas">
-                                        <IconButton
-                                            onClick={() => setIsCreateDialogOpen(true)}
-                                            sx={{
-                                                width: 40, height: 40,
-                                                bgcolor: 'primary.main', color: 'white',
-                                                boxShadow: 2,
-                                                '&:hover': { bgcolor: 'primary.dark' },
-                                            }}
-                                        >
-                                            <AddIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
-                                    <Tooltip title="Admin Menu">
-                                        <IconButton
-                                            onClick={() => setIsDrawerOpen(true)}
-                                            sx={{
-                                                width: 40, height: 40,
-                                                bgcolor: '#e2e8f0', color: '#1e293b',
-                                                boxShadow: 2,
-                                                '&:hover': { bgcolor: '#cbd5e1' },
-                                            }}
-                                        >
-                                            <MenuIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
+                                    <Button
+                                        variant="contained"
+                                        size="small"
+                                        startIcon={<SaveIcon />}
+                                        onClick={handleSave}
+                                        sx={{
+                                            bgcolor: 'primary.main',
+                                            '&:hover': { bgcolor: 'primary.dark' },
+                                            textTransform: 'none',
+                                            borderRadius: 2,
+                                            boxShadow: 1
+                                        }}
+                                    >
+                                        Snapshot
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        startIcon={<MenuIcon />}
+                                        onClick={() => setIsDrawerOpen(true)}
+                                        sx={{
+                                            bgcolor: 'background.paper',
+                                            textTransform: 'none',
+                                            borderRadius: 2,
+                                            borderColor: 'divider',
+                                            color: 'text.primary',
+                                            '&:hover': { bgcolor: 'action.hover' }
+                                        }}
+                                    >
+                                        Menu
+                                    </Button>
                                 </Box>
                             );
                         }
                     }}
                 />
 
-                {/* Right Side Drawer for Admin Settings */}
+                {/* Main Management Drawer */}
                 <Drawer
                     anchor="right"
                     open={isDrawerOpen}
                     onClose={() => setIsDrawerOpen(false)}
-                    PaperProps={{ sx: { width: { xs: '100%', md: 800 }, bgcolor: '#f9f9ff' } }}
+                    PaperProps={{ sx: { width: { xs: '100%', sm: 400 }, p: 3, display: 'flex', flexDirection: 'column' } }}
                 >
-                    <Box sx={{ p: { xs: 3, md: 4 } }}>
-                        {/* 1. Header Section */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 3 }}>
-                            <Button
-                                onClick={() => setIsDrawerOpen(false)}
-                                sx={{ bgcolor: '#e2dfff', color: '#3525cd', px: 2, py: 1, borderRadius: 2, textTransform: 'none', '&:hover': { bgcolor: '#c9c4ff' } }}
-                                startIcon={<CloseIcon />}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                        <Typography variant="h6" fontWeight="bold" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Layers color="primary" /> Canvas Workspace
+                        </Typography>
+                        <IconButton onClick={() => setIsDrawerOpen(false)} size="small">
+                            <CloseIcon />
+                        </IconButton>
+                    </Box>
+                    <Divider sx={{ mb: 3 }} />
+
+                    {canvasSizeWarning && (
+                        <Alert severity="warning" sx={{ mb: 3, fontSize: '13px' }}>
+                            {canvasSizeWarning}
+                        </Alert>
+                    )}
+
+                    {/* Canvas Selector */}
+                    <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontWeight: 600 }}>
+                            Switch Canvas Blueprint
+                        </Typography>
+                        <FormControl fullWidth size="small">
+                            <Select
+                                value={initialActiveCanvasId}
+                                onChange={(e) => router.get('/canvas', { canvas_id: e.target.value })}
+                                sx={{ borderRadius: 2 }}
                             >
-                                <Typography sx={{ fontSize: '13px', fontWeight: 700 }}>Close Drawer</Typography>
-                            </Button>
-                        </Box>
+                                {canvases.map((c) => (
+                                    <MenuItem key={c.id} value={c.id}>
+                                        {c.title} {c.user_id !== currentUserId ? '(Shared)' : ''}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Box>
 
-                        {/* Bento Grid */}
-                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(12, 1fr)' }, gap: 3 }}>
+                    {isOwner && (
+                        <Button
+                            variant="outlined"
+                            startIcon={<AddIcon />}
+                            onClick={() => setIsCreateDialogOpen(true)}
+                            fullWidth
+                            sx={{ mb: 3, textTransform: 'none', borderRadius: 2, py: 1 }}
+                        >
+                            Create New Canvas
+                        </Button>
+                    )}
 
-                            {/* 2. Active Canvas Card */}
-                            <Box sx={{ gridColumn: { xs: 'span 1', md: 'span 8' }, bgcolor: '#fff', border: '1px solid #c7c4d8', borderRadius: 3, p: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: 'center', justifyContent: 'space-between', gap: 2, transition: 'all 0.2s', '&:hover': { borderColor: '#4f46e5', boxShadow: '0 4px 12px -2px rgba(79, 70, 229, 0.08)' } }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <Box sx={{ width: 64, height: 64, borderRadius: 3, bgcolor: '#4f46e5', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <Draw sx={{ fontSize: 32 }} />
-                                    </Box>
-                                    <Box>
-                                        <Typography sx={{ fontSize: '20px', fontWeight: 600, color: '#111c2d' }}>
-                                            {canvases.find(c => c.id === initialActiveCanvasId)?.title || 'Canvas'}
-                                        </Typography>
-                                        <Typography sx={{ fontSize: '14px', color: '#464555' }}>
-                                            Owned by {canvases.find(c => c.id === initialActiveCanvasId)?.user_id === currentUserId ? 'You' : canvases.find(c => c.id === initialActiveCanvasId)?.user?.first_name || 'Admin'}
-                                        </Typography>
-                                    </Box>
-                                </Box>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: { xs: 'flex-start', sm: 'flex-end' } }}>
-                                    <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#464555', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>Selected White Board</Typography>
-                                    <FormControl size="small" sx={{ minWidth: 180 }}>
-                                        <Select
-                                            value={initialActiveCanvasId}
-                                            onChange={(e) => router.get('/canvas', { canvas_id: e.target.value }, { onSuccess: () => setSnackbar({ open: true, message: 'Canvas loaded successfully!', severity: 'success' }) })}
-                                            displayEmpty
-                                            renderValue={(selected) => {
-                                                const c = canvases.find(cv => cv.id === selected);
-                                                if (!c) return '';
-                                                if (c.user_id !== currentUserId) {
-                                                    return (
-                                                        <Box sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2, py: 0.5 }}>
-                                                            <span style={{ fontSize: '14px' }}>{c.title}</span>
-                                                            <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.7)', fontWeight: 'normal' }}>by {c.user?.first_name} {c.user?.last_name}</span>
-                                                        </Box>
-                                                    );
-                                                }
-                                                return <span style={{ fontSize: '14px', paddingBottom: '2px', paddingTop: '2px' }}>{c.title}</span>;
-                                            }}
-                                            sx={{
-                                                bgcolor: '#3525cd', color: '#fff', borderRadius: 2, fontWeight: 600,
-                                                '& .MuiSelect-icon': { color: '#fff' },
-                                                '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-                                                '&:hover': { bgcolor: '#2b1da8' }
-                                            }}
-                                        >
-                                            <ListSubheader sx={{ fontWeight: 'bold', color: '#3525cd', lineHeight: '36px' }}>My Canvases</ListSubheader>
-                                            {canvases.filter(c => c.user_id === currentUserId).map(c => (
-                                                <MenuItem key={c.id} value={c.id}>{c.title}</MenuItem>
-                                            ))}
-
-                                            {canvases.filter(c => c.user_id !== currentUserId).length > 0 && [
-                                                <ListSubheader key="shared-header" sx={{ fontWeight: 'bold', color: '#6063ee', lineHeight: '36px' }}>Shared with me</ListSubheader>,
-                                                ...canvases.filter(c => c.user_id !== currentUserId).map(c => (
-                                                    <MenuItem key={c.id} value={c.id}>
-                                                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                                                            <span>{c.title}</span>
-                                                            <Typography variant="caption" sx={{ color: '#464555' }}>
-                                                                by {c.user?.first_name} {c.user?.last_name}
-                                                            </Typography>
-                                                        </Box>
-                                                    </MenuItem>
-                                                ))
-                                            ]}
-                                        </Select>
-                                    </FormControl>
-                                </Box>
-                            </Box>
-
-                            {/* 3. Snapshot Action */}
-                            <Box sx={{ gridColumn: { xs: 'span 1', md: 'span 4' }, bgcolor: '#263143', borderRadius: 3, p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-                                <Box sx={{ mb: 2 }}>
-                                    <CameraAlt sx={{ fontSize: 48, color: '#e2dfff' }} />
-                                </Box>
-                                <Typography sx={{ fontSize: '20px', fontWeight: 600, color: '#fff', mb: 0.5 }}>Save State</Typography>
-                                <Typography sx={{ fontSize: '14px', color: '#c7c4d8', mb: 3 }}>Preserve current configuration.</Typography>
+                    {/* Sharing Management (Owner Only) */}
+                    {isOwner && (
+                        <Box sx={{ mb: 3 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                    Collaboration & Access
+                                </Typography>
                                 <Button
-                                    onClick={handleSave}
-                                    fullWidth
-                                    sx={{ bgcolor: '#4f46e5', color: '#dad7ff', py: 1.5, borderRadius: 2, fontSize: '12px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', '&:hover': { bgcolor: '#3525cd' } }}
+                                    size="small"
+                                    startIcon={<Share fontSize="small" />}
+                                    onClick={() => setIsShareDialogOpen(true)}
+                                    sx={{ textTransform: 'none', fontSize: '12px' }}
                                 >
-                                    Snapshot
+                                    Share
                                 </Button>
                             </Box>
-
-                            {/* 4. Sharing & Team Card */}
-                            <Box sx={{ gridColumn: { xs: 'span 1', md: 'span 7' }, bgcolor: '#fff', border: '1px solid #c7c4d8', borderRadius: 3, p: 3, display: 'flex', flexDirection: 'column', transition: 'all 0.2s', '&:hover': { borderColor: '#4f46e5', boxShadow: '0 4px 12px -2px rgba(79, 70, 229, 0.08)' } }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'nowrap' }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, overflow: 'hidden' }}>
-                                        <Share sx={{ color: '#3525cd', flexShrink: 0 }} />
-                                        <Typography sx={{ fontSize: { xs: '16px', sm: '20px' }, fontWeight: 600, color: '#111c2d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Sharing & Team</Typography>
-                                    </Box>
-                                    {isOwner && (
-                                        <Button
-                                            onClick={() => setIsShareDialogOpen(true)}
-                                            startIcon={<PersonAdd />}
-                                            sx={{ color: '#3525cd', fontSize: { xs: '11px', sm: '12px' }, fontWeight: 600, textTransform: 'none', flexShrink: 0, minWidth: 'auto' }}
+                            <List dense sx={{ bgcolor: 'background.default', borderRadius: 2, maxHeight: 150, overflowY: 'auto', p: 1 }}>
+                                {sharedUsers.length === 0 ? (
+                                    <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ py: 1.5 }}>
+                                        Not shared with anyone yet.
+                                    </Typography>
+                                ) : (
+                                    sharedUsers.map((u) => (
+                                        <ListItem
+                                            key={u.id}
+                                            secondaryAction={
+                                                <IconButton edge="end" size="small" onClick={() => setUserToDelete(u)}>
+                                                    <DeleteIcon fontSize="small" color="error" />
+                                                </IconButton>
+                                            }
                                         >
-                                            Add Member
-                                        </Button>
-                                    )}
-                                </Box>
-
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                                    {/* Owner Fake/Real Row - We can just show 'You' or actual owner */}
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: '#fff', border: '1px solid #e0e3e5', borderRadius: 2 }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                            <Avatar sx={{ width: 40, height: 40, bgcolor: '#4f46e5', fontSize: '16px' }}>
-                                                {(canvases.find(c => c.id === initialActiveCanvasId)?.user?.first_name?.[0]) || 'O'}
-                                            </Avatar>
-                                            <Box>
-                                                <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#111c2d' }}>
-                                                    {canvases.find(c => c.id === initialActiveCanvasId)?.user_id === currentUserId ? 'You (Owner)' : (canvases.find(c => c.id === initialActiveCanvasId)?.user?.first_name || 'Owner')}
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-                                        <Box sx={{ bgcolor: '#e2dfff', color: '#3323cc', px: 1, py: 0.5, borderRadius: 1, fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Owner</Box>
-                                    </Box>
-
-                                    {/* Shared Users */}
-                                    {sharedUsers.length === 0 && canvases.find(c => c.id === initialActiveCanvasId)?.user_id === currentUserId && (
-                                        <Typography sx={{ fontSize: '13px', color: '#464555', fontStyle: 'italic', mt: 1 }}>Not shared with anyone yet.</Typography>
-                                    )}
-                                    {sharedUsers.map((u: any) => (
-                                        <Box key={u.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: '#fff', border: '1px solid #e0e3e5', borderRadius: 2 }}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                                <Avatar sx={{ width: 40, height: 40, border: '2px solid #cfdaf2', bgcolor: '#f0f3ff', color: '#111c2d', fontSize: '16px' }}>{u.first_name[0]}</Avatar>
-                                                <Box>
-                                                    <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#111c2d' }}>{u.first_name} {u.last_name}</Typography>
-                                                </Box>
-                                            </Box>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <Box sx={{ bgcolor: '#dee8ff', color: '#464555', px: 1, py: 0.5, borderRadius: 1, fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{u.pivot?.permission === 'view' ? 'Viewer' : 'Editor'}</Box>
-                                                {isOwner && <IconButton size="small" onClick={() => setUserToDelete(u)} sx={{ color: '#ba1a1a', p: 0.5 }}><DeleteIcon fontSize="small" /></IconButton>}
-                                            </Box>
-                                        </Box>
-                                    ))}
-                                </Box>
-                            </Box>
-
-                            {/* 5. Version History */}
-                            <Box sx={{ gridColumn: { xs: 'span 1', md: 'span 5' }, bgcolor: '#fff', border: '1px solid #c7c4d8', borderRadius: 3, p: 3, display: 'flex', flexDirection: 'column', transition: 'all 0.2s', '&:hover': { borderColor: '#4f46e5', boxShadow: '0 4px 12px -2px rgba(79, 70, 229, 0.08)' } }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-                                    <HistoryIcon sx={{ color: '#3525cd' }} />
-                                    <Typography sx={{ fontSize: '20px', fontWeight: 600, color: '#111c2d' }}>Version History</Typography>
-                                </Box>
-
-                                <Box sx={{ pl: 2, borderLeft: '2px solid #c7c4d8', ml: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                                    {history.length === 0 ? (
-                                        <Typography sx={{ fontSize: '14px', color: '#464555', fontStyle: 'italic' }}>No saves yet.</Typography>
-                                    ) : (
-                                        history.slice(0, 5).map(item => {
-                                            const isActive = activeVersionId === item.id;
-                                            return (
-                                                <Box key={item.id} sx={{ position: 'relative', cursor: 'pointer', '&:hover .timeline-dot': { bgcolor: '#3525cd' } }} onClick={() => handleLoadVersion(item.id)}>
-                                                    <Box className="timeline-dot" sx={{ position: 'absolute', left: -25, top: 4, width: 14, height: 14, bgcolor: isActive ? '#3525cd' : '#c7c4d8', border: '3px solid #fff', borderRadius: '50%', transition: 'background-color 0.2s' }} />
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <Typography sx={{ fontSize: '14px', fontWeight: 700, color: isActive ? '#3525cd' : '#111c2d' }}>
-                                                            v{item.id} {isActive && '(Active)'}
-                                                        </Typography>
-                                                        <Box sx={{ textAlign: 'right' }}>
-                                                            <Typography sx={{ fontSize: '11px', color: '#464555' }}>{formatDate(item.created_at)}</Typography>
-                                                            {item.user && (
-                                                                <Typography sx={{ fontSize: '10px', color: '#888', fontWeight: 600, mt: 0.5 }}>
-                                                                    by {item.user.first_name} {item.user.last_name}
-                                                                </Typography>
-                                                            )}
-                                                        </Box>
-                                                    </Box>
-                                                    <Typography sx={{ fontSize: '11px', color: '#464555', fontStyle: 'italic', mt: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                        {item.comment || 'No comment'}
-                                                    </Typography>
-                                                </Box>
-                                            );
-                                        })
-                                    )}
-                                </Box>
-                            </Box>
+                                            <ListItemAvatar sx={{ minWidth: 36 }}>
+                                                <Avatar sx={{ width: 26, height: 26, fontSize: '12px', bgcolor: 'primary.main' }}>
+                                                    {u.first_name?.[0] || 'U'}
+                                                </Avatar>
+                                            </ListItemAvatar>
+                                            <ListItemText
+                                                primary={`${u.first_name} ${u.last_name || ''}`}
+                                                secondary={`Permission: ${u.pivot?.permission || 'view'}`}
+                                                primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
+                                                secondaryTypographyProps={{ variant: 'caption' }}
+                                            />
+                                        </ListItem>
+                                    ))
+                                )}
+                            </List>
                         </Box>
+                    )}
+
+                    <Divider sx={{ mb: 3 }} />
+
+                    {/* Version History List */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <HistoryIcon fontSize="small" /> Version History
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {history.length} saved
+                        </Typography>
                     </Box>
+
+                    <List sx={{ flexGrow: 1, overflowY: 'auto', maxHeight: 240, bgcolor: 'background.default', borderRadius: 2, p: 1 }}>
+                        {history.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 3 }}>
+                                No snapshots recorded yet.
+                            </Typography>
+                        ) : (
+                            history.map((item) => {
+                                const isActive = activeVersionId === item.id;
+                                return (
+                                    <ListItem
+                                        key={item.id}
+                                        onClick={() => handleLoadVersion(item.id)}
+                                        sx={{
+                                            borderRadius: 1.5,
+                                            mb: 1,
+                                            cursor: 'pointer',
+                                            bgcolor: isActive ? 'primary.main' : 'background.paper',
+                                            color: isActive ? 'primary.contrastText' : 'text.primary',
+                                            boxShadow: 0,
+                                            border: '1px solid',
+                                            borderColor: isActive ? 'primary.main' : 'divider',
+                                            transition: 'all 0.2s',
+                                            '&:hover': {
+                                                bgcolor: isActive ? 'primary.dark' : 'action.hover',
+                                            }
+                                        }}
+                                    >
+                                        <ListItemText
+                                            primary={
+                                                <Typography variant="body2" fontWeight="600" noWrap>
+                                                    {item.comment || 'Blueprint Update'}
+                                                </Typography>
+                                            }
+                                            secondary={
+                                                <Typography variant="caption" sx={{ color: isActive ? 'rgba(255,255,255,0.7)' : 'text.secondary' }}>
+                                                    {formatDate(item.created_at)} {item.user ? `• ${item.user.first_name}` : ''}
+                                                </Typography>
+                                            }
+                                        />
+                                    </ListItem>
+                                );
+                            })
+                        )}
+                    </List>
                 </Drawer>
 
-                {/* Create Canvas Dialog */}
-                <Dialog disableEnforceFocus open={isCreateDialogOpen} onClose={() => setIsCreateDialogOpen(false)} maxWidth="xs" fullWidth>
-                    <DialogTitle fontWeight="bold">Create New Canvas</DialogTitle>
+                {/* Create New Canvas Dialog */}
+                <Dialog open={isCreateDialogOpen} onClose={() => setIsCreateDialogOpen(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle sx={{ fontWeight: 'bold' }}>Create New Canvas</DialogTitle>
                     <DialogContent>
                         <TextField
                             autoFocus
                             margin="dense"
                             label="Canvas Title"
-                            type="text"
                             fullWidth
                             variant="outlined"
                             value={newCanvasTitle}
                             onChange={(e) => setNewCanvasTitle(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCanvas(); }}
                             sx={{ mt: 1 }}
                         />
                     </DialogContent>
                     <DialogActions sx={{ px: 3, pb: 2 }}>
                         <Button onClick={() => setIsCreateDialogOpen(false)} color="inherit">Cancel</Button>
-                        <Button onClick={handleCreateCanvas} variant="contained" disableElevation disabled={!newCanvasTitle.trim()}>Create</Button>
+                        <Button onClick={handleCreateCanvas} variant="contained" disabled={!newCanvasTitle.trim()}>Create</Button>
                     </DialogActions>
                 </Dialog>
 
                 {/* Share Canvas Dialog */}
-                <Dialog disableEnforceFocus open={isShareDialogOpen} onClose={() => setIsShareDialogOpen(false)} maxWidth="xs" fullWidth>
-                    <DialogTitle fontWeight="bold">Share Canvas</DialogTitle>
+                <Dialog open={isShareDialogOpen} onClose={() => setIsShareDialogOpen(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle sx={{ fontWeight: 'bold' }}>Share Canvas Access</DialogTitle>
                     <DialogContent>
-                        <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                        <FormControl fullWidth size="small" sx={{ mt: 1, mb: 2 }}>
                             <InputLabel>Select User</InputLabel>
                             <Select
                                 value={selectedUserToShare}
                                 label="Select User"
-                                onChange={e => setSelectedUserToShare(e.target.value as string)}
+                                onChange={(e) => setSelectedUserToShare(e.target.value)}
                             >
-                                {allUsers?.filter((u: any) => !sharedUsers.some(su => String(su.id) === String(u.id))).map((u: any) => (
-                                    <MenuItem key={u.id} value={u.id}>{u.first_name} {u.last_name}</MenuItem>
-                                ))}
+                                {allUsers
+                                    .filter((u: any) => u.id !== currentUserId && !sharedUsers.some(su => su.id === u.id))
+                                    .map((u: any) => (
+                                        <MenuItem key={u.id} value={u.id}>
+                                            {u.first_name} {u.last_name || ''} ({u.email})
+                                        </MenuItem>
+                                    ))}
                             </Select>
                         </FormControl>
-                        <FormControl fullWidth size="small" sx={{ mb: 1 }}>
-                            <InputLabel>Permission</InputLabel>
+                        <FormControl fullWidth size="small">
+                            <InputLabel>Permission Level</InputLabel>
                             <Select
                                 value={selectedPermission}
-                                label="Permission"
-                                onChange={e => setSelectedPermission(e.target.value as 'view' | 'edit')}
+                                label="Permission Level"
+                                onChange={(e: any) => setSelectedPermission(e.target.value)}
                             >
-                                <MenuItem value="edit">Editor (Can make changes)</MenuItem>
                                 <MenuItem value="view">Viewer (Read-only)</MenuItem>
+                                <MenuItem value="edit">Editor (Can draw & modify)</MenuItem>
                             </Select>
                         </FormControl>
                     </DialogContent>
                     <DialogActions sx={{ px: 3, pb: 2 }}>
                         <Button onClick={() => setIsShareDialogOpen(false)} color="inherit">Cancel</Button>
-                        <Button onClick={() => { handleShareCanvas(); setIsShareDialogOpen(false); }} color="primary" variant="contained" disableElevation disabled={!selectedUserToShare}>Share</Button>
+                        <Button onClick={handleShareCanvas} variant="contained" disabled={!selectedUserToShare}>Share</Button>
                     </DialogActions>
                 </Dialog>
 
-                {/* Confirm Delete Shared User Dialog */}
-                <Dialog disableEnforceFocus open={Boolean(userToDelete)} onClose={() => setUserToDelete(null)} maxWidth="xs" fullWidth>
-                    <DialogTitle fontWeight="bold">Remove Access?</DialogTitle>
+                {/* Unshare Confirmation Dialog */}
+                <Dialog open={Boolean(userToDelete)} onClose={() => setUserToDelete(null)} maxWidth="xs" fullWidth>
+                    <DialogTitle sx={{ fontWeight: 'bold' }}>Remove User Access</DialogTitle>
                     <DialogContent>
-                        <Typography>
-                            Are you sure you want to remove <strong>{userToDelete?.first_name} {userToDelete?.last_name}</strong> from this canvas? They will no longer be able to view or edit it.
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                            Are you sure you want to revoke canvas access for <strong>{userToDelete?.first_name} {userToDelete?.last_name || ''}</strong>?
                         </Typography>
                     </DialogContent>
                     <DialogActions sx={{ px: 3, pb: 2 }}>
                         <Button onClick={() => setUserToDelete(null)} color="inherit">Cancel</Button>
-                        <Button onClick={handleConfirmUnshare} color="error" variant="contained" disableElevation>Remove</Button>
+                        <Button onClick={handleConfirmUnshare} variant="contained" color="error">Revoke Access</Button>
                     </DialogActions>
                 </Dialog>
 
-                {/* Global Snackbar Alerts */}
-                <Snackbar
-                    open={snackbar.open}
-                    autoHideDuration={4000}
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-                    sx={{ mt: { xs: 7, sm: 8 }, ml: { xs: 1, sm: 2 } }}
-                >
-                    <Alert
-                        onClose={() => setSnackbar({ ...snackbar, open: false })}
-                        severity={snackbar.severity}
-                        sx={{ width: '100%', boxShadow: 3 }}
-                        elevation={6}
-                        variant="filled"
-                    >
-                        {snackbar.message}
-                    </Alert>
-                </Snackbar>
-
-                {/* Save Comment Dialog */}
-                <Dialog
-                    open={saveDialogOpen}
-                    onClose={() => setSaveDialogOpen(false)}
-                    maxWidth="xs"
-                    fullWidth
-                >
-                    <DialogTitle sx={{ fontWeight: 700 }}>Save Snapshot</DialogTitle>
+                {/* Save Snapshot Dialog */}
+                <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle sx={{ fontWeight: 'bold' }}>Save Canvas Snapshot</DialogTitle>
                     <DialogContent>
                         <TextField
                             autoFocus
-                            label="Comment for this save"
+                            margin="dense"
+                            label="Version Description / Comment"
                             fullWidth
                             variant="outlined"
                             value={saveComment}
                             onChange={(e) => setSaveComment(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && saveComment.trim()) {
-                                    performSave(saveComment.trim());
-                                }
-                            }}
                             sx={{ mt: 1 }}
                         />
                     </DialogContent>
                     <DialogActions sx={{ px: 3, pb: 2 }}>
-                        <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-                        <Button
-                            variant="contained"
-                            onClick={() => performSave(saveComment.trim() || 'Updated canvas blueprint')}
-                            disabled={!saveComment.trim()}
-                        >
-                            Save
-                        </Button>
+                        <Button onClick={() => setSaveDialogOpen(false)} color="inherit">Cancel</Button>
+                        <Button onClick={() => performSave(saveComment)} variant="contained">Save Snapshot</Button>
                     </DialogActions>
                 </Dialog>
 
-                {/* Canvas Size Warning */}
-                {canvasSizeWarning && (
-                    <Box sx={{
-                        position: 'fixed', bottom: 16, right: 16, zIndex: 9999,
-                        bgcolor: canvasSizeWarning.includes('Warning') ? '#ef4444' : '#f59e0b',
-                        color: 'white', px: 2, py: 1, borderRadius: 2, boxShadow: 3,
-                        fontSize: '13px', fontWeight: 600, maxWidth: 300
-                    }}>
-                        {canvasSizeWarning}
-                    </Box>
-                )}
-
+                {/* Snackbar Notifications */}
+                <Snackbar
+                    open={snackbar.open}
+                    autoHideDuration={4000}
+                    onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                >
+                    <Alert severity={snackbar.severity} sx={{ width: '100%', boxShadow: 3 }}>
+                        {snackbar.message}
+                    </Alert>
+                </Snackbar>
             </Box>
         </ThemeProvider>
     );
