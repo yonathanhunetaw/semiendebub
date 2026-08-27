@@ -159,17 +159,15 @@ class AuthenticatedSessionController extends Controller
     /**
      * Helper to find the primary host for a specific role.
      */
-    private function getHostForRole(string $role): ?string
+    protected function getHostForRole(string $role): ?string
     {
-        $map = config('subdomains.host_role_map', []);
+        // Search the host_role_map config to find the subdomain host assigned to this role
+        $roleMap = config('subdomains.host_role_map', []);
+        $matchedHost = array_search($role, $roleMap, true);
 
-        foreach ($map as $host => $mappedRole) {
-            // Use strtolower to ensure "Admin" matches "admin"
-            if (strtolower($mappedRole) === strtolower($role)) {
-                return $host;
-            }
-        }
-        return null;
+        // If no specific subdomain is mapped for this role (e.g., standard users), 
+        // return null so they stay on the main domain.
+        return $matchedHost ?: null;
     }
 
     private function expectedRoleForHost(string $host): ?string

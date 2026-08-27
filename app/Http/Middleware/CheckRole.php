@@ -30,14 +30,13 @@ class CheckRole
             'delivery' => 'delivery.dashboard',
             'dev' => 'dev.dashboard',
             'finance' => 'finance.dashboard',
-            'guest' => 'home',
             'marketing' => 'marketing.dashboard',
             'procurement' => 'procurement.dashboard',
             'seller' => 'seller.dashboard',
             'shared' => 'shared.dashboard',
             'stock_keeper' => 'stock_keeper.dashboard',
             'vendor' => 'vendor.dashboard',
-            'user' => 'user.home',
+            'user' => 'home', // Pointing to your main domain's home route
         ];
 
         $userRole = $user->roles->pluck('name')->first();

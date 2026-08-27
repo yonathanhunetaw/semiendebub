@@ -165,4 +165,7 @@ docker exec -it duka-app php artisan migrate:fresh --seed
 docker exec -it duka-app tail -f storage/logs/laravel.log
 
 docker exec -it duka-prod-app tail -n 50 storage/logs/laravel.log
+
+docker exec -it duka-dev-app php artisan route:list --except-vendor
+
 ```

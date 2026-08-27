@@ -184,23 +184,6 @@ class UserSeeder extends Seeder
         ]);
         $gelila->assignRole('finance');
 
-        $guest = User::create([
-            'first_name' => 'Guest',
-            'last_name' => 'User',
-            'phone_number' => '0972241474',
-            'email' => 'guest@mezgebedirijit.com',
-            'email_verified_at' => now(),
-            'role' => 'guest',
-            'password' => Hash::make('97527534'),
-            'remember_token' => Str::random(10),
-            'store_id' => null,
-            'inventory_location_id' => null,
-            'created_by' => 1,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-        $guest->assignRole('guest');
-
         $henok = User::create([
             'first_name' => 'Henok',
             'last_name' => 'Godiso',
@@ -313,12 +296,11 @@ class UserSeeder extends Seeder
                 'role' => 'admin',
                 'password' => Hash::make('12345678'),
                 'remember_token' => Str::random(10),
-                'store_id' => null,  // add null if not applicable
-                'inventory_location_id' => null, // add null if not applicable
+                'store_id' => null,
+                'inventory_location_id' => null,
                 'created_at' => now(),
-                'created_by' => $yonathan->id, // Assuming user with ID 1 is creating the record
+                'created_by' => $yonathan->id,
                 'updated_at' => now(),
-                // Admin does NOT need store_id or inventory_location_id
             ],
             [
                 'first_name' => 'Sultan',
@@ -348,7 +330,7 @@ class UserSeeder extends Seeder
                 'store_id' => 3, // <-- needed to see stock of store online store 1 being main store, 2 second store and assuming that 3 is online_store
                 'inventory_location_id' => 1,
                 'created_at' => now(),
-                'created_by' => $yonathan->id, // Assuming user with ID 1 is creating the record
+                'created_by' => $yonathan->id,
                 'updated_at' => now(),
             ],
             [
@@ -365,7 +347,6 @@ class UserSeeder extends Seeder
                 'created_at' => now(),
                 'created_by' => $yonathan->id, // Assuming user with ID 1 is creating the record
                 'updated_at' => now(),
-                // Admin does NOT need store_id or inventory_location_id
             ],
             [
                 'first_name' => 'Seller',
@@ -380,7 +361,7 @@ class UserSeeder extends Seeder
                 'store_id' => 1, // seller is tied to a store
                 'inventory_location_id' => 1,
                 'created_at' => now(),
-                'created_by' => $yonathan->id, // Assuming user with ID 1 is creating the record
+                'created_by' => $yonathan->id,
                 'updated_at' => now(),
             ],
             [
@@ -407,10 +388,10 @@ class UserSeeder extends Seeder
                 'role' => 'user',
                 'password' => Hash::make('12345678'),
                 'remember_token' => Str::random(10),
-                'store_id' => 3, // <-- needed to see stock of store online store 1 being main store, 2 second store and assuming that 3 is online_store
+                'store_id' => 3,
                 'inventory_location_id' => null,
                 'created_at' => now(),
-                'created_by' => $yonathan->id, // Assuming user with ID 1 is creating the record
+                'created_by' => $yonathan->id,
                 'updated_at' => now(),
             ],
             [
@@ -422,31 +403,24 @@ class UserSeeder extends Seeder
                 'role' => 'seller',
                 'password' => Hash::make('12345678'),
                 'remember_token' => Str::random(10),
-                'store_id' => 2, // <-- needed to see stock of store online store 1 being main store, 2 second store and assuming that 3 is online_store
+                'store_id' => 2,
                 'inventory_location_id' => null,
                 'created_at' => now(),
-                'created_by' => $yonathan->id, // Assuming user with ID 1 is creating the record
+                'created_by' => $yonathan->id,
                 'updated_at' => now(),
             ],
-            // There is also a visitor which i different from a user (a user is someone that had signed up).
-            // You can add more users as needed
         ];
 
         foreach ($users as $data) {
             $role = $data['role'];
-            unset($data['role']); // remove role before insert
-            $user = User::create(array_merge($data, [
-                'password' => Hash::make('12345678'),
-                'email_verified_at' => now(),
-                'remember_token' => Str::random(10),
-            ]));
-            $user->assignRole($role); // ✅ assign Spatie role
+            unset($data['role']);
+            $user = User::create($data);
+            $user->assignRole($role);
         }
 
         // Factory users
         User::factory(10)->create()->each(function ($user) {
             $user->assignRole('user'); // default role
         });
-
     }
 }

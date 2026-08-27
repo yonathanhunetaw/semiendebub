@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Models\User;
+use App\Models\Auth\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -12,29 +12,34 @@ class AuthenticationTest extends TestCase
 
     public function test_login_screen_can_be_rendered(): void
     {
-        $response = $this->get('/login');
+        $baseDomain = config('app.system_domain', 'duka.local');
+
+        $response = $this->get("http://delivery.{$baseDomain}/login");
 
         $response->assertStatus(200);
     }
 
     public function test_users_can_authenticate_using_the_login_screen(): void
     {
+        $baseDomain = config('app.system_domain', 'duka.local');
         $user = User::factory()->create();
+        $user->assignRole('delivery'); // Required for subdomain role middleware
 
-        $response = $this->post('/login', [
+        $response = $this->post("http://delivery.{$baseDomain}/login", [
             'email' => $user->email,
             'password' => 'password',
         ]);
 
         $this->assertAuthenticated();
-        $response->assertRedirect(route('dashboard', absolute: false));
+        $response->assertRedirect("http://delivery.{$baseDomain}/dashboard");
     }
 
     public function test_users_can_not_authenticate_with_invalid_password(): void
     {
+        $baseDomain = config('app.system_domain', 'duka.local');
         $user = User::factory()->create();
 
-        $this->post('/login', [
+        $this->post("http://delivery.{$baseDomain}/login", [
             'email' => $user->email,
             'password' => 'wrong-password',
         ]);
@@ -44,11 +49,13 @@ class AuthenticationTest extends TestCase
 
     public function test_users_can_logout(): void
     {
+        $baseDomain = config('app.system_domain', 'duka.local');
         $user = User::factory()->create();
+        $user->assignRole('delivery');
 
-        $response = $this->actingAs($user)->post('/logout');
+        $response = $this->actingAs($user)->post("http://delivery.{$baseDomain}/logout");
 
         $this->assertGuest();
-        $response->assertRedirect('/');
+        $response->assertRedirect("http://{$baseDomain}/"); // Redirects back to main landing
     }
 }

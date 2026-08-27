@@ -43,11 +43,7 @@ class SessionController extends Controller
         $sessionLifetime = (int) config('session.lifetime', 120);
         $rememberLifetime = 8640; // 6 days in minutes for remember-me sessions
 
-        $mappedSessions = $sessions->map(function ($session) use (
-            $users,
-            $sessionLifetime,
-            $rememberLifetime
-        ) {
+        $mappedSessions = $sessions->map(function ($session) use ($users, $sessionLifetime, $rememberLifetime) {
             $user = $session->user_id
                 ? $users->get($session->user_id)
                 : null;
@@ -98,10 +94,10 @@ class SessionController extends Controller
                     ]
                     : [
                         'id' => null,
-                        'first_name' => 'Guest',
+                        'first_name' => 'Visitor',
                         'last_name' => '',
                         'email' => 'N/A',
-                        'role' => 'Guest',
+                        'role' => 'None',
                     ],
 
                 'ip_address' => $session->ip_address,
@@ -282,7 +278,7 @@ class SessionController extends Controller
          * administrator's current session.
          */
         $ids = collect($validated['ids'])
-            ->reject(fn ($id) => $id === $currentSessionId)
+            ->reject(fn($id) => $id === $currentSessionId)
             ->values()
             ->all();
 

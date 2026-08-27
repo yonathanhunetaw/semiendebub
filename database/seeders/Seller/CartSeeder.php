@@ -35,16 +35,7 @@ class CartSeeder extends Seeder
             'priority' => 1,
         ]);
 
-        // SCENARIO B: The Guest Visitor Cart
-        $guestCart = Cart::create([
-            'store_id' => $store->id,
-            'user_id' => null,
-            'session_id' => Str::random(40),
-            'status' => 'pending',
-            'priority' => 2, // Added priority
-        ]);
-
-        // Add 3 variants to this cart
+        // Add 3 variants to the seller cart
         foreach ($variants->random(3) as $variant) {
             $sellerCart->variants()->attach($variant->id, [
                 'quantity' => rand(1, 10),
@@ -53,12 +44,13 @@ class CartSeeder extends Seeder
             ]);
         }
 
-        // SCENARIO B: The Guest Visitor Cart (Anonymous)
+        // SCENARIO B: The Anonymous Visitor Cart (Unauthenticated shopper)
         $guestCart = Cart::create([
             'store_id' => $store->id,
             'user_id' => null,
             'session_id' => Str::random(40),
             'status' => 'pending',
+            'priority' => 2,
         ]);
 
         $guestCart->variants()->attach($variants->first()->id, [
@@ -67,7 +59,7 @@ class CartSeeder extends Seeder
             'store_id' => $store->id,
         ]);
 
-        // SCENARIO C: A Completed Transaction
+        // SCENARIO C: A Completed Transaction Cart
         $oldCart = Cart::create([
             'store_id' => $store->id,
             'user_id' => $seller->id,

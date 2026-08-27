@@ -22,7 +22,6 @@ class RolePermissionSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'view delivery dashboard']);
         Permission::firstOrCreate(['name' => 'view dev dashboard']);
         Permission::firstOrCreate(['name' => 'view finance dashboard']);
-        Permission::firstOrCreate(['name' => 'view guest dashboard']);
         Permission::firstOrCreate(['name' => 'view marketing dashboard']);
         Permission::firstOrCreate(['name' => 'view procurement dashboard']);
         Permission::firstOrCreate(['name' => 'view seller dashboard']);
@@ -42,9 +41,6 @@ class RolePermissionSeeder extends Seeder
 
         $finance = Role::firstOrCreate(['name' => 'finance']);
         $finance->givePermissionTo(['view finance dashboard']);
-
-        $guest = Role::firstOrCreate(['name' => 'guest']);
-        $guest->givePermissionTo(['view guest dashboard']);
 
         $marketing = Role::firstOrCreate(['name' => 'marketing']);
         $marketing->givePermissionTo(['view marketing dashboard']);

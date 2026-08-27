@@ -5,19 +5,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-// Route::get('/', function () {
-//    if (auth()->check()) {
-//        return redirect()->route('admin.dashboard');
-//    }
-//
-//    return Inertia::render('Guest/Welcome', [
-//        'canLogin' => Route::has('login'),
-//        'canRegister' => Route::has('register'),
-//        'laravelVersion' => Application::VERSION,
-//        'phpVersion' => PHP_VERSION,
-//    ]);
-// });
-
 Route::middleware('notify.public.visit')->get('/', function () {
 
     $user = Auth::user();
@@ -43,7 +30,6 @@ Route::middleware('notify.public.visit')->get('/', function () {
             'delivery' => 'delivery.dashboard',
             'dev' => 'dev.dashboard',
             'finance' => 'finance.dashboard',
-            'guest' => 'guest.dashboard',
             'marketing' => 'marketing.dashboard',
             'procurement' => 'procurement.dashboard',
             'seller' => 'seller.dashboard',

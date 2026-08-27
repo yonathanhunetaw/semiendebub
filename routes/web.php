@@ -97,7 +97,7 @@ require __DIR__.'/web/stockkeeper/stockkeeper.php';              // ['auth', 've
 require __DIR__.'/web/vendor/vendor.php';                        // ['auth', 'verified', 'check_role:Vendor']
 
 /*-------------------------------------------------------------------------------------------------------------
-| GUEST -> routes/web/guest/guest.php
+| USER -> routes/web/user/user.php
 |-------------------------------------------------------------------------------------------------------------*/
 
-require __DIR__.'/web/guest/guest.php';
+require __DIR__.'/web/user/user.php';

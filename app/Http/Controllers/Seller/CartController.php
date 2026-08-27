@@ -185,7 +185,7 @@ class CartController extends Controller
      * This replaces the old "addItem" and "storeItem" methods to be variant-aware.
      */
     /**
-     * Add a variant to the cart (Works for Sellers, Customers, and Guests).
+     * Add a variant to the cart (Works for Sellers, Customers, and s).
      */
     public function addVariant(Request $request, $variantId)
     {
@@ -206,7 +206,7 @@ class CartController extends Controller
                 'status' => 'open',
             ]);
         } else {
-            // Guest: Use the Session to identify them
+            // : Use the Session to identify them
             $sessionId = session()->getId();
 
             $cart = Cart::firstOrCreate([

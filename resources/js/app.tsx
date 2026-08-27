@@ -70,7 +70,7 @@ createInertiaApp({
                 // This prevents the app from crashing if someone types a fake subdomain.
                 const validSubdomains = [
                     'admin', 'auth', 'dev', 'finance', 'marketing',
-                    'seller', 'guest', 'delivery', 'procurement',
+                    'seller', 'delivery', 'procurement',
                     'stockkeeper', 'vendor', 'shared'
                 ];
 

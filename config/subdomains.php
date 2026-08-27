@@ -26,11 +26,6 @@ $subdomains = [
         'login_component' => 'Finance/Login/index',
         'welcome_component' => 'Finance/Welcome/index',
     ],
-    'guest' => [
-        'role' => 'guest',
-        'login_component' => 'Guest/Login/index',
-        'welcome_component' => 'Guest/Welcome/index',
-    ],
     'marketing' => [
         'role' => 'marketing',
         'login_component' => 'Marketing/Login/index',
