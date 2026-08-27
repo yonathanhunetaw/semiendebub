@@ -30,6 +30,17 @@ Route::domain("admin.{$baseDomain}")
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
             Route::get('/settings', fn() => Inertia::render('Admin/Settings/index'))->name('settings');
 
+            // ── Canvas ──
+            Route::prefix('canvas')->name('canvas.')->group(function () {
+                Route::get('/', [CanvasController::class, 'index'])->name('index');
+                Route::post('/create', [CanvasController::class, 'create'])->name('create');
+                Route::post('/share', [CanvasController::class, 'share'])->name('share');
+                Route::post('/unshare', [CanvasController::class, 'unshare'])->name('unshare');
+                Route::post('/save', [CanvasController::class, 'save'])->name('save');
+                Route::get('/version/{id}', [CanvasController::class, 'getVersion'])->name('version');
+                Route::post('/upload-asset', [CanvasController::class, 'uploadAsset'])->name('upload-asset');
+            });
+
             // ── Items ──
             Route::post('items/inline-options', [ItemController::class, 'storeInlineOption'])->name('items.inline-options');
             Route::patch('items/{item}/variants/{variant}/status', [ItemController::class, 'updateVariantStatus'])->name('items.variants.status');
@@ -51,7 +62,6 @@ Route::domain("admin.{$baseDomain}")
 
             // ── Unified Inventory & Warehouse ──
             Route::prefix('inventory')->name('inventory.')->group(function () {
-
                 // Stores view
                 Route::get('/stores', [StoreController::class, 'index'])->name('stores');
 
@@ -72,20 +82,5 @@ Route::domain("admin.{$baseDomain}")
                 Route::patch('/transfers/{transfer}/cancel', [TransferController::class, 'cancel'])->name('transfers.cancel');
             });
 
-        });
-    });
-
-Route::domain("{subdomain}.{$baseDomain}")
-    ->middleware(['auth', 'verified'])
-    ->group(function () {
-        // ── Canvas ──
-        Route::prefix('canvas')->name('canvas.')->group(function () {
-            Route::get('/', [CanvasController::class, 'index'])->name('index');
-            Route::post('/create', [CanvasController::class, 'create'])->name('create');
-            Route::post('/share', [CanvasController::class, 'share'])->name('share');
-            Route::post('/unshare', [CanvasController::class, 'unshare'])->name('unshare');
-            Route::post('/save', [CanvasController::class, 'save'])->name('save');
-            Route::get('/version/{id}', [CanvasController::class, 'getVersion'])->name('version');
-            Route::post('/upload-asset', [CanvasController::class, 'uploadAsset'])->name('upload-asset');
         });
     });
