@@ -143,7 +143,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             hour: '2-digit', minute: '2-digit'
         });
     };
-    
+
     // -------------------------------------------------------------------------
     // Helper: Sanitize a TipTap rich-text document
     // -------------------------------------------------------------------------
@@ -360,16 +360,13 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         return mutableDoc;
     };
 
-    // -------------------------------------------------------------------------
     // Component state & hooks
-    // -------------------------------------------------------------------------
     const editorRef = useRef<Editor | null>(null);
     const tldrawKey = 'canvas-root';
 
     const [history, setHistory] = useState<HistoryItem[]>(initialHistory || []);
     const [activeVersionId, setActiveVersionId] = useState<number | null>(latestVersionInfo?.id || null);
 
-    // MUI Specific State
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
@@ -382,11 +379,8 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
     const [sharedUsers, setSharedUsers] = useState<any[]>(initialSharedUsers || []);
 
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-
-    // Upload Progress
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
-    // Snapshot Reminders & Canvas Size
     const [unsavedChangesCount, setUnsavedChangesCount] = useState(0);
     const [canvasSizeWarning, setCanvasSizeWarning] = useState<string | null>(null);
     const lastSaveTime = useRef<number>(Date.now());
@@ -451,30 +445,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             setSnackbar({ open: true, message: 'Canvas switched successfully', severity: 'success' });
         }
     }, [initialActiveCanvasId]);
-
-    useEffect(() => {
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (hasUnsavedChanges) {
-                e.preventDefault();
-                e.returnValue = '';
-            }
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [hasUnsavedChanges]);
-
-    useEffect(() => {
-        const unsubscribe = router.on('before', (event) => {
-            if (hasUnsavedChanges) {
-                if (!window.confirm('You have unsaved changes. Are you sure you want to leave this canvas without saving?')) {
-                    event.preventDefault();
-                }
-            }
-        });
-
-        return unsubscribe;
-    }, [hasUnsavedChanges]);
 
     const handleCreateCanvas = () => {
         if (!newCanvasTitle.trim()) return;
@@ -570,18 +540,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             }
         });
 
-        try {
-            const allRecords = Object.values(editor.store.allRecords());
-            const userPatches = allRecords
-                .filter((r: any) => r.typeName === 'user' && (r.imageUrl === null || r.imageUrl === undefined))
-                .map((r: any) => ({ ...r, imageUrl: '' }));
-            if (userPatches.length > 0) {
-                editor.store.put(userPatches);
-            }
-        } catch (e) {
-            console.warn('Could not patch user imageUrl records:', e);
-        }
-
         setTimeout(() => {
             editor.zoomToFit({ animation: { duration: 200 } });
         }, 150);
@@ -664,7 +622,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'background.default' }}>
                 <Head title="Canvas Admin" />
 
-                {/* Upload Progress Bar */}
                 {uploadProgress !== null && (
                     <Box sx={{
                         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, height: '4px',
@@ -687,92 +644,38 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     onMount={handleMount}
                     components={{
                         DebugMenu: null,
-                        SharePanel: () => {
-                            const activeCanvas = canvases.find(c => c.id === initialActiveCanvasId);
-                            return (
-                                <Box sx={{ pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: 1.5, mr: 1, my: 1.5 }}>
-                                    <style>{`
-                                        @keyframes canvasPop {
-                                            0%, 100% { transform: scale(1); opacity: 1; }
-                                            50% { transform: scale(0.85); opacity: 0; }
-                                        }
-                                        @keyframes saveBounce {
-                                            0%   { transform: scale(1);    }
-                                            20%  { transform: scale(1.25); }
-                                            40%  { transform: scale(0.9);  }
-                                            60%  { transform: scale(1.15); }
-                                            80%  { transform: scale(0.95); }
-                                            100% { transform: scale(1);    }
-                                        }
-                                    `}</style>
-                                    {activeCanvas && (
-                                        <Box
-                                            key={activeCanvas.id}
-                                            sx={{
-                                                bgcolor: 'background.paper', px: 2, py: 0.75, borderRadius: 2, boxShadow: 1, border: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column',
-                                                animation: 'canvasPop 0.35s ease-in-out 3'
-                                            }}
-                                        >
-                                            <Typography variant="body2" fontWeight="bold" color="text.primary" sx={{ lineHeight: 1.2 }}>
-                                                {activeCanvas.title}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, fontSize: '10px' }}>
-                                                Owned by {activeCanvas.user_id === currentUserId ? 'you' : (activeCanvas.user?.first_name || 'Admin')}
-                                            </Typography>
-                                        </Box>
-                                    )}
-                                    {snapshotReminder && (
-                                        <Tooltip title="Unsaved changes — click to save a snapshot">
-                                            <IconButton
-                                                key={saveAnimKey}
-                                                onClick={handleSave}
-                                                sx={{
-                                                    width: 40, height: 40,
-                                                    bgcolor: 'primary.main',
-                                                    color: 'white',
-                                                    boxShadow: 2,
-                                                    '&:hover': { bgcolor: 'primary.dark' },
-                                                    animation: 'saveBounce 0.6s ease-in-out 3',
-                                                }}
-                                            >
-                                                <CameraAlt fontSize="small" />
-                                            </IconButton>
-                                        </Tooltip>
-                                    )}
-                                    <Button
-                                        variant="contained"
-                                        size="small"
-                                        startIcon={<SaveIcon />}
-                                        onClick={handleSave}
-                                        sx={{
-                                            bgcolor: 'primary.main',
-                                            '&:hover': { bgcolor: 'primary.dark' },
-                                            textTransform: 'none',
-                                            borderRadius: 2,
-                                            boxShadow: 1
-                                        }}
-                                    >
-                                        Snapshot
-                                    </Button>
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
-                                        startIcon={<MenuIcon />}
-                                        onClick={() => setIsDrawerOpen(true)}
-                                        sx={{
-                                            bgcolor: 'background.paper',
-                                            textTransform: 'none',
-                                            borderRadius: 2,
-                                            borderColor: 'divider',
-                                            color: 'text.primary',
-                                            '&:hover': { bgcolor: 'action.hover' }
-                                        }}
-                                    >
-                                        Menu
-                                    </Button>
-                                </Box>
-                            );
-                        }
+                        SharePanel: () => (
+                            <Box sx={{ pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: 1.5, mr: 1, my: 1.5 }}>
+                                {activeCanvas && (
+                                    <Box sx={{ bgcolor: 'background.paper', px: 2, py: 0.75, borderRadius: 2, boxShadow: 1, border: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="body2" fontWeight="bold" color="text.primary" sx={{ lineHeight: 1.2 }}>
+                                            {activeCanvas.title}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, fontSize: '10px' }}>
+                                            Owned by {activeCanvas.user_id === currentUserId ? 'you' : (activeCanvas.user?.first_name || 'Admin')}
+                                        </Typography>
+                                    </Box>
+                                )}
+                                <Button
+                                    variant="contained"
+                                    size="small"
+                                    startIcon={<SaveIcon />}
+                                    onClick={handleSave}
+                                    sx={{ bgcolor: 'primary.main', '&:hover': { bgcolor: 'primary.dark' }, textTransform: 'none', borderRadius: 2 }}
+                                >
+                                    Snapshot
+                                </Button>
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={<MenuIcon />}
+                                    onClick={() => setIsDrawerOpen(true)}
+                                    sx={{ bgcolor: 'background.paper', textTransform: 'none', borderRadius: 2 }}
+                                >
+                                    Menu
+                                </Button>
+                            </Box>
+                        )
                     }}
                 />
 
@@ -799,7 +702,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         </Alert>
                     )}
 
-                    {/* Canvas Selector */}
                     <Box sx={{ mb: 3 }}>
                         <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontWeight: 600 }}>
                             Switch Canvas Blueprint
@@ -831,7 +733,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         </Button>
                     )}
 
-                    {/* Sharing Management (Owner Only) */}
                     {isOwner && (
                         <Box sx={{ mb: 3 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -882,7 +783,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
 
                     <Divider sx={{ mb: 3 }} />
 
-                    {/* Version History List */}
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                         <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             <HistoryIcon fontSize="small" /> Version History
@@ -938,7 +838,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     </List>
                 </Drawer>
 
-                {/* Create New Canvas Dialog */}
+                {/* Dialogs */}
                 <Dialog open={isCreateDialogOpen} onClose={() => setIsCreateDialogOpen(false)} maxWidth="xs" fullWidth>
                     <DialogTitle sx={{ fontWeight: 'bold' }}>Create New Canvas</DialogTitle>
                     <DialogContent>
@@ -959,7 +859,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     </DialogActions>
                 </Dialog>
 
-                {/* Share Canvas Dialog */}
                 <Dialog open={isShareDialogOpen} onClose={() => setIsShareDialogOpen(false)} maxWidth="xs" fullWidth>
                     <DialogTitle sx={{ fontWeight: 'bold' }}>Share Canvas Access</DialogTitle>
                     <DialogContent>
@@ -997,7 +896,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     </DialogActions>
                 </Dialog>
 
-                {/* Unshare Confirmation Dialog */}
                 <Dialog open={Boolean(userToDelete)} onClose={() => setUserToDelete(null)} maxWidth="xs" fullWidth>
                     <DialogTitle sx={{ fontWeight: 'bold' }}>Remove User Access</DialogTitle>
                     <DialogContent>
@@ -1011,7 +909,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     </DialogActions>
                 </Dialog>
 
-                {/* Save Snapshot Dialog */}
                 <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="xs" fullWidth>
                     <DialogTitle sx={{ fontWeight: 'bold' }}>Save Canvas Snapshot</DialogTitle>
                     <DialogContent>
@@ -1032,7 +929,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     </DialogActions>
                 </Dialog>
 
-                {/* Snackbar Notifications */}
                 <Snackbar
                     open={snackbar.open}
                     autoHideDuration={4000}
