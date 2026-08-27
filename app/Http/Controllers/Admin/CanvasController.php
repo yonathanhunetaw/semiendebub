@@ -170,10 +170,8 @@ class CanvasController extends Controller
         }
 
         try {
-            $path = Storage::disk('s3')->putFile('canvas-assets', $file, [
-                'visibility' => 'public',
-                'ContentType' => $file->getClientMimeType()
-            ]);
+            // 🟢 Changed from 's3' (MinIO) to 'r2' and removed object-level visibility
+            $path = Storage::disk('r2')->putFile('canvas-assets', $file);
 
             if (!is_string($path) || $path === '') {
                 Log::error('Canvas asset upload did not return a storage path.', [
@@ -198,7 +196,7 @@ class CanvasController extends Controller
             ]);
 
             return response()->json([
-                'error' => 'Image upload failed. Check MinIO/S3 configuration and Laravel logs.',
+                'error' => 'Image upload failed. Check R2 configuration and Laravel logs.',
             ], 500);
         }
     }
