@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Canvas\Canvas;
 use App\Models\Canvas\CanvasVersion;
-use App\Services\ImageResolver;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -181,9 +181,14 @@ class CanvasController extends Controller
                 return response()->json(['error' => 'Image upload did not return a storage path.'], 500);
             }
 
+            // Build the public URL from the R2 disk directly.
+            // ImageResolver uses the MinIO/s3 disk, which is wrong here —
+            // this file lives on R2, so we must get the URL from the r2 disk.
+            $url = Storage::disk('r2')->url($path);
+
             return response()->json([
                 'path' => $path,
-                'url' => ImageResolver::resolve($path),
+                'url'  => $url,
             ]);
         } catch (Throwable $exception) {
             Log::error('Canvas asset upload failed.', [
