@@ -4,49 +4,54 @@ import 'tldraw/tldraw.css';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    ThemeProvider,
-    createTheme,
-    Box,
-    Button,
-    Select,
-    MenuItem,
-    TextField,
-    IconButton,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Typography,
-    Drawer,
-    Divider,
-    List,
-    ListItem,
-    ListItemText,
-    ListItemAvatar,
-    Avatar,
-    Tooltip,
-    Snackbar,
-    Alert,
-    Fab,
-    FormControl,
-    InputLabel,
-    ListSubheader
+    ThemeProvider, createTheme, Box, Button, Select, MenuItem,
+    TextField, IconButton, Dialog, DialogTitle, DialogContent,
+    DialogActions, Typography, Drawer, Divider, List, ListItem,
+    ListItemText, ListItemAvatar, Avatar, Tooltip, Snackbar,
+    Alert, Fab, FormControl, InputLabel, ListSubheader
 } from '@mui/material';
 import {
-    Menu as MenuIcon,
-    Add as AddIcon,
-    Delete as DeleteIcon,
-    Save as SaveIcon,
-    History as HistoryIcon,
-    Person as PersonIcon,
-    AccessTime as AccessTimeIcon,
-    Close as CloseIcon,
-    CameraAlt,
-    Layers,
-    Share,
-    Draw,
-    PersonAdd
+    Menu as MenuIcon, Add as AddIcon, Delete as DeleteIcon, Save as SaveIcon,
+    History as HistoryIcon, Person as PersonIcon, AccessTime as AccessTimeIcon,
+    Close as CloseIcon, CameraAlt, Layers, Share, Draw, PersonAdd
 } from '@mui/icons-material';
+
+// Global Ziggy route declaration
+declare function route(name?: string, params?: any, absolute?: boolean): string;
+
+const customAssetStore: any = {
+    async upload(_asset: any, file: File): Promise<{ src: string }> {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        window.dispatchEvent(new CustomEvent('canvas-upload-start'));
+
+        try {
+            const response = await axios.post(route('admin.canvas.upload-asset'), formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (progressEvent) => {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+                    window.dispatchEvent(new CustomEvent('canvas-upload-progress', { detail: { progress: percentCompleted } }));
+                }
+            });
+
+            const url = response.data?.url;
+            if (typeof url !== 'string' || url.length === 0) {
+                console.error('Canvas image upload returned an invalid response:', response.data);
+                throw new Error(response.data?.error || 'Canvas image upload did not return a URL.');
+            }
+
+            window.dispatchEvent(new CustomEvent('canvas-upload-success'));
+            return { src: url };
+        } catch (error) {
+            window.dispatchEvent(new CustomEvent('canvas-upload-error'));
+            throw error;
+        }
+    },
+    async resolve(asset: any): Promise<string> {
+        return asset.props?.src ?? '';
+    }
+};
 
 const theme = createTheme({
     palette: {
@@ -98,40 +103,6 @@ interface CanvasProps {
     };
     history: HistoryItem[];
 }
-
-const customAssetStore: any = {
-    async upload(_asset: any, file: File): Promise<{ src: string }> {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        window.dispatchEvent(new CustomEvent('canvas-upload-start'));
-
-        try {
-            const response = await axios.post('/canvas/upload-asset', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                onUploadProgress: (progressEvent) => {
-                    const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
-                    window.dispatchEvent(new CustomEvent('canvas-upload-progress', { detail: { progress: percentCompleted } }));
-                }
-            });
-
-            const url = response.data?.url;
-            if (typeof url !== 'string' || url.length === 0) {
-                console.error('Canvas image upload returned an invalid response:', response.data);
-                throw new Error(response.data?.error || 'Canvas image upload did not return a URL.');
-            }
-
-            window.dispatchEvent(new CustomEvent('canvas-upload-success'));
-            return { src: url };
-        } catch (error) {
-            window.dispatchEvent(new CustomEvent('canvas-upload-error'));
-            throw error;
-        }
-    },
-    async resolve(asset: any): Promise<string> {
-        return asset.props?.src ?? '';
-    }
-};
 
 export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId, currentUserId, allUsers, sharedUsers: initialSharedUsers, latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
 
