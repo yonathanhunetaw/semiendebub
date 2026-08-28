@@ -8,8 +8,27 @@ x-loki-logging: &loki-logging
 
 services:
   duka-app:
-    env_file: ../.env.observability
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: ${COMPOSE_PROJECT_NAME:-duka}-app
+    ports:
+      - "${APP_PORT:-8095}:80"
+      - "${VITE_PORT:-5177}:5177"
+    volumes:
+      - ../:/var/www/html:delegated
+      - storage_data:/var/www/html/storage
+      - vendor_data:/var/www/html/vendor
+      - ../storage/app/seed-images:/var/www/html/storage/app/seed-images:delegated
     environment:
+      DB_HOST: duka-db
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_BUCKET: ${AWS_BUCKET}
+      AWS_ENDPOINT: http://duka-minio:9000
+      AWS_USE_PATH_STYLE_ENDPOINT: "true"
+      VITE_TLDRAW_LICENSE_KEY: ${VITE_TLDRAW_LICENSE_KEY}
+      # Observability additions
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-duka-app}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://lgtm:4318}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
@@ -21,13 +40,19 @@ services:
       GLITCHTIP_DSN: ${GLITCHTIP_DSN:-}
       GLITCHTIP_ENVIRONMENT: ${GLITCHTIP_ENVIRONMENT:-${APP_ENV:-local}}
       GLITCHTIP_RELEASE: ${GLITCHTIP_RELEASE:-}
+    networks:
+      - duka-network
     depends_on:
-      - lgtm
-      - glitchtip-web
+      duka-db:
+        condition: service_healthy          # ← base dependency
+      minio-setup:
+        condition: service_completed_successfully  # ← base dependency
+      lgtm:
+        condition: service_started          # ← observability
+      glitchtip-web:
+        condition: service_started          # ← observability
     logging: *loki-logging
-
-  duka-db:
-    logging: *loki-logging
+    env_file: ../.env.observability   # optional, can also rely on environment
 
   lgtm:
     image: grafana/otel-lgtm:latest
@@ -145,3 +170,7 @@ volumes:
   glitchtip_postgres_data:
   glitchtip_redis_data:
   glitchtip_uploads:
+
+networks:
+  duka-network:
+    driver: bridge
