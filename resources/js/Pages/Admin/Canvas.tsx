@@ -19,24 +19,14 @@ import {
 // Global Ziggy route declaration
 declare function route(name?: string, params?: any, absolute?: boolean): string;
 
-const getCsrfToken = (): string => {
-    const meta = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-    if (meta) return meta;
-
-    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
-    if (match) return decodeURIComponent(match[1]);
-
-    return '';
-};
-
 const customAssetStore: any = {
     async upload(_asset: any, file: File): Promise<{ src: string }> {
-        const token = getCsrfToken();
+        // Manually retrieve the XSRF-TOKEN cookie that Laravel sets
+        const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+        const xsrfToken = match ? decodeURIComponent(match[1]) : '';
+
         const formData = new FormData();
         formData.append('file', file);
-        if (token) {
-            formData.append('_token', token);
-        }
 
         window.dispatchEvent(new CustomEvent('canvas-upload-start'));
 
@@ -44,7 +34,8 @@ const customAssetStore: any = {
             const response = await axios.post(route('admin.canvas.upload-asset'), formData, {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
-                    ...(token ? { 'X-CSRF-TOKEN': token, 'X-XSRF-TOKEN': token } : {}),
+                    // Explicitly pass the XSRF token so Laravel accepts the request under subdomain isolation
+                    ...(xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {}),
                 },
                 withCredentials: true,
                 withXSRFToken: true,
@@ -56,7 +47,6 @@ const customAssetStore: any = {
 
             const url = response.data?.url;
             if (typeof url !== 'string' || url.length === 0) {
-                console.error('Canvas image upload returned an invalid response:', response.data);
                 throw new Error(response.data?.error || 'Canvas image upload did not return a URL.');
             }
 
