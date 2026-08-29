@@ -19,16 +19,35 @@ import {
 // Global Ziggy route declaration
 declare function route(name?: string, params?: any, absolute?: boolean): string;
 
+const getCsrfToken = (): string => {
+    const meta = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    if (meta) return meta;
+
+    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+    if (match) return decodeURIComponent(match[1]);
+
+    return '';
+};
+
 const customAssetStore: any = {
     async upload(_asset: any, file: File): Promise<{ src: string }> {
+        const token = getCsrfToken();
         const formData = new FormData();
         formData.append('file', file);
+        if (token) {
+            formData.append('_token', token);
+        }
 
         window.dispatchEvent(new CustomEvent('canvas-upload-start'));
 
         try {
             const response = await axios.post(route('admin.canvas.upload-asset'), formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(token ? { 'X-CSRF-TOKEN': token, 'X-XSRF-TOKEN': token } : {}),
+                },
+                withCredentials: true,
+                withXSRFToken: true,
                 onUploadProgress: (progressEvent) => {
                     const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
                     window.dispatchEvent(new CustomEvent('canvas-upload-progress', { detail: { progress: percentCompleted } }));
@@ -527,7 +546,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         setSaveDialogOpen(false);
         try {
             const snapshot = getSanitizedSnapshot(editor.getSnapshot());
-            const response = await axios.post('/canvas/save', {
+            const response = await axios.post(route('admin.canvas.save'), {
                 canvas_id: initialActiveCanvasId,
                 snapshot_json: snapshot,
                 comment,
