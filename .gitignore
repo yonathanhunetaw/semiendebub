@@ -7,6 +7,8 @@
 .env.production
 .env.observability
 .env.testing
+.env.example
+.env.bak
 .phpactor.json
 .phpunit.result.cache
 smart_context.txt
