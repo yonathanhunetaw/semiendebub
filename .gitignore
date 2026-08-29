@@ -5,6 +5,8 @@
 .env_old
 .env.backup
 .env.production
+.env.observability
+.env.testing
 .phpactor.json
 .phpunit.result.cache
 smart_context.txt
