@@ -54,6 +54,9 @@ services:
     logging: *loki-logging
     env_file: ../.env.observability   # optional, can also rely on environment
 
+  duka-db:
+    logging: *loki-logging
+
   lgtm:
     image: grafana/otel-lgtm:latest
     env_file: ../.env.observability
