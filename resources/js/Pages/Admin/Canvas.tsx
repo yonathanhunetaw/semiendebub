@@ -624,35 +624,80 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     components={{
                         DebugMenu: null,
                         SharePanel: () => (
-                            <Box sx={{ pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: 1.5, mr: 1, my: 1.5 }}>
+                            <Box sx={{
+                                pointerEvents: 'all',
+                                display: 'flex',
+                                alignItems: { xs: 'flex-end', sm: 'center' },
+                                gap: { xs: 0.75, sm: 1.5 },
+                                mr: { xs: 0.75, sm: 1.5 },
+                                my: { xs: 0.75, sm: 1.5 },
+                                flexDirection: { xs: 'column', sm: 'row' },
+                            }}>
                                 {activeCanvas && (
-                                    <Box sx={{ bgcolor: 'background.paper', px: 2, py: 0.75, borderRadius: 2, boxShadow: 1, border: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column' }}>
-                                        <Typography variant="body2" fontWeight="bold" color="text.primary" sx={{ lineHeight: 1.2 }}>
+                                    <Box sx={{
+                                        bgcolor: 'background.paper',
+                                        px: { xs: 1.25, sm: 2 },
+                                        py: { xs: 0.5, sm: 0.75 },
+                                        borderRadius: 2,
+                                        boxShadow: 1,
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        display: { xs: 'none', md: 'flex' },
+                                        flexDirection: 'column',
+                                    }}>
+                                        <Typography variant="body2" fontWeight="bold" color="text.primary" noWrap sx={{ lineHeight: 1.2 }}>
                                             {activeCanvas.title}
                                         </Typography>
-                                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, fontSize: '10px' }}>
+                                        <Typography variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1, fontSize: '10px' }}>
                                             Owned by {activeCanvas.user_id === currentUserId ? 'you' : (activeCanvas.user?.first_name || 'Admin')}
                                         </Typography>
                                     </Box>
                                 )}
-                                <Button
-                                    variant="contained"
-                                    size="small"
-                                    startIcon={<SaveIcon />}
-                                    onClick={handleSave}
-                                    sx={{ bgcolor: 'primary.main', '&:hover': { bgcolor: 'primary.dark' }, textTransform: 'none', borderRadius: 2 }}
-                                >
-                                    Snapshot
-                                </Button>
-                                <Button
-                                    variant="outlined"
-                                    size="small"
-                                    startIcon={<MenuIcon />}
-                                    onClick={() => setIsDrawerOpen(true)}
-                                    sx={{ bgcolor: 'background.paper', textTransform: 'none', borderRadius: 2 }}
-                                >
-                                    Menu
-                                </Button>
+
+                                <Box sx={{
+                                    display: 'flex',
+                                    flexDirection: { xs: 'column', sm: 'row' },
+                                    gap: 0.75,
+                                    alignItems: { xs: 'flex-end', sm: 'center' },
+                                }}>
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        startIcon={<MenuIcon />}
+                                        onClick={() => setIsDrawerOpen(true)}
+                                        sx={{
+                                            bgcolor: 'background.paper',
+                                            textTransform: 'none',
+                                            borderRadius: 2,
+                                            boxShadow: 1,
+                                            order: { xs: 1, sm: 2 },
+                                            fontSize: { xs: '12px', sm: '13px' },
+                                            px: { xs: 1.25, sm: 1.5 },
+                                            py: { xs: 0.35, sm: 0.5 },
+                                        }}
+                                    >
+                                        Menu
+                                    </Button>
+                                    <Button
+                                        variant="contained"
+                                        size="small"
+                                        startIcon={<SaveIcon />}
+                                        onClick={handleSave}
+                                        sx={{
+                                            bgcolor: 'primary.main',
+                                            '&:hover': { bgcolor: 'primary.dark' },
+                                            textTransform: 'none',
+                                            borderRadius: 2,
+                                            boxShadow: 1,
+                                            order: { xs: 2, sm: 1 },
+                                            fontSize: { xs: '12px', sm: '13px' },
+                                            px: { xs: 1.25, sm: 1.5 },
+                                            py: { xs: 0.35, sm: 0.5 },
+                                        }}
+                                    >
+                                        Snapshot
+                                    </Button>
+                                </Box>
                             </Box>
                         )
                     }}
@@ -700,17 +745,15 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         </FormControl>
                     </Box>
 
-                    {isOwner && (
-                        <Button
-                            variant="outlined"
-                            startIcon={<AddIcon />}
-                            onClick={() => setIsCreateDialogOpen(true)}
-                            fullWidth
-                            sx={{ mb: 3, textTransform: 'none', borderRadius: 2, py: 1 }}
-                        >
-                            Create New Canvas
-                        </Button>
-                    )}
+                    <Button
+                        variant="outlined"
+                        startIcon={<AddIcon />}
+                        onClick={() => setIsCreateDialogOpen(true)}
+                        fullWidth
+                        sx={{ mb: 3, textTransform: 'none', borderRadius: 2, py: 1 }}
+                    >
+                        Create New Canvas
+                    </Button>
 
                     {isOwner && (
                         <Box sx={{ mb: 3 }}>
