@@ -60,6 +60,10 @@ services:
     networks:
       - duka-network
 
+    # ADD THIS LINE: Maps a clean hostname inside the container straight to your ZeroTier IP
+    extra_hosts:
+      - "ubuntu-master:10.216.254.10"  
+
     healthcheck:
       test:
         [
