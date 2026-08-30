@@ -28,7 +28,7 @@ Route::domain("admin.{$baseDomain}")
         Route::middleware(['auth', 'verified', 'role.subdomain:admin'])->group(function () {
 
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-            Route::get('/settings', fn() => Inertia::render('Admin/Settings/index'))->name('settings');
+            Route::get('/settings', fn() => Inertia::render('Admin/Settings/Index'))->name('settings');
 
             // ── Canvas ──
             Route::prefix('canvas')->name('canvas.')->group(function () {

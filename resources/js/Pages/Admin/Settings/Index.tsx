@@ -1,6 +1,6 @@
 // resources/js/Pages/Settings/Index.tsx
 import * as React from "react";
-import AdminLayout from "@/Layouts/AppLayout";
+import AdminLayout from "@/Layouts/AdminLayout";
 import { Head, Link } from "@inertiajs/react";
 import {
     Box,

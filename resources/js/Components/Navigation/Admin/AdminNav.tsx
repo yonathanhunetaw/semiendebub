@@ -132,7 +132,7 @@ export default function AdminNav({
                         </MenuItem>
                         <MenuItem
                             component={Link}
-                            href="/admin/settings"
+                            href="/settings"
                             onClick={() => setAnchorEl(null)}
                         >
                             Settings
