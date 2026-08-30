@@ -63,7 +63,13 @@ Route::middleware('notify.public.visit')->get('/', function () {
 
 if (app()->environment('local')) {
     Route::get('/glitchtip-test', function () {
-        throw new \Exception('GlitchTip test error');
+        // This fires a log event that also gets captured by GlitchTip
+        \Illuminate\Support\Facades\Log::error('GlitchTip test log warning triggered prior to exception.', [
+            'host' => request()->getHost(),
+        ]);
+
+        // This triggers the 500 exception
+        throw new \Exception('GlitchTip test error on host: ' . request()->getHost());
     })->name('glitchtip.test');
 }
 

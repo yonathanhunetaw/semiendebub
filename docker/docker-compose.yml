@@ -39,6 +39,11 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-duka}-db
     restart: unless-stopped
 
+    command:
+      - --server-id=${MYSQL_SERVER_ID:-1}
+      - --log-bin=mysql-bin
+      - --binlog-do-db=${DB_DATABASE:-duka}
+
     ports:
       - "${MYSQL_EXPOSE_PORT:-3308}:3306"
 
@@ -50,6 +55,7 @@ services:
 
     volumes:
       - database_data:/var/lib/mysql
+      - ./docker/init-replication.sql:/docker-entrypoint-initdb.d/init-replication.sql
 
     networks:
       - duka-network
