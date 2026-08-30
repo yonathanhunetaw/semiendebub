@@ -1313,6 +1313,27 @@ docker exec "$APP_CONTAINER" php artisan tinker --execute="
 log_success "Image post-processing complete"
 
 # =============================================================================
+# CLOUDFLARE CACHE PURGING (AUTOMATED)
+# =============================================================================
+
+log_step "Clearing Cloudflare edge cache to prevent stale Vite manifest errors..."
+
+if [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+         -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+         -H "Content-Type: application/json" \
+         '{"purge_everything":true}')
+         
+    if [ "$RESPONSE" -eq 200 ]; then
+        log_success "Cloudflare cache purged successfully!"
+    else
+        log_warning "Cloudflare cache purge returned HTTP status code: $RESPONSE"
+    fi
+else
+    log_warning "Skipping Cloudflare cache purge: CLOUDFLARE_ZONE_ID or CLOUDFLARE_API_TOKEN not found in environment."
+fi
+
+# =============================================================================
 # DEPLOYMENT COMPLETE
 # =============================================================================
 
