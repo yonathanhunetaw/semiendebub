@@ -37,6 +37,7 @@ services:
   duka-db:
     image: mysql:8.0
     container_name: ${COMPOSE_PROJECT_NAME:-duka}-db
+    hostname: ${DB_HOSTNAME:-mysql-node}
     restart: unless-stopped
 
     command:

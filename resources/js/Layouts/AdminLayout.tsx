@@ -15,6 +15,7 @@ import { subdomainConfigs, SubdomainType } from "@/theme";
 // Updated paths to match your new modular folder structure
 import AdminNav from "@/Components/Navigation/Admin/AdminNav";
 import AdminSidebar from "@/Components/Navigation/Admin/AdminSidebar";
+import DatabaseNodeBadge from "@/Components/DatabaseNodeBadge";
 
 interface Props {
     children: React.ReactNode;
@@ -227,7 +228,7 @@ export default function AdminLayout({ children }: Props) {
                     {children}
                 </Box>
 
-                {/* Optional: You can put a Footer here later */}
+                <DatabaseNodeBadge variant="footer" />
             </Box>
         </Box>
     );
