@@ -29,21 +29,22 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        $databaseNode = null;
-        try {
-            $hostname = \Illuminate\Support\Facades\DB::select('SELECT @@hostname AS hostname')[0]->hostname ?? null;
-            if ($hostname) {
-                $lower = strtolower($hostname);
-                $databaseNode = match (true) {
-                    str_contains($lower, 'ubuntu') => 'Ubuntu (Master)',
-                    str_contains($lower, 'mac') => 'Mac (Replica)',
-                    str_contains($lower, 'pi') || str_contains($lower, 'raspberry') => 'Raspberry Pi (Replica)',
-                    default => $hostname,
-                };
-            }
-        } catch (\Throwable $e) {
-            $databaseNode = null;
-        }
+        // NOTE: The following code is commented out because it is not needed for a single-node MySQL setup. If you want to enable replication in the future, you can uncomment this code and set the appropriate logic to determine the database node.
+        // $databaseNode = null;
+        // try {
+        //     $hostname = \Illuminate\Support\Facades\DB::select('SELECT @@hostname AS hostname')[0]->hostname ?? null;
+        //     if ($hostname) {
+        //         $lower = strtolower($hostname);
+        //         $databaseNode = match (true) {
+        //             str_contains($lower, 'ubuntu') => 'Ubuntu (Master)',
+        //             str_contains($lower, 'mac') => 'Mac (Replica)',
+        //             str_contains($lower, 'pi') || str_contains($lower, 'raspberry') => 'Raspberry Pi (Replica)',
+        //             default => $hostname,
+        //         };
+        //     }
+        // } catch (\Throwable $e) {
+        //     $databaseNode = null;
+        // }
 
         return [
             ...parent::share($request),
@@ -60,7 +61,8 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
             ],
-            'databaseNode' => $databaseNode,
+            // NOTE: The following line is commented out because it is not needed for a single-node MySQL setup. If you want to enable replication in the future, you can uncomment this line and provide the appropriate logic to determine the database node.
+            // 'databaseNode' => $databaseNode,
         ];
     }
 }

@@ -11,7 +11,7 @@ import {
     Typography,
 } from "@mui/material";
 import { Link, router, usePage } from "@inertiajs/react";
-import DatabaseNodeBadge from "@/Components/DatabaseNodeBadge";
+// import DatabaseNodeBadge from "@/Components/DatabaseNodeBadge";
 
 const drawerWidth = 260;
 
@@ -63,7 +63,7 @@ export default function AdminNav({
                 </Box>
                 <Box sx={{ flexGrow: 1 }} />
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                    <DatabaseNodeBadge variant="chip" />
+                    {/* <DatabaseNodeBadge variant="chip" /> */}
                     {toolbarActions}
                     <Box
                         sx={{

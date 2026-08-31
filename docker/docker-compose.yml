@@ -40,10 +40,11 @@ services:
     hostname: ${DB_HOSTNAME:-mysql-node}
     restart: unless-stopped
 
-    command:
-      - --server-id=${MYSQL_SERVER_ID:-1}
-      - --log-bin=mysql-bin
-      - --binlog-do-db=${DB_DATABASE:-duka}
+    # This is commented out because it is not needed for a single-node MySQL setup. If you want to enable replication in the future, you can uncomment these lines and set the appropriate environment variables.
+    # command:
+    #   - --server-id=${MYSQL_SERVER_ID:-1}
+    #   - --log-bin=mysql-bin
+    #   - --binlog-do-db=${DB_DATABASE:-duka}
 
     ports:
       - "${MYSQL_EXPOSE_PORT:-3308}:3306"
@@ -56,14 +57,15 @@ services:
 
     volumes:
       - database_data:/var/lib/mysql
-      - ./docker/init-replication.sql:/docker-entrypoint-initdb.d/init-replication.sql
+      # NOTE: The following line is commented out because it is not needed for a single-node MySQL setup. If you want to enable replication in the future, you can uncomment this line and provide the appropriate SQL script for initializing replication.
+      # - ./docker/init-replication.sql:/docker-entrypoint-initdb.d/init-replication.sql
 
     networks:
       - duka-network
 
     # ADD THIS LINE: Maps a clean hostname inside the container straight to your ZeroTier IP
-    extra_hosts:
-      - "ubuntu-master:10.216.254.10"  
+    # extra_hosts:
+    #   - "ubuntu-master:10.216.254.10"  
 
     healthcheck:
       test:
