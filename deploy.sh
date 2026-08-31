@@ -1144,6 +1144,30 @@ step_success 5 "Frontend assets processed"
 # After migration and seeding
 step_start 6
 
+# =============================================================================
+# R2 DATABASE SYNC CHECK (OPTIONAL RESTORE)
+# =============================================================================
+if [ "${SYNC_DB_FROM_R2:-false}" = "true" ]; then
+    log_step "SYNC_DB_FROM_R2 is enabled. Pulling latest production DB backup from R2..."
+    
+    mkdir -p "$PROJECT_ROOT/storage/app/backups"
+    
+    if command -v mc >/dev/null 2>&1; then
+        if mc cp r2/duka-prod-db-backups/latest.sql.gz "$PROJECT_ROOT/storage/app/backups/latest.sql.gz"; then
+            log_info "Restoring production backup into database container ($DB_CONTAINER)..."
+            if gunzip -c "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
+                log_success "Database successfully restored from R2 backup!"
+            else
+                log_warning "Failed to restore database from backup file."
+            fi
+        else
+            log_warning "Failed to download backup from R2 via mc."
+        fi
+    else
+        log_warning "MinIO Client (mc) is not installed on the host. Skipping R2 sync."
+    fi
+fi
+
 log_step "${ICON_DB} Running database migration..."
 
 if ! run_migration_with_retry; then
