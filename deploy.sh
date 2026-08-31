@@ -1145,26 +1145,61 @@ step_success 5 "Frontend assets processed"
 step_start 6
 
 # =============================================================================
-# R2 DATABASE SYNC CHECK (OPTIONAL RESTORE)
+# R2 DATABASE SYNC CHECK (ROBUST WITH PYTHON FALLBACK)
 # =============================================================================
 if [ "${SYNC_DB_FROM_R2:-false}" = "true" ]; then
     log_step "SYNC_DB_FROM_R2 is enabled. Pulling latest production DB backup from R2..."
     
     mkdir -p "$PROJECT_ROOT/storage/app/backups"
-    
+    download_success=false
+
+    # Try 1: Try using MinIO Client (mc)
     if command -v mc >/dev/null 2>&1; then
-        if mc cp r2/duka-prod-db-backups/latest.sql.gz "$PROJECT_ROOT/storage/app/backups/latest.sql.gz"; then
-            log_info "Restoring production backup into database container ($DB_CONTAINER)..."
-            if gunzip -c "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
-                log_success "Database successfully restored from R2 backup!"
-            else
-                log_warning "Failed to restore database from backup file."
-            fi
+        if mc cp r2/duka-prod-db-backups/latest.sql.gz "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" 2>/dev/null; then
+            download_success=true
         else
-            log_warning "Failed to download backup from R2 via mc."
+            log_warning "mc timed out or failed. Switching to Python fallback..."
+        fi
+    fi
+
+    # Try 2: Fallback to Python with your direct Cloudflare R2 keys
+    if [ "$download_success" = false ]; then
+        if python3 -c "import boto3" 2>/dev/null; then
+            log_info "Downloading via Python R2 client..."
+            python3 -c "
+import boto3
+from botocore.config import Config
+try:
+    s3 = boto3.client(
+        's3',
+        endpoint_url='https://9497f0e6bbe4c681a7331d9f50191c58.r2.cloudflarestorage.com',
+        aws_access_key_id='d011eaa19f57ded4bd0d9938cdee55bc',
+        aws_secret_access_key='c835d108de840c2cef151d2d5971b064ecc07f834b2738209597d385e3873d83',
+        config=Config(signature_version='s3v4')
+    )
+    s3.download_file('duka-prod-db-backups', 'latest.sql.gz', '$PROJECT_ROOT/storage/app/backups/latest.sql.gz')
+    exit(0)
+except Exception as e:
+    print(f'Python R2 error: {e}')
+    exit(1)
+" && download_success=true
+        else
+            log_warning "Python boto3 library not found."
+        fi
+    fi
+
+    # Restore if any download method succeeded
+    if [ "$download_success" = true ]; then
+        log_info "Restoring production backup into database container ($DB_CONTAINER)..."
+        if gunzip -c "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
+            log_success "Database successfully restored from R2 backup!"
+        else
+            log_error "Failed to restore database from backup file."
+            exit 1
         fi
     else
-        log_warning "MinIO Client (mc) is not installed on the host. Skipping R2 sync."
+        log_error "All R2 download methods failed. Aborting deployment."
+        exit 1
     fi
 fi
 
@@ -1341,6 +1376,12 @@ log_success "Image post-processing complete"
 # =============================================================================
 
 log_step "Clearing Cloudflare edge cache to prevent stale Vite manifest errors..."
+
+if [ -f .env.production ]; then
+    set -a
+    source .env.production
+    set +a
+fi
 
 if [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
