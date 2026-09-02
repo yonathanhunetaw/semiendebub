@@ -1387,7 +1387,7 @@ if [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
          -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
          -H "Content-Type: application/json" \
-         '{"purge_everything":true}')
+         --data '{"purge_everything":true}')
          
     if [ "$RESPONSE" -eq 200 ]; then
         log_success "Cloudflare cache purged successfully!"
