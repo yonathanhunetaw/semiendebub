@@ -1148,14 +1148,18 @@ step_start 6
 # R2 DATABASE SYNC CHECK (ROBUST WITH PYTHON FALLBACK)
 # =============================================================================
 if [ "${SYNC_DB_FROM_R2:-true}" = "true" ]; then
-    log_step "SYNC_DB_FROM_R2 is enabled. Pulling latest production DB backup from R2..."
+    BACKUP_FILE_NAME="latest.sql.gz"
+    BACKUP_BUCKET_PATH="duka-prod-db-backups"
+    
+    log_step "SYNC_DB_FROM_R2 is enabled. Pulling production backup '${BACKUP_FILE_NAME}' from R2 (${BACKUP_BUCKET_PATH})..."
     
     mkdir -p "$PROJECT_ROOT/storage/app/backups"
     download_success=false
 
     # Try 1: Try using MinIO Client (mc)
     if command -v mc >/dev/null 2>&1; then
-        if mc cp r2/duka-prod-db-backups/latest.sql.gz "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" 2>/dev/null; then
+        log_info "Trying download via MinIO client (mc)..."
+        if mc cp "r2/${BACKUP_BUCKET_PATH}/${BACKUP_FILE_NAME}" "$PROJECT_ROOT/storage/app/backups/${BACKUP_FILE_NAME}" 2>/dev/null; then
             download_success=true
         else
             log_warning "mc timed out or failed. Switching to Python fallback..."
@@ -1177,7 +1181,7 @@ try:
         aws_secret_access_key='c835d108de840c2cef151d2d5971b064ecc07f834b2738209597d385e3873d83',
         config=Config(signature_version='s3v4')
     )
-    s3.download_file('duka-prod-db-backups', 'latest.sql.gz', '$PROJECT_ROOT/storage/app/backups/latest.sql.gz')
+    s3.download_file('${BACKUP_BUCKET_PATH}', '${BACKUP_FILE_NAME}', '$PROJECT_ROOT/storage/app/backups/${BACKUP_FILE_NAME}')
     exit(0)
 except Exception as e:
     print(f'Python R2 error: {e}')
@@ -1190,15 +1194,15 @@ except Exception as e:
 
     # Restore if any download method succeeded
     if [ "$download_success" = true ]; then
-        log_info "Restoring production backup into database container ($DB_CONTAINER)..."
-        if gunzip -c "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
-            log_success "Database successfully restored from R2 backup!"
+        log_info "Restoring backup file '${BACKUP_FILE_NAME}' into database container ($DB_CONTAINER)..."
+        if gunzip -c "$PROJECT_ROOT/storage/app/backups/${BACKUP_FILE_NAME}" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
+            log_success "Database successfully restored from R2 backup (${BACKUP_FILE_NAME})!"
         else
-            log_error "Failed to restore database from backup file."
+            log_error "Failed to restore database from backup file: ${BACKUP_FILE_NAME}."
             exit 1
         fi
     else
-        log_error "All R2 download methods failed. Aborting deployment."
+        log_error "All R2 download methods failed for '${BACKUP_FILE_NAME}'. Aborting deployment."
         exit 1
     fi
 fi
