@@ -769,7 +769,7 @@ step_start 0
 log_info "Configuration loaded successfully"
 log_info "Project Root: $PROJECT_ROOT"
 log_info "Environment: $APP_ENV"
-step_success 0 "Environment: $APP_ENV, Force Build: $FORCE_BUILD"
+step_success 0 "[1/9] Environment: $APP_ENV, Force Build: $FORCE_BUILD"
 
 # =============================================================================
 # STEP 2: START SERVICES (FIXED FOR RASPBERRY PI)
@@ -909,7 +909,7 @@ set -e
 log_info "All services started — current container status:"
 docker ps -a | grep duka | log_stream
 
-step_success 1 "All containers started successfully"
+step_success 1 "[2/9] All containers started successfully"
 
 
 # =============================================================================
@@ -952,7 +952,7 @@ fi
 # Make sure all objects are public
 make_minio_objects_public
 
-step_success 2 "MinIO ready with bucket configured"
+step_success 2 "[3/9] MinIO ready with bucket configured"
 
 # =============================================================================
 # STEP 3.5: VERIFY MINIO IS FULLY READY FOR SEEDING
@@ -1033,7 +1033,7 @@ else
 fi
 
 log_done "PHP dependencies installed"
-step_success 3 "PHP dependencies installed successfully"
+step_success 3 "[4/9] PHP dependencies installed successfully"
 
 # =============================================================================
 # STEP 5: NODE DEPENDENCIES
@@ -1060,7 +1060,7 @@ else
     log_success "Node dependencies already installed and complete"
 fi
 
-step_success 4 "Node dependencies ready"
+step_success 4 "[5/9] Node dependencies ready"
 
 
 # =============================================================================
@@ -1135,7 +1135,7 @@ else
 fi
 
 
-step_success 5 "Frontend assets processed"
+step_success 5 "[6/9] Frontend assets processed"
 
 # =============================================================================
 # STEP 7: DATABASE MIGRATION & SEEDING (NOW MINIO IS READY WITH BUCKET!)
@@ -1194,9 +1194,13 @@ except Exception as e:
 
     # Restore if any download method succeeded
     if [ "$download_success" = true ]; then
-        log_info "Restoring backup file '${BACKUP_FILE_NAME}' into database container ($DB_CONTAINER)..."
+        # Grab the Last-Modified timestamp from R2 for latest.sql.gz
+        BACKUP_TIMESTAMP=$(mc stat r2/${BACKUP_BUCKET_PATH}/${BACKUP_FILE_NAME} 2>/dev/null | grep "Last Modified" | cut -d: -f2- | xargs || echo "Unknown timestamp")
+
+        log_info "Restoring backup '${BACKUP_FILE_NAME}' (Originally taken: ${BACKUP_TIMESTAMP}) into database container ($DB_CONTAINER)..."
+        
         if gunzip -c "$PROJECT_ROOT/storage/app/backups/${BACKUP_FILE_NAME}" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
-            log_success "Database successfully restored from R2 backup (${BACKUP_FILE_NAME})!"
+            log_success "Database successfully restored from R2 backup (Taken: ${BACKUP_TIMESTAMP})!"
         else
             log_error "Failed to restore database from backup file: ${BACKUP_FILE_NAME}."
             exit 1
@@ -1216,7 +1220,7 @@ if ! run_migration_with_retry; then
 fi
 
 log_done "Database migration completed"
-step_success 6 "Database migrated and seeded"
+step_success 6 "[7/9] Database migrated and seeded (R2 sync included)"
 
 # =============================================================================
 # POST-SEEDING: ENSURE ALL UPLOADED IMAGES ARE PUBLIC
@@ -1296,8 +1300,7 @@ else
 fi
 
 log_done "Laravel optimizations refreshed"
-step_success 7 "Cache cleared and permissions set"
-
+step_success 7 "[8/9] Cache cleared and permissions set"
 # =============================================================================
 # STEP 9: FINAL VERIFICATION
 # =============================================================================
@@ -1332,12 +1335,12 @@ else
     log_warning "Health check endpoint not responding"
 fi
 
-step_success 8 "Deployment verification complete"
-
+step_success 8 "[9/9] Deployment verification complete"
 # =============================================================================
 # STEP 9.5: UPLOAD MISSING IMAGES (POST-DEPLOYMENT)
 # =============================================================================
 
+step_start 9
 log_step "Checking for missing MinIO images..."
 
 # Run a dedicated artisan command to upload any missing seed images
@@ -1374,11 +1377,13 @@ docker exec "$APP_CONTAINER" php artisan tinker --execute="
 " 2>&1 | log_stream
 
 log_success "Image post-processing complete"
+step_success 9 "[10/11] Missing images synced successfully"
 
 # =============================================================================
 # CLOUDFLARE CACHE PURGING (AUTOMATED)
 # =============================================================================
 
+step_start 10
 log_step "Clearing Cloudflare edge cache to prevent stale Vite manifest errors..."
 
 if [ -f .env.production ]; then
@@ -1402,6 +1407,8 @@ else
     log_warning "Skipping Cloudflare cache purge: CLOUDFLARE_ZONE_ID or CLOUDFLARE_API_TOKEN not found in environment."
 fi
 
+step_success 10 "[11/11] Cloudflare cache purged"
+
 # =============================================================================
 # DEPLOYMENT COMPLETE
 # =============================================================================
@@ -1416,8 +1423,6 @@ log_success "=========================================="
 show_full_progress
 
 finish_banner
-
-
 # =============================================================================
 # COLOR CODES FOR LOGGING
 # =============================================================================
