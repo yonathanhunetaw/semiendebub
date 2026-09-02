@@ -68,6 +68,8 @@ init_steps() {
         "Database Migration & Seeding"
         "Cache & Permissions Setup"
         "Final Verification"
+        "Post-Deployment Image Sync"
+        "Cloudflare Cache Purging"
     )
     
     for i in "${!STEPS[@]}"; do
@@ -1417,7 +1419,7 @@ log_success "Image post-processing complete"
 step_success 9 "[10/11] Missing images synced successfully"
 
 # =============================================================================
-# CLOUDFLARE CACHE PURGING (AUTOMATED)
+# STEP 11: CLOUDFLARE CACHE PURGING (AUTOMATED)
 # =============================================================================
 
 step_start 10
