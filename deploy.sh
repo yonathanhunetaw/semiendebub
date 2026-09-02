@@ -1136,7 +1136,6 @@ fi
 
 
 step_success 5 "[6/9] Frontend assets processed"
-
 # =============================================================================
 # STEP 7: DATABASE MIGRATION & SEEDING (NOW MINIO IS READY WITH BUCKET!)
 # =============================================================================
@@ -1148,21 +1147,32 @@ step_start 6
 # R2 DATABASE SYNC CHECK (ROBUST WITH PYTHON FALLBACK)
 # =============================================================================
 if [ "${SYNC_DB_FROM_R2:-true}" = "true" ]; then
-    BACKUP_FILE_NAME="latest.sql.gz"
     BACKUP_BUCKET_PATH="duka-prod-db-backups"
     
-    log_step "SYNC_DB_FROM_R2 is enabled. Pulling production backup '${BACKUP_FILE_NAME}' from R2 (${BACKUP_BUCKET_PATH})..."
+    log_step "SYNC_DB_FROM_R2 is enabled. Finding latest timestamped backup in R2 (${BACKUP_BUCKET_PATH})..."
     
     mkdir -p "$PROJECT_ROOT/storage/app/backups"
     download_success=false
+    TARGET_BACKUP_FILE=""
 
-    # Try 1: Try using MinIO Client (mc)
+    # Try 1: Try using MinIO Client (mc) to find the latest duka_backup_*.sql.gz file
     if command -v mc >/dev/null 2>&1; then
-        log_info "Trying download via MinIO client (mc)..."
-        if mc cp "r2/${BACKUP_BUCKET_PATH}/${BACKUP_FILE_NAME}" "$PROJECT_ROOT/storage/app/backups/${BACKUP_FILE_NAME}" 2>/dev/null; then
-            download_success=true
+        log_info "Querying R2 via MinIO client (mc)..."
+        TARGET_BACKUP_FILE=$(mc ls "r2/${BACKUP_BUCKET_PATH}/" | awk '{print $NF}' | grep '^duka_backup_.*\.sql\.gz$' | sort | tail -n 1)
+        
+        if [ -n "$TARGET_BACKUP_FILE" ]; then
+            log_info "Found latest backup file: ${TARGET_BACKUP_FILE}"
+            if mc cp "r2/${BACKUP_BUCKET_PATH}/${TARGET_BACKUP_FILE}" "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" 2>/dev/null; then
+                download_success=true
+            else
+                log_warning "mc download failed for ${TARGET_BACKUP_FILE}. Switching to Python fallback..."
+            fi
         else
-            log_warning "mc timed out or failed. Switching to Python fallback..."
+            log_warning "No timestamped backup found, falling back to 'latest.sql.gz'..."
+            TARGET_BACKUP_FILE="latest.sql.gz"
+            if mc cp "r2/${BACKUP_BUCKET_PATH}/latest.sql.gz" "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" 2>/dev/null; then
+                download_success=true
+            fi
         fi
     fi
 
@@ -1170,6 +1180,29 @@ if [ "${SYNC_DB_FROM_R2:-true}" = "true" ]; then
     if [ "$download_success" = false ]; then
         if python3 -c "import boto3" 2>/dev/null; then
             log_info "Downloading via Python R2 client..."
+            TARGET_BACKUP_FILE=$(python3 -c "
+import boto3
+from botocore.config import Config
+try:
+    s3 = boto3.client(
+        's3',
+        endpoint_url='https://9497f0e6bbe4c681a7331d9f50191c58.r2.cloudflarestorage.com',
+        aws_access_key_id='d011eaa19f57ded4bd0d9938cdee55bc',
+        aws_secret_access_key='c835d108de840c2cef151d2d5971b064ecc07f834b2738209597d385e3873d83',
+        config=Config(signature_version='s3v4')
+    )
+    response = s3.list_objects_v2(Bucket='${BACKUP_BUCKET_PATH}')
+    files = [obj['Key'] for obj in response.get('Contents', []) if obj['Key'].startswith('duka_backup_')]
+    if files:
+        print(sorted(files)[-1])
+    else:
+        print('latest.sql.gz')
+except Exception as e:
+    print('latest.sql.gz')
+")
+            
+            [ -z "$TARGET_BACKUP_FILE" ] && TARGET_BACKUP_FILE="latest.sql.gz"
+
             python3 -c "
 import boto3
 from botocore.config import Config
@@ -1181,7 +1214,7 @@ try:
         aws_secret_access_key='c835d108de840c2cef151d2d5971b064ecc07f834b2738209597d385e3873d83',
         config=Config(signature_version='s3v4')
     )
-    s3.download_file('${BACKUP_BUCKET_PATH}', '${BACKUP_FILE_NAME}', '$PROJECT_ROOT/storage/app/backups/${BACKUP_FILE_NAME}')
+    s3.download_file('${BACKUP_BUCKET_PATH}', '${TARGET_BACKUP_FILE}', '$PROJECT_ROOT/storage/app/backups/latest.sql.gz')
     exit(0)
 except Exception as e:
     print(f'Python R2 error: {e}')
@@ -1194,19 +1227,19 @@ except Exception as e:
 
     # Restore if any download method succeeded
     if [ "$download_success" = true ]; then
-        # Grab the Last-Modified timestamp from R2 for latest.sql.gz
-        BACKUP_TIMESTAMP=$(mc stat r2/${BACKUP_BUCKET_PATH}/${BACKUP_FILE_NAME} 2>/dev/null | grep "Last Modified" | cut -d: -f2- | xargs || echo "Unknown timestamp")
+        # Export this globally so the final summary box can access it
+        export RESTORED_BACKUP_NAME="$TARGET_BACKUP_FILE"
 
-        log_info "Restoring backup '${BACKUP_FILE_NAME}' (Originally taken: ${BACKUP_TIMESTAMP}) into database container ($DB_CONTAINER)..."
+        log_info "Restoring backup file '${RESTORED_BACKUP_NAME}' into database container ($DB_CONTAINER)..."
         
-        if gunzip -c "$PROJECT_ROOT/storage/app/backups/${BACKUP_FILE_NAME}" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
-            log_success "Database successfully restored from R2 backup (Taken: ${BACKUP_TIMESTAMP})!"
+        if gunzip -c "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
+            log_success "Database successfully restored from R2 backup (${RESTORED_BACKUP_NAME})!"
         else
-            log_error "Failed to restore database from backup file: ${BACKUP_FILE_NAME}."
+            log_error "Failed to restore database from backup file: ${RESTORED_BACKUP_NAME}."
             exit 1
         fi
     else
-        log_error "All R2 download methods failed for '${BACKUP_FILE_NAME}'. Aborting deployment."
+        log_error "All R2 download methods failed. Aborting deployment."
         exit 1
     fi
 fi
@@ -1220,7 +1253,12 @@ if ! run_migration_with_retry; then
 fi
 
 log_done "Database migration completed"
-step_success 6 "[7/9] Database migrated and seeded (R2 sync included)"
+
+# Dynamically display the specific backup filename in your [7/11] progress row
+DB_MSG_LABEL="Database migrated and seeded"
+[ -n "${RESTORED_BACKUP_NAME:-}" ] && DB_MSG_LABEL="Database restored from ${RESTORED_BACKUP_NAME}"
+
+step_success 6 "[7/11] ${DB_MSG_LABEL}"
 
 # =============================================================================
 # POST-SEEDING: ENSURE ALL UPLOADED IMAGES ARE PUBLIC
@@ -1257,7 +1295,6 @@ docker run --rm \
     -c 'mc anonymous set download --recursive local/$BUCKET' 2>&1 | log_stream || true
 
 log_success "All images are now publicly accessible"
-
 # =============================================================================
 # STEP 8: CACHE AND PERMISSIONS
 # =============================================================================
