@@ -39,13 +39,13 @@ interface DashboardItem {
     sold_count: number;
     store_stock?: number;
     category?: { category_name: string } | null;
-    pricing_matrix?: {
+    pricing_matrix?: Array<{
         level: string;
         price: number;
         discount_price: number | null;
         discount_ends_at: string | null;
         final: number;
-    }[];
+    }>;
 }
 
 interface Props {
@@ -391,24 +391,25 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                         }}
                     >
                         {items.map((item) => {
-                            // 1. Get the store price from the ladder (first item in array)
-                            const storeLevel = item.pricing_matrix?.[0];
+                            // 1. The original "strikethrough" price is the store tier's resolved price
+                            const originalPrice = item.store_price ?? 0;
 
-                            // 2. Fallback to top-level properties if the matrix is empty
-                            const originalPrice = storeLevel?.price ?? item.store_price ?? 0;
+                            // 2. The active price to pay is the deepest tier's final price
+                            const displayPrice = item.final_price ?? originalPrice;
 
-                            // 3. Get the discount from the matrix
-                            const discountFromMatrix = storeLevel?.discount_price ?? null;
-                            const discountEnds = storeLevel?.discount_ends_at ?? item.discount_ends_at ?? null;
-
-                            // 4. Calculate display price
-                            const hasDiscount = discountFromMatrix !== null && discountFromMatrix < originalPrice;
-                            const displayPrice = storeLevel?.final ?? (hasDiscount ? discountFromMatrix! : originalPrice);
-
+                            // 3. Discount math (whether from tier override or actual discount)
+                            const hasDiscount = displayPrice < originalPrice;
                             const discountPercent =
                                 hasDiscount && originalPrice > 0
-                                    ? Math.round(((originalPrice - discountFromMatrix!) / originalPrice) * 100)
+                                    ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100)
                                     : 0;
+
+                            // 4. Extract active countdown if the deepest tier has one
+                            const deepestTier = item.pricing_matrix?.[item.pricing_matrix.length - 1];
+                            const discountEnds = deepestTier?.discount_ends_at ?? item.discount_ends_at ?? null;
+
+                            // 5. Determine if we should show the "Seller Price" badge
+                            const isSellerPrice = deepestTier?.level === "seller";
 
                             const imgSrc = item.image_urls?.[0]
                                 ? resolveImageUrl(item.image_urls[0])
@@ -521,6 +522,26 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                                     }}
                                                 />
                                             </>
+                                        )}
+                                        {isSellerPrice && (
+                                            <Chip
+                                                label="Seller Price"
+                                                size="small"
+                                                sx={{
+                                                    position: "absolute",
+                                                    bottom: 8,
+                                                    left: 8,
+                                                    zIndex: 2,
+                                                    bgcolor: "#1e293b",
+                                                    color: "#fff",
+                                                    fontWeight: 600,
+                                                    fontSize: "0.65rem",
+                                                    height: 22,
+                                                    borderRadius: 1,
+                                                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                                                    pointerEvents: "none",
+                                                }}
+                                            />
                                         )}
                                     </Box>
 

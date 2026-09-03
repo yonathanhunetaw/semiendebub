@@ -375,9 +375,26 @@ class ItemController extends Controller
         $store = Auth::user()->store;
         $storeId = $store?->id;
 
-        $sellerId = request('seller_id');
-        $customerId = request('customer_id');
+        $sellerId = request('seller_id') ?? Auth::id();
         $selectedCartId = request('cart_id');
+
+        // Resolve customer from cart (matching index/dashboard logic)
+        $topCart = \App\Models\Seller\Cart::with('customer')
+            ->where('seller_id', Auth::id())
+            ->where('status', 'open')
+            ->orderBy('priority', 'asc')
+            ->first();
+
+        $cart = $selectedCartId
+            ? \App\Models\Seller\Cart::with('customer')->find($selectedCartId)
+            : $topCart;
+
+        $customer = $cart?->customer;
+        $customerId = $customer?->id;
+
+        // TIN filled = individual (15% markup), No TIN = business (standard)
+        $hasTin = is_object($customer) && !empty($customer->tin_number);
+        $customerType = $hasTin ? 'individual' : 'business';
 
         // Load variants with all needed relations
         $item->load([
@@ -434,7 +451,7 @@ class ItemController extends Controller
         ]);
 
         // 🔹 Build enriched variant data
-        $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId) {
+        $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId, $customerType) {
             // Get the store variant for the current store
             $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
             if (app()->environment('testing') && is_null($storeVariant)) {
@@ -466,10 +483,10 @@ class ItemController extends Controller
                     customerId: $customerId
                 )
                 : [];
-            $final_price = $storeVariant ? PriceProvider::getFinalPrice($price_ladder) : null;
+            $final_price = $storeVariant ? PriceProvider::getFinalPriceWithTax($price_ladder, $customerType) : null;
 
             $basePriceLevel = $price_ladder[0] ?? null;
-            $price = $basePriceLevel['price'] ?? null;
+            $price = $basePriceLevel['final'] ?? $basePriceLevel['price'] ?? null;
             $discount_price = $basePriceLevel['discount_price'] ?? null;
 
             // Handle fallback to raw matrix just in case

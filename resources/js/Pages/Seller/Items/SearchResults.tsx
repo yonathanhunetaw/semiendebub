@@ -37,11 +37,13 @@ interface SearchResultItem {
     store_stock: number;
     sold_count: number;
     category: { category_name: string } | null;
-    pricing_matrix?: {
+    pricing_matrix?: Array<{
+        level: string;
         price: number;
         discount_price: number | null;
         discount_ends_at: string | null;
-    };
+        final: number;
+    }>;
 }
 
 interface Props {
@@ -319,7 +321,10 @@ export default function SearchResults({
                             // Individual carts, Business VAT, Customer prices, and Seller prices.
                             const originalPrice = item.store_price ?? item.original_price ?? 0;
                             const displayPrice = item.final_price ?? originalPrice;
-                            const discountEnds = item.discount_ends_at ?? null;
+                            
+                            const deepestTier = item.pricing_matrix?.[item.pricing_matrix.length - 1];
+                            const discountEnds = deepestTier?.discount_ends_at ?? item.discount_ends_at ?? null;
+                            const isSellerPrice = deepestTier?.level === "seller";
                             
                             const hasDiscount = displayPrice < originalPrice;
                             const discountPercent =
@@ -441,6 +446,26 @@ export default function SearchResults({
                                                     }}
                                                 />
                                             </>
+                                        )}
+                                        {isSellerPrice && (
+                                            <Chip
+                                                label="Seller Price"
+                                                size="small"
+                                                sx={{
+                                                    position: "absolute",
+                                                    bottom: 8,
+                                                    left: 8,
+                                                    zIndex: 2,
+                                                    bgcolor: "#1e293b",
+                                                    color: "#fff",
+                                                    fontWeight: 600,
+                                                    fontSize: "0.65rem",
+                                                    height: 22,
+                                                    borderRadius: 1,
+                                                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                                                    pointerEvents: "none",
+                                                }}
+                                            />
                                         )}
                                     </Box>
 
