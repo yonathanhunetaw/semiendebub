@@ -92,7 +92,7 @@ update_step() {
 show_full_progress() {
     echo ""
     echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BOLD_CYAN}         ════════════════════   DEPLOYMENT PROGRESS    ════════════════════         ${NC}"
+    echo -e "${BOLD_CYAN}                                DEPLOYMENT PROGRESS                                 ${NC}"
     echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════════════════════════${NC}"
     
     for i in "${!STEPS[@]}"; do
@@ -122,7 +122,7 @@ show_full_progress() {
         esac
     done
     
-    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD_CYAN}═════════════════════════════════════════════════════════════════════════════════════${NC}"
     echo ""
 }
 
@@ -1137,7 +1137,7 @@ else
 fi
 
 
-step_success 5 "[6/9] Frontend assets processed"
+step_success 5 "[6/11] Frontend assets processed"
 # =================================================================================================
 # STEP 7: DATABASE MIGRATION & SEEDING (NOW MINIO IS READY WITH BUCKET!)
 # =================================================================================================
@@ -1339,7 +1339,7 @@ else
 fi
 
 log_done "Laravel optimizations refreshed"
-step_success 7 "[8/9] Cache cleared and permissions set"
+step_success 7 "[8/11] Cache cleared and permissions set"
 # =================================================================================================
 # STEP 9: FINAL VERIFICATION
 # =================================================================================================
@@ -1374,7 +1374,7 @@ else
     log_warning "Health check endpoint not responding"
 fi
 
-step_success 8 "[9/9] Deployment verification complete"
+step_success 8 "[9/11] Deployment verification complete"
 # =================================================================================================
 # STEP 9.5: UPLOAD MISSING IMAGES (POST-DEPLOYMENT)
 # =================================================================================================
