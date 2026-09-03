@@ -32,6 +32,7 @@ interface SearchResultItem {
     product_name: string;
     image_urls: string[];
     original_price: number;
+    store_price?: number | null;
     final_price: number | null;
     discount_ends_at: string | null;
     store_stock: number;

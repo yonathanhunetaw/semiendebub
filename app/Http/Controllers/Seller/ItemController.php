@@ -486,7 +486,8 @@ class ItemController extends Controller
             $final_price = $storeVariant ? PriceProvider::getFinalPriceWithTax($price_ladder, $customerType) : null;
 
             $basePriceLevel = $price_ladder[0] ?? null;
-            $price = $basePriceLevel['final'] ?? $basePriceLevel['price'] ?? null;
+            // Use the raw base price from the store tier (NOT 'final', so strikethroughs work)
+            $price = $basePriceLevel['price'] ?? null;
             $discount_price = $basePriceLevel['discount_price'] ?? null;
 
             // Handle fallback to raw matrix just in case
@@ -497,35 +498,24 @@ class ItemController extends Controller
                 $discount_price = $matrix['discount_price'] ?? null;
             }
 
-            // Handle Variant Images
+            // Extract Seller and Customer prices directly from the ladder (since it resolves expired discounts, overrides, etc.)
+            $sellerTier = collect($price_ladder)->firstWhere('level', 'seller');
+            $seller_price = $sellerTier['price'] ?? null;
+            $seller_discount_price = $sellerTier['discount_price'] ?? null;
+
+            $customerTier = collect($price_ladder)->firstWhere('level', 'customer');
+            $customer_price = $customerTier['price'] ?? null;
+            $customer_discount_price = $customerTier['discount_price'] ?? null;
+
             // Handle Variant Images
             $rawVarImages = $variant->images;
-
             if (is_string($rawVarImages)) {
                 $decoded = json_decode($rawVarImages, true);
                 $rawVarImages = is_array($decoded) ? $decoded : [];
             }
-
             $variantImages = collect($rawVarImages)
                 ->filter(fn($img) => !empty($img))
                 ->map(fn($img) => $this->resolveImageUrl($img));
-
-
-            $seller_price_record = $storeVariant
-                ? $storeVariant->sellerPrices()
-                    ->where('seller_id', auth()->id())
-                    ->where('active', true)
-                    ->first()
-                : null;
-
-            $seller_price = null;
-            $seller_discount_price = null;
-            if ($seller_price_record && !empty($seller_price_record->pricing_matrix)) {
-                $sellerMatrix = is_string($seller_price_record->pricing_matrix) ? json_decode($seller_price_record->pricing_matrix, true) : $seller_price_record->pricing_matrix;
-                $sellerMatrix = (isset($sellerMatrix[0]) && is_array($sellerMatrix[0])) ? $sellerMatrix[0] : ($sellerMatrix ?? []);
-                $seller_price = $sellerMatrix['price'] ?? null;
-                $seller_discount_price = $sellerMatrix['discount_price'] ?? null;
-            }
 
             $payload = [
                 'id' => $variant->id,
@@ -545,6 +535,8 @@ class ItemController extends Controller
                 'final_price' => $final_price,
                 'seller_price' => $seller_price,
                 'seller_discount_price' => $seller_discount_price,
+                'customer_price' => $customer_price,
+                'customer_discount_price' => $customer_discount_price,
             ];
 
             // 🚀 LOG 2: Variant Image Debug

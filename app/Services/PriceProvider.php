@@ -240,12 +240,15 @@ class PriceProvider
         $minFinalPrice = min($variantPrices);
         $minIndex = array_search($minFinalPrice, $variantPrices);
         $bestLadder = $ladders[$minIndex] ?? [];
-        
-        $basePrice = $bestLadder[0]['final'] ?? $bestLadder[0]['price'] ?? min($basePrices);
+
+        // Use raw `price` (not `final`) from the store tier so the frontend can show
+        // a strikethrough when the active price is lower than the base store price.
+        $storeTier = collect($bestLadder)->firstWhere('level', 'store');
+        $rawStorePrice = $storeTier['price'] ?? ($bestLadder[0]['price'] ?? min($basePrices));
         $discountEndsAt = $bestLadder[0]['discount_ends_at'] ?? null;
 
         return [
-            'store_price' => $basePrice,
+            'store_price' => $rawStorePrice,
             'final_price' => $minFinalPrice,
             'discount_ends_at' => $discountEndsAt,
             'pricing_matrix' => $bestLadder,

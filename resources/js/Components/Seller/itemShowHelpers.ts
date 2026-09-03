@@ -12,6 +12,8 @@ export interface SellerVariantData {
     final_price?: number | null;
     seller_price?: number | null;
     seller_discount_price?: number | null;
+    customer_price?: number | null;
+    customer_discount_price?: number | null;
     stock?: number | null;
     status?: string | null;
     images?: string[];

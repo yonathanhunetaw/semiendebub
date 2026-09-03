@@ -27,10 +27,9 @@ export default function ItemInfoCard({
     const theme = useTheme();
     const isDark = theme.palette.mode === "dark";
 
-    const hasDiscount =
-        variant?.discount_price != null &&
-        variant?.price != null &&
-        variant.price !== variant.discount_price;
+    const activePrice = selectedPrice ?? displayPrice ?? null;
+    const basePrice = variant?.price ?? null;
+    const hasDiscount = activePrice != null && basePrice != null && activePrice < basePrice;
 
     // Find the piece-tier unit price to compute "per piece" for bigger tiers
     const pieceTier = packagingOptions.find((o) => o.tier === "piece");
@@ -82,9 +81,7 @@ export default function ItemInfoCard({
                     {hasDiscount && (
                         <Chip
                             label={`-${Math.round(
-                                ((variant!.price! - variant!.discount_price!) /
-                                    variant!.price!) *
-                                    100,
+                                ((basePrice! - activePrice!) / basePrice!) * 100,
                             )}%`}
                             size="small"
                             sx={{
@@ -108,6 +105,124 @@ export default function ItemInfoCard({
                         />
                     )}
                 </Box>
+
+                {/* ── Price Tier Breakdown ── */}
+                {variant && (
+                    <Box
+                        sx={{
+                            bgcolor: isDark ? "#1a1a1a" : "#f9f7f4",
+                            border: "1px solid",
+                            borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)",
+                            borderRadius: 3,
+                            p: 1.5,
+                            mt: 0.5,
+                        }}
+                    >
+                        <Typography
+                            variant="caption"
+                            sx={{ fontWeight: 700, color: "text.secondary", mb: 1, display: "block" }}
+                        >
+                            Price Tiers
+                        </Typography>
+                        <Stack spacing={0.5}>
+                            {/* Base / Store price */}
+                            {variant.price != null && (() => {
+                                const isActive = pricingMode === "normal" && variant.seller_price == null && variant.customer_price == null;
+                                return (
+                                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                        <Typography variant="body2" color="text.secondary">Base</Typography>
+                                        <Stack direction="row" alignItems="center" spacing={0.75}>
+                                            {variant.discount_price != null && variant.discount_price < variant.price && (
+                                                <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled" }}>
+                                                    {sellerPrice(variant.price)}
+                                                </Typography>
+                                            )}
+                                            <Typography
+                                                variant="body2"
+                                                sx={{
+                                                    fontWeight: isActive ? 800 : 500,
+                                                    color: isActive ? "error.main" : "text.primary",
+                                                }}
+                                            >
+                                                {sellerPrice(variant.discount_price != null && variant.discount_price < variant.price
+                                                    ? variant.discount_price
+                                                    : variant.price)}
+                                            </Typography>
+                                            {isActive && (
+                                                <Chip label="Active" size="small" sx={{ bgcolor: "#22c55e", color: "#fff", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
+                                            )}
+                                        </Stack>
+                                    </Stack>
+                                );
+                            })()}
+
+                            {/* Seller price */}
+                            {variant.seller_price != null && (() => {
+                                const isActive = pricingMode === "seller";
+                                return (
+                                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                        <Typography variant="body2" color="text.secondary">Seller</Typography>
+                                        <Stack direction="row" alignItems="center" spacing={0.75}>
+                                            {variant.seller_discount_price != null && variant.seller_price != null && variant.seller_discount_price < variant.seller_price && (
+                                                <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled" }}>
+                                                    {sellerPrice(variant.seller_price)}
+                                                </Typography>
+                                            )}
+                                            <Typography
+                                                variant="body2"
+                                                sx={{
+                                                    fontWeight: isActive ? 800 : 500,
+                                                    color: isActive ? "error.main" : "text.primary",
+                                                }}
+                                            >
+                                                {sellerPrice(
+                                                    variant.seller_discount_price != null && variant.seller_price != null && variant.seller_discount_price < variant.seller_price
+                                                        ? variant.seller_discount_price
+                                                        : variant.seller_price
+                                                )}
+                                            </Typography>
+                                            <Chip label="Seller" size="small" sx={{ bgcolor: SELLER_BRAND_DARK, color: "#fff", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
+                                            {isActive && (
+                                                <Chip label="Active" size="small" sx={{ bgcolor: "#22c55e", color: "#fff", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
+                                            )}
+                                        </Stack>
+                                    </Stack>
+                                );
+                            })()}
+
+                            {/* Customer price */}
+                            {variant.customer_price != null && (() => {
+                                const isActive = pricingMode === "normal" && variant.seller_price == null;
+                                return (
+                                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                        <Typography variant="body2" color="text.secondary">Customer</Typography>
+                                        <Stack direction="row" alignItems="center" spacing={0.75}>
+                                            {variant.customer_discount_price != null && variant.customer_price != null && variant.customer_discount_price < variant.customer_price && (
+                                                <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled" }}>
+                                                    {sellerPrice(variant.customer_price)}
+                                                </Typography>
+                                            )}
+                                            <Typography
+                                                variant="body2"
+                                                sx={{
+                                                    fontWeight: isActive ? 800 : 500,
+                                                    color: isActive ? "error.main" : "text.primary",
+                                                }}
+                                            >
+                                                {sellerPrice(
+                                                    variant.customer_discount_price != null && variant.customer_price != null && variant.customer_discount_price < variant.customer_price
+                                                        ? variant.customer_discount_price
+                                                        : variant.customer_price
+                                                )}
+                                            </Typography>
+                                            <Chip label="Customer" size="small" sx={{ bgcolor: "#6366f1", color: "#fff", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
+                                        </Stack>
+                                    </Stack>
+                                );
+                            })()}
+                        </Stack>
+                    </Box>
+                )}
 
                 {/* ── Packaging price breakdown ── */}
                 {packagingOptions.length > 0 && (
