@@ -126,7 +126,7 @@ return [
     | since doing so does not grant a meaningful security improvement.
     |
     */
-    'cookie' => 'duka_session',
+    'cookie' => env('SESSION_COOKIE', 'duka_session'),
     /*
     |--------------------------------------------------------------------------
     | Session Cookie Path
@@ -151,7 +151,7 @@ return [
     |
     */
 
-    'domain' => null,
+    'domain' => env('SESSION_DOMAIN', null),
 
     /*
     |--------------------------------------------------------------------------
