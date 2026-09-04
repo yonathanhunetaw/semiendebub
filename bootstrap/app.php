@@ -33,7 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'login',
         ]);
 
-        $middleware->prepend(ScopeSessionToHost::class);
+        // $middleware->prepend(ScopeSessionToHost::class);
 
         $middleware->alias([
             'role' => RoleMiddleware::class,
