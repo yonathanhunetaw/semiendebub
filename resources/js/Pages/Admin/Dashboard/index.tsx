@@ -73,7 +73,7 @@ function DashboardPagination({ meta, links }: { meta: PaginationMeta; links: Pag
     if (meta.last_page <= 1) return null;
 
     return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, overflowX: 'auto' }}>
             <Pagination
                 count={meta.last_page}
                 page={meta.current_page}
@@ -138,8 +138,14 @@ export default function Dashboard({
 
     const StatCard = ({ title, value, icon, color, cardKey, children }: any) => (
         <Paper elevation={0} sx={{
-            p: 3, borderRadius: '12px', border: '1px solid', borderColor: 'divider',
-            display: 'flex', flexDirection: 'column', position: 'relative'
+            p: 3,
+            borderRadius: '12px',
+            border: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative',
+            height: '100%',
         }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%' }}>
                 <Box>
@@ -170,7 +176,7 @@ export default function Dashboard({
     );
 
     return (
-        <Box sx={{ p: 1 }}>
+        <Box sx={{ p: { xs: 1, sm: 2 }, width: '100%', overflowX: 'hidden' }}>
             <Head title="Admin Dashboard" />
             
             {/* Header with Store Switcher Toolbar */}
@@ -179,10 +185,10 @@ export default function Dashboard({
                     Admin Dashboard
                 </Typography>
                 
-                <Stack direction="row" spacing={1} alignItems="center">
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                     <StorefrontIcon color="action" fontSize="small" />
                     <Typography variant="body2" color="text.secondary" fontWeight={500}>Store Scope:</Typography>
-                    <Stack direction="row" spacing={0.5}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, maxWidth: '100%', overflowX: 'auto' }}>
                         <Chip 
                             label="All Stores" 
                             onClick={() => handleStoreChange('all')} 
@@ -200,7 +206,7 @@ export default function Dashboard({
                                 size="small"
                             />
                         ))}
-                    </Stack>
+                    </Box>
                 </Stack>
             </Box>
 
@@ -275,7 +281,7 @@ export default function Dashboard({
                 gap: 3
             }}>
                 {/* Low Stock Section with Store Context */}
-                <Paper sx={{ p: 3, borderRadius: '12px', border: '1px solid', borderColor: 'divider' }}>
+                <Paper sx={{ p: 3, borderRadius: '12px', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
                     <Stack direction="row" spacing={1} alignItems="center" mb={2}>
                         <WarningAmberIcon color="warning" />
                         <Typography variant="h6" fontWeight={600}>Low Stock Alerts by Store</Typography>
@@ -286,15 +292,28 @@ export default function Dashboard({
                         <>
                             {items.map((item) => (
                                 <Box key={item.item_id} sx={{
-                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                    py: 1.5, borderBottom: '1px solid', borderColor: 'divider',
+                                    display: 'flex',
+                                    flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                                    justifyContent: 'space-between',
+                                    alignItems: { xs: 'flex-start', sm: 'center' },
+                                    gap: 1,
+                                    py: 1.5,
+                                    borderBottom: '1px solid',
+                                    borderColor: 'divider',
                                     '&:last-child': { borderBottom: 'none' }
                                 }}>
-                                    <Box>
-                                        <Typography variant="body1" fontWeight={500}>{item.product_name}</Typography>
-                                        <Chip label={item.store_name} size="small" variant="outlined" sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }} />
+                                    <Box sx={{ maxWidth: { xs: '100%', sm: '60%' } }}>
+                                        <Typography variant="body1" fontWeight={500} noWrap={false}>
+                                            {item.product_name}
+                                        </Typography>
+                                        <Chip 
+                                            label={item.store_name} 
+                                            size="small" 
+                                            variant="outlined" 
+                                            sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }} 
+                                        />
                                     </Box>
-                                    <Stack direction="row" spacing={2} alignItems="center">
+                                    <Stack direction="row" spacing={2} alignItems="center" sx={{ flexShrink: 0 }}>
                                         <Typography variant="body2" color="text.secondary">
                                             Remaining: {item.total_stock}
                                         </Typography>
