@@ -10,6 +10,7 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 
+// ========== INTERFACES (all original) ==========
 interface LowStockItem {
     item_id: number;
     product_name: string;
@@ -58,6 +59,7 @@ interface Props {
     currentStore?: string;
 }
 
+// ========== PAGINATION COMPONENT ==========
 function DashboardPagination({ meta, links }: { meta: PaginationMeta; links: PaginationLink[] }) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -87,6 +89,7 @@ function DashboardPagination({ meta, links }: { meta: PaginationMeta; links: Pag
     );
 }
 
+// ========== MAIN DASHBOARD COMPONENT ==========
 export default function Dashboard({
     sessionsCount,
     rolesBreakdown = {},
@@ -116,7 +119,7 @@ export default function Dashboard({
         setMenuTarget(null);
     };
 
-    // Normalize paginated data
+    // Normalize paginated data (unchanged)
     let items: LowStockItem[] = [];
     let meta: PaginationMeta | null = null;
     let links: PaginationLink[] = [];
@@ -136,6 +139,7 @@ export default function Dashboard({
         links = (lowStockItems.meta && lowStockItems.meta.links) || lowStockItems.links || [];
     }
 
+    // StatCard helper (unchanged)
     const StatCard = ({ title, value, icon, color, cardKey, children }: any) => (
         <Paper elevation={0} sx={{
             p: 3,
@@ -176,10 +180,11 @@ export default function Dashboard({
     );
 
     return (
+        // ROOT CONTAINER: prevents overflow and uses responsive padding
         <Box sx={{ p: { xs: 1, sm: 2 }, width: '100%', overflowX: 'hidden' }}>
             <Head title="Admin Dashboard" />
             
-            {/* Header with Store Switcher Toolbar */}
+            {/* HEADER with store switcher – chips now wrap */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
                 <Typography variant="h5" sx={{ fontWeight: 700 }}>
                     Admin Dashboard
@@ -210,7 +215,7 @@ export default function Dashboard({
                 </Stack>
             </Box>
 
-            {/* Statistics Grid */}
+            {/* STATS GRID – responsive columns */}
             <Box sx={{
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(5, 1fr)' },
@@ -258,7 +263,7 @@ export default function Dashboard({
                 <StatCard title="Total Variants" value={activeVariantsCount} icon={<ShoppingBagIcon />} color="secondary" cardKey="variants" />
             </Box>
 
-            {/* Expanded Breakdown Context Menu */}
+            {/* CONTEXT MENU – unchanged */}
             <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
                 <Typography variant="subtitle2" sx={{ px: 2, py: 1, fontWeight: 600 }}>
                     Store Breakdown ({menuTarget})
@@ -275,12 +280,13 @@ export default function Dashboard({
                 )}
             </Menu>
 
+            {/* LOWER SECTION – low stock + system status */}
             <Box sx={{
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' },
                 gap: 3
             }}>
-                {/* Low Stock Section with Store Context */}
+                {/* LOW STOCK – items now wrap on mobile */}
                 <Paper sx={{ p: 3, borderRadius: '12px', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
                     <Stack direction="row" spacing={1} alignItems="center" mb={2}>
                         <WarningAmberIcon color="warning" />
@@ -328,7 +334,7 @@ export default function Dashboard({
                     )}
                 </Paper>
 
-                {/* System Status Panel */}
+                {/* SYSTEM STATUS – unchanged */}
                 <Paper sx={{ p: 3, borderRadius: '12px', border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
                     <Typography variant="h6" fontWeight={600} mb={2}>System Status</Typography>
                     <Typography variant="body2" color="text.secondary" mb={2}>

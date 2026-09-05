@@ -38,6 +38,8 @@ return [
     'discord' => [
         'visit_webhook_url' => env('DISCORD_VISIT_WEBHOOK_URL'),
         'daily_visit_webhook_url' => env('DISCORD_DAILY_VISIT_WEBHOOK_URL'),
+        'login_webhook_url' => env('DISCORD_LOGIN_WEBHOOK_URL'),
+        'notify_user_id' => env('DISCORD_NOTIFY_USER_ID'),
     ],
 
     'glitchtip' => [
