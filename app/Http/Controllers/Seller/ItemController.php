@@ -102,11 +102,16 @@ class ItemController extends Controller
             ->values()
             ->toArray();
 
+        $hasTinCart = $cart && ($cart->customer_id === null || !empty($cart->customer?->tin_number));
+        $topCartIsIndividual = $cart && ($cart->customer_id === null || !empty($cart->customer?->tin_number));
+
         return Inertia::render('Seller/Items/Index', [
             'items' => $items,
             'nextPageUrl' => $paginator->nextPageUrl(),
             'filters' => ['search' => $search ?? '', 'cart_id' => $cartId],
-            'categories' => $categoryNames, // 👈 add this
+            'categories' => $categoryNames,
+            'has_tin_cart' => $hasTinCart,
+            'top_cart_is_individual' => $topCartIsIndividual,
         ]);
     }
 
@@ -345,8 +350,15 @@ class ItemController extends Controller
 
         $paginator = $query->orderBy('product_name')->paginate($perPage, ['*'], 'page', $page);
 
-        $cart = $cartId ? \App\Models\Seller\Cart::with('customer')->find($cartId) : null;
+        $topCart = \App\Models\Seller\Cart::with('customer')
+            ->where('seller_id', Auth::id())
+            ->where('status', 'open')
+            ->orderBy('priority', 'asc')
+            ->first();
+
+        $cart = $cartId ? \App\Models\Seller\Cart::with('customer')->find($cartId) : $topCart;
         $customer = $cart ? $cart->customer : null;
+        $hasTinCart = $cart && $cart->customer && !empty($cart->customer->tin_number);
 
         $items = collect($paginator->items())->map(function ($item) use ($storeId, $customer) {
             return $this->enrichItemForIndex($item, $storeId, $customer);
@@ -355,6 +367,7 @@ class ItemController extends Controller
         return response()->json([
             'items' => $items,
             'nextPageUrl' => $paginator->nextPageUrl(),
+            'has_tin_cart' => $hasTinCart,
         ]);
     }
 
@@ -392,9 +405,14 @@ class ItemController extends Controller
         $customer = $cart?->customer;
         $customerId = $customer?->id;
 
-        // TIN filled = individual (15% markup), No TIN = business (standard)
-        $hasTin = is_object($customer) && !empty($customer->tin_number);
-        $customerType = $hasTin ? 'individual' : 'business';
+        // Cart without customer = individual walk-in; Customer with TIN = individual; Customer without TIN = business
+        if ($customer === null) {
+            $customerType = 'individual';
+            $hasTin = true;
+        } else {
+            $hasTin = is_object($customer) && !empty($customer->tin_number);
+            $customerType = $hasTin ? 'individual' : 'business';
+        }
 
         // Load variants with all needed relations
         $item->load([
@@ -462,14 +480,10 @@ class ItemController extends Controller
                 ]);
             }
 
-            // 🛑 FIX: Get stock from the item_stocks relationship, not the store_variants column
-            // We filter by location_id to make sure we don't show stock from other stores
-            $stockRecord = $storeVariant?->stocks
+            // 🛑 FIX: Get stock from the item_stocks relationship, summed for this store
+            $store_stock = (int) ($storeVariant?->stocks
                 ->where('location_id', $storeId)
-                ->where('location_type', 'App\Models\Store\Store')
-                ->first();
-
-            $store_stock = $stockRecord?->quantity ?? 0;
+                ->sum('quantity') ?? $storeVariant?->stocks->sum('quantity') ?? $storeVariant?->stock ?? 0);
 
             $status = $storeVariant?->computed_status ?? 'inactive';
             $store_active = $status === 'active';
@@ -486,17 +500,20 @@ class ItemController extends Controller
             $final_price = $storeVariant ? PriceProvider::getFinalPriceWithTax($price_ladder, $customerType) : null;
 
             $basePriceLevel = $price_ladder[0] ?? null;
-            // Use the raw base price from the store tier (NOT 'final', so strikethroughs work)
-            $price = $basePriceLevel['price'] ?? null;
-            $discount_price = $basePriceLevel['discount_price'] ?? null;
+            // Use the raw base price from the store tier (with VAT if individual, for accurate strikethrough)
+            $rawBasePrice = $basePriceLevel['price'] ?? null;
+            $rawDiscountPrice = $basePriceLevel['discount_price'] ?? null;
 
             // Handle fallback to raw matrix just in case
-            if ($storeVariant && !$price) {
+            if ($storeVariant && !$rawBasePrice) {
                 $matrix = is_string($storeVariant->pricing_matrix) ? json_decode($storeVariant->pricing_matrix, true) : $storeVariant->pricing_matrix;
                 $matrix = (isset($matrix[0]) && is_array($matrix[0])) ? $matrix[0] : ($matrix ?? []);
-                $price = $matrix['price'] ?? null;
-                $discount_price = $matrix['discount_price'] ?? null;
+                $rawBasePrice = $matrix['price'] ?? null;
+                $rawDiscountPrice = $matrix['discount_price'] ?? null;
             }
+
+            $price = ($rawBasePrice !== null && $customerType === 'individual') ? round($rawBasePrice * 1.15, 2) : $rawBasePrice;
+            $discount_price = ($rawDiscountPrice !== null && $customerType === 'individual') ? round($rawDiscountPrice * 1.15, 2) : $rawDiscountPrice;
 
             // Extract Seller and Customer prices directly from the ladder (since it resolves expired discounts, overrides, etc.)
             $sellerTier = collect($price_ladder)->firstWhere('level', 'seller');
@@ -560,6 +577,8 @@ class ItemController extends Controller
             ->get();
 
         $displayPrice = $variantData->where('status', 'active')->min('final_price') ?? $variantData->min('price');
+        $hasTinCart = $hasTin;
+        $has_tin_cart = $hasTin;
 
         return Inertia::render('Seller/Items/Show', compact(
             'item',
@@ -570,7 +589,9 @@ class ItemController extends Controller
             'variantData',
             'minStoreVariant',
             'displayPrice',
-            'selectedCartId'
+            'selectedCartId',
+            'has_tin_cart',
+            'hasTinCart'
         ));
     }
 

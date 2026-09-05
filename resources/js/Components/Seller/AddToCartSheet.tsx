@@ -5,12 +5,9 @@ import ShoppingCartRoundedIcon from "@mui/icons-material/ShoppingCartRounded";
 import {
     Box,
     Button,
-    Divider,
     Drawer,
     IconButton,
-    MenuItem,
     Stack,
-    TextField,
     Typography,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -24,9 +21,7 @@ import {
 import PackagingSelector, {
     type PackagingTierOption,
 } from "./PackagingSelector";
-import InventoryDetailList, {
-    PLACEHOLDER_INVENTORY_LOCATIONS,
-} from "./InventoryDetailList";
+import InventoryDetailList from "./InventoryDetailList";
 
 export interface AddToCartSheetProps {
     open: boolean;
@@ -56,9 +51,9 @@ export interface AddToCartSheetProps {
     onExtraPiecesChange: (count: number) => void;
     piecePrice: number | null;
 
-    openCarts: OpenCart[];
-    selectedCart: string;
-    onSelectCart: (cartId: string) => void;
+    openCarts?: OpenCart[];
+    selectedCart?: string;
+    onSelectCart?: (cartId: string) => void;
 
     totalLabel: string;
     totalPrice: number;
@@ -90,7 +85,7 @@ export default function AddToCartSheet({
     extraPieces,
     onExtraPiecesChange,
     piecePrice,
-    openCarts,
+    openCarts = [],
     selectedCart,
     onSelectCart,
     totalLabel,
@@ -323,45 +318,8 @@ export default function AddToCartSheet({
 
                                 <InventoryDetailList
                                     inStock={(variant?.stock ?? 0) > 0}
-                                    locations={PLACEHOLDER_INVENTORY_LOCATIONS}
+                                    stockCount={variant?.stock ?? 0}
                                 />
-
-                                <Divider
-                                    sx={{
-                                        bgcolor: isDark ? "#444" : "rgba(0,0,0,0.12)",
-                                    }}
-                                />
-
-                                <TextField
-                                    select
-                                    fullWidth
-                                    label="Cart"
-                                    value={selectedCart}
-                                    onChange={(e) => onSelectCart(e.target.value)}
-                                    size="small"
-                                    sx={{
-                                        "& .MuiInputLabel-root": {
-                                            color: isDark ? "#aaa" : "inherit",
-                                        },
-                                        "& .MuiOutlinedInput-root": {
-                                            color: isDark ? "#fff" : "inherit",
-                                            "& fieldset": {
-                                                borderColor: isDark
-                                                    ? "#444"
-                                                    : "rgba(0,0,0,0.23)",
-                                            },
-                                        },
-                                    }}
-                                >
-                                    {openCarts.map((cart) => (
-                                        <MenuItem key={cart.id} value={cart.id}>
-                                            Cart #{cart.id} ·{" "}
-                                            {[cart.customer?.first_name, cart.customer?.last_name]
-                                                .filter(Boolean)
-                                                .join(" ") || "No customer"}
-                                        </MenuItem>
-                                    ))}
-                                </TextField>
                             </>
                         )}
                     </Stack>
@@ -369,7 +327,7 @@ export default function AddToCartSheet({
             </Box>
 
             {/* Sticky footer CTA */}
-            {openCarts.length > 0 && (
+            {(!openCarts || openCarts.length > 0) && (
                 <Box
                     sx={{
                         p: 2,

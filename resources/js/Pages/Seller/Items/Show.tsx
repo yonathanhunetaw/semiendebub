@@ -41,6 +41,7 @@ export default function Show({
     displayPrice,
     openCarts = [],
     selectedCartId,
+    has_tin_cart = false,
 }: {
     item: SellerItem;
     allImages?: string[];
@@ -48,6 +49,7 @@ export default function Show({
     displayPrice?: number | null;
     openCarts?: OpenCart[];
     selectedCartId?: number | string | null;
+    has_tin_cart?: boolean;
 }) {
     const initialVariant = firstVariant(variantData) as
         | SellerVariantData
@@ -339,6 +341,7 @@ export default function Show({
                         pricingMode={pricingMode}
                         onPriceTap={priceTapped}
                         packagingOptions={packagingOptions}
+                        hasTinCart={has_tin_cart}
                     />
 
                     <ItemStockCard

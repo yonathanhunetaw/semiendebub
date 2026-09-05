@@ -54,6 +54,8 @@ interface Props {
     nextPageUrl?: string | null;
     filters?: { search: string };
     categories?: string[];
+    has_tin_cart?: boolean;
+    top_cart_is_individual?: boolean;
 }
 
 // ======================== IMAGE RESOLVER ========================
@@ -64,7 +66,7 @@ const resolveImageUrl = (path?: string): string => {
     return `${baseUrl}/${path.replace(/^\//, "")}`;
 };
 
-// ======================== DISCOUNT COUNTDOWN (full‑width) ========================
+// ======================== DISCOUNT COUNTDOWN (full‑width version) ========================
 function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
     const [timeLeft, setTimeLeft] = React.useState<{
         days: number;
@@ -100,13 +102,12 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
     let label = "";
     if (days > 0) label = `${days}d ${hours}h`;
     else if (hours > 0) label = `${hours}h ${minutes}m`;
-    else if (minutes > 0) label = `${minutes}m ${seconds}s`;
-    else label = `${seconds}s`;
+    else label = `${minutes}m ${seconds}s`;
 
     return (
-        <Tooltip title={`Discount ends on ${new Date(endsAt).toLocaleString()}`}>
-            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
-                <AccessTimeIcon sx={{ fontSize: 16, color: "#fff" }} />
+        <Tooltip title={`Discount ends: ${new Date(endsAt).toLocaleString()}`} arrow>
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+                <AccessTimeIcon sx={{ fontSize: "0.85rem", color: "#fbbf24" }} />
                 <Typography variant="caption" sx={{ fontWeight: 700, color: "#fff", fontSize: "0.75rem" }}>
                     {label}
                 </Typography>
@@ -116,7 +117,7 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
 }
 
 // ======================== MAIN DASHBOARD ========================
-export default function Dashboard({ items: initialItems, store, nextPageUrl, filters = { search: '' }, categories = [] }: Props) {
+export default function Dashboard({ items: initialItems, store, nextPageUrl, filters = { search: '' }, categories = [], has_tin_cart = false, top_cart_is_individual = false }: Props) {
     const theme = useTheme();
     const [items, setItems] = React.useState(initialItems);
     const [hasNextPage, setHasNextPage] = React.useState(!!nextPageUrl);
@@ -580,6 +581,11 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                                     }}
                                                 >
                                                     ${originalPrice.toFixed(2)}
+                                                </Typography>
+                                            )}
+                                            {has_tin_cart && (
+                                                <Typography variant="caption" color="success.main" sx={{ ml: 'auto !important', fontWeight: 600, fontSize: '0.65rem' }}>
+                                                    incl. VAT
                                                 </Typography>
                                             )}
                                         </Stack>

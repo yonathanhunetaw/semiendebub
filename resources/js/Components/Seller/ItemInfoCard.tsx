@@ -13,6 +13,7 @@ export interface ItemInfoCardProps {
     onPriceTap: () => void;
     /** All packaging tiers (Piece/Packet/Carton) with unit prices */
     packagingOptions?: PackagingTierOption[];
+    hasTinCart?: boolean;
 }
 
 export default function ItemInfoCard({
@@ -23,6 +24,7 @@ export default function ItemInfoCard({
     pricingMode,
     onPriceTap,
     packagingOptions = [],
+    hasTinCart = false,
 }: ItemInfoCardProps) {
     const theme = useTheme();
     const isDark = theme.palette.mode === "dark";
@@ -103,6 +105,15 @@ export default function ItemInfoCard({
                                 fontSize: "0.7rem",
                             }}
                         />
+                    )}
+                    {hasTinCart && (
+                        <Typography
+                            variant="caption"
+                            color="success.main"
+                            sx={{ fontWeight: 700, fontSize: "0.75rem", ml: "auto" }}
+                        >
+                            incl. VAT
+                        </Typography>
                     )}
                 </Box>
 

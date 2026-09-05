@@ -47,10 +47,8 @@ class DashboardController extends Controller
             ->orderBy('priority', 'asc')
             ->first();
 
-        $hasTinCart = $topCart && $topCart->customer && !empty($topCart->customer->tin_number); // HAS tin = Individual = VAT
-
-        // Business (no TIN / guest) → show individual price tier, no VAT badge
-        $topCartIsIndividual = $topCart && (is_null($topCart->customer_id) || empty($topCart->customer?->tin_number));
+        $hasTinCart = $topCart && ($topCart->customer_id === null || !empty($topCart->customer?->tin_number));
+        $topCartIsIndividual = $topCart && ($topCart->customer_id === null || !empty($topCart->customer?->tin_number));
         $topCartIsGuest      = $topCart && is_null($topCart->customer_id);
 
         // 🔹 1. Build the query – identical to ItemController::index

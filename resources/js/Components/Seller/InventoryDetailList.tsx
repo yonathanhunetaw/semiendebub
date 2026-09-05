@@ -10,18 +10,9 @@ export interface InventoryLocationBreakdown {
 
 export interface InventoryDetailListProps {
     inStock: boolean;
-    locations: InventoryLocationBreakdown[];
+    stockCount?: number;
+    locations?: InventoryLocationBreakdown[];
 }
-
-/**
- * Placeholder data shown until the backend exposes real per-location stock.
- * Swap this out for a prop fed from `variant`/`item` once that data exists.
- */
-export const PLACEHOLDER_INVENTORY_LOCATIONS: InventoryLocationBreakdown[] = [
-    { location: "Store", cartons: 3, packets: 4, pieces: 22 },
-    { location: "Warehouse A", cartons: 22, packets: 4, pieces: 3 },
-    { location: "Warehouse B", cartons: 4, packets: 3, pieces: 0 },
-];
 
 function formatBreakdown(loc: InventoryLocationBreakdown) {
     const parts: string[] = [];
@@ -33,7 +24,8 @@ function formatBreakdown(loc: InventoryLocationBreakdown) {
 
 export default function InventoryDetailList({
     inStock,
-    locations,
+    stockCount,
+    locations = [],
 }: InventoryDetailListProps) {
     const theme = useTheme();
     const isDark = theme.palette.mode === "dark";
@@ -72,9 +64,34 @@ export default function InventoryDetailList({
             </Stack>
 
             <Stack spacing={1}>
-                {locations.map((loc) => (
+                {locations.length > 0 ? (
+                    locations.map((loc) => (
+                        <Stack
+                            key={loc.location}
+                            direction="row"
+                            justifyContent="space-between"
+                            sx={{ fontSize: 14 }}
+                        >
+                            <Typography
+                                variant="body2"
+                                sx={{ color: isDark ? "rgba(255,255,255,0.7)" : "text.secondary" }}
+                            >
+                                {loc.location}
+                            </Typography>
+                            <Typography
+                                variant="body2"
+                                sx={{
+                                    fontWeight: 700,
+                                    color: isDark ? "#fff" : "text.primary",
+                                    textAlign: "right",
+                                }}
+                            >
+                                {formatBreakdown(loc)}
+                            </Typography>
+                        </Stack>
+                    ))
+                ) : (
                     <Stack
-                        key={loc.location}
                         direction="row"
                         justifyContent="space-between"
                         sx={{ fontSize: 14 }}
@@ -83,7 +100,7 @@ export default function InventoryDetailList({
                             variant="body2"
                             sx={{ color: isDark ? "rgba(255,255,255,0.7)" : "text.secondary" }}
                         >
-                            {loc.location}
+                            Store Inventory
                         </Typography>
                         <Typography
                             variant="body2"
@@ -93,10 +110,10 @@ export default function InventoryDetailList({
                                 textAlign: "right",
                             }}
                         >
-                            {formatBreakdown(loc)}
+                            {stockCount ?? 0} pcs available
                         </Typography>
                     </Stack>
-                ))}
+                )}
             </Stack>
         </Box>
     );

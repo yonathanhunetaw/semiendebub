@@ -53,6 +53,7 @@ interface Props {
     nextPageUrl: string | null;
     categories?: { id: number; category_name: string }[];
     selectedCategoryId?: number | null;
+    has_tin_cart?: boolean;
 }
 
 // ======================== IMAGE RESOLVER ========================
@@ -121,6 +122,7 @@ export default function SearchResults({
     nextPageUrl,
     categories = [],
     selectedCategoryId = null,
+    has_tin_cart = false,
 }: Props) {
     const theme = useTheme();
     const [items, setItems] = React.useState(initialItems);
@@ -505,6 +507,11 @@ export default function SearchResults({
                                                     }}
                                                 >
                                                     ${originalPrice.toFixed(2)}
+                                                </Typography>
+                                            )}
+                                            {has_tin_cart && (
+                                                <Typography variant="caption" color="success.main" sx={{ ml: 'auto !important', fontWeight: 600, fontSize: '0.65rem' }}>
+                                                    incl. VAT
                                                 </Typography>
                                             )}
                                         </Stack>

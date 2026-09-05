@@ -36,9 +36,15 @@ class PriceProvider
         $base = self::normalizeMatrix($matrix);
         $prices[] = self::formatMatrixPrice('store', $base);
 
-        // 2️⃣ Individual override (Only apply if customer is an individual with a TIN)
+        // 2️⃣ Individual override
+        // Applies to:
+        // - Carts without a customer (walk-in guest retail customer = individual)
+        // - Customers with a TIN (registered individual customer)
+        // Business customers (registered customer without TIN) do NOT get individual prices.
         $isIndividual = false;
-        if ($customerId) {
+        if ($customerId === null) {
+            $isIndividual = true;
+        } else {
             $customerRecord = DB::table('customers')->find($customerId);
             if ($customerRecord && !empty($customerRecord->tin_number)) {
                 $isIndividual = true;
@@ -178,9 +184,13 @@ class PriceProvider
         $customerId = $customer->id ?? null;
         $ladder = self::getPriceLadder($smallestVariant->id, $storeId, $sellerId, $customerId);
 
-        // TIN filled = individual, No TIN = business
-        $hasTin = is_object($customer) && !empty($customer->tin_number);
-        $customerType = $hasTin ? 'individual' : 'business';
+        // Cart without customer = individual walk-in; Customer with TIN = individual; Customer without TIN = business
+        if ($customer === null) {
+            $customerType = 'individual';
+        } else {
+            $hasTin = is_object($customer) && !empty($customer->tin_number);
+            $customerType = $hasTin ? 'individual' : 'business';
+        }
         
         return self::getFinalPriceWithTax($ladder, $customerType);
     }
@@ -192,17 +202,13 @@ class PriceProvider
     {
         $customerId = is_object($customer) ? ($customer->id ?? null) : $customer;
         
-        // TIN filled = individual, No TIN = business
-        $hasTin = is_object($customer) && !empty($customer->tin_number);
-        $customerType = $hasTin ? 'individual' : 'business';
-
-        \Illuminate\Support\Facades\Log::info('PriceProvider::getItemPriceRange Called', [
-            'item_id' => $item->id,
-            'store_id' => $storeId,
-            'seller_id' => $sellerId,
-            'customer_id' => $customerId,
-            'customer_type' => $customerType
-        ]);
+        // Cart without customer = individual walk-in; Customer with TIN = individual; Customer without TIN = business
+        if ($customer === null) {
+            $customerType = 'individual';
+        } else {
+            $hasTin = is_object($customer) && !empty($customer->tin_number);
+            $customerType = $hasTin ? 'individual' : 'business';
+        }
 
         $variantPrices = [];
         $basePrices = [];
@@ -218,7 +224,7 @@ class PriceProvider
                 if (empty($ladder)) continue;
                 
                 $finalPrice = self::getFinalPriceWithTax($ladder, $customerType);
-                $basePrice = $ladder[0]['final'] ?? $ladder[0]['price'] ?? 0;
+                $basePrice = $ladder[0]['price'] ?? 0;
                 
                 $variantPrices[] = $finalPrice;
                 $basePrices[] = $basePrice;
@@ -227,14 +233,14 @@ class PriceProvider
         }
 
         if (empty($variantPrices)) {
-            $emptyResult = [
+            return [
                 'store_price' => 0,
                 'final_price' => 0,
                 'discount_ends_at' => null,
                 'pricing_matrix' => [],
+                'customer_type' => $customerType,
+                'vat_applied' => false,
             ];
-            
-            return $emptyResult;
         }
 
         $minFinalPrice = min($variantPrices);
@@ -247,11 +253,35 @@ class PriceProvider
         $rawStorePrice = $storeTier['price'] ?? ($bestLadder[0]['price'] ?? min($basePrices));
         $discountEndsAt = $bestLadder[0]['discount_ends_at'] ?? null;
 
+        // If customer is an individual (VAT applied), apply VAT to the base comparison price too
+        // so e.g. Base: $201 + 15% = $231.15 (crossed out) vs Discount: $200 + 15% = $230.00 (active)
+        $storePriceWithTax = $customerType === 'individual' ? round($rawStorePrice * 1.15, 2) : (float) $rawStorePrice;
+
+        // Determine which tier was actually used for the final price
+        $resolvedTier = end($bestLadder);
+        $resolvedLevel = $resolvedTier['level'] ?? 'store';
+        $vatApplied = $customerType === 'individual';
+
+        // 📊 Log the full price resolution path
+        \Illuminate\Support\Facades\Log::info('PriceProvider::getItemPriceRange Result', [
+            'item_id' => $item->id,
+            'item_name' => $item->product_name ?? null,
+            'customer_id' => $customerId,
+            'customer_type' => $customerType,
+            'vat_applied' => $vatApplied,
+            'resolved_tier' => $resolvedLevel,
+            'store_price' => $storePriceWithTax,
+            'final_price' => $minFinalPrice,
+            'ladder_path' => collect($bestLadder)->map(fn($t) => $t['level'] . ':' . $t['final'])->implode(' → '),
+        ]);
+
         return [
-            'store_price' => $rawStorePrice,
+            'store_price' => $storePriceWithTax,
             'final_price' => $minFinalPrice,
             'discount_ends_at' => $discountEndsAt,
             'pricing_matrix' => $bestLadder,
+            'customer_type' => $customerType,
+            'vat_applied' => $vatApplied,
         ];
     }
 }
