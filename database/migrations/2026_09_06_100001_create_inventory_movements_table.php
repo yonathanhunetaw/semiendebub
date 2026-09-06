@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('inventory_movements')) {
+            return;
+        }
+
         Schema::create('inventory_movements', function (Blueprint $table) {
             $table->id();
             $table->foreignId('store_variant_id')
