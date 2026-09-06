@@ -228,10 +228,19 @@ export default function Show({
         .includes("cartoon");
     const perPacket = isCartoon && selectedPrice != null ? selectedPrice : null;
 
+    // Calculate the prorated piece price based on the selected tier.
+    // If a carton is selected and it has a bundled price, the extra pieces should use the prorated cost of the carton.
+    const selectedOption = packagingOptions.find((o) => o.tier === selectedTier);
+    let activePiecePrice = piecePrice;
+    if (selectedOption && selectedOption.tier !== "piece" && selectedOption.unitPrice != null && selectedOption.unitsPerTier != null && selectedOption.unitsPerTier > 0) {
+        activePiecePrice = selectedOption.unitPrice / selectedOption.unitsPerTier;
+    }
+
     // --- Hierarchical packaging breakdown for the cart total ---
     const breakdownLines: PackagingBreakdownLine[] = React.useMemo(() => {
         const lines: PackagingBreakdownLine[] = [];
         const selected = packagingOptions.find((o) => o.tier === selectedTier);
+
         if (selected) {
             lines.push({
                 tier: selected.tier,
@@ -247,11 +256,11 @@ export default function Show({
                 raw: pieceOption?.raw ?? "",
                 label: "Piece",
                 count: extraPieces,
-                unitPrice: piecePrice,
+                unitPrice: activePiecePrice,
             });
         }
         return lines;
-    }, [packagingOptions, selectedTier, tierCount, extraPieces, piecePrice, pieceOption]);
+    }, [packagingOptions, selectedTier, tierCount, extraPieces, activePiecePrice, pieceOption]);
 
     const totalPrice = totalFromBreakdown(breakdownLines);
     const totalLabel = summarizeBreakdown(breakdownLines) || "No items selected";
@@ -260,15 +269,17 @@ export default function Show({
         variant_id: variant?.id ?? 0,
         quantity: tierCount,
         extra_pieces: extraPieces,
-        price: totalPrice || selectedPrice || displayPrice || 0,
+        extra_piece_price: activePiecePrice ?? 0,
+        price: selectedPrice || displayPrice || 0,
     });
 
     React.useEffect(() => {
-        setData("price", totalPrice || selectedPrice || displayPrice || 0);
+        setData("price", selectedPrice || displayPrice || 0);
         setData("variant_id", variant?.id ?? 0);
         setData("quantity", tierCount);
         setData("extra_pieces", extraPieces);
-    }, [displayPrice, selectedPrice, totalPrice, tierCount, extraPieces, setData, variant?.id]);
+        setData("extra_piece_price", activePiecePrice ?? 0);
+    }, [displayPrice, selectedPrice, tierCount, extraPieces, activePiecePrice, setData, variant?.id]);
 
     const chooseColor = (color: string) => {
         const nextSizes = availableSizes(variantData, color);
@@ -428,7 +439,7 @@ export default function Show({
                 onTierCountChange={setTierCount}
                 extraPieces={extraPieces}
                 onExtraPiecesChange={setExtraPieces}
-                piecePrice={piecePrice}
+                piecePrice={activePiecePrice}
                 openCarts={openCarts}
                 selectedCart={selectedCart}
                 onSelectCart={setSelectedCart}

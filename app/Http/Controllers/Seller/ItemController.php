@@ -469,7 +469,10 @@ class ItemController extends Controller
         ]);
 
         // 🔹 Build enriched variant data
-        $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId, $customerType) {
+        $storeVariantIds = $item->variants->flatMap(fn($v) => $v->storeVariants->where('store_id', $storeId))->pluck('id')->toArray();
+        $stocks = app(\App\Services\StockService::class)->getBatchStock($storeVariantIds);
+
+        $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId, $customerType, $stocks) {
             // Get the store variant for the current store
             $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
             if (app()->environment('testing') && is_null($storeVariant)) {
@@ -480,10 +483,8 @@ class ItemController extends Controller
                 ]);
             }
 
-            // 🛑 FIX: Get stock from the item_stocks relationship, summed for this store
-            $store_stock = (int) ($storeVariant?->stocks
-                ->where('location_id', $storeId)
-                ->sum('quantity') ?? $storeVariant?->stocks->sum('quantity') ?? $storeVariant?->stock ?? 0);
+            // 🛑 FIX: Use StockService SSOT ledger for stock
+            $store_stock = $storeVariant ? ($stocks[$storeVariant->id] ?? 0) : 0;
 
             $status = $storeVariant?->computed_status ?? 'inactive';
             $store_active = $status === 'active';
@@ -573,7 +574,7 @@ class ItemController extends Controller
         $openCarts = Cart::with('customer')
             ->visibleTo(auth()->user())
             ->open()
-            ->latest()
+            ->orderBy('priority', 'asc')
             ->get();
 
         $displayPrice = $variantData->where('status', 'active')->min('final_price') ?? $variantData->min('price');

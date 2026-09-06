@@ -29,6 +29,7 @@ interface CustomerPrice {
     tin_number: string | null;
     price: string | number;
     individual_price: number | null;
+    business_price?: number | null;
     discount_price: string | number | null;
     discount_ends_at: string | null;
 }
@@ -725,61 +726,151 @@ function DesktopRow({
 
             {/* Collapsible variant detail */}
             <TableRow>
-                <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
+                <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={5}>
                     <Collapse in={open} timeout="auto" unmountOnExit>
-                        <Box sx={{ m: 2, bgcolor: "action.hover", p: 2, borderRadius: 2 }}>
+                        <Box sx={{ my: 1.5, mx: { xs: 0.5, sm: 1 }, bgcolor: "action.hover", p: { xs: 1, sm: 2 }, borderRadius: 2, maxWidth: "100%", overflow: "hidden" }}>
                             <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
                                 Variants — {item.item_name}
                             </Typography>
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell sx={{ fontWeight: 700 }}>SKU</TableCell>
-                                        <TableCell sx={{ fontWeight: 700 }}>Label</TableCell>
-                                        <TableCell sx={{ fontWeight: 700 }}>Base Price</TableCell>
-                                        <TableCell sx={{ fontWeight: 700 }}>Discount</TableCell>
-                                        <TableCell sx={{ fontWeight: 700 }}>Stock</TableCell>
-                                        <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                                        <TableCell sx={{ fontWeight: 700 }} align="center">Edit</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {variants.map(v => (
-                                        <TableRow key={v.id} hover>
-                                            <TableCell sx={{ fontSize: 12, color: "text.secondary" }}>
-                                                {v.sku}
-                                            </TableCell>
-                                            <TableCell>{v.label}</TableCell>
-                                            <TableCell>{fmt(v.price)}</TableCell>
-                                            <TableCell>{fmt(v.discount_price)}</TableCell>
-                                            <TableCell>{v.stock}</TableCell>
-                                            <TableCell>
-                                                <Chip
-                                                    label={v.active ? "Active" : "Inactive"}
-                                                    size="small"
-                                                    color={v.active ? "success" : "default"}
-                                                    variant="outlined"
-                                                />
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                <Stack direction="row" spacing={0.5} justifyContent="center">
-                                                    <Tooltip title="Edit prices">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={e => {
-                                                                e.stopPropagation();
-                                                                setEditing(v);
-                                                            }}
-                                                        >
-                                                            <EditIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </Stack>
-                                            </TableCell>
+                            <TableContainer component={Paper} variant="outlined" sx={{ maxWidth: "100%", overflowX: "auto" }}>
+                                <Table size="small" sx={{ minWidth: 680 }}>
+                                    <TableHead sx={{ bgcolor: "grey.50" }}>
+                                        <TableRow>
+                                            <TableCell sx={{ fontWeight: 700 }}>SKU</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Label</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Base Price</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Price Tiers</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Stock</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }} align="center">Edit</TableCell>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHead>
+                                    <TableBody>
+                                        {variants.map(v => {
+                                            const hasDiscount = v.discount_price != null && Number(v.discount_price) < Number(v.price);
+                                            const hasOverrides = (v.seller_prices && v.seller_prices.length > 0) ||
+                                                (v.customer_prices && v.customer_prices.length > 0) ||
+                                                Boolean(v.individual_price?.price);
+
+                                            return (
+                                                <TableRow key={v.id} hover>
+                                                    <TableCell sx={{ fontSize: 12, color: "text.secondary", whiteSpace: "nowrap" }}>
+                                                        {v.sku}
+                                                    </TableCell>
+                                                    <TableCell sx={{ fontWeight: 600 }}>{v.label}</TableCell>
+                                                    <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                                        {hasDiscount ? (
+                                                            <Stack direction="row" alignItems="baseline" spacing={0.75}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 700, color: "error.main" }}>
+                                                                    {fmt(v.discount_price)}
+                                                                </Typography>
+                                                                <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled" }}>
+                                                                    {fmt(v.price)}
+                                                                </Typography>
+                                                            </Stack>
+                                                        ) : (
+                                                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                                                {fmt(v.price)}
+                                                            </Typography>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {hasOverrides ? (
+                                                            <Stack spacing={0.5}>
+                                                                {v.seller_prices.map(sp => (
+                                                                    <Stack key={`sp-${sp.id}`} direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+                                                                        <Chip
+                                                                            label="Seller"
+                                                                            size="small"
+                                                                            sx={{ bgcolor: "#1e293b", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }}
+                                                                        />
+                                                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
+                                                                            {fmt(sp.discount_price && Number(sp.discount_price) < Number(sp.price) ? sp.discount_price : sp.price)}
+                                                                        </Typography>
+                                                                        {sp.discount_price && Number(sp.discount_price) < Number(sp.price) && (
+                                                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>
+                                                                                {fmt(sp.price)}
+                                                                            </Typography>
+                                                                        )}
+                                                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                                                                            ({sp.seller_name})
+                                                                        </Typography>
+                                                                    </Stack>
+                                                                ))}
+                                                                {v.customer_prices.map(cp => (
+                                                                    <Stack key={`cp-${cp.id}`} direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+                                                                        <Chip
+                                                                            label="Customer"
+                                                                            size="small"
+                                                                            sx={{ bgcolor: "#6366f1", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }}
+                                                                        />
+                                                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
+                                                                            {fmt(cp.discount_price && Number(cp.discount_price) < Number(cp.price) ? cp.discount_price : cp.price)}
+                                                                        </Typography>
+                                                                        {cp.discount_price && Number(cp.discount_price) < Number(cp.price) && (
+                                                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>
+                                                                                {fmt(cp.price)}
+                                                                            </Typography>
+                                                                        )}
+                                                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                                                                            ({cp.customer_name})
+                                                                        </Typography>
+                                                                    </Stack>
+                                                                ))}
+                                                                {v.individual_price?.price && (
+                                                                    <Stack direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+                                                                        <Chip
+                                                                            label="Individual"
+                                                                            size="small"
+                                                                            sx={{ bgcolor: "#059669", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }}
+                                                                        />
+                                                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
+                                                                            {fmt(v.individual_price.discount_price && Number(v.individual_price.discount_price) < Number(v.individual_price.price) ? v.individual_price.discount_price : v.individual_price.price)}
+                                                                        </Typography>
+                                                                        {v.individual_price.discount_price && Number(v.individual_price.discount_price) < Number(v.individual_price.price) && (
+                                                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>
+                                                                                {fmt(v.individual_price.price)}
+                                                                            </Typography>
+                                                                        )}
+                                                                    </Stack>
+                                                                )}
+                                                            </Stack>
+                                                        ) : (
+                                                            <Typography variant="caption" color="text.disabled">
+                                                                —
+                                                            </Typography>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>{v.stock}</TableCell>
+                                                    <TableCell>
+                                                        <Chip
+                                                            label={v.active ? "Active" : "Inactive"}
+                                                            size="small"
+                                                            color={v.active ? "success" : "default"}
+                                                            variant="outlined"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell align="center">
+                                                        <Stack direction="row" spacing={0.5} justifyContent="center">
+                                                            <Tooltip title="Edit prices">
+                                                                <IconButton
+                                                                    size="small"
+                                                                    onClick={e => {
+                                                                        e.stopPropagation();
+                                                                        setEditing(v);
+                                                                    }}
+                                                                >
+                                                                    <EditIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </Stack>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
                         </Box>
                     </Collapse>
                 </TableCell>
@@ -856,53 +947,140 @@ function MobileCard({
             <Collapse in={expanded} timeout="auto" unmountOnExit>
                 <Divider />
                 <Box sx={{ p: 2 }}>
-                    {variants.map(v => (
-                        <Paper
-                            key={v.id}
-                            variant="outlined"
-                            sx={{ p: 1.5, mb: 1.5, borderRadius: 2 }}
-                        >
-                            <Stack spacing={1}>
-                                <Stack direction="row" justifyContent="space-between" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                                    <Typography variant="subtitle2" fontWeight={600} sx={{ wordBreak: 'break-word', flex: 1, minWidth: 0 }}>{v.label}</Typography>
-                                    <Chip
-                                        label={v.active ? "Active" : "Inactive"}
-                                        size="small"
-                                        color={v.active ? "success" : "default"}
+                    {variants.map(v => {
+                        const hasDiscount = v.discount_price && Number(v.discount_price) > 0 && Number(v.discount_price) < Number(v.price);
+                        const hasOverrides = (v.seller_prices && v.seller_prices.length > 0) ||
+                            (v.customer_prices && v.customer_prices.length > 0) ||
+                            Boolean(v.individual_price?.price);
+
+                        return (
+                            <Paper
+                                key={v.id}
+                                variant="outlined"
+                                sx={{ p: 1.5, mb: 1.5, borderRadius: 2 }}
+                            >
+                                <Stack spacing={1}>
+                                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ flexWrap: 'wrap', gap: 1 }}>
+                                        <Typography variant="subtitle2" fontWeight={600} sx={{ wordBreak: 'break-word', flex: 1, minWidth: 0 }}>
+                                            {v.label}
+                                        </Typography>
+                                        <Chip
+                                            label={v.active ? "Active" : "Inactive"}
+                                            size="small"
+                                            color={v.active ? "success" : "default"}
+                                            variant="outlined"
+                                        />
+                                    </Stack>
+
+                                    <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                                        <Box>
+                                            <Typography variant="caption" color="text.secondary">SKU</Typography>
+                                            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{v.sku}</Typography>
+                                        </Box>
+                                        <Box>
+                                            <Typography variant="caption" color="text.secondary">Stock</Typography>
+                                            <Typography variant="body2" fontWeight={600}>{v.stock}</Typography>
+                                        </Box>
+                                        <Box>
+                                            <Typography variant="caption" color="text.secondary">Base Price</Typography>
+                                            {hasDiscount ? (
+                                                <Stack direction="row" alignItems="baseline" spacing={0.5}>
+                                                    <Typography variant="body2" sx={{ fontWeight: 700, color: "error.main" }}>
+                                                        {fmt(v.discount_price)}
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled" }}>
+                                                        {fmt(v.price)}
+                                                    </Typography>
+                                                </Stack>
+                                            ) : (
+                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                                    {fmt(v.price)}
+                                                </Typography>
+                                            )}
+                                        </Box>
+                                    </Stack>
+
+                                    {/* Price Tiers (Customer & Seller Prices) */}
+                                    {hasOverrides && (
+                                        <Box sx={{ mt: 0.5, pt: 1, borderTop: "1px dashed #e2e8f0" }}>
+                                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: "block", mb: 0.5 }}>
+                                                Price Tiers:
+                                            </Typography>
+                                            <Stack spacing={0.5}>
+                                                {v.seller_prices.map(sp => (
+                                                    <Stack key={`sp-${sp.id}`} direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+                                                        <Chip
+                                                            label="Seller"
+                                                            size="small"
+                                                            sx={{ bgcolor: "#1e293b", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }}
+                                                        />
+                                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
+                                                            {fmt(sp.discount_price && Number(sp.discount_price) < Number(sp.price) ? sp.discount_price : sp.price)}
+                                                        </Typography>
+                                                        {sp.discount_price && Number(sp.discount_price) < Number(sp.price) && (
+                                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>
+                                                                {fmt(sp.price)}
+                                                            </Typography>
+                                                        )}
+                                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                                                            ({sp.seller_name})
+                                                        </Typography>
+                                                    </Stack>
+                                                ))}
+                                                {v.customer_prices.map(cp => (
+                                                    <Stack key={`cp-${cp.id}`} direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+                                                        <Chip
+                                                            label="Customer"
+                                                            size="small"
+                                                            sx={{ bgcolor: "#6366f1", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }}
+                                                        />
+                                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
+                                                            {fmt(cp.discount_price && Number(cp.discount_price) < Number(cp.price) ? cp.discount_price : cp.price)}
+                                                        </Typography>
+                                                        {cp.discount_price && Number(cp.discount_price) < Number(cp.price) && (
+                                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>
+                                                                {fmt(cp.price)}
+                                                            </Typography>
+                                                        )}
+                                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                                                            ({cp.customer_name})
+                                                        </Typography>
+                                                    </Stack>
+                                                ))}
+                                                {v.individual_price?.price && (
+                                                    <Stack direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+                                                        <Chip
+                                                            label="Individual"
+                                                            size="small"
+                                                            sx={{ bgcolor: "#059669", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }}
+                                                        />
+                                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
+                                                            {fmt(v.individual_price.discount_price && Number(v.individual_price.discount_price) < Number(v.individual_price.price) ? v.individual_price.discount_price : v.individual_price.price)}
+                                                        </Typography>
+                                                        {v.individual_price.discount_price && Number(v.individual_price.discount_price) < Number(v.individual_price.price) && (
+                                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>
+                                                                {fmt(v.individual_price.price)}
+                                                            </Typography>
+                                                        )}
+                                                    </Stack>
+                                                )}
+                                            </Stack>
+                                        </Box>
+                                    )}
+
+                                    <Button
                                         variant="outlined"
-                                    />
+                                        size="small"
+                                        startIcon={<EditIcon />}
+                                        onClick={() => setEditing(v)}
+                                        sx={{ mt: 1, alignSelf: 'flex-start' }}
+                                    >
+                                        Edit Prices
+                                    </Button>
                                 </Stack>
-                                <Stack direction="row" spacing={2}>
-                                    <Box>
-                                        <Typography variant="caption" color="text.secondary">SKU</Typography>
-                                        <Typography variant="body2">{v.sku}</Typography>
-                                    </Box>
-                                    <Box>
-                                        <Typography variant="caption" color="text.secondary">Stock</Typography>
-                                        <Typography variant="body2">{v.stock}</Typography>
-                                    </Box>
-                                </Stack>
-                                <Stack direction="row" spacing={2}>
-                                    <Box>
-                                        <Typography variant="caption" color="text.secondary">Base Price</Typography>
-                                        <Typography variant="body2">{fmt(v.price)}</Typography>
-                                    </Box>
-                                    <Box>
-                                        <Typography variant="caption" color="text.secondary">Discount</Typography>
-                                        <Typography variant="body2">{fmt(v.discount_price)}</Typography>
-                                    </Box>
-                                </Stack>
-                                <Button
-                                    variant="outlined"
-                                    size="small"
-                                    startIcon={<EditIcon />}
-                                    onClick={() => setEditing(v)}
-                                >
-                                    Edit Prices
-                                </Button>
-                            </Stack>
-                        </Paper>
-                    ))}
+                            </Paper>
+                        );
+                    })}
                 </Box>
             </Collapse>
 
@@ -962,8 +1140,7 @@ export default function StoreInventory({ store, inventory, customers = [], selle
     console.log("[StoreInventory] inventory type:", Array.isArray(inventory) ? 'array' : 'paginated');
 
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
     // Normalize inventory data: if it's an array, wrap as paginated with single page
     let items: InventoryItem[] = [];
@@ -989,21 +1166,22 @@ export default function StoreInventory({ store, inventory, customers = [], selle
         console.log("[StoreInventory] Inventory is an array, using single page");
     } else {
         // Assume it's PaginatedData from Laravel Resource or raw LengthAwarePaginator
-        items = inventory.data || [];
-        meta = inventory.meta || (inventory.current_page !== undefined ? {
-            current_page: inventory.current_page,
-            from: inventory.from,
-            last_page: inventory.last_page,
-            per_page: inventory.per_page,
-            to: inventory.to,
-            total: inventory.total,
+        const paginated = inventory as any;
+        items = paginated.data || [];
+        meta = paginated.meta || (paginated.current_page !== undefined ? {
+            current_page: paginated.current_page,
+            from: paginated.from,
+            last_page: paginated.last_page,
+            per_page: paginated.per_page,
+            to: paginated.to,
+            total: paginated.total,
         } : null);
-        links = (inventory.meta && inventory.meta.links) || inventory.links || [];
+        links = (paginated.meta && paginated.meta.links) || paginated.links || [];
         console.log("[StoreInventory] Inventory is paginated, total items:", items.length, "meta:", meta);
     }
 
     return (
-        <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
+        <Box sx={{ p: { xs: 1, sm: 2, md: 3 }, maxWidth: "100%", overflowX: "hidden" }}>
             <Head title={`${store?.name} Inventory`} />
 
             <Stack direction="row" spacing={2} alignItems="center" mb={3} flexWrap="wrap">
@@ -1038,7 +1216,7 @@ export default function StoreInventory({ store, inventory, customers = [], selle
                         <TableContainer
                             component={Paper}
                             elevation={0}
-                            sx={{ border: "1px solid #e0e0e0", borderRadius: 3, overflowX: 'auto' }}
+                            sx={{ border: "1px solid #e0e0e0", borderRadius: 3, maxWidth: "100%", overflowX: 'auto' }}
                         >
                             <Table aria-label="store inventory">
                                 <TableHead sx={{ bgcolor: "grey.50" }}>

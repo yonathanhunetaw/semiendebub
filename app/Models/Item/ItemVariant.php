@@ -199,7 +199,16 @@ class ItemVariant extends Model
      */
     public function calculateTotalPieces(): int
     {
-        // Option 2 is best for performance
+        if ($this->item_packaging_type_id) {
+            $pivotRow = $this->packagingQuantities()
+                ->where('item_packaging_types.id', $this->item_packaging_type_id)
+                ->first();
+
+            if ($pivotRow && isset($pivotRow->pivot->quantity)) {
+                return (int) $pivotRow->pivot->quantity;
+            }
+        }
+
         return (int) $this->packagingQuantities()
             ->sum('item_variant_packaging_quantity.quantity');
     }

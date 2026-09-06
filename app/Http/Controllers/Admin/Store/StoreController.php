@@ -64,7 +64,7 @@ class StoreController extends Controller
                     $q2->where('store_id', $store->id);
                 })
                 ->with([
-                    'itemColor', 'itemSize', 'packagingQuantities',
+                    'itemColor', 'itemSize', 'itemPackagingType', 'packagingQuantities',
                     'storeVariants' => function($q2) use ($store) {
                         $q2->where('store_id', $store->id)
                            ->with([
@@ -112,7 +112,7 @@ class StoreController extends Controller
                         'label' => implode(' / ', array_filter([
                             $sv->itemVariant->itemColor?->name,
                             $sv->itemVariant->itemSize?->name,
-                            $sv->itemVariant->packagingQuantities->first()?->name,
+                            $sv->itemVariant->itemPackagingType?->name ?? $sv->itemVariant->packagingQuantities->first()?->name,
                         ])) ?: $sv->itemVariant->sku,
 
                         // Base store prices
@@ -282,7 +282,7 @@ class StoreController extends Controller
             'customerPrices.customer',
             'sellerPrices.seller',
             'itemVariant' => function ($q) {
-                $q->with(['item.category', 'itemColor', 'itemSize', 'packagingQuantities']);
+                $q->with(['item.category', 'itemColor', 'itemSize', 'itemPackagingType', 'packagingQuantities']);
             },
             'stocks'
         ]);
@@ -309,7 +309,7 @@ class StoreController extends Controller
                 'label' => implode(' / ', array_filter([
                     $storeVariant->itemVariant->itemColor?->name,
                     $storeVariant->itemVariant->itemSize?->name,
-                    $storeVariant->itemVariant->packagingQuantities->first()?->name,
+                    $storeVariant->itemVariant->itemPackagingType?->name ?? $storeVariant->itemVariant->packagingQuantities->first()?->name,
                 ])) ?: $storeVariant->itemVariant->sku,
                 'price' => $basePrice,
                 'discount_price' => $discountPrice,

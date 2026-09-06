@@ -19,6 +19,7 @@ class Item extends Model
 
     protected $fillable = [
         'product_name',
+        'description',
         'product_description',
         'packaging_details',
         'general_images',
@@ -27,6 +28,17 @@ class Item extends Model
         'is_incomplete',
         'file_prefix',
     ];
+
+    public function getDescriptionAttribute($value): ?string
+    {
+        return $value ?: $this->product_description;
+    }
+
+    public function setDescriptionAttribute($value): void
+    {
+        $this->attributes['description'] = $value;
+        $this->attributes['product_description'] = $value;
+    }
 
     protected $casts = [
         'general_images' => 'array',

@@ -260,27 +260,12 @@ export default function ItemInfoCard({
                                 const unitPrice = opt.unitPrice;
                                 const qty = opt.unitsPerTier; // pieces in this unit
 
-                                // Per-smaller-unit cost:
-                                // Packet → per piece; Carton → per packet (if packet exists)
                                 let perSmallerLabel: string | null = null;
                                 let perSmallerPrice: number | null = null;
 
-                                if (opt.tier === "packet" && qty && unitPrice != null) {
+                                if (qty != null && qty > 1 && unitPrice != null) {
                                     perSmallerPrice = unitPrice / qty;
                                     perSmallerLabel = "/ piece";
-                                } else if (opt.tier === "cartoon") {
-                                    const packetOpt = packagingOptions.find((o) => o.tier === "packet");
-                                    if (packetOpt?.unitPrice != null && packetOpt.unitsPerTier && qty) {
-                                        // pieces per carton / pieces per packet = packets per carton
-                                        const packetsPerCarton = qty / packetOpt.unitsPerTier;
-                                        if (packetsPerCarton > 0 && unitPrice != null) {
-                                            perSmallerPrice = unitPrice / packetsPerCarton;
-                                            perSmallerLabel = "/ packet";
-                                        }
-                                    } else if (pieceUnitPrice == null && qty && unitPrice != null) {
-                                        perSmallerPrice = unitPrice / qty;
-                                        perSmallerLabel = "/ piece";
-                                    }
                                 }
 
                                 return (
@@ -292,13 +277,13 @@ export default function ItemInfoCard({
                                                     sx={{ fontWeight: 700, color: isDark ? "#fff" : "text.primary" }}
                                                 >
                                                     {label}
-                                                    {qty != null && (
+                                                    {qty != null && qty > 1 && (
                                                         <Typography
                                                             component="span"
                                                             variant="caption"
                                                             sx={{ ml: 0.5, color: "text.secondary", fontWeight: 400 }}
                                                         >
-                                                            ({qty} {idx === 0 ? "pcs" : "pcs"})
+                                                            ({qty} pcs)
                                                         </Typography>
                                                     )}
                                                 </Typography>

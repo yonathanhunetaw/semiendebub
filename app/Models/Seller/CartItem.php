@@ -19,6 +19,8 @@ class CartItem extends Pivot
         'store_id',
         'quantity',
         'price',
+        'extra_pieces',
+        'extra_piece_price',
     ];
 
     /**

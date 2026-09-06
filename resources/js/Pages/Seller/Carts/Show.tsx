@@ -3,6 +3,7 @@ import {
     SellerHeader,
     SELLER_BRAND_DARK,
     sellerName,
+    sellerPrice,
 } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, router } from "@inertiajs/react";
@@ -29,8 +30,12 @@ import React from "react";
 interface CartItem {
     id: number;
     product_name: string;
+    packaging?: string | null;
+    pieces_per_unit?: number | null;
     quantity: number;
     price: number;
+    extra_pieces?: number;
+    extra_piece_price?: number | null;
 }
 
 interface Cart {
@@ -54,7 +59,10 @@ export default function Show({ cart }: { cart: Cart }) {
         : "Guest Customer";
 
     const totalAmount = cart.items.reduce(
-        (sum, item) => sum + item.price * item.quantity,
+        (sum, item) =>
+            sum +
+            item.price * item.quantity +
+            (item.extra_pieces ?? 0) * (item.extra_piece_price ?? 0),
         0,
     );
 
@@ -153,16 +161,34 @@ export default function Show({ cart }: { cart: Cart }) {
                                                         {item.product_name}
                                                     </Typography>
                                                 }
-                                                secondary={`Qty: ${item.quantity} × $${item.price}`}
+                                                secondary={
+                                                    <Stack spacing={0.5} mt={0.5}>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            {item.packaging ? `${item.packaging} — ` : ""}
+                                                            Qty: {item.quantity} × {sellerPrice(item.price)} Birr
+                                                        </Typography>
+                                                        {(item.extra_pieces ?? 0) > 0 && (
+                                                            <Typography variant="body2" color="text.secondary">
+                                                                + {item.extra_pieces} Piece{item.extra_pieces === 1 ? "" : "s"} × {sellerPrice(item.extra_piece_price ?? 0)} Birr
+                                                            </Typography>
+                                                        )}
+                                                        {item.packaging && item.packaging.toLowerCase() !== "piece" && item.pieces_per_unit && item.pieces_per_unit > 1 && (
+                                                            <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.8 }}>
+                                                                Contains {item.pieces_per_unit} pieces ({sellerPrice(item.price / item.pieces_per_unit)} Birr / piece)
+                                                            </Typography>
+                                                        )}
+                                                    </Stack>
+                                                }
                                             />
                                             <Typography
                                                 fontWeight={900}
                                                 sx={{ mr: 2 }}
                                             >
-                                                $
-                                                {(
-                                                    item.price * item.quantity
-                                                ).toFixed(2)}
+                                                {sellerPrice(
+                                                    item.price * item.quantity +
+                                                        (item.extra_pieces ?? 0) *
+                                                            (item.extra_piece_price ?? 0),
+                                                )} Birr
                                             </Typography>
                                         </ListItem>
                                     ))}
@@ -221,7 +247,7 @@ export default function Show({ cart }: { cart: Cart }) {
                                             Subtotal
                                         </Typography>
                                         <Typography fontWeight={700}>
-                                            ${totalAmount.toFixed(2)}
+                                            {sellerPrice(totalAmount)} Birr
                                         </Typography>
                                     </Stack>
                                     <Divider />
@@ -240,7 +266,7 @@ export default function Show({ cart }: { cart: Cart }) {
                                             fontWeight={900}
                                             color={SELLER_BRAND_DARK}
                                         >
-                                            ${totalAmount.toFixed(2)}
+                                            {sellerPrice(totalAmount)} Birr
                                         </Typography>
                                     </Stack>
                                     <Button

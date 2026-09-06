@@ -14,11 +14,17 @@ class Warehouse extends Model
     protected $fillable = [
         'name',
         'code',
+        'location',
         'address',
         'store_id',
         'manager',
         'status'
     ];
+
+    public function getLocationAttribute($value): ?string
+    {
+        return $value ?: $this->address;
+    }
 
     /**
      * Get all physical stock records located in this warehouse.

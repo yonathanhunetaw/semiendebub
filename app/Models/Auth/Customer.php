@@ -14,6 +14,8 @@ class Customer extends Model
     use HasFactory;
 
     protected $fillable = [
+        'name',
+        'phone',
         'first_name',
         'last_name',
         'phone_number',
@@ -26,9 +28,9 @@ class Customer extends Model
 
     /**
      * 2. The attributes that should be appended to the model's array form.
-     * This makes 'name' visible to Inertia/React.
+     * This makes 'name' and 'phone' visible to Inertia/React.
      */
-    protected $appends = ['name'];
+    protected $appends = ['name', 'phone'];
 
     /**
      * 3. Define the 'name' accessor.
@@ -36,7 +38,26 @@ class Customer extends Model
     protected function name(): Attribute
     {
         return Attribute::make(
-            get: fn () => trim("{$this->first_name} {$this->last_name}"),
+            get: fn ($value) => $value ?: trim("{$this->first_name} {$this->last_name}"),
+            set: fn ($value) => [
+                'name' => $value,
+                'first_name' => explode(' ', (string) $value, 2)[0] ?? $value,
+                'last_name' => explode(' ', (string) $value, 2)[1] ?? '',
+            ],
+        );
+    }
+
+    /**
+     * Define the 'phone' accessor.
+     */
+    protected function phone(): Attribute
+    {
+        return Attribute::make(
+            get: fn ($value) => $value ?: $this->phone_number,
+            set: fn ($value) => [
+                'phone' => $value,
+                'phone_number' => $value,
+            ],
         );
     }
 

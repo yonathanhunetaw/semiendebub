@@ -1,4 +1,4 @@
-import { SELLER_BRAND_DARK } from "@/Components/Seller/sellerUi";
+import { SELLER_BRAND_DARK, sellerPrice } from "@/Components/Seller/sellerUi";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import RemoveRoundedIcon from "@mui/icons-material/RemoveRounded";
 import { Box, IconButton, Stack, Typography } from "@mui/material";
@@ -179,7 +179,7 @@ export default function PackagingSelector({
                                             variant="caption"
                                             sx={{ color: SELLER_BRAND_DARK, fontWeight: 700 }}
                                         >
-                                            {piecePrice} Birr ea.
+                                            {sellerPrice(piecePrice)} Birr ea.
                                         </Typography>
                                     )}
                                 </Box>

@@ -1,6 +1,6 @@
 import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
 import { Head, usePage } from "@inertiajs/react";
-import { Alert, Box, CssBaseline, useTheme } from "@mui/material";
+import { Alert, Box, CssBaseline, Snackbar, useTheme } from "@mui/material";
 import React from "react";
 
 export default function SellerLayout({
@@ -53,22 +53,27 @@ export default function SellerLayout({
                     },
                 }}
             >
-                {flash?.success && (
-                    <Alert
-                        severity="success"
-                        sx={{ m: 2, mb: 0, borderRadius: 3 }}
-                    >
-                        {flash.success}
+                <Snackbar
+                    open={!!flash?.success}
+                    autoHideDuration={3000}
+                    anchorOrigin={{ vertical: "top", horizontal: "center" }}
+                    sx={{ mt: 2 }}
+                >
+                    <Alert severity="success" sx={{ borderRadius: 3, boxShadow: 3 }}>
+                        {flash?.success}
                     </Alert>
-                )}
-                {flash?.error && (
-                    <Alert
-                        severity="error"
-                        sx={{ m: 2, mb: 0, borderRadius: 3 }}
-                    >
-                        {flash.error}
+                </Snackbar>
+
+                <Snackbar
+                    open={!!flash?.error}
+                    autoHideDuration={4000}
+                    anchorOrigin={{ vertical: "top", horizontal: "center" }}
+                    sx={{ mt: 2 }}
+                >
+                    <Alert severity="error" sx={{ borderRadius: 3, boxShadow: 3 }}>
+                        {flash?.error}
                     </Alert>
-                )}
+                </Snackbar>
 
                 <Box
                     component="main"

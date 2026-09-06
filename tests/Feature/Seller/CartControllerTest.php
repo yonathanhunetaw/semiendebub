@@ -10,6 +10,7 @@ use App\Models\Seller\Cart;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -79,6 +80,8 @@ class CartControllerTest extends TestCase
             'variant_id' => $variant->id,
             'quantity'   => 2,
             'price'      => 2333.00,
+            'extra_pieces' => 1,
+            'extra_piece_price' => 48.60,
         ]);
 
         $response->assertRedirect();
@@ -87,6 +90,8 @@ class CartControllerTest extends TestCase
             'item_variant_id' => $variant->id,
             'quantity'        => 2,
             'price'           => 2333.00,
+            'extra_pieces'    => 1,
+            'extra_piece_price' => 48.60,
         ]);
     }
 
@@ -115,5 +120,29 @@ class CartControllerTest extends TestCase
             'cart_id'         => $cart->id,
             'item_variant_id' => $variant->id,
         ]);
+    }
+
+    #[Test]
+    public function cart_displays_the_price_saved_when_the_item_was_added()
+    {
+        $item = Item::factory()->create(['status' => 'active']);
+        $variant = ItemVariant::factory()->create(['item_id' => $item->id]);
+        $cart = Cart::create([
+            'seller_id' => $this->seller->id,
+            'store_id' => $this->store->id,
+            'status' => 'open',
+        ]);
+
+        $cart->variants()->attach($variant->id, [
+            'quantity' => 1,
+            'price' => 1900.00,
+            'store_id' => $this->store->id,
+        ]);
+
+        $this->get(route('seller.carts.show', $cart))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Seller/Carts/Show')
+                ->where('cart.items.0.price', 1900)
+            );
     }
 }

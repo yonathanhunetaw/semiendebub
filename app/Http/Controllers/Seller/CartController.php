@@ -106,22 +106,20 @@ class CartController extends Controller
         $this->authorize('view', $cart);
         $cart->load(['customer', 'variants.item']);
 
-        // Determine type: business or individual (fallback to individual)
-        $customer = $cart->customer;
-        $isBusiness = $customer && (!empty($customer->is_business) || !empty($customer->tin_number));
-        $customerType = $isBusiness ? 'business' : 'individual';
-
         $cartData = [
             'id' => $cart->id,
             'status' => $cart->status,
             'customer' => $cart->customer,
-            'items' => $cart->variants->map(function ($variant) use ($customerType) {
+            'items' => $cart->variants->map(function ($variant) {
                 return [
                     'id' => $variant->id,
                     'product_name' => $variant->item?->product_name ?? 'Unknown',
-                    // Use the calculation engine here
-                    'price' => \App\Services\PriceProvider::getFinalPriceWithTax([$variant->pivot->price], $customerType),
+                    'packaging' => $variant->itemPackagingType?->name ?? null,
+                    'pieces_per_unit' => $variant->calculateTotalPieces(),
+                    'price' => (float) $variant->pivot->price,
                     'quantity' => $variant->pivot->quantity,
+                    'extra_pieces' => $variant->pivot->extra_pieces ?? 0,
+                    'extra_piece_price' => $variant->pivot->extra_piece_price,
                 ];
             }),
         ];
@@ -244,6 +242,8 @@ class CartController extends Controller
             'variant_id' => 'required|exists:item_variants,id',
             'quantity' => 'required|integer|min:1',
             'price' => 'required|numeric|min:0',
+            'extra_pieces' => 'nullable|integer|min:0',
+            'extra_piece_price' => 'nullable|numeric|min:0',
         ]);
 
         $variant = ItemVariant::findOrFail($validated['variant_id']);
@@ -253,12 +253,16 @@ class CartController extends Controller
             $cart->variants()->updateExistingPivot($variant->id, [
                 'quantity' => $existing->pivot->quantity + $validated['quantity'],
                 'price' => $validated['price'],
+                'extra_pieces' => $existing->pivot->extra_pieces + ($validated['extra_pieces'] ?? 0),
+                'extra_piece_price' => $validated['extra_piece_price'] ?? $existing->pivot->extra_piece_price,
                 'store_id' => $cart->store_id,
             ]);
         } else {
             $cart->variants()->attach($variant->id, [
                 'quantity' => $validated['quantity'],
                 'price' => $validated['price'],
+                'extra_pieces' => $validated['extra_pieces'] ?? 0,
+                'extra_piece_price' => $validated['extra_piece_price'] ?? null,
                 'store_id' => $cart->store_id,
             ]);
         }

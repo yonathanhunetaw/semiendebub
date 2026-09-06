@@ -25,6 +25,7 @@ class StoreVariant extends Model
         'manual_status',
         'forced_status',
         'status',
+        'active',
     ];
 
     /**
@@ -101,6 +102,26 @@ class StoreVariant extends Model
     {
         return $this->active ? 'active' : 'inactive';
     }
+    public function inventoryMovements(): HasMany
+    {
+        return $this->hasMany(\App\Models\Inventory\InventoryMovement::class, 'store_variant_id');
+    }
+
+    /**
+     * Dynamic Stock Balance calculated from the SSOT inventory movements ledger.
+     */
+    public function getCurrentStockAttribute(): int
+    {
+        return (int) $this->inventoryMovements()->sum('quantity');
+    }
+
+    public function scopeInStock($query)
+    {
+        return $query->whereHas('inventoryMovements', function ($q) {
+            $q->havingRaw('SUM(quantity) > 0');
+        });
+    }
+
     // In StoreVariant.php (Model)
     public function getIsDiscountedAttribute()
     {
