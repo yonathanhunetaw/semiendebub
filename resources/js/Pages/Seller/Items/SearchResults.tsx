@@ -511,7 +511,7 @@ export default function SearchResults({
                                             )}
                                             {has_tin_cart && (
                                                 <Typography variant="caption" color="success.main" sx={{ ml: 'auto !important', fontWeight: 600, fontSize: '0.65rem' }}>
-                                                    incl. VAT
+                                                    Individual pricing
                                                 </Typography>
                                             )}
                                         </Stack>

@@ -18,6 +18,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
 import axios from "axios";
+import { keyframes } from "@emotion/react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -27,6 +28,7 @@ interface CustomerPrice {
     customer_id: number;
     customer_name: string;
     tin_number: string | null;
+    customer_type?: "business" | "individual";
     price: string | number;
     individual_price: number | null;
     business_price?: number | null;
@@ -38,6 +40,14 @@ interface SellerPrice {
     id: number;
     seller_id: number;
     seller_name: string;
+    price: string | number;
+    discount_price: string | number | null;
+    discount_ends_at: string | null;
+    business?: PriceTier | null;
+    individual?: PriceTier | null;
+}
+
+interface PriceTier {
     price: string | number;
     discount_price: string | number | null;
     discount_ends_at: string | null;
@@ -124,6 +134,35 @@ const getPersonName = (person: Person) => {
         : person.first_name;
 };
 
+const defaultExpiryDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() + 30);
+    return date.toISOString().slice(0, 10);
+};
+
+const discountFromDefault = (defaultPrice: string, price: string) => {
+    const defaultValue = Number(defaultPrice);
+    const priceValue = Number(price);
+    if (!defaultValue || !Number.isFinite(priceValue)) return "Set a price to see the discount.";
+    return `${Math.max(0, ((defaultValue - priceValue) / defaultValue) * 100).toFixed(1)}% ${priceValue <= defaultValue ? "below" : "above"} the default price.`;
+};
+
+const includingVat = (price: string | number | null | undefined) =>
+    price == null || price === "" ? "" : (Number(price) * 1.15).toFixed(2);
+
+const variantAccent = (label: string) => {
+    const accents = ["#2563eb", "#7c3aed", "#db2777", "#0891b2", "#d97706", "#16a34a"];
+    return accents[[...label].reduce((total, char) => total + char.charCodeAt(0), 0) % accents.length];
+};
+
+const bounce = keyframes`
+    0%, 100% { transform: translateY(0); }
+    20% { transform: translateY(-10px); }
+    40% { transform: translateY(0); }
+    60% { transform: translateY(-6px); }
+    80% { transform: translateY(0); }
+`;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Toast Component (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,6 +203,7 @@ function EditDrawer({
     onSaved: (updated: Variant) => void;
 }) {
     const [tab, setTab] = useState(0);
+    const [pricingSection, setPricingSection] = useState<"default" | "customer" | "seller">("default");
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [toast, setToast] = useState({ open: false, message: "", severity: "success" as "success" | "error" });
@@ -179,9 +219,9 @@ function EditDrawer({
     const [sellerPrices, setSellerPrices] = useState<SellerPrice[]>(variant.seller_prices);
 
     // ── Individual price state ───────────────────────────────────────────────
-    const [indPrice, setIndPrice] = useState(String(variant.individual_price?.price ?? ""));
-    const [indDiscount, setIndDiscount] = useState(String(variant.individual_price?.discount_price ?? ""));
-    const [indEndsAt, setIndEndsAt] = useState(variant.individual_price?.discount_ends_at?.substring(0, 10) ?? "");
+    const [indPrice, setIndPrice] = useState(String(variant.individual_price?.price ?? includingVat(variant.price)));
+    const [indDiscount, setIndDiscount] = useState(String(variant.individual_price?.discount_price ?? includingVat(variant.discount_price)));
+    const [indEndsAt, setIndEndsAt] = useState(variant.discount_ends_at?.substring(0, 10) ?? "");
     const [indActive, setIndActive] = useState(variant.individual_price?.active ?? true);
     const [individualPrice, setIndividualPrice] = useState<IndividualPrice | null>(variant.individual_price ?? null);
 
@@ -196,6 +236,21 @@ function EditDrawer({
     const [spPrice, setSpPrice] = useState("");
     const [spDiscount, setSpDiscount] = useState("");
     const [spEndsAt, setSpEndsAt] = useState("");
+
+    const customerType = tab === 1 ? "individual" : "business";
+    const defaultTierPrice = customerType === "business" ? basePrice : indPrice;
+    const visibleCustomerPrices = customerPrices.filter(price =>
+        customerType === "individual" ? Boolean(price.tin_number) : !price.tin_number
+    );
+    const eligibleCustomers = customers.filter(customer =>
+        customerType === "individual" ? Boolean(customer.tin_number) : !customer.tin_number
+    );
+    const visibleSellerPrices = sellerPrices
+        .map(sellerPrice => ({
+            sellerPrice,
+            tier: customerType === "individual" ? sellerPrice.individual : (sellerPrice.business ?? sellerPrice),
+        }))
+        .filter(({ tier }) => Boolean(tier));
 
     const showToast = (message: string, severity: "success" | "error") => {
         setToast({ open: true, message, severity });
@@ -246,65 +301,77 @@ function EditDrawer({
     const addCustomerPrice = () => wrap(async () => {
         const { data } = await axios.post(`/store-variants/${variant.id}/customer-prices`, {
             customer_id: cpCustomer,
+            customer_type: customerType,
             price: cpPrice,
             discount_price: cpDiscount || null,
             discount_ends_at: cpEndsAt || null,
         });
-        setCustomerPrices(prev => {
-            const idx = prev.findIndex(cp => cp.customer_id === Number(cpCustomer));
-            const row: CustomerPrice = {
+        const row: CustomerPrice = {
                 id: data.id,
                 customer_id: data.customer_id,
                 customer_name: data.customer?.first_name
                     ? `${data.customer.first_name} ${data.customer.last_name ?? ''}`.trim()
                     : `Customer #${data.customer_id}`,
                 tin_number: data.customer?.tin_number ?? null,
+                customer_type: data.customer?.tin_number ? "individual" : "business",
                 price: data.pricing_matrix?.price ?? data.price ?? 0,
                 individual_price: null,
                 business_price: null,
                 discount_price: data.pricing_matrix?.discount_price ?? data.discount_price,
                 discount_ends_at: data.pricing_matrix?.discount_ends_at ?? data.discount_ends_at,
-            };
-            return idx >= 0 ? prev.map((cp, i) => i === idx ? row : cp) : [...prev, row];
-        });
+        };
+        const index = customerPrices.findIndex(price => price.customer_id === Number(cpCustomer));
+        const next = index >= 0 ? customerPrices.map((price, currentIndex) => currentIndex === index ? row : price) : [...customerPrices, row];
+        setCustomerPrices(next);
+        onSaved({ ...variant, customer_prices: next, seller_prices: sellerPrices, individual_price: individualPrice });
         setCpCustomer(""); setCpPrice(""); setCpDiscount(""); setCpEndsAt("");
     }, "Customer price saved successfully!");
 
     // Delete customer price
     const deleteCustomerPrice = (id: number) => wrap(async () => {
         await axios.delete(`/store-variant-customer-prices/${id}`);
-        setCustomerPrices(prev => prev.filter(cp => cp.id !== id));
+        const next = customerPrices.filter(cp => cp.id !== id);
+        setCustomerPrices(next);
+        onSaved({ ...variant, customer_prices: next, seller_prices: sellerPrices, individual_price: individualPrice });
     }, "Customer price deleted successfully!");
 
     // Add / update seller price
     const addSellerPrice = () => wrap(async () => {
         const { data } = await axios.post(`/store-variants/${variant.id}/seller-prices`, {
             seller_id: spSeller,
+            customer_type: customerType,
             price: spPrice,
             discount_price: spDiscount || null,
             discount_ends_at: spEndsAt || null,
         });
-        setSellerPrices(prev => {
-            const idx = prev.findIndex(sp => sp.seller_id === Number(spSeller));
-            const row: SellerPrice = {
+        const row: SellerPrice = {
                 id: data.id,
                 seller_id: data.seller_id,
                 seller_name: data.seller?.first_name
                     ? `${data.seller.first_name} ${data.seller.last_name ?? ''}`.trim()
                     : `Seller #${data.seller_id}`,
-                price: data.price,
-                discount_price: data.discount_price,
-                discount_ends_at: data.discount_ends_at,
-            };
-            return idx >= 0 ? prev.map((sp, i) => i === idx ? row : sp) : [...prev, row];
-        });
+                price: data.pricing_matrix?.business?.price ?? data.pricing_matrix?.price ?? data.price,
+                discount_price: data.pricing_matrix?.business?.discount_price ?? data.pricing_matrix?.discount_price ?? data.discount_price,
+                discount_ends_at: data.pricing_matrix?.business?.discount_ends_at ?? data.pricing_matrix?.discount_ends_at ?? data.discount_ends_at,
+                business: data.pricing_matrix?.business ?? (customerType === "business" ? data.pricing_matrix : null),
+                individual: data.pricing_matrix?.individual ?? (customerType === "individual" ? data.pricing_matrix : null),
+        };
+        const index = sellerPrices.findIndex(price => price.seller_id === Number(spSeller));
+        const next = index >= 0 ? sellerPrices.map((price, currentIndex) => currentIndex === index ? row : price) : [...sellerPrices, row];
+        setSellerPrices(next);
+        onSaved({ ...variant, customer_prices: customerPrices, seller_prices: next, individual_price: individualPrice });
         setSpSeller(""); setSpPrice(""); setSpDiscount(""); setSpEndsAt("");
     }, "Seller price saved successfully!");
 
     // Delete seller price
     const deleteSellerPrice = (id: number) => wrap(async () => {
-        await axios.delete(`/store-variant-seller-prices/${id}`);
-        setSellerPrices(prev => prev.filter(sp => sp.id !== id));
+        await axios.delete(`/store-variant-seller-prices/${id}`, { data: { customer_type: customerType } });
+        const next = sellerPrices.map(sellerPrice => sellerPrice.id !== id
+            ? sellerPrice
+            : { ...sellerPrice, [customerType]: null }
+        ).filter(sellerPrice => sellerPrice.business || sellerPrice.individual || sellerPrice.id !== id);
+        setSellerPrices(next);
+        onSaved({ ...variant, customer_prices: customerPrices, seller_prices: next, individual_price: individualPrice });
     }, "Seller price deleted successfully!");
 
     // Save / update individual price
@@ -316,6 +383,7 @@ function EditDrawer({
             active: indActive,
         });
         setIndividualPrice(data);
+        onSaved({ ...variant, customer_prices: customerPrices, seller_prices: sellerPrices, individual_price: data });
     }, "Individual price saved successfully!");
 
     // Clear individual price override
@@ -326,6 +394,7 @@ function EditDrawer({
         setIndDiscount("");
         setIndEndsAt("");
         setIndActive(true);
+        onSaved({ ...variant, customer_prices: customerPrices, seller_prices: sellerPrices, individual_price: null });
     }, "Individual price cleared!");
 
     return (
@@ -350,29 +419,42 @@ function EditDrawer({
 
                     <Tabs
                         value={tab}
-                        onChange={(_, v) => setTab(v)}
+                        onChange={(_, v) => {
+                            setTab(v);
+                            setPricingSection("default");
+                        }}
                         textColor="inherit"
                         TabIndicatorProps={{ style: { backgroundColor: "#fff" } }}
                         sx={{ mt: 1 }}
                     >
-                        <Tab label="Base Price" sx={{ fontSize: 12 }} />
-                        <Tab label="Customer Prices" sx={{ fontSize: 12 }} />
-                        <Tab label="Seller Prices" sx={{ fontSize: 12 }} />
+                        <Tab label="Business" sx={{ fontSize: 12 }} />
+                        <Tab label="Individual" sx={{ fontSize: 12 }} />
                     </Tabs>
                 </Box>
 
                 <Box sx={{ px: 3, py: 2, overflowY: "auto", flex: 1 }}>
                     {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
+                    <Tabs
+                        value={pricingSection}
+                        onChange={(_, section) => setPricingSection(section)}
+                        variant="fullWidth"
+                        sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
+                    >
+                        <Tab value="default" label="Default Price" sx={{ fontSize: 12 }} />
+                        <Tab value="customer" label="Customer Price" sx={{ fontSize: 12 }} />
+                        <Tab value="seller" label="Seller Price" sx={{ fontSize: 12 }} />
+                    </Tabs>
+
                     {/* ── TAB 0: Base Price ──────────────────────────────────────── */}
-                    {tab === 0 && (
+                    {tab === 0 && pricingSection === "default" && (
                         <Stack spacing={2.5} mt={1}>
                             <Typography variant="subtitle2" color="text.secondary">
-                                Default price shown to all customers unless a specific price override exists.
+                                Default business price for this active store variant. Individual prices are configured in the Individual tab.
                             </Typography>
 
                             <TextField
-                                label="Base Price"
+                                label="Default Business Price"
                                 type="number"
                                 value={basePrice}
                                 onChange={e => setBasePrice(e.target.value)}
@@ -418,19 +500,37 @@ function EditDrawer({
                                 onClick={saveBase}
                                 disabled={saving}
                             >
-                                Save Base Price
+                                Save Default Business Price
                             </Button>
                         </Stack>
                     )}
 
-                    {/* ── TAB 1: Customer Prices ─────────────────────────────────── */}
-                    {tab === 1 && (
+                    {tab === 1 && pricingSection === "default" && (
+                        <Paper variant="outlined" sx={{ p: 2, bgcolor: "success.50" }}>
+                            <Typography variant="subtitle2" fontWeight={700} mb={0.5}>Default Individual Price</Typography>
+                            <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+                                Used for walk-in and individual customers unless they have a personal override.
+                            </Typography>
+                            <Stack spacing={1.5}>
+                                <TextField label="Individual Price" type="number" value={indPrice} onChange={e => setIndPrice(e.target.value)} size="small" fullWidth InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
+                                <TextField label="Individual Discount Price" type="number" value={indDiscount} onChange={e => setIndDiscount(e.target.value)} size="small" fullWidth InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
+                                <TextField label="Discount Ends At" type="date" value={indEndsAt} InputLabelProps={{ shrink: true }} size="small" fullWidth disabled helperText="Matches the Default Business Price discount expiry." />
+                                <FormControl size="small" fullWidth><InputLabel>Status</InputLabel><Select value={indActive ? "active" : "inactive"} label="Status" onChange={e => setIndActive(e.target.value === "active")}><MenuItem value="active">Active</MenuItem><MenuItem value="inactive">Inactive</MenuItem></Select></FormControl>
+                                <Stack direction="row" spacing={1}><Button variant="contained" onClick={saveIndividualPrice} disabled={saving || !indPrice}>Save Default Individual Price</Button>{individualPrice && <Button color="inherit" onClick={clearIndividualPrice} disabled={saving}>Clear</Button>}</Stack>
+                            </Stack>
+                        </Paper>
+                    )}
+
+                    {/* ── Customer Prices ───────────────────────────────────────── */}
+                    {pricingSection === "customer" && (
                         <Box mt={1}>
                             <Typography variant="subtitle2" color="text.secondary" mb={2}>
-                                Per-customer price overrides for this variant in this store.
+                                {customerType === "business"
+                                    ? "Business customer price overrides for this variant."
+                                    : "Individual customer price overrides for this variant."}
                             </Typography>
 
-                            {customerPrices.length > 0 ? (
+                            {visibleCustomerPrices.length > 0 ? (
                                 <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
                                     <Table size="small">
                                         <TableHead sx={{ bgcolor: "grey.50" }}>
@@ -443,7 +543,7 @@ function EditDrawer({
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {customerPrices.map(cp => (
+                                            {visibleCustomerPrices.map(cp => (
                                                 <TableRow key={cp.id} hover>
                                                     <TableCell>{cp.customer_name}</TableCell>
                                                     <TableCell>{fmt(cp.price)}</TableCell>
@@ -469,13 +569,13 @@ function EditDrawer({
                                 </TableContainer>
                             ) : (
                                 <Alert severity="info" sx={{ mb: 2 }}>
-                                    No customer-specific prices yet.
+                                    No {customerType} customer prices yet.
                                 </Alert>
                             )}
 
                             <Divider sx={{ mb: 2 }} />
                             <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
-                                Add / Update Customer Price
+                                Add / Update {customerType === "business" ? "Business" : "Individual"} Customer Price
                             </Typography>
 
                             <Stack spacing={2}>
@@ -486,33 +586,17 @@ function EditDrawer({
                                         label="Customer"
                                         onChange={e => {
                                             setCpCustomer(String(e.target.value));
-                                            setCpPrice("");
+                                            setCpPrice(defaultTierPrice);
                                             setCpDiscount("");
-                                            setCpEndsAt("");
+                                            setCpEndsAt(defaultExpiryDate());
                                         }}
                                     >
-                                        {customers.map(c => {
-                                            const hasTin = !!c.tin_number;
-                                            return (
-                                                <MenuItem key={c.id} value={c.id}>
-                                                    <Stack direction="row" spacing={1} alignItems="center" width="100%" justifyContent="space-between">
-                                                        <Typography variant="body2">{getPersonName(c)}</Typography>
-                                                        <Chip
-                                                            label={hasTin ? "Individual" : "Business"}
-                                                            size="small"
-                                                            color={hasTin ? "info" : "warning"}
-                                                            variant="outlined"
-                                                            sx={{ fontSize: 9, height: 18 }}
-                                                        />
-                                                    </Stack>
-                                                </MenuItem>
-                                            );
-                                        })}
+                                        {eligibleCustomers.map(c => <MenuItem key={c.id} value={c.id}>{getPersonName(c)}</MenuItem>)}
                                     </Select>
                                 </FormControl>
 
                                 <TextField
-                                    label="Price"
+                                    label={`${customerType === "business" ? "Business" : "Individual"} Customer Price`}
                                     type="number"
                                     value={cpPrice}
                                     onChange={e => setCpPrice(e.target.value)}
@@ -520,6 +604,9 @@ function EditDrawer({
                                     size="small"
                                     fullWidth
                                 />
+                                <Typography variant="caption" color="text.secondary">
+                                    Discount from the default: {discountFromDefault(defaultTierPrice, cpPrice)}
+                                </Typography>
                                 <TextField
                                     label="Discount Price"
                                     type="number"
@@ -545,20 +632,20 @@ function EditDrawer({
                                     onClick={addCustomerPrice}
                                     disabled={saving || !cpCustomer || !cpPrice}
                                 >
-                                    Save Customer Price
+                                    Save {customerType === "business" ? "Business" : "Individual"} Price
                                 </Button>
                             </Stack>
                         </Box>
                     )}
 
                     {/* ── TAB 2: Seller Prices ───────────────────────────────────── */}
-                    {tab === 2 && (
+                    {pricingSection === "seller" && (
                         <Box mt={1}>
                             <Typography variant="subtitle2" color="text.secondary" mb={2}>
-                                Per-seller price overrides for this variant in this store.
+                                {customerType === "business" ? "Business seller price overrides." : "Individual seller price overrides."}
                             </Typography>
 
-                            {sellerPrices.length > 0 ? (
+                            {visibleSellerPrices.length > 0 ? (
                                 <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
                                     <Table size="small">
                                         <TableHead sx={{ bgcolor: "grey.50" }}>
@@ -571,13 +658,13 @@ function EditDrawer({
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {sellerPrices.map(sp => (
+                                            {visibleSellerPrices.map(({ sellerPrice: sp, tier }) => (
                                                 <TableRow key={sp.id} hover>
                                                     <TableCell>{sp.seller_name}</TableCell>
-                                                    <TableCell>{fmt(sp.price)}</TableCell>
-                                                    <TableCell>{fmt(sp.discount_price)}</TableCell>
+                                                    <TableCell>{fmt(tier?.price)}</TableCell>
+                                                    <TableCell>{fmt(tier?.discount_price)}</TableCell>
                                                     <TableCell sx={{ whiteSpace: "nowrap", fontSize: 11 }}>
-                                                        {sp.discount_ends_at?.substring(0, 10) ?? "—"}
+                                                        {tier?.discount_ends_at?.substring(0, 10) ?? "—"}
                                                     </TableCell>
                                                     <TableCell align="right">
                                                         <Tooltip title="Delete">
@@ -597,13 +684,13 @@ function EditDrawer({
                                 </TableContainer>
                             ) : (
                                 <Alert severity="info" sx={{ mb: 2 }}>
-                                    No seller-specific prices yet.
+                                    No {customerType} seller prices yet.
                                 </Alert>
                             )}
 
                             <Divider sx={{ mb: 2 }} />
                             <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
-                                Add / Update Seller Price
+                                Add / Update {customerType === "business" ? "Business" : "Individual"} Seller Price
                             </Typography>
 
                             <Stack spacing={2}>
@@ -612,7 +699,12 @@ function EditDrawer({
                                     <Select
                                         value={spSeller}
                                         label="Seller"
-                                        onChange={e => setSpSeller(String(e.target.value))}
+                                        onChange={e => {
+                                            setSpSeller(String(e.target.value));
+                                            setSpPrice(defaultTierPrice);
+                                            setSpDiscount("");
+                                            setSpEndsAt(defaultExpiryDate());
+                                        }}
                                     >
                                         {sellers.map(s => (
                                             <MenuItem key={s.id} value={s.id}>
@@ -622,7 +714,7 @@ function EditDrawer({
                                     </Select>
                                 </FormControl>
                                 <TextField
-                                    label="Price"
+                                    label={`${customerType === "business" ? "Business" : "Individual"} Seller Price`}
                                     type="number"
                                     value={spPrice}
                                     onChange={e => setSpPrice(e.target.value)}
@@ -630,6 +722,9 @@ function EditDrawer({
                                     size="small"
                                     fullWidth
                                 />
+                                <Typography variant="caption" color="text.secondary">
+                                    Discount from the default: {discountFromDefault(defaultTierPrice, spPrice)}
+                                </Typography>
                                 <TextField
                                     label="Discount Price"
                                     type="number"
@@ -689,10 +784,20 @@ function DesktopRow({
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState<Variant | null>(null);
     const [variants, setVariants] = useState<Variant[]>(item.variants);
+    const [highlightedVariantId, setHighlightedVariantId] = useState<number | null>(null);
 
     const handleSaved = (updated: Variant) => {
         setVariants(prev => prev.map(v => v.id === updated.id ? updated : v));
-        setEditing(updated);
+        setEditing(null);
+        setOpen(true);
+        setHighlightedVariantId(updated.id);
+        window.setTimeout(() => {
+            document.getElementById(`variant-${updated.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 50);
+        window.setTimeout(() => {
+            setHighlightedVariantId(null);
+            router.reload();
+        }, 1900);
     };
 
     return (
@@ -712,7 +817,9 @@ function DesktopRow({
                 <TableCell sx={{ fontWeight: 700 }}>{item.item_name}</TableCell>
                 <TableCell>{item.category}</TableCell>
                 <TableCell align="center">
-                    <Chip label={`${item.total_variants} Variants`} size="small" variant="outlined" />
+                    <Button size="small" variant="outlined" endIcon={open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />} onClick={event => { event.stopPropagation(); setOpen(value => !value); }}>
+                        {open ? "Hide Variants" : `Show Variants (${item.total_variants})`}
+                    </Button>
                 </TableCell>
                 <TableCell align="right">
                     <Typography
@@ -753,11 +860,11 @@ function DesktopRow({
                                                 Boolean(v.individual_price?.price);
 
                                             return (
-                                                <TableRow key={v.id} hover>
+                                                <TableRow key={v.id} id={`variant-${v.id}`} hover sx={highlightedVariantId === v.id ? { animation: `${bounce} 0.6s ease-in-out 3`, bgcolor: "primary.50" } : undefined}>
                                                     <TableCell sx={{ fontSize: 12, color: "text.secondary", whiteSpace: "nowrap" }}>
                                                         {v.sku}
                                                     </TableCell>
-                                                    <TableCell sx={{ fontWeight: 600 }}>{v.label}</TableCell>
+                                                    <TableCell sx={{ fontWeight: 600 }}><Stack direction="row" alignItems="center" spacing={1}><Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: variantAccent(v.label), boxShadow: `0 0 0 3px ${variantAccent(v.label)}22` }} /><span>{v.label}</span></Stack></TableCell>
                                                     <TableCell sx={{ whiteSpace: "nowrap" }}>
                                                         {hasDiscount ? (
                                                             <Stack direction="row" alignItems="baseline" spacing={0.75}>
@@ -905,10 +1012,20 @@ function MobileCard({
     const [expanded, setExpanded] = useState(false);
     const [editing, setEditing] = useState<Variant | null>(null);
     const [variants, setVariants] = useState<Variant[]>(item.variants);
+    const [highlightedVariantId, setHighlightedVariantId] = useState<number | null>(null);
 
     const handleSaved = (updated: Variant) => {
         setVariants(prev => prev.map(v => v.id === updated.id ? updated : v));
-        setEditing(updated);
+        setEditing(null);
+        setExpanded(true);
+        setHighlightedVariantId(updated.id);
+        window.setTimeout(() => {
+            document.getElementById(`variant-${updated.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 50);
+        window.setTimeout(() => {
+            setHighlightedVariantId(null);
+            router.reload();
+        }, 1900);
     };
 
     return (
@@ -956,14 +1073,13 @@ function MobileCard({
                         return (
                             <Paper
                                 key={v.id}
+                                id={`variant-${v.id}`}
                                 variant="outlined"
-                                sx={{ p: 1.5, mb: 1.5, borderRadius: 2 }}
+                                sx={{ p: 1.5, mb: 1.5, borderRadius: 2, ...(highlightedVariantId === v.id ? { animation: `${bounce} 0.6s ease-in-out 3`, borderColor: "primary.main" } : {}) }}
                             >
                                 <Stack spacing={1}>
                                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                                        <Typography variant="subtitle2" fontWeight={600} sx={{ wordBreak: 'break-word', flex: 1, minWidth: 0 }}>
-                                            {v.label}
-                                        </Typography>
+                                        <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}><Box sx={{ width: 10, height: 10, borderRadius: "50%", flex: "0 0 auto", bgcolor: variantAccent(v.label) }} /><Typography variant="subtitle2" fontWeight={600} sx={{ wordBreak: 'break-word' }}>{v.label}</Typography></Stack>
                                         <Chip
                                             label={v.active ? "Active" : "Inactive"}
                                             size="small"

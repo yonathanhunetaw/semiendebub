@@ -185,10 +185,11 @@ export default function Show({
                     }
                     return sellerImage(image);
                 })
-                .filter(Boolean) as string[];
+                .filter((image): image is string => typeof image === "string")
+                .filter((image) => mainImages.includes(image));
         }
         return [];
-    }, [variant?.id, variant?.images]);
+    }, [mainImages, variant?.id, variant?.images]);
 
     const activeMainImage = selectedMainImage || mainImages[0] || null;
     const activeVariantImage = selectedVariantImage || variantImages[0] || null;

@@ -59,6 +59,7 @@ class DashboardController extends Controller
                     $q->with([
                         'storeVariants' => function ($sq) use ($storeId) {
                             $sq->where('store_id', $storeId)
+                                ->where('active', true)
                                 ->with([
                                     'stocks' => function ($stockQuery) use ($storeId) {
                                         $stockQuery->where('location_type', 'App\Models\Store\Store')
@@ -71,7 +72,7 @@ class DashboardController extends Controller
             ]);
 
         $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
-            $q->where('store_id', $storeId);
+            $q->where('store_id', $storeId)->where('active', true);
         });
 
         if ($search) {

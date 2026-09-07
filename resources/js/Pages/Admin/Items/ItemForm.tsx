@@ -504,6 +504,7 @@ export default function ItemForm({
 
         // Variant images keyed by comboKey and slot index
         for (const [key, slots] of Object.entries(variantSlots)) {
+            fd.append(`variant_slot_keys[${key}]`, "1");
             slots.forEach((slot, slotIndex) => {
                 if (slot.kind === "new") {
                     fd.append(

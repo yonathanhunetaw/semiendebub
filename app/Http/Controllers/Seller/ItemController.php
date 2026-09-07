@@ -50,6 +50,7 @@ class ItemController extends Controller
                     $q->with([
                         'storeVariants' => function ($sq) use ($storeId) {
                             $sq->where('store_id', $storeId)
+                                ->where('active', true)
                                 ->with([
                                     'stocks' => function ($stockQuery) use ($storeId) {
                                         $stockQuery->where('location_type', 'App\Models\Store\Store')
@@ -62,7 +63,7 @@ class ItemController extends Controller
             ]);
 
         $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
-            $q->where('store_id', $storeId);
+            $q->where('store_id', $storeId)->where('active', true);
         });
 
         if ($search) {
@@ -144,6 +145,9 @@ class ItemController extends Controller
         $totalStock = 0;
         foreach ($item->variants as $variant) {
             foreach ($variant->storeVariants->where('store_id', $storeId) as $sv) {
+                if (!$sv->active) {
+                    continue;
+                }
                 $totalStock += (int) $sv->stocks->sum('quantity');
             }
         }
@@ -181,13 +185,14 @@ class ItemController extends Controller
         $selectedCategoryId = $request->input('category_id');
 
         $queryBuilder = Item::where('status', 'active')
-            ->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId))
+            ->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId)->where('active', true))
             ->with([
                 'category',
                 'variants' => function ($q) use ($storeId) {
                     $q->with([
                         'storeVariants' => function ($sq) use ($storeId) {
                             $sq->where('store_id', $storeId)
+                                ->where('active', true)
                                 ->with([
                                     'stocks' => function ($stockQuery) use ($storeId) {
                                         $stockQuery->where('location_type', 'App\Models\Store\Store')
@@ -276,7 +281,7 @@ class ItemController extends Controller
 
         // Get categories of items matching search query or matching active items
         $categoryQuery = Item::where('status', 'active')
-            ->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId))
+            ->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId)->where('active', true))
             ->whereNotNull('item_category_id');
 
         if ($query) {
@@ -325,6 +330,7 @@ class ItemController extends Controller
                     $q->with([
                         'storeVariants' => function ($sq) use ($storeId) {
                             $sq->where('store_id', $storeId)
+                                ->where('active', true)
                                 ->with([
                                     'stocks' => function ($stockQuery) use ($storeId) {
                                         $stockQuery->where('location_type', 'App\Models\Store\Store')
@@ -336,7 +342,7 @@ class ItemController extends Controller
                 },
             ])
             ->whereHas('variants.storeVariants', function ($q) use ($storeId) {
-                $q->where('store_id', $storeId);
+                $q->where('store_id', $storeId)->where('active', true);
             });
 
         if ($search) {
@@ -415,14 +421,17 @@ class ItemController extends Controller
             'variants.itemSize',
             'variants.itemPackagingType',
             'variants.packagingQuantities',
-            'variants.storeVariants.sellerPrices',
-            'variants.storeVariants.customerPrices',
-            'variants.storeVariants.stocks',
+            'variants.storeVariants' => function ($query) use ($storeId) {
+                $query->where('store_id', $storeId)
+                    ->where('active', true)
+                    ->with(['sellerPrices', 'customerPrices', 'stocks']);
+            },
             // 'variants.storeVariants.sellerPrices',
             'variants.owner',
         ]);
 
-        $storeVariants = $item->variants->flatMap(fn($v) => $v->storeVariants);
+        $storeVariants = $item->variants->flatMap(fn($v) => $v->storeVariants)
+            ->filter(fn($storeVariant) => $storeVariant->active);
 
         $minStoreVariant = $storeVariants
             ->filter(fn($sv) => $sv->computed_status === 'active')
@@ -496,9 +505,10 @@ class ItemController extends Controller
             $final_price = $storeVariant ? PriceProvider::getFinalPriceWithTax($price_ladder, $customerType) : null;
 
             $basePriceLevel = $price_ladder[0] ?? null;
-            // Use the raw base price from the store tier (with VAT if individual, for accurate strikethrough)
-            $rawBasePrice = $basePriceLevel['price'] ?? null;
-            $rawDiscountPrice = $basePriceLevel['discount_price'] ?? null;
+            $individualTier = collect($price_ladder)->firstWhere('level', 'individual');
+            $displayTier = $customerType === 'individual' ? ($individualTier ?? $basePriceLevel) : $basePriceLevel;
+            $rawBasePrice = $displayTier['price'] ?? null;
+            $rawDiscountPrice = $displayTier['discount_price'] ?? null;
 
             // Handle fallback to raw matrix just in case
             if ($storeVariant && !$rawBasePrice) {
@@ -508,8 +518,8 @@ class ItemController extends Controller
                 $rawDiscountPrice = $matrix['discount_price'] ?? null;
             }
 
-            $price = ($rawBasePrice !== null && $customerType === 'individual') ? round($rawBasePrice * 1.15, 2) : $rawBasePrice;
-            $discount_price = ($rawDiscountPrice !== null && $customerType === 'individual') ? round($rawDiscountPrice * 1.15, 2) : $rawDiscountPrice;
+            $price = $rawBasePrice;
+            $discount_price = $rawDiscountPrice;
 
             // Extract Seller and Customer prices directly from the ladder (since it resolves expired discounts, overrides, etc.)
             $sellerTier = collect($price_ladder)->firstWhere('level', 'seller');
@@ -558,7 +568,7 @@ class ItemController extends Controller
             ]);
 
             return $payload;
-        });
+        })->filter(fn($variant) => $variant['store_active'])->values();
         // ... (Your existing Cart/Seller retrieval logic)
         $sellers = User::where('role', 'seller')->get();
         $customersWithOpenCarts = Customer::where('store_id', $storeId)

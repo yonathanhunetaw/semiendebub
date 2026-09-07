@@ -132,6 +132,7 @@ class StoreController extends Controller
                             'customer_id' => $cp->customer_id,
                             'customer_name' => $cp->customer?->first_name ?? "Customer #{$cp->customer_id}",
                             'tin_number' => $cp->customer?->tin_number ?? null,
+                            'customer_type' => $cp->customer?->tin_number ? 'individual' : 'business',
                             'price' => $cp->pricing_matrix['price'] ?? 0,
                             'discount_price' => $cp->pricing_matrix['discount_price'] ?? null,
                             'discount_ends_at' => $cp->pricing_matrix['discount_ends_at'] ?? null,
@@ -144,6 +145,8 @@ class StoreController extends Controller
                             'price' => $sp->pricing_matrix['price'] ?? 0,
                             'discount_price' => $sp->pricing_matrix['discount_price'] ?? null,
                             'discount_ends_at' => $sp->pricing_matrix['discount_ends_at'] ?? null,
+                            'business' => $sp->pricing_matrix['business'] ?? $sp->pricing_matrix,
+                            'individual' => $sp->pricing_matrix['individual'] ?? null,
                         ])->values(),
 
                         'individual_price' => $sv->individualPrice ? [
@@ -277,10 +280,38 @@ class StoreController extends Controller
             'active' => $validated['active'] ?? $storeVariant->active,
         ]);
 
+        $businessTier = isset($pricingMatrix[0]) && is_array($pricingMatrix[0])
+            ? $pricingMatrix[0]
+            : $pricingMatrix;
+        $individualPrice = $storeVariant->individualPrice;
+        $isAutoIndividualPrice = $individualPrice
+            && (($individualPrice->pricing_matrix['auto_from_business'] ?? false) === true);
+
+        if (!$individualPrice || $isAutoIndividualPrice) {
+            $individualMatrix = [
+                'price' => round(((float) $businessTier['price']) * 1.15, 2),
+                'discount_price' => isset($businessTier['discount_price']) && $businessTier['discount_price'] !== null
+                    ? round(((float) $businessTier['discount_price']) * 1.15, 2)
+                    : null,
+                'discount_ends_at' => $businessTier['discount_ends_at'] ?? null,
+                'auto_from_business' => true,
+            ];
+
+            StoreVariantIndividualPrice::updateOrCreate(
+                ['store_variant_id' => $storeVariant->id],
+                ['pricing_matrix' => $individualMatrix, 'active' => true]
+            );
+        } else {
+            $individualMatrix = $individualPrice->pricing_matrix;
+            $individualMatrix['discount_ends_at'] = $businessTier['discount_ends_at'] ?? null;
+            $individualPrice->update(['pricing_matrix' => $individualMatrix]);
+        }
+
         // Reload with relationships
         $storeVariant->load([
             'customerPrices.customer',
             'sellerPrices.seller',
+            'individualPrice',
             'itemVariant' => function ($q) {
                 $q->with(['item.category', 'itemColor', 'itemSize', 'itemPackagingType', 'packagingQuantities']);
             },
@@ -324,6 +355,7 @@ class StoreController extends Controller
                     'customer_id' => $cp->customer_id,
                     'customer_name' => $cp->customer?->first_name ?? "Customer #{$cp->customer_id}",
                     'tin_number' => $cp->customer?->tin_number ?? null,
+                    'customer_type' => $cp->customer?->tin_number ? 'individual' : 'business',
                     'price' => $cp->pricing_matrix['price'] ?? 0,
                     'discount_price' => $cp->pricing_matrix['discount_price'] ?? null,
                     'discount_ends_at' => $cp->pricing_matrix['discount_ends_at'] ?? null,
@@ -335,6 +367,8 @@ class StoreController extends Controller
                     'price' => $sp->pricing_matrix['price'] ?? 0,
                     'discount_price' => $sp->pricing_matrix['discount_price'] ?? null,
                     'discount_ends_at' => $sp->pricing_matrix['discount_ends_at'] ?? null,
+                    'business' => $sp->pricing_matrix['business'] ?? $sp->pricing_matrix,
+                    'individual' => $sp->pricing_matrix['individual'] ?? null,
                 ]),
                 'individual_price' => $storeVariant->individualPrice ? [
                     'id'               => $storeVariant->individualPrice->id,
@@ -354,10 +388,20 @@ class StoreController extends Controller
     {
         $validated = $request->validate([
             'customer_id'      => 'required|exists:customers,id',
+            'customer_type'    => 'required|in:business,individual',
             'price'            => 'required|numeric|min:0',
             'discount_price'   => 'nullable|numeric|min:0',
             'discount_ends_at' => 'nullable|date',
         ]);
+
+        $customer = Customer::findOrFail($validated['customer_id']);
+        $customerType = $customer->tin_number ? 'individual' : 'business';
+
+        if ($validated['customer_type'] !== $customerType) {
+            return response()->json([
+                'message' => "Select an {$validated['customer_type']} customer for this price.",
+            ], 422);
+        }
 
         $pricingMatrix = [
             'price'            => (float) $validated['price'],
@@ -397,26 +441,32 @@ class StoreController extends Controller
     {
         $validated = $request->validate([
             'seller_id' => 'required|exists:users,id',
+            'customer_type' => 'required|in:business,individual',
             'price' => 'required|numeric|min:0',
             'discount_price' => 'nullable|numeric|min:0',
             'discount_ends_at' => 'nullable|date',
         ]);
 
-        $pricingMatrix = [
+        $pricingTier = [
             'price'            => (float) $validated['price'],
             'discount_price'   => isset($validated['discount_price']) ? (float) $validated['discount_price'] : null,
             'discount_ends_at' => $validated['discount_ends_at'] ?? null,
         ];
 
-        $record = StoreVariantSellerPrice::updateOrCreate(
-            [
-                'store_variant_id' => $storeVariant->id,
-                'seller_id' => $validated['seller_id'],
-            ],
-            [
-                'pricing_matrix' => $pricingMatrix,
-            ]
-        );
+        $record = StoreVariantSellerPrice::firstOrNew([
+            'store_variant_id' => $storeVariant->id,
+            'seller_id' => $validated['seller_id'],
+        ]);
+
+        $pricingMatrix = $record->pricing_matrix ?? [];
+        if (!isset($pricingMatrix['business']) && !isset($pricingMatrix['individual']) && !empty($pricingMatrix)) {
+            $pricingMatrix = ['business' => $pricingMatrix];
+        }
+        $pricingMatrix[$validated['customer_type']] = $pricingTier;
+
+        $record->pricing_matrix = $pricingMatrix;
+        $record->active = true;
+        $record->save();
 
         return response()->json($record->load('seller'));
     }
@@ -425,9 +475,27 @@ class StoreController extends Controller
      * Remove a seller-specific price.
      * DELETE /store-variant-seller-prices/{price}
      */
-    public function destroySellerPrice(StoreVariantSellerPrice $price)
+    public function destroySellerPrice(Request $request, StoreVariantSellerPrice $price)
     {
-        $price->delete();
+        $validated = $request->validate([
+            'customer_type' => 'required|in:business,individual',
+        ]);
+
+        $pricingMatrix = $price->pricing_matrix ?? [];
+
+        // Legacy seller prices have one shared tier, so deleting either view
+        // removes the record. Tier-aware prices retain the other customer type.
+        if (isset($pricingMatrix['business']) || isset($pricingMatrix['individual'])) {
+            unset($pricingMatrix[$validated['customer_type']]);
+
+            if (empty($pricingMatrix)) {
+                $price->delete();
+            } else {
+                $price->update(['pricing_matrix' => $pricingMatrix]);
+            }
+        } else {
+            $price->delete();
+        }
 
         return response()->json(['ok' => true]);
     }
@@ -445,13 +513,19 @@ class StoreController extends Controller
             'active'           => 'boolean',
         ]);
 
+        $businessMatrix = $storeVariant->pricing_matrix ?? [];
+        $businessMatrix = isset($businessMatrix[0]) && is_array($businessMatrix[0])
+            ? $businessMatrix[0]
+            : $businessMatrix;
+
         $record = StoreVariantIndividualPrice::updateOrCreate(
             ['store_variant_id' => $storeVariant->id],
             [
                 'pricing_matrix' => [
                     'price'            => (float) $validated['price'],
                     'discount_price'   => isset($validated['discount_price']) ? (float) $validated['discount_price'] : null,
-                    'discount_ends_at' => $validated['discount_ends_at'] ?? null,
+                    'discount_ends_at' => $businessMatrix['discount_ends_at'] ?? null,
+                    'auto_from_business' => false,
                 ],
                 'active' => $validated['active'] ?? true,
             ]

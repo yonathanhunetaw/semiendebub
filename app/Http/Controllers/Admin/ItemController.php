@@ -176,6 +176,9 @@ class ItemController extends Controller
         ]);
 
         $variantData = $item->variants->map(function ($v) {
+            $slots = $v->image_slots;
+            $slotCount = collect($slots)->filter()->count();
+
             // Debug each variant's images
             \Log::info('Variant Images', [
                 'variant_id' => $v->id,
@@ -191,9 +194,9 @@ class ItemController extends Controller
                 'size' => $v->itemSize?->name,
                 'packaging' => $v->itemPackagingType?->name,
                 'status' => $v->status,
-                'slots' => $v->image_slots,
-                'slot_count' => count($v->image_slots),
-                'proof_ok' => count($v->image_slots) >= 2,
+                'slots' => $slots,
+                'slot_count' => $slotCount,
+                'proof_ok' => $slotCount >= 2,
                 'packaging_data' => $v->packagingQuantities->map(fn($p) => [
                     'name' => $p->name,
                     'pivot' => [
@@ -482,6 +485,7 @@ class ItemController extends Controller
 
         $newFiles = $request->file('variant_images', []);
         $existingPaths = $request->input('variant_existing_images', []);
+        $submittedSlotKeys = array_keys($request->input('variant_slot_keys', []));
 
         foreach ($item->variants as $variant) {
 
@@ -502,6 +506,10 @@ class ItemController extends Controller
                 $variant->item_size_id ?? 'null',
                 $variant->item_packaging_type_id ?? 'null',
             ]);
+
+            if (!in_array($variantKey, $submittedSlotKeys, true)) {
+                continue;
+            }
 
             $existingSlotsForKey = $existingPaths[$variantKey] ?? [];
             foreach ($existingSlotsForKey as $slotIndex => $path) {
@@ -526,19 +534,7 @@ class ItemController extends Controller
                 }
             }
 
-            // --- STEP 3: Fallback Merge Architecture ---
-            $existingImages = is_array($variant->images) ? $variant->images : [];
-
-            $merged = [];
-            for ($i = 0; $i < 5; $i++) {
-                if ($slots[$i] !== null) {
-                    $merged[] = $slots[$i];
-                } elseif (isset($existingImages[$i])) {
-                    $merged[] = $existingImages[$i];
-                }
-            }
-
-            $variant->update(['images' => $merged]);
+            $variant->update(['images' => $slots]);
         }
     }
 
@@ -552,7 +548,7 @@ class ItemController extends Controller
 
         $allProven = $item->variants->every(function ($variant) {
             $images = is_array($variant->images) ? $variant->images : [];
-            return count($images) >= 2;
+            return count(array_filter($images)) >= 2;
         });
 
         $finalStatus = $allProven ? $requestedStatus : 'draft';

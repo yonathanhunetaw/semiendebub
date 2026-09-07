@@ -141,7 +141,7 @@ export default function ItemInfoCard({
                                 const isActive = pricingMode === "normal" && variant.seller_price == null && variant.customer_price == null;
                                 return (
                                     <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                        <Typography variant="body2" color="text.secondary">Base</Typography>
+                                                <Typography variant="body2" color="text.secondary">{hasTinCart ? "incl. VAT" : "Base"}</Typography>
                                         <Stack direction="row" alignItems="center" spacing={0.75}>
                                             {variant.discount_price != null && variant.discount_price < variant.price && (
                                                 <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled" }}>

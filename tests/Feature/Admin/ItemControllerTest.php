@@ -8,6 +8,7 @@ use App\Models\Item\ItemCategory;
 use App\Models\Item\ItemColor;
 use App\Models\Item\ItemSize;
 use App\Models\Item\ItemPackagingType;
+use App\Models\Store\Store;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -134,6 +135,56 @@ class ItemControllerTest extends TestCase
         $response->assertRedirect(route('admin.items.edit', $item));
         $this->assertDatabaseHas('items', ['product_name' => 'Updated Name']);
         $this->assertTrue($item->colors->contains($color));
+    }
+
+    #[Test]
+    public function it_persists_cleared_variant_image_slots(): void
+    {
+        Store::factory()->create();
+        $item = Item::factory()->create();
+        $color = ItemColor::factory()->create();
+        $size = ItemSize::factory()->create();
+        $packagingType = ItemPackagingType::factory()->create();
+        $item->colors()->attach($color->id);
+        $item->sizes()->attach($size->id);
+        $item->packagingTypes()->attach($packagingType->id, ['quantity' => 1]);
+
+        $variant = $item->variants()->create([
+            'sku' => 'SLOT-TEST',
+            'item_color_id' => $color->id,
+            'item_size_id' => $size->id,
+            'item_packaging_type_id' => $packagingType->id,
+            'images' => [
+                'uploads/variants/slot-1.jpg',
+                'uploads/variants/slot-2.jpg',
+                'uploads/variants/slot-3.jpg',
+                'uploads/variants/slot-4.jpg',
+                'uploads/variants/slot-5.jpg',
+            ],
+        ]);
+        $key = "{$color->id}:{$size->id}:{$packagingType->id}";
+
+        $this->patch(route('admin.items.update', $item), [
+            'product_name' => $item->product_name,
+            'item_category_id' => $item->item_category_id,
+            'status' => 'draft',
+            'color_ids' => [$color->id],
+            'size_ids' => [$size->id],
+            'packaging' => [[
+                'item_packaging_type_id' => $packagingType->id,
+                'quantity' => 1,
+            ]],
+            'variant_slot_keys' => [$key => 1],
+            'variant_existing_images' => [$key => [0 => 'uploads/variants/slot-1.jpg']],
+        ])->assertRedirect(route('admin.items.edit', $item));
+
+        $this->assertSame([
+            'uploads/variants/slot-1.jpg',
+            null,
+            null,
+            null,
+            null,
+        ], $variant->fresh()->images);
     }
 
     /** @test */

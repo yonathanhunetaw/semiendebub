@@ -19,7 +19,6 @@ class ItemVariantGenerationService
         $packIds = $item->packagingTypes->isNotEmpty() ? $item->packagingTypes->pluck('id')->toArray() : [null];
 
         $validVariantIds = [];
-        $variantIndex = 1;
 
         foreach ($colorIds as $colorId) {
             foreach ($sizeIds as $sizeId) {
@@ -37,16 +36,12 @@ class ItemVariantGenerationService
                         $variant->restore();
                     }
 
-                    // 2. Set Images (Using the current variantIndex)
-                    if (empty($variant->images)) {
-                        $variantSpecificImages = [];
-                        for ($i = 1; $i <= 5; $i++) {
-                            $variantSpecificImages[] = "uploads/items/{$item->id}/{$item->file_prefix}_v{$variantIndex}_{$i}.jpg";
-                        }
-                        $variant->images = $variantSpecificImages;
-                    } else {
-                        $variantSpecificImages = is_array($variant->images) ? $variant->images : (json_decode($variant->images, true) ?: []);
-                    }
+                    // 2. New variants start without images. Image slots are
+                    // populated only by files actually uploaded in the item form.
+                    $variantSpecificImages = is_array($variant->images)
+                        ? $variant->images
+                        : (json_decode($variant->images, true) ?: []);
+                    $variant->images = $variantSpecificImages;
                     $variant->status = $item->status;
 
                     // Construct a robust SKU including the packaging ID
@@ -68,7 +63,6 @@ class ItemVariantGenerationService
                     // 3. Process Pricing/Stores
                     $this->ensureStoreVariantRecords($item, $variant, $variantSpecificImages);
 
-                    $variantIndex++;
                 }
             }
         }

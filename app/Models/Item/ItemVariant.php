@@ -87,7 +87,8 @@ class ItemVariant extends Model
 
     /**
      * Structured slot data for the Show.tsx admin view.
-     * Returns array of ['path' => <key>, 'url' => <full url>].
+     * Returns fixed-position slots of ['path' => <key>, 'url' => <full url>]
+     * or null for an empty slot.
      */
     public function getImageSlotsAttribute(): array
     {
@@ -96,11 +97,10 @@ class ItemVariant extends Model
         }
 
         return collect($this->images)
-            ->filter()
-            ->map(fn($key) => [
+            ->map(fn($key) => $key ? [
                 'path' => $key,
                 'url' => ImageResolver::resolve($key),
-            ])
+            ] : null)
             ->values()
             ->toArray();
     }

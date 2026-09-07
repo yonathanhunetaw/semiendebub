@@ -17,12 +17,6 @@ import {
     ListItemText,
     Paper,
     Stack,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
     Tooltip,
     Typography,
     useTheme,
@@ -35,7 +29,6 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import KeyboardArrowLeftIcon from "@mui/icons-material/KeyboardArrowLeft";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import StorefrontIcon from "@mui/icons-material/Storefront";
 import CloseIcon from "@mui/icons-material/Close";
 
@@ -59,7 +52,7 @@ interface VariantRow {
     size: string | null;
     packaging: string | null;
     status: string;
-    slots: ImageSlotData[];
+    slots: Array<ImageSlotData | null>;
     slot_count: number;
     proof_ok: boolean;
     packaging_data: PackagingItem[];
@@ -526,31 +519,6 @@ export default function Show({
                                                                     display: "block",
                                                                 }}
                                                             />
-                                                            <Tooltip title={slot.path} arrow placement="bottom">
-                                                                <Typography variant="caption" sx={{
-                                                                    display: "block",
-                                                                    fontSize: "0.55rem",
-                                                                    color: "text.disabled",
-                                                                    mt: 0.5,
-                                                                    maxWidth: 80,
-                                                                    overflow: "hidden",
-                                                                    textOverflow: "ellipsis",
-                                                                    whiteSpace: "nowrap",
-                                                                    fontFamily: "monospace",
-                                                                    textAlign: "center",
-                                                                }}>
-                                                                    {slot.path.split("/").pop()}
-                                                                </Typography>
-                                                            </Tooltip>
-                                                            <IconButton
-                                                                size="small"
-                                                                component="a"
-                                                                href={slot.url}
-                                                                target="_blank"
-                                                                sx={{ p: 0.25, display: "block", mx: "auto", mt: 0.25 }}
-                                                            >
-                                                                <OpenInNewIcon sx={{ fontSize: 12, color: "text.disabled" }} />
-                                                            </IconButton>
                                                         </Box>
                                                     ) : (
                                                         <Box
@@ -583,35 +551,6 @@ export default function Show({
                                         })}
                                     </Stack>
 
-                                    {variant.slots && variant.slots.length > 0 && (
-                                        <Box>
-                                            <Typography variant="caption" color="text.disabled" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: "0.06em", display: "block", mb: 0.5 }}>
-                                                Storage Paths
-                                            </Typography>
-                                            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
-                                                <Table size="small">
-                                                    <TableHead sx={{ bgcolor: "action.hover" }}>
-                                                        <TableRow>
-                                                            <TableCell sx={{ fontWeight: 700, py: 0.5, fontSize: "0.7rem", width: 40 }}>Slot</TableCell>
-                                                            <TableCell sx={{ fontWeight: 700, py: 0.5, fontSize: "0.7rem" }}>Storage Path</TableCell>
-                                                        </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        {variant.slots.map((slot, i) => (
-                                                            <TableRow key={i}>
-                                                                <TableCell sx={{ py: 0.5, fontSize: "0.7rem", color: "text.disabled" }}>{i + 1}</TableCell>
-                                                                <TableCell sx={{ py: 0.5 }}>
-                                                                    <Typography variant="caption" sx={{ fontFamily: "monospace", fontSize: "0.65rem", color: "text.secondary", wordBreak: "break-all" }}>
-                                                                        {slot.path}
-                                                                    </Typography>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))}
-                                                    </TableBody>
-                                                </Table>
-                                            </TableContainer>
-                                        </Box>
-                                    )}
                                 </Paper>
                             );
                         })}

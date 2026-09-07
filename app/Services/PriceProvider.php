@@ -73,7 +73,10 @@ class PriceProvider
 
             if ($seller && !empty($seller->pricing_matrix)) {
                 $sellerMatrix = json_decode($seller->pricing_matrix, true);
-                $prices[] = self::formatMatrixPrice('seller', self::normalizeMatrix($sellerMatrix));
+                $sellerTier = self::selectSellerTier($sellerMatrix, $isIndividual);
+                if ($sellerTier !== null) {
+                    $prices[] = self::formatMatrixPrice('seller', self::normalizeMatrix($sellerTier));
+                }
             }
         }
 
@@ -107,6 +110,21 @@ class PriceProvider
         return (isset($matrix[0]) && is_array($matrix[0])) ? $matrix[0] : $matrix;
     }
 
+    /**
+     * Seller overrides can carry distinct business and individual tiers while
+     * remaining compatible with the legacy single-tier pricing matrix.
+     */
+    protected static function selectSellerTier(array $matrix, bool $isIndividual): ?array
+    {
+        $tier = $isIndividual ? 'individual' : 'business';
+
+        if (isset($matrix['business']) || isset($matrix['individual'])) {
+            return isset($matrix[$tier]) && is_array($matrix[$tier]) ? $matrix[$tier] : null;
+        }
+
+        return $matrix;
+    }
+
     public static function getFinalPrice(array $priceLadder): ?float
     {
         if (empty($priceLadder))
@@ -127,15 +145,7 @@ class PriceProvider
 
     public static function getFinalPriceWithTax(array $priceLadder, string $customerType): float
     {
-        $basePrice = self::getFinalPrice($priceLadder) ?? 0.00;
-
-        // If it's an individual account (has TIN), add 15% to the final price
-        if ($customerType === 'individual') {
-            return round($basePrice * 1.15, 2);
-        }
-
-        // If it's a business account (no TIN), return standard price without extra markup
-        return (float) $basePrice;
+        return (float) (self::getFinalPrice($priceLadder) ?? 0.00);
     }
 
     protected static function formatMatrixPrice(string $level, array $row): array
@@ -168,6 +178,7 @@ class PriceProvider
             ->join('item_variants', 'store_variants.item_variant_id', '=', 'item_variants.id')
             ->where('item_variants.item_id', $itemId)
             ->where('store_variants.store_id', $storeId)
+            ->where('store_variants.active', 1)
             ->select('store_variants.id', 'store_variants.pricing_matrix')
             ->get();
 
@@ -247,20 +258,17 @@ class PriceProvider
         $minIndex = array_search($minFinalPrice, $variantPrices);
         $bestLadder = $ladders[$minIndex] ?? [];
 
-        // Use raw `price` (not `final`) from the store tier so the frontend can show
-        // a strikethrough when the active price is lower than the base store price.
         $storeTier = collect($bestLadder)->firstWhere('level', 'store');
-        $rawStorePrice = $storeTier['price'] ?? ($bestLadder[0]['price'] ?? min($basePrices));
-        $discountEndsAt = $bestLadder[0]['discount_ends_at'] ?? null;
-
-        // If customer is an individual (VAT applied), apply VAT to the base comparison price too
-        // so e.g. Base: $201 + 15% = $231.15 (crossed out) vs Discount: $200 + 15% = $230.00 (active)
-        $storePriceWithTax = $customerType === 'individual' ? round($rawStorePrice * 1.15, 2) : (float) $rawStorePrice;
+        $displayTier = $customerType === 'individual'
+            ? (collect($bestLadder)->firstWhere('level', 'individual') ?? $storeTier)
+            : $storeTier;
+        $rawStorePrice = $displayTier['price'] ?? ($bestLadder[0]['price'] ?? min($basePrices));
+        $discountEndsAt = $displayTier['discount_ends_at'] ?? ($bestLadder[0]['discount_ends_at'] ?? null);
 
         // Determine which tier was actually used for the final price
         $resolvedTier = end($bestLadder);
         $resolvedLevel = $resolvedTier['level'] ?? 'store';
-        $vatApplied = $customerType === 'individual';
+        $vatApplied = false;
 
         // 📊 Log the full price resolution path
         \Illuminate\Support\Facades\Log::info('PriceProvider::getItemPriceRange Result', [
@@ -270,13 +278,13 @@ class PriceProvider
             'customer_type' => $customerType,
             'vat_applied' => $vatApplied,
             'resolved_tier' => $resolvedLevel,
-            'store_price' => $storePriceWithTax,
+            'store_price' => (float) $rawStorePrice,
             'final_price' => $minFinalPrice,
             'ladder_path' => collect($bestLadder)->map(fn($t) => $t['level'] . ':' . $t['final'])->implode(' → '),
         ]);
 
         return [
-            'store_price' => $storePriceWithTax,
+            'store_price' => (float) $rawStorePrice,
             'final_price' => $minFinalPrice,
             'discount_ends_at' => $discountEndsAt,
             'pricing_matrix' => $bestLadder,

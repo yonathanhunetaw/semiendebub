@@ -583,12 +583,12 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                                     ${originalPrice.toFixed(2)}
                                                 </Typography>
                                             )}
-                                            {has_tin_cart && (
-                                                <Typography variant="caption" color="success.main" sx={{ ml: 'auto !important', fontWeight: 600, fontSize: '0.65rem' }}>
-                                                    incl. VAT
-                                                </Typography>
-                                            )}
                                         </Stack>
+                                        {has_tin_cart && (
+                                            <Typography variant="caption" color="success.main" sx={{ display: "block", mt: hasDiscount ? 0.25 : 0, fontWeight: 600, fontSize: "0.65rem" }}>
+                                                Including VAT
+                                            </Typography>
+                                        )}
 
                                         {item.store_stock !== undefined && (
                                             <Typography
