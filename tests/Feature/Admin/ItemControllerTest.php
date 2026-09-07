@@ -53,6 +53,40 @@ class ItemControllerTest extends TestCase
         );
     }
 
+    #[Test]
+    public function it_sends_selected_options_and_variant_keys_to_the_edit_form()
+    {
+        $item = Item::factory()->create();
+        $color = ItemColor::factory()->create(['name' => 'Crimson']);
+        $size = ItemSize::factory()->create(['name' => 'Large']);
+        $packagingType = ItemPackagingType::factory()->create(['name' => 'Carton']);
+
+        $item->colors()->attach($color->id);
+        $item->sizes()->attach($size->id);
+        $item->packagingTypes()->attach($packagingType->id, ['quantity' => 48]);
+
+        $variant = $item->variants()->create([
+            'item_color_id' => $color->id,
+            'item_size_id' => $size->id,
+            'item_packaging_type_id' => $packagingType->id,
+            'sku' => 'CRIMSON-LARGE-CARTON',
+            'images' => ['uploads/variants/carton.jpg'],
+        ]);
+
+        $this->get(route('admin.items.edit', $item))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Items/Edit')
+                ->where('item.colors.0.id', $color->id)
+                ->where('item.sizes.0.id', $size->id)
+                ->where('item.packagingTypes.0.id', $packagingType->id)
+                ->where('item.packagingTypes.0.pivot.quantity', 48)
+                ->where('item.variants.0.id', $variant->id)
+                ->where('item.variants.0.item_color_id', $color->id)
+                ->where('item.variants.0.item_size_id', $size->id)
+                ->where('item.variants.0.item_packaging_type_id', $packagingType->id)
+            );
+    }
+
     /** @test */
     public function it_stores_a_new_item_and_resolves_category_from_string()
     {

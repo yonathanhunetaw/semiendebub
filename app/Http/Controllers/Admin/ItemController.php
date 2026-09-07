@@ -301,21 +301,31 @@ class ItemController extends Controller
             'general_images' => $item->processed_images,
             'raw_general_images' => $item->general_images ?? [],
 
-            // Flat primitive array mapping for basic option selectors
-            'colors' => $item->colors->pluck('id')->toArray(),
-            'sizes' => $item->sizes->pluck('id')->toArray(),
-
-            // Multi-dimensional array configuration matching pivot fields
-            'packaging' => $item->packagingTypes->map(fn($p) => [
-                'item_packaging_type_id' => $p->id,
-                'quantity' => $p->pivot->quantity,
-            ])->toArray(),
+            'colors' => $item->colors->map(fn($color) => [
+                'id' => $color->id,
+                'name' => $color->name,
+            ])->values()->toArray(),
+            'sizes' => $item->sizes->map(fn($size) => [
+                'id' => $size->id,
+                'name' => $size->name,
+            ])->values()->toArray(),
+            'packagingTypes' => $item->packagingTypes->map(fn($packagingType) => [
+                'id' => $packagingType->id,
+                'name' => $packagingType->name,
+                'pivot' => [
+                    'quantity' => $packagingType->pivot->quantity,
+                ],
+            ])->values()->toArray(),
 
             'variants' => $item->variants->map(function ($variant) {
                 return [
                     'id' => $variant->id,
                     'sku' => $variant->sku,
-                    // ... your existing keys ...
+                    'status' => $variant->status,
+                    'images' => $variant->images ?? [],
+                    'item_color_id' => $variant->item_color_id,
+                    'item_size_id' => $variant->item_size_id,
+                    'item_packaging_type_id' => $variant->item_packaging_type_id,
                     'packaging_quantities' => $variant->packagingQuantities->map(fn($pq) => [
                         'id' => $pq->id,
                         'quantity' => $pq->pivot->quantity,

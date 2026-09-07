@@ -119,17 +119,17 @@ const fmt = (v: string | number | null | undefined) =>
     v != null && v !== "" ? `$${Number(v).toFixed(2)}` : "—";
 
 const getPersonName = (person: Person) => {
-    return person.last_name 
-        ? `${person.first_name} ${person.last_name}` 
+    return person.last_name
+        ? `${person.first_name} ${person.last_name}`
         : person.first_name;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Toast Component (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
-function Toast({ open, message, severity, onClose }: { 
-    open: boolean; 
-    message: string; 
+function Toast({ open, message, severity, onClose }: {
+    open: boolean;
+    message: string;
     severity: "success" | "error" | "info" | "warning";
     onClose: () => void;
 }) {
@@ -255,7 +255,7 @@ function EditDrawer({
             const row: CustomerPrice = {
                 id: data.id,
                 customer_id: data.customer_id,
-                customer_name: data.customer?.first_name 
+                customer_name: data.customer?.first_name
                     ? `${data.customer.first_name} ${data.customer.last_name ?? ''}`.trim()
                     : `Customer #${data.customer_id}`,
                 tin_number: data.customer?.tin_number ?? null,
@@ -289,7 +289,7 @@ function EditDrawer({
             const row: SellerPrice = {
                 id: data.id,
                 seller_id: data.seller_id,
-                seller_name: data.seller?.first_name 
+                seller_name: data.seller?.first_name
                     ? `${data.seller.first_name} ${data.seller.last_name ?? ''}`.trim()
                     : `Seller #${data.seller_id}`,
                 price: data.price,
@@ -486,8 +486,8 @@ function EditDrawer({
                                         label="Customer"
                                         onChange={e => {
                                             setCpCustomer(String(e.target.value));
-                                            setCpPrice(""); 
-                                            setCpDiscount(""); 
+                                            setCpPrice("");
+                                            setCpDiscount("");
                                             setCpEndsAt("");
                                         }}
                                     >
@@ -1073,7 +1073,7 @@ function MobileCard({
                                         size="small"
                                         startIcon={<EditIcon />}
                                         onClick={() => setEditing(v)}
-                                        sx={{ mt: 1, alignSelf: 'flex-start' }}
+                                        sx={{ mt: 1, alignSelf: 'flex-end' }} // 👈 this keeps it on the left
                                     >
                                         Edit Prices
                                     </Button>

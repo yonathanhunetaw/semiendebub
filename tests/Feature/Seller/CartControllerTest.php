@@ -60,6 +60,29 @@ class CartControllerTest extends TestCase
     }
 
     #[Test]
+    public function seller_can_select_all_customers_when_creating_a_cart()
+    {
+        $storeCustomer = Customer::factory()->create([
+            'store_id' => $this->store->id,
+            'first_name' => 'Store',
+            'last_name' => 'Customer',
+        ]);
+        $otherCustomer = Customer::factory()->create([
+            'store_id' => Store::factory()->create()->id,
+            'first_name' => 'Other',
+            'last_name' => 'Customer',
+        ]);
+
+        $this->get(route('seller.carts.create'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Seller/Carts/Create')
+                ->has('customers', 2)
+                ->where('customers.0.id', $otherCustomer->id)
+                ->where('customers.1.id', $storeCustomer->id)
+            );
+    }
+
+    #[Test]
     public function seller_can_add_item_variant_to_cart()
     {
         $item = Item::factory()->create(['status' => 'active']);

@@ -12,228 +12,221 @@
 ├── PROJECT_CONTEXT.md
 ├── README.md
 ├── app
-│   ├── Http
-│   │   ├── Controllers
-│   │   ├── Middleware
-│   │   └── Requests
-│   ├── Models
-│   │   ├── Auth
-│   │   ├── Delivery
-│   │   ├── Finance
-│   │   ├── Inventory
-│   │   ├── Item
-│   │   ├── Procurement
-│   │   ├── Seller
-│   │   ├── Shared
-│   │   ├── StockKeeper
-│   │   ├── Store
-│   │   └── Vendor
-│   ├── Policies
-│   │   └── Seller
-│   ├── Providers
-│   │   ├── AppServiceProvider.php
-│   │   └── AuthEventServiceProvider.php
-│   └── Services
-│       ├── CartService.php
-│       ├── DiscordVisitNotificationService.php
-│       ├── ImageResolver.php
-│       ├── ItemVariantGenerationService.php
-│       └── PriceProvider.php
+│   ├── Exceptions
+│   │   ├── CartCheckoutException.php
+│   │   └── InsufficientStockException.php
+│   ├── Extensions
+│   │   └── CustomDatabaseSessionHandler.php
+│   ├── Http
+│   │   ├── Controllers
+│   │   ├── Middleware
+│   │   └── Requests
+│   ├── Models
+│   │   ├── Auth
+│   │   ├── Canvas
+│   │   ├── Finance
+│   │   ├── Fulfillment
+│   │   ├── Inventory
+│   │   ├── Item
+│   │   ├── Procurement
+│   │   ├── Seller
+│   │   ├── StockKeeper
+│   │   └── Store
+│   ├── Policies
+│   │   └── Seller
+│   ├── Providers
+│   │   ├── AppServiceProvider.php
+│   │   └── AuthEventServiceProvider.php
+│   └── Services
+│       ├── CartService.php
+│       ├── CheckoutService.php
+│       ├── DiscordVisitNotificationService.php
+│       ├── ImageResolver.php
+│       ├── ItemVariantGenerationService.php
+│       ├── PriceProvider.php
+│       └── StockService.php
 ├── artisan
-├── backend_map.txt
 ├── bootstrap
-│   ├── app.php
-│   └── providers.php
+│   ├── app.php
+│   ├── cache
+│   │   ├── packages.php
+│   │   └── services.php
+│   └── providers.php
 ├── composer.json
 ├── composer.lock
 ├── config
-│   ├── app.php
-│   ├── auth.php
-│   ├── cache.php
-│   ├── database.php
-│   ├── filesystems.php
-│   ├── logging.php
-│   ├── mail.php
-│   ├── permission.php
-│   ├── queue.php
-│   ├── sentry.php
-│   ├── services.php
-│   ├── session.php
-│   └── subdomains.php
+│   ├── app.php
+│   ├── auth.php
+│   ├── cache.php
+│   ├── database.php
+│   ├── filesystems.php
+│   ├── logging.php
+│   ├── mail.php
+│   ├── permission.php
+│   ├── queue.php
+│   ├── sentry.php
+│   ├── services.php
+│   ├── session.php
+│   └── subdomains.php
 ├── database
-│   ├── database.sqlite
-│   ├── factories
-│   │   ├── Category
-│   │   ├── Customer
-│   │   ├── Finance
-│   │   ├── Inventory
-│   │   ├── Item
-│   │   ├── ItemFactory.php
-│   │   ├── ItemVariantFactory.php
-│   │   ├── Marketing
-│   │   ├── Procurement
-│   │   ├── Sales
-│   │   ├── Shared
-│   │   ├── Store
-│   │   ├── StoreVariantFactory.php
-│   │   ├── User
-│   │   └── Vendor
-│   ├── migrations
-│   │   ├── 0000_01_01_000000_create_stores_table.php
-│   │   ├── 0000_01_02_000000_create_item_inventory_locations_table.php
-│   │   ├── 0000_01_03_000000_create_users_table.php
-│   │   ├── 0000_01_03_032131_create_item_categories_table.php
-│   │   ├── 0000_01_04_000000_create_items_table.php
-│   │   ├── 0000_01_05_000000_create_item_colors_table.php
-│   │   ├── 0000_01_06_000000_create_item_sizes_table.php
-│   │   ├── 0000_01_07_000000_create_item_packaging_types_table.php
-│   │   ├── 0000_01_08_000000_create_item_variants_table.php
-│   │   ├── 0000_01_09_000000_create_store_variants_table.php
-│   │   ├── 0001_01_01_000001_create_cache_table.php
-│   │   ├── 0001_01_01_000002_create_jobs_table.php
-│   │   ├── 2024_12_18_233953_create_user_management_table.php
-│   │   ├── 2024_12_19_003325_create_sales_table.php
-│   │   ├── 2024_12_19_004638_create_purchases_table.php
-│   │   ├── 2024_12_21_001858_create_customers_table.php
-│   │   ├── 2024_12_24_000056_create_carts_table.php
-│   │   ├── 2024_12_24_000850_create_cart_items_table.php
-│   │   ├── 2025_01_08_011344_create_telescope_entries_table.php
-│   │   ├── 2025_01_13_032326_create_item_images_table.php
-│   │   ├── 2025_01_13_032330_create_item_variant_packaging_quantity_table.php
-│   │   ├── 2025_01_13_032342_create_item_owners_table.php
-│   │   ├── 2025_01_13_032354_create_item_stocks_table.php
-│   │   ├── 2025_01_13_032400_create_item_prices_table.php
-│   │   ├── 2025_01_29_025744_create_item_category_item_table.php
-│   │   ├── 2025_02_01_230400_create_item_images_describtion_table.php
-│   │   ├── 2025_10_27_093034_add_status_to_carts_table.php
-│   │   ├── 2025_11_04_043619_create_item_color_item_table.php
-│   │   ├── 2025_11_04_043619_create_item_item_size_table.php
-│   │   ├── 2025_11_04_043619_create_item_packaging_type_item_table.php
-│   │   ├── 2025_11_04_061416_create_store_variants_customer_prices_table.php
-│   │   ├── 2025_11_14_223238_create_stocks_table.php
-│   │   ├── 2025_12_02_044855_create_customer_prices_table.php
-│   │   ├── 2025_12_02_045035_create_seller_prices_table.php
-│   │   ├── 2025_12_02_045537_create_store_variants_seller_prices_table.php
-│   │   ├── 2025_12_04_032449_add_remember_me_to_sessions_table.php
-│   │   ├── 2025_12_14_040138_create_item_store_table.php
-│   │   ├── 2026_02_25_033150_create_permission_tables.php
-│   │   ├── 2026_02_26_140231_create_sessions_table.php
-│   │   ├── 2026_05_05_072044_create_transfers_table.php
-│   │   └── 2026_05_09_040815_create_warehouses_table.php
-│   └── seeders
-│       ├── Admin
-│       ├── Auth
-│       ├── Customer
-│       ├── DatabaseSeeder.php
-│       ├── Delivery
-│       ├── Finance
-│       ├── Inventory
-│       ├── Marketing
-│       ├── PackagingTypeSeeder.php
-│       ├── Procurement
-│       ├── Seller
-│       ├── StockKeeper
-│       ├── Store
-│       ├── User
-│       └── Vendor
+│   ├── database.sqlite
+│   ├── factories
+│   │   ├── Customer
+│   │   ├── Item
+│   │   ├── ItemFactory.php
+│   │   ├── ItemVariantFactory.php
+│   │   ├── Sales
+│   │   ├── Store
+│   │   ├── StoreVariantFactory.php
+│   │   └── User
+│   ├── migrations
+│   │   ├── 0000_01_01_000000_create_stores_table.php
+│   │   ├── 0000_01_02_000000_create_item_inventory_locations_table.php
+│   │   ├── 0000_01_03_000000_create_users_table.php
+│   │   ├── 0000_01_03_032131_create_item_categories_table.php
+│   │   ├── 0000_01_04_000000_create_items_table.php
+│   │   ├── 0000_01_05_000000_create_item_colors_table.php
+│   │   ├── 0000_01_06_000000_create_item_sizes_table.php
+│   │   ├── 0000_01_07_000000_create_item_packaging_types_table.php
+│   │   ├── 0000_01_08_000000_create_item_variants_table.php
+│   │   ├── 0000_01_09_000000_create_store_variants_table.php
+│   │   ├── 0001_01_01_000001_create_cache_table.php
+│   │   ├── 0001_01_01_000002_create_jobs_table.php
+│   │   ├── 2024_12_18_233953_create_user_management_table.php
+│   │   ├── 2024_12_19_003325_create_sales_table.php
+│   │   ├── 2024_12_19_004638_create_purchases_table.php
+│   │   ├── 2024_12_21_001858_create_customers_table.php
+│   │   ├── 2024_12_24_000056_create_carts_table.php
+│   │   ├── 2024_12_24_000850_create_cart_items_table.php
+│   │   ├── 2025_01_08_011344_create_telescope_entries_table.php
+│   │   ├── 2025_01_13_032326_create_item_images_table.php
+│   │   ├── 2025_01_13_032330_create_item_variant_packaging_quantity_table.php
+│   │   ├── 2025_01_13_032342_create_item_owners_table.php
+│   │   ├── 2025_01_13_032354_create_item_stocks_table.php
+│   │   ├── 2025_01_13_032400_create_item_prices_table.php
+│   │   ├── 2025_01_29_025744_create_item_category_item_table.php
+│   │   ├── 2025_02_01_230400_create_item_images_describtion_table.php
+│   │   ├── 2025_10_27_093034_add_status_to_carts_table.php
+│   │   ├── 2025_11_04_043619_create_item_color_item_table.php
+│   │   ├── 2025_11_04_043619_create_item_item_size_table.php
+│   │   ├── 2025_11_04_043619_create_item_packaging_type_item_table.php
+│   │   ├── 2025_11_04_061416_create_store_variants_customer_prices_table.php
+│   │   ├── 2025_11_14_223238_create_stocks_table.php
+│   │   ├── 2025_12_02_044855_create_customer_prices_table.php
+│   │   ├── 2025_12_02_045035_create_seller_prices_table.php
+│   │   ├── 2025_12_02_045537_create_store_variants_seller_prices_table.php
+│   │   ├── 2025_12_04_032449_add_remember_me_to_sessions_table.php
+│   │   ├── 2025_12_14_040138_create_item_store_table.php
+│   │   ├── 2026_02_25_033150_create_permission_tables.php
+│   │   ├── 2026_02_26_140231_create_sessions_table.php
+│   │   ├── 2026_05_05_072044_create_transfers_table.php
+│   │   ├── 2026_05_09_040815_create_warehouses_table.php
+│   │   ├── 2026_06_29_015745_create_store_variants_individual_prices_table.php
+│   │   ├── 2026_07_07_043454_create_canvas_versions_table.php
+│   │   ├── 2026_07_20_000000_create_canvases_tables.php
+│   │   ├── 2026_08_14_204807_add_lifetime_to_sessions_table.php
+│   │   ├── 2026_09_05_003538_add_custom_lifetime_to_sessions_table.php
+│   │   ├── 2026_09_06_100001_create_inventory_movements_table.php
+│   │   ├── 2026_09_06_100002_add_columns_to_customers_table.php
+│   │   ├── 2026_09_06_100003_add_location_to_warehouses_table.php
+│   │   ├── 2026_09_06_100004_add_description_to_items_table.php
+│   │   ├── 2026_09_06_100005_add_item_id_to_store_variants_table.php
+│   │   ├── 2026_09_06_100006_upgrade_sales_and_fulfillment_tables.php
+│   │   └── 2026_09_06_100007_add_extra_piece_details_to_cart_items_table.php
+│   └── seeders
+│       ├── Admin
+│       ├── Auth
+│       ├── Customer
+│       ├── DatabaseSeeder.php
+│       ├── Inventory
+│       ├── PackagingTypeSeeder.php
+│       ├── Seller
+│       ├── StockKeeper
+│       ├── Store
+│       └── User
 ├── deploy-with-options.sh
 ├── deploy.sh
 ├── docker
-│   ├── Dockerfile
-│   ├── Dockerfile.dev
-│   ├── docker-compose.dev.yml
-│   ├── docker-compose.observability.yml
-│   ├── docker-compose.prod.yml
-│   ├── docker-compose.yml
-│   ├── docker-entrypoint.sh
-│   ├── nginx.conf
-│   └── promtail-config.yaml
+│   ├── backup-db.sh
+│   ├── docker
+│   │   └── init-replication.sql
+│   ├── docker-compose.dev.yml
+│   ├── docker-compose.observability.yml
+│   ├── docker-compose.prod.yml
+│   ├── docker-compose.tldraw.yml
+│   ├── docker-compose.yml
+│   ├── docker-entrypoint.sh
+│   ├── Dockerfile
+│   ├── Dockerfile.dev
+│   ├── init-replication.sql
+│   ├── logs
+│   ├── nginx.conf
+│   └── promtail-config.yaml
 ├── docs
-│   ├── item.excalidraw.png
-│   ├── noteDuka1.3.0.md
-│   ├── noteDuka1.3.0docker.md
-│   ├── notemdfile.md
-│   └── observability.md
-├── frontend_map.txt
+│   ├── backend_map.txt
+│   ├── database-replication.md
+│   ├── deploy-with-options.sh.md
+│   ├── deploy.sh.md
+│   ├── DESIGN.md
+│   ├── Docker.md
+│   ├── Duka.md
+│   ├── frontend_map.txt
+│   ├── item.excalidraw.png
+│   ├── md-file-formats.md
+│   ├── Next.md
+│   ├── observability.md
+│   ├── PROJECT_CONTEXT.md
+│   ├── routes_list.md
+│   ├── routes_list.txt
+│   └── smart_context.txt
+├── error.html
 ├── jsconfig.json
 ├── logs
-│   ├── deploy_20260605_020236.log
-│   ├── deploy_20260605_050506.log
-│   ├── deploy_20260623_061334.log
-│   └── deploy_20260623_061623.log
+│   └── deploy_20260905_054850.log
 ├── package-lock.json
 ├── package.json
 ├── phpunit.xml
 ├── postcss.config.js
-├── public
-│   ├── downloads
-│   ├── favicon.ico
-│   ├── hot
-│   ├── images
-│   │   ├── 1828533.png
-│   │   ├── addtocartbutton.svg
-│   │   ├── default.jpg
-│   │   ├── defaults
-│   │   ├── homepage
-│   │   ├── icons8-dashboard-50.png
-│   │   ├── images
-│   │   ├── items
-│   │   └── product_images
-│   ├── index.php
-│   ├── logo.jpeg
-│   ├── no-image.png
-│   ├── robots.txt
-│   └── uploads
-│       └── variants
+├── README.md
 ├── resources
-│   ├── css
-│   │   └── app.css
-│   ├── js
-│   │   ├── Components
-│   │   ├── Layouts
-│   │   ├── Pages
-│   │   ├── app.tsx
-│   │   ├── bootstrap.js
-│   │   ├── theme
-│   │   ├── theme.ts
-│   │   ├── types
-│   │   └── vite-env.d.ts
-│   ├── theme
-│   └── views
-│       └── app.blade.php
+│   ├── css
+│   │   └── app.css
+│   ├── js
+│   │   ├── app.tsx
+│   │   ├── bootstrap.js
+│   │   ├── Components
+│   │   ├── Layouts
+│   │   ├── Pages
+│   │   ├── theme
+│   │   ├── theme.ts
+│   │   ├── types
+│   │   └── vite-env.d.ts
+│   └── views
+│       └── app.blade.php
 ├── routes
-│   ├── auth.php
-│   ├── console.php
-│   ├── web
-│   │   ├── admin
-│   │   ├── delivery
-│   │   ├── dev
-│   │   ├── errors
-│   │   ├── finance
-│   │   ├── guest
-│   │   ├── marketing
-│   │   ├── procurement
-│   │   ├── seller
-│   │   ├── shared
-│   │   └── stockkeeper
-│   └── web.php
-├── smart_context.txt
+│   ├── auth.php
+│   ├── console.php
+│   ├── web
+│   │   ├── admin
+│   │   ├── delivery
+│   │   ├── dev
+│   │   ├── errors
+│   │   ├── finance
+│   │   ├── marketing
+│   │   ├── procurement
+│   │   ├── seller
+│   │   ├── shared
+│   │   ├── stockkeeper
+│   │   └── user
+│   └── web.php
 ├── tailwind.config.js
-├── tests
-│   ├── Feature
-│   │   ├── Admin
-│   │   ├── Auth
-│   │   ├── ExampleTest.php
-│   │   ├── ProfileTest.php
-│   │   └── Seller
-│   ├── TestCase.php
-│   └── Unit
-│       ├── ExampleTest.php
-│       └── PostRepositoryTest.php
+├── test_warehouse.php
+├── test_wh.php
+├── test-tldraw.js
 ├── tsconfig.json
 └── vite.config.js
 
-95 directories, 221 files
+71 directories, 144 files
 ```
 
 ## Admin Routes

@@ -61,7 +61,10 @@ class CartController extends Controller
     {
         $storeId = auth()->user()->store_id;
 
-        $customers = Customer::where('store_id', $storeId)->get();
+        $customers = Customer::query()
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get(['id', 'name', 'first_name', 'last_name', 'tin_number']);
         $sellers = User::where('role', 'seller')
             ->where('store_id', $storeId)
             ->get();

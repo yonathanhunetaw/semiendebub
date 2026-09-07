@@ -52,7 +52,7 @@ export default function Create({ customers, auth }: Props) {
     };
 
     return (
-        <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: "background.default", minHeight: "100vh" }}>
+        <Box sx={{ bgcolor: "background.default", minHeight: "100vh" }}>
             <Head title="Create New Cart" />
 
             <SellerHeader
@@ -61,7 +61,7 @@ export default function Create({ customers, auth }: Props) {
                 subtitle="Assign a customer to a new session"
             />
 
-            <Box sx={{ maxWidth: 600, mx: "auto", mt: 4 }}>
+            <Box sx={{ maxWidth: 600, mx: "auto", mt: 2, px: { xs: 2, md: 3 } }}>
                 <SellerCard>
                     <form onSubmit={handleSubmit}>
                         <Stack spacing={4} sx={{ p: 1 }}>
