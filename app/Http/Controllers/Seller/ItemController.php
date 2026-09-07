@@ -8,6 +8,7 @@ use App\Models\Auth\User;
 use App\Models\Item\Item;
 use App\Models\Seller\Cart;
 use App\Services\PriceProvider;
+use App\Services\ImageResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -163,13 +164,7 @@ class ItemController extends Controller
     }
     private function resolveImageUrl(?string $path): ?string
     {
-        if (empty($path))
-            return null;
-        if (str_starts_with($path, 'http'))
-            return $path;
-
-        $baseUrl = config('filesystems.disks.s3.url') ?? env('AWS_URL', 'http://duka.test:9000/duka-images');
-        return $baseUrl . '/' . ltrim($path, '/');
+        return empty($path) ? null : ImageResolver::resolve($path);
     }
 
     public function search(Request $request)

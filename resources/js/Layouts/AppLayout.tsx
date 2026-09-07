@@ -1,7 +1,7 @@
 // resources/js/Components/Admin/AdminLayout.tsx
 import React, { useState } from 'react';
-import { Box, Breadcrumbs, CssBaseline, Link as MuiLink, Toolbar, Typography } from '@mui/material';
-import { Link } from '@inertiajs/react';
+import { Alert, Box, Breadcrumbs, CssBaseline, Link as MuiLink, Snackbar, Toolbar, Typography } from '@mui/material';
+import { Link, usePage } from '@inertiajs/react';
 import AdminNav from '../Components/Navigation/Admin/AdminNav';
 import AdminSidebar from '../Components/Navigation/Admin/AdminSidebar';
 
@@ -19,6 +19,9 @@ const breadcrumbLabelMap: Record<string, string> = {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const [mobileOpen, setMobileOpen] = useState(false);
+    const { flash } = usePage().props as {
+        flash?: { success?: string; error?: string };
+    };
     const pathSegments =
         typeof window !== 'undefined'
             ? window.location.pathname.split('/').filter(Boolean)
@@ -65,6 +68,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     width: { xl: `calc(100% - 260px)` }
                 }}
             >
+                <Snackbar
+                    open={Boolean(flash?.success)}
+                    autoHideDuration={3000}
+                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                >
+                    <Alert severity="success" sx={{ borderRadius: 2, boxShadow: 3 }}>
+                        {flash?.success}
+                    </Alert>
+                </Snackbar>
+                <Snackbar
+                    open={Boolean(flash?.error)}
+                    autoHideDuration={4000}
+                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                >
+                    <Alert severity="error" sx={{ borderRadius: 2, boxShadow: 3 }}>
+                        {flash?.error}
+                    </Alert>
+                </Snackbar>
                 <Toolbar /> {/* This offsets the fixed AppBar */}
                 <Box sx={{ p: { xs: 2, sm: 3 } }}> {/* This is the only padding container you need */}
                     <Box sx={{ mb: 2 }}>

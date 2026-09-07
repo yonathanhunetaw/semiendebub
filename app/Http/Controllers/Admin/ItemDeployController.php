@@ -14,8 +14,8 @@ class ItemDeployController extends Controller
      * Deploy all variants of an item to a store.
      *
      * For each ItemVariant that does not yet have a StoreVariant record
-     * in the target store, we create one with default stock=0, price=0.
-     * Existing records are left untouched (idempotent).
+     * in the target store, we create one with default stock=0 and an empty
+     * pricing matrix. Existing records are left untouched (idempotent).
      */
     public function deploy(Request $request, Item $item)
     {
@@ -30,22 +30,21 @@ class ItemDeployController extends Controller
         $created = 0;
 
         foreach ($item->variants as $variant) {
-            $alreadyExists = StoreVariant::where('item_id', $item->id)
-                ->where('item_variant_id', $variant->id)
-                ->where('store_id', $store->id)
-                ->exists();
-
-            if (!$alreadyExists) {
-                StoreVariant::create([
-                    'item_id'         => $item->id,
-                    'item_variant_id' => $variant->id,
-                    'store_id'        => $store->id,
-                    'stock'           => 0,
-                    'price'           => 0,
-                    'status'          => 'inactive', // staff can activate after setting price/stock
-                ]);
-                $created++;
-            }
+            $created += StoreVariant::query()->insertOrIgnore([
+                'item_id' => $item->id,
+                'item_variant_id' => $variant->id,
+                'store_id' => $store->id,
+                'stock' => 0,
+                'pricing_matrix' => json_encode([
+                    'price' => 0,
+                    'discount_price' => null,
+                    'discount_ends_at' => null,
+                ]),
+                'active' => false,
+                'manual_status' => 'auto',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         }
 
         $message = $created > 0

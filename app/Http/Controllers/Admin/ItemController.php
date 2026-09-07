@@ -263,8 +263,8 @@ class ItemController extends Controller
 
             $this->evaluateDraftStatus($item, $validated['status']);
 
-            return redirect()->route('admin.items.edit', $item)
-                ->with('success', 'Item created. Upload images for every variant to publish.');
+            return redirect()->route('admin.items.show', $item)
+                ->with('success', 'Item created successfully.');
         });
     }
 
@@ -297,7 +297,7 @@ class ItemController extends Controller
             'item_category_id' => $item->item_category_id,
             'status' => $item->status,
 
-            // Optimized via ImageResolver (Zero S3 API network checking overhead)
+            // Optimized via ImageResolver (Zero r2 API network checking overhead)
             'general_images' => $item->processed_images,
             'raw_general_images' => $item->general_images ?? [],
 
@@ -323,6 +323,7 @@ class ItemController extends Controller
                     'sku' => $variant->sku,
                     'status' => $variant->status,
                     'images' => $variant->images ?? [],
+                    'image_urls' => ImageResolver::resolveAll($variant->images ?? []),
                     'item_color_id' => $variant->item_color_id,
                     'item_size_id' => $variant->item_size_id,
                     'item_packaging_type_id' => $variant->item_packaging_type_id,
@@ -489,14 +490,18 @@ class ItemController extends Controller
             if ($request->hasFile($fileKey)) {
                 $file = $request->file($fileKey);
                 $fileName = "{$variant->sku}_main." . $file->getClientOriginalExtension();
-                $path = $file->storeAs("uploads/variants/{$variant->sku}", $fileName, 's3');
+                $path = $file->storeAs("uploads/variants/{$variant->sku}", $fileName, 'r2');
                 $variant->update(['images' => [$path]]);
                 continue;
             }
 
             // --- STEP 2: Multi-Slot Array Setup (Slots 0 to 4) ---
             $slots = array_fill(0, 5, null);
-            $variantKey = $variant->id;
+            $variantKey = implode(':', [
+                $variant->item_color_id ?? 'null',
+                $variant->item_size_id ?? 'null',
+                $variant->item_packaging_type_id ?? 'null',
+            ]);
 
             $existingSlotsForKey = $existingPaths[$variantKey] ?? [];
             foreach ($existingSlotsForKey as $slotIndex => $path) {
@@ -515,7 +520,7 @@ class ItemController extends Controller
                     $path = $file->storeAs(
                         'uploads/variants/' . $sku,
                         "{$sku}_{$slotNumber}.{$ext}",
-                        's3'
+                        'r2'
                     );
                     $slots[(int) $slotIndex] = $path;
                 }
@@ -637,11 +642,10 @@ class ItemController extends Controller
     {
         $newPaths = [];
 
-        if ($request->hasFile('general_images')) {
-            foreach ($request->file('general_images') as $file) {
+        foreach ($request->file('general_images', []) as $file) {
+            if ($file && $file->isValid()) {
                 $name = Str::slug($request->product_name) . '_' . time() . '_' . Str::random(5) . '.' . $file->getClientOriginalExtension();
-                // Store raw key to MinIO — ImageResolver::resolve() will build the URL at render time
-                $path = $file->storeAs('uploads/items', $name, 's3');
+                $path = $file->storeAs('uploads/items', $name, 'r2');
                 $newPaths[] = $path;
             }
         }
@@ -668,7 +672,7 @@ class ItemController extends Controller
             $fileName = "{$slug}_{$counter}.{$extension}";
 
             // Store raw key — ImageResolver builds the URL at render time
-            $path = $file->storeAs('uploads/items', $fileName, 's3');
+            $path = $file->storeAs('uploads/items', $fileName, 'r2');
 
             // Return the resolved URL for the immediate upload response
             $paths[] = ImageResolver::resolve($path);

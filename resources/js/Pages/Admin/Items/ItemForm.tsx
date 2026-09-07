@@ -58,6 +58,7 @@ type VariantRecord = {
     // Update these two lines:
     item_packaging_type_id?: number | null;
     images?: string[] | null;
+    image_urls?: string[] | null;
     // Keep these for the labels
     item_packaging_type?: { id: number; name: string } | null;
     item_color?: { id: number; name: string } | null;
@@ -72,6 +73,7 @@ type ItemPayload = {
     item_category_id?: number | string | null;
     status?: string;
     general_images?: string[] | null;
+    raw_general_images?: string[] | null;
     category?: Option | null;
     colors?: Option[];
     sizes?: Option[];
@@ -143,6 +145,7 @@ export default function ItemForm({
     const [tempValue, setTempValue] = useState("");
     const [inlineError, setInlineError] = useState<string | null>(null);
     const [imageLimitError, setImageLimitError] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // ── Main form data ───────────────────────────────────────────────────────
     const packagingSource = item?.packagingTypes ?? item?.packaging_types ?? [];
@@ -161,10 +164,20 @@ export default function ItemForm({
         color_ids: (item?.colors ?? []).map((c) => c.id),
         size_ids: (item?.sizes ?? []).map((s) => s.id),
         packaging: initialPackaging,
-        existing_images: item?.general_images ?? [],
+        existing_images: item?.raw_general_images ?? item?.general_images ?? [],
         images: [] as File[],
         status: item?.status ?? "draft",
     });
+
+    const existingImageUrls = useMemo(
+        () => new Map(
+            (item?.raw_general_images ?? []).map((path, index) => [
+                path,
+                item?.general_images?.[index] ?? path,
+            ]),
+        ),
+        [item?.general_images, item?.raw_general_images],
+    );
 
     // ── Per-variant image matrix ─────────────────────────────────────────────
     // Map of comboKey → 5 ImageSlots
@@ -185,6 +198,7 @@ export default function ItemForm({
             // Laravel usually casts JSON to an array automatically
             // This will now work without TypeScript errors
             const existingImages = Array.isArray(v.images) ? v.images : [];
+            const imageUrls = Array.isArray(v.image_urls) ? v.image_urls : [];
 
             // Create the 5-slot array
             const slots: ImageSlot[] = Array(IMAGES_PER_VARIANT).fill({
@@ -195,23 +209,9 @@ export default function ItemForm({
             // Inside your variantSlots initialization loop:
             existingImages.forEach((path: string, index: number) => {
                 if (index < IMAGES_PER_VARIANT) {
-                    // 1. The Regex "Power Washer"
-                    const cleanPath = path.replace(
-                        /^(\/)?storage(\/)+|^\//,
-                        "",
-                    );
-
-                    // 2. Debug Logs - Open your browser console (F12) to see these
-                    console.log(`--- Image Slot ${index} ---`);
-                    console.log("Raw path from DB:", path);
-                    console.log("Cleaned path:", cleanPath);
-                    console.log("Final URL assigned:", `/storage/${cleanPath}`);
-
                     slots[index] = {
                         kind: "existing",
-                        url: path.startsWith("http")
-                            ? path
-                            : `/storage/${cleanPath}`,
+                        url: imageUrls[index] ?? path,
                         path: path,
                     };
                 }
@@ -435,6 +435,7 @@ export default function ItemForm({
             <Box sx={{ mt: 1 }}>
                 {activeCreator !== uid ? (
                     <Button
+                        type="button"
                         size="small"
                         startIcon={<AddIcon />}
                         sx={{ color: "primary.main", textTransform: "none" }}
@@ -457,12 +458,13 @@ export default function ItemForm({
                             sx={inputStyle}
                         />
                         <Button
+                            type="button"
                             variant="contained"
                             onClick={() => void handleInlineSave(field, index)}
                         >
                             Save
                         </Button>
-                        <Button onClick={() => setActiveCreator(null)}>
+                        <Button type="button" onClick={() => setActiveCreator(null)}>
                             Cancel
                         </Button>
                     </Stack>
@@ -474,6 +476,7 @@ export default function ItemForm({
     // ── Submit ───────────────────────────────────────────────────────────────
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
+        if (isSubmitting || processing) return;
 
         // Build a FormData manually so we can append variant image files
         const fd = new FormData();
@@ -497,7 +500,7 @@ export default function ItemForm({
         data.existing_images.forEach((img) =>
             fd.append("existing_images[]", img),
         );
-        data.images.forEach((file) => fd.append("images[]", file));
+        data.images.forEach((file) => fd.append("general_images[]", file));
 
         // Variant images keyed by comboKey and slot index
         for (const [key, slots] of Object.entries(variantSlots)) {
@@ -523,6 +526,8 @@ export default function ItemForm({
 
         router.post(targetRoute, fd as any, {
             forceFormData: true,
+            onStart: () => setIsSubmitting(true),
+            onFinish: () => setIsSubmitting(false),
             ...(mode === "edit"
                 ? {
                       method: "post",
@@ -570,6 +575,13 @@ export default function ItemForm({
                         )}
                         {imageLimitError && (
                             <Alert severity="error">{imageLimitError}</Alert>
+                        )}
+                        {isSubmitting && (
+                            <Alert severity="info">
+                                {mode === "create"
+                                    ? "Creating item. Please wait..."
+                                    : "Updating item. Please wait..."}
+                            </Alert>
                         )}
 
                         {/* ── Row 1: Name / Description / Category / Colors / Sizes ── */}
@@ -924,6 +936,7 @@ export default function ItemForm({
                                                     }}
                                                 />
                                                 <IconButton
+                                                    type="button"
                                                     color="error"
                                                     disabled={
                                                         data.packaging
@@ -950,6 +963,7 @@ export default function ItemForm({
                                         </Box>
                                     ))}
                                     <Button
+                                        type="button"
                                         startIcon={<AddIcon />}
                                         sx={{
                                             color: "primary.main",
@@ -1045,7 +1059,7 @@ export default function ItemForm({
                                     >
                                         <Box
                                             component="img"
-                                            src={img}
+                                            src={existingImageUrls.get(img) ?? img}
                                             alt=""
                                             sx={{
                                                 width: "100%",
@@ -1055,6 +1069,7 @@ export default function ItemForm({
                                         />
                                         <CardContent sx={{ p: 1.5 }}>
                                             <Button
+                                                type="button"
                                                 color="error"
                                                 size="small"
                                                 onClick={() =>
@@ -1097,6 +1112,7 @@ export default function ItemForm({
                                                 {img.name}
                                             </Typography>
                                             <Button
+                                                type="button"
                                                 color="error"
                                                 size="small"
                                                 onClick={() =>
@@ -1109,9 +1125,9 @@ export default function ItemForm({
                                     </Card>
                                 ))}
                             </Stack>
-                            {errors.images && (
+                            {errors.general_images && (
                                 <FormHelperText error>
-                                    {errors.images}
+                                    {errors.general_images}
                                 </FormHelperText>
                             )}
                         </Box>
@@ -1296,6 +1312,7 @@ export default function ItemForm({
                                                                                 }}
                                                                             />
                                                                             <IconButton
+                                                                                type="button"
                                                                                 size="small"
                                                                                 onClick={() =>
                                                                                     clearSlot(
@@ -1442,12 +1459,16 @@ export default function ItemForm({
                             <Button
                                 type="submit"
                                 variant="contained"
-                                disabled={processing}
+                                disabled={isSubmitting || processing}
                                 sx={{ px: 5 }}
                             >
-                                {mode === "create"
-                                    ? "Save Item"
-                                    : "Update Item"}
+                                {isSubmitting || processing
+                                    ? mode === "create"
+                                        ? "Saving Item..."
+                                        : "Updating Item..."
+                                    : mode === "create"
+                                        ? "Save Item"
+                                        : "Update Item"}
                             </Button>
                         </Box>
                     </Stack>

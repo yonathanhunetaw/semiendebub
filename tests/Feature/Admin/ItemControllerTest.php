@@ -56,6 +56,7 @@ class ItemControllerTest extends TestCase
     #[Test]
     public function it_sends_selected_options_and_variant_keys_to_the_edit_form()
     {
+        config()->set('filesystems.disks.r2.url', 'https://images.example.test');
         $item = Item::factory()->create();
         $color = ItemColor::factory()->create(['name' => 'Crimson']);
         $size = ItemSize::factory()->create(['name' => 'Large']);
@@ -84,6 +85,7 @@ class ItemControllerTest extends TestCase
                 ->where('item.variants.0.item_color_id', $color->id)
                 ->where('item.variants.0.item_size_id', $size->id)
                 ->where('item.variants.0.item_packaging_type_id', $packagingType->id)
+                ->where('item.variants.0.image_urls.0', 'https://images.example.test/uploads/variants/carton.jpg')
             );
     }
 
@@ -109,7 +111,7 @@ class ItemControllerTest extends TestCase
         $this->assertDatabaseHas('item_categories', ['category_name' => 'New Category']);
 
         $item = Item::latest()->first();
-        $response->assertRedirect(route('admin.items.edit', $item));
+        $response->assertRedirect(route('admin.items.show', $item));
     }
 
     /** @test */

@@ -168,12 +168,6 @@ class DashboardController extends Controller
 
     private function resolveImageUrl(?string $path): ?string
     {
-        if (empty($path))
-            return null;
-        if (str_starts_with($path, 'http'))
-            return $path;
-
-        $baseUrl = config('filesystems.disks.s3.url') ?? env('AWS_URL', 'http://duka.test:9000/duka-images');
-        return $baseUrl . '/' . ltrim($path, '/');
+        return empty($path) ? null : ImageResolver::resolve($path);
     }
 }

@@ -9,12 +9,12 @@ use Illuminate\Support\Facades\Log;
  * Single source of truth for turning a stored image path/key into a
  * browser-accessible URL.
  *
- * Stored values are always the raw MinIO object key, e.g.:
+ * Stored values are raw R2 object keys, e.g.:
  *   uploads/items/42/cover.jpg
  *   uploads/variants/SKU-001-RED-L-PIECE-7/front.jpg
  *
- * This class converts them to the correct external URL using your
- * AWS_URL setting, and falls back gracefully when MinIO is down.
+ * This class converts them to the configured R2 public URL and normalizes
+ * legacy MinIO URLs that use the same object key.
  */
 class ImageResolver
 {
@@ -32,45 +32,42 @@ class ImageResolver
 
         $path = trim($path);
 
-        // Already a full URL — trust it (covers seeded picsum/placeholder URLs too)
+        // Keep R2 URLs and third-party URLs (such as seeded placeholder images)
+        // untouched. Legacy object-store URLs are normalized to their raw key.
         if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
-            return $path;
+            $r2Url = rtrim((string) config('filesystems.disks.r2.url'), '/');
+            if ($r2Url !== '' && str_starts_with($path, $r2Url . '/')) {
+                return $path;
+            }
+
+            $urlPath = (string) parse_url($path, PHP_URL_PATH);
+            if (preg_match('#/(uploads|images)/.+$#', $urlPath, $match)) {
+                $path = ltrim($match[0], '/');
+            } else {
+                return $path;
+            }
         }
 
         // Strip any legacy storage/ prefix that may have been saved historically
         $key = ltrim(preg_replace('#^storage/#', '', $path), '/');
 
-        // Try to get a URL from the s3 disk.
-        // Storage::disk('s3')->url() does NOT hit the network — it just builds the URL
-        // from your AWS_URL / AWS_ENDPOINT config. This is safe even when MinIO is down.
+        // Prefer the public R2 domain. This does not initialize the S3 adapter,
+        // which keeps image rendering independent of upload credentials.
+        $publicUrl = rtrim((string) config('filesystems.disks.r2.url'), '/');
+        if ($publicUrl !== '') {
+            return $publicUrl . '/' . $key;
+        }
+
+        // Fall back to the disk URL when no public R2 domain is configured.
         try {
-            $url = Storage::disk('s3')->url($key);
-            
-            // Remove any accidental /storage/ that might get added from misconfiguration
-            $url = str_replace('/storage/duka-images', '/duka-images', $url);
-            $url = str_replace('/storage/', '/', $url);
-            
+            $url = Storage::disk('r2')->url($key);
             return $url;
         } catch (\Throwable $e) {
             Log::warning("ImageResolver: could not build URL for [{$key}]: " . $e->getMessage());
         }
 
-        // Fallback: Try to construct URL directly from AWS_URL config
-        $awsUrl = config('filesystems.disks.s3.url');
-        if ($awsUrl && (str_starts_with($key, 'uploads/') || str_starts_with($key, 'images/'))) {
-            // Clean the AWS URL first
-            $cleanUrl = rtrim($awsUrl, '/');
-            $cleanUrl = str_replace('/storage', '', $cleanUrl);
-            return $cleanUrl . '/' . ltrim($key, '/');
-        }
-
         // Last resort fallback for legacy public-disk paths
         if (str_starts_with($key, 'images/') || str_starts_with($key, 'uploads/')) {
-            // Don't add /storage/ for MinIO images - use direct URL
-            $directUrl = config('filesystems.disks.s3.url');
-            if ($directUrl) {
-                return rtrim($directUrl, '/') . '/' . ltrim($key, '/');
-            }
             return asset('storage/' . $key);
         }
 
@@ -109,7 +106,7 @@ class ImageResolver
             throw new \RuntimeException("Seed image not found at [{$localPath}]");
         }
 
-        Storage::disk('s3')->put(
+        Storage::disk('r2')->put(
             $storagePath,
             file_get_contents($localPath),
             'public'
@@ -134,7 +131,7 @@ class ImageResolver
             throw new \RuntimeException("Could not download seed image from [{$sourceUrl}]");
         }
 
-        Storage::disk('s3')->put($storagePath, $contents, 'public');
+        Storage::disk('r2')->put($storagePath, $contents, 'public');
 
         return $storagePath;
     }
