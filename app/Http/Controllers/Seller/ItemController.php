@@ -483,7 +483,7 @@ class ItemController extends Controller
         $storeVariantIds = $item->variants->flatMap(fn($v) => $v->storeVariants->where('store_id', $storeId))->pluck('id')->toArray();
         $stocks = app(\App\Services\StockService::class)->getBatchStock($storeVariantIds);
 
-        $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId, $customerType, $stocks) {
+        $variantData = $item->variants->map(function ($variant) use ($store, $storeId, $sellerId, $customerId, $customerType, $stocks) {
             // Get the store variant for the current store
             $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
             if (app()->environment('testing') && is_null($storeVariant)) {
@@ -496,6 +496,14 @@ class ItemController extends Controller
 
             // 🛑 FIX: Use StockService SSOT ledger for stock
             $store_stock = $storeVariant ? ($stocks[$storeVariant->id] ?? 0) : 0;
+
+            $remote_stock = 0;
+            if ($store && $store->warehouse) {
+                $remote_stock = \App\Models\StockKeeper\ItemStock::where('location_type', \App\Models\Inventory\Warehouse::class)
+                    ->where('location_id', $store->warehouse->id)
+                    ->where('item_variant_id', $variant->id)
+                    ->sum('quantity');
+            }
 
             $status = $storeVariant?->computed_status ?? 'inactive';
             $store_active = $status === 'active';
@@ -558,6 +566,7 @@ class ItemController extends Controller
                 'price' => $price,
                 'discount_price' => $discount_price,
                 'stock' => $store_stock,
+                'remote_stock' => $remote_stock,
                 'status' => $status,
                 'store_active' => $store_active,
                 'quantity' => $variant->calculateTotalPieces(),

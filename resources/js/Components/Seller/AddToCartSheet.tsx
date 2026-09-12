@@ -49,7 +49,10 @@ export interface AddToCartSheetProps {
     onTierCountChange: (count: number) => void;
     extraPieces: number;
     onExtraPiecesChange: (count: number) => void;
+    extraBoxes?: number;
+    onExtraBoxesChange?: (count: number) => void;
     piecePrice: number | null;
+    boxPrice?: number | null;
 
     openCarts?: OpenCart[];
     selectedCart?: string;
@@ -84,7 +87,10 @@ export default function AddToCartSheet({
     onTierCountChange,
     extraPieces,
     onExtraPiecesChange,
+    extraBoxes = 0,
+    onExtraBoxesChange = () => {},
     piecePrice,
+    boxPrice = null,
     openCarts = [],
     selectedCart,
     onSelectCart,
@@ -104,18 +110,30 @@ export default function AddToCartSheet({
     const selectedOption = packagingOptions.find((o) => o.tier === selectedTier);
     const unitCountLabel = (() => {
         if (!selectedOption || tierCount <= 0) return "";
-        const tierWord = selectedOption.tier === "cartoon" ? "Carton" : selectedOption.tier === "packet" ? "Packet" : "Piece";
+        const tierWord = selectedOption.tier === "cartoon" ? "Carton" : selectedOption.tier === "box" ? "Box" : selectedOption.tier === "packet" ? "Packet" : "Piece";
         const tierPart = `${tierCount} ${tierWord}${tierCount === 1 ? "" : "s"}`;
 
         if (selectedOption.tier === "piece") {
             return tierPart;
         }
 
+        const boxOption = packagingOptions.find((o) => o.tier === "box");
         const totalPieces =
-            (selectedOption.unitsPerTier ?? 0) * tierCount + extraPieces;
+            (selectedOption.unitsPerTier ?? 0) * tierCount + extraPieces + (extraBoxes * (boxOption?.unitsPerTier ?? 0));
         if (totalPieces <= 0) return tierPart;
 
-        return `${tierPart} / ${totalPieces} Piece${totalPieces === 1 ? "" : "s"}`;
+        const parts: string[] = [tierPart];
+
+        // For cartons, show total boxes count in the middle
+        if (selectedOption.tier === "cartoon" && boxOption?.unitsPerTier) {
+            const totalBoxes = Math.floor((selectedOption.unitsPerTier ?? 0) * tierCount / boxOption.unitsPerTier) + extraBoxes;
+            if (totalBoxes > 0) {
+                parts.push(`${totalBoxes} Box${totalBoxes === 1 ? "" : "es"}`);
+            }
+        }
+
+        parts.push(`${totalPieces} Piece${totalPieces === 1 ? "" : "s"}`);
+        return parts.join(" / ");
     })();
 
     return (
@@ -312,7 +330,10 @@ export default function AddToCartSheet({
                                         onTierCountChange={onTierCountChange}
                                         extraPieces={extraPieces}
                                         onExtraPiecesChange={onExtraPiecesChange}
+                                        extraBoxes={extraBoxes}
+                                        onExtraBoxesChange={onExtraBoxesChange}
                                         piecePrice={piecePrice}
+                                        boxPrice={boxPrice}
                                     />
                                 )}
 

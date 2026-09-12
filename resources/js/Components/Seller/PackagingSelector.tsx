@@ -28,7 +28,10 @@ export interface PackagingSelectorProps {
     /** Extra loose pieces on top of the selected tier (only when tier !== "piece"). */
     extraPieces: number;
     onExtraPiecesChange: (count: number) => void;
+    extraBoxes?: number;
+    onExtraBoxesChange?: (count: number) => void;
     piecePrice: number | null;
+    boxPrice?: number | null;
 }
 
 export default function PackagingSelector({
@@ -39,7 +42,10 @@ export default function PackagingSelector({
     onTierCountChange,
     extraPieces,
     onExtraPiecesChange,
+    extraBoxes = 0,
+    onExtraBoxesChange = () => {},
     piecePrice,
+    boxPrice = null,
 }: PackagingSelectorProps) {
     const theme = useTheme();
     const isDark = theme.palette.mode === "dark";
@@ -126,6 +132,9 @@ export default function PackagingSelector({
                                     sx={{ color: "text.secondary", display: "block" }}
                                 >
                                     {selectedOption.unitsPerTier} Pieces
+                                    {selectedOption.tier === "cartoon" && options.find(o => o.tier === "box")?.unitsPerTier ? (
+                                        ` (${Math.floor(selectedOption.unitsPerTier / options.find(o => o.tier === "box")!.unitsPerTier!)} Boxes)`
+                                    ) : null}
                                 </Typography>
                             )}
                             {selectedOption.unitPrice != null && (
@@ -147,12 +156,60 @@ export default function PackagingSelector({
                         />
                     </Stack>
 
+                    {/* Nested "extra boxes" stepper */}
+                    {selectedTier === "cartoon" && options.find(o => o.tier === "box") && (
+                        <Box
+                            sx={{
+                                ml: 2.5,
+                                pl: 1.5,
+                                pt: 1.5,
+                                borderLeft: "2px solid",
+                                borderColor: isDark
+                                    ? "rgba(255,255,255,0.1)"
+                                    : "rgba(0,0,0,0.08)",
+                            }}
+                        >
+                            <Stack
+                                direction="row"
+                                justifyContent="space-between"
+                                alignItems="center"
+                            >
+                                <Box>
+                                    <Typography
+                                        variant="body2"
+                                        sx={{
+                                            fontWeight: 600,
+                                            color: isDark ? "#ccc" : "text.secondary",
+                                        }}
+                                    >
+                                        + Boxes
+                                    </Typography>
+                                    {boxPrice != null && (
+                                        <Typography
+                                            variant="caption"
+                                            sx={{ color: SELLER_BRAND_DARK, fontWeight: 700 }}
+                                        >
+                                            {sellerPrice(boxPrice)} Birr ea.
+                                        </Typography>
+                                    )}
+                                </Box>
+                                <Stepper
+                                    value={extraBoxes}
+                                    onChange={onExtraBoxesChange}
+                                    min={0}
+                                    size="sm"
+                                />
+                            </Stack>
+                        </Box>
+                    )}
+
                     {/* Nested "extra pieces" stepper */}
                     {showExtraPieces && (
                         <Box
                             sx={{
                                 ml: 2.5,
                                 pl: 1.5,
+                                pt: 1.5,
                                 borderLeft: "2px solid",
                                 borderColor: isDark
                                     ? "rgba(255,255,255,0.1)"

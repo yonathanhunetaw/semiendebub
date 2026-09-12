@@ -55,4 +55,10 @@ class Store extends Model
         // This tells Laravel that the store has many records in the store_variants table
         return $this->hasMany(\App\Models\Store\StoreVariant::class, 'store_id');
     }
+
+    // Remote warehouse for this store
+    public function warehouse()
+    {
+        return $this->hasOne(\App\Models\Inventory\Warehouse::class, 'store_id');
+    }
 }

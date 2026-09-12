@@ -89,7 +89,10 @@ class StoreController extends Controller
                 }
             }
 
-            $mappedVariants = $storeVariants->map(function ($sv) use ($store) {
+            $storeVariantIds = $storeVariants->pluck('id')->toArray();
+            $batchStocks = app(\App\Services\StockService::class)->getBatchStock($storeVariantIds);
+
+            $mappedVariants = $storeVariants->map(function ($sv) use ($store, $batchStocks) {
                 // Use PriceProvider to get the price ladder
                 $priceLadder = PriceProvider::getPriceLadder(
                     $sv->id,
@@ -106,6 +109,18 @@ class StoreController extends Controller
                 $discountPrice = $priceLadder[0]['discount_price'] ?? null;
                 $discountEndsAt = $priceLadder[0]['discount_ends_at'] ?? null;
 
+                $store_stock = $batchStocks[$sv->id] ?? 0;
+                $remote_stock = 0;
+                if ($store->warehouse) {
+                    $remote_stock = \App\Models\StockKeeper\ItemStock::where('location_type', \App\Models\Inventory\Warehouse::class)
+                        ->where('location_id', $store->warehouse->id)
+                        ->where('item_variant_id', $sv->itemVariant->id)
+                        ->sum('quantity');
+                }
+
+                $pieces = $sv->itemVariant->calculateTotalPieces();
+                $multiplier = $pieces > 0 ? $pieces : 1;
+
                     return [
                         'id' => $sv->id,
                         'sku' => $sv->itemVariant->sku ?? '—',
@@ -121,7 +136,9 @@ class StoreController extends Controller
                         'discount_ends_at' => $discountEndsAt,
                         'final_price' => $finalPrice, // Add this for convenience
                         'active' => (bool) $sv->active,
-                        'stock' => (int) $sv->stocks->sum('quantity'),
+                        'stock' => $store_stock,
+                        'remote_stock' => $remote_stock,
+                        'multiplier' => $multiplier,
                         'status' => $sv->active ? 'active' : 'inactive',
 
                         // Full price ladder (for debugging or advanced UI)
@@ -165,8 +182,12 @@ class StoreController extends Controller
                 'category' => $item->category->category_name ?? 'N/A',
                 'starting_price' => $mappedVariants->min('final_price'),
                 'total_variants' => $storeVariants->count(),
-                'total_stock' => $storeVariants->reduce(
-                    fn($carry, $sv) => $carry + $sv->stocks->sum('quantity'),
+                'total_stock' => $mappedVariants->reduce(
+                    fn($carry, $mv) => $carry + ($mv['stock'] * $mv['multiplier']),
+                    0
+                ),
+                'remote_total_stock' => $mappedVariants->reduce(
+                    fn($carry, $mv) => $carry + ($mv['remote_stock'] * $mv['multiplier']),
                     0
                 ),
                 'variants' => $mappedVariants,

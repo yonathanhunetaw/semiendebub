@@ -8,6 +8,7 @@ import {
     Select, FormControl, InputLabel, Tooltip, Alert, CircularProgress,
     Tabs, Tab, InputAdornment, Snackbar, Pagination, useMediaQuery,
     useTheme, Card, CardContent, Grid, CardActions,
+    ToggleButton, ToggleButtonGroup,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
@@ -70,6 +71,8 @@ interface Variant {
     discount_ends_at: string | null;
     active: boolean;
     stock: number;
+    remote_stock: number;
+    multiplier: number;
     status: string;
     customer_prices: CustomerPrice[];
     seller_prices: SellerPrice[];
@@ -83,6 +86,7 @@ interface InventoryItem {
     starting_price: number;
     total_variants: number;
     total_stock: number;
+    remote_total_stock: number;
     variants: Variant[];
 }
 
@@ -150,9 +154,42 @@ const discountFromDefault = (defaultPrice: string, price: string) => {
 const includingVat = (price: string | number | null | undefined) =>
     price == null || price === "" ? "" : (Number(price) * 1.15).toFixed(2);
 
+const COLOR_MAP: Record<string, string> = {
+    // Grays / Neutrals
+    gray: "#9ca3af", grey: "#9ca3af", silver: "#c0c0c0",
+    white: "#e5e7eb", black: "#1f2937", charcoal: "#374151",
+    // Reds
+    red: "#ef4444", crimson: "#dc143c", maroon: "#7f1d1d",
+    rose: "#f43f5e", pink: "#ec4899", coral: "#ff6b6b", salmon: "#fa8072",
+    // Oranges / Yellows
+    orange: "#f97316", amber: "#f59e0b", yellow: "#eab308",
+    gold: "#d4af37", cream: "#fdf6c3", beige: "#d4b896",
+    // Greens
+    green: "#22c55e", lime: "#84cc16", olive: "#65a30d",
+    teal: "#14b8a6", mint: "#6ee7b7", sage: "#87a878",
+    // Blues
+    blue: "#3b82f6", navy: "#1e3a5f", sky: "#0ea5e9",
+    cyan: "#06b6d4", indigo: "#6366f1", cobalt: "#0047ab",
+    // Purples / Violets
+    purple: "#a855f7", violet: "#7c3aed", lavender: "#c4b5fd",
+    magenta: "#d946ef", fuchsia: "#e879f9",
+    // Browns / Earthy
+    brown: "#78350f", tan: "#c8a97e", khaki: "#c3b091",
+    caramel: "#c68642", chocolate: "#7b3f00",
+};
+
 const variantAccent = (label: string) => {
-    const accents = ["#2563eb", "#7c3aed", "#db2777", "#0891b2", "#d97706", "#16a34a"];
-    return accents[[...label].reduce((total, char) => total + char.charCodeAt(0), 0) % accents.length];
+    // Label format: "Color / Size / Packaging" — color is always the first segment
+    const colorName = label.split("/")[0].trim().toLowerCase();
+    // Direct lookup
+    if (COLOR_MAP[colorName]) return COLOR_MAP[colorName];
+    // Partial match (e.g. "light gray", "dark blue")
+    for (const [key, hex] of Object.entries(COLOR_MAP)) {
+        if (colorName.includes(key)) return hex;
+    }
+    // Fallback: deterministic hash → one of a set of neutral-ish accents
+    const fallbacks = ["#2563eb", "#7c3aed", "#db2777", "#0891b2", "#d97706", "#16a34a"];
+    return fallbacks[[...label].reduce((t, c) => t + c.charCodeAt(0), 0) % fallbacks.length];
 };
 
 const bounce = keyframes`
@@ -162,6 +199,8 @@ const bounce = keyframes`
     60% { transform: translateY(-6px); }
     80% { transform: translateY(0); }
 `;
+
+export type StockLocationMode = 'store' | 'remote' | 'both';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Toast Component (unchanged)
@@ -825,8 +864,9 @@ function DesktopRow({
                     <Typography
                         fontWeight="bold"
                         color={item.total_stock > 0 ? "success.main" : "error.main"}
+                        sx={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
                     >
-                        {item.total_stock} Units
+                        {item.total_stock} Pieces
                     </Typography>
                 </TableCell>
             </TableRow>
@@ -948,7 +988,9 @@ function DesktopRow({
                                                             </Typography>
                                                         )}
                                                     </TableCell>
-                                                    <TableCell>{v.stock}</TableCell>
+                                                    <TableCell>
+                                                        <Typography variant="body2">{v.stock}</Typography>
+                                                    </TableCell>
                                                     <TableCell>
                                                         <Chip
                                                             label={v.active ? "Active" : "Inactive"}
@@ -998,6 +1040,172 @@ function DesktopRow({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// VariantCard — single variant collapsed by default, expands on click
+// ─────────────────────────────────────────────────────────────────────────────
+function VariantCard({
+    v,
+    hasDiscount,
+    hasOverrides,
+    highlighted,
+    onEdit,
+}: {
+    v: Variant;
+    hasDiscount: boolean;
+    hasOverrides: boolean;
+    highlighted: boolean;
+    onEdit: () => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const [stockLocation, setStockLocation] = useState<StockLocationMode>('store');
+
+    const displayStock = stockLocation === 'remote'
+        ? v.remote_stock
+        : stockLocation === 'both'
+            ? v.stock + v.remote_stock
+            : v.stock;
+
+    return (
+        <Paper
+            id={`variant-${v.id}`}
+            variant="outlined"
+            sx={{
+                mb: 1.5,
+                borderRadius: 2,
+                overflow: "hidden",
+                ...(highlighted ? { animation: `${bounce} 0.6s ease-in-out 3`, borderColor: "primary.main" } : {}),
+            }}
+        >
+            {/* ── Collapsed header — always visible, click to expand ── */}
+            <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+                onClick={() => setOpen(o => !o)}
+                sx={{ px: 1.5, py: 1.25, cursor: "pointer", userSelect: "none", "&:hover": { bgcolor: "action.hover" } }}
+            >
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", flex: "0 0 auto", bgcolor: variantAccent(v.label) }} />
+                    <Typography variant="subtitle2" fontWeight={600} sx={{ wordBreak: "break-word" }}>
+                        {v.label}
+                    </Typography>
+                </Stack>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                    <Chip
+                        label={v.active ? "Active" : "Inactive"}
+                        size="small"
+                        color={v.active ? "success" : "default"}
+                        variant="outlined"
+                    />
+                    {open ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
+                </Stack>
+            </Stack>
+
+            {/* ── Expanded detail ── */}
+            <Collapse in={open} timeout="auto" unmountOnExit>
+                <Divider />
+                <Stack spacing={1} sx={{ p: 1.5 }}>
+                    <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", gap: 1 }} alignItems="flex-end">
+                        <Box>
+                            <Typography variant="caption" color="text.secondary">SKU</Typography>
+                            <Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{v.sku}</Typography>
+                        </Box>
+                        <Box>
+                            <Typography variant="caption" color="text.secondary">Base Price</Typography>
+                            {hasDiscount ? (
+                                <Stack direction="row" alignItems="baseline" spacing={0.5}>
+                                    <Typography variant="body2" sx={{ fontWeight: 700, color: "error.main" }}>{fmt(v.discount_price)}</Typography>
+                                    <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled" }}>{fmt(v.price)}</Typography>
+                                </Stack>
+                            ) : (
+                                <Typography variant="body2" sx={{ fontWeight: 700 }}>{fmt(v.price)}</Typography>
+                            )}
+                        </Box>
+                    </Stack>
+
+                    {/* ── Stock with location toggle ── */}
+                    <Box sx={{ pt: 0.5 }}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
+                            <Box>
+                                <Typography variant="caption" color="text.secondary" display="block">Stock</Typography>
+                                <Typography variant="body1" fontWeight={700}>{displayStock}</Typography>
+                            </Box>
+                            <ToggleButtonGroup
+                                size="small"
+                                value={stockLocation}
+                                exclusive
+                                onChange={(_, val) => val && setStockLocation(val)}
+                                onClick={e => e.stopPropagation()}
+                                sx={{ "& .MuiToggleButton-root": { py: 0.25, px: 1, fontSize: "0.7rem" } }}
+                            >
+                                <ToggleButton value="store">Store</ToggleButton>
+                                <ToggleButton value="remote">Remote</ToggleButton>
+                                <ToggleButton value="both">Both</ToggleButton>
+                            </ToggleButtonGroup>
+                        </Stack>
+                    </Box>
+
+                    {hasOverrides && (
+                        <Box sx={{ pt: 1, borderTop: "1px dashed #e2e8f0" }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: "block", mb: 0.5 }}>
+                                Price Tiers:
+                            </Typography>
+                            <Stack spacing={0.5}>
+                                {v.seller_prices.map(sp => (
+                                    <Stack key={`sp-${sp.id}`} direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+                                        <Chip label="Seller" size="small" sx={{ bgcolor: "#1e293b", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }} />
+                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
+                                            {fmt(sp.discount_price && Number(sp.discount_price) < Number(sp.price) ? sp.discount_price : sp.price)}
+                                        </Typography>
+                                        {sp.discount_price && Number(sp.discount_price) < Number(sp.price) && (
+                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>{fmt(sp.price)}</Typography>
+                                        )}
+                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>({sp.seller_name})</Typography>
+                                    </Stack>
+                                ))}
+                                {v.customer_prices.map(cp => (
+                                    <Stack key={`cp-${cp.id}`} direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+                                        <Chip label="Customer" size="small" sx={{ bgcolor: "#6366f1", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }} />
+                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
+                                            {fmt(cp.discount_price && Number(cp.discount_price) < Number(cp.price) ? cp.discount_price : cp.price)}
+                                        </Typography>
+                                        {cp.discount_price && Number(cp.discount_price) < Number(cp.price) && (
+                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>{fmt(cp.price)}</Typography>
+                                        )}
+                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>({cp.customer_name})</Typography>
+                                    </Stack>
+                                ))}
+                                {v.individual_price?.price && (
+                                    <Stack direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+                                        <Chip label="Individual" size="small" sx={{ bgcolor: "#059669", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }} />
+                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
+                                            {fmt(v.individual_price.discount_price && Number(v.individual_price.discount_price) < Number(v.individual_price.price) ? v.individual_price.discount_price : v.individual_price.price)}
+                                        </Typography>
+                                        {v.individual_price.discount_price && Number(v.individual_price.discount_price) < Number(v.individual_price.price) && (
+                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>{fmt(v.individual_price.price)}</Typography>
+                                        )}
+                                    </Stack>
+                                )}
+                            </Stack>
+                        </Box>
+                    )}
+
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<EditIcon />}
+                        onClick={e => { e.stopPropagation(); onEdit(); }}
+                        sx={{ alignSelf: "flex-end" }}
+                    >
+                        Edit Prices
+                    </Button>
+                </Stack>
+            </Collapse>
+        </Paper>
+    );
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Mobile Card view — each inventory item as a card, with expandable variants
 // ─────────────────────────────────────────────────────────────────────────────
 function MobileCard({
@@ -1044,11 +1252,8 @@ function MobileCard({
                 </Stack>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1}>
                     <Typography variant="body2" color="text.secondary">Total Stock</Typography>
-                    <Typography
-                        fontWeight="bold"
-                        color={item.total_stock > 0 ? "success.main" : "error.main"}
-                    >
-                        {item.total_stock} Units
+                    <Typography fontWeight="bold" color={item.total_stock > 0 ? "success.main" : "error.main"}>
+                        {item.total_stock} Pieces
                     </Typography>
                 </Stack>
             </CardContent>
@@ -1071,130 +1276,14 @@ function MobileCard({
                             Boolean(v.individual_price?.price);
 
                         return (
-                            <Paper
+                            <VariantCard
                                 key={v.id}
-                                id={`variant-${v.id}`}
-                                variant="outlined"
-                                sx={{ p: 1.5, mb: 1.5, borderRadius: 2, ...(highlightedVariantId === v.id ? { animation: `${bounce} 0.6s ease-in-out 3`, borderColor: "primary.main" } : {}) }}
-                            >
-                                <Stack spacing={1}>
-                                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                                        <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}><Box sx={{ width: 10, height: 10, borderRadius: "50%", flex: "0 0 auto", bgcolor: variantAccent(v.label) }} /><Typography variant="subtitle2" fontWeight={600} sx={{ wordBreak: 'break-word' }}>{v.label}</Typography></Stack>
-                                        <Chip
-                                            label={v.active ? "Active" : "Inactive"}
-                                            size="small"
-                                            color={v.active ? "success" : "default"}
-                                            variant="outlined"
-                                        />
-                                    </Stack>
-
-                                    <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 1 }}>
-                                        <Box>
-                                            <Typography variant="caption" color="text.secondary">SKU</Typography>
-                                            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{v.sku}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="caption" color="text.secondary">Stock</Typography>
-                                            <Typography variant="body2" fontWeight={600}>{v.stock}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="caption" color="text.secondary">Base Price</Typography>
-                                            {hasDiscount ? (
-                                                <Stack direction="row" alignItems="baseline" spacing={0.5}>
-                                                    <Typography variant="body2" sx={{ fontWeight: 700, color: "error.main" }}>
-                                                        {fmt(v.discount_price)}
-                                                    </Typography>
-                                                    <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled" }}>
-                                                        {fmt(v.price)}
-                                                    </Typography>
-                                                </Stack>
-                                            ) : (
-                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                                    {fmt(v.price)}
-                                                </Typography>
-                                            )}
-                                        </Box>
-                                    </Stack>
-
-                                    {/* Price Tiers (Customer & Seller Prices) */}
-                                    {hasOverrides && (
-                                        <Box sx={{ mt: 0.5, pt: 1, borderTop: "1px dashed #e2e8f0" }}>
-                                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: "block", mb: 0.5 }}>
-                                                Price Tiers:
-                                            </Typography>
-                                            <Stack spacing={0.5}>
-                                                {v.seller_prices.map(sp => (
-                                                    <Stack key={`sp-${sp.id}`} direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
-                                                        <Chip
-                                                            label="Seller"
-                                                            size="small"
-                                                            sx={{ bgcolor: "#1e293b", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }}
-                                                        />
-                                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
-                                                            {fmt(sp.discount_price && Number(sp.discount_price) < Number(sp.price) ? sp.discount_price : sp.price)}
-                                                        </Typography>
-                                                        {sp.discount_price && Number(sp.discount_price) < Number(sp.price) && (
-                                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>
-                                                                {fmt(sp.price)}
-                                                            </Typography>
-                                                        )}
-                                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
-                                                            ({sp.seller_name})
-                                                        </Typography>
-                                                    </Stack>
-                                                ))}
-                                                {v.customer_prices.map(cp => (
-                                                    <Stack key={`cp-${cp.id}`} direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
-                                                        <Chip
-                                                            label="Customer"
-                                                            size="small"
-                                                            sx={{ bgcolor: "#6366f1", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }}
-                                                        />
-                                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
-                                                            {fmt(cp.discount_price && Number(cp.discount_price) < Number(cp.price) ? cp.discount_price : cp.price)}
-                                                        </Typography>
-                                                        {cp.discount_price && Number(cp.discount_price) < Number(cp.price) && (
-                                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>
-                                                                {fmt(cp.price)}
-                                                            </Typography>
-                                                        )}
-                                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
-                                                            ({cp.customer_name})
-                                                        </Typography>
-                                                    </Stack>
-                                                ))}
-                                                {v.individual_price?.price && (
-                                                    <Stack direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
-                                                        <Chip
-                                                            label="Individual"
-                                                            size="small"
-                                                            sx={{ bgcolor: "#059669", color: "#fff", fontWeight: 700, fontSize: "0.62rem", height: 18 }}
-                                                        />
-                                                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
-                                                            {fmt(v.individual_price.discount_price && Number(v.individual_price.discount_price) < Number(v.individual_price.price) ? v.individual_price.discount_price : v.individual_price.price)}
-                                                        </Typography>
-                                                        {v.individual_price.discount_price && Number(v.individual_price.discount_price) < Number(v.individual_price.price) && (
-                                                            <Typography variant="caption" sx={{ textDecoration: "line-through", color: "text.disabled", fontSize: "0.7rem" }}>
-                                                                {fmt(v.individual_price.price)}
-                                                            </Typography>
-                                                        )}
-                                                    </Stack>
-                                                )}
-                                            </Stack>
-                                        </Box>
-                                    )}
-
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
-                                        startIcon={<EditIcon />}
-                                        onClick={() => setEditing(v)}
-                                        sx={{ mt: 1, alignSelf: 'flex-end' }} // 👈 this keeps it on the left
-                                    >
-                                        Edit Prices
-                                    </Button>
-                                </Stack>
-                            </Paper>
+                                v={v}
+                                hasDiscount={hasDiscount}
+                                hasOverrides={hasOverrides}
+                                highlighted={highlightedVariantId === v.id}
+                                onEdit={() => setEditing(v)}
+                            />
                         );
                     })}
                 </Box>
@@ -1213,24 +1302,6 @@ function MobileCard({
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Pagination component using MUI Pagination + Inertia
-// ─────────────────────────────────────────────────────────────────────────────
-function InventoryPagination({ meta, links }: { meta: PaginationMeta; links: PaginationLink[] }) {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
-    const handlePageChange = (event: React.ChangeEvent<unknown>, page: number) => {
-        if (page === meta.current_page) return;
-        // Find the link for that page number
-        const link = links.find(l => l.label === String(page) && !l.active);
-        if (link && link.url) {
-            router.get(link.url, {}, { preserveState: true, preserveScroll: true });
-        }
-    };
-
-    // If only one page, don't render
-    if (meta.last_page <= 1) return null;
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>

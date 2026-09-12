@@ -73,6 +73,7 @@ export default function Show({
     );
     const [tierCount, setTierCount] = React.useState(1);
     const [extraPieces, setExtraPieces] = React.useState(0);
+    const [extraBoxes, setExtraBoxes] = React.useState(0);
 
     // Images
     const [selectedMainImage, setSelectedMainImage] = React.useState<
@@ -138,7 +139,7 @@ export default function Show({
         if (!packagingOptions.some((o) => o.tier === selectedTier)) {
             setSelectedTier(packagingOptions[0].tier);
             setTierCount(1);
-            setExtraPieces(0);
+            setExtraPieces(0); setExtraBoxes(0);
         }
     }, [packagingOptions, selectedTier]);
 
@@ -237,18 +238,36 @@ export default function Show({
         activePiecePrice = selectedOption.unitPrice / selectedOption.unitsPerTier;
     }
 
+    const boxOption = packagingOptions.find((o) => o.tier === "box");
+    let activeBoxPrice = boxOption?.unitPrice ?? null;
+    if (selectedOption && selectedOption.tier === "cartoon" && selectedOption.unitPrice != null && selectedOption.unitsPerTier != null && selectedOption.unitsPerTier > 0) {
+        if (boxOption && boxOption.unitsPerTier && boxOption.unitsPerTier > 0) {
+            activeBoxPrice = selectedOption.unitPrice / (selectedOption.unitsPerTier / boxOption.unitsPerTier);
+        }
+    }
+
     // --- Hierarchical packaging breakdown for the cart total ---
     const breakdownLines: PackagingBreakdownLine[] = React.useMemo(() => {
         const lines: PackagingBreakdownLine[] = [];
         const selected = packagingOptions.find((o) => o.tier === selectedTier);
+        const boxOption = packagingOptions.find((o) => o.tier === "box");
 
         if (selected) {
             lines.push({
                 tier: selected.tier,
                 raw: selected.raw,
-                label: selected.tier === "cartoon" ? "Carton" : selected.tier === "packet" ? "Packet" : "Piece",
+                label: selected.tier === "cartoon" ? "Carton" : selected.tier === "box" ? "Box" : selected.tier === "packet" ? "Packet" : "Piece",
                 count: tierCount,
                 unitPrice: selected.unitPrice,
+            });
+        }
+        if (selectedTier === "cartoon" && extraBoxes > 0 && boxOption) {
+            lines.push({
+                tier: "box",
+                raw: boxOption.raw,
+                label: "Box",
+                count: extraBoxes,
+                unitPrice: activeBoxPrice,
             });
         }
         if (selectedTier && selectedTier !== "piece" && extraPieces > 0) {
@@ -261,15 +280,20 @@ export default function Show({
             });
         }
         return lines;
-    }, [packagingOptions, selectedTier, tierCount, extraPieces, activePiecePrice, pieceOption]);
+    }, [packagingOptions, selectedTier, tierCount, extraPieces, extraBoxes, activePiecePrice, pieceOption]);
 
     const totalPrice = totalFromBreakdown(breakdownLines);
     const totalLabel = summarizeBreakdown(breakdownLines) || "No items selected";
 
+    const computedExtraPieces = React.useMemo(() => {
+        const boxUnits = packagingOptions.find(o => o.tier === "box")?.unitsPerTier ?? 0;
+        return extraPieces + (extraBoxes * boxUnits);
+    }, [extraPieces, extraBoxes, packagingOptions]);
+
     const { data, setData, post, processing } = useForm({
         variant_id: variant?.id ?? 0,
         quantity: tierCount,
-        extra_pieces: extraPieces,
+        extra_pieces: computedExtraPieces,
         extra_piece_price: activePiecePrice ?? 0,
         price: selectedPrice || displayPrice || 0,
     });
@@ -278,9 +302,9 @@ export default function Show({
         setData("price", selectedPrice || displayPrice || 0);
         setData("variant_id", variant?.id ?? 0);
         setData("quantity", tierCount);
-        setData("extra_pieces", extraPieces);
+        setData("extra_pieces", computedExtraPieces);
         setData("extra_piece_price", activePiecePrice ?? 0);
-    }, [displayPrice, selectedPrice, tierCount, extraPieces, activePiecePrice, setData, variant?.id]);
+    }, [displayPrice, selectedPrice, tierCount, computedExtraPieces, activePiecePrice, setData, variant?.id]);
 
     const chooseColor = (color: string) => {
         const nextSizes = availableSizes(variantData, color);
@@ -289,7 +313,7 @@ export default function Show({
         setSelectedSize(nextSize);
         setSelectedTier(null);
         setTierCount(1);
-        setExtraPieces(0);
+        setExtraPieces(0); setExtraBoxes(0);
         setSelectedVariantImage(null);
     };
 
@@ -297,14 +321,14 @@ export default function Show({
         setSelectedSize(size);
         setSelectedTier(null);
         setTierCount(1);
-        setExtraPieces(0);
+        setExtraPieces(0); setExtraBoxes(0);
         setSelectedVariantImage(null);
     };
 
     const handleSelectTier = (tier: PackagingTier) => {
         setSelectedTier(tier);
         setTierCount(1);
-        setExtraPieces(0);
+        setExtraPieces(0); setExtraBoxes(0);
         setSelectedVariantImage(null);
     };
 
@@ -358,6 +382,7 @@ export default function Show({
 
                     <ItemStockCard
                         stock={variant?.stock ?? 0}
+                        remoteStock={variant?.remote_stock ?? 0}
                         unitsInPack={variant?.quantity ?? 1}
                         perPiece={perPiece}
                         perPacket={perPacket}
@@ -440,7 +465,10 @@ export default function Show({
                 onTierCountChange={setTierCount}
                 extraPieces={extraPieces}
                 onExtraPiecesChange={setExtraPieces}
+                extraBoxes={extraBoxes}
+                onExtraBoxesChange={setExtraBoxes}
                 piecePrice={activePiecePrice}
+                boxPrice={activeBoxPrice}
                 openCarts={openCarts}
                 selectedCart={selectedCart}
                 onSelectCart={setSelectedCart}

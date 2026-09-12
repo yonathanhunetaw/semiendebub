@@ -15,6 +15,7 @@ export interface SellerVariantData {
     customer_price?: number | null;
     customer_discount_price?: number | null;
     stock?: number | null;
+    remote_stock?: number | null;
     status?: string | null;
     images?: string[];
     quantity?: number | null;
@@ -119,17 +120,19 @@ export function visiblePrice(
 // the Piece/Packet/Carton tab UI, and figure out which tier nests inside
 // which (e.g. a Carton contains N Packets, a Packet contains M Pieces).
 
-export type PackagingTier = "piece" | "packet" | "cartoon";
+export type PackagingTier = "piece" | "packet" | "box" | "cartoon";
 
 export const PACKAGING_TIER_ORDER: PackagingTier[] = [
     "piece",
     "packet",
+    "box",
     "cartoon",
 ];
 
 export const PACKAGING_TIER_LABEL: Record<PackagingTier, string> = {
     piece: "Piece",
     packet: "Packet",
+    box: "Box",
     cartoon: "Carton",
 };
 
@@ -139,6 +142,7 @@ export function classifyPackagingTier(
     const value = (packaging ?? "").toLowerCase();
     if (!value) return null;
     if (value.includes("carton") || value.includes("cartoon")) return "cartoon";
+    if (value.includes("box")) return "box";
     if (value.includes("packet") || value.includes("pack")) return "packet";
     if (value.includes("piece") || value.includes("pcs") || value.includes("pc"))
         return "piece";
