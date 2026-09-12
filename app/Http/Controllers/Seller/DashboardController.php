@@ -148,7 +148,12 @@ class DashboardController extends Controller
         $totalStock = 0;
         foreach ($item->variants as $variant) {
             foreach ($variant->storeVariants->where('store_id', $storeId) as $sv) {
-                $totalStock += (int) $sv->stocks->sum('quantity');
+                if (!$sv->active) {
+                    continue;
+                }
+                $pieces = $variant->calculateTotalPieces();
+                $multiplier = $pieces > 0 ? $pieces : 1;
+                $totalStock += ((int) $sv->stocks->sum('quantity')) * $multiplier;
             }
         }
 
@@ -163,6 +168,7 @@ class DashboardController extends Controller
             'final_price' => $priceInfo['final_price'],
             'discount_ends_at' => $priceInfo['discount_ends_at'],
             'pricing_matrix' => $priceInfo['pricing_matrix'],
+            'individual_price' => collect($priceInfo['pricing_matrix'])->firstWhere('level', 'individual'),
             'store_stock' => $totalStock,
         ];
     }

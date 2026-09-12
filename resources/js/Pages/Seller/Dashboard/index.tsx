@@ -393,7 +393,10 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                     >
                         {items.map((item) => {
                             // 1. The original "strikethrough" price is the store tier's resolved price
-                            const originalPrice = item.store_price ?? 0;
+                            let originalPrice = item.store_price ?? 0;
+                            if (top_cart_is_individual && item.individual_price?.price != null) {
+                                originalPrice = item.individual_price.price;
+                            }
 
                             // 2. The active price to pay is the deepest tier's final price
                             const displayPrice = item.final_price ?? originalPrice;

@@ -148,7 +148,9 @@ class ItemController extends Controller
                 if (!$sv->active) {
                     continue;
                 }
-                $totalStock += (int) $sv->stocks->sum('quantity');
+                $pieces = $variant->calculateTotalPieces();
+                $multiplier = $pieces > 0 ? $pieces : 1;
+                $totalStock += ((int) $sv->stocks->sum('quantity')) * $multiplier;
             }
         }
 
@@ -163,6 +165,7 @@ class ItemController extends Controller
             'final_price' => $priceInfo['final_price'],
             'discount_ends_at' => $priceInfo['discount_ends_at'],
             'pricing_matrix' => $priceInfo['pricing_matrix'],
+            'individual_price' => collect($priceInfo['pricing_matrix'])->firstWhere('level', 'individual'),
             'store_stock' => $totalStock,
         ];
     }
@@ -254,7 +257,9 @@ class ItemController extends Controller
             foreach ($item->variants as $variant) {
                 $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
                 if ($storeVariant) {
-                    $totalStock += $stocks[$storeVariant->id]->quantity ?? 0;
+                    $pieces = $variant->calculateTotalPieces();
+                    $multiplier = $pieces > 0 ? $pieces : 1;
+                    $totalStock += ($stocks[$storeVariant->id]->quantity ?? 0) * $multiplier;
                 }
             }
 
@@ -263,6 +268,7 @@ class ItemController extends Controller
             $item->final_price = $priceInfo['final_price'];
             $item->discount_ends_at = $priceInfo['discount_ends_at'];
             $item->pricing_matrix = $priceInfo['pricing_matrix'];
+            $item->individual_price = collect($priceInfo['pricing_matrix'])->firstWhere('level', 'individual');
             $item->store_stock = $totalStock;
 
             return [
@@ -276,6 +282,7 @@ class ItemController extends Controller
                 'discount_ends_at' => $item->discount_ends_at,
                 'store_stock' => $item->store_stock,
                 'pricing_matrix' => $item->pricing_matrix,
+                'individual_price' => $item->individual_price,
             ];
         });
 

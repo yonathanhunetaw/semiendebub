@@ -1215,41 +1215,41 @@ DB_MSG_LABEL="Database migrated and seeded"
 
 step_success 6 "[7/11] ${DB_MSG_LABEL}"
 
-# =================================================================================================
-# POST-SEEDING: ENSURE ALL UPLOADED IMAGES ARE PUBLIC
-# =================================================================================================
+# # =================================================================================================
+# # POST-SEEDING: ENSURE ALL UPLOADED IMAGES ARE PUBLIC
+# # =================================================================================================
 
-log_step "Ensuring all seeded images are publicly accessible..."
+# log_step "Ensuring all seeded images are publicly accessible..."
 
-# Run a Laravel command to set visibility on all uploaded images
-docker exec "$APP_CONTAINER" php artisan tinker --execute="
-    try {
-        \$disk = Illuminate\Support\Facades\Storage::disk('s3');
-        \$files = \$disk->allFiles('uploads');
-        \$count = 0;
-        foreach (\$files as \$file) {
-            if (\$disk->getVisibility(\$file) !== 'public') {
-                \$disk->setVisibility(\$file, 'public');
-                \$count++;
-            }
-        }
-        echo \"✅ Made \$count images public\n\";
-    } catch (\Exception \$e) {
-        echo \"⚠️ Could not update visibilities: \" . \$e->getMessage() . \"\n\";
-    }
-" 2>&1 | log_stream
+# # Run a Laravel command to set visibility on all uploaded images
+# docker exec "$APP_CONTAINER" php artisan tinker --execute="
+#     try {
+#         \$disk = Illuminate\Support\Facades\Storage::disk('s3');
+#         \$files = \$disk->allFiles('uploads');
+#         \$count = 0;
+#         foreach (\$files as \$file) {
+#             if (\$disk->getVisibility(\$file) !== 'public') {
+#                 \$disk->setVisibility(\$file, 'public');
+#                 \$count++;
+#             }
+#         }
+#         echo \"✅ Made \$count images public\n\";
+#     } catch (\Exception \$e) {
+#         echo \"⚠️ Could not update visibilities: \" . \$e->getMessage() . \"\n\";
+#     }
+# " 2>&1 | log_stream
 
-# Also ensure all bucket objects are public via a fresh mc container.
-# Uses MC_HOST_local env var (no alias setup needed, avoids shell quoting issues).
-docker run --rm \
-    --entrypoint /bin/sh \
-    --network "${COMPOSE_PROJECT_NAME:-duka}_duka-network" \
-    -e MC_HOST_local="http://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@duka-minio:9000" \
-    -e BUCKET="${AWS_BUCKET}" \
-    minio/mc:latest \
-    -c 'mc anonymous set download --recursive local/$BUCKET' 2>&1 | log_stream || true
+# # Also ensure all bucket objects are public via a fresh mc container.
+# # Uses MC_HOST_local env var (no alias setup needed, avoids shell quoting issues).
+# docker run --rm \
+#     --entrypoint /bin/sh \
+#     --network "${COMPOSE_PROJECT_NAME:-duka}_duka-network" \
+#     -e MC_HOST_local="http://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@duka-minio:9000" \
+#     -e BUCKET="${AWS_BUCKET}" \
+#     minio/mc:latest \
+#     -c 'mc anonymous set download --recursive local/$BUCKET' 2>&1 | log_stream || true
 
-log_success "All images are now publicly accessible"
+# log_success "All images are now publicly accessible"
 # =================================================================================================
 # STEP 8: CACHE AND PERMISSIONS
 # =================================================================================================

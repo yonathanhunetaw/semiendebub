@@ -254,8 +254,9 @@ class PriceProvider
             ];
         }
 
-        $minFinalPrice = min($variantPrices);
-        $minIndex = array_search($minFinalPrice, $variantPrices);
+        $minBasePrice = min($basePrices);
+        $minIndex = array_search($minBasePrice, $basePrices);
+        $minFinalPrice = $variantPrices[$minIndex];
         $bestLadder = $ladders[$minIndex] ?? [];
 
         $storeTier = collect($bestLadder)->firstWhere('level', 'store');

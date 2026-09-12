@@ -19,14 +19,8 @@ services:
       - ../:/var/www/html:delegated
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
-      - ../storage/app/seed-images:/var/www/html/storage/app/seed-images:delegated
     environment:
       DB_HOST: duka-db
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_BUCKET: ${AWS_BUCKET}
-      AWS_ENDPOINT: http://duka-minio:9000
-      AWS_USE_PATH_STYLE_ENDPOINT: "true"
       VITE_TLDRAW_LICENSE_KEY: ${VITE_TLDRAW_LICENSE_KEY}
       # Observability additions
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-duka-app}
@@ -44,16 +38,13 @@ services:
       - duka-network
     depends_on:
       duka-db:
-        condition: service_healthy          # ← base dependency
-      minio-setup:
-        condition: service_completed_successfully  # ← base dependency
+        condition: service_healthy
       lgtm:
-        condition: service_started          # ← observability
+        condition: service_started
       glitchtip-web:
-        condition: service_started          # ← observability
+        condition: service_started
     logging: *loki-logging
-    env_file: ../.env.observability   # optional, can also rely on environment
-
+    env_file: ../.env.observability
     deploy:
       resources:
         limits:
@@ -63,8 +54,37 @@ services:
           memory: '${APP_MEM_RESERVATION:-512M}'
 
   duka-db:
+    image: mysql:8.0
+    container_name: ${COMPOSE_PROJECT_NAME:-duka}-db
+    hostname: ${DB_HOSTNAME:-mysql-node}
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_EXPOSE_PORT:-3308}:3306"
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-duka}
+      MYSQL_USER: ${DB_USERNAME:-duka_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-password}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-password}
+    volumes:
+      - database_data:/var/lib/mysql
+    networks:
+      - duka-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysql",
+          "-u",
+          "root",
+          "-p${DB_PASSWORD:-password}",
+          "-e",
+          "SELECT 1"
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
     logging: *loki-logging
-
     deploy:
       resources:
         limits:
@@ -89,6 +109,7 @@ services:
       - ./logs:/var/log/host-deploy-logs:ro
     networks:
       - duka-network
+    logging: *loki-logging
 
   glitchtip-postgres:
     image: postgres:16-alpine
@@ -115,7 +136,6 @@ services:
       - duka-network
     logging: *loki-logging
 
-  # Dedicated one-off migration service for GlitchTip
   glitchtip-migrate:
     image: glitchtip/glitchtip:latest
     env_file: ../.env.observability
@@ -185,6 +205,9 @@ services:
     logging: *loki-logging
 
 volumes:
+  storage_data:
+  vendor_data:
+  database_data:
   lgtm_data:
   glitchtip_postgres_data:
   glitchtip_redis_data:

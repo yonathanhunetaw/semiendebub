@@ -403,7 +403,10 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                         {items.map((item) => {
                             // The backend (enrichItemForIndex) already resolved everything:
                             // Individual carts, Business VAT, Customer prices, and Seller prices.
-                            const originalPrice = item.store_price ?? 0;
+                            let originalPrice = item.store_price ?? 0;
+                            if (top_cart_is_individual && item.individual_price?.price != null) {
+                                originalPrice = item.individual_price.price;
+                            }
                             const displayPrice = item.final_price ?? originalPrice;
                             
                             const deepestTier = item.pricing_matrix?.[item.pricing_matrix.length - 1];
