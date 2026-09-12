@@ -1,21 +1,25 @@
+x-loki-logging: &loki-logging
+  driver: loki
+  options:
+    loki-url: "http://lgtm:3100/loki/api/v1/push"
+    loki-retries: "2"
+    max-size: "10m"
+    max-file: "3"
+
 services:
   duka-app:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dev
-
     container_name: ${COMPOSE_PROJECT_NAME:-duka}-app
-
     ports:
       - "${APP_PORT:-8095}:80"
       - "${VITE_PORT:-5177}:5177"
-
     volumes:
       - ../:/var/www/html:delegated
       - storage_data:/var/www/html/storage
       - vendor_data:/var/www/html/vendor
       - ../storage/app/seed-images:/var/www/html/storage/app/seed-images:delegated
-
     environment:
       DB_HOST: duka-db
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
@@ -24,49 +28,55 @@ services:
       AWS_ENDPOINT: http://duka-minio:9000
       AWS_USE_PATH_STYLE_ENDPOINT: "true"
       VITE_TLDRAW_LICENSE_KEY: ${VITE_TLDRAW_LICENSE_KEY}
-
+      # Observability additions
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-duka-app}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://lgtm:4318}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+      LOG_CHANNEL: ${LOG_CHANNEL:-stack}
+      LOG_STACK: ${LOG_STACK:-single,stderr_json}
+      GLITCHTIP_DSN: ${GLITCHTIP_DSN:-}
+      GLITCHTIP_ENVIRONMENT: ${GLITCHTIP_ENVIRONMENT:-${APP_ENV:-local}}
+      GLITCHTIP_RELEASE: ${GLITCHTIP_RELEASE:-}
     networks:
       - duka-network
-
     depends_on:
       duka-db:
         condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
+      lgtm:
+        condition: service_started
+      glitchtip-web:
+        condition: service_started
+    logging: *loki-logging
+    env_file: ../.env.observability
+    deploy:
+      resources:
+        limits:
+          cpus: '${APP_CPU_LIMIT:-2.0}'
+          memory: '${APP_MEM_LIMIT:-1.5G}'
+        reservations:
+          memory: '${APP_MEM_RESERVATION:-512M}'
 
   duka-db:
     image: mysql:8.0
     container_name: ${COMPOSE_PROJECT_NAME:-duka}-db
     hostname: ${DB_HOSTNAME:-mysql-node}
     restart: unless-stopped
-
-    # This is commented out because it is not needed for a single-node MySQL setup. If you want to enable replication in the future, you can uncomment these lines and set the appropriate environment variables.
-    # command:
-    #   - --server-id=${MYSQL_SERVER_ID:-1}
-    #   - --log-bin=mysql-bin
-    #   - --binlog-do-db=${DB_DATABASE:-duka}
-
     ports:
       - "${MYSQL_EXPOSE_PORT:-3308}:3306"
-
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:-duka}
       MYSQL_USER: ${DB_USERNAME:-duka_user}
       MYSQL_PASSWORD: ${DB_PASSWORD:-password}
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-password}
-
     volumes:
       - database_data:/var/lib/mysql
-      # NOTE: The following line is commented out because it is not needed for a single-node MySQL setup. If you want to enable replication in the future, you can uncomment this line and provide the appropriate SQL script for initializing replication.
-      # - ./docker/init-replication.sql:/docker-entrypoint-initdb.d/init-replication.sql
-
     networks:
       - duka-network
-
-    # ADD THIS LINE: Maps a clean hostname inside the container straight to your ZeroTier IP
-    # extra_hosts:
-    #   - "ubuntu-master:10.216.254.10"  
-
     healthcheck:
       test:
         [
@@ -82,11 +92,18 @@ services:
       timeout: 10s
       retries: 10
       start_period: 90s
+    logging: *loki-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '${DB_CPU_LIMIT:-1.0}'
+          memory: '${DB_MEM_LIMIT:-1.0G}'
+        reservations:
+          memory: '${DB_MEM_RESERVATION:-256M}'
 
   duka-minio:
     image: minio/minio
     container_name: ${COMPOSE_PROJECT_NAME:-duka}-minio
-
     command:
       - server
       - /data
@@ -100,15 +117,11 @@ services:
     environment:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
-
     volumes:
       - minio_dev_data:/data
-
     networks:
       - duka-network
-
     restart: unless-stopped
-
     healthcheck:
       test:
         [
@@ -120,26 +133,29 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    logging: *loki-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '${MINIO_CPU_LIMIT:-0.5}'
+          memory: '${MINIO_MEM_LIMIT:-512M}'
+        reservations:
+          memory: '${MINIO_MEM_RESERVATION:-128M}'
 
   minio-setup:
     image: minio/mc:latest
     container_name: ${COMPOSE_PROJECT_NAME:-duka}-minio-setup
-
     depends_on:
       duka-minio:
         condition: service_healthy
-
     environment:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
       AWS_BUCKET: ${AWS_BUCKET:-duka-images}
-
     networks:
       - duka-network
-
     entrypoint:
       - /bin/sh
-
     command:
       - -c
       - |
@@ -155,15 +171,130 @@ services:
         mc anonymous set download local/$$AWS_BUCKET
 
         echo "=== MinIO Setup Complete ==="
-
     restart: "no"
+    logging: *loki-logging
 
-networks:
-  duka-network:
-    driver: bridge
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    env_file: ../.env.observability
+    restart: unless-stopped
+    ports:
+      - "${LGTM_GRAFANA_PORT:-3000}:3000"
+      - "${LGTM_LOKI_PORT:-3100}:3100"
+      - "${LGTM_TEMPO_PORT:-3200}:3200"
+      - "${LGTM_OTLP_GRPC_PORT:-4317}:4317"
+      - "${LGTM_OTLP_HTTP_PORT:-4318}:4318"
+      - "${LGTM_PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - lgtm_data:/data
+      - ./logs:/var/log/host-deploy-logs:ro
+    networks:
+      - duka-network
+    logging: *loki-logging
+
+  glitchtip-postgres:
+    image: postgres:16-alpine
+    env_file: ../.env.observability
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${GLITCHTIP_DB_NAME:-glitchtip}
+      POSTGRES_USER: ${GLITCHTIP_DB_USER:-glitchtip}
+      POSTGRES_PASSWORD: ${GLITCHTIP_DB_PASSWORD:-glitchtip}
+    volumes:
+      - glitchtip_postgres_data:/var/lib/postgresql/data
+    networks:
+      - duka-network
+    logging: *loki-logging
+
+  glitchtip-redis:
+    image: redis:7-alpine
+    env_file: ../.env.observability
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - glitchtip_redis_data:/data
+    networks:
+      - duka-network
+    logging: *loki-logging
+
+  glitchtip-migrate:
+    image: glitchtip/glitchtip:latest
+    env_file: ../.env.observability
+    command: ./manage.py migrate
+    environment:
+      DATABASE_URL: postgres://${GLITCHTIP_DB_USER:-glitchtip}:${GLITCHTIP_DB_PASSWORD:-glitchtip}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME:-glitchtip}
+      REDIS_URL: redis://glitchtip-redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:-change-this-secret}
+    depends_on:
+      - glitchtip-postgres
+      - glitchtip-redis
+    networks:
+      - duka-network
+    logging: *loki-logging
+
+  glitchtip-web:
+    image: glitchtip/glitchtip:latest
+    env_file: ../.env.observability
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${GLITCHTIP_DB_USER:-glitchtip}:${GLITCHTIP_DB_PASSWORD:-glitchtip}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME:-glitchtip}
+      REDIS_URL: redis://glitchtip-redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:-change-this-secret}
+      PORT: 8000
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8080}
+      DEFAULT_FROM_EMAIL: ${GLITCHTIP_DEFAULT_FROM_EMAIL:-glitchtip@example.com}
+      EMAIL_URL: ${GLITCHTIP_EMAIL_URL:-consolemail://}
+      ENABLE_OPEN_USER_REGISTRATION: ${GLITCHTIP_ENABLE_OPEN_USER_REGISTRATION:-False}
+      DJANGO_SUPERUSER_USERNAME: ${GLITCHTIP_ADMIN_USERNAME:-admin}
+      DJANGO_SUPERUSER_EMAIL: ${GLITCHTIP_ADMIN_EMAIL:-admin@example.com}
+      DJANGO_SUPERUSER_PASSWORD: ${GLITCHTIP_ADMIN_PASSWORD:-change-this-password}
+    depends_on:
+      - glitchtip-postgres
+      - glitchtip-redis
+    ports:
+      - "18080:8000"
+    volumes:
+      - glitchtip_uploads:/code/uploads
+    networks:
+      - duka-network
+    logging: *loki-logging
+
+  glitchtip-worker:
+    image: glitchtip/glitchtip:latest
+    env_file: ../.env.observability
+    restart: unless-stopped
+    command: ./bin/run-celery-with-beat.sh
+    environment:
+      DATABASE_URL: postgres://${GLITCHTIP_DB_USER:-glitchtip}:${GLITCHTIP_DB_PASSWORD:-glitchtip}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME:-glitchtip}
+      REDIS_URL: redis://glitchtip-redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:-change-this-secret}
+      PORT: 8000
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8080}
+      DEFAULT_FROM_EMAIL: ${GLITCHTIP_DEFAULT_FROM_EMAIL:-glitchtip@example.com}
+      EMAIL_URL: ${GLITCHTIP_EMAIL_URL:-consolemail://}
+      ENABLE_OPEN_USER_REGISTRATION: ${GLITCHTIP_ENABLE_OPEN_USER_REGISTRATION:-False}
+      DJANGO_SUPERUSER_USERNAME: ${GLITCHTIP_ADMIN_USERNAME:-admin}
+      DJANGO_SUPERUSER_EMAIL: ${GLITCHTIP_ADMIN_EMAIL:-admin@example.com}
+      DJANGO_SUPERUSER_PASSWORD: ${GLITCHTIP_ADMIN_PASSWORD:-change-this-password}
+    depends_on:
+      - glitchtip-postgres
+      - glitchtip-redis
+    volumes:
+      - glitchtip_uploads:/code/uploads
+    networks:
+      - duka-network
+    logging: *loki-logging
 
 volumes:
   storage_data:
   vendor_data:
   database_data:
   minio_dev_data:
+  lgtm_data:
+  glitchtip_postgres_data:
+  glitchtip_redis_data:
+  glitchtip_uploads:
+
+networks:
+  duka-network:
+    driver: bridge
