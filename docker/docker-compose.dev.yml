@@ -31,6 +31,13 @@ services:
     depends_on:
       duka-db:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '${APP_CPU_LIMIT:-2.0}'
+          memory: '${APP_MEM_LIMIT:-1.5G}'
+        reservations:
+          memory: '${APP_MEM_RESERVATION:-512M}'    
 
   duka-db:
     image: mysql:8.0
@@ -53,6 +60,14 @@ services:
       timeout: 10s
       retries: 10
       start_period: 90s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '${DB_CPU_LIMIT:-1.0}'
+          memory: '${DB_MEM_LIMIT:-1.0G}'
+        reservations:
+          memory: '${DB_MEM_RESERVATION:-256M}'  
 
 networks:
   duka-network:

@@ -54,8 +54,24 @@ services:
     logging: *loki-logging
     env_file: ../.env.observability   # optional, can also rely on environment
 
+    deploy:
+      resources:
+        limits:
+          cpus: '${APP_CPU_LIMIT:-2.0}'
+          memory: '${APP_MEM_LIMIT:-1.5G}'
+        reservations:
+          memory: '${APP_MEM_RESERVATION:-512M}'
+
   duka-db:
     logging: *loki-logging
+
+    deploy:
+      resources:
+        limits:
+          cpus: '${DB_CPU_LIMIT:-1.0}'
+          memory: '${DB_MEM_LIMIT:-1.0G}'
+        reservations:
+          memory: '${DB_MEM_RESERVATION:-256M}'
 
   lgtm:
     image: grafana/otel-lgtm:latest
