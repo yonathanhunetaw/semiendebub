@@ -61,7 +61,7 @@ init_steps() {
     STEPS=(
         "Load Configuration & Environment"
         "Start Services (Docker Compose)"
-        "MinIO Readiness & Bucket Setup"
+        # "MinIO Readiness & Bucket Setup"
         "PHP Dependencies Installation"
         "Node Dependencies Installation"
         "Frontend Assets Build"
@@ -347,8 +347,8 @@ unset _OVERRIDE_FORCE_BUILD_VALUE
 # never collide. These variables are used throughout the rest of the script.
 APP_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-app"
 DB_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-db"
-MINIO_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-minio"
-MINIO_SETUP_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-minio-setup"
+# MINIO_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-minio"
+# MINIO_SETUP_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-minio-setup"
 
 # Log deployment start
 log_success "=================================================================================="
@@ -564,93 +564,93 @@ compose_rm_services() {
 # MINIO READINESS & BUCKET SETUP
 # =================================================================================================
 
-wait_for_minio() {
-    local max_attempts=60
-    local attempt=1
+# wait_for_minio() {
+#     local max_attempts=60
+#     local attempt=1
     
-    log_info "Waiting for MinIO to become ready..."
+#     log_info "Waiting for MinIO to become ready..."
     
-    while [ $attempt -le $max_attempts ]; do
-        if docker exec "$MINIO_CONTAINER" \
-        mc ls local >/dev/null 2>&1
-        then
-            log_success "MinIO is ready and authenticated"
-            return 0
-        fi
+#     while [ $attempt -le $max_attempts ]; do
+#         if docker exec "$MINIO_CONTAINER" \
+#         mc ls local >/dev/null 2>&1
+#         then
+#             log_success "MinIO is ready and authenticated"
+#             return 0
+#         fi
         
-        echo -n "."
-        sleep 2
-        attempt=$((attempt + 1))
-    done
+#         echo -n "."
+#         sleep 2
+#         attempt=$((attempt + 1))
+#     done
     
-    log_error "MinIO failed to become ready after $max_attempts attempts"
-    return 1
-}
+#     log_error "MinIO failed to become ready after $max_attempts attempts"
+#     return 1
+# }
 
-setup_minio_bucket() {
-    log_step "Creating MinIO bucket and directories..."
+# setup_minio_bucket() {
+#     log_step "Creating MinIO bucket and directories..."
     
-    # Wait for minio-setup container to complete
-    log_step "Waiting for MinIO setup container..."
-    for i in {1..60}; do
-        STATUS=$(docker inspect -f '{{.State.Status}}' "$MINIO_SETUP_CONTAINER" 2>/dev/null || echo "not-found")
+#     # Wait for minio-setup container to complete
+#     log_step "Waiting for MinIO setup container..."
+#     for i in {1..60}; do
+#         STATUS=$(docker inspect -f '{{.State.Status}}' "$MINIO_SETUP_CONTAINER" 2>/dev/null || echo "not-found")
         
-        if [ "$STATUS" = "exited" ]; then
-            log_success "MinIO setup container finished"
-            break
-        fi
-        echo -n "."
-        sleep 2
-    done
-    echo
+#         if [ "$STATUS" = "exited" ]; then
+#             log_success "MinIO setup container finished"
+#             break
+#         fi
+#         echo -n "."
+#         sleep 2
+#     done
+#     echo
     
-    # Configure MinIO bucket
-    if [ "$STATUS" = "exited" ]; then
-        EXIT_CODE=$(docker inspect -f '{{.State.ExitCode}}' "$MINIO_SETUP_CONTAINER")
+#     # Configure MinIO bucket
+#     if [ "$STATUS" = "exited" ]; then
+#         EXIT_CODE=$(docker inspect -f '{{.State.ExitCode}}' "$MINIO_SETUP_CONTAINER")
 
-        if [ "$EXIT_CODE" = "0" ]; then
-            log_success "MinIO bucket configured"
-            return 0
-        else
-            log_error "MinIO setup failed"
-            docker logs "$MINIO_SETUP_CONTAINER"
-            return 1
-        fi
-    fi
-}
+#         if [ "$EXIT_CODE" = "0" ]; then
+#             log_success "MinIO bucket configured"
+#             return 0
+#         else
+#             log_error "MinIO setup failed"
+#             docker logs "$MINIO_SETUP_CONTAINER"
+#             return 1
+#         fi
+#     fi
+# }
 
 # =================================================================================================
 # MAKE ALL EXISTING MINIO OBJECTS PUBLIC
 # =================================================================================================
 
-make_minio_objects_public() {
-    log_step "Making all MinIO objects publicly accessible..."
+# make_minio_objects_public() {
+#     log_step "Making all MinIO objects publicly accessible..."
 
-    sleep 2
+#     sleep 2
 
-    # The minio-setup container already exited (restart: "no"), so spin up a
-    # fresh temporary mc container.
-    # KEY POINTS:
-    #   1. --entrypoint /bin/sh  because minio/mc sets `mc` as its ENTRYPOINT
-    #   2. Use service name `duka-minio` (Docker DNS), NOT the container name
-    #   3. Pass credentials and bucket as -e vars so no shell quoting nightmares
-    local MC_OUTPUT
-    MC_OUTPUT=$(docker run --rm \
-        --entrypoint /bin/sh \
-        --network "${COMPOSE_PROJECT_NAME:-duka}_duka-network" \
-        -e MC_HOST_local="http://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@duka-minio:9000" \
-        -e BUCKET="${AWS_BUCKET}" \
-        minio/mc:latest \
-        -c 'mc anonymous set download local/$BUCKET' 2>&1)
+#     # The minio-setup container already exited (restart: "no"), so spin up a
+#     # fresh temporary mc container.
+#     # KEY POINTS:
+#     #   1. --entrypoint /bin/sh  because minio/mc sets `mc` as its ENTRYPOINT
+#     #   2. Use service name `duka-minio` (Docker DNS), NOT the container name
+#     #   3. Pass credentials and bucket as -e vars so no shell quoting nightmares
+#     local MC_OUTPUT
+#     MC_OUTPUT=$(docker run --rm \
+#         --entrypoint /bin/sh \
+#         --network "${COMPOSE_PROJECT_NAME:-duka}_duka-network" \
+#         -e MC_HOST_local="http://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@duka-minio:9000" \
+#         -e BUCKET="${AWS_BUCKET}" \
+#         minio/mc:latest \
+#         -c 'mc anonymous set download local/$BUCKET' 2>&1)
 
-    if [ $? -eq 0 ]; then
-        log_success "MinIO bucket is publicly accessible"
-        return 0
-    else
-        log_warning "Could not set public access: $MC_OUTPUT"
-        return 1
-    fi
-}
+#     if [ $? -eq 0 ]; then
+#         log_success "MinIO bucket is publicly accessible"
+#         return 0
+#     else
+#         log_warning "Could not set public access: $MC_OUTPUT"
+#         return 1
+#     fi
+# }
 
 # =================================================================================================
 # NODE DEPENDENCIES
@@ -704,8 +704,8 @@ run_migration_with_retry() {
                     log_success "Migrations completed"
                     
                     # Wait a moment for MinIO to be fully ready after migration
-                    log_step "Waiting 3 seconds for MinIO to stabilize..."
-                    sleep 3
+                    # log_step "Waiting 3 seconds for MinIO to stabilize..."
+                    # sleep 3
                     
                     # Run all seeders
                     log_step "Running seeders..."
@@ -798,11 +798,10 @@ log_info "Cleaning up any remaining containers..."
 
 # Safety cleanup — stop/remove THIS namespace's containers, plus legacy bare-named
 # ones for the one-time migration away from the old un-namespaced setup.
-docker rm -f "$MINIO_SETUP_CONTAINER" duka-minio-setup 2>/dev/null || true
-docker stop "$APP_CONTAINER" "$DB_CONTAINER" "$MINIO_CONTAINER" \
-             duka-app duka-db duka-minio 2>/dev/null || true
-docker rm -f "$APP_CONTAINER" "$DB_CONTAINER" "$MINIO_CONTAINER" \
-             duka-app duka-db duka-minio 2>/dev/null || true
+docker stop "$APP_CONTAINER" "$DB_CONTAINER" \
+             duka-app duka-db 2>/dev/null || true
+docker rm -f "$APP_CONTAINER" "$DB_CONTAINER" \
+             duka-app duka-db 2>/dev/null || true
 log_done "Cleanup complete"
 
 log_step "Starting application services..."
@@ -820,18 +819,6 @@ fi
 
 log_info "Waiting for MySQL to initialize (10 seconds)..."
 sleep 10
-
-log_info "Starting MinIO..."
-compose up -d duka-minio
-MINIO_EXIT=$?
-log_info "MinIO start exit code: $MINIO_EXIT"
-
-sleep 5
-
-log_info "Starting minio-setup..."
-compose up -d minio-setup
-SETUP_EXIT=$?
-log_info "minio-setup start exit code: $SETUP_EXIT"
 
 log_info "Starting duka-app..."
 if ! compose up -d --force-recreate duka-app; then
@@ -915,7 +902,7 @@ step_success 1 "[2/9] All containers started successfully"
 
 
 # =================================================================================================
-# STEP 3: MINIO READINESS & BUCKET SETUP (CRITICAL - MUST BE BEFORE SEEDING)
+# STEP 3: DATABASE READINESS CHECK
 # =================================================================================================
 
 step_start 2
@@ -945,41 +932,7 @@ for i in {1..30}; do
     fi
 done
 
-# Configure bucket
-if ! setup_minio_bucket; then
-    step_failed 2 "MinIO bucket setup failed"
-    exit 1
-fi
-
-# Make sure all objects are public
-make_minio_objects_public
-
-step_success 2 "[3/9] MinIO ready with bucket configured"
-
-# =================================================================================================
-# STEP 3.5: VERIFY MINIO IS FULLY READY FOR SEEDING
-# =================================================================================================
-
-step_start 2 # Still part of step 2 technically, but add this after bucket setup
-
-log_step "Verifying MinIO is writable for seeding..."
-
-# Test write to MinIO from Laravel
-if docker exec "$APP_CONTAINER" php artisan tinker --execute="
-    try {
-        Storage::disk('s3')->put('test-seeder.txt', 'Seeder test ' . date('Y-m-d H:i:s'), 'public');
-        Storage::disk('s3')->delete('test-seeder.txt');
-        echo 'OK';
-    } catch (\Exception \$e) {
-        echo 'ERROR: ' . \$e->getMessage();
-    }
-" 2>&1 | grep -q "OK"; then
-    log_success "MinIO is writable and ready for seeding"
-else
-    log_warning "MinIO write test failed, but continuing..."
-fi
-
-step_success 2 "MinIO ready with bucket configured"
+step_success 2 "Database ready"
 
 # =================================================================================================
 # STEP 4: PHP DEPENDENCIES
@@ -1339,7 +1292,8 @@ else
 fi
 
 log_done "Laravel optimizations refreshed"
-step_success 7 "[8/11] Cache cleared and permissions set"
+step_success 7 "[8/9] Cache cleared and permissions set"
+
 # =================================================================================================
 # STEP 9: FINAL VERIFICATION
 # =================================================================================================
@@ -1348,8 +1302,8 @@ step_start 8
 
 log_step "Performing final verification checks..."
 
-# Check if all critical containers are running
-CRITICAL_CONTAINERS=("$APP_CONTAINER" "$DB_CONTAINER" "$MINIO_CONTAINER")
+# Check if all critical containers are running (MinIO removed)
+CRITICAL_CONTAINERS=("$APP_CONTAINER" "$DB_CONTAINER")
 all_running=true
 
 for container in "${CRITICAL_CONTAINERS[@]}"; do
@@ -1374,55 +1328,13 @@ else
     log_warning "Health check endpoint not responding"
 fi
 
-step_success 8 "[9/11] Deployment verification complete"
+step_success 8 "[9/9] Deployment verification complete"
+
 # =================================================================================================
-# STEP 9.5: UPLOAD MISSING IMAGES (POST-DEPLOYMENT)
+# CLOUDFLARE CACHE PURGING (AUTOMATED)
 # =================================================================================================
 
 step_start 9
-log_step "Checking for missing MinIO images..."
-
-# Run a dedicated artisan command to upload any missing seed images
-docker exec "$APP_CONTAINER" php artisan tinker --execute="
-    \$missingCount = 0;
-    \$uploadedCount = 0;
-    
-    // Get all items that should have images
-    \$items = App\Models\Item\Item::whereNotNull('file_prefix')->get();
-    
-    foreach (\$items as \$item) {
-        \$prefix = \$item->file_prefix;
-        \$itemId = \$item->id;
-        
-        for (\$i = 1; \$i <= 5; \$i++) {
-            \$fileName = \"{\$prefix}_{\$i}.jpg\";
-            \$sourcePath = storage_path(\"app/seed-images/{\$fileName}\");
-            \$minioPath = \"uploads/items/{\$itemId}/{\$fileName}\";
-            
-            if (file_exists(\$sourcePath) && !Storage::disk('s3')->exists(\$minioPath)) {
-                try {
-                    Storage::disk('s3')->put(\$minioPath, file_get_contents(\$sourcePath), 'public');
-                    echo \"✅ Post-deploy uploaded: {\$minioPath}\\n\";
-                    \$uploadedCount++;
-                } catch (\Exception \$e) {
-                    echo \"❌ Failed: {\$minioPath} - \" . \$e->getMessage() . \"\\n\";
-                    \$missingCount++;
-                }
-            }
-        }
-    }
-    
-    echo \"\\n📊 Summary: Uploaded \$uploadedCount images, \$missingCount still missing\\n\";
-" 2>&1 | log_stream
-
-log_success "Image post-processing complete"
-step_success 9 "[10/11] Missing images synced successfully"
-
-# =================================================================================================
-# STEP 11: CLOUDFLARE CACHE PURGING (AUTOMATED)
-# =================================================================================================
-
-step_start 10
 log_step "Clearing Cloudflare edge cache to prevent stale Vite manifest errors..."
 
 if [ -f .env.production ]; then
@@ -1446,7 +1358,7 @@ else
     log_warning "Skipping Cloudflare cache purge: CLOUDFLARE_ZONE_ID or CLOUDFLARE_API_TOKEN not found in environment."
 fi
 
-step_success 10 "[11/11] Cloudflare cache purged"
+step_success 9 "Cloudflare cache purged"
 
 # =================================================================================================
 # DEPLOYMENT COMPLETE
