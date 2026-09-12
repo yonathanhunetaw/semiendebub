@@ -1302,6 +1302,24 @@ function MobileCard({
     );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Pagination component using MUI Pagination + Inertia
+// ─────────────────────────────────────────────────────────────────────────────
+function InventoryPagination({ meta, links }: { meta: PaginationMeta; links: PaginationLink[] }) {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+    const handlePageChange = (event: React.ChangeEvent<unknown>, page: number) => {
+        if (page === meta.current_page) return;
+        // Find the link for that page number
+        const link = links.find(l => l.label === String(page) && !l.active);
+        if (link && link.url) {
+            router.get(link.url, {}, { preserveState: true, preserveScroll: true });
+        }
+    };
+
+    // If only one page, don't render
+    if (meta.last_page <= 1) return null;
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
