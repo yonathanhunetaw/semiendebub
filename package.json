@@ -36,7 +36,7 @@
         "@emotion/styled": "^11.14.1",
         "@fontsource/poppins": "^5.2.7",
         "@inertiajs/react": "^2.3.13",
-        "@mui/icons-material": "^7.3.7",
+        "@mui/icons-material": "^7.3.11",
         "@mui/material": "^7.3.7",
         "@mui/x-charts": "^8.27.0",
         "html5-qrcode": "^2.3.8",

@@ -35,9 +35,9 @@ services:
       resources:
         limits:
           cpus: '${APP_CPU_LIMIT:-2.0}'
-          memory: '${APP_MEM_LIMIT:-1.5G}'
+          memory: '${APP_MEM_LIMIT:-3G}'
         reservations:
-          memory: '${APP_MEM_RESERVATION:-512M}'    
+          memory: '${APP_MEM_RESERVATION:-1G}'    
 
   duka-db:
     image: mysql:8.0

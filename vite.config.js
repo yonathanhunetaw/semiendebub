@@ -42,6 +42,7 @@ export default defineConfig(({ mode }) => {
                 '@emotion/react',
                 '@emotion/styled',
                 '@mui/material',
+                '@mui/icons-material',
                 'hoist-non-react-statics',
             ],
             esbuildOptions: {
