@@ -7,6 +7,7 @@ use App\Http\Controllers\Seller\DashboardController;
 use App\Http\Controllers\Seller\ItemController;
 use App\Http\Controllers\Seller\MenuController;
 use App\Http\Controllers\Seller\SellerSettingsController;
+use App\Http\Controllers\Seller\ShipmentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -46,5 +47,6 @@ Route::domain("seller.$baseDomain")
             Route::delete('/carts/{cart}/items/{variant}', [CartController::class, 'destroyItem'])->name('carts.items.destroy');
             Route::get('/settings', [SellerSettingsController::class, 'index'])->name('settings.index');
             Route::patch('/settings', [SellerSettingsController::class, 'update'])->name('settings.update');
+            Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
         });
     });

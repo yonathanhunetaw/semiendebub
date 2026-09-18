@@ -652,6 +652,148 @@ class StoreController extends Controller
     /**
      * GET /stores/{store}/inventory/deviations
      */
+    
+    public function itemVariants(Store $store, \App\Models\Item\Item $item)
+    {
+        $item->load([
+            'category',
+            'variants' => function ($q) use ($store) {
+                $q->whereHas('storeVariants', function ($q2) use ($store) {
+                    $q2->where('store_id', $store->id);
+                })
+                    ->with([
+                        'itemColor',
+                        'itemSize',
+                        'itemPackagingType',
+                        'packagingQuantities',
+                        'storeVariants' => function ($q2) use ($store) {
+                            $q2->where('store_id', $store->id)
+                                ->with([
+                                    'stocks',
+                                    'customerPrices.customer',
+                                    'sellerPrices.seller',
+                                    'individualPrice',
+                                ]);
+                        },
+                    ]);
+            }
+        ]);
+
+        $storeVariants = collect();
+        foreach ($item->variants as $itemVariant) {
+            foreach ($itemVariant->storeVariants as $sv) {
+                $sv->setRelation('itemVariant', $itemVariant);
+                $itemVariant->setRelation('item', $item);
+                $storeVariants->push($sv);
+            }
+        }
+
+        $storeVariantIds = $storeVariants->pluck('id')->toArray();
+        $batchStocks = app(\App\Services\StockService::class)->getBatchStock($storeVariantIds);
+
+        $mappedVariants = $storeVariants->map(function ($sv) use ($store, $batchStocks) {
+            $priceLadder = \App\Services\PriceProvider::getPriceLadder($sv->id, $store->id, null, null);
+            $finalPrice = \App\Services\PriceProvider::getFinalPrice($priceLadder);
+
+            $basePrice = $priceLadder[0]['price'] ?? 0;
+            $discountPrice = $priceLadder[0]['discount_price'] ?? null;
+            $discountEndsAt = $priceLadder[0]['discount_ends_at'] ?? null;
+
+            $store_stock = $batchStocks[$sv->id] ?? 0;
+            $remote_stock = 0;
+            if ($store->warehouse) {
+                $remote_stock = \App\Models\Inventory\ItemStock::where('location_type', \App\Models\Inventory\Warehouse::class)
+                    ->where('location_id', $store->warehouse->id)
+                    ->where('item_variant_id', $sv->itemVariant->id)
+                    ->sum('quantity');
+            }
+
+            $pieces = $sv->itemVariant->calculateTotalPieces();
+            $multiplier = $pieces > 0 ? $pieces : 1;
+
+            return [
+                'id' => $sv->id,
+                'sku' => $sv->itemVariant->sku ?? '—',
+                'label' => implode(' / ', array_filter([
+                    $sv->itemVariant->itemColor?->name,
+                    $sv->itemVariant->itemSize?->name,
+                    $sv->itemVariant->itemPackagingType?->name ?? $sv->itemVariant->packagingQuantities->first()?->name,
+                ])) ?: $sv->itemVariant->sku,
+
+                'price' => $basePrice,
+                'discount_price' => $discountPrice,
+                'discount_ends_at' => $discountEndsAt,
+                'final_price' => $finalPrice,
+                'active' => (bool) $sv->active,
+                'stock' => $store_stock,
+                'remote_stock' => $remote_stock,
+                'multiplier' => $multiplier,
+
+                'individual_price' => $sv->individualPrice ? [
+                    'price' => $sv->individualPrice->price,
+                    'discount_price' => $sv->individualPrice->discount_price,
+                    'discount_ends_at' => $sv->individualPrice->discount_ends_at,
+                ] : null,
+
+                'customer_prices' => $sv->customerPrices->map(fn($cp) => [
+                    'id' => $cp->id,
+                    'customer_id' => $cp->customer_id,
+                    'customer_name' => $cp->customer ? trim($cp->customer->first_name . ' ' . $cp->customer->last_name) : 'Unknown',
+                    'customer_type' => $cp->customer_type,
+                    'price' => $cp->price,
+                    'discount_price' => $cp->discount_price,
+                    'discount_ends_at' => $cp->discount_ends_at,
+                ]),
+
+                'seller_prices' => $sv->sellerPrices->map(fn($sp) => [
+                    'id' => $sp->id,
+                    'seller_id' => $sp->seller_id,
+                    'seller_name' => $sp->seller ? trim($sp->seller->first_name . ' ' . $sp->seller->last_name) : 'Unknown',
+                    'customer_type' => $sp->customer_type,
+                    'price' => $sp->price,
+                    'discount_price' => $sp->discount_price,
+                    'discount_ends_at' => $sp->discount_ends_at,
+                ]),
+                'min_reorder' => $sv->min_reorder_level,
+                'max_stock' => $sv->max_stock_level,
+            ];
+        });
+
+        $totalStock = $mappedVariants->reduce(
+            fn($carry, $mv) => $carry + ($mv['stock'] * $mv['multiplier']),
+            0
+        );
+        $remoteTotalStock = $mappedVariants->reduce(
+            fn($carry, $mv) => $carry + ($mv['remote_stock'] * $mv['multiplier']),
+            0
+        );
+
+        $mappedItem = [
+            'item_id' => $item->id,
+            'item_name' => $item->product_name ?? $item->name ?? 'Unknown Item',
+            'category' => $item->category->category_name ?? $item->category?->name ?? 'N/A',
+            'starting_price' => $mappedVariants->min('final_price') ?? 0,
+            'total_variants' => $mappedVariants->count(),
+            'total_stock' => $totalStock,
+            'remote_total_stock' => $remoteTotalStock,
+            'variants' => $mappedVariants->values()->all(),
+        ];
+
+        // Also fetch customers and sellers for the UI
+        $customers = \App\Models\Auth\Customer::select('id', 'first_name', 'last_name')->get();
+        $sellers = \App\Models\Auth\User::role('seller')->select('id', 'first_name', 'last_name')->get();
+
+        return \Inertia\Inertia::render('Admin/Inventory/Stores/ItemVariants', [
+            'store' => [
+                'id' => $store->id,
+                'name' => $store->name,
+            ],
+            'item' => $mappedItem,
+            'customers' => $customers,
+            'sellers' => $sellers,
+        ]);
+    }
+
     public function deviations(Store $store)
     {
         $storeVariantIds = StoreVariant::where('store_id', $store->id)->pluck('id');
@@ -788,10 +930,15 @@ class StoreController extends Controller
     // TRANSFER ACTIONS
     // ═════════════════════════════════════════════════════════════════════════
 
-    public function cancelTransfer(Transfer $transfer)
+    public function cancelTransfer(Request $request, $id)
     {
+        if ((int)$id === 0) {
+            return back();
+        }
+
+        $transfer = Transfer::findOrFail($id);
         abort_unless(
-            in_array($transfer->status, ['pending', 'in_transit'], true),
+            in_array($transfer->status, ['pending', 'in_transit', 'queued']),
             422,
             'Only pending or in-transit transfers can be cancelled.'
         );
@@ -805,9 +952,38 @@ class StoreController extends Controller
         return back();
     }
 
-    public function dispatchTransfer(Transfer $transfer)
+    public function dispatchTransfer(Request $request, $id)
     {
-        abort_unless($transfer->status === 'pending', 422, 'Only pending transfers can be dispatched.');
+        if ((int)$id === 0 || $request->has('store_variant_id')) {
+            $svId = $request->input('store_variant_id');
+            $sv = StoreVariant::find($svId);
+
+            if ($sv) {
+                $iv = $sv->itemVariant;
+                $piecesPerUnit = max(1, (int) ($iv?->calculateTotalPieces() ?: 1));
+                $perCarton = $piecesPerUnit * 10;
+                $qty = (int) $request->input('quantity', $perCarton);
+
+                $reference = 'TR-' . str_pad((Transfer::max('id') ?? 0) + 1, 6, '0', STR_PAD_LEFT);
+
+                Transfer::create([
+                    'reference' => $reference,
+                    'item_variant_id' => $sv->item_variant_id,
+                    'store_variant_id' => $sv->id,
+                    'to_store_id' => $sv->store_id,
+                    'quantity' => $qty,
+                    'status' => 'in_transit',
+                    'dispatched_at' => now(),
+                    'eta' => now()->addHours(24),
+                    'notes' => 'Auto-queued dispatch',
+                ]);
+
+                return back();
+            }
+        }
+
+        $transfer = Transfer::findOrFail($id);
+        abort_unless(in_array($transfer->status, ['pending', 'queued', 'draft']), 422, 'Only pending transfers can be dispatched.');
 
         $transfer->update([
             'status' => 'in_transit',

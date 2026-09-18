@@ -144,13 +144,17 @@ export default function Replenish({ store, transfers = [] }: Props) {
         }
     };
 
-    const fireNow = async (id: number) => {
-        setBusy(id);
+    const fireNow = async (t: TransferRow) => {
+        setBusy(t.id);
         try {
-            await axios.patch(route("store-transfer.dispatch", id));
-            setToast(`Transfer #${id} dispatched`);
+            await axios.patch(route("store-transfer.dispatch", t.id), {
+                store_variant_id: t.variant.id,
+                quantity: t.qty,
+            });
+            setToast("Transfer dispatched successfully");
             router.reload({ only: ["transfers"] });
-        } catch {
+        } catch (err) {
+            console.error("Dispatch error:", err);
             setToast("Could not dispatch — try again.");
         } finally {
             setBusy(null);
@@ -212,7 +216,7 @@ export default function Replenish({ store, transfers = [] }: Props) {
                             <Button size="small" variant="contained" fullWidth
                                 startIcon={<LocalShippingIcon sx={{ fontSize: 14 }} />}
                                 disabled={busy === t.id}
-                                onClick={() => fireNow(t.id)}>
+                                onClick={() => fireNow(t)}>
                                 Dispatch Now
                             </Button>
                             <Button size="small" color="inherit" fullWidth
@@ -342,7 +346,7 @@ export default function Replenish({ store, transfers = [] }: Props) {
                                                 <Tooltip title="Dispatch now">
                                                     <span>
                                                         <IconButton size="small" disabled={busy === t.id}
-                                                            onClick={() => fireNow(t.id)}>
+                                                            onClick={() => fireNow(t)}>
                                                             <LocalShippingIcon fontSize="small" />
                                                         </IconButton>
                                                     </span>

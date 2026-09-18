@@ -2,6 +2,7 @@ import { Link, usePage } from "@inertiajs/react";
 import AppsRoundedIcon from "@mui/icons-material/AppsRounded";
 import CategoryRoundedIcon from "@mui/icons-material/CategoryRounded";
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
+import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import ShoppingCartRoundedIcon from "@mui/icons-material/ShoppingCartRounded";
 import { BottomNavigation, BottomNavigationAction, Paper, useTheme } from "@mui/material";
 import React from "react";
@@ -26,6 +27,12 @@ const navItems = [
         href: route("seller.carts.index"),
     },
     {
+        value: "shipments",
+        label: "Shipments",
+        icon: <LocalShippingRoundedIcon />,
+        href: route("seller.shipments.index"),
+    },
+    {
         value: "more",
         label: "More",
         icon: <AppsRoundedIcon />,
@@ -46,6 +53,10 @@ function currentTab(url: string) {
 
     if (path.startsWith("/orders") || path.startsWith("/carts")) {
         return "carts";
+    }
+
+    if (path.startsWith("/shipments")) {
+        return "shipments";
     }
 
     return "more";

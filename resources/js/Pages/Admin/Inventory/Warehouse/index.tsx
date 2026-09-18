@@ -1,4 +1,5 @@
 // resources/js/Pages/Admin/Inventory/Warehouse/index.tsx
+import React, { useState, useMemo } from "react";
 import AdminLayout from "@/Layouts/AdminLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import AddIcon from "@mui/icons-material/Add";
@@ -8,12 +9,15 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import PlaceIcon from "@mui/icons-material/Place";
 import StorefrontIcon from "@mui/icons-material/Storefront";
 import WarehouseIcon from "@mui/icons-material/Warehouse";
+import SearchIcon from "@mui/icons-material/Search";
+import ClearIcon from "@mui/icons-material/Clear";
 import {
     Box,
     Button,
     Chip,
     Grid,
     IconButton,
+    InputAdornment,
     LinearProgress,
     Paper,
     Stack,
@@ -22,7 +26,9 @@ import {
     TableCell,
     TableContainer,
     TableHead,
+    TablePagination,
     TableRow,
+    TextField,
     Tooltip,
     Typography,
 } from "@mui/material";
@@ -31,8 +37,8 @@ interface Warehouse {
     id: number;
     name: string;
     address: string | null;
-    code: string | null; // Added code
-    stocks_count: number; // Renamed from stock_lines_count
+    code: string | null;
+    stocks_count: number;
     store_name?: string | null;
     total_units: number;
 }
@@ -42,26 +48,32 @@ interface StockLine {
     item_name: string;
     variant_label: string;
     sku: string | null;
-    location_name: string; // This will show the Warehouse name
+    location_name: string;
     quantity: number;
-    min_stock_level: number | null; // Changed from low_stock_threshold
+    min_stock_level: number | null;
 }
 
 interface Props {
-    warehouses: Warehouse[]; // Changed from locations
+    warehouses: Warehouse[];
     stockLines: StockLine[];
-    totalWarehouses: number; // Changed from totalLocations
+    totalWarehouses: number;
     totalUnits: number;
     lowStockCount: number;
 }
 
 export default function WarehouseIndex({
-    warehouses = [], // Rename
+    warehouses = [],
     stockLines = [],
-    totalWarehouses = 0, // Rename
+    totalWarehouses = 0,
     totalUnits = 0,
     lowStockCount = 0,
 }: Props) {
+    // ── Filtering & Pagination State ──
+    const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set(["all"]));
+    const [searchQuery, setSearchQuery] = useState<string>("");
+    const [page, setPage] = useState<number>(0);
+    const [rowsPerPage, setRowsPerPage] = useState<number>(10);
+
     const handleDeleteLocation = (wh: Warehouse) => {
         if (
             !confirm(
@@ -72,9 +84,71 @@ export default function WarehouseIndex({
         router.delete(route("admin.inventory.warehouse.destroy", wh.id));
     };
 
-    // Update to use 'min_stock_level'
     const isLow = (line: StockLine) =>
         line.min_stock_level !== null && line.quantity <= line.min_stock_level;
+
+    // Build location list for selector pills
+    const locationPills = useMemo(() => {
+        const list: { key: string; label: string; count: number; tone: string }[] = [
+            { key: "all", label: "All Locations", count: totalUnits, tone: "grey.900" },
+        ];
+        const tones = ["success.main", "info.main", "primary.main", "warning.main", "secondary.main"];
+        warehouses.forEach((wh, idx) => {
+            list.push({
+                key: wh.name,
+                label: wh.name,
+                count: wh.total_units || 0,
+                tone: tones[idx % tones.length],
+            });
+        });
+        return list;
+    }, [warehouses, totalUnits]);
+
+    const isAllSelected = selectedLocations.has("all");
+
+    const toggleLocation = (key: string) => {
+        setPage(0);
+        if (key === "all") {
+            setSelectedLocations(new Set(["all"]));
+            return;
+        }
+        setSelectedLocations(prev => {
+            const next = new Set(prev);
+            next.delete("all");
+            if (next.has(key)) {
+                next.delete(key);
+                if (next.size === 0) next.add("all");
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+    };
+
+    // Filter stock lines by location selection and search query
+    const filteredStockLines = useMemo(() => {
+        return stockLines.filter(line => {
+            // Location filter
+            const matchesLoc = isAllSelected || selectedLocations.has(line.location_name);
+            if (!matchesLoc) return false;
+
+            // Search query filter
+            if (!searchQuery.trim()) return true;
+            const q = searchQuery.toLowerCase();
+            return (
+                line.item_name.toLowerCase().includes(q) ||
+                (line.sku && line.sku.toLowerCase().includes(q)) ||
+                line.variant_label.toLowerCase().includes(q) ||
+                line.location_name.toLowerCase().includes(q)
+            );
+        });
+    }, [stockLines, selectedLocations, isAllSelected, searchQuery]);
+
+    // Paginated slice
+    const paginatedStockLines = useMemo(() => {
+        return filteredStockLines.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+    }, [filteredStockLines, page, rowsPerPage]);
+
     return (
         <Box>
             <Head title="Warehouse" />
@@ -123,9 +197,8 @@ export default function WarehouseIndex({
             <Grid container spacing={2} mb={3}>
                 {[
                     {
-                        // Changed label to 'Warehouses' to be more specific
                         label: "Total Warehouses",
-                        value: totalWarehouses, // Match the new prop name
+                        value: totalWarehouses,
                         icon: <WarehouseIcon />,
                         color: "primary.main",
                     },
@@ -136,11 +209,9 @@ export default function WarehouseIndex({
                         color: "success.main",
                     },
                     {
-                        // This now represents items below their 'min_stock_level'
                         label: "Low Stock Alerts",
                         value: lowStockCount,
                         icon: <InventoryIcon />,
-                        // Keeps the warning color if count is > 0
                         color:
                             lowStockCount > 0 ? "warning.main" : "success.main",
                     },
@@ -156,7 +227,6 @@ export default function WarehouseIndex({
                                 display: "flex",
                                 alignItems: "center",
                                 gap: 2,
-                                // Subtly highlight the card if it's a warning
                                 bgcolor:
                                     card.label === "Low Stock Alerts" &&
                                     lowStockCount > 0
@@ -219,7 +289,6 @@ export default function WarehouseIndex({
                             <TableCell sx={{ fontWeight: 800 }}>
                                 Warehouse
                             </TableCell>
-                            {/* We can keep 'Linked Store' if you still want to show which store this warehouse serves */}
                             <TableCell sx={{ fontWeight: 800 }}>
                                 Linked Store
                             </TableCell>
@@ -268,7 +337,6 @@ export default function WarehouseIndex({
                                         )}
                                     </TableCell>
                                     <TableCell>
-                                        {/* Updated to whatever your store relationship name is now */}
                                         {wh.store_name ? (
                                             <Stack
                                                 direction="row"
@@ -371,10 +439,104 @@ export default function WarehouseIndex({
                 </Table>
             </TableContainer>
 
-            {/* ── Stock Level Lines ── */}
-            <Typography variant="h6" fontWeight={700} mb={1.5}>
-                Stock Levels
-            </Typography>
+            {/* ── Stock Level Lines Section ── */}
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+                <Typography variant="h6" fontWeight={700}>
+                    Stock Levels
+                </Typography>
+                <Chip
+                    size="small"
+                    label={`${filteredStockLines.length} Records Found`}
+                    color="primary"
+                    variant="outlined"
+                    sx={{ fontWeight: 700 }}
+                />
+            </Stack>
+
+            {/* Location Selector Pills (just like ItemVariants) */}
+            <Box sx={{ mb: 2 }}>
+                <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
+                    <Typography variant="caption" color="text.secondary"
+                        sx={{ textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
+                        Select Location (Tap to Filter / Combine)
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+                        {isAllSelected ? "All Locations" : `${selectedLocations.size} Location${selectedLocations.size === 1 ? "" : "s"} Selected`}
+                    </Typography>
+                </Stack>
+                <Stack direction="row" spacing={0.75} sx={{ overflowX: "auto", pb: 0.5,
+                    "&::-webkit-scrollbar": { display: "none" } }}>
+                    {locationPills.map(l => {
+                        const active = l.key === "all" ? isAllSelected : selectedLocations.has(l.key);
+                        return (
+                            <Paper key={l.key} variant="outlined"
+                                onClick={() => toggleLocation(l.key)}
+                                sx={{
+                                    flex: "0 0 auto", px: 1.25, py: 0.75, borderRadius: 2,
+                                    cursor: "pointer", minWidth: 100,
+                                    bgcolor: active ? "grey.900" : "background.paper",
+                                    color: active ? "#fff" : "text.primary",
+                                    borderColor: active ? "grey.900" : "divider",
+                                    transition: "all 0.15s",
+                                }}>
+                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                    <Box sx={{ width: 6, height: 6, borderRadius: "50%",
+                                        bgcolor: active ? "#fff" : l.tone }} />
+                                    <Typography variant="caption"
+                                        sx={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase",
+                                            color: active ? "rgba(255,255,255,0.75)" : "text.secondary" }}>
+                                        {l.label}
+                                    </Typography>
+                                </Stack>
+                                <Typography sx={{ fontWeight: 800, fontFamily: "monospace", fontSize: "0.85rem", mt: 0.25 }}>
+                                    {l.count.toLocaleString()}
+                                    <Typography component="span"
+                                        sx={{ fontSize: "0.6rem", fontWeight: 400, ml: 0.5,
+                                            color: active ? "rgba(255,255,255,0.6)" : "text.secondary" }}>
+                                        units
+                                    </Typography>
+                                </Typography>
+                            </Paper>
+                        );
+                    })}
+                </Stack>
+            </Box>
+
+            {/* Search Input Bar */}
+            <Box sx={{ mb: 2 }}>
+                <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search stock lines by item name, SKU, variant, or location..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setPage(0);
+                    }}
+                    InputProps={{
+                        startAdornment: (
+                            <InputAdornment position="start">
+                                <SearchIcon sx={{ color: "text.secondary", fontSize: 20 }} />
+                            </InputAdornment>
+                        ),
+                        endAdornment: searchQuery ? (
+                            <InputAdornment position="end">
+                                <IconButton size="small" onClick={() => { setSearchQuery(""); setPage(0); }}>
+                                    <ClearIcon fontSize="small" />
+                                </IconButton>
+                            </InputAdornment>
+                        ) : null,
+                    }}
+                    sx={{
+                        "& .MuiOutlinedInput-root": {
+                            borderRadius: "12px",
+                            bgcolor: "background.paper",
+                        },
+                    }}
+                />
+            </Box>
+
+            {/* Stock Lines Table */}
             <TableContainer
                 component={Paper}
                 elevation={0}
@@ -403,12 +565,10 @@ export default function WarehouseIndex({
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {stockLines.length > 0 ? (
-                            stockLines.map((line) => {
+                        {paginatedStockLines.length > 0 ? (
+                            paginatedStockLines.map((line) => {
                                 const low = isLow(line);
 
-                                // Logic update: Use min_stock_level instead of threshold
-                                // We calculate percentage based on 3x the minimum safety stock
                                 const pct = line.min_stock_level
                                     ? Math.min(
                                           100,
@@ -457,7 +617,6 @@ export default function WarehouseIndex({
                                             )}
                                         </TableCell>
                                         <TableCell>
-                                            {/* This will show "Main Warehouse" or "Downtown Store" automatically */}
                                             <Typography variant="body2">
                                                 {line.location_name}
                                             </Typography>
@@ -533,8 +692,9 @@ export default function WarehouseIndex({
                                     sx={{ py: 5 }}
                                 >
                                     <Typography color="text.secondary">
-                                        No stock records yet. Deploy items to
-                                        start tracking quantities.
+                                        {stockLines.length === 0
+                                            ? "No stock records yet. Deploy items to start tracking quantities."
+                                            : "No matching stock lines found for the selected filters."}
                                     </Typography>
                                 </TableCell>
                             </TableRow>
@@ -542,6 +702,23 @@ export default function WarehouseIndex({
                     </TableBody>
                 </Table>
             </TableContainer>
+
+            {/* Pagination Controls */}
+            {filteredStockLines.length > 0 && (
+                <TablePagination
+                    rowsPerPageOptions={[5, 10, 25, 50]}
+                    component="div"
+                    count={filteredStockLines.length}
+                    rowsPerPage={rowsPerPage}
+                    page={page}
+                    onPageChange={(_, newPage) => setPage(newPage)}
+                    onRowsPerPageChange={(e) => {
+                        setRowsPerPage(parseInt(e.target.value, 10));
+                        setPage(0);
+                    }}
+                    sx={{ mt: 1 }}
+                />
+            )}
         </Box>
     );
 }

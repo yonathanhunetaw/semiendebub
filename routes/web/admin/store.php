@@ -18,6 +18,7 @@ Route::domain("admin.{$baseDomain}")
 
             // ── Inventory sub-pages (must come BEFORE /{store} wildcard) ──────
             Route::get('/{store}/inventory/replenish',  [StoreController::class, 'replenish'])->name('replenish');
+            Route::get('/{store}/inventory/items/{item}', [StoreController::class, 'itemVariants'])->name('item.variants');
             Route::get('/{store}/inventory/deviations', [StoreController::class, 'deviations'])->name('deviations');
 
             Route::post('/{store}/transfers', [StoreController::class, 'storeTransfer'])->name('transfer.create');

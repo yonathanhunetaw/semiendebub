@@ -47,7 +47,7 @@ export default function AdminSidebar({
 
     // Only one dropdown state now: Inventory
     const [inventoryOpen, setInventoryOpen] = useState(
-        ["/inventory/transfers", "/inventory/stores", "/inventory/warehouse"].some((path) => url.includes(path))
+        ["/inventory/transfers", "/inventory/stores", "/inventory/warehouse", "/inventory/replenish"].some((path) => url.includes(path))
     );
 
     const mainItemStyle = {
@@ -178,6 +178,17 @@ export default function AdminSidebar({
                                     <MultipleStop fontSize="small" />
                                 </ListItemIcon>
                                 <ListItemText primary="Transfers" />
+                            </ListItemButton>
+                            <ListItemButton
+                                component={Link}
+                                href="/inventory/replenish"
+                                selected={url.includes("/inventory/replenish")}
+                                sx={indentedItemStyle}
+                            >
+                                <ListItemIcon sx={{ minWidth: 36 }}>
+                                    <LocalShipping fontSize="small" />
+                                </ListItemIcon>
+                                <ListItemText primary="Replenish" />
                             </ListItemButton>
                         </List>
                     </Collapse>

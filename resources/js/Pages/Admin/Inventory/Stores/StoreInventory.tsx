@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import StitchProductDetails from './StitchProductDetails';
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -24,6 +26,17 @@ import Inventory2Icon from "@mui/icons-material/Inventory2";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import RuleSettingsIcon from "@mui/icons-material/Rule";
 import StyleIcon from "@mui/icons-material/Style";
+import StorefrontIcon from "@mui/icons-material/Storefront";
+import StoreIcon from "@mui/icons-material/Store";
+import CloudQueueIcon from "@mui/icons-material/CloudQueue";
+import WarehouseIcon from "@mui/icons-material/Warehouse";
+import PublicIcon from "@mui/icons-material/Public";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import ArchiveIcon from "@mui/icons-material/Archive";
+import ExtensionIcon from "@mui/icons-material/Extension";
+import TrendingDownIcon from "@mui/icons-material/TrendingDown";
+import VerticalAlignTopIcon from "@mui/icons-material/VerticalAlignTop";
+import AutorenewIcon from "@mui/icons-material/Autorenew";
 import axios from "axios";
 import { keyframes } from "@emotion/react";
 
@@ -68,7 +81,7 @@ interface IndividualPrice {
     active: boolean;
 }
 
-interface Variant {
+export interface Variant {
     id: number;
     sku: string;
     label: string;
@@ -88,7 +101,7 @@ interface Variant {
     incoming_transfer?: { qty: number; from?: string } | null;
 }
 
-interface InventoryItem {
+export interface InventoryItem {
     item_id: number;
     item_name: string;
     category: string;
@@ -101,7 +114,7 @@ interface InventoryItem {
     variants: Variant[];
 }
 
-interface Person {
+export interface Person {
     id: number;
     first_name: string;
     last_name?: string;
@@ -197,7 +210,7 @@ function variantTierSummary(v: Variant) {
     };
 }
 
-function decomposeStock(stock: number, multiplier: number) {
+export function decomposeStock(stock: number, multiplier: number) {
     const perBox = Math.max(1, multiplier || 12);
     const perCarton = perBox * 10;
     const cartons = Math.floor(stock / perCarton);
@@ -271,7 +284,7 @@ function Toast({ open, message, severity, onClose }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // EditDrawer
 // ─────────────────────────────────────────────────────────────────────────────
-function EditDrawer({
+export function EditDrawer({
     variant, customers, sellers, onClose, onSaved,
 }: {
     variant: Variant;
@@ -717,27 +730,70 @@ function EditDrawer({
 // ─────────────────────────────────────────────────────────────────────────────
 // StockBreakdownPanel
 // ─────────────────────────────────────────────────────────────────────────────
-type StockLocationKey = "store" | "remote" | "whseA" | "whseB" | "all";
+type StockLocationKey = "shelf" | "store" | "remote" | "whseA" | "whseB";
 
-function StockBreakdownPanel({ item, variants }: { item: InventoryItem; variants: Variant[] }) {
-    const [location, setLocation] = useState<StockLocationKey>("store");
-    const [pkgMode, setPkgMode] = useState<PkgMode>("cartons");
+export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; variants: Variant[] }) {
+    // Multi-select: Default to Store Shelf + Store
+    const [selected, setSelected] = useState<Set<StockLocationKey>>(new Set(["shelf", "store"]));
+    const [pkgMode, setPkgMode] = useState<PkgMode>("pieces");
 
+    // Replenishment rules state inside the card
     const perBox = variants[0]?.multiplier ?? 12;
     const perCarton = perBox * 10;
 
-    const storeStock = item.total_stock;
+    const [minCtn, setMinCtn] = useState<number>(2);
+    const [maxCtn, setMaxCtn] = useState<number>(10);
+    const [autoBatchCartons, setAutoBatchCartons] = useState<number>(1);
+    const [source, setSource] = useState<string>("remote");
+    const [toast, setToast] = useState<string | null>(null);
+
+    // Stock counts
+    const totalStoreStock = item.total_stock;
+    const shelfStock = Math.min(totalStoreStock, Math.round(totalStoreStock * 0.25)); // 25% on shelf
+    const storeStock = Math.max(0, totalStoreStock - shelfStock); // 75% in main store room
     const remoteStock = item.remote_total_stock;
     const whseAStock = item.warehouse_a_stock ?? 0;
     const whseBStock = item.warehouse_b_stock ?? 0;
-    const allStock = storeStock + remoteStock + whseAStock + whseBStock;
+    const allStock = totalStoreStock + remoteStock + whseAStock + whseBStock;
 
     const stockByLoc: Record<StockLocationKey, number> = {
-        store: storeStock, remote: remoteStock,
-        whseA: whseAStock, whseB: whseBStock,
-        all: allStock,
+        shelf: shelfStock,
+        store: storeStock,
+        remote: remoteStock,
+        whseA: whseAStock,
+        whseB: whseBStock,
     };
-    const current = stockByLoc[location];
+
+    const allKeys: StockLocationKey[] = ["shelf", "store", "remote", "whseA", "whseB"];
+    const isAllSelected = allKeys.every(k => selected.has(k));
+
+    const current = Array.from(selected).reduce((sum, key) => sum + (stockByLoc[key] ?? 0), 0);
+
+    const toggleLocation = (key: StockLocationKey) => {
+        setSelected(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                if (next.size > 1) next.delete(key);
+            } else {
+                next.add(key);
+            }
+            if (next.has("shelf") && next.size === 1) {
+                setPkgMode("pieces");
+            } else if (!next.has("shelf") && next.size === 1) {
+                setPkgMode("cartons");
+            }
+            return next;
+        });
+    };
+
+    const selectPreset = (keys: StockLocationKey[]) => {
+        setSelected(new Set(keys));
+        if (keys.length === 1 && keys[0] === "shelf") {
+            setPkgMode("pieces");
+        } else {
+            setPkgMode("cartons");
+        }
+    };
 
     const fullCartons = Math.floor(current / perCarton);
     const remAfterCartons = current % perCarton;
@@ -766,64 +822,75 @@ function StockBreakdownPanel({ item, variants }: { item: InventoryItem; variants
                 ? `${fullBoxes} × ${perBox} + ${looseFromBoxes} = ${current} pcs total`
                 : `Granular count: ${current} individual units`;
 
-    const locations: { key: StockLocationKey; label: string; count: number; tone: string }[] = [
-        { key: "store", label: "Store Shelf", count: storeStock, tone: "success.main" },
-        { key: "remote", label: "Remote Whse", count: remoteStock, tone: "info.main" },
-        { key: "whseA", label: "Warehouse A", count: whseAStock, tone: "primary.main" },
-        { key: "whseB", label: "Warehouse B", count: whseBStock, tone: "grey.500" },
-        { key: "all", label: "All Locations", count: allStock, tone: "grey.900" },
+    const pillLocations: { key: StockLocationKey | "all"; label: string; count: number; tone: string; icon: React.ReactNode }[] = [
+        { key: "shelf", label: "Store Shelf", count: shelfStock, tone: "success.main", icon: <StorefrontIcon sx={{ fontSize: 13 }} /> },
+        { key: "store", label: "Store Room", count: storeStock, tone: "info.main", icon: <StoreIcon sx={{ fontSize: 13 }} /> },
+        { key: "remote", label: "Remote Hub", count: remoteStock, tone: "primary.main", icon: <CloudQueueIcon sx={{ fontSize: 13 }} /> },
+        { key: "whseA", label: "Warehouse A", count: whseAStock, tone: "warning.main", icon: <WarehouseIcon sx={{ fontSize: 13 }} /> },
+        { key: "whseB", label: "Warehouse B", count: whseBStock, tone: "grey.500", icon: <WarehouseIcon sx={{ fontSize: 13 }} /> },
+        { key: "all", label: "All Locations", count: allStock, tone: "grey.900", icon: <PublicIcon sx={{ fontSize: 13 }} /> },
     ];
 
-    const NodeCard = ({ label, count, tone }: { label: string; count: number; tone: string }) => {
-        const d = decomposeStock(count, perBox);
-        return (
-            <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2,
-                borderLeft: "3px solid", borderLeftColor: tone }}>
-                <Typography variant="caption" fontWeight={700} display="block">{label}</Typography>
-                <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1.2, mt: 0.25 }}>
-                    {count}
-                    <Typography component="span" variant="caption"
-                        color="text.secondary" sx={{ ml: 0.5, fontWeight: 400 }}>pcs</Typography>
-                </Typography>
-                <Typography variant="caption" color="text.secondary"
-                    sx={{ fontFamily: "monospace", fontSize: "0.62rem" }}>
-                    {d.cartons} Ctn • {d.boxes} Bx • {d.pieces} Pcs
-                </Typography>
-            </Paper>
-        );
-    };
+    const selectedLabels = pillLocations
+        .filter(l => l.key !== "all" && selected.has(l.key as StockLocationKey))
+        .map(l => l.label)
+        .join(" + ");
+
+    const minPcs = minCtn * perCarton;
+    const maxPcs = maxCtn * perCarton;
+    const reorderPercent = Math.min(100, Math.round((minCtn / maxCtn) * 100));
+    const fillPercent = Math.min(100, Math.round((current / maxPcs) * 100));
+    const isLow = current < minPcs;
+    const autoBatchPcs = autoBatchCartons * perCarton;
 
     return (
         <Stack spacing={1.75}>
+            {/* Toast feedback */}
+            {toast && (
+                <Alert severity="success" onClose={() => setToast(null)} sx={{ borderRadius: 2 }}>
+                    {toast}
+                </Alert>
+            )}
+
+            {/* 1. Location Selection Pills (Store Shelf -> Store -> Remote -> Warehouse A -> Warehouse B) */}
             <Box>
                 <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
                     <Typography variant="caption" color="text.secondary"
                         sx={{ textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
-                        Select Location
+                        Select Location (Tap to Filter / Combine)
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
-                        {locations.filter(l => l.count > 0).length} Locations Active
+                        {selected.size} Selected
                     </Typography>
                 </Stack>
                 <Stack direction="row" spacing={0.75} sx={{ overflowX: "auto", pb: 0.5,
                     "&::-webkit-scrollbar": { display: "none" } }}>
-                    {locations.map(l => {
-                        const active = location === l.key;
+                    {pillLocations.map(l => {
+                        const active = l.key === "all" ? isAllSelected : selected.has(l.key as StockLocationKey);
                         return (
-                            <Paper key={l.key} variant="outlined" onClick={() => setLocation(l.key)}
+                            <Paper key={l.key} variant="outlined"
+                                onClick={() => {
+                                    if (l.key === "all") {
+                                        selectPreset(isAllSelected ? ["shelf"] : allKeys);
+                                    } else {
+                                        toggleLocation(l.key as StockLocationKey);
+                                    }
+                                }}
                                 sx={{
                                     flex: "0 0 auto", px: 1.25, py: 0.75, borderRadius: 2,
                                     cursor: "pointer", minWidth: 92,
                                     bgcolor: active ? "grey.900" : "background.paper",
                                     color: active ? "#fff" : "text.primary",
                                     borderColor: active ? "grey.900" : "divider",
+                                    transition: "all 0.15s",
                                 }}>
                                 <Stack direction="row" spacing={0.5} alignItems="center">
-                                    <Box sx={{ width: 6, height: 6, borderRadius: "50%",
-                                        bgcolor: active ? "#fff" : l.tone }} />
+                                    <Box sx={{ color: active ? "#fff" : l.tone, display: "flex", alignItems: "center" }}>
+                                        {l.icon}
+                                    </Box>
                                     <Typography variant="caption"
                                         sx={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase",
-                                            color: active ? "rgba(255,255,255,0.75)" : "text.secondary" }}>
+                                            color: active ? "rgba(255,255,255,0.9)" : "text.secondary" }}>
                                         {l.label}
                                     </Typography>
                                 </Stack>
@@ -841,14 +908,19 @@ function StockBreakdownPanel({ item, variants }: { item: InventoryItem; variants
                 </Stack>
             </Box>
 
+            {/* 2. Packaging Mode Selector */}
             <Box sx={{ bgcolor: "grey.100", p: 0.5, borderRadius: 2, display: "flex", gap: 0.5 }}>
                 {(["cartons", "boxes", "pieces"] as PkgMode[]).map(m => {
                     const active = pkgMode === m;
+                    const icon = m === "cartons" ? <InventoryIcon sx={{ fontSize: 14 }} />
+                        : m === "boxes" ? <ArchiveIcon sx={{ fontSize: 14 }} />
+                        : <ExtensionIcon sx={{ fontSize: 14 }} />;
                     const label = m === "cartons" ? `Cartons (${perCarton}s)`
                         : m === "boxes" ? `Boxes (${perBox}s)` : "Pieces (Pcs)";
                     return (
                         <Button key={m} fullWidth size="small" disableElevation
                             onClick={() => setPkgMode(m)}
+                            startIcon={icon}
                             variant={active ? "contained" : "text"}
                             sx={{
                                 py: 0.5, fontSize: "0.7rem", textTransform: "none", fontWeight: 700,
@@ -862,33 +934,38 @@ function StockBreakdownPanel({ item, variants }: { item: InventoryItem; variants
                 })}
             </Box>
 
-            <Paper elevation={0} sx={{ p: 1.75, borderRadius: 3,
+            {/* 3. Single Unified Card: Location Breakdown + Composition + Trigger Bar + Replenishment Rules */}
+            <Paper elevation={0} sx={{ p: 2, borderRadius: 3,
                 background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.04))",
-                border: "1px solid rgba(59,130,246,0.15)" }}>
+                border: "1px solid rgba(59,130,246,0.18)" }}>
+                
+                {/* Location Header & Icon */}
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                     <Box sx={{ minWidth: 0, flex: 1 }}>
                         <Chip size="small"
-                            label={locations.find(l => l.key === location)?.label.toUpperCase()}
+                            label={(selectedLabels || "No Location Selected").toUpperCase()}
                             sx={{ height: 20, fontSize: "0.6rem", fontWeight: 800,
-                                bgcolor: "primary.100", color: "primary.700" }} />
-                        <Typography sx={{ fontWeight: 800, fontSize: "1.1rem", mt: 0.75, lineHeight: 1.25 }}>
+                                bgcolor: "primary.100", color: "primary.700", maxWidth: "100%" }} />
+                        <Typography sx={{ fontWeight: 800, fontSize: "1.2rem", mt: 0.75, lineHeight: 1.25 }}>
                             {heading}
                         </Typography>
                     </Box>
-                    <Box sx={{ width: 32, height: 32, borderRadius: "50%", bgcolor: "primary.main",
-                        color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", ml: 1 }}>
-                        <Inventory2Icon sx={{ fontSize: 18 }} />
+                    <Box sx={{ width: 36, height: 36, borderRadius: "50%", bgcolor: "primary.main",
+                        color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", ml: 1, flexShrink: 0 }}>
+                        <Inventory2Icon sx={{ fontSize: 20 }} />
                     </Box>
                 </Stack>
 
-                <Paper variant="outlined" sx={{ mt: 1.25, px: 1, py: 0.5, display: "inline-block",
+                {/* Math Formula Box */}
+                <Paper variant="outlined" sx={{ mt: 1.25, px: 1.25, py: 0.5, display: "inline-block",
                     bgcolor: "rgba(255,255,255,0.7)" }}>
-                    <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary" }}>
+                    <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary", fontWeight: 600 }}>
                         {math}
                     </Typography>
                 </Paper>
 
-                <Box sx={{ mt: 1.25 }}>
+                {/* Storage Hierarchy Composition */}
+                <Box sx={{ mt: 2 }}>
                     <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
                         <Typography variant="caption" color="text.secondary" fontWeight={600}>
                             Storage Hierarchy Composition
@@ -918,87 +995,182 @@ function StockBreakdownPanel({ item, variants }: { item: InventoryItem; variants
                         </Stack>
                     </Stack>
                 </Box>
-            </Paper>
 
-            <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
-                <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
-                    <Typography variant="caption" fontWeight={700}
-                        sx={{ textTransform: "uppercase", letterSpacing: "0.04em", color: "text.secondary" }}>
-                        Physical Distribution
-                    </Typography>
-                    <Typography variant="caption" color="primary.main" fontWeight={600}>
-                        Auto-synced across nodes
-                    </Typography>
-                </Stack>
-
-                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
-                    <NodeCard label="Store Shelf" count={storeStock} tone="success.main" />
-                    <NodeCard label="Remote Whse" count={remoteStock} tone="info.main" />
-
-                    <Paper variant="outlined" sx={{ gridColumn: "1 / -1", p: 1.25, borderRadius: 2,
-                        bgcolor: "grey.50", borderLeft: "3px solid", borderLeftColor: "info.main" }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                            <Typography variant="caption" fontWeight={700}>Combined Store + Remote</Typography>
-                            <Chip size="small" color="info" variant="outlined"
-                                label="Active Network" sx={{ height: 18, fontSize: "0.6rem" }} />
-                        </Stack>
-                        <Typography variant="h6" fontWeight={800} sx={{ mt: 0.5 }}>
-                            {storeStock + remoteStock}
-                            <Typography component="span" variant="caption"
-                                color="text.secondary" sx={{ ml: 0.5, fontWeight: 400 }}>
-                                pcs active in network
-                            </Typography>
+                {/* ── Capacity & Next Replenishment Trigger Bar with Vertical Marker Line ── */}
+                <Box sx={{ mt: 2, pt: 1.5, borderTop: "1px dashed rgba(59,130,246,0.2)" }}>
+                    <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
+                        <Typography variant="caption" color="text.secondary" fontWeight={700}
+                            sx={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                            Capacity &amp; Next Replenishment Trigger
                         </Typography>
-                        {(() => {
-                            const d = decomposeStock(storeStock + remoteStock, perBox);
-                            return (
-                                <Typography variant="caption" color="text.secondary"
-                                    sx={{ fontFamily: "monospace", fontSize: "0.62rem" }}>
-                                    {d.cartons} Ctn • {d.boxes} Bx • {d.pieces} Pcs
-                                </Typography>
-                            );
-                        })()}
-                    </Paper>
-
-                    <NodeCard label="Warehouse A" count={whseAStock} tone="primary.main" />
-                    <NodeCard label="Warehouse B" count={whseBStock} tone="grey.500" />
-
-                    <Paper variant="outlined" sx={{ gridColumn: "1 / -1", p: 1.25, borderRadius: 2,
-                        bgcolor: "grey.50", borderLeft: "3px solid", borderLeftColor: "success.main" }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                            <Typography variant="caption" fontWeight={700}>Combined (All Nodes)</Typography>
-                            <Chip size="small" color="success" variant="outlined"
-                                label="Total Buffer" sx={{ height: 18, fontSize: "0.6rem" }} />
-                        </Stack>
-                        <Typography variant="h6" fontWeight={800} sx={{ mt: 0.5 }}>
-                            {allStock}
-                            <Typography component="span" variant="caption"
-                                color="text.secondary" sx={{ ml: 0.5, fontWeight: 400 }}>
-                                pcs across network
-                            </Typography>
+                        <Typography variant="caption" sx={{ fontFamily: "monospace", fontWeight: 700,
+                            color: isLow ? "error.main" : "success.main" }}>
+                            {isLow ? `⚠️ Trigger Active (Below ${minCtn} Ctn)` : "✓ Stock Capacity Healthy"}
                         </Typography>
-                        {(() => {
-                            const d = decomposeStock(allStock, perBox);
-                            return (
-                                <Typography variant="caption" color="text.secondary"
-                                    sx={{ fontFamily: "monospace", fontSize: "0.62rem" }}>
-                                    {d.cartons} Ctn • {d.boxes} Bx • {d.pieces} Pcs
-                                </Typography>
-                            );
-                        })()}
-                    </Paper>
+                    </Stack>
+
+                    {/* Progress Bar Container with Vertical Refill Line Marker */}
+                    <Box sx={{ position: "relative", height: 14, width: "100%", bgcolor: "grey.200", borderRadius: 999 }}>
+                        {/* Fill Level */}
+                        <Box sx={{
+                            height: "100%",
+                            width: `${fillPercent}%`,
+                            bgcolor: isLow ? "error.main" : "primary.main",
+                            borderRadius: 999,
+                            transition: "width .3s",
+                        }} />
+
+                        {/* Vertical Refill Point Line Indicator */}
+                        <Box sx={{
+                            position: "absolute",
+                            top: -3,
+                            bottom: -3,
+                            left: `${reorderPercent}%`,
+                            width: "3px",
+                            bgcolor: "warning.main",
+                            borderRadius: "2px",
+                            zIndex: 3,
+                            boxShadow: "0 0 6px rgba(237, 108, 2, 0.9)",
+                        }} />
+                    </Box>
+
+                    {/* Legend */}
+                    <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.75 }}>
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: isLow ? "error.main" : "primary.main" }} />
+                            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                Stock Fill ({fillPercent}%)
+                            </Typography>
+                        </Stack>
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                            <Box sx={{ width: 3, height: 10, bgcolor: "warning.main", borderRadius: 1 }} />
+                            <Typography variant="caption" color="warning.main" fontWeight={700}>
+                                Reorder Point (${minCtn} Ctn Line)
+                            </Typography>
+                        </Stack>
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "grey.400" }} />
+                            <Typography variant="caption" color="text.secondary">
+                                Max Cap (${maxCtn} Ctn)
+                            </Typography>
+                        </Stack>
+                    </Stack>
                 </Box>
+
+                {/* ── Embedded Replenishment Rules ── */}
+                <Paper variant="outlined" sx={{ mt: 2, p: 1.5, borderRadius: 2.5, bgcolor: "rgba(255,255,255,0.85)" }}>
+                    <Typography variant="caption" fontWeight={800} color="primary.main"
+                        sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
+                        Replenishment Rules &amp; Thresholds
+                    </Typography>
+
+                    {/* Min Stock Slider */}
+                    <Box sx={{ mt: 1 }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                <TrendingDownIcon sx={{ fontSize: 14, color: "warning.main" }} />
+                                <Typography variant="caption" fontWeight={600}>
+                                    Min Stock (Reorder Point)
+                                </Typography>
+                            </Stack>
+                            <Chip size="small" label={`${minCtn} Ctn (${minPcs} pcs)`}
+                                sx={{ height: 20, fontFamily: "monospace", fontSize: "0.65rem",
+                                    fontWeight: 700, bgcolor: "grey.100" }} />
+                        </Stack>
+                        <Slider size="small" value={minCtn} min={1} max={Math.min(9, maxCtn - 1)} step={1}
+                            onChange={(_, val) => setMinCtn(val as number)}
+                            valueLabelDisplay="auto"
+                            valueLabelFormat={(val) => `${val} Ctn`}
+                            sx={{ mt: 0.5 }} />
+                    </Box>
+
+                    {/* Max Store Capacity Slider */}
+                    <Box sx={{ mt: 1 }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                <VerticalAlignTopIcon sx={{ fontSize: 14, color: "primary.main" }} />
+                                <Typography variant="caption" fontWeight={600}>
+                                    Max Store Capacity
+                                </Typography>
+                            </Stack>
+                            <Chip size="small" label={`${maxCtn} Ctn (${maxPcs} pcs)`}
+                                color="primary" variant="outlined"
+                                sx={{ height: 20, fontFamily: "monospace", fontSize: "0.65rem", fontWeight: 700 }} />
+                        </Stack>
+                        <Slider size="small" value={maxCtn} min={Math.min(minCtn + 1, 10)} max={10} step={1}
+                            onChange={(_, val) => setMaxCtn(val as number)}
+                            valueLabelDisplay="auto"
+                            valueLabelFormat={(val) => `${val} Ctn`}
+                            sx={{ mt: 0.5 }} />
+                    </Box>
+
+                    {/* Auto Transfer Batch Size */}
+                    <Paper variant="outlined" sx={{ mt: 1.25, p: 1, borderRadius: 1.5, bgcolor: "grey.50" }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Box>
+                                <Typography variant="caption" fontWeight={700} display="block">
+                                    Auto Transfer Batch Size
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.62rem" }}>
+                                    Fires when stock &lt; min reorder point
+                                </Typography>
+                            </Box>
+                            <TextField
+                                type="number" size="small"
+                                value={autoBatchCartons}
+                                onChange={e => setAutoBatchCartons(Math.max(1, Number(e.target.value) || 1))}
+                                inputProps={{ min: 1, max: 50,
+                                    style: { width: 48, textAlign: "center", fontFamily: "monospace", fontWeight: 700 } }}
+                                InputProps={{ endAdornment: <InputAdornment position="end">Ctn</InputAdornment> }}
+                                sx={{ width: 100 }}
+                            />
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary"
+                            sx={{ fontFamily: "monospace", fontSize: "0.62rem", mt: 0.5, display: "block" }}>
+                            = {autoBatchPcs} pcs ({autoBatchCartons} Ctn)
+                        </Typography>
+                    </Paper>
+
+                    {isLow && (
+                        <Alert severity="error" icon={<LocalShippingIcon />}
+                            sx={{ mt: 1.25, borderRadius: 1.5, py: 0.25 }}>
+                            <Typography variant="caption" fontWeight={700}>
+                                Auto-Transfer Triggered: {autoBatchCartons} Ctn ({autoBatchPcs} pcs) from {source.toUpperCase()}
+                            </Typography>
+                        </Alert>
+                    )}
+
+                    {/* Source & Action button */}
+                    <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} alignItems="center">
+                        <FormControl size="small" sx={{ flex: 1 }}>
+                            <InputLabel>Primary Source</InputLabel>
+                            <Select value={source} label="Primary Source"
+                                onChange={e => setSource(e.target.value)}>
+                                <MenuItem value="store">Store Room (Backroom Shelf-Fill)</MenuItem>
+                                <MenuItem value="whseA">Warehouse A (Central Hub)</MenuItem>
+                                <MenuItem value="remote">Remote Hub</MenuItem>
+                                <MenuItem value="whseB">Warehouse B (Overflow)</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <Button size="small" variant="contained"
+                            startIcon={<LocalShippingIcon sx={{ fontSize: 14 }} />}
+                            onClick={() =>
+                                setToast(`Transfer requested — ${selectedLabels}: ${autoBatchPcs} pcs (${autoBatchCartons} Ctn) from ${source.toUpperCase()}`)
+                            }>
+                            Request Transfer
+                        </Button>
+                    </Stack>
+                </Paper>
             </Paper>
         </Stack>
     );
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ReplenishmentPanel — biggest packaging only
 // ─────────────────────────────────────────────────────────────────────────────
 type RuleState = { minPcs: number; maxPcs: number; autoBatchCartons: number; source: string };
 
-function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
+export function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
     const replenishVariants = useMemo(() => {
         const groups = new Map<string, Variant>();
         for (const v of variants) {
@@ -1019,7 +1191,7 @@ function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                 minPcs: v.min_reorder ?? perCarton * 2,
                 maxPcs: v.target_cap ?? perCarton * 10,
                 autoBatchCartons: 1,
-                source: "whseA",
+                source: "remote",
             };
             return acc;
         }, {} as Record<number, RuleState>)
@@ -1048,8 +1220,8 @@ function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                 const incoming = v.incoming_transfer ?? null;
 
                 const currentD = decomposeStock(v.stock, perBox);
-                const minCtn = Math.max(1, Math.round(r.minPcs / perCarton));
-                const maxCtn = Math.max(minCtn + 1, Math.round(r.maxPcs / perCarton));
+                const minCtn = Math.max(1, Math.min(9, Math.round(r.minPcs / perCarton)));
+                const maxCtn = Math.max(minCtn + 1, Math.min(10, Math.round(r.maxPcs / perCarton)));
                 const autoBatchPcs = r.autoBatchCartons * perCarton;
                 const autoBatchFromMax = Math.max(1, Math.ceil(Math.max(0, r.maxPcs - v.stock) / perCarton));
                 const willAutoFire = low && !incoming;
@@ -1134,7 +1306,7 @@ function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                                     color="primary" variant="outlined"
                                     sx={{ height: 20, fontFamily: "monospace", fontSize: "0.65rem", fontWeight: 700 }} />
                             </Stack>
-                            <Slider size="small" value={maxCtn} min={minCtn + 1} max={100} step={1}
+                            <Slider size="small" value={maxCtn} min={Math.min(minCtn + 1, 10)} max={10} step={1}
                                 onChange={(_, val) => update(v.id, { maxPcs: (val as number) * perCarton })}
                                 valueLabelDisplay="auto"
                                 valueLabelFormat={(val) => `${val} Ctn`}
@@ -1183,6 +1355,7 @@ function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                                 <InputLabel>Primary Source</InputLabel>
                                 <Select value={r.source} label="Primary Source"
                                     onChange={e => update(v.id, { source: e.target.value })}>
+                                    <MenuItem value="store">Store Room (Backroom Shelf-Fill)</MenuItem>
                                     <MenuItem value="whseA">Warehouse A (Central Hub)</MenuItem>
                                     <MenuItem value="remote">Remote Hub</MenuItem>
                                     <MenuItem value="whseB">Warehouse B (Overflow)</MenuItem>
@@ -1212,7 +1385,7 @@ function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // StitchVariantCard
 // ─────────────────────────────────────────────────────────────────────────────
-function StitchVariantCard({ v, highlighted, onEdit }: {
+export function StitchVariantCard({ v, highlighted, onEdit }: {
     v: Variant;
     highlighted: boolean;
     onEdit: () => void;
@@ -1397,8 +1570,8 @@ function StitchVariantCard({ v, highlighted, onEdit }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // StitchProductCard
 // ─────────────────────────────────────────────────────────────────────────────
-function StitchProductCard({ item, customers, sellers }: {
-    item: InventoryItem; customers: Person[]; sellers: Person[];
+function StitchProductCard({ store, item, customers, sellers }: {
+    store: { id: number; name: string; }; item: InventoryItem; customers: Person[]; sellers: Person[];
 }) {
     const [expanded, setExpanded] = useState(false);
     const [tab, setTab] = useState<"stock" | "replenish" | "variants">("stock");
@@ -1480,7 +1653,7 @@ function StitchProductCard({ item, customers, sellers }: {
 
             <Box sx={{ px: 2, pb: 1.5 }}>
                 <Button fullWidth variant="text"
-                    onClick={() => setExpanded(e => !e)}
+                    onClick={() => router.visit(route("store.item.variants", { store: store.id, item: item.item_id }))}
                     sx={{
                         justifyContent: "space-between", px: 1.5, py: 1, borderRadius: 2,
                         bgcolor: "grey.50", textTransform: "none", color: "text.primary",
@@ -1488,66 +1661,20 @@ function StitchProductCard({ item, customers, sellers }: {
                     }}>
                     <Stack direction="row" spacing={1} alignItems="center">
                         <RuleSettingsIcon fontSize="small" sx={{ color: "primary.main" }} />
-                        <Typography variant="body2" fontWeight={600}>
+                        {/* <Typography variant="body2" fontWeight={600}>
                             Stock Rules, Breakdown & {item.total_variants} Variants
-                        </Typography>
+                        </Typography> */}
                     </Stack>
                     <Stack direction="row" spacing={0.5} alignItems="center">
-                        <Typography variant="caption" color="text.secondary">
-                            {expanded ? "Expanded" : "Collapsed"}
+                        <Typography variant="caption" color="primary.main" fontWeight={600}>
+                            Manage
                         </Typography>
-                        {expanded ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
+                        <KeyboardArrowRightIcon fontSize="small" sx={{ color: "primary.main" }} />
                     </Stack>
                 </Button>
             </Box>
 
-            <Collapse in={expanded} timeout="auto" unmountOnExit>
-                <Divider />
-                <Box sx={{ px: 2, py: 1.5 }}>
-                    <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable"
-                        scrollButtons="auto" sx={{ minHeight: 36, mb: 2,
-                            "& .MuiTab-root": { minHeight: 36, py: 0.5, fontSize: "0.72rem", textTransform: "none" } }}>
-                        <Tab value="stock" icon={<Inventory2Icon sx={{ fontSize: 16 }} />}
-                            iconPosition="start" label="Active Stock & Packaging" />
-                        <Tab value="replenish" icon={<RuleSettingsIcon sx={{ fontSize: 16 }} />}
-                            iconPosition="start"
-                            label={
-                                <Stack direction="row" spacing={0.5} alignItems="center">
-                                    <span>Replenishment Rules</span>
-                                    {hasLow && (
-                                        <Chip size="small" color="error" label={`${lowStockVariants} Low`}
-                                            sx={{ height: 16, fontSize: "0.6rem", fontWeight: 700 }} />
-                                    )}
-                                </Stack>
-                            } />
-                        <Tab value="variants" icon={<StyleIcon sx={{ fontSize: 16 }} />}
-                            iconPosition="start" label={`SKU Variants (${item.total_variants})`} />
-                    </Tabs>
-
-                    {tab === "stock" && <StockBreakdownPanel item={item} variants={variants} />}
-                    {tab === "replenish" && <ReplenishmentPanel variants={variants} />}
-                    {tab === "variants" && (
-                        <Stack spacing={1.25}>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center" px={0.5}>
-                                <Stack direction="row" spacing={0.75} alignItems="center">
-                                    <StyleIcon fontSize="small" sx={{ color: "primary.main" }} />
-                                    <Typography variant="subtitle2" fontWeight={700}>
-                                        Individual SKU Variants ({variants.length})
-                                    </Typography>
-                                </Stack>
-                                <Typography variant="caption" color="text.secondary">
-                                    B2B &amp; DTC Tier Pricing
-                                </Typography>
-                            </Stack>
-                            {variants.map(v => (
-                                <StitchVariantCard key={v.id} v={v}
-                                    highlighted={highlightedVariantId === v.id}
-                                    onEdit={() => setEditing(v)} />
-                            ))}
-                        </Stack>
-                    )}
-                </Box>
-            </Collapse>
+            
 
             {editing && (
                 <EditDrawer variant={editing} customers={customers} sellers={sellers}
@@ -1753,7 +1880,7 @@ export default function StoreInventory({ store, inventory, customers = [], selle
                     {/* Same Stitch cards on every breakpoint */}
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2 }}>
                         {filteredItems.map(item => (
-                            <StitchProductCard key={item.item_id} item={item}
+                            <StitchProductCard key={item.item_id} store={store} item={item}
                                 customers={customers} sellers={sellers} />
                         ))}
                     </Box>
