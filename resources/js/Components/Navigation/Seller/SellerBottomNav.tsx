@@ -27,12 +27,6 @@ const navItems = [
         href: route("seller.carts.index"),
     },
     {
-        value: "shipments",
-        label: "Shipments",
-        icon: <LocalShippingRoundedIcon />,
-        href: route("seller.shipments.index"),
-    },
-    {
         value: "more",
         label: "More",
         icon: <AppsRoundedIcon />,
@@ -53,10 +47,6 @@ function currentTab(url: string) {
 
     if (path.startsWith("/orders") || path.startsWith("/carts")) {
         return "carts";
-    }
-
-    if (path.startsWith("/shipments")) {
-        return "shipments";
     }
 
     return "more";

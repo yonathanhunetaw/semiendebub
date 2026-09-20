@@ -188,7 +188,7 @@ export default function AdminSidebar({
                                 <ListItemIcon sx={{ minWidth: 36 }}>
                                     <LocalShipping fontSize="small" />
                                 </ListItemIcon>
-                                <ListItemText primary="Replenish" />
+                                <ListItemText primary="Shipments" />
                             </ListItemButton>
                         </List>
                     </Collapse>

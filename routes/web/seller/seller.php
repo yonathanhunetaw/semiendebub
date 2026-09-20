@@ -48,5 +48,10 @@ Route::domain("seller.$baseDomain")
             Route::get('/settings', [SellerSettingsController::class, 'index'])->name('settings.index');
             Route::patch('/settings', [SellerSettingsController::class, 'update'])->name('settings.update');
             Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
+            Route::get('/shipments/{id}', [ShipmentController::class, 'show'])->name('shipments.show');
+            Route::post('/shipments/{id}', [ShipmentController::class, 'store'])->name('shipments.store');
+            Route::get('/shipments/{id}/review', [ShipmentController::class, 'review'])->name('shipments.review');
+            Route::post('/shipments/{id}/dispatch', [ShipmentController::class, 'dispatch'])->name('shipments.dispatch');
+            Route::get('/shipments/{id}/dispatched', [ShipmentController::class, 'dispatched'])->name('shipments.dispatched');
         });
     });

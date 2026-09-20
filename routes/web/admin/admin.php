@@ -82,9 +82,13 @@ Route::domain("admin.{$baseDomain}")
                 Route::patch('/transfers/{transfer}/complete', [TransferController::class, 'complete'])->name('transfers.complete');
                 Route::patch('/transfers/{transfer}/cancel', [TransferController::class, 'cancel'])->name('transfers.cancel');
 
-                // Replenishment Shipments
+                // Replenishment Shipments (3-phase workflow)
                 Route::get('/replenish', [ReplenishController::class, 'index'])->name('replenish');
                 Route::post('/replenish', [ReplenishController::class, 'store'])->name('replenish.store');
+                Route::get('/replenish/{transfer}', [ReplenishController::class, 'show'])->name('replenish.show');
+                Route::get('/replenish/{transfer}/review', [ReplenishController::class, 'review'])->name('replenish.review');
+                Route::post('/replenish/{transfer}/dispatch', [ReplenishController::class, 'dispatch'])->name('replenish.dispatch');
+                Route::get('/replenish/{transfer}/dispatched', [ReplenishController::class, 'dispatched'])->name('replenish.dispatched');
             });
 
         });

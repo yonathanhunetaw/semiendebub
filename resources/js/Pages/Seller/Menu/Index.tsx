@@ -18,7 +18,7 @@ import React from "react";
 const liveCards = [
     { label: "Sales",     icon: TrendingUpRoundedIcon,           href: () => route("seller.sales.index") },
     { label: "Orders",    icon: ShoppingBagRoundedIcon,          href: () => route("seller.orders.index") },
-    { label: "Delivery",  icon: LocalShippingRoundedIcon,        href: () => route("seller.delivery.index") },
+    { label: "Shipments", icon: LocalShippingRoundedIcon,        href: () => route("seller.shipments.index") },
     { label: "Calendar",  icon: CalendarMonthRoundedIcon,        href: () => route("seller.calendar.index") },
     { label: "Balance",   icon: AccountBalanceWalletRoundedIcon, href: () => route("seller.balance.index") },
     { label: "Documents", icon: ReceiptLongRoundedIcon,          href: () => route("seller.documents.index") },
@@ -42,7 +42,7 @@ export default function Index({
     const getBadge = (label: string) => {
         if (label === "Sales")    return stats?.sales;
         if (label === "Orders")   return stats?.orders;
-        if (label === "Delivery") return stats?.deliveries;
+        if (label === "Shipments") return stats?.deliveries;
         return undefined;
     };
 
