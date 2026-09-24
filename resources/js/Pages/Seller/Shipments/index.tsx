@@ -1,36 +1,7 @@
 import React, { useState } from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { Head, Link } from "@inertiajs/react";
-import {
-    Box,
-    Typography,
-    Paper,
-    Chip,
-    Stack,
-    Button,
-    Divider,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    TextField,
-    MenuItem,
-    IconButton,
-    Tooltip,
-} from "@mui/material";
-import LocalShippingIcon from "@mui/icons-material/LocalShipping";
-import HomeWorkIcon from "@mui/icons-material/HomeWork";
-import StoreIcon from "@mui/icons-material/Store";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import ScheduleIcon from "@mui/icons-material/Schedule";
-import TimerIcon from "@mui/icons-material/Timer";
-import ErrorIcon from "@mui/icons-material/Error";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import BuildIcon from "@mui/icons-material/Build";
-import SyncAltIcon from "@mui/icons-material/SyncAlt";
-import AddIcon from "@mui/icons-material/Add";
-import EditIcon from "@mui/icons-material/Edit";
+import { Head, Link, router } from "@inertiajs/react";
+import PartyDetailModal, { PartyKey, PartyAgreementInfo } from "@/Components/Seller/PartyDetailModal";
 
 /* ----------------------------------------------------------
  | Types
@@ -38,7 +9,7 @@ import EditIcon from "@mui/icons-material/Edit";
 interface ScheduledTransfer {
     id: number;
     reference: string;
-    status: "scheduled" | "pending" | "overdue";
+    status: "scheduled" | "pending" | "overdue" | "dispatched" | "en_route" | "shipped";
     origin: { name: string; detail: string };
     destination: { name: string; detail: string };
     distance_km: number;
@@ -46,9 +17,21 @@ interface ScheduledTransfer {
     cutoff_label: string;
     sku_count: number;
     total_cartons: number;
+    total_cbm?: number;
+    vehicle_max_cbm?: number;
+    load_percentage?: number;
     vehicle_name: string;
     vehicle_plate: string;
     slot: string;
+    created_by?: string;
+    created_at?: string;
+    schedule_options?: string[];
+    agreements?: {
+        creator?: PartyAgreementInfo;
+        fleet?: PartyAgreementInfo;
+        origin?: PartyAgreementInfo;
+        destination?: PartyAgreementInfo;
+    };
 }
 
 interface Props {
@@ -58,26 +41,17 @@ interface Props {
 /* ----------------------------------------------------------
  | Status config
  |----------------------------------------------------------*/
-const statusConfig = {
-    scheduled: {
-        label: "Scheduled",
-        color: "success" as const,
-        icon: <CheckCircleIcon sx={{ fontSize: 16 }} />,
-    },
-    pending: {
-        label: "Pending Manifest",
-        color: "warning" as const,
-        icon: <WarningAmberIcon sx={{ fontSize: 16 }} />,
-    },
-    overdue: {
-        label: "Overdue",
-        color: "error" as const,
-        icon: <ErrorIcon sx={{ fontSize: 16 }} />,
-    },
+const statusConfig: Record<string, { label: string; color: string; icon: string }> = {
+    dispatched: { label: "Dispatched",       color: "bg-blue-100 text-blue-800",       icon: "local_shipping" },
+    scheduled:  { label: "Scheduled",        color: "bg-emerald-100 text-emerald-800", icon: "check_circle" },
+    en_route:   { label: "En Route",         color: "bg-indigo-100 text-indigo-800",   icon: "route" },
+    shipped:    { label: "Shipped",          color: "bg-teal-100 text-teal-800",       icon: "task_alt" },
+    pending:    { label: "Pending Manifest", color: "bg-amber-100 text-amber-800",     icon: "warning" },
+    overdue:    { label: "Overdue",          color: "bg-red-100 text-red-800",         icon: "error" },
 };
 
 /* ----------------------------------------------------------
- | DEMO facility / unit options (replace with API data)
+ | DEMO facility / unit options
  |----------------------------------------------------------*/
 const FACILITIES = [
     { value: "central-hub", label: "Central Hub — Kality Logistics Center" },
@@ -92,279 +66,352 @@ const UNITS = [
 ];
 
 /* ----------------------------------------------------------
- | Edit Route Dialog
+ | Helpers
  |----------------------------------------------------------*/
-interface EditRouteDialogProps {
-    open: boolean;
-    transfer: ScheduledTransfer;
-    onClose: () => void;
-    onSave: (origin: { name: string; detail: string }, destination: { name: string; detail: string }) => void;
-}
-
-function EditRouteDialog({ open, transfer, onClose, onSave }: EditRouteDialogProps) {
-    const [originVal, setOriginVal] = useState(
-        FACILITIES.find((f) => transfer.origin.name.startsWith(f.label.split("—")[0].trim()))?.value ?? FACILITIES[0].value
-    );
-    const [destVal, setDestVal] = useState(
-        UNITS.find((u) => transfer.destination.name.startsWith(u.label.split("—")[0].trim()))?.value ?? UNITS[0].value
-    );
-
-    const handleSave = () => {
-        const originOpt = FACILITIES.find((f) => f.value === originVal)!;
-        const destOpt   = UNITS.find((u) => u.value === destVal)!;
-        const [oName, oDetail] = originOpt.label.split(" — ");
-        const [dName, dDetail] = destOpt.label.split(" — ");
-        onSave({ name: oName.trim(), detail: oDetail?.trim() ?? "" }, { name: dName.trim(), detail: dDetail?.trim() ?? "" });
-    };
-
-    return (
-        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: "16px" } }}>
-            <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>Edit Route — {transfer.reference}</DialogTitle>
-            <DialogContent sx={{ pt: 1 }}>
-                <Stack spacing={2.5} mt={0.5}>
-                    <TextField
-                        select
-                        label="Origin Facility"
-                        value={originVal}
-                        onChange={(e) => setOriginVal(e.target.value)}
-                        size="small"
-                        fullWidth
-                        InputProps={{ startAdornment: <HomeWorkIcon sx={{ fontSize: 16, mr: 0.75, color: "text.secondary" }} /> }}
-                    >
-                        {FACILITIES.map((f) => <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>)}
-                    </TextField>
-                    <TextField
-                        select
-                        label="Target Unit"
-                        value={destVal}
-                        onChange={(e) => setDestVal(e.target.value)}
-                        size="small"
-                        fullWidth
-                        InputProps={{ startAdornment: <StoreIcon sx={{ fontSize: 16, mr: 0.75, color: "text.secondary" }} /> }}
-                    >
-                        {UNITS.map((u) => <MenuItem key={u.value} value={u.value}>{u.label}</MenuItem>)}
-                    </TextField>
-                </Stack>
-            </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-                <Button onClick={onClose} variant="outlined" sx={{ borderRadius: "10px", textTransform: "none" }}>Cancel</Button>
-                <Button onClick={handleSave} variant="contained" sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700 }}>Save Route</Button>
-            </DialogActions>
-        </Dialog>
-    );
+function formatDateTime(valStr: string) {
+    if (!valStr) return "";
+    if (valStr.includes("T")) {
+        const d = new Date(valStr);
+        if (!isNaN(d.getTime())) {
+            const dateStr = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+            const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+            return `${dateStr} • ${timeStr}`;
+        }
+    }
+    return valStr; // Fallback
 }
 
 /* ----------------------------------------------------------
- | Add Shipment Dialog
+ | Add Shipment Bottom Sheet (z-[60] to stay above bottom nav)
  |----------------------------------------------------------*/
-interface AddShipmentDialogProps {
-    open: boolean;
-    onClose: () => void;
-}
+function AddShipmentSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+    const tzOffset = new Date().getTimezoneOffset() * 60000;
+    const tomorrow = new Date(Date.now() + 86400000 - tzOffset).toISOString().split('T')[0];
+    const today = new Date(Date.now() - tzOffset).toISOString().split('T')[0];
 
-function AddShipmentDialog({ open, onClose }: AddShipmentDialogProps) {
     const [origin, setOrigin] = useState(FACILITIES[0].value);
     const [dest, setDest]     = useState(UNITS[0].value);
-    const [schedDate, setSchedDate] = useState("");
-    const [schedTime, setSchedTime] = useState("08:00");
+    const [schedDate, setSchedDate] = useState(tomorrow);
+    const [schedTime, setSchedTime] = useState("08:30");
+    const [altOptions, setAltOptions] = useState<{date: string, time: string}[]>([]);
+
+    if (!open) return null;
 
     const handleAdd = () => {
-        // TODO: POST to seller.shipments.store (or a create endpoint) with form data
-        alert(`Shipment request submitted!\nOrigin: ${origin}\nTarget: ${dest}\nScheduled: ${schedDate} ${schedTime}`);
+        alert(`Shipment request submitted!\nOrigin: ${origin}\nTarget: ${dest}\nScheduled: ${schedDate} ${schedTime}\nAlt Options: ${altOptions.length}`);
         onClose();
     };
 
+    const addOption = () => setAltOptions([...altOptions, { date: schedDate, time: "17:00" }]);
+    const removeOption = (idx: number) => setAltOptions(altOptions.filter((_, i) => i !== idx));
+    const updateOption = (idx: number, field: 'date'|'time', val: string) => {
+        const newOpts = [...altOptions];
+        newOpts[idx][field] = val;
+        setAltOptions(newOpts);
+    };
+
     return (
-        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: "16px" } }}>
-            <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                    <LocalShippingIcon color="primary" />
-                    <span>New Shipment</span>
-                </Stack>
-            </DialogTitle>
-            <DialogContent sx={{ pt: 1 }}>
-                <Stack spacing={2.5} mt={0.5}>
-                    <TextField
-                        select
-                        label="Origin Facility"
-                        value={origin}
-                        onChange={(e) => setOrigin(e.target.value)}
-                        size="small"
-                        fullWidth
-                        InputProps={{ startAdornment: <HomeWorkIcon sx={{ fontSize: 16, mr: 0.75, color: "text.secondary" }} /> }}
-                    >
-                        {FACILITIES.map((f) => <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>)}
-                    </TextField>
-                    <TextField
-                        select
-                        label="Target Unit"
-                        value={dest}
-                        onChange={(e) => setDest(e.target.value)}
-                        size="small"
-                        fullWidth
-                        InputProps={{ startAdornment: <StoreIcon sx={{ fontSize: 16, mr: 0.75, color: "text.secondary" }} /> }}
-                    >
-                        {UNITS.map((u) => <MenuItem key={u.value} value={u.value}>{u.label}</MenuItem>)}
-                    </TextField>
-                    <Stack direction="row" spacing={1.5}>
-                        <TextField
-                            label="Scheduled Date"
-                            type="date"
-                            value={schedDate}
-                            onChange={(e) => setSchedDate(e.target.value)}
-                            size="small"
-                            fullWidth
-                            InputLabelProps={{ shrink: true }}
-                        />
-                        <TextField
-                            label="Time"
-                            type="time"
-                            value={schedTime}
-                            onChange={(e) => setSchedTime(e.target.value)}
-                            size="small"
-                            sx={{ width: 120 }}
-                            InputLabelProps={{ shrink: true }}
-                        />
-                    </Stack>
-                </Stack>
-            </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-                <Button onClick={onClose} variant="outlined" sx={{ borderRadius: "10px", textTransform: "none" }}>Cancel</Button>
-                <Button onClick={handleAdd} variant="contained" sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700 }}>
-                    Add Shipment
-                </Button>
-            </DialogActions>
-        </Dialog>
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-xs" onClick={onClose}>
+            <div className="w-full max-w-[425px] bg-white rounded-t-3xl p-5 pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
+                <div className="flex items-center gap-2 mb-4">
+                    <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[#c2410c] text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
+                    </div>
+                    <h3 className="text-[16px] font-bold text-gray-900">New Shipment</h3>
+                </div>
+                <div className="space-y-3 mb-5 max-h-[50vh] overflow-y-auto custom-scrollbar px-1">
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Origin Facility</label>
+                        <select value={origin} onChange={e => setOrigin(e.target.value)}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#c2410c]/30">
+                            {FACILITIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Target Unit</label>
+                        <select value={dest} onChange={e => setDest(e.target.value)}
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#c2410c]/30">
+                            {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                        </select>
+                    </div>
+                    
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-3 mt-4">
+                        <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Primary Target Time</label>
+                        </div>
+                        <div className="flex gap-2">
+                            <div className="flex-1">
+                                <input type="date" value={schedDate} min={today} onChange={e => setSchedDate(e.target.value)}
+                                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-white focus:outline-none" />
+                            </div>
+                            <div className="w-1/3">
+                                <input type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)}
+                                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-white focus:outline-none" />
+                            </div>
+                        </div>
+
+                        {altOptions.length > 0 && (
+                            <div className="space-y-2 pt-2 border-t border-slate-200">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Alternate Time Windows</label>
+                                {altOptions.map((opt, idx) => (
+                                    <div key={idx} className="flex gap-2 items-center">
+                                        <div className="flex-1">
+                                            <input type="date" value={opt.date} min={today} onChange={e => updateOption(idx, 'date', e.target.value)}
+                                                className="w-full border border-slate-200 rounded-xl px-2 py-2 text-[12px] font-semibold text-gray-900 bg-white focus:outline-none" />
+                                        </div>
+                                        <div className="w-1/3">
+                                            <input type="time" value={opt.time} onChange={e => updateOption(idx, 'time', e.target.value)}
+                                                className="w-full border border-slate-200 rounded-xl px-2 py-2 text-[12px] font-semibold text-gray-900 bg-white focus:outline-none" />
+                                        </div>
+                                        <button onClick={() => removeOption(idx)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-red-50 text-red-500 shrink-0">
+                                            <span className="material-symbols-outlined text-[16px]">close</span>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <button onClick={addOption} className="w-full py-2 border border-dashed border-slate-300 rounded-xl text-[11px] font-bold text-slate-500 flex items-center justify-center gap-1 hover:bg-slate-100">
+                            <span className="material-symbols-outlined text-[14px]">add</span> Add Time Window
+                        </button>
+                    </div>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-600 active:scale-95 transition-transform">Cancel</button>
+                    <button onClick={handleAdd} className="flex-1 py-3 rounded-xl bg-[#c2410c] text-white text-[13px] font-bold active:scale-95 transition-transform shadow-md">Add Shipment</button>
+                </div>
+            </div>
+        </div>
     );
 }
 
 /* ----------------------------------------------------------
  | Transfer Selection Card
  |----------------------------------------------------------*/
-function TransferCard({ t, onEditRoute }: { t: ScheduledTransfer; onEditRoute: (t: ScheduledTransfer) => void }) {
-    const cfg = statusConfig[t.status];
+function TransferCard({ t }: { t: ScheduledTransfer }) {
+    const [activePartyModal, setActivePartyModal] = useState<PartyKey | null>(null);
+    const cfg = statusConfig[t.status] || statusConfig.scheduled;
+    const creator = t.created_by || "Admin";
+    const createdAt = t.created_at ? formatDateTime(t.created_at) : "Today • 06:14 AM";
+    const loadPercent = t.load_percentage ?? (t.vehicle_max_cbm && t.total_cbm ? Math.round((t.total_cbm / t.vehicle_max_cbm) * 100) : 60);
+
+    // Only when the manifest has been reviewed and dispatched should Creator be ticked off as created
+    const isDispatched = t.status === "dispatched";
+
+    // 4-Party agreement details fallback
+    const agreements: {
+        creator: PartyAgreementInfo;
+        fleet: PartyAgreementInfo;
+        origin: PartyAgreementInfo;
+        destination: PartyAgreementInfo;
+    } = {
+        creator: t.agreements?.creator ? {
+            ...t.agreements.creator,
+            status: isDispatched ? "created" : "pending",
+            status_label: isDispatched ? "Created" : "Pending Dispatch",
+        } : {
+            title: "1. Creator",
+            role: "Seller",
+            party: `Admin • ${createdAt}`,
+            status: isDispatched ? "created" : "pending",
+            status_label: isDispatched ? "Created" : "Pending Dispatch",
+            detail: isDispatched ? "Manifest reviewed & dispatched by Admin." : "Manifest drafted; awaiting dispatch sign-off.",
+        },
+        fleet: t.agreements?.fleet ?? {
+            title: "2. Fleet",
+            role: "Carrier",
+            party: `${t.vehicle_name} • ${t.vehicle_plate}`,
+            status: (t.status === "overdue" ? "rescheduled" : (t.status === "scheduled" || isDispatched) ? "accepted" : "pending") as "accepted" | "rescheduled" | "pending",
+            status_label: t.status === "overdue" ? "Rescheduled" : (t.status === "scheduled" || isDispatched) ? "Driver Accepted" : "Pending Driver",
+            detail: t.status === "overdue"
+                ? "Driver requested slot reschedule due to transit maintenance."
+                : (t.status === "scheduled" || isDispatched)
+                ? "Driver Abebe K. accepted assignment • ETA on schedule."
+                : "Awaiting driver assignment & route confirmation.",
+        },
+        origin: t.agreements?.origin ?? {
+            title: "3. Origin",
+            role: "Depot",
+            party: `${t.origin.name} (${t.origin.detail})`,
+            status: (t.status === "overdue" ? "rescheduled" : (t.status === "pending" || isDispatched) ? "accepted" : "pending") as "accepted" | "rescheduled" | "pending",
+            status_label: t.status === "overdue" ? "Rescheduled" : (t.status === "pending" || isDispatched) ? "Accepted" : "Pending Stock Keeper",
+            detail: t.status === "overdue"
+                ? "Stock Keeper Kidus W. sent a reschedule notice due to loading dock backlog."
+                : (t.status === "pending" || isDispatched)
+                ? "Stock Keeper Dawit T. accepted and packed 80 cartons."
+                : "Stock Keeper Dawit T. assigned. Bay staging in progress.",
+        },
+        destination: t.agreements?.destination ?? {
+            title: "4. Dest.",
+            role: "Store",
+            party: `${t.destination.name} (${t.destination.detail})`,
+            status: (t.status === "pending" ? "rescheduled" : "pending") as "accepted" | "rescheduled" | "pending",
+            status_label: t.status === "pending" ? "Rescheduled" : "Pending Stock Keeper",
+            detail: t.status === "pending"
+                ? "Store Stock Keeper Blen A. sent a reschedule request (+30 mins for shift swap)."
+                : "Store Receiver Helen M. standing by for arrival confirmation.",
+        },
+    };
 
     return (
-        <Paper
-            elevation={0}
-            sx={{
-                p: 2,
-                borderRadius: "16px",
-                border: "1px solid",
-                borderColor: t.status === "overdue" ? "error.light" : "divider",
-                bgcolor: "background.paper",
-            }}
-        >
-            {/* Top row */}
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={1.5}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                    <Box
-                        sx={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: "10px",
-                            bgcolor: "action.hover",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flexShrink: 0,
-                        }}
-                    >
-                        <LocalShippingIcon color="primary" sx={{ fontSize: 20 }} />
-                    </Box>
-                    <Box>
-                        <Typography variant="subtitle2" fontWeight={700}>{t.origin.name} → {t.destination.name}</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>{t.reference}</Typography>
-                    </Box>
-                </Stack>
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                    <Chip icon={cfg.icon} label={cfg.label} size="small" color={cfg.color} sx={{ fontWeight: 700 }} />
-                    <Tooltip title="Edit origin / target">
-                        <IconButton size="small" onClick={() => onEditRoute(t)} sx={{ ml: 0.25 }}>
-                            <EditIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
-                    </Tooltip>
-                </Stack>
-            </Stack>
+        <div className={`bg-white rounded-2xl border ${t.status === "overdue" ? "border-red-200 shadow-sm" : "border-slate-100 shadow-sm"} p-4 relative overflow-hidden`}>
+            {t.status === "overdue" && <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>}
+            
+            {/* ── Status & Title (No redundant Created by Admin here) ── */}
+            <div className="flex justify-between items-start mb-4">
+                <div>
+                    <p className="text-[14px] font-bold text-gray-900 tracking-tight">{t.origin.name} → {t.destination.name}</p>
+                    <p className="text-[10px] font-mono text-slate-400 mt-0.5">{t.reference}</p>
+                </div>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${cfg.color} shrink-0`}>
+                    <span className="material-symbols-outlined text-[12px]">{cfg.icon}</span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider">{cfg.label}</span>
+                </div>
+            </div>
 
-            {/* Route strip */}
-            <Box
-                sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1,
-                    bgcolor: "action.hover",
-                    borderRadius: "10px",
-                    p: 1.25,
-                    mb: 1.5,
-                }}
-            >
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Stack direction="row" alignItems="center" spacing={0.5} mb={0.25}>
-                        <HomeWorkIcon sx={{ fontSize: 12, color: "text.secondary" }} />
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, textTransform: "uppercase" }}>Origin</Typography>
-                    </Stack>
-                    <Typography variant="subtitle2" fontWeight={700} noWrap sx={{ fontSize: 13 }}>{t.origin.name}</Typography>
-                    <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: 11 }}>{t.origin.detail}</Typography>
-                </Box>
-                <Box sx={{ textAlign: "center", flexShrink: 0 }}>
-                    <ArrowForwardIcon color="primary" sx={{ fontSize: 18 }} />
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: 10 }}>{t.distance_km} km</Typography>
-                </Box>
-                <Box sx={{ flex: 1, minWidth: 0, textAlign: "right" }}>
-                    <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={0.5} mb={0.25}>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, textTransform: "uppercase" }}>Target</Typography>
-                        <StoreIcon sx={{ fontSize: 12, color: "text.secondary" }} />
-                    </Stack>
-                    <Typography variant="subtitle2" fontWeight={700} noWrap sx={{ fontSize: 13 }}>{t.destination.name}</Typography>
-                    <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: 11 }}>{t.destination.detail}</Typography>
-                </Box>
-            </Box>
+            {/* ── Schedule Strip (Scheduled Time) ── */}
+            <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl mb-4 border border-slate-100">
+                <div className="w-8 h-8 rounded-lg bg-[#c2410c] flex items-center justify-center shrink-0 shadow-sm">
+                    <span className="material-symbols-outlined text-[18px] text-white">schedule</span>
+                </div>
+                <div className="flex-1">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Scheduled Time</p>
+                    <p className="text-[13px] font-bold text-[#c2410c]">{formatDateTime(t.scheduled_run)}</p>
+                </div>
+                <div className="text-right shrink-0">
+                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold tracking-wide uppercase ${t.status === "overdue" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>
+                        {t.cutoff_label}
+                    </span>
+                </div>
+            </div>
 
-            {/* Meta row */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-                <Stack direction="row" alignItems="center" spacing={0.75}>
-                    <ScheduleIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: 12 }}>{t.scheduled_run}</Typography>
-                </Stack>
-                <Chip
-                    icon={<TimerIcon sx={{ fontSize: 13 }} />}
-                    label={t.cutoff_label}
-                    size="small"
-                    color={t.status === "overdue" ? "error" : "warning"}
-                    variant="outlined"
-                    sx={{ fontWeight: 700, fontSize: 10 }}
-                />
-            </Stack>
+            {/* ── Stats (with Volume in between Cartons and SLOT) ── */}
+            <div className="grid grid-cols-4 gap-2 mb-4">
+                <div className="bg-slate-50 p-2 rounded-xl text-center border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">SKUs</p>
+                    <p className="text-[14px] font-bold font-mono text-gray-900">{t.sku_count}</p>
+                </div>
+                <div className="bg-slate-50 p-2 rounded-xl text-center border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Cartons</p>
+                    <p className="text-[14px] font-bold font-mono text-gray-900">{t.total_cartons}</p>
+                </div>
+                <div className="bg-slate-50 p-2 rounded-xl text-center border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Volume</p>
+                    <p className="text-[14px] font-bold font-mono text-gray-900">
+                        {loadPercent}%
+                    </p>
+                </div>
+                <div className="bg-slate-50 p-2 rounded-xl text-center border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 truncate">{t.slot || "BAY"}</p>
+                    <p className="text-[12px] font-bold font-mono text-gray-900 truncate">{t.vehicle_plate}</p>
+                </div>
+            </div>
 
-            <Divider sx={{ mb: 1.5 }} />
+            {/* ── Conditional Bottom Section: Transit Status vs 4-Party Gate ── */}
+            {(t.status === "en_route" || t.status === "shipped") ? (
+                <div className="border-t border-slate-100 pt-4 mt-2">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Transit Status</p>
+                    
+                    {t.status === "en_route" && (
+                        <div className="space-y-2.5">
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+                                <span className="text-[12px] font-bold text-gray-800">Origin → Driver Done</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[16px] text-indigo-500">sync</span>
+                                <span className="text-[12px] font-bold text-gray-800">Driver → Destination Pending</span>
+                            </div>
+                        </div>
+                    )}
 
-            {/* Stats + action */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Stack direction="row" spacing={1.5}>
-                    {[
-                        { label: "SKUs", value: t.sku_count },
-                        { label: "Cartons", value: t.total_cartons },
-                        { label: t.slot, value: t.vehicle_plate },
-                    ].map((s) => (
-                        <Box key={s.label} sx={{ textAlign: "center" }}>
-                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, textTransform: "uppercase", display: "block" }}>{s.label}</Typography>
-                            <Typography variant="caption" fontWeight={700} sx={{ fontFamily: "monospace" }}>{s.value}</Typography>
-                        </Box>
-                    ))}
-                </Stack>
-                <Button
-                    component={Link}
-                    href={route("seller.shipments.show", t.id)}
-                    variant="contained"
-                    size="small"
-                    startIcon={<BuildIcon sx={{ fontSize: 15 }} />}
-                    sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700, fontSize: 12 }}
-                >
-                    Build Manifest
-                </Button>
-            </Stack>
-        </Paper>
+                    {t.status === "shipped" && (
+                        <div className="space-y-2.5">
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+                                <span className="text-[12px] font-bold text-gray-800">Shipment Created ({creator})</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+                                <span className="text-[12px] font-bold text-gray-800">Driver Accepted</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+                                <span className="text-[12px] font-bold text-gray-800">Origin Completed</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+                                <span className="text-[12px] font-bold text-gray-800">Destination Received</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <>
+                    {/* ── 4-Party Agreement Gate ── */}
+                    <div className="border-t border-slate-100 pt-3 mb-4">
+                        <div className="flex items-center justify-between mb-2.5">
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">4-Party Agreement Gate</p>
+                                <p className="text-[9px] text-slate-400">Tap any party to view details</p>
+                            </div>
+                            <span className="text-[9px] font-bold text-[#c2410c] bg-orange-50 px-1.5 py-0.5 rounded-full border border-orange-200/50">ALL 4 REQ</span>
+                        </div>
+                        
+                        {/* 4 Party Status Clickable Buttons */}
+                        <div className="grid grid-cols-4 gap-1.5 text-center">
+                            {[
+                                { key: "creator" as PartyKey,     label: "1. Creator", sub: isDispatched ? "Created" : "Pending", icon: "person",         agreed: isDispatched },
+                                { key: "fleet" as PartyKey,       label: "2. Fleet",   sub: "Carrier", icon: "local_shipping", agreed: agreements.fleet.status === "accepted" },
+                                { key: "origin" as PartyKey,      label: "3. Origin",  sub: "Depot",   icon: "warehouse",      agreed: agreements.origin.status === "accepted" },
+                                { key: "destination" as PartyKey, label: "4. Dest.",   sub: agreements.destination.stock_keepers ? "2 SKs" : "Store", icon: "storefront", agreed: agreements.destination.status === "accepted" },
+                            ].map((p, idx) => {
+                                const color = p.agreed ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-400 border-slate-200";
+                                return (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setActivePartyModal(p.key)}
+                                    className={`flex flex-col items-center p-1.5 rounded-xl border transition-all text-center cursor-pointer hover:shadow-xs active:scale-95 ${
+                                        p.agreed ? 'border-emerald-100 bg-emerald-50/50 hover:bg-emerald-100/60' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center mb-1 border ${color} shrink-0`}>
+                                        <span className="material-symbols-outlined text-[13px]">{p.icon}</span>
+                                    </div>
+                                    <span className={`text-[8px] font-bold leading-tight w-full truncate ${p.agreed ? 'text-emerald-900' : 'text-gray-500'}`}>{p.label}</span>
+                                    <span className="text-[7px] text-slate-400 leading-tight w-full truncate">{p.sub}</span>
+                                    <div className="mt-1 flex items-center justify-center w-full">
+                                        {p.agreed 
+                                            ? <span className="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span> 
+                                            : <span className="material-symbols-outlined text-[12px] text-slate-300">hourglass_empty</span>
+                                        }
+                                    </div>
+                                </button>
+                            )})}
+                        </div>
+                    </div>
+
+                    {/* ── Party Detail Modal Window (Opens on click for each party) ── */}
+                    <PartyDetailModal
+                        open={activePartyModal !== null}
+                        activeParty={activePartyModal ?? "creator"}
+                        onClose={() => setActivePartyModal(null)}
+                        onSelectParty={setActivePartyModal}
+                        reference={t.reference}
+                        scheduleOptions={t.schedule_options}
+                        agreements={agreements}
+                    />
+
+                    {/* ── Action ── */}
+                    <Link href={route("seller.shipments.show", t.id)} 
+                        className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-gray-900 text-[13px] font-bold active:scale-95 transition-transform hover:bg-slate-100 hover:border-slate-300">
+                        <span className="material-symbols-outlined text-[16px] text-gray-600">build</span>
+                        Build Manifest
+                    </Link>
+                </>
+            )}
+        </div>
     );
 }
 
@@ -373,94 +420,89 @@ function TransferCard({ t, onEditRoute }: { t: ScheduledTransfer; onEditRoute: (
  |----------------------------------------------------------*/
 export default function ReplenishIndex({ scheduled_transfers = [] }: Props) {
     const [addOpen, setAddOpen] = useState(false);
-    const [editTarget, setEditTarget] = useState<ScheduledTransfer | null>(null);
+    const [filter, setFilter] = useState("all");
 
-    // Local state so edits are reflected without a page reload
-    const [transfers, setTransfers] = useState<ScheduledTransfer[]>(scheduled_transfers);
-
-    const handleSaveRoute = (
-        origin: { name: string; detail: string },
-        destination: { name: string; detail: string }
-    ) => {
-        if (!editTarget) return;
-        setTransfers((prev) =>
-            prev.map((t) => (t.id === editTarget.id ? { ...t, origin, destination } : t))
-        );
-        setEditTarget(null);
-    };
+    // Filter logic
+    const displayedTransfers = filter === "all" 
+        ? scheduled_transfers 
+        : scheduled_transfers.filter(t => t.status === filter);
 
     return (
-        <Box sx={{ px: 2, pt: 2 }}>
-            <Head title="Shipments — Scheduled Runs" />
+        <>
+            <Head title="Shipments">
+                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+            </Head>
 
-            {/* ── Header ── */}
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={3}>
-                <Box>
-                    <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
-                        <LocalShippingIcon color="primary" />
-                        <Typography variant="h5" fontWeight={800}>Shipments</Typography>
-                    </Stack>
-                    <Typography variant="body2" color="text.secondary">
-                        Select a scheduled corridor to start manifest configuration.
-                    </Typography>
-                </Box>
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <Button
-                        variant="contained"
-                        size="small"
-                        startIcon={<AddIcon />}
-                        onClick={() => setAddOpen(true)}
-                        sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700 }}
-                    >
-                        Add Shipment
-                    </Button>
-                    <Chip
-                        icon={<SyncAltIcon sx={{ fontSize: 14 }} />}
-                        label="ERP-SYNC: ACTIVE"
-                        color="primary"
-                        size="small"
-                        sx={{ fontWeight: 700, fontFamily: "monospace", fontSize: 11 }}
-                    />
-                </Stack>
-            </Stack>
+            {/* ── Top Context Strip: Back button, centered Shipments, and NEW button ── */}
+            <div className="px-4 py-3 flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-20">
+                <button
+                    onClick={() => {
+                        if (window.history.length > 1) {
+                            window.history.back();
+                        } else {
+                            router.visit(route("seller.dashboard"));
+                        }
+                    }}
+                    className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 flex items-center justify-center active:scale-95 transition-all text-slate-600"
+                    aria-label="Back"
+                >
+                    <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                </button>
 
-            {/* ── Status filter chips ── */}
-            <Stack direction="row" spacing={1} mb={2.5} flexWrap="wrap">
-                {[
-                    { label: `All (${transfers.length})`, active: true },
-                    { label: "Scheduled", active: false },
-                    { label: "Pending", active: false },
-                    { label: "Overdue", active: false },
-                ].map((chip) => (
-                    <Chip
-                        key={chip.label}
-                        label={chip.label}
-                        size="small"
-                        variant={chip.active ? "filled" : "outlined"}
-                        color={chip.active ? "primary" : "default"}
-                        sx={{ fontWeight: chip.active ? 700 : 500, cursor: "pointer" }}
-                    />
-                ))}
-            </Stack>
+                <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[#c2410c] text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
+                    <h1 className="text-[16px] font-bold text-gray-900 tracking-tight">Shipments</h1>
+                </div>
 
-            {/* ── Transfer list ── */}
-            <Stack spacing={1.5}>
-                {transfers.map((t) => (
-                    <TransferCard key={t.id} t={t} onEditRoute={setEditTarget} />
-                ))}
-            </Stack>
+                <button onClick={() => setAddOpen(true)}
+                    className="flex items-center gap-1 bg-orange-50 text-[#c2410c] px-3 py-1.5 rounded-full border border-orange-200/60 active:scale-95 transition-transform hover:bg-orange-100">
+                    <span className="material-symbols-outlined text-[14px]">add</span>
+                    <span className="font-bold text-[11px] tracking-wide">NEW</span>
+                </button>
+            </div>
+
+            <div className="px-3.5 pt-3 pb-36 space-y-3">
+                
+                {/* ── Status Filter Chips ── */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+                    {[
+                        { id: "all",       label: `All (${scheduled_transfers.length})` },
+                        { id: "scheduled", label: "Scheduled" },
+                        { id: "pending",   label: "Pending Manifest" },
+                        { id: "en_route",  label: "En Route" },
+                        { id: "shipped",   label: "Shipped" },
+                        { id: "overdue",   label: "Overdue" },
+                    ].map(f => (
+                        <button key={f.id} onClick={() => setFilter(f.id)}
+                            className={`px-3 py-1.5 rounded-full text-[11px] font-bold shrink-0 transition-colors border ${
+                                filter === f.id 
+                                    ? "bg-[#c2410c] text-white border-[#c2410c]" 
+                                    : "bg-white text-slate-600 border-slate-200"
+                            }`}>
+                            {f.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* ── Transfer List ── */}
+                <div className="space-y-3">
+                    {displayedTransfers.map(t => (
+                        <TransferCard key={t.id} t={t} />
+                    ))}
+                    {displayedTransfers.length === 0 && (
+                        <div className="py-8 text-center bg-white rounded-2xl border border-slate-100">
+                            <span className="material-symbols-outlined text-slate-300 text-[36px] mb-2">inbox</span>
+                            <p className="text-[13px] font-bold text-gray-900">No shipments found</p>
+                            <p className="text-[11px] text-slate-400 mt-1">Change the filter or create a new shipment.</p>
+                        </div>
+                    )}
+                </div>
+
+            </div>
 
             {/* ── Dialogs ── */}
-            <AddShipmentDialog open={addOpen} onClose={() => setAddOpen(false)} />
-            {editTarget && (
-                <EditRouteDialog
-                    open={!!editTarget}
-                    transfer={editTarget}
-                    onClose={() => setEditTarget(null)}
-                    onSave={handleSaveRoute}
-                />
-            )}
-        </Box>
+            <AddShipmentSheet open={addOpen} onClose={() => setAddOpen(false)} />
+        </>
     );
 }
 
