@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin\Inventory;
 
 use App\Http\Controllers\Controller;
-use App\Models\Transfer;
+use App\Models\StockKeeper\Transfer;
 use Inertia\Inertia;
 
 class TransferController extends Controller
@@ -13,10 +13,10 @@ class TransferController extends Controller
         $transfers = Transfer::with([
             'fromLocation',
             'toLocation',
-            'variant.item',
-            'variant.itemColor',
-            'variant.itemSize',
-            'initiatedBy',
+            'itemVariant.item',
+            'itemVariant.itemColor',
+            'itemVariant.itemSize',
+            'initiator',
         ])
         ->latest()
         ->get()
@@ -25,16 +25,16 @@ class TransferController extends Controller
             'reference'      => $t->reference,
             'from_location'  => $t->fromLocation->name,
             'to_location'    => $t->toLocation->name,
-            'item_name'      => $t->variant->item->product_name,
+            'item_name'      => $t->itemVariant->item->product_name,
             'variant_label'  => collect([
-                $t->variant->itemColor?->name,
-                $t->variant->itemSize?->name,
+                $t->itemVariant->itemColor?->name,
+                $t->itemVariant->itemSize?->name,
             ])->filter()->join(' / ') ?: 'Default',
-            'sku'            => $t->variant->sku,
+            'sku'            => $t->itemVariant->sku,
             'quantity'       => $t->quantity,
             'status'         => $t->status,
-            'initiated_by'   => $t->initiatedBy
-                ? trim("{$t->initiatedBy->first_name} {$t->initiatedBy->last_name}")
+            'initiated_by'   => $t->initiator
+                ? trim("{$t->initiator->first_name} {$t->initiator->last_name}")
                 : 'System',
             'created_at'     => $t->created_at->toISOString(),
             'completed_at'   => $t->completed_at?->toISOString(),

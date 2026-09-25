@@ -45,3 +45,5 @@ docs/Terminal.md
 docs/scribts/MODULES.md
 docs/scribts/build-ai-context.sh
 docs/scribts/dump-module.sh
+.aider*
+CLAUDE.md
