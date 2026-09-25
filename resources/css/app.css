@@ -2,3 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+    /* Horizontal pill/chip strips scroll without a visible track on mobile.
+       Used by the storefront category filters. */
+    .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+}

@@ -1,63 +1,99 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\StockKeeper;
 
 use App\Http\Controllers\Controller;
-use App\Models\Item\Item;
-use App\Models\Item\ItemVariant;
-use App\Models\Inventory\Warehouse;
-use App\Models\Inventory\ItemStock;
+use App\Http\Requests\StockKeeper\AdjustStockRequest;
+use App\Http\Requests\StockKeeper\ReceiveStockRequest;
+use App\Models\StockKeeper\ItemStock;
+use App\Services\StockKeeperService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Inertia\Response;
 
+/**
+ * The stock ledger itself: what sits where, plus the two write actions the
+ * warehouse desk performs — booking goods in, and correcting a count.
+ */
 class InventoryController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function __construct(private readonly StockKeeperService $stock)
     {
-        $items = Item::all();
-        $warehouses = Warehouse::all();
-        $variants = ItemVariant::with('item', 'itemColor', 'itemSize')->get()->map(function ($v) {
-            $label = collect([$v->itemColor?->name, $v->itemSize?->name])->filter()->join(' / ') ?: 'Standard';
-            return [
-                'id' => $v->id,
-                'name' => ($v->item->product_name ?? 'Unknown') . ' - ' . $label . ' (SKU: ' . $v->sku . ')',
-            ];
-        });
+    }
+
+    public function index(Request $request): Response
+    {
+        $search = $request->filled('search') ? trim((string) $request->string('search')) : '';
+        $locationType = $request->string('location_type')->toString() ?: null;
+        $locationId = $request->integer('location_id') ?: null;
+
+        $paginator = $this->stock->paginateStock($search !== '' ? $search : null, $locationType, $locationId);
 
         return Inertia::render('StockKeeper/Inventory/index', [
-            'items' => $items,
-            'warehouses' => $warehouses,
-            'variants' => $variants,
+            'stock' => collect($paginator->items())
+                ->map(fn (ItemStock $row) => $this->stock->presentStockRow($row))
+                ->values()
+                ->all(),
+            'locations' => $this->stock->locations(),
+            'variants' => $this->stock->variantOptions($search !== '' ? $search : null)->all(),
+            'filters' => [
+                'search' => $search,
+                'location_type' => $locationType,
+                'location_id' => $locationId,
+            ],
+            'metrics' => $this->stock->metrics(),
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'total' => $paginator->total(),
+            ],
         ]);
     }
 
     /**
-     * Receive stock into a warehouse.
+     * Book goods into a location.
      */
-    public function receive(Request $request)
+    public function receive(ReceiveStockRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'warehouse_id' => 'required|exists:warehouses,id',
-            'item_variant_id' => 'required|exists:item_variants,id',
-            'quantity' => 'required|integer|min:1',
-        ]);
-
-        $stock = ItemStock::firstOrCreate(
-            [
-                'location_id' => $validated['warehouse_id'],
-                'location_type' => Warehouse::class,
-                'item_variant_id' => $validated['item_variant_id'],
-            ],
-            [
-                'quantity' => 0,
-            ]
+        $stock = $this->stock->receive(
+            (int) $request->validated('item_variant_id'),
+            (string) $request->validated('location_type'),
+            (int) $request->validated('location_id'),
+            (int) $request->validated('quantity'),
+            $request->validated('min_stock_level') !== null
+                ? (int) $request->validated('min_stock_level')
+                : null,
         );
 
-        $stock->increment('quantity', $validated['quantity']);
+        return back()->with(
+            'success',
+            "Received {$request->validated('quantity')} units — {$stock->quantity} now on hand."
+        );
+    }
 
-        return back()->with('success', 'Stock received successfully in warehouse.');
+    /**
+     * Correct a ledger row after a physical recount.
+     */
+    public function adjust(AdjustStockRequest $request, ItemStock $stock): RedirectResponse
+    {
+        $delta = $this->stock->adjust(
+            $stock,
+            (int) $request->validated('counted_quantity'),
+            $request->validated('min_stock_level') !== null
+                ? (int) $request->validated('min_stock_level')
+                : null,
+        );
+
+        $direction = $delta === 0 ? 'confirmed' : ($delta > 0 ? 'up' : 'down');
+
+        return back()->with(
+            'success',
+            $delta === 0
+                ? 'Count confirmed — no change.'
+                : "Count adjusted {$direction} by " . abs($delta) . ' units.'
+        );
     }
 }

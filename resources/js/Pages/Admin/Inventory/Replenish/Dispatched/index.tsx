@@ -21,7 +21,6 @@ import ScheduleIcon from "@mui/icons-material/Schedule";
 import BadgeIcon from "@mui/icons-material/Badge";
 import RouteIcon from "@mui/icons-material/Route";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import SyncAltIcon from "@mui/icons-material/SyncAlt";
 import PersonIcon from "@mui/icons-material/Person";
 import CallIcon from "@mui/icons-material/Call";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
@@ -168,16 +167,11 @@ export default function ReplenishDispatched({
             <Confetti />
 
             {/* ── Header ── */}
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                <Box>
-                    <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
-                        <LocalShippingIcon color="primary" />
-                        <Typography variant="h5" fontWeight={800}>Shipments</Typography>
-                    </Stack>
-                    <Typography variant="body2" color="text.secondary">Phase 3 / 3 — Tracking &amp; Handoff</Typography>
-                </Box>
-                <Chip icon={<SyncAltIcon sx={{ fontSize: 14 }} />} label="ERP-SYNC: ACTIVE" color="primary" size="small" sx={{ fontWeight: 700, fontFamily: "monospace", fontSize: 11 }} />
+            <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
+                <LocalShippingIcon color="primary" />
+                <Typography variant="h5" fontWeight={800}>Shipments</Typography>
             </Stack>
+            <Typography variant="body2" color="text.secondary" mb={2}>Phase 3 / 3 — Tracking &amp; Handoff</Typography>
 
             <PhaseStepper />
 

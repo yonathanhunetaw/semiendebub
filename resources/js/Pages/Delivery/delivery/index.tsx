@@ -1,153 +1,384 @@
-import React from 'react';
-import DeliveryLayout from '@/Layouts/DeliveryLayout';
-import { Typography, Box, Paper, Chip, Stack, Divider, Button } from '@mui/material';
-import { LocalShipping } from '@mui/icons-material';
-import { alpha, useTheme } from '@mui/material/styles';
+import { Head, router, useForm } from "@inertiajs/react";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import {
+    Alert,
+    Button,
+    Chip,
+    Container,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    Grid,
+    InputAdornment,
+    Snackbar,
+    Stack,
+    TextField,
+    Typography,
+} from "@mui/material";
+import React from "react";
 
-export default function Index() {
-    const theme = useTheme();
-    const readyToAccept = [
-        {
-            orderNo: 'ORD-2430',
-            status: 'Preparation Started',
-            preparedBy: 'Stockkeeper Hana',
-            recipientPhone: '0911 223 344',
-            location: 'Bole, Addis Ababa',
-            driverName: 'Unassigned',
-            driverPhone: '-',
-            plateNumber: '-',
-        },
-        {
-            orderNo: 'ORD-2431',
-            status: 'Preparation Completed',
-            preparedBy: 'Sales Eden',
-            recipientPhone: '0933 550 662',
-            location: 'Megenagna, Addis Ababa',
-            driverName: 'Unassigned',
-            driverPhone: '-',
-            plateNumber: '-',
-        },
-    ];
+import {
+    EmptyRuns,
+    RunCard,
+    StatTile,
+    TRANSITION_LABELS,
+} from "@/Components/Delivery/deliveryUi";
+import DeliveryLayout from "@/Layouts/DeliveryLayout";
+import type {
+    DeliveryRun,
+    DeliveryRunsProps,
+    DeliveryStatus,
+} from "@/types/delivery";
 
-    const pendingPickup = [
-        {
-            orderNo: 'ORD-2418',
-            status: 'Accepted By Delivery',
-            preparedBy: 'Stockkeeper Hana',
-            recipientPhone: '0911 223 344',
-            location: 'Bole, Addis Ababa',
-            driverName: 'Abel K',
-            driverPhone: '0922 112 334',
-            plateNumber: 'AA-45231',
-        },
-    ];
+const SEARCH_DEBOUNCE_MS = 350;
 
-    const activeDelivery = [
-        {
-            orderNo: 'ORD-2423',
-            status: 'Out For Delivery',
-            preparedBy: 'Stockkeeper Noah',
-            recipientPhone: '0944 220 198',
-            location: 'CMC, Addis Ababa',
-            driverName: 'Samuel T',
-            driverPhone: '0910 788 001',
-            plateNumber: 'OR-77421',
-        },
-    ];
+const STATUS_TABS: Array<{ value: string; label: string }> = [
+    { value: "open", label: "Open" },
+    { value: "pending", label: "To collect" },
+    { value: "dispatched", label: "Collected" },
+    { value: "in_transit", label: "In transit" },
+    { value: "delivered", label: "Delivered" },
+    { value: "all", label: "All" },
+];
 
-    const renderQueue = (
-        title: string,
-        color: 'warning' | 'info' | 'success',
-        items: typeof readyToAccept,
-        actionLabel: string
-    ) => (
-        <Paper sx={{ p: 2, borderRadius: 2 }}>
-            <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1.2 }}>
-                {title} ({items.length})
-            </Typography>
-            <Stack spacing={1.5}>
-                {items.map((delivery) => (
-                    <Paper
-                        key={delivery.orderNo}
-                        elevation={0}
-                        sx={{
-                            p: 2,
-                            borderRadius: 2,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                            bgcolor: 'background.default',
-                        }}
-                    >
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 1 }}>
-                            <Typography variant="subtitle2" fontWeight="bold">
-                                {delivery.orderNo}
-                            </Typography>
-                            <Chip label={delivery.status} size="small" color={color} variant="outlined" />
-                        </Box>
-                        <Divider sx={{ mb: 1.2 }} />
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                            Prepared By: {delivery.preparedBy}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                            Recipient Phone: {delivery.recipientPhone}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                            Driver: {delivery.driverName} ({delivery.driverPhone})
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                            Plate Number: {delivery.plateNumber}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.2 }}>
-                            Location: {delivery.location}
-                        </Typography>
-                        <Button size="small" variant="contained" color={color}>
-                            {actionLabel}
-                        </Button>
-                    </Paper>
-                ))}
-            </Stack>
-        </Paper>
+/**
+ * The courier's run list.
+ *
+ * Which buttons appear on a run comes from `allowed_transitions`, which the
+ * server derives from the lifecycle — the UI never invents a move the backend
+ * would refuse.
+ */
+export default function Runs({
+    deliveries,
+    available_runs: availableRuns,
+    metrics,
+    filters,
+    pagination,
+    flash,
+}: DeliveryRunsProps): React.ReactElement {
+    const [search, setSearch] = React.useState<string>(filters.search);
+    const [failing, setFailing] = React.useState<DeliveryRun | null>(null);
+    const [notice, setNotice] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        setSearch(filters.search);
+    }, [filters.search]);
+
+    React.useEffect(() => {
+        const message = flash?.success ?? flash?.error ?? null;
+        if (message) {
+            setNotice(message);
+        }
+    }, [flash?.success, flash?.error]);
+
+    const applyFilters = React.useCallback(
+        (next: { status?: string; search?: string }): void => {
+            router.get(
+                route("delivery.delivery.index"),
+                {
+                    status: next.status ?? filters.status,
+                    ...((next.search ?? filters.search)
+                        ? { search: next.search ?? filters.search }
+                        : {}),
+                },
+                { preserveState: true, preserveScroll: true, replace: true },
+            );
+        },
+        [filters.status, filters.search],
     );
 
+    React.useEffect(() => {
+        if (search === filters.search) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => applyFilters({ search }), SEARCH_DEBOUNCE_MS);
+        return () => window.clearTimeout(timer);
+    }, [search, filters.search, applyFilters]);
+
+    const advance = (run: DeliveryRun, status: DeliveryStatus): void => {
+        if (status === "failed") {
+            setFailing(run);
+            return;
+        }
+
+        router.patch(
+            route("delivery.delivery.transition", run.id),
+            { status },
+            { preserveScroll: true },
+        );
+    };
+
+    const claim = (run: DeliveryRun): void => {
+        router.post(route("delivery.delivery.claim", run.id), {}, { preserveScroll: true });
+    };
+
     return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h5" fontWeight="bold">My Delivery</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Work queues: accept, pickup, then active delivery.
-            </Typography>
+        <>
+            <Head title="My Deliveries" />
 
-            <Paper
-                elevation={0}
-                sx={{
-                    p: 2.5,
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: alpha(theme.palette.info.main, 0.35),
-                    bgcolor: alpha(theme.palette.info.main, 0.1),
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
-                }}
+            <Container sx={{ pt: 3, pb: 10 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, mb: 2 }}>
+                    My Deliveries
+                </Typography>
+
+                <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
+                    <Grid size={4}>
+                        <StatTile label="Open" value={metrics.open} tone="warning" />
+                    </Grid>
+                    <Grid size={4}>
+                        <StatTile
+                            label="Done today"
+                            value={metrics.delivered_today}
+                            tone="success"
+                        />
+                    </Grid>
+                    <Grid size={4}>
+                        <StatTile label="In pool" value={metrics.unassigned} />
+                    </Grid>
+                </Grid>
+
+                <TextField
+                    fullWidth
+                    size="small"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search name, phone, address or tracking…"
+                    sx={{ mb: 1.5 }}
+                    slotProps={{
+                        input: {
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <SearchRoundedIcon fontSize="small" />
+                                </InputAdornment>
+                            ),
+                        },
+                    }}
+                />
+
+                <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ mb: 2.5, overflowX: "auto", pb: 0.5 }}
+                >
+                    {STATUS_TABS.map((tab) => {
+                        const active = filters.status === tab.value;
+                        return (
+                            <Chip
+                                key={tab.value}
+                                label={tab.label}
+                                onClick={() => applyFilters({ status: tab.value })}
+                                color={active ? "primary" : "default"}
+                                variant={active ? "filled" : "outlined"}
+                                sx={{ fontWeight: 700, flexShrink: 0 }}
+                            />
+                        );
+                    })}
+                </Stack>
+
+                {/* ── Assigned runs ── */}
+                <Stack spacing={1.5} sx={{ mb: 3 }}>
+                    {deliveries.length === 0 ? (
+                        <EmptyRuns
+                            title="No runs in this view"
+                            hint="Try another filter, or claim one from the pool below."
+                        />
+                    ) : (
+                        deliveries.map((run) => (
+                            <RunCard
+                                key={run.id}
+                                run={run}
+                                actions={
+                                    run.allowed_transitions.length > 0 ? (
+                                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                            {run.allowed_transitions
+                                                .filter((status) => status in TRANSITION_LABELS)
+                                                .map((status) => (
+                                                    <Button
+                                                        key={status}
+                                                        size="small"
+                                                        variant={
+                                                            status === "failed"
+                                                                ? "outlined"
+                                                                : "contained"
+                                                        }
+                                                        color={
+                                                            status === "failed"
+                                                                ? "error"
+                                                                : status === "delivered"
+                                                                  ? "success"
+                                                                  : "primary"
+                                                        }
+                                                        onClick={() => advance(run, status)}
+                                                    >
+                                                        {TRANSITION_LABELS[status]}
+                                                    </Button>
+                                                ))}
+                                        </Stack>
+                                    ) : null
+                                }
+                            />
+                        ))
+                    )}
+                </Stack>
+
+                {pagination.last_page > 1 ? (
+                    <Stack
+                        direction="row"
+                        spacing={2}
+                        alignItems="center"
+                        justifyContent="center"
+                        sx={{ mb: 3 }}
+                    >
+                        <Button
+                            disabled={pagination.current_page <= 1}
+                            onClick={() =>
+                                router.get(
+                                    route("delivery.delivery.index"),
+                                    { ...filters, page: pagination.current_page - 1 },
+                                    { preserveState: true },
+                                )
+                            }
+                        >
+                            Previous
+                        </Button>
+                        <Typography variant="caption" color="text.secondary">
+                            {pagination.current_page} / {pagination.last_page}
+                        </Typography>
+                        <Button
+                            disabled={pagination.current_page >= pagination.last_page}
+                            onClick={() =>
+                                router.get(
+                                    route("delivery.delivery.index"),
+                                    { ...filters, page: pagination.current_page + 1 },
+                                    { preserveState: true },
+                                )
+                            }
+                        >
+                            Next
+                        </Button>
+                    </Stack>
+                ) : null}
+
+                {/* ── Pool ── */}
+                {availableRuns.length > 0 ? (
+                    <>
+                        <Typography variant="h6" sx={{ fontWeight: 800, mb: 1.5 }}>
+                            Available to claim
+                        </Typography>
+                        <Stack spacing={1.5}>
+                            {availableRuns.map((run) => (
+                                <RunCard
+                                    key={run.id}
+                                    run={run}
+                                    actions={
+                                        <Button
+                                            variant="contained"
+                                            size="small"
+                                            fullWidth
+                                            onClick={() => claim(run)}
+                                        >
+                                            Claim this run
+                                        </Button>
+                                    }
+                                />
+                            ))}
+                        </Stack>
+                    </>
+                ) : null}
+            </Container>
+
+            <ReportProblemDialog run={failing} onClose={() => setFailing(null)} />
+
+            <Snackbar
+                open={notice !== null}
+                autoHideDuration={4000}
+                onClose={() => setNotice(null)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+                sx={{ bottom: { xs: 72 } }}
             >
-                <LocalShipping sx={{ color: theme.palette.info.main }} />
-                <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: 'text.primary' }}>
-                        Active Deliveries
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Separate queues reduce mistakes and missed handoffs.
-                    </Typography>
-                </Box>
-            </Paper>
-
-            <Stack spacing={2} sx={{ mt: 2 }}>
-                {renderQueue('Ready To Accept', 'warning', readyToAccept, 'Accept Delivery')}
-                {renderQueue('Pending Pickup', 'info', pendingPickup, 'Confirm Pickup')}
-                {renderQueue('Active Delivery', 'success', activeDelivery, 'Mark Delivered')}
-            </Stack>
-        </Box>
+                <Alert
+                    severity={flash?.error ? "error" : "success"}
+                    variant="filled"
+                    onClose={() => setNotice(null)}
+                >
+                    {notice}
+                </Alert>
+            </Snackbar>
+        </>
     );
 }
 
-// Ensure the path to your Layout is correct based on your aliases
-Index.layout = (page: React.ReactNode) => <DeliveryLayout children={page} />;
+/**
+ * A failed run must record why, so the desk can follow up.
+ */
+function ReportProblemDialog({
+    run,
+    onClose,
+}: {
+    run: DeliveryRun | null;
+    onClose: () => void;
+}): React.ReactElement {
+    const { data, setData, patch, processing, errors, reset } = useForm<{
+        status: string;
+        failure_reason: string;
+    }>({
+        status: "failed",
+        failure_reason: "",
+    });
+
+    const submit = (event: React.FormEvent): void => {
+        event.preventDefault();
+        if (!run) {
+            return;
+        }
+
+        patch(route("delivery.delivery.transition", run.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                reset();
+                onClose();
+            },
+        });
+    };
+
+    return (
+        <Dialog open={run !== null} onClose={onClose} fullWidth maxWidth="xs">
+            <form onSubmit={submit}>
+                <DialogTitle sx={{ fontWeight: 800 }}>Report a problem</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        {run?.recipient_name} · {run?.tracking_number ?? `Run #${run?.id}`}
+                    </Typography>
+                    <TextField
+                        autoFocus
+                        fullWidth
+                        label="What went wrong?"
+                        value={data.failure_reason}
+                        onChange={(event) => setData("failure_reason", event.target.value)}
+                        error={Boolean(errors.failure_reason)}
+                        helperText={
+                            errors.failure_reason ?? "e.g. nobody home, wrong address, refused"
+                        }
+                        multiline
+                        rows={3}
+                    />
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={onClose}>Cancel</Button>
+                    <Button
+                        type="submit"
+                        variant="contained"
+                        color="error"
+                        disabled={processing}
+                    >
+                        Report
+                    </Button>
+                </DialogActions>
+            </form>
+        </Dialog>
+    );
+}
+
+Runs.layout = (page: React.ReactNode) => <DeliveryLayout>{page}</DeliveryLayout>;

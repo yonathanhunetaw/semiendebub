@@ -1,6 +1,10 @@
 <?php
 
+use App\Http\Controllers\Delivery\DashboardController;
+use App\Http\Controllers\Delivery\DeliveryController;
+use App\Http\Controllers\Delivery\ProfileController;
 use App\Http\Controllers\Delivery\SessionController;
+use App\Http\Controllers\Delivery\ShipmentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -24,9 +28,7 @@ Route::domain("delivery.{$baseDomain}")
         // Protected Routes
         Route::middleware(['auth', 'verified', 'role.subdomain:delivery'])->group(function () {
 
-            Route::get('/dashboard', function () {
-                return Inertia::render('Delivery/Dashboard/index');
-            })->name('dashboard');
+            Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
             // --- SESSION ROUTES ---
             Route::prefix('sessions')->group(function () {
@@ -34,17 +36,16 @@ Route::domain("delivery.{$baseDomain}")
                 Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
             });
 
-            Route::get('/delivery', function () {
-                return Inertia::render('Delivery/Delivery/index');
-            })->name('delivery.index');
+            // --- ACTIVE RUNS ---
+            Route::get('/delivery', [DeliveryController::class, 'index'])->name('delivery.index');
+            Route::post('/delivery/{delivery}/claim', [DeliveryController::class, 'claim'])->name('delivery.claim');
+            Route::patch('/delivery/{delivery}/status', [DeliveryController::class, 'transition'])->name('delivery.transition');
 
-            Route::get('/shipments', function () {
-                return Inertia::render('Delivery/Shipments/index');
-            })->name('shipments.index');
+            // --- HISTORY ---
+            Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
 
-            // Added this so your Profile button has a destination!
-            Route::get('/profile', function () {
-                return Inertia::render('Delivery/Profile/index');
-            })->name('profile.index');
+            // --- PROFILE ---
+            Route::get('/profile', [ProfileController::class, 'index'])->name('profile.index');
+            Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
         });
     });

@@ -26,12 +26,17 @@ import ErrorIcon from "@mui/icons-material/Error";
 import ReportIcon from "@mui/icons-material/Report";
 import WarningIcon from "@mui/icons-material/Warning";
 import InventoryIcon from "@mui/icons-material/Inventory";
-import SyncAltIcon from "@mui/icons-material/SyncAlt";
 import TimerIcon from "@mui/icons-material/Timer";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SyncIcon from "@mui/icons-material/Sync";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import PersonIcon from "@mui/icons-material/Person";
+import WarehouseIcon from "@mui/icons-material/Warehouse";
+import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
+
+import PartyDetailDialog from "@/Components/Admin/Inventory/Replenish/PartyDetailDialog";
+import type { PartyAgreementsMap, PartyKey } from "@/types/adminReplenish";
 
 /* ----------------------------------------------------------
  | Types
@@ -168,6 +173,8 @@ export default function ReplenishReview({
 }: Props) {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [notes, setNotes]             = useState("");
+    const [isDispatched, setIsDispatched] = useState(false);
+    const [activePartyModal, setActivePartyModal] = useState<PartyKey | null>(null);
 
     // Load state derived from telemetry
     const cbmPercent = Math.round((total_cbm / vehicle.max_cbm) * 100);
@@ -179,7 +186,66 @@ export default function ReplenishReview({
     const gaugeColor =
         loadState === "over" ? "#ba1a1a" : loadState === "warning" ? "#814400" : "#004632";
 
+    const agreements: PartyAgreementsMap = {
+        creator: {
+            title: "1. Creator",
+            role: "Seller",
+            party: "Admin • Today • 06:14 AM",
+            status: isDispatched ? "created" : "pending",
+            status_label: isDispatched ? "Created" : "Pending Dispatch",
+            detail: isDispatched
+                ? "Replenishment run verified & successfully dispatched by Admin."
+                : "Manifest reviewed and ready for dispatch. Click 'Confirm Dispatch' to tick off Creator as Created.",
+        },
+        fleet: {
+            title: "2. Fleet",
+            role: "Carrier",
+            party: `${vehicle.name} • ${vehicle.plate}`,
+            status: "accepted",
+            status_label: "Driver Accepted",
+            detail: `Driver Abebe K. accepted assignment • ETA slot ${slot} confirmed.`,
+        },
+        origin: {
+            title: "3. Origin",
+            role: "Depot",
+            party: `${origin.name} (${origin.detail})`,
+            status: "accepted",
+            status_label: "Accepted",
+            detail: "Stock Keeper Dawit T. — Bay #04 loaded & sign-off complete.",
+        },
+        destination: {
+            title: "4. Dest.",
+            role: "Store & Remote WH",
+            party: `${destination.name} + Remote Warehouse`,
+            status: "accepted",
+            status_label: "Accepted (2 SKs)",
+            detail: "Both Store Stock Keeper Helen M. and Remote Warehouse Stock Keeper Blen A. have accepted the delivery.",
+            stock_keepers: [
+                {
+                    name: "Main Store Floor",
+                    location: destination.name,
+                    role: "Store Stock Keeper",
+                    keeper: "Helen M.",
+                    status: "accepted",
+                    status_label: "Accepted",
+                    detail: "Store Receiver: Helen M. — Receiving dock ready for scheduled inbound.",
+                },
+                {
+                    name: "Remote Warehouse",
+                    location: "Kality Sector 3 Overflow",
+                    role: "Remote WH Stock Keeper",
+                    keeper: "Blen A.",
+                    status: "accepted",
+                    status_label: "Accepted",
+                    detail: "Remote WH Stock Keeper: Blen A. — Pallet storage reserved & sign-off complete.",
+                },
+            ],
+        },
+    };
+
     const handleDispatch = () => {
+        setIsDispatched(true);
+        setConfirmOpen(false);
         router.post(route("admin.inventory.replenish.dispatch", transfer_id), { notes });
     };
 
@@ -188,18 +254,13 @@ export default function ReplenishReview({
             <Head title="Review & Dispatch" />
 
             {/* ── Header ── */}
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                <Box>
-                    <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
-                        <LocalShippingIcon color="primary" />
-                        <Typography variant="h5" fontWeight={800}>Review &amp; Dispatch</Typography>
-                    </Stack>
-                    <Typography variant="body2" color="text.secondary">
-                        Confirm replenishment manifest and load balance before dock release.
-                    </Typography>
-                </Box>
-                <Chip icon={<SyncAltIcon sx={{ fontSize: 14 }} />} label="ERP-SYNC: ACTIVE" color="primary" size="small" sx={{ fontWeight: 700, fontFamily: "monospace", fontSize: 11 }} />
+            <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
+                <LocalShippingIcon color="primary" />
+                <Typography variant="h5" fontWeight={800}>Review &amp; Dispatch</Typography>
             </Stack>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+                Confirm replenishment manifest and load balance before dock release.
+            </Typography>
 
             {/* ── Phase Stepper ── */}
             <PhaseStepper active={2} />
@@ -325,6 +386,55 @@ export default function ReplenishReview({
                     </Stack>
                 </Box>
             </Paper>
+
+            {/* ── 4-Party Consensus Gate ── */}
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+                    <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>4-Party Agreement Gate</Typography>
+                        <Typography variant="caption" color="text.secondary">Creator ticked once dispatched • Tap party to view details</Typography>
+                    </Box>
+                    <Chip label="ALL 4 REQUIRED" size="small" color="warning" variant="outlined" sx={{ fontWeight: 700, fontSize: 10 }} />
+                </Stack>
+                <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
+                    {[
+                        { key: "creator" as PartyKey,     label: "1. Creator (Seller)",        icon: <PersonIcon sx={{ fontSize: 16 }} />,        agreed: isDispatched, slot: isDispatched ? "Created" : "Pending" },
+                        { key: "fleet" as PartyKey,       label: "2. Fleet (Carrier)",          icon: <LocalShippingIcon sx={{ fontSize: 16 }} />, agreed: true, slot: "07:00 AM" },
+                        { key: "origin" as PartyKey,      label: "3. Origin Stock Keeper",      icon: <WarehouseIcon sx={{ fontSize: 16 }} />,     agreed: true, slot: "07:00 AM" },
+                        { key: "destination" as PartyKey, label: "4. Dest. (2 Stock Keepers)",  icon: <StoreIcon sx={{ fontSize: 16 }} />,         agreed: true, slot: "07:00 AM" },
+                    ].map((party) => (
+                        <Box
+                            key={party.key}
+                            onClick={() => setActivePartyModal(party.key)}
+                            sx={{
+                                flex: "1 1 45%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                                p: 1.25, borderRadius: "10px", cursor: "pointer", border: "1px solid",
+                                borderColor: party.agreed ? "success.light" : "divider",
+                                bgcolor: party.agreed ? "success.light" : "action.hover",
+                            }}
+                        >
+                            <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
+                                {party.agreed
+                                    ? <CheckCircleIcon color="success" sx={{ fontSize: 16 }} />
+                                    : <HourglassEmptyIcon sx={{ fontSize: 16, color: "text.disabled" }} />}
+                                <Typography variant="caption" fontWeight={700} noWrap>{party.label}</Typography>
+                            </Stack>
+                            <Typography variant="caption" fontWeight={700} sx={{ fontFamily: "monospace", flexShrink: 0, ml: 0.5 }} color={party.agreed ? "success.dark" : "warning.dark"}>
+                                {party.slot}
+                            </Typography>
+                        </Box>
+                    ))}
+                </Stack>
+            </Paper>
+
+            <PartyDetailDialog
+                open={activePartyModal !== null}
+                activeParty={activePartyModal ?? "creator"}
+                onClose={() => setActivePartyModal(null)}
+                onSelectParty={setActivePartyModal}
+                reference={reference}
+                agreements={agreements}
+            />
 
             {/* ── Volumetric Load Telemetry ── */}
             <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>

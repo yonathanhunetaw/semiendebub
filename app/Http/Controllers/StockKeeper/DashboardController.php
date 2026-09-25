@@ -1,69 +1,58 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\StockKeeper;
 
-use App\Http\Controllers\Admin\Controller;
-use App\Models\Item\Item;
-use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use App\Models\StockKeeper\ItemStock;
+use App\Models\StockKeeper\Transfer;
+use App\Services\StockKeeperService;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
+use Inertia\Response;
 
+/**
+ * Warehouse desk overview: what is on hand, what is breaching threshold, and
+ * what is moving between locations.
+ */
 class DashboardController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function __construct(private readonly StockKeeperService $stock)
     {
-        $items = Item::all();
-
-        return Inertia::render('StockKeeper/Dashboard/index', compact('items'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function index(): Response
     {
-        //
-    }
+        $alerts = $this->stock->lowStockQuery()
+            ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
+            ->orderByRaw('(quantity - min_stock_level) ASC')
+            ->limit(8)
+            ->get()
+            ->map(fn (ItemStock $stock) => $this->stock->presentStockRow($stock))
+            ->values()
+            ->all();
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
-    }
+        $recentMovements = ItemStock::query()
+            ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
+            ->orderByDesc('updated_at')
+            ->limit(8)
+            ->get()
+            ->map(fn (ItemStock $stock) => $this->stock->presentStockRow($stock))
+            ->values()
+            ->all();
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
+        return Inertia::render('StockKeeper/Dashboard/index', [
+            'metrics' => $this->stock->metrics(),
+            'alerts' => $alerts,
+            'recent_movements' => $recentMovements,
+            'locations' => $this->stock->locations(),
+            'assigned_location' => $this->stock->assignedLocation(Auth::user()),
+            'transfer_summary' => [
+                'pending' => Transfer::query()->where('status', 'pending')->count(),
+                'in_transit' => Transfer::query()->where('status', 'in_transit')->count(),
+                'completed' => Transfer::query()->where('status', 'completed')->count(),
+            ],
+        ]);
     }
 }

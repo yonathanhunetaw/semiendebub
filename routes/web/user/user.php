@@ -95,9 +95,11 @@ Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
         return Inertia::render('Guest/HomePage/index');
     })->name('homepage');
 
-    Route::get('/dashboard', function () {
-        return Inertia::render('Guest/Dashboard/index');
-    })->name('guest.dashboard');
+    // Guest/Dashboard/index is now the public storefront and needs catalogue
+    // props, so this authenticated entry point shares the storefront
+    // controller. The unauthenticated door is `storefront.index` (/shop).
+    Route::get('/dashboard', [\App\Http\Controllers\Storefront\StorefrontController::class, 'index'])
+        ->name('guest.dashboard');
 
     Route::prefix('sessions')->group(function () {
         Route::get('/', [SessionController::class, 'index'])->name('sessions.index');

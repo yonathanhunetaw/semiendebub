@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Controllers\Vendor\CatalogueController;
+use App\Http\Controllers\Vendor\DashboardController;
+use App\Http\Controllers\Vendor\ProfileController;
+use App\Http\Controllers\Vendor\PurchaseOrderController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -21,8 +25,17 @@ Route::domain("vendor.$baseDomain")
         });
 
         Route::middleware(['auth', 'verified', 'role.subdomain:vendor'])->group(function () {
-            Route::get('/dashboard', function () {
-                return Inertia::render('Vendor/Dashboard/index');
-            })->name('dashboard');
+            Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+            // --- SUPPLIED SKUS ---
+            Route::get('/catalogue', [CatalogueController::class, 'index'])->name('catalogue.index');
+
+            // --- ORDERS PLACED WITH THIS VENDOR (read-only) ---
+            Route::get('/orders', [PurchaseOrderController::class, 'index'])->name('orders.index');
+            Route::get('/orders/{purchase}', [PurchaseOrderController::class, 'show'])->name('orders.show');
+
+            // --- PROFILE ---
+            Route::get('/profile', [ProfileController::class, 'index'])->name('profile.index');
+            Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
         });
     });

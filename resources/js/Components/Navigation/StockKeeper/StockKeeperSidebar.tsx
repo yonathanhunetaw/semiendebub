@@ -2,6 +2,7 @@ import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
 import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import NotificationsActiveRoundedIcon from "@mui/icons-material/NotificationsActiveRounded";
 import SpaceDashboardRoundedIcon from "@mui/icons-material/SpaceDashboardRounded";
+import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import {
     Divider,
     Drawer,
@@ -33,6 +34,11 @@ export default function StockKeeperSidebar({
             label: "Inventory",
             icon: <Inventory2RoundedIcon />,
             href: "/inventory",
+        },
+        {
+            label: "Transfers",
+            icon: <SwapHorizRoundedIcon />,
+            href: "/transfers",
         },
         {
             label: "Orders",

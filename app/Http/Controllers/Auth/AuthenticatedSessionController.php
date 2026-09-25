@@ -68,9 +68,15 @@ class AuthenticatedSessionController extends Controller
 
         session(['role' => $role]);
 
-        // We pass the guestSessionId we captured at the very beginning
-        if ($user->store_id) {
-            app(\App\Services\CartService::class)->mergeGuestCart($user, $user->store_id, $guestSessionId);
+        // We pass the guestSessionId we captured at the very beginning.
+        // Storefront shoppers carry no store_id of their own, so fall back to
+        // the public storefront's store — otherwise a guest cart built before
+        // signing in would be orphaned at the moment of login.
+        $mergeStoreId = $user->store_id
+            ?? app(\App\Services\StorefrontCatalogService::class)->resolveStore()?->id;
+
+        if ($mergeStoreId) {
+            app(\App\Services\CartService::class)->mergeGuestCart($user, $mergeStoreId, $guestSessionId);
         }
 
         // LOG: Confirm the role is stored in the session

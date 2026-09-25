@@ -21,16 +21,19 @@ class Purchase extends Model
         'store_id',
         'warehouse_id',
         'supplier_name',
+        'vendor_id',
         'total_amount',
         'status',
         'user_id',
         'purchased_at',
+        'expected_at',
         'notes',
     ];
 
     protected $casts = [
         'total_amount' => 'decimal:2',
         'purchased_at' => 'datetime',
+        'expected_at' => 'datetime',
     ];
 
     public function store(): BelongsTo
@@ -46,6 +49,19 @@ class Purchase extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * The supplier fulfilling this order.
+     */
+    public function vendor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'vendor_id');
+    }
+
+    public function scopeForVendor(Builder $query, int $vendorId): Builder
+    {
+        return $query->where('vendor_id', $vendorId);
     }
 
     public function scopeReceived(Builder $query): Builder

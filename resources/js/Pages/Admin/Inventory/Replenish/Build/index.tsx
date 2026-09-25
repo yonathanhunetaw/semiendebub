@@ -35,12 +35,16 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
-import SyncAltIcon from "@mui/icons-material/SyncAlt";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import EditIcon from "@mui/icons-material/Edit";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import PersonIcon from "@mui/icons-material/Person";
+import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
+
+import PartyDetailDialog from "@/Components/Admin/Inventory/Replenish/PartyDetailDialog";
+import type { PartyAgreementsMap, PartyKey } from "@/types/adminReplenish";
 
 /* ----------------------------------------------------------
  | Types
@@ -61,7 +65,7 @@ interface ManifestItem {
     name: string;
     sku: string;
     pack_label: string;
-    status: "oos" | "low" | "regular";
+    status: "oos" | "low" | "regular" | "sold";
     status_label: string;
     stock_qty: number | null;
     quantity: number;
@@ -70,6 +74,18 @@ interface ManifestItem {
     weight_kg: number;
     location: string;
     icon: string;
+    target_dest?: "store" | "remote_warehouse";
+    added_by?: {
+        type: "auto" | "manual";
+        name?: string;
+        reason: string;
+    };
+}
+
+interface TimeWindow {
+    id: number;
+    date: string;
+    time: string;
 }
 
 interface Location {
@@ -104,9 +120,16 @@ const UNITS = [
 ];
 
 const AVAILABLE_SKUS: ManifestItem[] = [
-    { id: 301, name: "Ballpoint Pens Box", sku: "SKU-301", pack_label: "Box/12", status: "low", status_label: "LOW STOCK", stock_qty: 8, quantity: 20, unit: "Bx", cbm: 0.4, weight_kg: 80, location: "Aisle C-02", icon: "warning" },
-    { id: 302, name: "Correction Fluid 12pk", sku: "SKU-302", pack_label: "Pack/12", status: "regular", status_label: "REGULAR", stock_qty: 30, quantity: 30, unit: "Pk", cbm: 0.3, weight_kg: 60, location: "Aisle C-03", icon: "inventory" },
-    { id: 303, name: "Stapler Set", sku: "SKU-303", pack_label: "Set/6", status: "oos", status_label: "CRITICAL OOS", stock_qty: 0, quantity: 15, unit: "Pcs", cbm: 0.5, weight_kg: 90, location: "Aisle A-01", icon: "report" },
+    { id: 301, name: "Ballpoint Pens Box", sku: "SKU-301", pack_label: "Box/12", status: "low", status_label: "LOW STOCK", stock_qty: 8, quantity: 20, unit: "Bx", cbm: 0.4, weight_kg: 80, location: "Aisle C-02", icon: "warning", target_dest: "store", added_by: { type: "auto", reason: "Replenish algorithm" } },
+    { id: 302, name: "Correction Fluid 12pk", sku: "SKU-302", pack_label: "Pack/12", status: "regular", status_label: "REGULAR", stock_qty: 30, quantity: 30, unit: "Pk", cbm: 0.3, weight_kg: 60, location: "Aisle C-03", icon: "inventory", target_dest: "remote_warehouse", added_by: { type: "manual", name: "Admin", reason: "Store request" } },
+    { id: 303, name: "Stapler Set", sku: "SKU-303", pack_label: "Set/6", status: "oos", status_label: "CRITICAL OOS", stock_qty: 0, quantity: 15, unit: "Pcs", cbm: 0.5, weight_kg: 90, location: "Aisle A-01", icon: "report", target_dest: "store", added_by: { type: "auto", reason: "Zero stock" } },
+];
+
+const DEFAULT_TIME_WINDOWS: TimeWindow[] = [
+    { id: 1, date: "2024-10-25", time: "08:30" },
+    { id: 2, date: "2024-10-25", time: "17:00" },
+    { id: 3, date: "2024-10-26", time: "08:30" },
+    { id: 4, date: "2024-10-26", time: "17:00" },
 ];
 
 const SIBLING_TRANSFERS = [
@@ -121,6 +144,7 @@ const statusColors = {
     oos: { bg: "error.light", text: "error.dark", chipColor: "error" as const },
     low: { bg: "warning.light", text: "warning.dark", chipColor: "warning" as const },
     regular: { bg: "action.hover", text: "text.secondary", chipColor: "default" as const },
+    sold: { bg: "info.light", text: "info.dark", chipColor: "info" as const },
 };
 
 function ItemIcon({ icon }: { icon: string }) {
@@ -231,27 +255,34 @@ function AddItemsDialog({ open, existingIds, onClose, onAdd }: {
     onClose: () => void; onAdd: (items: ManifestItem[]) => void;
 }) {
     const available = AVAILABLE_SKUS.filter((s) => !existingIds.includes(s.id));
-    const [selected, setSelected] = useState<Record<number, string>>({});
+    const [selected, setSelected] = useState<Record<number, { unit: string; dest: "store" | "remote_warehouse" }>>({});
 
-    const toggle = (id: number) => {
+    const toggle = (item: ManifestItem) => {
         setSelected((prev) => {
             const next = { ...prev };
-            if (next[id]) delete next[id];
-            else next[id] = "Box";
+            if (next[item.id]) delete next[item.id];
+            else next[item.id] = { unit: "Box", dest: item.target_dest ?? "store" };
             return next;
         });
     };
 
     const updatePack = (e: React.MouseEvent, id: number, unit: string) => {
         e.stopPropagation();
-        setSelected((prev) => ({ ...prev, [id]: unit }));
+        setSelected((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { dest: "store" }), unit } }));
+    };
+
+    const updateDest = (e: React.MouseEvent, id: number, dest: "store" | "remote_warehouse") => {
+        e.stopPropagation();
+        setSelected((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { unit: "Box" }), dest } }));
     };
 
     const handleAdd = () => {
         const toAdd = available.filter((s) => selected[s.id]).map((s) => ({
             ...s,
-            unit: selected[s.id],
-            pack_label: selected[s.id] === "Pcs" ? "Singles" : selected[s.id] === "Box" ? "Box/12" : "Carton/48"
+            unit: selected[s.id].unit,
+            target_dest: selected[s.id].dest,
+            pack_label: selected[s.id].unit === "Pcs" ? "Singles" : selected[s.id].unit === "Box" ? "Box/12" : "Carton/48",
+            added_by: { type: "manual" as const, name: "Admin", reason: "Manual addition" },
         }));
         onAdd(toAdd);
         setSelected({});
@@ -272,7 +303,7 @@ function AddItemsDialog({ open, existingIds, onClose, onAdd }: {
                             const cfg = statusColors[item.status];
                             const isSelected = !!selected[item.id];
                             return (
-                                <Paper key={item.id} elevation={0} onClick={() => toggle(item.id)}
+                                <Paper key={item.id} elevation={0} onClick={() => toggle(item)}
                                     sx={{ p: 1.25, borderRadius: "10px", border: "1px solid", borderColor: isSelected ? "primary.main" : "divider", cursor: "pointer" }}>
                                     <Stack direction="row" alignItems="center" spacing={1}>
                                         <Checkbox checked={isSelected} size="small" sx={{ p: 0 }} />
@@ -288,18 +319,41 @@ function AddItemsDialog({ open, existingIds, onClose, onAdd }: {
                                     {isSelected && (
                                         <Box mt={1} pt={1} borderTop="1px dashed" borderColor="divider" onClick={(e) => e.stopPropagation()}>
                                             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontWeight: 600 }}>Packaging Option:</Typography>
-                                            <Stack direction="row" spacing={1}>
+                                            <Stack direction="row" spacing={1} mb={1.25}>
                                                 {["Pcs", "Box", "Carton"].map((u) => (
                                                     <Chip
                                                         key={u}
                                                         label={u === "Pcs" ? "Pcs (1)" : u === "Box" ? "Box (12)" : "Carton (48)"}
                                                         size="small"
-                                                        color={selected[item.id] === u ? "primary" : "default"}
-                                                        variant={selected[item.id] === u ? "filled" : "outlined"}
+                                                        color={selected[item.id]?.unit === u ? "primary" : "default"}
+                                                        variant={selected[item.id]?.unit === u ? "filled" : "outlined"}
                                                         onClick={(e) => updatePack(e, item.id, u)}
                                                         sx={{ fontSize: 10, fontWeight: 700 }}
                                                     />
                                                 ))}
+                                            </Stack>
+                                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontWeight: 600 }}>Target Destination (Dual Support):</Typography>
+                                            <Stack direction="row" spacing={1}>
+                                                <Button
+                                                    size="small"
+                                                    variant={selected[item.id]?.dest !== "remote_warehouse" ? "contained" : "outlined"}
+                                                    color="primary"
+                                                    startIcon={<StoreIcon sx={{ fontSize: 14 }} />}
+                                                    onClick={(e) => updateDest(e, item.id, "store")}
+                                                    sx={{ flex: 1, textTransform: "none", fontWeight: 700, fontSize: 10, borderRadius: "8px" }}
+                                                >
+                                                    Main Store
+                                                </Button>
+                                                <Button
+                                                    size="small"
+                                                    variant={selected[item.id]?.dest === "remote_warehouse" ? "contained" : "outlined"}
+                                                    color="secondary"
+                                                    startIcon={<WarehouseIcon sx={{ fontSize: 14 }} />}
+                                                    onClick={(e) => updateDest(e, item.id, "remote_warehouse")}
+                                                    sx={{ flex: 1, textTransform: "none", fontWeight: 700, fontSize: 10, borderRadius: "8px" }}
+                                                >
+                                                    Remote Warehouse
+                                                </Button>
                                             </Stack>
                                         </Box>
                                     )}
@@ -370,9 +424,14 @@ export default function ReplenishBuild({
     const [origin, setOrigin] = useState(originProp);
     const [destination, setDestination] = useState(destinationProp);
 
+    const [driver, setDriver] = useState("auto");
     const [editRouteOpen, setEditRouteOpen] = useState(false);
     const [addItemsOpen, setAddItemsOpen] = useState(false);
     const [moveItem, setMoveItem] = useState<ManifestItem | null>(null);
+    const [activePartyModal, setActivePartyModal] = useState<PartyKey | null>(null);
+
+    const [timeWindows, setTimeWindows] = useState<TimeWindow[]>(DEFAULT_TIME_WINDOWS);
+    const [primaryWindowId, setPrimaryWindowId] = useState<number | null>(DEFAULT_TIME_WINDOWS[0]?.id ?? null);
 
     const activeVehicle = vehicles.find((v) => v.id === selectedVehicle);
     const totalCbm = items.reduce((sum, item) => sum + item.cbm * ((quantities[item.id] ?? 0) / item.quantity), 0);
@@ -382,6 +441,78 @@ export default function ReplenishBuild({
     const cbmPercent = Math.min(Math.round((totalCbm / maxCbm) * 100), 100);
     const kgPercent  = Math.min(Math.round((totalKg / maxKg) * 100), 100);
     const totalCartons = Object.values(quantities).reduce((a, b) => a + b, 0);
+
+    const hasStoreDest = items.some((i) => (i.target_dest ?? "store") === "store");
+    const hasRemoteWHDest = items.some((i) => i.target_dest === "remote_warehouse");
+    const isDualDest = hasStoreDest && hasRemoteWHDest;
+
+    const agreements: PartyAgreementsMap = {
+        creator: {
+            title: "1. Creator",
+            role: "Seller",
+            party: "Admin • Today • 06:14 AM",
+            status: "pending",
+            status_label: "Drafting / Pending Dispatch",
+            detail: "Manifest is being constructed by Admin. Only ticked off as Created once reviewed and dispatched.",
+        },
+        fleet: {
+            title: "2. Fleet",
+            role: "Carrier",
+            party: `${activeVehicle?.name ?? "Unassigned"} • ${activeVehicle?.plate ?? "TBD"}`,
+            status: driver === "d1" ? "accepted" : driver === "d2" ? "rescheduled" : "pending",
+            status_label: driver === "d1" ? "Driver Accepted" : driver === "d2" ? "Rescheduled" : "Pending Driver",
+            detail: driver === "d1"
+                ? "Driver Abebe K. accepted assigned vehicle and scheduled route."
+                : driver === "d2"
+                ? "Driver Chala M. requested reschedule to 10/25/2024, 05:00 PM (En route delay)."
+                : "Auto-dispatch enabled; awaiting driver confirmation.",
+        },
+        origin: {
+            title: "3. Origin",
+            role: "Depot",
+            party: `${origin.name} (${origin.detail})`,
+            status: "pending",
+            status_label: "Pending Stock Keeper",
+            detail: "Stock Keeper assigned; bay reserved, awaiting picking & staging sign-off.",
+        },
+        destination: isDualDest ? {
+            title: "4. Dest.",
+            role: "Store & Remote WH",
+            party: `${destination.name} + Remote Warehouse`,
+            status: "pending",
+            status_label: "Pending 2 Stock Keepers",
+            detail: "Manifest has items going to both Store Floor and Remote WH. Both Stock Keepers must accept.",
+            stock_keepers: [
+                {
+                    name: "Main Store (Floor)",
+                    location: destination.name,
+                    role: "Store Stock Keeper",
+                    keeper: "Helen M.",
+                    status: "pending",
+                    status_label: "Pending Stock Keeper",
+                    detail: "Store Receiver standing by for floor staging clearance.",
+                },
+                {
+                    name: "Remote Warehouse (Overflow)",
+                    location: "Kality Sector 3 Overflow",
+                    role: "Remote WH Stock Keeper",
+                    keeper: "Blen A.",
+                    status: "pending",
+                    status_label: "Pending Stock Keeper",
+                    detail: "Remote warehouse stock keeper sign-off required for inbound overflow.",
+                },
+            ],
+        } : {
+            title: "4. Dest.",
+            role: hasRemoteWHDest ? "Remote WH" : "Store",
+            party: hasRemoteWHDest ? "Remote Warehouse (Overflow Depot)" : `${destination.name} (${destination.detail})`,
+            status: "pending",
+            status_label: "Pending Stock Keeper",
+            detail: hasRemoteWHDest
+                ? "Stock Keeper awaiting overflow depot clearance."
+                : "Store Receiver awaiting inbound corridor clearance.",
+        },
+    };
 
     const handleQty = (id: number, delta: number) => {
         setQuantities((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) + delta) }));
@@ -395,8 +526,33 @@ export default function ReplenishBuild({
         setQuantities((prev) => { const n = { ...prev }; delete n[id]; return n; });
     };
     const handleMoveItem = (itemId: number, _transferId: number) => handleRemoveItem(itemId);
+    const handleToggleDest = (id: number) => {
+        setItems((prev) => prev.map((item) => {
+            if (item.id !== id) return item;
+            const nextDest = (item.target_dest ?? "store") === "store" ? "remote_warehouse" : "store";
+            return { ...item, target_dest: nextDest };
+        }));
+    };
     const handleReview = () => {
         router.post(route("admin.inventory.replenish.store"), { transfer_id, vehicle_id: selectedVehicle, quantities });
+    };
+
+    // ── Proposed Time Gap Windows: the alternate run-times delivery/origin/destination
+    // can agree on. Seeded when the shipment was added; editable here (add/edit/delete).
+    const addTimeWindow = () => {
+        const [date] = scheduleInput.split("T");
+        setTimeWindows((prev) => [...prev, { id: Date.now(), date: date || "", time: "17:00" }]);
+    };
+    const updateTimeWindow = (id: number, field: "date" | "time", value: string) => {
+        setTimeWindows((prev) => prev.map((w) => (w.id === id ? { ...w, [field]: value } : w)));
+    };
+    const removeTimeWindow = (id: number) => {
+        setTimeWindows((prev) => prev.filter((w) => w.id !== id));
+        if (primaryWindowId === id) setPrimaryWindowId(null);
+    };
+    const selectPrimaryWindow = (w: TimeWindow) => {
+        setPrimaryWindowId(w.id);
+        setScheduleInput(`${w.date}T${w.time}`);
     };
 
     return (
@@ -404,16 +560,11 @@ export default function ReplenishBuild({
             <Head title="Shipments — Manifest Builder" />
 
             {/* ── Header ── */}
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                <Box>
-                    <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
-                        <LocalShippingIcon color="primary" />
-                        <Typography variant="h5" fontWeight={800}>Shipments</Typography>
-                    </Stack>
-                    <Typography variant="body2" color="text.secondary">Phase 1 / 3 — Manifest Configuration</Typography>
-                </Box>
-                <Chip icon={<SyncAltIcon sx={{ fontSize: 14 }} />} label="ERP-SYNC: ACTIVE" color="primary" size="small" sx={{ fontWeight: 700, fontFamily: "monospace", fontSize: 11 }} />
+            <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
+                <LocalShippingIcon color="primary" />
+                <Typography variant="h5" fontWeight={800}>Shipments</Typography>
             </Stack>
+            <Typography variant="body2" color="text.secondary" mb={2}>Phase 1 / 3 — Manifest Configuration</Typography>
 
             {/* ── Phase Stepper ── */}
             <PhaseStepper active={1} />
@@ -466,7 +617,98 @@ export default function ReplenishBuild({
                     </Stack>
                     <Chip label={cutoff_label} size="small" color="warning" sx={{ fontWeight: 700 }} />
                 </Stack>
+
+                {/* Proposed Time Gap Windows — alternates delivery/origin/destination can agree
+                    on, seeded when the shipment was created; editable here (add/edit/delete). */}
+                <Box sx={{ mt: 1.5, p: 1.5, borderRadius: "10px", bgcolor: "action.hover" }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                        <Typography variant="caption" fontWeight={700}>Proposed Time Gap Windows:</Typography>
+                        <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={addTimeWindow}
+                            sx={{ textTransform: "none", fontWeight: 700, fontSize: 11 }}>
+                            Add Window
+                        </Button>
+                    </Stack>
+                    <Stack spacing={1}>
+                        {timeWindows.map((w) => {
+                            const isPrimary = primaryWindowId === w.id;
+                            return (
+                                <Stack key={w.id} direction="row" spacing={1} alignItems="center">
+                                    <TextField type="date" size="small" value={w.date}
+                                        onChange={(e) => updateTimeWindow(w.id, "date", e.target.value)}
+                                        sx={{ bgcolor: "background.paper", borderRadius: 1, flex: 1 }} />
+                                    <TextField type="time" size="small" value={w.time}
+                                        onChange={(e) => updateTimeWindow(w.id, "time", e.target.value)}
+                                        sx={{ bgcolor: "background.paper", borderRadius: 1, width: 110 }} />
+                                    <Tooltip title={isPrimary ? "Primary run time" : "Set as primary run time"}>
+                                        <Chip
+                                            size="small"
+                                            label={isPrimary ? "PRIMARY" : "Set Primary"}
+                                            color={isPrimary ? "success" : "default"}
+                                            variant={isPrimary ? "filled" : "outlined"}
+                                            onClick={() => selectPrimaryWindow(w)}
+                                            sx={{ fontWeight: 700, fontSize: 10 }}
+                                        />
+                                    </Tooltip>
+                                    <IconButton size="small" color="error" onClick={() => removeTimeWindow(w.id)}>
+                                        <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                                    </IconButton>
+                                </Stack>
+                            );
+                        })}
+                        {timeWindows.length === 0 && (
+                            <Typography variant="caption" color="text.disabled">No alternate windows proposed — add one above.</Typography>
+                        )}
+                    </Stack>
+                </Box>
             </Paper>
+
+            {/* ── 4-Party Inbound Agreement Gate ── */}
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+                    <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>4-Party Inbound Agreement Gate</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {isDualDest ? "Dual Destination: Store SK + Remote WH SK both required" : "Tap any party to view details"}
+                        </Typography>
+                    </Box>
+                    <Chip label={isDualDest ? "DUAL DEST (2 SKS)" : "ALL 4 REQUIRED"} size="small" color="warning" variant="outlined" sx={{ fontWeight: 700, fontSize: 10 }} />
+                </Stack>
+                <Stack direction="row" spacing={1}>
+                    {[
+                        { key: "creator" as PartyKey,     label: "Creator", icon: <PersonIcon sx={{ fontSize: 14 }} />,        agreed: false },
+                        { key: "fleet" as PartyKey,       label: "Fleet",   icon: <LocalShippingIcon sx={{ fontSize: 14 }} />, agreed: driver === "d1" },
+                        { key: "origin" as PartyKey,      label: "Origin",  icon: <WarehouseIcon sx={{ fontSize: 14 }} />,     agreed: false },
+                        { key: "destination" as PartyKey, label: "Dest.",   icon: <StoreIcon sx={{ fontSize: 14 }} />,         agreed: false },
+                    ].map((p) => (
+                        <Box
+                            key={p.key}
+                            onClick={() => setActivePartyModal(p.key)}
+                            sx={{
+                                flex: 1, textAlign: "center", p: 1, borderRadius: "12px", cursor: "pointer",
+                                border: "1px solid", borderColor: p.agreed ? "success.light" : "divider",
+                                bgcolor: p.agreed ? "success.light" : "action.hover", opacity: p.agreed ? 1 : 0.85,
+                            }}
+                        >
+                            <Stack alignItems="center" spacing={0.25}>
+                                <Box sx={{ color: p.agreed ? "success.dark" : "text.secondary" }}>{p.icon}</Box>
+                                <Typography variant="caption" fontWeight={700} sx={{ fontSize: 9 }}>{p.label}</Typography>
+                                {p.agreed
+                                    ? <CheckCircleIcon color="success" sx={{ fontSize: 13 }} />
+                                    : <HourglassEmptyIcon sx={{ fontSize: 13, color: "text.disabled" }} />}
+                            </Stack>
+                        </Box>
+                    ))}
+                </Stack>
+            </Paper>
+
+            <PartyDetailDialog
+                open={activePartyModal !== null}
+                activeParty={activePartyModal ?? "creator"}
+                onClose={() => setActivePartyModal(null)}
+                onSelectParty={setActivePartyModal}
+                reference={`RPL-BUILD-${transfer_id}`}
+                agreements={agreements}
+            />
 
             {/* ── Vehicle Selection ── */}
             <Box mb={2}>
@@ -515,6 +757,18 @@ export default function ReplenishBuild({
                         );
                     })}
                 </Stack>
+
+                {/* Driver Assignment */}
+                <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", fontWeight: 700, display: "block", mb: 1 }}>
+                        Assign Driver for this Fleet
+                    </Typography>
+                    <TextField select size="small" fullWidth value={driver} onChange={(e) => setDriver(e.target.value)}>
+                        <MenuItem value="auto">Open to Any Driver (Auto-dispatch &amp; accept)</MenuItem>
+                        <MenuItem value="d1">Abebe K. — (Available Now)</MenuItem>
+                        <MenuItem value="d2">Chala M. — (Currently On Route)</MenuItem>
+                    </TextField>
+                </Box>
             </Box>
 
             {/* ── Volumetric Telemetry ── */}
@@ -566,8 +820,16 @@ export default function ReplenishBuild({
             <Box mb={3}>
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={1.5}>
                     <Box>
-                        <Typography variant="subtitle1" fontWeight={700}>Replenishment Manifest</Typography>
-                        <Typography variant="caption" color="text.secondary">Calculated from inventory velocity</Typography>
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                            <Typography variant="subtitle1" fontWeight={700}>Replenishment Manifest</Typography>
+                            {isDualDest && (
+                                <Chip label="DUAL DEST (2 SKs)" size="small" color="secondary"
+                                    sx={{ fontWeight: 700, fontSize: 9 }} />
+                            )}
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary">
+                            {isDualDest ? "Store Floor + Remote Warehouse stock keepers both required" : "Calculated from inventory velocity"}
+                        </Typography>
                     </Box>
                     <Button variant="contained" startIcon={<AddIcon />} size="small"
                         sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 700 }}
@@ -594,11 +856,30 @@ export default function ReplenishBuild({
                                         </Box>
                                         <Box sx={{ minWidth: 0 }}>
                                             <Typography variant="subtitle2" fontWeight={700} noWrap>{item.name}</Typography>
-                                            <Stack direction="row" alignItems="center" spacing={0.75} mt={0.25} flexWrap="wrap">
+                                            <Stack direction="row" alignItems="center" spacing={0.75} mt={0.25} flexWrap="wrap" useFlexGap>
                                                 <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>{item.sku} • {item.pack_label}</Typography>
-                                                <Chip label={item.status === "oos" ? `${item.status_label} (0 Pcs)` : `${item.status_label} (${item.stock_qty} Pcs)`}
+                                                <Chip label={item.status === "oos" ? `${item.status_label} (0 Pcs)` : item.status === "sold" ? item.status_label : `${item.status_label} (${item.stock_qty} Pcs)`}
                                                     size="small" color={cfg.chipColor} sx={{ fontWeight: 700, fontSize: 10 }} />
+                                                <Chip
+                                                    size="small"
+                                                    onClick={() => handleToggleDest(item.id)}
+                                                    icon={(item.target_dest ?? "store") === "remote_warehouse"
+                                                        ? <WarehouseIcon sx={{ fontSize: 12 }} />
+                                                        : <StoreIcon sx={{ fontSize: 12 }} />}
+                                                    label={(item.target_dest ?? "store") === "remote_warehouse" ? "To: Remote WH" : "To: Store Floor"}
+                                                    color={(item.target_dest ?? "store") === "remote_warehouse" ? "secondary" : "primary"}
+                                                    variant="outlined"
+                                                    sx={{ fontWeight: 700, fontSize: 9 }}
+                                                />
                                             </Stack>
+                                            {item.added_by && (
+                                                <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: "action.hover", px: 1, py: 0.5, borderRadius: "6px", mt: 0.75, width: "fit-content" }}>
+                                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                                                        {item.added_by.type === "auto" ? "Auto-added:" : `Added by ${item.added_by.name}:`}{" "}
+                                                        <Box component="span" sx={{ color: "text.primary", fontWeight: 600 }}>{item.added_by.reason}</Box>
+                                                    </Typography>
+                                                </Stack>
+                                            )}
                                         </Box>
                                     </Stack>
                                     <Box sx={{ textAlign: "right", flexShrink: 0 }}>
