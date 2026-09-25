@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
+use App\Http\Requests\Seller\ReorderCartsRequest;
+use App\Http\Requests\Seller\StoreCartItemRequest;
 use App\Models\Auth\Customer;
 use App\Models\Auth\User;
 use App\Models\Item\ItemVariant;
@@ -192,10 +194,12 @@ class CartController extends Controller
     {
         $variant = ItemVariant::findOrFail($variantId);
 
+        // `price` is deliberately not accepted here either: this method is
+        // currently unrouted, and taking a client price would reintroduce the
+        // hole closed in storeItem() the moment it is wired up.
         $request->validate([
             'store_id' => 'required|exists:stores,id',
             'quantity' => 'required|integer|min:1',
-            'price' => 'required|numeric|min:0',
         ]);
 
         // 1. FIND OR CREATE THE CART
@@ -218,18 +222,25 @@ class CartController extends Controller
             ]);
         }
 
-        // 2. ADD THE VARIANT TO THE PIVOT (cart_items)
+        // 2. RESOLVE THE PRICE SERVER-SIDE
+        try {
+            $price = $this->cartService->resolveLinePrice($cart, $variant);
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['variant_id' => $e->getMessage()]);
+        }
+
+        // 3. ADD THE VARIANT TO THE PIVOT (cart_items)
         $existing = $cart->variants()->where('item_variant_id', $variant->id)->first();
 
         if ($existing) {
             $cart->variants()->updateExistingPivot($variant->id, [
                 'quantity' => $existing->pivot->quantity + $request->quantity,
-                'price' => $request->price,
+                'price' => $price,
             ]);
         } else {
             $cart->variants()->attach($variant->id, [
                 'quantity' => $request->quantity,
-                'price' => $request->price,
+                'price' => $price,
                 'store_id' => $cart->store_id,
             ]);
         }
@@ -237,35 +248,38 @@ class CartController extends Controller
         return redirect()->back()->with('success', 'Item added to cart!');
     }
 
-    public function storeItem(Request $request, Cart $cart)
+    public function storeItem(StoreCartItemRequest $request, Cart $cart)
     {
         $this->authorize('update', $cart);
 
-        $validated = $request->validate([
-            'variant_id' => 'required|exists:item_variants,id',
-            'quantity' => 'required|integer|min:1',
-            'price' => 'required|numeric|min:0',
-            'extra_pieces' => 'nullable|integer|min:0',
-            'extra_piece_price' => 'nullable|numeric|min:0',
-        ]);
+        $variant = ItemVariant::findOrFail($request->variantId());
 
-        $variant = ItemVariant::findOrFail($validated['variant_id']);
+        // The unit price is never taken from the request: it is resolved from
+        // the price ladder for this store and this cart's customer. This also
+        // rejects a variant that is not active in the cart's store.
+        try {
+            $price = $this->cartService->resolveLinePrice($cart, $variant);
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['variant_id' => $e->getMessage()]);
+        }
+
+        $extraPiecePrice = $request->validated('extra_piece_price');
         $existing = $cart->variants()->where('item_variant_id', $variant->id)->first();
 
         if ($existing) {
             $cart->variants()->updateExistingPivot($variant->id, [
-                'quantity' => $existing->pivot->quantity + $validated['quantity'],
-                'price' => $validated['price'],
-                'extra_pieces' => $existing->pivot->extra_pieces + ($validated['extra_pieces'] ?? 0),
-                'extra_piece_price' => $validated['extra_piece_price'] ?? $existing->pivot->extra_piece_price,
+                'quantity' => $existing->pivot->quantity + $request->quantity(),
+                'price' => $price,
+                'extra_pieces' => $existing->pivot->extra_pieces + $request->extraPieces(),
+                'extra_piece_price' => $extraPiecePrice ?? $existing->pivot->extra_piece_price,
                 'store_id' => $cart->store_id,
             ]);
         } else {
             $cart->variants()->attach($variant->id, [
-                'quantity' => $validated['quantity'],
-                'price' => $validated['price'],
-                'extra_pieces' => $validated['extra_pieces'] ?? 0,
-                'extra_piece_price' => $validated['extra_piece_price'] ?? null,
+                'quantity' => $request->quantity(),
+                'price' => $price,
+                'extra_pieces' => $request->extraPieces(),
+                'extra_piece_price' => $extraPiecePrice,
                 'store_id' => $cart->store_id,
             ]);
         }
@@ -281,17 +295,31 @@ class CartController extends Controller
         return back()->with('success', 'Item removed from cart.');
     }
 
-    public function reorder(Request $request)
+    /**
+     * Re-prioritise carts.
+     *
+     * Previously this wrote to any cart id supplied by the client with no
+     * authorization, letting a seller reorder another store's carts. Every
+     * cart is now resolved and passed through CartPolicy first, so a
+     * cross-tenant id aborts the whole request with a 403 rather than
+     * silently applying part of the reordering.
+     */
+    public function reorder(ReorderCartsRequest $request)
     {
-        $request->validate(['order' => 'required|array']);
+        $cartIds = $request->cartIds();
 
-        DB::transaction(function () use ($request) {
-            foreach ($request->order as $index => $cartId) {
-                Cart::where('id', $cartId)->update(['priority' => $index]);
+        $carts = Cart::query()->whereIn('id', $cartIds)->get()->keyBy('id');
+
+        foreach ($cartIds as $cartId) {
+            $this->authorize('update', $carts[$cartId]);
+        }
+
+        DB::transaction(function () use ($cartIds, $carts): void {
+            foreach ($cartIds as $index => $cartId) {
+                $carts[$cartId]->update(['priority' => $index]);
             }
         });
 
-        // CHANGE THIS LINE: Return back() instead of json()
-        return redirect()->back();
+        return redirect()->back()->with('success', 'Cart order updated.');
     }
 }

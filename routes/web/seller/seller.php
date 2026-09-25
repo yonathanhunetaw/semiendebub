@@ -47,11 +47,11 @@ Route::domain("seller.$baseDomain")
             Route::delete('/carts/{cart}/items/{variant}', [CartController::class, 'destroyItem'])->name('carts.items.destroy');
             Route::get('/settings', [SellerSettingsController::class, 'index'])->name('settings.index');
             Route::patch('/settings', [SellerSettingsController::class, 'update'])->name('settings.update');
+            // ── Shipments (shared cross-role domain) ──
             Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
-            Route::get('/shipments/{id}', [ShipmentController::class, 'show'])->name('shipments.show');
-            Route::post('/shipments/{id}', [ShipmentController::class, 'store'])->name('shipments.store');
-            Route::get('/shipments/{id}/review', [ShipmentController::class, 'review'])->name('shipments.review');
-            Route::post('/shipments/{id}/dispatch', [ShipmentController::class, 'dispatch'])->name('shipments.dispatch');
-            Route::get('/shipments/{id}/dispatched', [ShipmentController::class, 'dispatched'])->name('shipments.dispatched');
+            Route::post('/shipments', [ShipmentController::class, 'store'])->name('shipments.store');
+            Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');
+            Route::post('/shipments/{shipment}/items', [ShipmentController::class, 'addItem'])->name('shipments.items.store');
+            Route::patch('/shipments/{shipment}/status', [ShipmentController::class, 'transition'])->name('shipments.transition');
         });
     });

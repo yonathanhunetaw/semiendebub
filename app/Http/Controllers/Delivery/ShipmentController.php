@@ -13,7 +13,13 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
+<<<<<<< HEAD
  * Closed runs — what this courier delivered, and what failed.
+=======
+ * Closed last-mile deliveries — what this courier delivered, and what failed.
+ *
+ * Distinct from FreightController, which handles inter-store shipments.
+>>>>>>> e13f568 (second week session)
  */
 class ShipmentController extends Controller
 {
@@ -31,7 +37,11 @@ class ShipmentController extends Controller
             $search !== '' ? $search : null,
         );
 
+<<<<<<< HEAD
         return Inertia::render('Delivery/Shipments/index', [
+=======
+        return Inertia::render('Delivery/History/index', [
+>>>>>>> e13f568 (second week session)
             'shipments' => collect($paginator->items())
                 ->map(fn (Delivery $delivery) => $this->deliveries->present($delivery))
                 ->values()

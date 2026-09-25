@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\Inventory\WarehouseController;
 use App\Http\Controllers\Admin\Inventory\TransferController;
 use App\Http\Controllers\Admin\Inventory\ReplenishController;
+use App\Http\Controllers\Admin\Inventory\ShipmentController;
 use App\Http\Controllers\Admin\CanvasController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -81,6 +82,14 @@ Route::domain("admin.{$baseDomain}")
                 Route::get('/transfers/{transfer}', [TransferController::class, 'show'])->name('transfers.show');
                 Route::patch('/transfers/{transfer}/complete', [TransferController::class, 'complete'])->name('transfers.complete');
                 Route::patch('/transfers/{transfer}/cancel', [TransferController::class, 'cancel'])->name('transfers.cancel');
+
+                // Shipments (shared cross-role domain)
+                Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
+                Route::post('/shipments', [ShipmentController::class, 'store'])->name('shipments.store');
+                Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');
+                Route::post('/shipments/{shipment}/items', [ShipmentController::class, 'addItem'])->name('shipments.items.store');
+                Route::delete('/shipments/{shipment}/items/{variant}', [ShipmentController::class, 'removeItem'])->name('shipments.items.destroy');
+                Route::patch('/shipments/{shipment}/status', [ShipmentController::class, 'transition'])->name('shipments.transition');
 
                 // Replenishment Shipments (3-phase workflow)
                 Route::get('/replenish', [ReplenishController::class, 'index'])->name('replenish');

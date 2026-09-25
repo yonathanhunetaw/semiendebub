@@ -28,6 +28,16 @@ class StockKeeperService
     public const STORE_TYPE = Store::class;
 
     /**
+<<<<<<< HEAD
+=======
+     * Location names keyed by "{type}#{id}", memoized for the request.
+     *
+     * @var array<string, string>|null
+     */
+    private ?array $locationNameCache = null;
+
+    /**
+>>>>>>> e13f568 (second week session)
      * Headline counters for the StockKeeper dashboard.
      *
      * @return array<string, int>
@@ -259,6 +269,7 @@ class StockKeeperService
 
     /**
      * Human-readable location label for a ledger row.
+<<<<<<< HEAD
      */
     public function locationName(ItemStock $stock): string
     {
@@ -267,6 +278,44 @@ class StockKeeperService
             : Store::find($stock->location_id)?->name;
 
         return (string) ($resolved ?? 'Unassigned location');
+=======
+     *
+     * Names are resolved from a memoized map rather than per row: this is
+     * called once per ledger row while presenting a page, so a find() here
+     * cost one query per row (25 rows => 25 queries).
+     */
+    public function locationName(ItemStock $stock): string
+    {
+        $names = $this->locationNames();
+        $key = $stock->location_type . '#' . $stock->location_id;
+
+        return $names[$key] ?? 'Unassigned location';
+    }
+
+    /**
+     * Every location name, keyed by "{type}#{id}", loaded at most once per
+     * request. Two queries total regardless of how many rows are rendered.
+     *
+     * @return array<string, string>
+     */
+    private function locationNames(): array
+    {
+        if ($this->locationNameCache !== null) {
+            return $this->locationNameCache;
+        }
+
+        $names = [];
+
+        foreach (Warehouse::query()->pluck('name', 'id') as $id => $name) {
+            $names[self::WAREHOUSE_TYPE . '#' . $id] = (string) $name;
+        }
+
+        foreach (Store::query()->pluck('name', 'id') as $id => $name) {
+            $names[self::STORE_TYPE . '#' . $id] = (string) $name;
+        }
+
+        return $this->locationNameCache = $names;
+>>>>>>> e13f568 (second week session)
     }
 
     /**

@@ -3,6 +3,7 @@
 use App\Http\Controllers\StockKeeper\DashboardController;
 use App\Http\Controllers\StockKeeper\InventoryController;
 use App\Http\Controllers\StockKeeper\OrderController;
+use App\Http\Controllers\StockKeeper\ShipmentController;
 use App\Http\Controllers\StockKeeper\StockAlertController;
 use App\Http\Controllers\StockKeeper\TransferController;
 use Illuminate\Support\Facades\Route;
@@ -39,6 +40,12 @@ Route::domain("stockkeeper.{$baseDomain}")
             Route::post('/transfers/{transfer}/dispatch', [TransferController::class, 'dispatchTransfer'])->name('transfers.dispatch');
             Route::post('/transfers/{transfer}/complete', [TransferController::class, 'complete'])->name('transfers.complete');
             Route::post('/transfers/{transfer}/cancel', [TransferController::class, 'cancel'])->name('transfers.cancel');
+
+            // --- SHIPMENTS (shared cross-role domain) ---
+            Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
+            Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');
+            Route::post('/shipments/{shipment}/pick', [ShipmentController::class, 'pick'])->name('shipments.pick');
+            Route::patch('/shipments/{shipment}/status', [ShipmentController::class, 'transition'])->name('shipments.transition');
 
             Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
             Route::get('/stock-alerts', [StockAlertController::class, 'index'])->name('alerts.index');

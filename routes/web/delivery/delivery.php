@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Delivery\DashboardController;
 use App\Http\Controllers\Delivery\DeliveryController;
+use App\Http\Controllers\Delivery\FreightController;
 use App\Http\Controllers\Delivery\ProfileController;
 use App\Http\Controllers\Delivery\SessionController;
 use App\Http\Controllers\Delivery\ShipmentController;
@@ -41,8 +42,13 @@ Route::domain("delivery.{$baseDomain}")
             Route::post('/delivery/{delivery}/claim', [DeliveryController::class, 'claim'])->name('delivery.claim');
             Route::patch('/delivery/{delivery}/status', [DeliveryController::class, 'transition'])->name('delivery.transition');
 
-            // --- HISTORY ---
-            Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
+            // --- LAST-MILE HISTORY ---
+            Route::get('/history', [ShipmentController::class, 'index'])->name('history.index');
+
+            // --- INTER-STORE FREIGHT (shared shipment domain) ---
+            Route::get('/shipments', [FreightController::class, 'index'])->name('shipments.index');
+            Route::post('/shipments/{shipment}/claim', [FreightController::class, 'claim'])->name('shipments.claim');
+            Route::patch('/shipments/{shipment}/status', [FreightController::class, 'transition'])->name('shipments.transition');
 
             // --- PROFILE ---
             Route::get('/profile', [ProfileController::class, 'index'])->name('profile.index');

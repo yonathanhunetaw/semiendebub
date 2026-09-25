@@ -1,13 +1,38 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Seller;
 
+use App\Http\Controllers\Concerns\DrivesShipments;
 use App\Http\Controllers\Controller;
-use Inertia\Inertia;
+use App\Http\Requests\Shipment\StoreShipmentItemRequest;
+use App\Http\Requests\Shipment\StoreShipmentRequest;
+use App\Http\Requests\Shipment\TransitionShipmentRequest;
+use App\Models\Fulfillment\Shipment;
+use App\Models\Item\ItemVariant;
+use App\Models\Store\Store;
+use App\Services\ShipmentWorkflowService;
+use App\Services\StockKeeperService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
+use Inertia\Response;
 
+/**
+ * The seller's view of shipments touching their store.
+ *
+ * They raise replenishment requests inbound to their store, watch runs on the
+ * road, and confirm receipt when a load lands — the confirmation that moves
+ * the stock onto their books.
+ *
+ * This controller previously served entirely hardcoded demo arrays; it now
+ * reads the shared `shipments` tables.
+ */
 class ShipmentController extends Controller
 {
+<<<<<<< HEAD
     private function demoScheduledTransfers(): array
     {
         return [
@@ -252,163 +277,136 @@ class ShipmentController extends Controller
                 'created_at'     => 'Yesterday • 06:14 AM',
             ],
         ];
+=======
+    use DrivesShipments;
+
+    public function __construct(
+        private readonly ShipmentWorkflowService $workflow,
+        private readonly StockKeeperService $stock,
+    ) {
+>>>>>>> e13f568 (second week session)
     }
 
-    private function demoTransferById(int $id): array
+    protected function shipmentRole(): string
     {
-        $transfers = $this->demoScheduledTransfers();
-        return collect($transfers)->firstWhere('id', $id) ?? $transfers[0];
+        return 'seller';
     }
 
-    private function demoVehicles(): array
+    /**
+     * A seller only ever sees shipments with their store at one end.
+     *
+     * @return array<int, int>|null
+     */
+    protected function shipmentStoreScope(): ?array
     {
-        return [
-            [
-                'id'         => 'isuzu-npr',
-                'name'       => 'Isuzu NPR Box Truck',
-                'plate'      => 'ET-3-9482',
-                'icon'       => 'rv_hookup',
-                'max_cbm'    => 14.5,
-                'payload_kg' => 4200,
-                'bay'        => 'BAY 04',
-                'is_primary' => true,
-            ],
-            [
-                'id'         => 'suzuki-carry',
-                'name'       => 'Suzuki Carry Mini Van',
-                'plate'      => 'ET-2-1104',
-                'icon'       => 'directions_car',
-                'max_cbm'    => 3.2,
-                'payload_kg' => 850,
-                'bay'        => null,
-                'is_primary' => false,
-            ],
-        ];
+        return $this->ownStoreScope();
     }
 
-    private function demoManifestItems(): array
+    public function index(Request $request): Response
     {
-        return [
-            [
-                'id'           => 127,
-                'name'         => 'Noteit Sticky Notes 3x3',
-                'sku'          => 'SKU-127',
-                'pack_label'   => 'Pack 100',
-                'status'       => 'oos',
-                'status_label' => 'CRITICAL OOS',
-                'stock_qty'    => 0,
-                'quantity'     => 40,
-                'unit'         => 'Ctns',
-                'cbm'          => 1.8,
-                'weight_kg'    => 480,
-                'location'     => 'Aisle A-04 | Shelf 2',
-                'icon'         => 'report',
-            ],
-            [
-                'id'           => 204,
-                'name'         => 'Thermal Receipt Rolls 80mm',
-                'sku'          => 'SKU-204',
-                'pack_label'   => '50 Rolls/Box',
-                'status'       => 'low',
-                'status_label' => 'LOW STOCK',
-                'stock_qty'    => 12,
-                'quantity'     => 60,
-                'unit'         => 'Bx',
-                'cbm'          => 3.2,
-                'weight_kg'    => 960,
-                'location'     => 'Aisle B-08 | Shelf 1',
-                'icon'         => 'warning',
-            ],
-            [
-                'id'           => 108,
-                'name'         => 'A4 Copy Paper 80gsm',
-                'sku'          => 'SKU-108',
-                'pack_label'   => '5 Reams/Ctn',
-                'status'       => 'regular',
-                'status_label' => 'REGULAR RESTOCK',
-                'stock_qty'    => null,
-                'quantity'     => 50,
-                'unit'         => 'Ctns',
-                'cbm'          => 3.7,
-                'weight_kg'    => 1200,
-                'location'     => 'Aisle D-01 | Bulk Floor',
-                'icon'         => 'inventory',
-            ],
-        ];
-    }
+        $storeId = (int) (Auth::user()->store_id ?? 0);
+        $direction = $request->string('direction')->toString() ?: 'inbound';
 
-    public function index()
-    {
+        $query = Shipment::query()->with(['origin', 'destination', 'courier', 'creator', 'items.itemVariant.item']);
+
+        $direction === 'outbound'
+            ? $query->outboundFrom($storeId)
+            : $query->inboundTo($storeId);
+
+        $paginator = $query->orderByDesc('id')->paginate(20)->withQueryString();
+
         return Inertia::render('Seller/Shipments/index', [
-            'scheduled_transfers' => $this->demoScheduledTransfers(),
+            'shipments' => collect($paginator->items())
+                ->map(fn (Shipment $s) => $this->workflow->present($s, 'seller'))
+                ->values()
+                ->all(),
+            'filters' => ['direction' => $direction],
+            'own_store_id' => $storeId,
+            'counts' => [
+                'inbound' => Shipment::query()->inboundTo($storeId)->open()->count(),
+                'outbound' => Shipment::query()->outboundFrom($storeId)->open()->count(),
+                'awaiting_receipt' => Shipment::query()
+                    ->inboundTo($storeId)
+                    ->where('status', ShipmentWorkflowService::DELIVERED)
+                    ->count(),
+            ],
+            'stores' => Store::query()->where('id', '!=', $storeId)->orderBy('name')->get(['id', 'name', 'location']),
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'total' => $paginator->total(),
+            ],
         ]);
     }
 
-    public function show(int $id)
+    public function show(Shipment $shipment): Response
     {
-        $transfer = $this->demoTransferById($id);
+        abort_unless($this->shipmentIsInScope($shipment), 403);
 
-        return Inertia::render('Seller/Shipments/Build/index', array_merge(
-            $transfer,
-            [
-                'transfer_id'    => $id,
-                'vehicles'       => $this->demoVehicles(),
-                'manifest_items' => $this->demoManifestItems(),
-            ]
-        ));
+        return Inertia::render('Seller/Shipments/Show', [
+            'shipment' => $this->workflow->present($shipment, 'seller'),
+            'variants' => $this->stock->variantOptions()->all(),
+        ]);
     }
 
-    public function review(int $id)
+    /**
+     * Raise a replenishment request: stock moving from another store into mine.
+     */
+    public function store(StoreShipmentRequest $request): RedirectResponse
     {
-        $transfer = $this->demoTransferById($id);
-        $vehicle = collect($this->demoVehicles())->firstWhere('id', 'isuzu-npr');
+        $storeId = (int) (Auth::user()->store_id ?? 0);
 
-        return Inertia::render('Seller/Shipments/Review/index', array_merge(
-            $transfer,
-            [
-                'transfer_id'    => $id,
-                'vehicle'        => $vehicle,
-                'manifest_items' => $this->demoManifestItems(),
-                'total_cbm'      => 8.7,
-                'total_kg'       => 2640,
-                'total_cartons'  => 150,
-            ]
-        ));
+        // A seller may only request stock *into* their own store.
+        if ((int) $request->validated('destination_store_id') !== $storeId) {
+            return back()->withErrors([
+                'destination_store_id' => 'You can only request shipments into your own store.',
+            ]);
+        }
+
+        try {
+            $shipment = $this->workflow->create(
+                (int) $request->validated('origin_store_id'),
+                $storeId,
+                collect($request->validated())
+                    ->only(['scheduled_for', 'notes'])
+                    ->filter(fn ($v) => $v !== null)
+                    ->all(),
+                Auth::id(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['origin_store_id' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('seller.shipments.show', $shipment)
+            ->with('success', "Replenishment {$shipment->reference} opened.");
     }
 
-    public function dispatch(Request $request, int $id)
+    public function addItem(StoreShipmentItemRequest $request, Shipment $shipment): RedirectResponse
     {
-        // ... logic
-        return redirect()->route('seller.shipments.dispatched', $id);
+        abort_unless($this->shipmentIsInScope($shipment), 403);
+
+        $variant = ItemVariant::findOrFail((int) $request->validated('item_variant_id'));
+
+        try {
+            $this->workflow->addItem(
+                $shipment,
+                $variant,
+                (int) $request->validated('quantity'),
+                collect($request->validated())
+                    ->only(['cbm', 'weight_kg', 'unit', 'location'])
+                    ->filter(fn ($v) => $v !== null)
+                    ->all(),
+            );
+        } catch (\RuntimeException | \InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Manifest updated.');
     }
 
-    public function dispatched(int $id)
+    public function transition(TransitionShipmentRequest $request, Shipment $shipment): RedirectResponse
     {
-        $transfer = $this->demoTransferById($id);
-        $vehicle = collect($this->demoVehicles())->firstWhere('id', 'isuzu-npr');
-
-        return Inertia::render('Seller/Shipments/Dispatched/index', array_merge(
-            $transfer,
-            [
-                'transfer_id'    => $id,
-                'vehicle'        => $vehicle,
-                'manifest_items' => $this->demoManifestItems(),
-                'total_cbm'      => 8.7,
-                'total_kg'       => 2640,
-                'total_cartons'  => 150,
-                'driver'         => ['name' => 'Amanuel T.', 'phone' => '+251 911 23 45 67'],
-                'gate_pass'      => 'GP-' . strtoupper(substr(uniqid(), -6)),
-                'departure_time' => now()->format('H:i A'),
-                'eta'            => now()->addMinutes(38)->format('H:i A'),
-                'est_mins'       => 38,
-                'transit_pct'    => 38,
-            ]
-        ));
-    }
-
-    // fallback for the form builder
-    public function store(Request $request, int $id)
-    {
-        return redirect()->route('seller.shipments.review', $id);
+        return $this->driveShipment($request, $shipment, $this->workflow);
     }
 }

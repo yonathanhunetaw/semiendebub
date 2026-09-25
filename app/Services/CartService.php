@@ -69,6 +69,60 @@ class CartService
 
     /*
     |--------------------------------------------------------------------------
+<<<<<<< HEAD
+=======
+    | Authoritative line pricing
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * The price a cart line must be stamped with, resolved server-side.
+     *
+     * Callers previously trusted a `price` field from the request, which let a
+     * crafted payload set any amount. The price ladder is the single source of
+     * truth: base store price, then the individual/seller/customer overrides
+     * that apply to this cart's customer.
+     *
+     * @throws \RuntimeException when the variant is not sellable in this store
+     */
+    public function resolveLinePrice(Cart $cart, ItemVariant $variant, ?int $sellerId = null): float
+    {
+        $storeVariant = \App\Models\Store\StoreVariant::query()
+            ->where('item_variant_id', $variant->id)
+            ->where('store_id', $cart->store_id)
+            ->where('active', true)
+            ->first();
+
+        if (! $storeVariant) {
+            throw new \RuntimeException('That variant is not available in this store.');
+        }
+
+        $cart->loadMissing('customer');
+        $customer = $cart->customer;
+
+        // A cart with no customer is a walk-in, which PriceProvider prices as
+        // an individual; a registered customer is individual only with a TIN.
+        $customerType = $customer === null || ! empty($customer->tin_number)
+            ? 'individual'
+            : 'business';
+
+        $ladder = PriceProvider::getPriceLadder(
+            (int) $storeVariant->id,
+            (int) $cart->store_id,
+            $sellerId ?? $cart->seller_id,
+            $customer?->id,
+        );
+
+        if (empty($ladder)) {
+            throw new \RuntimeException('That variant has no price configured in this store.');
+        }
+
+        return PriceProvider::getFinalPriceWithTax($ladder, $customerType);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+>>>>>>> e13f568 (second week session)
     | Buyer (public storefront) cart
     |--------------------------------------------------------------------------
     |

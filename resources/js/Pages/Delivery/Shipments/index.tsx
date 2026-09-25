@@ -1,167 +1,181 @@
 import { Head, router } from "@inertiajs/react";
-import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import {
+    Alert,
     Button,
+    Chip,
     Container,
     Grid,
-    InputAdornment,
+    Snackbar,
     Stack,
-    TextField,
     Typography,
 } from "@mui/material";
 import React from "react";
 
+import { StatTile } from "@/Components/Delivery/deliveryUi";
 import {
-    EmptyRuns,
-    RunCard,
-    StatTile,
+    ShipmentCard,
+    ShipmentRouteHeader,
+    TransitionBar,
     formatMoment,
-} from "@/Components/Delivery/deliveryUi";
+} from "@/Components/Shipment/shipmentUi";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
-import type { DeliveryShipmentsProps } from "@/types/delivery";
-
-const SEARCH_DEBOUNCE_MS = 350;
+import type { DeliveryFreightIndexProps, Shipment } from "@/types/shipment";
 
 /**
- * Closed runs for this courier — what landed, and what did not.
+ * Inter-store freight for the courier.
+ *
+ * Distinct from the last-mile delivery list: these are vehicle loads moving
+ * between stores. A run is claimed from the pool, carried, and handed over —
+ * the destination confirms receipt separately, which is what actually moves
+ * the stock onto their books.
  */
-export default function Shipments({
-    shipments,
-    metrics,
+export default function DeliveryFreight({
+    runs,
+    available_runs: availableRuns,
+    completed_runs: completedRuns,
     filters,
-    pagination,
-}: DeliveryShipmentsProps): React.ReactElement {
-    const [search, setSearch] = React.useState<string>(filters.search);
+    metrics,
+    flash,
+}: DeliveryFreightIndexProps): React.ReactElement {
+    const [notice, setNotice] = React.useState<string | null>(null);
 
     React.useEffect(() => {
-        setSearch(filters.search);
-    }, [filters.search]);
+        const message = flash?.success ?? flash?.error ?? null;
+        if (message) setNotice(message);
+    }, [flash?.success, flash?.error]);
 
-    React.useEffect(() => {
-        if (search === filters.search) {
-            return;
-        }
+    const setTab = (tab: string): void => {
+        router.get(
+            route("delivery.shipments.index"),
+            { tab },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
 
-        const timer = window.setTimeout(() => {
-            router.get(
-                route("delivery.shipments.index"),
-                search ? { search } : {},
-                { preserveState: true, preserveScroll: true, replace: true },
-            );
-        }, SEARCH_DEBOUNCE_MS);
+    const claim = (shipment: Shipment): void => {
+        router.post(
+            route("delivery.shipments.claim", shipment.id),
+            {},
+            { preserveScroll: true },
+        );
+    };
 
-        return () => window.clearTimeout(timer);
-    }, [search, filters.search]);
+    const visible =
+        filters.tab === "available"
+            ? availableRuns
+            : filters.tab === "completed"
+              ? completedRuns
+              : runs;
 
     return (
         <>
-            <Head title="Shipment History" />
+            <Head title="Freight Runs" />
 
             <Container sx={{ pt: 3, pb: 10 }}>
                 <Typography variant="h5" sx={{ fontWeight: 800, mb: 2 }}>
-                    Shipment History
+                    Freight Runs
                 </Typography>
 
                 <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
-                    <Grid size={6}>
+                    <Grid size={3}>
                         <StatTile
-                            label="Delivered"
-                            value={metrics.delivered_total}
-                            tone="success"
+                            label="To collect"
+                            value={metrics.assigned}
+                            tone={metrics.assigned > 0 ? "warning" : "default"}
                         />
                     </Grid>
-                    <Grid size={6}>
-                        <StatTile
-                            label="Failed"
-                            value={metrics.failed}
-                            tone={metrics.failed > 0 ? "danger" : "default"}
-                        />
+                    <Grid size={3}>
+                        <StatTile label="On road" value={metrics.in_transit} />
+                    </Grid>
+                    <Grid size={3}>
+                        <StatTile label="In pool" value={metrics.available} />
+                    </Grid>
+                    <Grid size={3}>
+                        <StatTile label="Done" value={metrics.completed} tone="success" />
                     </Grid>
                 </Grid>
 
-                <TextField
-                    fullWidth
-                    size="small"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search past runs…"
-                    sx={{ mb: 2 }}
-                    slotProps={{
-                        input: {
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchRoundedIcon fontSize="small" />
-                                </InputAdornment>
-                            ),
-                        },
-                    }}
-                />
-
-                <Stack spacing={1.5}>
-                    {shipments.length === 0 ? (
-                        <EmptyRuns
-                            title="No completed runs yet"
-                            hint="Runs you finish will be listed here."
+                <Stack direction="row" spacing={1} sx={{ mb: 2.5, overflowX: "auto", pb: 0.5 }}>
+                    {[
+                        { value: "mine", label: "My runs" },
+                        { value: "available", label: `Available (${metrics.available})` },
+                        { value: "completed", label: "Completed" },
+                    ].map((tab) => (
+                        <Chip
+                            key={tab.value}
+                            label={tab.label}
+                            onClick={() => setTab(tab.value)}
+                            color={filters.tab === tab.value ? "primary" : "default"}
+                            variant={filters.tab === tab.value ? "filled" : "outlined"}
+                            sx={{ fontWeight: 700, flexShrink: 0 }}
                         />
-                    ) : (
-                        shipments.map((run) => (
-                            <RunCard
-                                key={run.id}
-                                run={run}
-                                actions={
-                                    <Typography variant="caption" color="text.secondary">
-                                        {run.status === "delivered"
-                                            ? `Delivered ${formatMoment(run.delivered_at)}`
-                                            : run.status === "failed"
-                                              ? `Failed ${formatMoment(run.failed_at)}`
-                                              : `Closed ${formatMoment(run.created_at)}`}
-                                    </Typography>
-                                }
-                            />
-                        ))
-                    )}
+                    ))}
                 </Stack>
 
-                {pagination.last_page > 1 ? (
-                    <Stack
-                        direction="row"
-                        spacing={2}
-                        alignItems="center"
-                        justifyContent="center"
-                        sx={{ mt: 3 }}
-                    >
-                        <Button
-                            disabled={pagination.current_page <= 1}
-                            onClick={() =>
-                                router.get(
-                                    route("delivery.shipments.index"),
-                                    { ...filters, page: pagination.current_page - 1 },
-                                    { preserveState: true },
-                                )
-                            }
-                        >
-                            Previous
-                        </Button>
-                        <Typography variant="caption" color="text.secondary">
-                            {pagination.current_page} / {pagination.last_page}
+                {visible.length === 0 ? (
+                    <ShipmentCard sx={{ textAlign: "center", py: 5 }}>
+                        <LocalShippingRoundedIcon sx={{ fontSize: 36, color: "text.disabled" }} />
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1 }}>
+                            Nothing here
                         </Typography>
-                        <Button
-                            disabled={pagination.current_page >= pagination.last_page}
-                            onClick={() =>
-                                router.get(
-                                    route("delivery.shipments.index"),
-                                    { ...filters, page: pagination.current_page + 1 },
-                                    { preserveState: true },
-                                )
-                            }
-                        >
-                            Next
-                        </Button>
+                        <Typography variant="body2" color="text.secondary">
+                            {filters.tab === "available"
+                                ? "Dispatched loads will appear here to claim."
+                                : "Claim a run to get started."}
+                        </Typography>
+                    </ShipmentCard>
+                ) : (
+                    <Stack spacing={2}>
+                        {visible.map((shipment) => (
+                            <ShipmentCard key={shipment.id}>
+                                <ShipmentRouteHeader shipment={shipment} />
+
+                                <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{ display: "block", mt: 1 }}
+                                >
+                                    {shipment.vehicle_name ?? "Vehicle unassigned"}
+                                    {shipment.vehicle_plate ? ` · ${shipment.vehicle_plate}` : ""}
+                                    {shipment.eta ? ` · ETA ${formatMoment(shipment.eta)}` : ""}
+                                </Typography>
+
+                                {filters.tab === "available" ? (
+                                    <Button
+                                        variant="contained"
+                                        size="small"
+                                        fullWidth
+                                        sx={{ mt: 1.5 }}
+                                        onClick={() => claim(shipment)}
+                                    >
+                                        Claim this run
+                                    </Button>
+                                ) : (
+                                    <TransitionBar
+                                        shipment={shipment}
+                                        transitionRoute="delivery.shipments.transition"
+                                    />
+                                )}
+                            </ShipmentCard>
+                        ))}
                     </Stack>
-                ) : null}
+                )}
             </Container>
+
+            <Snackbar
+                open={notice !== null}
+                autoHideDuration={4000}
+                onClose={() => setNotice(null)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+                sx={{ bottom: { xs: 72 } }}
+            >
+                <Alert severity={flash?.error ? "error" : "success"} variant="filled">
+                    {notice}
+                </Alert>
+            </Snackbar>
         </>
     );
 }
 
-Shipments.layout = (page: React.ReactNode) => <DeliveryLayout>{page}</DeliveryLayout>;
+DeliveryFreight.layout = (page: React.ReactNode) => <DeliveryLayout>{page}</DeliveryLayout>;
