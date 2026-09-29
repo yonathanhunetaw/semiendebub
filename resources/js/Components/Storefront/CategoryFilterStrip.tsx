@@ -1,7 +1,11 @@
 import React from "react";
 
-import type { StorefrontCategory } from "@/types/storefront";
-import { STOREFRONT_BRAND } from "./storefrontConstants";
+import type {
+    StorefrontCategory,
+    StorefrontSort,
+    StorefrontSortOption,
+} from "@/types/storefront";
+import { STOREFRONT_BRAND, STOREFRONT_SHELL } from "./storefrontConstants";
 
 export interface CategoryFilterStripProps {
     categories: StorefrontCategory[];
@@ -14,6 +18,17 @@ export interface CategoryFilterStripProps {
     onSearchClear: () => void;
     totalCount: number;
     isSearching?: boolean;
+
+    /* -- ordering and availability -- */
+    sorts: StorefrontSortOption[];
+    activeSort: StorefrontSort;
+    onSelectSort: (sort: StorefrontSort) => void;
+    inStockOnly: boolean;
+    onToggleInStock: (next: boolean) => void;
+    onSaleOnly: boolean;
+    onToggleOnSale: (next: boolean) => void;
+    /** Clears search, category, sort and both switches in one go. */
+    onResetFilters: () => void;
 }
 
 /**
@@ -33,7 +48,22 @@ export default function CategoryFilterStrip({
     onSearchClear,
     totalCount,
     isSearching = false,
+    sorts,
+    activeSort,
+    onSelectSort,
+    inStockOnly,
+    onToggleInStock,
+    onSaleOnly,
+    onToggleOnSale,
+    onResetFilters,
 }: CategoryFilterStripProps): React.ReactElement {
+    const hasNarrowing =
+        search.length > 0 ||
+        activeCategoryId !== null ||
+        inStockOnly ||
+        onSaleOnly ||
+        activeSort !== "name";
+
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
         event.preventDefault();
         onSearchSubmit();
@@ -41,7 +71,7 @@ export default function CategoryFilterStrip({
 
     return (
         <div className="sticky top-16 z-20 border-b border-slate-200/70 bg-white/95 backdrop-blur">
-            <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+            <div className={`${STOREFRONT_SHELL} py-3`}>
                 {/* ── Search ── */}
                 <form onSubmit={handleSubmit} role="search">
                     <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 transition-colors focus-within:border-orange-300 focus-within:bg-white">
@@ -96,8 +126,92 @@ export default function CategoryFilterStrip({
                         />
                     ))}
                 </div>
+
+                {/* ── Ordering and availability ── */}
+                <div className="no-scrollbar scroll-smooth mt-2 flex items-center gap-1.5 overflow-x-auto">
+                    <label className="relative shrink-0">
+                        <span className="sr-only">Sort products</span>
+                        <select
+                            value={activeSort}
+                            onChange={(event) =>
+                                onSelectSort(event.target.value as StorefrontSort)
+                            }
+                            className="appearance-none rounded-full border border-slate-200 bg-white py-1.5 pl-7 pr-7 text-[11px] font-bold text-slate-600 focus:border-orange-300 focus:outline-none"
+                        >
+                            {sorts.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
+                        <span className="material-symbols-outlined pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[14px] text-slate-400">
+                            swap_vert
+                        </span>
+                        <span className="material-symbols-outlined pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[14px] text-slate-400">
+                            expand_more
+                        </span>
+                    </label>
+
+                    <TogglePill
+                        label="In stock"
+                        icon="inventory_2"
+                        active={inStockOnly}
+                        onClick={() => onToggleInStock(!inStockOnly)}
+                    />
+                    <TogglePill
+                        label="On sale"
+                        icon="sell"
+                        active={onSaleOnly}
+                        onClick={() => onToggleOnSale(!onSaleOnly)}
+                    />
+
+                    {hasNarrowing ? (
+                        <button
+                            type="button"
+                            onClick={onResetFilters}
+                            className="shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-bold text-slate-400 transition-colors hover:text-slate-600"
+                        >
+                            Reset
+                        </button>
+                    ) : null}
+                </div>
             </div>
         </div>
+    );
+}
+
+interface TogglePillProps {
+    label: string;
+    icon: string;
+    active: boolean;
+    onClick: () => void;
+}
+
+function TogglePill({
+    label,
+    icon,
+    active,
+    onClick,
+}: TogglePillProps): React.ReactElement {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-pressed={active}
+            className={`flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
+                active
+                    ? "border-transparent text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+            style={
+                active
+                    ? { backgroundColor: STOREFRONT_BRAND, borderColor: STOREFRONT_BRAND }
+                    : undefined
+            }
+        >
+            <span className="material-symbols-outlined text-[14px]">{icon}</span>
+            {label}
+        </button>
     );
 }
 

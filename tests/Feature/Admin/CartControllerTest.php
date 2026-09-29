@@ -23,7 +23,7 @@ class CartControllerTest extends TestCase
         $this->app->make(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
 
         // 2. Create the role explicitly for the 'web' guard
-        \Spatie\Permission\Models\Role::create(['name' => 'admin', 'guard_name' => 'web']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
 
         // 3. Create the admin user
         // Note: We use the factory which is linked to App\Models\Auth\User

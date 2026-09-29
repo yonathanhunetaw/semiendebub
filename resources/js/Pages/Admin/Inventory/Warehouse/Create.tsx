@@ -79,7 +79,7 @@ export default function CreateWarehouse({ stores = [] }: Props) {
                 <CardContent sx={{ p: 4 }}>
                     <form onSubmit={submit}>
                         <Grid container spacing={3}>
-                            <Grid item xs={12} md={6}>
+                            <Grid size={{ xs: 12, md: 6 }}>
                                 <TextField
                                     fullWidth
                                     label="Warehouse Name"
@@ -91,7 +91,7 @@ export default function CreateWarehouse({ stores = [] }: Props) {
                                 />
                             </Grid>
                             
-                            <Grid item xs={12} md={6}>
+                            <Grid size={{ xs: 12, md: 6 }}>
                                 <TextField
                                     fullWidth
                                     label="Warehouse Code"
@@ -102,7 +102,7 @@ export default function CreateWarehouse({ stores = [] }: Props) {
                                 />
                             </Grid>
 
-                            <Grid item xs={12}>
+                            <Grid size={{ xs: 12 }}>
                                 <TextField
                                     fullWidth
                                     label="Address"
@@ -115,7 +115,7 @@ export default function CreateWarehouse({ stores = [] }: Props) {
                                 />
                             </Grid>
 
-                            <Grid item xs={12} md={4}>
+                            <Grid size={{ xs: 12, md: 4 }}>
                                 <FormControl fullWidth error={!!errors.store_id}>
                                     <InputLabel>Linked Store (Optional)</InputLabel>
                                     <Select
@@ -136,7 +136,7 @@ export default function CreateWarehouse({ stores = [] }: Props) {
                                 </FormControl>
                             </Grid>
 
-                            <Grid item xs={12} md={4}>
+                            <Grid size={{ xs: 12, md: 4 }}>
                                 <TextField
                                     fullWidth
                                     label="Manager Name"
@@ -147,7 +147,7 @@ export default function CreateWarehouse({ stores = [] }: Props) {
                                 />
                             </Grid>
 
-                            <Grid item xs={12} md={4}>
+                            <Grid size={{ xs: 12, md: 4 }}>
                                 <FormControl fullWidth error={!!errors.status}>
                                     <InputLabel>Status</InputLabel>
                                     <Select

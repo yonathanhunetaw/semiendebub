@@ -26,6 +26,8 @@ interface PaginationMeta {
     per_page: number;
     to: number;
     total: number;
+    /** Laravel's paginator ships these alongside the counters. */
+    links?: Array<{ url: string | null; label: string; active: boolean }>;
 }
 
 interface PaginationLink {

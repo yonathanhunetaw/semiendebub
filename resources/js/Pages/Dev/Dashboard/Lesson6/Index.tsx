@@ -36,7 +36,7 @@ export default function Index({ initialColors }: IndexProps) {
 
                 <Grid container spacing={3}>
                     {initialColors.map((color) => (
-                        <Grid item xs={12} sm={6} md={4} key={color.id}>
+                        <Grid size={{ xs: 12, sm: 6, md: 4 }} key={color.id}>
                             <Paper
                                 elevation={0}
                                 sx={{

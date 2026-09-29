@@ -47,7 +47,9 @@ Route::domain("delivery.{$baseDomain}")
 
             // --- INTER-STORE FREIGHT (shared shipment domain) ---
             Route::get('/shipments', [FreightController::class, 'index'])->name('shipments.index');
+            Route::get('/shipments/{shipment}', [FreightController::class, 'show'])->name('shipments.show');
             Route::post('/shipments/{shipment}/claim', [FreightController::class, 'claim'])->name('shipments.claim');
+            Route::post('/shipments/{shipment}/agree', [FreightController::class, 'agree'])->name('shipments.agree');
             Route::patch('/shipments/{shipment}/status', [FreightController::class, 'transition'])->name('shipments.transition');
 
             // --- PROFILE ---

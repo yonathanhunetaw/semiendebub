@@ -1,85 +1,81 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, router } from "@inertiajs/react";
-import PartyDetailModal, { PartyKey } from "@/Components/Seller/PartyDetailModal";
+import PartyDetailModal from "@/Components/Seller/PartyDetailModal";
+import type {
+    CourierInfo,
+    Location,
+    LocationOption,
+    ManifestItem,
+    ManifestItemStatus,
+    MoveTarget,
+    PartyGateProps,
+    PartyKey,
+    Vehicle,
+    VariantOption,
+} from "@/types/shipments";
 
 /* ----------------------------------------------------------
  | Types
  |----------------------------------------------------------*/
-interface Vehicle {
-    id: string;
-    name: string;
-    plate: string;
-    icon: string;
-    max_cbm: number;
-    payload_kg: number;
-    bay: string | null;
-    is_primary: boolean;
-}
 
-interface ManifestItem {
-    id: number;
-    name: string;
-    sku: string;
-    status: "oos" | "low" | "regular" | "sold";
-    status_label: string;
-    stock_qty: number | null;
+/** A line the Add Items sheet is about to send to the server. */
+interface NewManifestLine {
+    item_variant_id: number;
     quantity: number;
     unit: string;
-    cbm: number;
-    weight_kg: number;
-    location: string;
-    icon: string;
-    target_dest?: "store" | "remote_warehouse";
-    added_by: {
-        type: "auto" | "manual";
-        name?: string;
-        reason: string;
-    };
 }
 
-interface Location {
-    name: string;
-    detail: string;
-}
-
-interface Props {
+interface Props extends PartyGateProps {
     transfer_id: number;
+    reference: string;
     origin: Location;
     destination: Location;
+    origin_store_id: number;
+    destination_store_id: number;
     distance_km: number;
     scheduled_run: string;
     cutoff_label: string;
     vehicles: Vehicle[];
     manifest_items: ManifestItem[];
+    /** Every facility, either end of the run. */
+    stores: LocationOption[];
+    /** SKUs that may go on the manifest. */
+    variants: VariantOption[];
+    /** Other open runs from this origin, for the Move Item sheet. */
+    move_targets: MoveTarget[];
+    /** The driver, once the fleet party has taken the run. */
+    courier: CourierInfo | null;
+    can_edit_manifest: boolean;
 }
 
-/* ----------------------------------------------------------
- | Static demo data
- |----------------------------------------------------------*/
-const FACILITIES = [
-    { value: "central-hub", label: "Central Hub — Kality Logistics Center" },
-    { value: "piazza-hub",  label: "Piazza Hub — Piazza Terminal 01" },
-    { value: "bole-hub",    label: "Bole Hub — Bole Logistics Center" },
-];
+/** Packaging units the Add Items sheet offers. */
+const PACK_UNITS = ["Pcs", "Box", "Carton"] as const;
 
-const UNITS = [
-    { value: "main-store",   label: "Main Store — Merkato Terminal 01" },
-    { value: "branch-store", label: "Branch Store — Piazza Terminal 02" },
-    { value: "bole-store",   label: "Bole Store — Bole Terminal 03" },
-];
-
-const AVAILABLE_SKUS: ManifestItem[] = [
-    { id: 301, name: "Ballpoint Pens Box",    sku: "SKU-301", status: "low",     status_label: "LOW STOCK",    stock_qty: 8,  quantity: 20, unit: "Bx",  cbm: 0.4, weight_kg: 80, location: "Aisle C-02", icon: "warning", target_dest: "store", added_by: { type: "auto", reason: "Replenish algorithm" } },
-    { id: 302, name: "Correction Fluid 12pk", sku: "SKU-302", status: "regular", status_label: "REGULAR",      stock_qty: 30, quantity: 30, unit: "Pk",  cbm: 0.3, weight_kg: 60, location: "Aisle C-03", icon: "inventory", target_dest: "remote_warehouse", added_by: { type: "manual", name: "Yonathan H.", reason: "Store request" } },
-    { id: 303, name: "Stapler Set",            sku: "SKU-303", status: "oos",     status_label: "CRITICAL OOS", stock_qty: 0,  quantity: 15, unit: "Pcs", cbm: 0.5, weight_kg: 90, location: "Aisle A-01", icon: "report", target_dest: "store", added_by: { type: "auto", reason: "Zero stock" } },
-    { id: 304, name: "Premium Notebook",       sku: "SKU-304", status: "sold",    status_label: "SOLD",         stock_qty: 0,  quantity: 5,  unit: "Bx",  cbm: 0.2, weight_kg: 40, location: "Aisle B-05", icon: "sell", target_dest: "remote_warehouse", added_by: { type: "auto", reason: "Order #4092 fulfilled" } },
-];
+/**
+ * The real lifecycle stage, in the seller's words.
+ *
+ * A run does not sit still while the seller is on this screen: the origin keeper
+ * picks it, the driver takes it out, the receiving dock signs it off. Naming the
+ * stage here is how the seller sees that without leaving the page.
+ */
+const STAGE_LABELS: Record<string, string> = {
+    draft: "Draft",
+    pending_agreement: "Awaiting agreement",
+    scheduled: "Scheduled",
+    picking: "Origin picking",
+    ready: "Picked & staged",
+    dispatched: "Left the origin",
+    in_transit: "On the road",
+    delivered: "Delivered — confirm receipt",
+    received: "Received",
+    cancelled: "Cancelled",
+};
 
 /* ----------------------------------------------------------
  | Helpers
  |----------------------------------------------------------*/
-function StatusBadge({ status, label }: { status: "oos" | "low" | "regular" | "sold"; label: string }) {
+function StatusBadge({ status, label }: { status: ManifestItemStatus; label: string }) {
     const cls =
         status === "oos"     ? "bg-red-100 text-red-800" :
         status === "sold"    ? "bg-blue-100 text-blue-800" :
@@ -120,24 +116,21 @@ function CbmGauge({ percent }: { percent: number }) {
 /* ----------------------------------------------------------
  | Edit Route Bottom Sheet
  |----------------------------------------------------------*/
-function EditRouteSheet({ open, originName, destName, onClose, onSave }: {
-    open: boolean; originName: string; destName: string;
-    onClose: () => void; onSave: (o: Location, d: Location) => void;
+function EditRouteSheet({ open, stores, originId, destId, submitting, onClose, onSave }: {
+    open: boolean;
+    stores: LocationOption[];
+    originId: number;
+    destId: number;
+    submitting: boolean;
+    onClose: () => void;
+    onSave: (originId: number, destId: number) => void;
 }) {
-    const [originVal, setOriginVal] = useState(
-        FACILITIES.find(f => originName.startsWith(f.label.split("—")[0].trim()))?.value ?? FACILITIES[0].value
-    );
-    const [destVal, setDestVal] = useState(
-        UNITS.find(u => destName.startsWith(u.label.split("—")[0].trim()))?.value ?? UNITS[0].value
-    );
+    const [originVal, setOriginVal] = useState(String(originId));
+    const [destVal, setDestVal] = useState(String(destId));
     if (!open) return null;
-    const handleSave = () => {
-        const o = FACILITIES.find(f => f.value === originVal)!;
-        const d = UNITS.find(u => u.value === destVal)!;
-        const [on, od] = o.label.split(" — ");
-        const [dn, dd] = d.label.split(" — ");
-        onSave({ name: on.trim(), detail: od?.trim() ?? "" }, { name: dn.trim(), detail: dd?.trim() ?? "" });
-    };
+
+    const sameEnds = originVal === destVal;
+    const handleSave = () => onSave(Number(originVal), Number(destVal));
     return (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
             <div className="w-full max-w-[425px] bg-white rounded-t-3xl p-5 pb-10 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -148,20 +141,31 @@ function EditRouteSheet({ open, originName, destName, onClose, onSave }: {
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Origin Facility</label>
                         <select value={originVal} onChange={e => setOriginVal(e.target.value)}
                             className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none">
-                            {FACILITIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                            {stores.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Target Unit</label>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Destination Facility</label>
                         <select value={destVal} onChange={e => setDestVal(e.target.value)}
                             className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none">
-                            {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                            {stores.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
                     </div>
                 </div>
+                {/* Rerouting withdraws the other parties' consent, so say so before
+                    the seller commits rather than after. */}
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-100 flex items-start gap-1.5 mb-4">
+                    <span className="material-symbols-outlined text-[15px] text-amber-600 shrink-0 mt-0.5">warning</span>
+                    <p className="text-[11px] text-amber-900 leading-snug">
+                        Changing either end asks the driver, origin dock and receiving dock to agree again.
+                    </p>
+                </div>
                 <div className="flex gap-2">
                     <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-600">Cancel</button>
-                    <button onClick={handleSave} className="flex-1 py-3 rounded-xl bg-[#c2410c] text-white text-[13px] font-bold">Save Route</button>
+                    <button onClick={handleSave} disabled={sameEnds || submitting}
+                        className="flex-1 py-3 rounded-xl bg-[#c2410c] text-white text-[13px] font-bold disabled:opacity-40">
+                        {sameEnds ? "Pick two facilities" : submitting ? "Saving…" : "Save Route"}
+                    </button>
                 </div>
             </div>
         </div>
@@ -171,33 +175,54 @@ function EditRouteSheet({ open, originName, destName, onClose, onSave }: {
 /* ----------------------------------------------------------
  | Add Items Bottom Sheet
  |----------------------------------------------------------*/
-function AddItemsSheet({ open, existingIds, onClose, onAdd }: {
-    open: boolean; existingIds: number[];
-    onClose: () => void; onAdd: (items: ManifestItem[]) => void;
+function AddItemsSheet({ open, variants, existingIds, submitting, onClose, onAdd }: {
+    open: boolean;
+    variants: VariantOption[];
+    existingIds: number[];
+    submitting: boolean;
+    onClose: () => void;
+    onAdd: (lines: NewManifestLine[]) => void;
 }) {
-    const available = AVAILABLE_SKUS.filter(s => !existingIds.includes(s.id));
-    const [selected, setSelected] = useState<Record<number, { unit: string; dest: "store" | "remote_warehouse" }>>({});
+    const [search, setSearch] = useState("");
+    const [selected, setSelected] = useState<Record<number, { unit: string; quantity: number }>>({});
+
+    const available = useMemo(() => {
+        const term = search.trim().toLowerCase();
+
+        return variants
+            .filter(v => !existingIds.includes(v.id))
+            .filter(v => term === ""
+                || v.label.toLowerCase().includes(term)
+                || (v.sku ?? "").toLowerCase().includes(term));
+    }, [variants, existingIds, search]);
+
     if (!open) return null;
 
-    const toggle = (item: ManifestItem) =>
+    const toggle = (variant: VariantOption) =>
         setSelected(prev => {
-            const n = { ...prev };
-            if (n[item.id]) {
-                delete n[item.id];
+            const next = { ...prev };
+            if (next[variant.id]) {
+                delete next[variant.id];
             } else {
-                n[item.id] = { unit: "Box", dest: item.target_dest ?? "store" };
+                next[variant.id] = { unit: "Box", quantity: 1 };
             }
-            return n;
+            return next;
         });
 
+    const setLine = (id: number, patch: Partial<{ unit: string; quantity: number }>) =>
+        setSelected(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+
     const handleAdd = () => {
-        onAdd(available.filter(s => selected[s.id]).map(s => ({
-            ...s,
-            unit: selected[s.id].unit,
-            target_dest: selected[s.id].dest,
-        })));
+        const lines: NewManifestLine[] = Object.entries(selected).map(([id, line]) => ({
+            item_variant_id: Number(id),
+            quantity: Math.max(1, line.quantity),
+            unit: line.unit,
+        }));
+
+        if (lines.length === 0) return;
+
+        onAdd(lines);
         setSelected({});
-        onClose();
     };
 
     const count = Object.keys(selected).length;
@@ -207,68 +232,82 @@ function AddItemsSheet({ open, existingIds, onClose, onAdd }: {
             <div className="w-full max-w-[425px] bg-white rounded-t-3xl p-5 pb-10 max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4 shrink-0" />
                 <h3 className="text-[16px] font-bold text-gray-900 mb-1 shrink-0">Add Items to Manifest</h3>
-                <p className="text-[11px] text-slate-400 mb-3 shrink-0">Assign packaging unit & target destination for each SKU</p>
+                <p className="text-[11px] text-slate-400 mb-3 shrink-0">Set a packaging unit and carton count for each SKU</p>
+
+                <div className="relative mb-3 shrink-0">
+                    <span className="material-symbols-outlined text-[16px] text-slate-400 absolute left-3 top-1/2 -translate-y-1/2">search</span>
+                    <input
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Search product or SKU"
+                        className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-[13px] text-gray-900 bg-slate-50 focus:outline-none focus:border-[#c2410c]"
+                    />
+                </div>
+
                 <div className="overflow-y-auto flex-1 space-y-2 pr-1">
                     {available.length === 0
-                        ? <p className="text-[13px] text-slate-400 text-center py-6">All available SKUs are already in the manifest.</p>
-                        : available.map(item => {
-                            const isSel = !!selected[item.id];
+                        ? (
+                            <p className="text-[13px] text-slate-400 text-center py-6">
+                                {variants.length === 0
+                                    ? "No product variants are set up yet."
+                                    : search.trim() !== ""
+                                    ? "No SKU matches that search."
+                                    : "Every available SKU is already on the manifest."}
+                            </p>
+                        )
+                        : available.map(variant => {
+                            const line = selected[variant.id];
+                            const isSel = !!line;
                             return (
-                                <div key={item.id} onClick={() => toggle(item)}
+                                <div key={variant.id} onClick={() => toggle(variant)}
                                     className={`p-3 rounded-xl border cursor-pointer transition-all ${isSel ? "border-[#c2410c] bg-orange-50/40" : "border-slate-100 bg-slate-50"}`}>
                                     <div className="flex items-center gap-2.5">
                                         <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${isSel ? "bg-[#c2410c] border-[#c2410c]" : "border-slate-300"}`}>
                                             {isSel && <span className="material-symbols-outlined text-white text-[12px]">check</span>}
                                         </div>
-                                        <ItemIcon icon={item.icon} />
+                                        <ItemIcon icon="inventory" />
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-[12px] font-bold text-gray-900 truncate">{item.name}</p>
-                                            <p className="text-[10px] font-mono text-slate-400">{item.sku} • {item.location}</p>
+                                            <p className="text-[12px] font-bold text-gray-900 truncate">{variant.label}</p>
+                                            <p className="text-[10px] font-mono text-slate-400">{variant.sku ?? "No SKU"}</p>
                                         </div>
-                                        <StatusBadge status={item.status} label={item.status_label} />
                                     </div>
                                     {isSel && (
                                         <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 space-y-2" onClick={e => e.stopPropagation()}>
                                             <div>
                                                 <p className="text-[10px] font-semibold text-slate-500 mb-1">Packaging Unit:</p>
                                                 <div className="flex gap-1.5">
-                                                    {["Pcs", "Box", "Carton"].map(u => (
+                                                    {PACK_UNITS.map(u => (
                                                         <button key={u}
                                                             type="button"
-                                                            onClick={e => { e.stopPropagation(); setSelected(p => ({ ...p, [item.id]: { ...(p[item.id] || { dest: "store" }), unit: u } })); }}
-                                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${selected[item.id]?.unit === u ? "bg-[#c2410c] text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
-                                                            {u === "Pcs" ? "Pcs (1)" : u === "Box" ? "Box (12)" : "Carton (48)"}
+                                                            onClick={e => { e.stopPropagation(); setLine(variant.id, { unit: u }); }}
+                                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${line.unit === u ? "bg-[#c2410c] text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
+                                                            {u}
                                                         </button>
                                                     ))}
                                                 </div>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-semibold text-slate-500 mb-1">Target Destination (Dual Support):</p>
-                                                <div className="grid grid-cols-2 gap-1.5">
-                                                    <button
-                                                        type="button"
-                                                        onClick={e => { e.stopPropagation(); setSelected(p => ({ ...p, [item.id]: { ...(p[item.id] || { unit: "Box" }), dest: "store" } })); }}
-                                                        className={`py-1.5 px-2 rounded-xl text-[10px] font-bold border transition-all flex items-center justify-center gap-1 ${
-                                                            selected[item.id]?.dest !== "remote_warehouse"
-                                                                ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                                                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                                                        }`}
-                                                    >
-                                                        <span className="material-symbols-outlined text-[13px]">storefront</span>
-                                                        Main Store
+                                                <p className="text-[10px] font-semibold text-slate-500 mb-1">Quantity:</p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button type="button"
+                                                        onClick={e => { e.stopPropagation(); setLine(variant.id, { quantity: Math.max(1, line.quantity - 1) }); }}
+                                                        className="w-7 h-7 rounded-lg border border-slate-200 bg-white flex items-center justify-center">
+                                                        <span className="material-symbols-outlined text-[14px] text-slate-600">remove</span>
                                                     </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={e => { e.stopPropagation(); setSelected(p => ({ ...p, [item.id]: { ...(p[item.id] || { unit: "Box" }), dest: "remote_warehouse" } })); }}
-                                                        className={`py-1.5 px-2 rounded-xl text-[10px] font-bold border transition-all flex items-center justify-center gap-1 ${
-                                                            selected[item.id]?.dest === "remote_warehouse"
-                                                                ? "bg-purple-600 text-white border-purple-600 shadow-xs"
-                                                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                                                        }`}
-                                                    >
-                                                        <span className="material-symbols-outlined text-[13px]">warehouse</span>
-                                                        Remote Warehouse
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        value={line.quantity}
+                                                        onClick={e => e.stopPropagation()}
+                                                        onChange={e => setLine(variant.id, { quantity: Math.max(1, Number(e.target.value) || 1) })}
+                                                        className="w-16 text-center border border-slate-200 rounded-lg py-1 text-[12px] font-bold font-mono text-gray-900 bg-white focus:outline-none"
+                                                    />
+                                                    <button type="button"
+                                                        onClick={e => { e.stopPropagation(); setLine(variant.id, { quantity: line.quantity + 1 }); }}
+                                                        className="w-7 h-7 rounded-lg border border-slate-200 bg-white flex items-center justify-center">
+                                                        <span className="material-symbols-outlined text-[14px] text-slate-600">add</span>
                                                     </button>
+                                                    <span className="text-[10px] text-slate-400 ml-1">{line.unit}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -280,9 +319,9 @@ function AddItemsSheet({ open, existingIds, onClose, onAdd }: {
                 </div>
                 <div className="flex gap-2 mt-4 shrink-0 pt-4 border-t border-slate-100 pb-4">
                     <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-600">Cancel</button>
-                    <button onClick={handleAdd} disabled={count === 0}
+                    <button onClick={handleAdd} disabled={count === 0 || submitting}
                         className="flex-1 py-3 rounded-xl bg-[#c2410c] text-white text-[13px] font-bold disabled:opacity-40">
-                        Add {count > 0 ? `(${count})` : ""} Items
+                        {submitting ? "Adding…" : `Add ${count > 0 ? `(${count})` : ""} Items`}
                     </button>
                 </div>
             </div>
@@ -293,30 +332,66 @@ function AddItemsSheet({ open, existingIds, onClose, onAdd }: {
 /* ----------------------------------------------------------
  | Move Item Bottom Sheet
  |----------------------------------------------------------*/
-function MoveItemSheet({ open, item, onClose, onMove }: {
-    open: boolean; item: ManifestItem | null;
-    onClose: () => void; onMove: (itemId: number, direction: "prev"|"next") => void;
+function MoveItemSheet({ open, item, targets, submitting, onClose, onMove }: {
+    open: boolean;
+    item: ManifestItem | null;
+    targets: MoveTarget[];
+    submitting: boolean;
+    onClose: () => void;
+    onMove: (variantId: number, targetShipmentId: number) => void;
 }) {
+    const [target, setTarget] = useState<string>("");
+
     if (!open || !item) return null;
+
     return (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
             <div className="w-full max-w-[425px] bg-white rounded-t-3xl p-5 pb-10 shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
                 <h3 className="text-[16px] font-bold text-gray-900 mb-1">Move Item</h3>
-                <p className="text-[12px] text-slate-500 mb-5">Move <strong className="text-gray-800">{item.name}</strong> to an adjacent scheduled shipment.</p>
-                <div className="flex gap-2 mb-2">
-                    <button onClick={() => { onMove(item.id, "prev"); onClose(); }}
-                        className="flex-1 py-3.5 rounded-xl border border-slate-200 text-[13px] font-bold text-slate-700 bg-slate-50 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform">
-                        <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-                        Previous Run
-                    </button>
-                    <button onClick={() => { onMove(item.id, "next"); onClose(); }}
-                        className="flex-1 py-3.5 rounded-xl border border-slate-200 text-[13px] font-bold text-slate-700 bg-slate-50 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform">
-                        <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
-                        Next Run
+                <p className="text-[12px] text-slate-500 mb-4">
+                    Move <strong className="text-gray-800">{item.name}</strong> onto another run leaving this origin.
+                </p>
+
+                {/* Only open runs from the same dock can take the line, so the
+                    server decides what is on offer here. */}
+                {targets.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center mb-4">
+                        <span className="material-symbols-outlined text-slate-300 text-[28px]">route</span>
+                        <p className="text-[12px] font-bold text-gray-700 mt-1">No other open run from this origin</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Create a second run first, then move the line onto it.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-2 mb-4 max-h-[40vh] overflow-y-auto pr-1">
+                        {targets.map(t => {
+                            const sel = target === String(t.id);
+                            return (
+                                <button key={t.id} type="button" onClick={() => setTarget(String(t.id))}
+                                    className={`w-full text-left p-3 rounded-xl border transition-all ${sel ? "border-[#c2410c] bg-orange-50/40" : "border-slate-100 bg-slate-50"}`}>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="text-[12px] font-bold text-gray-900 truncate">→ {t.destination}</p>
+                                            <p className="text-[10px] font-mono text-slate-400">{t.reference}</p>
+                                        </div>
+                                        <span className="text-[10px] font-mono text-slate-500 shrink-0">
+                                            {t.scheduled_run ? t.scheduled_run.replace("T", " • ") : "Unscheduled"}
+                                        </span>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
+                <div className="flex gap-2">
+                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-600">Cancel</button>
+                    <button
+                        onClick={() => onMove(item.id, Number(target))}
+                        disabled={target === "" || submitting}
+                        className="flex-1 py-3 rounded-xl bg-[#c2410c] text-white text-[13px] font-bold disabled:opacity-40">
+                        {submitting ? "Moving…" : "Move Line"}
                     </button>
                 </div>
-                <button onClick={onClose} className="w-full py-3 mt-4 mb-4 rounded-xl text-[13px] font-semibold text-slate-500 bg-slate-50 hover:bg-slate-100">Cancel</button>
             </div>
         </div>
     );
@@ -326,65 +401,133 @@ function MoveItemSheet({ open, item, onClose, onMove }: {
  | Page Component
  |----------------------------------------------------------*/
 export default function SellerShipmentsIndex({
-    transfer_id, origin: originProp, destination: destinationProp,
-    distance_km, scheduled_run, cutoff_label, vehicles, manifest_items: initialItems,
+    transfer_id, reference, origin, destination,
+    origin_store_id, destination_store_id,
+    distance_km, scheduled_run, cutoff_label, vehicles, manifest_items: items,
+    stores, variants, move_targets, courier, can_edit_manifest,
+    agreements, schedule_options, agreed_scheduled_for,
+    outstanding_parties, actionable_parties, workflow_status,
 }: Props) {
     const [selectedVehicle, setSelectedVehicle] = useState(
         vehicles.find(v => v.is_primary)?.id ?? vehicles[0]?.id
     );
-    const [driver, setDriver] = useState("auto");
     const [scheduleInput, setScheduleInput] = useState(scheduled_run);
-    const [items,      setItems]      = useState<ManifestItem[]>(initialItems);
+
+    /**
+     * Quantities are the one thing still edited locally, because the seller
+     * nudges them up and down before committing the manifest in one save. The
+     * lines themselves live on the server: adding, removing and moving them
+     * each go straight to it, so what this screen shows is what the stock
+     * keeper will be picking.
+     */
     const [quantities, setQuantities] = useState<Record<number, number>>(
-        Object.fromEntries(initialItems.map(i => [i.id, i.quantity]))
+        Object.fromEntries(items.map(i => [i.id, i.quantity]))
     );
-    const [origin,      setOrigin]      = useState(originProp);
-    const [destination, setDestination] = useState(destinationProp);
 
     const [editRouteOpen, setEditRouteOpen] = useState(false);
     const [addItemsOpen,  setAddItemsOpen]  = useState(false);
     const [moveItem,      setMoveItem]      = useState<ManifestItem | null>(null);
     const [activePartyModal, setActivePartyModal] = useState<PartyKey | null>(null);
+    const [busy, setBusy] = useState<null | "route" | "items" | "move" | "remove" | "agree" | "save">(null);
 
     const activeVehicle  = vehicles.find(v => v.id === selectedVehicle);
     const maxCbm         = activeVehicle?.max_cbm  ?? 14.5;
     const maxKg          = activeVehicle?.payload_kg ?? 4200;
     const totalCbm       = items.reduce((s, i) => s + i.cbm       * ((quantities[i.id] ?? 0) / i.quantity), 0);
-    const totalKg        = items.reduce((s, i) => s + i.weight_kg  * ((quantities[i.id] ?? 0) / i.quantity), 0);
+    const totalKg        = items.reduce((s, i) => s + (i.weight_kg ?? 0) * ((quantities[i.id] ?? 0) / i.quantity), 0);
     const cbmPercent     = Math.min(Math.round((totalCbm / maxCbm) * 100), 100);
     const kgPercent      = Math.min(Math.round((totalKg  / maxKg)  * 100), 100);
     const totalCartons   = Object.values(quantities).reduce((a, b) => a + b, 0);
 
-    const hasStoreDest = items.some(i => (i.target_dest ?? "store") === "store");
-    const hasRemoteWHDest = items.some(i => i.target_dest === "remote_warehouse");
-    const isDualDest = hasStoreDest && hasRemoteWHDest;
-
-    const handleToggleDest = (id: number) => {
-        setItems(prev => prev.map(item => {
-            if (item.id === id) {
-                const nextDest = (item.target_dest ?? "store") === "store" ? "remote_warehouse" : "store";
-                return { ...item, target_dest: nextDest };
-            }
-            return item;
-        }));
-    };
-
-    const handleQty         = (id: number, delta: number) =>
+    const handleQty = (id: number, delta: number) =>
         setQuantities(p => ({ ...p, [id]: Math.max(0, (p[id] ?? 0) + delta) }));
-    const handleAddItems    = (newItems: ManifestItem[]) => {
-        // Mock default added_by for newly added items
-        const newItemsWithAdder = newItems.map(i => ({ ...i, added_by: i.added_by || { type: "manual", name: "You", reason: "Manual addition" } }));
-        setItems(p => [...p, ...newItemsWithAdder]);
-        setQuantities(p => ({ ...p, ...Object.fromEntries(newItemsWithAdder.map(i => [i.id, i.quantity])) }));
+
+    /** Every mutation below is a real request; the page reloads from the record. */
+    const done = () => setBusy(null);
+
+    const handleSaveRoute = (originId: number, destId: number) => {
+        setBusy("route");
+        router.patch(
+            route("seller.shipments.route.update", transfer_id),
+            { origin_store_id: originId, destination_store_id: destId },
+            {
+                preserveScroll: true,
+                onSuccess: () => setEditRouteOpen(false),
+                onFinish: done,
+            },
+        );
     };
-    const handleRemoveItem  = (id: number) => {
-        setItems(p => p.filter(i => i.id !== id));
-        setQuantities(p => { const n = { ...p }; delete n[id]; return n; });
+
+    const handleAddItems = (lines: NewManifestLine[]) => {
+        setBusy("items");
+        router.post(
+            route("seller.shipments.items.bulk", transfer_id),
+            // Cast because Inertia types a visit payload as flat form data;
+            // the endpoint takes a `lines` array and Inertia serialises it fine.
+            { lines } as unknown as Record<string, never>,
+            {
+                preserveScroll: true,
+                onSuccess: () => setAddItemsOpen(false),
+                onFinish: done,
+            },
+        );
     };
-    const handleMoveItem    = (itemId: number, direction: "prev"|"next") => {
-        alert(`Item moved to ${direction} shipment run.`);
-        handleRemoveItem(itemId);
+
+    const handleRemoveItem = (variantId: number) => {
+        setBusy("remove");
+        router.delete(
+            route("seller.shipments.items.destroy", [transfer_id, variantId]),
+            { preserveScroll: true, onFinish: done },
+        );
     };
+
+    const handleMoveItem = (variantId: number, targetShipmentId: number) => {
+        setBusy("move");
+        router.post(
+            route("seller.shipments.items.move", [transfer_id, variantId]),
+            { target_shipment_id: targetShipmentId },
+            {
+                preserveScroll: true,
+                onSuccess: () => setMoveItem(null),
+                onFinish: done,
+            },
+        );
+    };
+
+    const handleAgree = (party: PartyKey, slot: string, stance: "accepted" | "rescheduled") => {
+        setBusy("agree");
+        router.post(
+            route("seller.shipments.agree", transfer_id),
+            { party, slot, stance },
+            {
+                preserveScroll: true,
+                onSuccess: () => setActivePartyModal(null),
+                onFinish: done,
+            },
+        );
+    };
+
+    const handleSaveManifest = () => {
+        const vehicle = vehicles.find(v => v.id === selectedVehicle);
+        setBusy("save");
+        router.post(
+            route("seller.shipments.manifest.save", transfer_id),
+            {
+                quantities,
+                vehicle_name: vehicle?.name,
+                vehicle_plate: vehicle?.plate,
+                vehicle_max_cbm: vehicle?.max_cbm,
+                scheduled_run: scheduleInput,
+            },
+            { onFinish: done },
+        );
+    };
+
+    /** Has this party accepted, as recorded by whichever role ticked it? */
+    const hasAgreed = (party: PartyKey) =>
+        party === "creator"
+            ? agreements.creator.status === "created" || agreements.creator.status === "accepted"
+            : agreements[party].status === "accepted";
 
     const loadLabel = cbmPercent <= 40 ? "Under Capacity" : cbmPercent <= 75 ? "Optimal Load" : "Near Capacity";
     const loadCls   = cbmPercent <= 40 ? "bg-emerald-100 text-emerald-800" : cbmPercent <= 75 ? "bg-orange-100 text-[#c2410c]" : "bg-red-100 text-red-800";
@@ -412,11 +555,16 @@ export default function SellerShipmentsIndex({
                         <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                     </button>
                     <span className="material-symbols-outlined text-[#c2410c] text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Build Shipment</p>
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">{reference}</p>
                         <p className="text-[15px] font-bold text-gray-900 leading-tight">Phase 1 of 3 — Manifest</p>
                     </div>
                 </div>
+                <span className={`text-[9px] font-bold uppercase tracking-wide px-2 py-1 rounded-full shrink-0 ${
+                    can_edit_manifest ? "bg-orange-50 text-[#c2410c] border border-orange-200/60" : "bg-slate-100 text-slate-500 border border-slate-200"
+                }`}>
+                    {STAGE_LABELS[workflow_status] ?? workflow_status}
+                </span>
             </div>
 
             {/* Content Container (lots of bottom padding to clear the double action bars) */}
@@ -495,36 +643,45 @@ export default function SellerShipmentsIndex({
                         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold shrink-0">{cutoff_label}</span>
                     </div>
 
-                    {/* Proposed Scheduled Run Time Gap Options */}
-                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 mb-3 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                            <p className="text-[10px] font-bold text-slate-700">Proposed Time Gap Windows:</p>
-                            <span className="text-[9px] text-[#c2410c] font-semibold">Multi-Party Agreement</span>
+                    {/* The windows actually on the table. These are the slots the
+                        other three parties are choosing from, so they come from
+                        the record rather than from four fixed October dates. */}
+                    {schedule_options.length > 0 && (
+                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 mb-3 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <p className="text-[10px] font-bold text-slate-700">Proposed Time Windows:</p>
+                                <span className="text-[9px] text-[#c2410c] font-semibold">Multi-Party Agreement</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1.5">
+                                {schedule_options.map((slotOpt, idx) => {
+                                    const isCurrent = slotOpt === scheduleInput;
+                                    return (
+                                        <button
+                                            key={slotOpt}
+                                            type="button"
+                                            onClick={() => setScheduleInput(slotOpt)}
+                                            className={`p-1.5 rounded-lg text-left text-[10px] font-mono active:scale-95 transition-all border ${
+                                                isCurrent
+                                                    ? "bg-orange-50 border-[#c2410c] text-[#c2410c]"
+                                                    : "bg-white border-slate-200/80 text-slate-700 hover:border-[#c2410c] hover:text-[#c2410c]"
+                                            }`}
+                                        >
+                                            <span className="text-[8px] font-bold uppercase text-slate-400 block">
+                                                {slotOpt === agreed_scheduled_for ? "Agreed" : `Window ${idx + 1}`}
+                                            </span>
+                                            {slotOpt.replace("T", " • ")}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-1.5">
-                            {[
-                                "10/25/2024, 08:30 AM",
-                                "10/25/2024, 05:00 PM",
-                                "10/26/2024, 08:30 AM",
-                                "10/26/2024, 05:00 PM",
-                            ].map((slotOpt, idx) => (
-                                <button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => setScheduleInput(idx === 0 ? "2024-10-25T08:30" : idx === 1 ? "2024-10-25T17:00" : idx === 2 ? "2024-10-26T08:30" : "2024-10-26T17:00")}
-                                    className="p-1.5 bg-white border border-slate-200/80 rounded-lg text-left text-[10px] font-mono hover:border-[#c2410c] active:scale-95 transition-all text-slate-700 hover:text-[#c2410c]"
-                                >
-                                    <span className="text-[8px] font-bold uppercase text-slate-400 block">Window {idx + 1}</span>
-                                    {slotOpt}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                    )}
 
                     <div className="p-2.5 rounded-xl bg-blue-50/60 flex items-start gap-1.5">
                         <span className="material-symbols-outlined text-[15px] text-blue-500 shrink-0 mt-0.5">info</span>
                         <p className="text-[11px] text-slate-500 leading-snug">
-                            <strong className="text-gray-700">Route Protocol:</strong> Remote WH → Store routes auto-assign 3PL transit; local transfer requires manual fleet allocation.
+                            <strong className="text-gray-700">Agreement Protocol:</strong> Picking cannot start until the
+                            fleet, the origin dock and the receiving dock all accept the same window.
                         </p>
                     </div>
                 </div>
@@ -535,20 +692,29 @@ export default function SellerShipmentsIndex({
                         <div>
                             <p className="text-[13px] font-bold text-gray-900">4-Party Inbound Agreement Gate</p>
                             <p className="text-[10px] text-slate-400">
-                                {isDualDest ? "Dual Destination: Store SK + Remote WH SK both required" : "Tap any party to view details"}
+                                {outstanding_parties.length === 0
+                                    ? "All parties agreed"
+                                    : `Awaiting ${outstanding_parties.length} of 4 — tap a party for detail`}
                             </p>
                         </div>
                         <span className="text-[10px] font-bold text-[#c2410c] bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200/50">
-                            {isDualDest ? "DUAL DEST (2 SKS)" : "ALL 4 REQUIRED"}
+                            {4 - outstanding_parties.length}/4 AGREED
                         </span>
                     </div>
+                    {/* Each tile reflects a stance recorded by whichever role owns
+                        it — delivery for fleet, the stock keepers for the two
+                        docks — rather than a guess from this screen's own state. */}
                     <div className="grid grid-cols-4 gap-1.5 text-center">
-                        {[
-                            { key: "creator" as PartyKey,     label: "1. Creator", sub: "Drafting",  icon: "person",         agreed: false },
-                            { key: "fleet" as PartyKey,       label: "2. Fleet",   sub: "Carrier",   icon: "local_shipping", agreed: driver === "d1" },
-                            { key: "origin" as PartyKey,      label: "3. Origin",  sub: "Depot",     icon: "warehouse",      agreed: false },
-                            { key: "destination" as PartyKey, label: "4. Dest.",   sub: isDualDest ? "2 SKs (Dual)" : "Store", icon: "storefront", agreed: false },
-                        ].map((p, idx) => {
+                        {([
+                            { key: "creator" as PartyKey,     label: "1. Creator", icon: "person" },
+                            { key: "fleet" as PartyKey,       label: "2. Fleet",   icon: "local_shipping" },
+                            { key: "origin" as PartyKey,      label: "3. Origin",  icon: "warehouse" },
+                            { key: "destination" as PartyKey, label: "4. Dest.",   icon: "storefront" },
+                        ]).map(({ key, label, icon }) => ({
+                            key, label, icon,
+                            sub: agreements[key].role,
+                            agreed: hasAgreed(key),
+                        })).map((p, idx) => {
                             const color = p.agreed ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-400 border-slate-200";
                             return (
                             <button
@@ -581,80 +747,15 @@ export default function SellerShipmentsIndex({
                     activeParty={activePartyModal ?? "creator"}
                     onClose={() => setActivePartyModal(null)}
                     onSelectParty={setActivePartyModal}
-                    reference={`RPL-BUILD-${transfer_id}`}
-                    scheduleOptions={[
-                        "10/25/2024, 08:30 AM",
-                        "10/25/2024, 05:00 PM",
-                        "10/26/2024, 08:30 AM",
-                        "10/26/2024, 05:00 PM",
-                    ]}
-                    agreements={{
-                        creator: {
-                            title: "1. Creator",
-                            role: "Seller",
-                            party: "Admin • Today • 06:14 AM",
-                            status: "pending",
-                            status_label: "Drafting / Pending Dispatch",
-                            detail: "Manifest is being constructed by Admin. Only ticked off as Created once reviewed and dispatched.",
-                        },
-                        fleet: {
-                            title: "2. Fleet",
-                            role: "Carrier",
-                            party: `${activeVehicle?.name} • ${activeVehicle?.plate}`,
-                            status: driver === "d1" ? "accepted" : driver === "d2" ? "rescheduled" : "pending",
-                            status_label: driver === "d1" ? "Driver Accepted" : driver === "d2" ? "Rescheduled" : "Pending Driver",
-                            detail: driver === "d1"
-                                ? "Driver Abebe K. accepted assigned vehicle and scheduled route."
-                                : driver === "d2"
-                                ? "Driver Chala M. requested reschedule to 10/25/2024, 05:00 PM (En route delay)."
-                                : "Auto-dispatch enabled; awaiting driver confirmation.",
-                        },
-                        origin: {
-                            title: "3. Origin",
-                            role: "Depot",
-                            party: `${origin.name} (${origin.detail})`,
-                            status: "pending",
-                            status_label: "Pending Stock Keeper",
-                            detail: "Stock Keeper Dawit T. — Bay reserved; awaiting picking & staging sign-off.",
-                        },
-                        destination: isDualDest ? {
-                            title: "4. Dest.",
-                            role: "Store & Remote WH",
-                            party: `${destination.name} + Remote Warehouse`,
-                            status: "pending",
-                            status_label: "Pending 2 Stock Keepers",
-                            detail: "Manifest has items going to both Store Floor and Remote WH. Both Stock Keepers must accept.",
-                            stock_keepers: [
-                                {
-                                    name: "Main Store (Floor)",
-                                    location: destination.name,
-                                    role: "Store Stock Keeper",
-                                    keeper: "Helen M.",
-                                    status: "pending",
-                                    status_label: "Pending Stock Keeper",
-                                    detail: "Store Receiver standing by for floor staging clearance.",
-                                },
-                                {
-                                    name: "Remote Warehouse (Overflow)",
-                                    location: "Kality Sector 3 Overflow",
-                                    role: "Remote WH Stock Keeper",
-                                    keeper: "Blen A.",
-                                    status: "pending",
-                                    status_label: "Pending Stock Keeper",
-                                    detail: "Remote warehouse stock keeper sign-off required for inbound overflow.",
-                                },
-                            ],
-                        } : {
-                            title: "4. Dest.",
-                            role: hasRemoteWHDest ? "Remote WH" : "Store",
-                            party: hasRemoteWHDest ? "Remote Warehouse (Overflow Depot)" : `${destination.name} (${destination.detail})`,
-                            status: "pending",
-                            status_label: "Pending Stock Keeper",
-                            detail: hasRemoteWHDest
-                                ? "Stock Keeper Blen A. — Awaiting overflow depot clearance."
-                                : "Store Receiver Helen M. — Awaiting inbound corridor clearance.",
-                        },
-                    }}
+                    reference={reference}
+                    scheduleOptions={schedule_options}
+                    selectedSchedule={agreed_scheduled_for ?? schedule_options[0]}
+                    agreedSlot={agreed_scheduled_for}
+                    outstandingParties={outstanding_parties}
+                    actionableParties={actionable_parties}
+                    submitting={busy === "agree"}
+                    onAgree={handleAgree}
+                    agreements={agreements}
                 />
 
                 {/* ── Vehicle & Driver Selection ── */}
@@ -710,15 +811,38 @@ export default function SellerShipmentsIndex({
                         })}
                     </div>
 
-                    {/* Driver Assignment Subsection */}
+                    {/*
+                      Driver assignment is the delivery role's to make, not the
+                      seller's: a run goes on the courier board and the driver who
+                      accepts a window takes it. This used to be a picker over two
+                      invented drivers that wrote to nothing.
+                    */}
                     <div className="mt-4 pt-3 border-t border-slate-100">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 block">Assign Driver for this Fleet</label>
-                        <select value={driver} onChange={e => setDriver(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[12px] font-semibold text-gray-900 bg-slate-50 focus:outline-none focus:border-[#c2410c] transition-colors">
-                            <option value="auto">Open to Any Driver (Auto-dispatch & accept)</option>
-                            <option value="d1">Abebe K. — (Available Now)</option>
-                            <option value="d2">Chala M. — (Currently On Route)</option>
-                        </select>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 block">Driver</label>
+                        {courier ? (
+                            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/60 border border-emerald-100">
+                                <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center shrink-0">
+                                    <span className="material-symbols-outlined text-white text-[18px]">person</span>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[12px] font-bold text-gray-900 truncate">{courier.name}</p>
+                                    <p className="text-[10px] font-mono text-slate-500">{courier.phone || "No number on file"}</p>
+                                </div>
+                                <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-700 shrink-0">
+                                    {agreements.fleet.status_label}
+                                </span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                <div className="w-9 h-9 rounded-xl bg-slate-200 flex items-center justify-center shrink-0">
+                                    <span className="material-symbols-outlined text-slate-500 text-[18px]">person_search</span>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[12px] font-bold text-gray-700">On the courier board</p>
+                                    <p className="text-[10px] text-slate-400">The driver who accepts a window takes the run.</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -778,8 +902,9 @@ export default function SellerShipmentsIndex({
                             <p className="text-[13px] font-bold text-gray-900">Replenishment Manifest</p>
                             <p className="text-[10px] text-slate-400">Calculated from inventory velocity</p>
                         </div>
-                        <button onClick={() => setAddItemsOpen(true)}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#c2410c] text-white text-[12px] font-bold active:scale-95 transition-transform shrink-0">
+                        <button onClick={() => setAddItemsOpen(true)} disabled={!can_edit_manifest}
+                            title={can_edit_manifest ? undefined : "The manifest is locked once picking has started"}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#c2410c] text-white text-[12px] font-bold active:scale-95 transition-transform shrink-0 disabled:opacity-40">
                             <span className="material-symbols-outlined text-[14px]">add</span>
                             Add Items
                         </button>
@@ -796,7 +921,7 @@ export default function SellerShipmentsIndex({
                                 <span className="material-symbols-outlined text-[13px]">info</span>
                             </button>
                         </div>
-                        <button onClick={() => setQuantities(Object.fromEntries(initialItems.map(i => [i.id, i.quantity])))}
+                        <button onClick={() => setQuantities(Object.fromEntries(items.map(i => [i.id, i.quantity])))}
                             className="flex items-center gap-1 text-red-400 text-[11px] font-medium">
                             <span className="material-symbols-outlined text-[13px]">delete_sweep</span>
                             Reset
@@ -804,6 +929,13 @@ export default function SellerShipmentsIndex({
                     </div>
 
                     <div className="space-y-2.5">
+                        {items.length === 0 && (
+                            <div className="py-8 text-center bg-slate-50 rounded-xl border border-slate-100">
+                                <span className="material-symbols-outlined text-slate-300 text-[32px]">inventory_2</span>
+                                <p className="text-[13px] font-bold text-gray-900 mt-1">Manifest is empty</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">Add at least one line before this run can be scheduled.</p>
+                            </div>
+                        )}
                         {items.map(item => (
                             <div key={item.id} className="p-3 rounded-xl border border-slate-100 bg-slate-50/50">
                                 <div className="flex items-start justify-between gap-3 mb-2">
@@ -823,21 +955,17 @@ export default function SellerShipmentsIndex({
                                                         : `${item.status_label} (${item.stock_qty})`
                                                     }
                                                 />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleDest(item.id)}
-                                                    className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border transition-colors flex items-center gap-0.5 cursor-pointer ${
-                                                        (item.target_dest ?? "store") === "remote_warehouse"
-                                                            ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-                                                            : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                                                    }`}
-                                                    title="Click to toggle destination between Store and Remote Warehouse"
-                                                >
-                                                    <span className="material-symbols-outlined text-[10px]">
-                                                        {(item.target_dest ?? "store") === "remote_warehouse" ? "warehouse" : "storefront"}
-                                                    </span>
-                                                    {(item.target_dest ?? "store") === "remote_warehouse" ? "To: Remote WH" : "To: Store Floor"}
-                                                </button>
+                                                {/*
+                                                  A run has one destination, so a line
+                                                  cannot be sent somewhere else on it.
+                                                  Splitting a load across two facilities
+                                                  means two runs — the swap button below
+                                                  moves a line onto the other one.
+                                                */}
+                                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-0.5">
+                                                    <span className="material-symbols-outlined text-[10px]">storefront</span>
+                                                    To: {destination.name}
+                                                </span>
                                             </div>
                                             {/* Who added it / reason row */}
                                             {item.added_by && (
@@ -866,12 +994,13 @@ export default function SellerShipmentsIndex({
                                         <span className="text-[11px] text-slate-500 truncate">{item.location}</span>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                        <button onClick={() => setMoveItem(item)}
-                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-slate-100" title="Move item to another run">
+                                        <button onClick={() => setMoveItem(item)} disabled={!can_edit_manifest}
+                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-slate-100 disabled:opacity-30" title="Move line to another run">
                                             <span className="material-symbols-outlined text-[13px] text-slate-400">swap_horiz</span>
                                         </button>
                                         <button onClick={() => handleRemoveItem(item.id)}
-                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-red-50" title="Remove item">
+                                            disabled={!can_edit_manifest || busy === "remove"}
+                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-red-50 disabled:opacity-30" title="Remove line">
                                             <span className="material-symbols-outlined text-[13px] text-red-400">delete_outline</span>
                                         </button>
                                         <button onClick={() => handleQty(item.id, -1)}
@@ -914,10 +1043,11 @@ export default function SellerShipmentsIndex({
                             </div>
                             <p className="text-[10px] text-slate-400 truncate">{Math.round(totalKg).toLocaleString()} kg • {activeVehicle?.name ?? "No vehicle"}</p>
                         </div>
-                        <button 
-                            onClick={() => router.get(route("seller.shipments.review", transfer_id), { vehicle_id: selectedVehicle, quantities })}
-                            className="flex items-center gap-1 px-3 py-2 rounded-xl bg-[#c2410c] text-white font-bold text-[12px] shadow-md shrink-0 active:scale-95 transition-transform">
-                            Review
+                        <button
+                            onClick={handleSaveManifest}
+                            disabled={busy === "save"}
+                            className="flex items-center gap-1 px-3 py-2 rounded-xl bg-[#c2410c] text-white font-bold text-[12px] shadow-md shrink-0 active:scale-95 transition-transform disabled:opacity-50">
+                            {busy === "save" ? "Saving…" : "Review"}
                             <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                         </button>
                     </div>
@@ -927,22 +1057,28 @@ export default function SellerShipmentsIndex({
             {/* ── Bottom Sheets ── */}
             <EditRouteSheet
                 open={editRouteOpen}
-                originName={origin.name}
-                destName={destination.name}
+                stores={stores}
+                originId={origin_store_id}
+                destId={destination_store_id}
+                submitting={busy === "route"}
                 onClose={() => setEditRouteOpen(false)}
-                onSave={(o, d) => { setOrigin(o); setDestination(d); setEditRouteOpen(false); }}
+                onSave={handleSaveRoute}
             />
             <AddItemsSheet
                 open={addItemsOpen}
+                variants={variants}
                 existingIds={items.map(i => i.id)}
+                submitting={busy === "items"}
                 onClose={() => setAddItemsOpen(false)}
                 onAdd={handleAddItems}
             />
             <MoveItemSheet
                 open={!!moveItem}
                 item={moveItem}
+                targets={move_targets}
+                submitting={busy === "move"}
                 onClose={() => setMoveItem(null)}
-                onMove={(id, direction) => handleMoveItem(id, direction)}
+                onMove={handleMoveItem}
             />
         </>
     );

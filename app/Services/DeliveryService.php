@@ -121,7 +121,9 @@ class DeliveryService
         $this->applySearch($query, $search);
 
         return $query
-            ->orderByRaw("FIELD(status, 'in_transit', 'dispatched', 'pending', 'failed', 'delivered', 'returned')")
+            // CASE, not FIELD(): FIELD() is MySQL-only and the test
+            // suite runs on SQLite, where this query would error.
+            ->orderByRaw("CASE status WHEN 'in_transit' THEN 0 WHEN 'dispatched' THEN 1 WHEN 'pending' THEN 2 WHEN 'failed' THEN 3 WHEN 'delivered' THEN 4 WHEN 'returned' THEN 5 ELSE 6 END")
             ->orderBy('scheduled_for')
             ->orderByDesc('id')
             ->paginate($perPage ?? 20)

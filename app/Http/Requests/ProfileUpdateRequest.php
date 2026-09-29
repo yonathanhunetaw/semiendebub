@@ -2,21 +2,26 @@
 
 namespace App\Http\Requests;
 
-use App\Models\User;
+use App\Models\Auth\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class ProfileUpdateRequest extends FormRequest
 {
     /**
-     * Get the validation rules that apply to the request.
+     * Validate against the columns this application actually has.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * The generated version required a `name` field; the users table has
+     * `first_name` / `last_name` and no `name` at all, so every profile update
+     * failed validation on a field that could never be supplied.
+     *
+     * @return array<string, array<int, mixed>>
      */
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['nullable', 'string', 'max:255'],
             'email' => [
                 'required',
                 'string',
@@ -24,6 +29,12 @@ class ProfileUpdateRequest extends FormRequest
                 'email',
                 'max:255',
                 Rule::unique(User::class)->ignore($this->user()->id),
+            ],
+            'phone_number' => [
+                'nullable',
+                'string',
+                'max:15',
+                Rule::unique(User::class, 'phone_number')->ignore($this->user()->id),
             ],
         ];
     }

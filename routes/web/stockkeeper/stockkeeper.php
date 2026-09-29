@@ -45,6 +45,9 @@ Route::domain("stockkeeper.{$baseDomain}")
             Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
             Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');
             Route::post('/shipments/{shipment}/pick', [ShipmentController::class, 'pick'])->name('shipments.pick');
+            Route::post('/shipments/{shipment}/agree', [ShipmentController::class, 'agree'])->name('shipments.agree');
+            Route::post('/shipments/{shipment}/handover', [ShipmentController::class, 'handover'])->name('shipments.handover');
+            Route::post('/shipments/{shipment}/receive', [ShipmentController::class, 'receive'])->name('shipments.receive');
             Route::patch('/shipments/{shipment}/status', [ShipmentController::class, 'transition'])->name('shipments.transition');
 
             Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');

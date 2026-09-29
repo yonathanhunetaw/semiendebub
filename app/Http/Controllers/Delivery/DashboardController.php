@@ -29,7 +29,9 @@ class DashboardController extends Controller
             ->with('sale')
             ->forCourier((int) $courier->id)
             ->open()
-            ->orderByRaw("FIELD(status, 'in_transit', 'dispatched', 'pending')")
+            // CASE, not FIELD(): FIELD() is MySQL-only and the test
+            // suite runs on SQLite, where this query would error.
+            ->orderByRaw("CASE status WHEN 'in_transit' THEN 0 WHEN 'dispatched' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END")
             ->orderBy('scheduled_for')
             ->limit(5)
             ->get()

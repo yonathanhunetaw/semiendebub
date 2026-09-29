@@ -4,6 +4,7 @@ import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
 import {
     Alert,
     Autocomplete,
+    Box,
     Button,
     Grid,
     IconButton,
@@ -17,6 +18,7 @@ import React from "react";
 
 import { CancelDialog } from "@/Pages/Admin/Inventory/Shipments/index";
 import {
+    AgreementPanel,
     LoadBar,
     ManifestTable,
     ShipmentCard,
@@ -126,6 +128,16 @@ export default function AdminShipmentShow({
                 </Grid>
 
                 <Grid size={{ xs: 12, lg: 4 }}>
+                    {/* Admin is all four parties, so this is both the oversight
+                        view of who is holding the run up and the place to
+                        unblock it on their behalf. */}
+                    <Box sx={{ mb: 2.5 }}>
+                        <AgreementPanel
+                            shipment={shipment}
+                            agreeRoute="admin.inventory.shipments.agree"
+                        />
+                    </Box>
+
                     <ShipmentCard>
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
                             Timeline

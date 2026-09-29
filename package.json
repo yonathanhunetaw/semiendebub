@@ -5,7 +5,8 @@
     "type": "module",
     "scripts": {
         "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "domain-map": "php artisan dev:generate-domain-map"
     },
     "devDependencies": {
         "@headlessui/react": "^2.0.0",

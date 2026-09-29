@@ -18,11 +18,11 @@ class StoreCartItemRequest extends FormRequest
     }
 
     /**
-     * Note what is absent: `price`.
+     * Note what is absent: `price` and `extra_piece_price`.
      *
-     * The unit price is now resolved server-side from PriceProvider, so a
-     * crafted request can no longer dictate what a line costs. Any `price`
-     * the client still posts is ignored.
+     * Both are resolved server-side from PriceProvider, so a crafted request
+     * cannot dictate what a line costs. Anything the client still posts for
+     * either field is ignored.
      *
      * @return array<string, mixed>
      */
@@ -32,7 +32,6 @@ class StoreCartItemRequest extends FormRequest
             'variant_id' => ['required', 'integer', 'exists:item_variants,id'],
             'quantity' => ['required', 'integer', 'min:1', 'max:100000'],
             'extra_pieces' => ['nullable', 'integer', 'min:0', 'max:100000'],
-            'extra_piece_price' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 

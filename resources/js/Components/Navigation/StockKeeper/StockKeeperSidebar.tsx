@@ -3,6 +3,7 @@ import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import NotificationsActiveRoundedIcon from "@mui/icons-material/NotificationsActiveRounded";
 import SpaceDashboardRoundedIcon from "@mui/icons-material/SpaceDashboardRounded";
 import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
+import WarehouseRoundedIcon from "@mui/icons-material/WarehouseRounded";
 import {
     Divider,
     Drawer,
@@ -39,6 +40,15 @@ export default function StockKeeperSidebar({
             label: "Transfers",
             icon: <SwapHorizRoundedIcon />,
             href: "/transfers",
+        },
+        // Inter-store freight. The board and its pick/handover/receive routes
+        // existed but nothing linked to them, so the keeper had no way to reach
+        // the runs they are the origin or destination party on — which is what
+        // the whole 4-party agreement gate waits for.
+        {
+            label: "Shipments",
+            icon: <WarehouseRoundedIcon />,
+            href: "/shipments",
         },
         {
             label: "Orders",

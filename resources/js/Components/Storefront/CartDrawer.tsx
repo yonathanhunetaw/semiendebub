@@ -200,6 +200,15 @@ function CartLineRow({
                                 {line.sku}
                             </p>
                         ) : null}
+                        {/* Sub-units bought at the pack's rate are part of what
+                            this line costs, so the line has to say so. */}
+                        {line.extra_pieces > 0 ? (
+                            <p className="mt-0.5 truncate text-[10px] font-bold text-[#c2410c]">
+                                + {line.extra_pieces} Piece
+                                {line.extra_pieces === 1 ? "" : "s"} ×{" "}
+                                {formatPrice(line.extra_piece_price)}
+                            </p>
+                        ) : null}
                     </div>
 
                     <button

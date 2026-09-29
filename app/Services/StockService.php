@@ -23,8 +23,7 @@ class StockService
     {
         $storeVariantId = $storeVariant instanceof StoreVariant ? $storeVariant->id : $storeVariant;
 
-        return (int) InventoryMovement::where('store_variant_id', $storeVariantId)
-            ->sum('quantity');
+        return $this->getBatchStock([$storeVariantId])[$storeVariantId] ?? 0;
     }
 
     /**
@@ -54,11 +53,41 @@ class StockService
             return [];
         }
 
-        $totals = InventoryMovement::whereIn('store_variant_id', $storeVariantIds)
+        // This system keeps stock in two places, and both are legitimate:
+        //
+        //   inventory_movements — the append-only movements ledger this service
+        //                         writes via recordPurchase/recordSale/etc.
+        //   item_stocks         — the positional ledger every other service
+        //                         (StockKeeper, Shipments, Storefront) uses,
+        //                         and where all production data actually lives.
+        //
+        // Reading only movements returned 0 for the entire catalogue, because
+        // nothing in production writes there: the seller's product page showed
+        // no stock and CheckoutService rejected every line as unavailable.
+        //
+        // So: movements win for any variant they actually track, and anything
+        // they have never seen falls back to the positional ledger.
+        $movementTotals = InventoryMovement::whereIn('store_variant_id', $storeVariantIds)
             ->groupBy('store_variant_id')
-            ->selectRaw('store_variant_id, CAST(SUM(quantity) AS SIGNED) as total_stock')
+            ->selectRaw('store_variant_id, SUM(quantity) as total_stock')
             ->pluck('total_stock', 'store_variant_id')
             ->all();
+
+        $untracked = array_values(array_diff($storeVariantIds, array_keys($movementTotals)));
+
+        $positionalTotals = $untracked === [] ? [] : DB::table('store_variants as sv')
+            ->join('item_stocks as s', function ($join): void {
+                $join->on('s.item_variant_id', '=', 'sv.item_variant_id')
+                    ->where('s.location_type', '=', Store::class)
+                    ->whereColumn('s.location_id', 'sv.store_id');
+            })
+            ->whereIn('sv.id', $untracked)
+            ->groupBy('sv.id')
+            ->selectRaw('sv.id as store_variant_id, SUM(s.quantity) as total_stock')
+            ->pluck('total_stock', 'store_variant_id')
+            ->all();
+
+        $totals = $movementTotals + $positionalTotals;
 
         // Ensure all requested IDs exist in result with 0 default
         $result = [];

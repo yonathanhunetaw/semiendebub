@@ -45,6 +45,9 @@ class CrossRoleShipmentTest extends TestCase
 
     private ItemVariant $variant;
 
+    /** The slot every party agrees on in these tests. */
+    private const SLOT = '2026-12-01T08:30';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -109,6 +112,28 @@ class CrossRoleShipmentTest extends TestCase
             ->sum('quantity');
     }
 
+    /**
+     * Take a shipment through the 4-party agreement gate.
+     *
+     * Since the consensus gate landed, `scheduled` is no longer reachable by a
+     * direct transition — all four parties must accept the same slot first.
+     */
+    private function reachConsensus(Shipment $shipment): Shipment
+    {
+        $workflow = app(ShipmentWorkflowService::class);
+
+        foreach ([
+            ['creator', $this->admin],
+            ['fleet', $this->courier],
+            ['origin', $this->stockKeeper],
+            ['destination', $this->seller],
+        ] as [$party, $actor]) {
+            $shipment = $workflow->recordPartyAgreement($shipment->fresh(), $party, self::SLOT, $actor);
+        }
+
+        return $shipment->fresh();
+    }
+
     /** A shipment already sitting at a given status, built through the service. */
     private function shipmentAt(string $status, int $quantity = 30): Shipment
     {
@@ -117,11 +142,26 @@ class CrossRoleShipmentTest extends TestCase
         $shipment = $workflow->create(
             $this->origin->id,
             $this->destination->id,
-            ['vehicle_name' => 'Isuzu NPR', 'vehicle_plate' => 'ET-3-9482', 'vehicle_max_cbm' => 14.5],
+            array_merge([
+                'vehicle_name' => 'Isuzu NPR',
+                'vehicle_plate' => 'ET-3-9482',
+                'vehicle_max_cbm' => 14.5,
+            ], $status === ShipmentWorkflowService::DRAFT
+                // Proposing a slot ticks the creator and leaves draft, so a
+                // shipment that must stay in draft is created without one.
+                ? []
+                : ['scheduled_for' => self::SLOT]),
             $this->admin->id,
         );
 
-        $workflow->addItem($shipment, $this->variant, $quantity, ['cbm' => 1.8, 'weight_kg' => 480]);
+        $workflow->addItem($shipment->fresh(), $this->variant, $quantity, ['cbm' => 1.8, 'weight_kg' => 480]);
+        $shipment = $shipment->fresh();
+
+        // Anything at or beyond `scheduled` must clear the agreement gate.
+        if ($status !== ShipmentWorkflowService::DRAFT
+            && $status !== ShipmentWorkflowService::PENDING_AGREEMENT) {
+            $shipment = $this->reachConsensus($shipment);
+        }
 
         $path = [
             ShipmentWorkflowService::SCHEDULED,
@@ -137,6 +177,13 @@ class CrossRoleShipmentTest extends TestCase
             if ($shipment->status === $status) {
                 break;
             }
+
+            // reachConsensus() may already have promoted it to `scheduled`, so
+            // only attempt stages that are actually still ahead of it.
+            if (! in_array($next, $workflow->allowedTransitions($shipment), true)) {
+                continue;
+            }
+
             $shipment = $workflow->transition($shipment, $next);
         }
 
@@ -158,10 +205,12 @@ class CrossRoleShipmentTest extends TestCase
                 'origin_store_id' => $this->origin->id,
                 'destination_store_id' => $this->destination->id,
                 'vehicle_name' => 'Isuzu NPR',
+                'scheduled_for' => self::SLOT,
             ])->assertRedirect();
 
         $shipment = Shipment::firstOrFail();
-        $this->assertSame(ShipmentWorkflowService::DRAFT, $shipment->status);
+        // Creating proposes a slot, which ticks the creator and opens the gate.
+        $this->assertSame(ShipmentWorkflowService::PENDING_AGREEMENT, $shipment->status);
 
         $this->asRole($this->admin, 'admin')
             ->post(route('admin.inventory.shipments.items.store', $shipment), [
@@ -172,12 +221,31 @@ class CrossRoleShipmentTest extends TestCase
 
         $this->assertSame(1, $shipment->fresh()->items()->count());
 
-        // Admin schedules it.
-        $this->asRole($this->admin, 'admin')
-            ->patch(route('admin.inventory.shipments.transition', $shipment), [
-                'status' => ShipmentWorkflowService::SCHEDULED,
-            ])->assertSessionHasNoErrors();
+        // ── THE GATE: three more parties must agree before it can be scheduled ──
+        $this->assertFalse(
+            app(ShipmentWorkflowService::class)->canSchedule($shipment->fresh()),
+            'Creator alone is not a consensus.'
+        );
 
+        $this->asRole($this->courier, 'delivery')
+            ->post(route('delivery.shipments.agree', $shipment), ['slot' => self::SLOT])
+            ->assertSessionHasNoErrors();
+
+        $this->asRole($this->stockKeeper, 'stockkeeper')
+            ->post(route('stock_keeper.shipments.agree', $shipment), ['slot' => self::SLOT])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            ShipmentWorkflowService::PENDING_AGREEMENT,
+            $shipment->fresh()->status,
+            'Three of four is still not schedulable.'
+        );
+
+        $this->asRole($this->seller, 'seller')
+            ->post(route('seller.shipments.agree', $shipment), ['slot' => self::SLOT])
+            ->assertSessionHasNoErrors();
+
+        // The fourth aligned tick promotes it automatically.
         $this->assertSame(ShipmentWorkflowService::SCHEDULED, $shipment->fresh()->status);
         $this->assertSame(100, $this->stockAt($this->origin), 'Scheduling must not move stock.');
 
@@ -249,10 +317,13 @@ class CrossRoleShipmentTest extends TestCase
     {
         $shipment = $this->shipmentAt(ShipmentWorkflowService::READY);
 
+        // The run IS theirs now — agreeing as fleet assigns the courier — so
+        // this is purely a role-boundary refusal: handing stock over is the
+        // origin keeper's act, not the driver's.
         $this->asRole($this->courier, 'delivery')
             ->patch(route('delivery.shipments.transition', $shipment), [
                 'status' => ShipmentWorkflowService::DISPATCHED,
-            ])->assertForbidden(); // not their run, and not their transition
+            ])->assertSessionHas('error');
 
         $this->assertSame(ShipmentWorkflowService::READY, $shipment->fresh()->status);
         $this->assertSame(100, $this->stockAt($this->origin), 'Stock must not move.');
@@ -519,20 +590,27 @@ class CrossRoleShipmentTest extends TestCase
     }
 
     #[Test]
-    public function a_dispatched_run_appears_in_the_courier_pool(): void
+    public function an_unclaimed_run_is_on_the_courier_board_until_a_driver_takes_it(): void
     {
-        $shipment = $this->shipmentAt(ShipmentWorkflowService::DISPATCHED);
+        $workflow = app(ShipmentWorkflowService::class);
+
+        // Before any fleet agreement the run has no driver.
+        $shipment = $this->shipmentAt(ShipmentWorkflowService::PENDING_AGREEMENT);
+        $this->assertNull($shipment->courier_id);
 
         $this->assertTrue(
-            Shipment::query()->claimable()->whereKey($shipment->id)->exists(),
-            'An unclaimed dispatched run should be claimable.'
+            $workflow->visibleQuery($this->courier)->whereKey($shipment->id)->exists(),
+            'An unclaimed, open run must reach the courier board — otherwise no '
+            . 'driver can ever tick the fleet party.'
         );
 
-        app(ShipmentWorkflowService::class)->claim($shipment, $this->courier);
+        // Agreeing as fleet is what takes ownership of the run.
+        $shipment = $workflow->recordPartyAgreement($shipment, 'fleet', self::SLOT, $this->courier);
 
+        $this->assertSame($this->courier->id, $shipment->courier_id);
         $this->assertFalse(
-            Shipment::query()->claimable()->whereKey($shipment->id)->exists(),
-            'A claimed run must leave the pool.'
+            Shipment::query()->whereNull('courier_id')->whereKey($shipment->id)->exists(),
+            'A run with a driver is no longer unclaimed.'
         );
     }
 }

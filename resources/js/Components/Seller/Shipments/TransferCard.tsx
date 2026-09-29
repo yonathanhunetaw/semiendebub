@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import PartyDetailModal from "@/Components/Seller/PartyDetailModal";
 import type { PartyKey, PartyAgreementsMap, ScheduledTransfer, StatusConfigEntry } from "@/types/shipments";
 
@@ -33,13 +33,53 @@ function formatDateTime(valStr: string) {
 
 export interface TransferCardProps {
     t: ScheduledTransfer;
+    /**
+     * Route name for the card's "open" link. Defaults to the seller route so
+     * the Seller screen is unchanged; the Delivery and StockKeeper screens
+     * reuse this card by pointing it at their own show route.
+     */
+    showRoute?: string;
+    /** Route name for POST {party, slot, stance}; defaults to the seller route. */
+    agreeRoute?: string;
+    /** Route name for PATCH {status}; defaults to the seller route. */
+    transitionRoute?: string;
 }
+
+/** Button copy for each lifecycle step a role may drive. */
+const STEP_LABELS: Record<string, string> = {
+    scheduled: "Schedule",
+    picking: "Start Picking",
+    ready: "Mark Ready",
+    dispatched: "Hand Over & Dispatch",
+    in_transit: "Start Run",
+    delivered: "Mark Delivered",
+    received: "Confirm Receipt",
+    cancelled: "Cancel Shipment",
+};
+
+const STEP_ICONS: Record<string, string> = {
+    scheduled: "event_available",
+    picking: "inventory",
+    ready: "check_box",
+    dispatched: "local_shipping",
+    in_transit: "route",
+    delivered: "where_to_vote",
+    received: "inventory_2",
+    cancelled: "cancel",
+};
 
 /* ----------------------------------------------------------
  | Transfer Selection Card
  |----------------------------------------------------------*/
-export default function TransferCard({ t }: TransferCardProps) {
+export default function TransferCard({
+    t,
+    showRoute = "seller.shipments.show",
+    agreeRoute = "seller.shipments.agree",
+    transitionRoute = "seller.shipments.transition",
+}: TransferCardProps) {
     const [activePartyModal, setActivePartyModal] = useState<PartyKey | null>(null);
+    const [agreeing, setAgreeing] = useState(false);
+    const [advancing, setAdvancing] = useState(false);
     const cfg = statusConfig[t.status] || statusConfig.scheduled;
     const creator = t.created_by || "Admin";
     const createdAt = t.created_at ? formatDateTime(t.created_at) : "Today • 06:14 AM";
@@ -48,55 +88,17 @@ export default function TransferCard({ t }: TransferCardProps) {
     // Only when the manifest has been reviewed and dispatched should Creator be ticked off as created
     const isDispatched = t.status === "dispatched";
 
-    // 4-Party agreement details fallback
-    const agreements: PartyAgreementsMap = {
-        creator: t.agreements?.creator ? {
-            ...t.agreements.creator,
-            status: isDispatched ? "created" : "pending",
-            status_label: isDispatched ? "Created" : "Pending Dispatch",
-        } : {
-            title: "1. Creator",
-            role: "Seller",
-            party: `Admin • ${createdAt}`,
-            status: isDispatched ? "created" : "pending",
-            status_label: isDispatched ? "Created" : "Pending Dispatch",
-            detail: isDispatched ? "Manifest reviewed & dispatched by Admin." : "Manifest drafted; awaiting dispatch sign-off.",
-        },
-        fleet: t.agreements?.fleet ?? {
-            title: "2. Fleet",
-            role: "Carrier",
-            party: `${t.vehicle_name} • ${t.vehicle_plate}`,
-            status: (t.status === "overdue" ? "rescheduled" : (t.status === "scheduled" || isDispatched) ? "accepted" : "pending") as "accepted" | "rescheduled" | "pending",
-            status_label: t.status === "overdue" ? "Rescheduled" : (t.status === "scheduled" || isDispatched) ? "Driver Accepted" : "Pending Driver",
-            detail: t.status === "overdue"
-                ? "Driver requested slot reschedule due to transit maintenance."
-                : (t.status === "scheduled" || isDispatched)
-                ? "Driver Abebe K. accepted assignment • ETA on schedule."
-                : "Awaiting driver assignment & route confirmation.",
-        },
-        origin: t.agreements?.origin ?? {
-            title: "3. Origin",
-            role: "Depot",
-            party: `${t.origin.name} (${t.origin.detail})`,
-            status: (t.status === "overdue" ? "rescheduled" : (t.status === "pending" || isDispatched) ? "accepted" : "pending") as "accepted" | "rescheduled" | "pending",
-            status_label: t.status === "overdue" ? "Rescheduled" : (t.status === "pending" || isDispatched) ? "Accepted" : "Pending Stock Keeper",
-            detail: t.status === "overdue"
-                ? "Stock Keeper Kidus W. sent a reschedule notice due to loading dock backlog."
-                : (t.status === "pending" || isDispatched)
-                ? "Stock Keeper Dawit T. accepted and packed 80 cartons."
-                : "Stock Keeper Dawit T. assigned. Bay staging in progress.",
-        },
-        destination: t.agreements?.destination ?? {
-            title: "4. Dest.",
-            role: "Store",
-            party: `${t.destination.name} (${t.destination.detail})`,
-            status: (t.status === "pending" ? "rescheduled" : "pending") as "accepted" | "rescheduled" | "pending",
-            status_label: t.status === "pending" ? "Rescheduled" : "Pending Stock Keeper",
-            detail: t.status === "pending"
-                ? "Store Stock Keeper Blen A. sent a reschedule request (+30 mins for shift swap)."
-                : "Store Receiver Helen M. standing by for arrival confirmation.",
-        },
-    };
+    /**
+     * 4-party agreement state, exactly as the server recorded it.
+     *
+     * Every screen that renders this card is fed by presentAsScheduledTransfer(),
+     * which always sends the real stances, so the ticks reflect who has actually
+     * agreed. There used to be a fallback here that invented a driver, two
+     * keepers and a receiver and derived their stances from the shipment status —
+     * it showed the origin dock as "packed 80 cartons" on runs nobody had
+     * touched.
+     */
+    const agreements: PartyAgreementsMap = t.agreements;
 
     return (
         <div className={`bg-white rounded-2xl border ${t.status === "overdue" ? "border-red-200 shadow-sm" : "border-slate-100 shadow-sm"} p-4 relative overflow-hidden`}>
@@ -239,21 +241,71 @@ export default function TransferCard({ t }: TransferCardProps) {
 
                     {/* ── Party Detail Modal Window (Opens on click for each party) ── */}
                     <PartyDetailModal
-                        open={activePartyModal !== null}
-                        activeParty={activePartyModal ?? "creator"}
-                        onClose={() => setActivePartyModal(null)}
-                        onSelectParty={setActivePartyModal}
-                        reference={t.reference}
-                        scheduleOptions={t.schedule_options}
-                        agreements={agreements}
-                    />
+                    open={activePartyModal !== null}
+                    activeParty={activePartyModal ?? "creator"}
+                    onClose={() => setActivePartyModal(null)}
+                    onSelectParty={setActivePartyModal}
+                    reference={t.reference}
+                    scheduleOptions={t.schedule_options}
+                    selectedSchedule={t.agreed_scheduled_for ?? t.schedule_options?.[0]}
+                    agreedSlot={t.agreed_scheduled_for ?? null}
+                    outstandingParties={t.outstanding_parties ?? []}
+                    actionableParties={t.actionable_parties ?? []}
+                    submitting={agreeing}
+                    onAgree={(party, slot, stance) => {
+                        setAgreeing(true);
+                        router.post(
+                            route(agreeRoute, t.id),
+                            { party, slot, stance },
+                            {
+                                preserveScroll: true,
+                                onFinish: () => setAgreeing(false),
+                                onSuccess: () => setActivePartyModal(null),
+                            },
+                        );
+                    }}
+                    agreements={agreements}
+                />
 
-                    {/* ── Action ── */}
-                    <Link href={route("seller.shipments.show", t.id)}
-                        className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-gray-900 text-[13px] font-bold active:scale-95 transition-transform hover:bg-slate-100 hover:border-slate-300">
-                        <span className="material-symbols-outlined text-[16px] text-gray-600">build</span>
-                        Build Manifest
-                    </Link>
+                    {/* ── Actions ── */}
+                    <div className="space-y-1.5">
+                        <Link href={route(showRoute, t.id)}
+                            className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-gray-900 text-[13px] font-bold active:scale-95 transition-transform hover:bg-slate-100 hover:border-slate-300">
+                            <span className="material-symbols-outlined text-[16px] text-gray-600">build</span>
+                            Build Manifest
+                        </Link>
+
+                        {/*
+                          Lifecycle steps come from the server (`allowed_transitions`),
+                          already narrowed to this viewer's role, so a button here can
+                          never trigger a transition the backend would refuse.
+                        */}
+                        {(t.allowed_transitions ?? [])
+                            .filter(step => step in STEP_LABELS)
+                            .map(step => (
+                                <button
+                                    key={step}
+                                    type="button"
+                                    disabled={advancing}
+                                    onClick={() => {
+                                        setAdvancing(true);
+                                        router.patch(
+                                            route(transitionRoute, t.id),
+                                            { status: step },
+                                            { preserveScroll: true, onFinish: () => setAdvancing(false) },
+                                        );
+                                    }}
+                                    className={`w-full flex items-center justify-center gap-1.5 py-3 rounded-xl text-[13px] font-bold active:scale-95 transition-transform disabled:opacity-50 ${
+                                        step === "cancelled"
+                                            ? "bg-white border border-red-200 text-red-700"
+                                            : "bg-[#c2410c] text-white shadow-md"
+                                    }`}
+                                >
+                                    <span className="material-symbols-outlined text-[16px]">{STEP_ICONS[step]}</span>
+                                    {STEP_LABELS[step]}
+                                </button>
+                            ))}
+                    </div>
                 </>
             )}
         </div>

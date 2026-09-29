@@ -15,9 +15,58 @@ class Store extends Model
     use HasFactory;
     protected $fillable = [
         'name',
+        'type',
+        'code',
         'location',
         'status',
     ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Facility types
+    |--------------------------------------------------------------------------
+    |
+    | A "store" row is any facility that can hold stock: a retail outlet, a
+    | central warehouse, or a remote/overflow warehouse. Shipments move between
+    | any two of them.
+    |
+    */
+
+    public const TYPE_RETAIL = 'retail';
+
+    public const TYPE_CENTRAL_WAREHOUSE = 'central_warehouse';
+
+    public const TYPE_REMOTE_WAREHOUSE = 'remote_warehouse';
+
+    /** @return array<string, string> */
+    public static function facilityTypes(): array
+    {
+        return [
+            self::TYPE_RETAIL => 'Retail Store',
+            self::TYPE_CENTRAL_WAREHOUSE => 'Central Warehouse',
+            self::TYPE_REMOTE_WAREHOUSE => 'Remote Warehouse',
+        ];
+    }
+
+    public function getTypeLabelAttribute(): string
+    {
+        return self::facilityTypes()[$this->type] ?? 'Facility';
+    }
+
+    public function isWarehouse(): bool
+    {
+        return in_array($this->type, [self::TYPE_CENTRAL_WAREHOUSE, self::TYPE_REMOTE_WAREHOUSE], true);
+    }
+
+    public function scopeWarehouses($query)
+    {
+        return $query->whereIn('type', [self::TYPE_CENTRAL_WAREHOUSE, self::TYPE_REMOTE_WAREHOUSE]);
+    }
+
+    public function scopeRetail($query)
+    {
+        return $query->where('type', self::TYPE_RETAIL);
+    }
 
     // Items in this store (Linked via your item_store migration)
     public function items()

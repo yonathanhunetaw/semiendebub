@@ -62,6 +62,20 @@ class DatabaseSeeder extends Seeder
 
             CartSeeder::class,
             WarehouseSeeder::class,
+
+            // The warehouse-type facilities, plus stock for them.
+            //
+            // This was never registered, so a standard seed produced three
+            // retail stores and nothing else: there was no warehouse to
+            // replenish *from*, which is the one route the shipment screens are
+            // built around. It also has to run after the item seeders, because
+            // stocking a warehouse needs variants to stock it with.
+            FacilitySeeder::class,
+
+            // Inter-store freight. Needs stores, users (for the creator, courier
+            // and keeper on each agreement ledger) and stock at the origins, so
+            // it goes last. It writes statuses directly and never moves stock.
+            ShipmentDemoSeeder::class,
         ]);
     }
 }

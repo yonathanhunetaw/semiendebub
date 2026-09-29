@@ -24,6 +24,20 @@ class StoreShipmentRequest extends FormRequest
                 'required', 'integer', 'exists:stores,id', 'different:origin_store_id',
             ],
             'scheduled_for' => ['nullable', 'date'],
+            /*
+             * The alternative windows the creator puts on the table.
+             *
+             * The "New Shipment" sheet has always collected these under
+             * "Alternate Time Windows", and they were dropped three times over:
+             * the page never sent them, this rule set never accepted them, and
+             * the controller never forwarded them. So a run reached the
+             * agreement gate offering exactly one time — and since
+             * recordPartyAgreement() refuses any slot that was not proposed,
+             * the driver and both docks could only take that one time or leave
+             * it. There was nothing to agree *about*.
+             */
+            'schedule_options' => ['nullable', 'array', 'max:12'],
+            'schedule_options.*' => ['nullable', 'date'],
             'vehicle_name' => ['nullable', 'string', 'max:255'],
             'vehicle_plate' => ['nullable', 'string', 'max:64'],
             'vehicle_max_cbm' => ['nullable', 'numeric', 'min:0', 'max:9999'],

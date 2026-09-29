@@ -45,27 +45,27 @@ export default function EditUser({ user }: { user: User }) {
                 <Alert severity="info" sx={{ mb: 3 }}>Leave password blank to keep current password.</Alert>
                 <form onSubmit={handleSubmit}>
                     <Grid container spacing={3}>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
                             <TextField
                                 fullWidth label="First Name" value={data.first_name}
                                 onChange={e => setData('first_name', e.target.value)}
                                 error={!!errors.first_name} helperText={errors.first_name}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
                             <TextField
                                 fullWidth label="Last Name" value={data.last_name}
                                 onChange={e => setData('last_name', e.target.value)}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
                             <TextField
                                 fullWidth label="Email" value={data.email}
                                 onChange={e => setData('email', e.target.value)}
                                 error={!!errors.email} helperText={errors.email}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
                             <TextField
                                 fullWidth select label="Role" value={data.role}
                                 onChange={e => setData('role', e.target.value)}
@@ -75,20 +75,20 @@ export default function EditUser({ user }: { user: User }) {
                                 ))}
                             </TextField>
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
                             <TextField
                                 fullWidth label="New Password" type="password"
                                 value={data.password} onChange={e => setData('password', e.target.value)}
                                 error={!!errors.password} helperText={errors.password}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
                             <TextField
                                 fullWidth label="Confirm New Password" type="password"
                                 value={data.password_confirmation} onChange={e => setData('password_confirmation', e.target.value)}
                             />
                         </Grid>
-                        <Grid item xs={12}>
+                        <Grid size={{ xs: 12 }}>
                             <Button
                                 type="submit" variant="contained"
                                 color="primary" startIcon={<UpdateIcon />}

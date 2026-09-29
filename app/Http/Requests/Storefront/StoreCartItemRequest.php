@@ -18,13 +18,25 @@ class StoreCartItemRequest extends FormRequest
     }
 
     /**
+     * Counts only.
+     *
+     * Note what is absent, exactly as on the seller's own request:
+     * `extra_piece_price`. The rate for a sub-unit is prorated server-side from
+     * the pack that was chosen (CartService::proratedSubUnitPrices), so a
+     * crafted post cannot decide what a loose piece costs.
+     *
      * @return array<string, mixed>
      */
     public function rules(): array
     {
+        $ceiling = (int) config('storefront.max_line_quantity', 999);
+
         return [
             'variant_id' => ['required', 'integer', 'exists:item_variants,id'],
-            'quantity' => ['required', 'integer', 'min:1', 'max:' . config('storefront.max_line_quantity', 999)],
+            'quantity' => ['required', 'integer', 'min:1', 'max:' . $ceiling],
+            // Loose sub-units topped onto the chosen pack.
+            'extra_pieces' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'extra_boxes' => ['nullable', 'integer', 'min:0', 'max:100000'],
         ];
     }
 
@@ -47,5 +59,15 @@ class StoreCartItemRequest extends FormRequest
     public function quantity(): int
     {
         return (int) $this->validated('quantity');
+    }
+
+    public function extraPieces(): int
+    {
+        return (int) ($this->validated('extra_pieces') ?? 0);
+    }
+
+    public function extraBoxes(): int
+    {
+        return (int) ($this->validated('extra_boxes') ?? 0);
     }
 }

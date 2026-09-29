@@ -99,23 +99,54 @@ class CartControllerTest extends TestCase
             'status'    => 'open',
         ]);
 
+        // Prices posted by the client are ignored: the line is stamped from
+        // the price ladder. Both figures below are deliberately wrong to prove
+        // the server does not take them.
         $response = $this->post(route('seller.carts.items.store', $cart), [
             'variant_id' => $variant->id,
             'quantity'   => 2,
-            'price'      => 2333.00,
-            'extra_pieces' => 1,
-            'extra_piece_price' => 48.60,
+            'price'      => 1.00,
         ]);
 
         $response->assertRedirect();
+        $response->assertSessionHasNoErrors();
+
         $this->assertDatabaseHas('cart_items', [
             'cart_id'         => $cart->id,
             'item_variant_id' => $variant->id,
             'quantity'        => 2,
+            // The ladder price, not the posted 1.00.
             'price'           => 2333.00,
-            'extra_pieces'    => 1,
-            'extra_piece_price' => 48.60,
         ]);
+    }
+
+    #[Test]
+    public function extra_pieces_need_a_piece_tier_variant_to_price_against()
+    {
+        $item = Item::factory()->create(['status' => 'active']);
+        $variant = ItemVariant::factory()->create(['item_id' => $item->id]);
+        StoreVariant::factory()->create([
+            'store_id'        => $this->store->id,
+            'item_variant_id' => $variant->id,
+            'pricing_matrix'  => ['price' => 2333.00, 'discount_price' => null, 'discount_ends_at' => null],
+        ]);
+
+        $cart = Cart::create([
+            'seller_id' => $this->seller->id,
+            'store_id'  => $this->store->id,
+            'status'    => 'open',
+        ]);
+
+        // This product is not sold loose, so extra pieces cannot be priced and
+        // the line is refused rather than billed at a client-supplied rate.
+        $this->post(route('seller.carts.items.store', $cart), [
+            'variant_id' => $variant->id,
+            'quantity'   => 1,
+            'extra_pieces' => 1,
+            'extra_piece_price' => 48.60,
+        ])->assertSessionHasErrors('extra_pieces');
+
+        $this->assertDatabaseMissing('cart_items', ['cart_id' => $cart->id]);
     }
 
     #[Test]

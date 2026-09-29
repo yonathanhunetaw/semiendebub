@@ -10,7 +10,7 @@ use App\Models\Store;
 use App\Models\Store\StoreVariantCustomerPrice;
 use App\Models\Store\StoreVariantSellerPrice;
 use App\Models\StoreVariant;
-use App\Models\User;
+use App\Models\Auth\User;
 use App\Services\PriceProvider;
 use Carbon\Carbon;
 use Illuminate\Http\Request;

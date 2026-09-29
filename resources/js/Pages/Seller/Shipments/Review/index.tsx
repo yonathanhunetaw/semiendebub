@@ -1,42 +1,21 @@
 import React, { useState } from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, router } from "@inertiajs/react";
-import PartyDetailModal, { PartyKey } from "@/Components/Seller/PartyDetailModal";
+import PartyDetailModal from "@/Components/Seller/PartyDetailModal";
+import type {
+    CourierInfo,
+    Location,
+    ManifestItem,
+    ManifestItemStatus,
+    PartyGateProps,
+    PartyKey,
+    Vehicle,
+} from "@/types/shipments";
 
 /* ----------------------------------------------------------
  | Types
  |----------------------------------------------------------*/
-interface Vehicle {
-    id: string;
-    name: string;
-    plate: string;
-    max_cbm: number;
-    payload_kg: number;
-    bay: string | null;
-}
-
-interface ManifestItem {
-    id: number;
-    name: string;
-    sku: string;
-    pack_label: string;
-    status: "oos" | "low" | "regular";
-    status_label: string;
-    stock_qty: number | null;
-    quantity: number;
-    unit: string;
-    cbm: number;
-    weight_kg: number;
-    location: string;
-    icon: string;
-}
-
-interface Location {
-    name: string;
-    detail: string;
-}
-
-interface Props {
+interface Props extends PartyGateProps {
     transfer_id: number;
     reference: string;
     origin: Location;
@@ -50,9 +29,13 @@ interface Props {
     total_cbm: number;
     total_kg: number;
     total_cartons: number;
+    /** The driver, once the fleet party has taken the run. */
+    courier: CourierInfo | null;
+    /** False while the agreement gate is still open or the manifest is empty. */
+    can_dispatch: boolean;
 }
 
-function statusBadge(status: "oos" | "low" | "regular", label: string) {
+function statusBadge(status: ManifestItemStatus, label: string) {
     if (status === "oos") return <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-red-100 text-red-800">{label}</span>;
     if (status === "low") return <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800">{label}</span>;
     return <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-600">{label}</span>;
@@ -103,9 +86,10 @@ function PhaseStepper({ active }: { active: 1 | 2 | 3 }) {
 /* ----------------------------------------------------------
  | Confirm Dispatch Bottom Sheet
  |----------------------------------------------------------*/
-function ConfirmSheet({ open, total_cartons, destination, vehicle, notes, onClose, onConfirm }: {
+function ConfirmSheet({ open, total_cartons, destination, vehicle, courier, notes, onClose, onConfirm }: {
     open: boolean; total_cartons: number; destination: Location;
-    vehicle: Vehicle; notes: string; onClose: () => void; onConfirm: () => void;
+    vehicle: Vehicle; courier: CourierInfo | null; notes: string;
+    onClose: () => void; onConfirm: () => void;
 }) {
     if (!open) return null;
     return (
@@ -129,6 +113,10 @@ function ConfirmSheet({ open, total_cartons, destination, vehicle, notes, onClos
                     <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
                         <span className="text-[11px] text-slate-500">Carrier</span>
                         <span className="text-[12px] font-mono font-bold text-gray-900">{vehicle.plate}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                        <span className="text-[11px] text-slate-500">Driver</span>
+                        <span className="text-[12px] font-bold text-gray-900">{courier?.name ?? "Unassigned"}</span>
                     </div>
                     <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
                         <span className="text-[11px] text-slate-500">Cartons</span>
@@ -156,12 +144,32 @@ function ConfirmSheet({ open, total_cartons, destination, vehicle, notes, onClos
 export default function SellerReplenishReview({
     transfer_id, reference, origin, destination, distance_km,
     scheduled_run, cutoff_label, slot, vehicle, manifest_items,
-    total_cbm, total_kg, total_cartons,
+    total_cbm, total_kg, total_cartons, courier, can_dispatch,
+    agreements, schedule_options, agreed_scheduled_for,
+    outstanding_parties, actionable_parties, workflow_status,
 }: Props) {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [notes, setNotes] = useState("");
     const [activePartyModal, setActivePartyModal] = useState<PartyKey | null>(null);
-    const [isDispatched, setIsDispatched] = useState(false);
+    const [dispatching, setDispatching] = useState(false);
+    const [agreeing, setAgreeing] = useState(false);
+
+    /**
+     * The gate as recorded, not as assumed. This screen used to show all four
+     * parties ticked the moment it loaded, so a seller pressed Dispatch on a
+     * run the driver and both docks had never agreed to and got a silent
+     * failure back.
+     */
+    const hasAgreed = (party: PartyKey) =>
+        party === "creator"
+            ? agreements.creator.status === "created" || agreements.creator.status === "accepted"
+            : agreements[party].status === "accepted";
+
+    const slotLabel = (party: PartyKey) => {
+        const agreed = agreements[party].agreed_time;
+        if (!agreed) return hasAgreed(party) ? "Agreed" : "Pending";
+        return agreed.replace("T", " • ").slice(5);
+    };
 
     const cbmPercent = Math.round((total_cbm / vehicle.max_cbm) * 100);
     const kgPercent  = Math.round((total_kg  / vehicle.payload_kg) * 100);
@@ -169,11 +177,26 @@ export default function SellerReplenishReview({
         cbmPercent > 100 ? "over" : cbmPercent > 85 ? "warning" : "healthy";
 
     const handleDispatch = () => {
-        setIsDispatched(true);
+        setDispatching(true);
         setConfirmOpen(false);
-        router.post(route("seller.shipments.dispatch", transfer_id), { notes }, {
-            onSuccess: () => setIsDispatched(true),
-        });
+        router.post(
+            route("seller.shipments.dispatch", transfer_id),
+            { notes },
+            { onFinish: () => setDispatching(false) },
+        );
+    };
+
+    const handleAgree = (party: PartyKey, agreeSlot: string, stance: "accepted" | "rescheduled") => {
+        setAgreeing(true);
+        router.post(
+            route("seller.shipments.agree", transfer_id),
+            { party, slot: agreeSlot, stance },
+            {
+                preserveScroll: true,
+                onSuccess: () => setActivePartyModal(null),
+                onFinish: () => setAgreeing(false),
+            },
+        );
     };
 
     return (
@@ -203,8 +226,29 @@ export default function SellerReplenishReview({
                 {/* Phase Stepper */}
                 <PhaseStepper active={2} />
 
+                {/* Agreement gate banner. The load being within limits is not the
+                    same as the run being clear to go: picking and dispatch are
+                    blocked until the driver and both docks accept a window. */}
+                {!can_dispatch && (
+                    <div className="p-3.5 rounded-2xl border border-amber-300 bg-amber-50 flex items-center gap-3">
+                        <span className="material-symbols-outlined text-amber-600 text-[22px] shrink-0">hourglass_top</span>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-bold text-amber-900">
+                                {manifest_items.length === 0 ? "Manifest is empty" : "Waiting on the agreement gate"}
+                            </p>
+                            <p className="text-[11px] text-amber-700 mt-0.5">
+                                {manifest_items.length === 0
+                                    ? "Add at least one line before this run can be dispatched."
+                                    : outstanding_parties.length > 0
+                                    ? `Still awaiting ${outstanding_parties.join(", ")}.`
+                                    : "All four parties must accept the same window."}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Load Validation Banner */}
-                {loadState === "healthy" && (
+                {can_dispatch && loadState === "healthy" && (
                     <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50 flex items-center gap-3">
                         <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
                         <div className="flex-1 min-w-0">
@@ -319,17 +363,28 @@ export default function SellerReplenishReview({
                     <div className="flex items-center justify-between mb-3">
                         <div>
                             <p className="text-[13px] font-bold text-gray-900">4-Party Agreement Gate</p>
-                            <p className="text-[10px] text-slate-400">Creator ticked once dispatched • Tap party to view details</p>
+                            <p className="text-[10px] text-slate-400">
+                                {outstanding_parties.length === 0
+                                    ? "All four agreed — clear to dispatch"
+                                    : `Awaiting ${outstanding_parties.join(", ")}`}
+                            </p>
                         </div>
-                        <span className="text-[10px] font-bold text-[#c2410c] bg-orange-50 px-2 py-0.5 rounded-full">ALL 4 REQUIRED</span>
+                        <span className="text-[10px] font-bold text-[#c2410c] bg-orange-50 px-2 py-0.5 rounded-full">
+                            {4 - outstanding_parties.length}/4 AGREED
+                        </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        {[
-                            { key: "creator" as PartyKey,     label: "1. Creator (Seller)", icon: "person",         color: isDispatched ? "text-emerald-600" : "text-slate-400", check: isDispatched,  slot: isDispatched ? "Created" : "Pending" },
-                            { key: "fleet" as PartyKey,       label: "2. Fleet (Carrier)",  icon: "local_shipping", color: "text-emerald-600", check: true,  slot: "07:00 AM" },
-                            { key: "origin" as PartyKey,      label: "3. Origin Stock Keeper", icon: "warehouse",    color: "text-emerald-600", check: true,  slot: "07:00 AM" },
-                            { key: "destination" as PartyKey, label: "4. Dest. (2 Stock Keepers)", icon: "storefront", color: "text-emerald-600", check: true, slot: "07:00 AM" },
-                        ].map(party => (
+                        {([
+                            { key: "creator" as PartyKey,     label: "1. Creator" },
+                            { key: "fleet" as PartyKey,       label: "2. Fleet" },
+                            { key: "origin" as PartyKey,      label: "3. Origin" },
+                            { key: "destination" as PartyKey, label: "4. Destination" },
+                        ]).map(({ key, label }) => ({
+                            key,
+                            label: `${label} (${agreements[key].role})`,
+                            check: hasAgreed(key),
+                            slot: slotLabel(key),
+                        })).map(party => (
                             <button
                                 key={party.key}
                                 type="button"
@@ -358,68 +413,14 @@ export default function SellerReplenishReview({
                     onClose={() => setActivePartyModal(null)}
                     onSelectParty={setActivePartyModal}
                     reference={reference}
-                    scheduleOptions={[
-                        "10/25/2024, 08:30 AM",
-                        "10/25/2024, 05:00 PM",
-                        "10/26/2024, 08:30 AM",
-                        "10/26/2024, 05:00 PM",
-                    ]}
-                    agreements={{
-                        creator: {
-                            title: "1. Creator",
-                            role: "Seller",
-                            party: "Admin • Today • 06:14 AM",
-                            status: isDispatched ? "created" : "pending",
-                            status_label: isDispatched ? "Created" : "Pending Dispatch",
-                            detail: isDispatched 
-                                ? "Replenishment run verified & successfully dispatched by Admin."
-                                : "Manifest reviewed and ready for dispatch. Click 'Confirm Dispatch' to tick off Creator as Created.",
-                        },
-                        fleet: {
-                            title: "2. Fleet",
-                            role: "Carrier",
-                            party: `${vehicle.name} • ${vehicle.plate}`,
-                            status: "accepted",
-                            status_label: "Driver Accepted",
-                            detail: `Driver Abebe K. accepted assignment • ETA slot ${slot} confirmed.`,
-                        },
-                        origin: {
-                            title: "3. Origin",
-                            role: "Depot",
-                            party: `${origin.name} (${origin.detail})`,
-                            status: "accepted",
-                            status_label: "Accepted",
-                            detail: "Stock Keeper Dawit T. — Bay #04 loaded & sign-off complete.",
-                        },
-                        destination: {
-                            title: "4. Dest.",
-                            role: "Store & Remote WH",
-                            party: `${destination.name} + Remote Warehouse`,
-                            status: "accepted",
-                            status_label: "Accepted (2 SKs)",
-                            detail: "Both Store Stock Keeper Helen M. and Remote Warehouse Stock Keeper Blen A. have accepted the delivery.",
-                            stock_keepers: [
-                                {
-                                    name: "Main Store Floor",
-                                    location: destination.name,
-                                    role: "Store Stock Keeper",
-                                    keeper: "Helen M.",
-                                    status: "accepted",
-                                    status_label: "Accepted",
-                                    detail: "Store Receiver: Helen M. — Receiving dock ready for scheduled inbound.",
-                                },
-                                {
-                                    name: "Remote Warehouse",
-                                    location: "Kality Sector 3 Overflow",
-                                    role: "Remote WH Stock Keeper",
-                                    keeper: "Blen A.",
-                                    status: "accepted",
-                                    status_label: "Accepted",
-                                    detail: "Remote WH Stock Keeper: Blen A. — Pallet storage reserved & sign-off complete.",
-                                },
-                            ],
-                        },
-                    }}
+                    scheduleOptions={schedule_options}
+                    selectedSchedule={agreed_scheduled_for ?? schedule_options[0]}
+                    agreedSlot={agreed_scheduled_for}
+                    outstandingParties={outstanding_parties}
+                    actionableParties={actionable_parties}
+                    submitting={agreeing}
+                    onAgree={handleAgree}
+                    agreements={agreements}
                 />
 
                 {/* Manifest Summary */}
@@ -486,10 +487,12 @@ export default function SellerReplenishReview({
                             className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-[13px] active:scale-95 transition-transform hover:bg-slate-50">
                             Back
                         </button>
-                        <button onClick={() => setConfirmOpen(true)} disabled={loadState === "over"}
+                        <button onClick={() => setConfirmOpen(true)}
+                            disabled={loadState === "over" || !can_dispatch || dispatching}
+                            title={can_dispatch ? undefined : "All four parties must agree on a window first"}
                             className="flex-1 py-2.5 rounded-xl bg-[#c2410c] text-white font-bold text-[13px] shadow-sm disabled:opacity-40 active:scale-95 transition-transform flex items-center justify-center gap-2 hover:bg-[#b23b0a]">
                             <span className="material-symbols-outlined text-[18px]">rocket_launch</span>
-                            Confirm Dispatch
+                            {dispatching ? "Dispatching…" : can_dispatch ? "Confirm Dispatch" : "Awaiting Agreement"}
                         </button>
                     </div>
                 </div>
@@ -500,6 +503,7 @@ export default function SellerReplenishReview({
                 total_cartons={total_cartons}
                 destination={destination}
                 vehicle={vehicle}
+                courier={courier}
                 notes={notes}
                 onClose={() => setConfirmOpen(false)}
                 onConfirm={handleDispatch}

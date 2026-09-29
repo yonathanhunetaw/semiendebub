@@ -411,16 +411,31 @@ class UserSeeder extends Seeder
             ],
         ];
 
+        // Both records of a role must be written.
+        //
+        // This loop used to unset `role` before the insert, so these eight
+        // accounts — admin@admin.com, seller@seller.com,
+        // stockkeeper@stockkeeper.com among them — were created with a Spatie
+        // role and a NULL `role` column. Route gates read the assignment, so
+        // they could sign in; anything reading the column treated them as
+        // roleless, which emptied their shipment board and removed every action
+        // button on it.
         foreach ($users as $data) {
             $role = $data['role'];
-            unset($data['role']);
             $user = User::create($data);
             $user->assignRole($role);
         }
 
-        // Factory users
-        User::factory(10)->create()->each(function ($user) {
-            $user->assignRole('user'); // default role
+        // Factory users.
+        //
+        // The assignment is made explicitly rather than left to the model's
+        // saved hook, because DatabaseSeeder uses WithoutModelEvents: inside a
+        // seeder run no model event fires, so relying on the hook here left ten
+        // accounts with a role column and no assigned role — locked out of every
+        // subdomain. The factory defaults the column to `user`; this keeps the
+        // assignment matching whatever it is.
+        User::factory(10)->create()->each(function (User $user): void {
+            $user->assignRole($user->getAttributes()['role'] ?: 'user');
         });
     }
 }

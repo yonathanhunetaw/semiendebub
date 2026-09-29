@@ -30,6 +30,12 @@ const NO_IMAGE_PLACEHOLDER =
 
 // ======================== TYPES ========================
 interface DashboardItem {
+    /** Individual (retail) tier from PriceProvider, when one applies. */
+    individual_price?: {
+        price: number | null;
+        discount_price: number | null;
+        discount_ends_at: string | null;
+    } | null;
     id: number;
     product_name: string;
     image_urls: string[];

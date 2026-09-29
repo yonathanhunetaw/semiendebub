@@ -207,6 +207,23 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        // Leave the role subdomain behind. A bare redirect('/') resolved
+        // against the current host, so logging out of delivery.duka.test
+        // dropped the user back on delivery.duka.test — still inside a
+        // workspace they no longer have a session for.
+        return redirect()->away($this->mainLandingUrl($request));
+    }
+
+    /**
+     * Root of the main domain, preserving scheme and any non-standard port.
+     */
+    private function mainLandingUrl(Request $request): string
+    {
+        $baseDomain = config('app.system_domain', config('subdomains.base_domain', 'duka.local'));
+        $scheme = $request->isSecure() ? 'https://' : 'http://';
+        $port = $request->getPort();
+        $portSuffix = ($port && ! in_array($port, [80, 443], true)) ? ":{$port}" : '';
+
+        return $scheme . $baseDomain . $portSuffix . '/';
     }
 }

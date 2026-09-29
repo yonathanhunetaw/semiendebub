@@ -35,6 +35,9 @@ class Shipment extends Model
         'vehicle_max_cbm',
         'courier_id',
         'scheduled_for',
+        'schedule_options',
+        'agreed_scheduled_for',
+        'party_agreements',
         'picked_at',
         'dispatched_at',
         'in_transit_at',
@@ -52,6 +55,9 @@ class Shipment extends Model
 
     protected $casts = [
         'scheduled_for' => 'datetime',
+        'agreed_scheduled_for' => 'datetime',
+        'schedule_options' => 'array',
+        'party_agreements' => 'array',
         'picked_at' => 'datetime',
         'dispatched_at' => 'datetime',
         'in_transit_at' => 'datetime',
@@ -125,6 +131,12 @@ class Shipment extends Model
     }
 
     /** Waiting on the warehouse floor. */
+    /** Still collecting the four party ticks. */
+    public function scopeAwaitingAgreement(Builder $query): Builder
+    {
+        return $query->whereIn('status', ['draft', 'pending_agreement']);
+    }
+
     public function scopeAwaitingPick(Builder $query): Builder
     {
         return $query->whereIn('status', ['scheduled', 'picking']);

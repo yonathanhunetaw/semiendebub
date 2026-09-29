@@ -69,8 +69,6 @@ class CartService
 
     /*
     |--------------------------------------------------------------------------
-<<<<<<< HEAD
-=======
     | Authoritative line pricing
     |--------------------------------------------------------------------------
     */
@@ -120,9 +118,117 @@ class CartService
         return PriceProvider::getFinalPriceWithTax($ladder, $customerType);
     }
 
+    /**
+     * The price of one loose piece of a variant, resolved server-side.
+     *
+     * "Extra pieces" are sold at the price of the product's piece-tier
+     * variant — the same item, colour and size, packaged as single pieces.
+     * That is exactly how the Seller item page derives it client-side
+     * (itemShowHelpers::classifyPackagingTier + visiblePrice); this mirrors
+     * the rule on the server so the figure cannot be dictated by the request.
+     *
+     * Returns null when the product has no piece-tier variant, in which case
+     * loose pieces are not sellable for it.
+     */
+    public function resolveExtraPiecePrice(Cart $cart, ItemVariant $variant): ?float
+    {
+        $variant->loadMissing(['itemPackagingType', 'itemColor', 'itemSize']);
+
+        // Same product, same colour/size, but packaged as loose pieces.
+        $pieceVariant = ItemVariant::query()
+            ->where('item_id', $variant->item_id)
+            ->where('item_color_id', $variant->item_color_id)
+            ->where('item_size_id', $variant->item_size_id)
+            ->whereHas('itemPackagingType', function ($query): void {
+                $query->whereRaw('LOWER(name) LIKE ?', ['%piece%'])
+                    ->orWhereRaw('LOWER(name) LIKE ?', ['%pcs%']);
+            })
+            ->first();
+
+        if (! $pieceVariant) {
+            return null;
+        }
+
+        try {
+            return $this->resolveLinePrice($cart, $pieceVariant);
+        } catch (\RuntimeException) {
+            // Not stocked or priced in this store: no loose-piece sale.
+            return null;
+        }
+    }
+
+    /**
+     * What one sub-unit of a chosen pack costs, prorated from that pack.
+     *
+     * This is the rule the Seller item sheet has always shown: choose a Carton
+     * at 9.51 holding 240 pieces in 20 boxes, and the nested "+ Boxes" and
+     * "+ Pieces" rows read 0.48 and 0.04 — 9.51/20 and 9.51/240. A shopper
+     * topping up a carton pays the carton's rate for the extras, not the
+     * standalone piece price.
+     *
+     * Derived here rather than trusted from the request, so the figure cannot
+     * be dictated by a crafted post — the same stance StoreCartItemRequest
+     * takes on the line price itself.
+     *
+     * Note that prorating makes the two rates consistent by construction:
+     * `per_box === per_piece * box_units`, so billing N extra boxes as
+     * `N * box_units` extra pieces costs exactly the same as billing them as
+     * boxes. That is what lets the cart store a single `extra_pieces` figure
+     * without losing money either way.
+     *
+     * @return array{per_piece: float|null, per_box: float|null, pieces_per_unit: int, box_units: int|null}
+     */
+    public function proratedSubUnitPrices(ItemVariant $packVariant, float $packPrice): array
+    {
+        $piecesPerUnit = max(0, (int) $packVariant->calculateTotalPieces());
+        $boxUnits = $this->boxUnitsFor($packVariant);
+
+        $perPiece = $piecesPerUnit > 0 ? $packPrice / $piecesPerUnit : null;
+
+        // Only meaningful when the chosen pack is bigger than a box.
+        $perBox = $perPiece !== null && $boxUnits !== null && $boxUnits > 0 && $piecesPerUnit > $boxUnits
+            ? $perPiece * $boxUnits
+            : null;
+
+        return [
+            'per_piece' => $perPiece,
+            'per_box' => $perBox,
+            'pieces_per_unit' => $piecesPerUnit,
+            'box_units' => $boxUnits,
+        ];
+    }
+
+    /**
+     * Pieces in one box of the same product, colour and size.
+     *
+     * Returns null when the product is not boxed, which is what suppresses the
+     * "+ Boxes" row rather than offering a sub-unit that does not exist.
+     */
+    public function boxUnitsFor(ItemVariant $variant): ?int
+    {
+        $variant->loadMissing(['itemColor', 'itemSize']);
+
+        $boxVariant = ItemVariant::query()
+            ->where('item_id', $variant->item_id)
+            ->where('item_color_id', $variant->item_color_id)
+            ->where('item_size_id', $variant->item_size_id)
+            ->whereHas(
+                'itemPackagingType',
+                fn ($query) => $query->whereRaw('LOWER(name) LIKE ?', ['%box%'])
+            )
+            ->first();
+
+        if (! $boxVariant) {
+            return null;
+        }
+
+        $units = (int) $boxVariant->calculateTotalPieces();
+
+        return $units > 0 ? $units : null;
+    }
+
     /*
     |--------------------------------------------------------------------------
->>>>>>> e13f568 (second week session)
     | Buyer (public storefront) cart
     |--------------------------------------------------------------------------
     |
@@ -170,7 +276,9 @@ class CartService
         ItemVariant $variant,
         int $quantity,
         float $price,
-        ?int $available = null
+        ?int $available = null,
+        int $extraPieces = 0,
+        ?float $extraPiecePrice = null
     ): void {
         $ceiling = (int) config('storefront.max_line_quantity', 999);
 
@@ -178,13 +286,25 @@ class CartService
             $ceiling = min($ceiling, $available);
         }
 
-        DB::transaction(function () use ($cart, $variant, $quantity, $price, $ceiling): void {
+        DB::transaction(function () use (
+            $cart,
+            $variant,
+            $quantity,
+            $price,
+            $ceiling,
+            $extraPieces,
+            $extraPiecePrice
+        ): void {
             $existing = $cart->variants()->where('item_variants.id', $variant->id)->first();
 
             if ($existing) {
                 $cart->variants()->updateExistingPivot($variant->id, [
                     'quantity' => min($ceiling, (int) $existing->pivot->quantity + $quantity),
                     'price' => $price,
+                    // Extras accumulate alongside the units, as on the seller
+                    // counter: adding to a line you already have tops it up.
+                    'extra_pieces' => (int) $existing->pivot->extra_pieces + $extraPieces,
+                    'extra_piece_price' => $extraPiecePrice ?? $existing->pivot->extra_piece_price,
                 ]);
 
                 return;
@@ -193,6 +313,8 @@ class CartService
             $cart->variants()->attach($variant->id, [
                 'quantity' => min($ceiling, $quantity),
                 'price' => $price,
+                'extra_pieces' => $extraPieces,
+                'extra_piece_price' => $extraPiecePrice,
                 'store_id' => $cart->store_id,
             ]);
         });
@@ -252,6 +374,10 @@ class CartService
             $storeVariant = $catalog->storeVariantFor($variant, $store);
             $unitPrice = (float) $variant->pivot->price;
             $quantity = (int) $variant->pivot->quantity;
+            $extraPieces = (int) ($variant->pivot->extra_pieces ?? 0);
+            $extraPiecePrice = $variant->pivot->extra_piece_price !== null
+                ? (float) $variant->pivot->extra_piece_price
+                : 0.0;
 
             return [
                 'variant_id' => (int) $variant->id,
@@ -263,7 +389,13 @@ class CartService
                 'image_url' => $variant->image_url,
                 'unit_price' => $unitPrice,
                 'quantity' => $quantity,
-                'line_total' => round($unitPrice * $quantity, 2),
+                // Loose sub-units topped onto the pack, at the pack's own rate.
+                'extra_pieces' => $extraPieces,
+                'extra_piece_price' => $extraPiecePrice,
+                'line_total' => round(
+                    ($unitPrice * $quantity) + ($extraPiecePrice * $extraPieces),
+                    2
+                ),
                 'available_stock' => $storeVariant
                     ? $catalog->availableStock($storeVariant, $store)
                     : 0,
@@ -298,7 +430,8 @@ class CartService
 
     private function isSeller(?User $user): bool
     {
-        return $user !== null && strtolower((string) $user->role) === 'seller';
+        // roleKey(), not ->role: the latter is display-formatted ("Seller").
+        return $user !== null && $user->isRole('seller');
     }
 
     /**

@@ -2,7 +2,11 @@ import React, { useState } from "react";
 import type { LocationOption, NewShipmentInput, NewShipmentTimeWindow } from "@/types/shipments";
 
 /* ----------------------------------------------------------
- | DEMO facility / unit options
+ | Fallback facility / unit options
+ |
+ | Used only when the page does not pass real stores. The sheet's
+ | markup is unchanged; just the option source became overridable
+ | so a created shipment can resolve to an actual store row.
  |----------------------------------------------------------*/
 export const FACILITIES: LocationOption[] = [
     { value: "central-hub", label: "Central Hub — Kality Logistics Center" },
@@ -20,18 +24,33 @@ export interface AddShipmentSheetProps {
     open: boolean;
     onClose: () => void;
     onAdd: (shipment: NewShipmentInput) => void;
+    /** Real origin options; falls back to FACILITIES when omitted. */
+    facilities?: LocationOption[];
+    /** Real destination options; falls back to UNITS when omitted. */
+    units?: LocationOption[];
+    /** Disables the confirm button while the create request is in flight. */
+    submitting?: boolean;
 }
 
 /* ----------------------------------------------------------
  | Add Shipment Bottom Sheet (z-[60] to stay above bottom nav)
  |----------------------------------------------------------*/
-export default function AddShipmentSheet({ open, onClose, onAdd }: AddShipmentSheetProps) {
+export default function AddShipmentSheet({
+    open,
+    onClose,
+    onAdd,
+    facilities,
+    units,
+    submitting = false,
+}: AddShipmentSheetProps) {
+    const facilityOptions = facilities?.length ? facilities : FACILITIES;
+    const unitOptions = units?.length ? units : UNITS;
     const tzOffset = new Date().getTimezoneOffset() * 60000;
     const tomorrow = new Date(Date.now() + 86400000 - tzOffset).toISOString().split('T')[0];
     const today = new Date(Date.now() - tzOffset).toISOString().split('T')[0];
 
-    const [origin, setOrigin] = useState(FACILITIES[0].value);
-    const [dest, setDest]     = useState(UNITS[0].value);
+    const [origin, setOrigin] = useState(facilityOptions[0].value);
+    const [dest, setDest]     = useState(unitOptions[0].value);
     const [schedDate, setSchedDate] = useState(tomorrow);
     const [schedTime, setSchedTime] = useState("08:30");
     const [altOptions, setAltOptions] = useState<NewShipmentTimeWindow[]>([]);
@@ -71,14 +90,14 @@ export default function AddShipmentSheet({ open, onClose, onAdd }: AddShipmentSh
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Origin Facility</label>
                         <select value={origin} onChange={e => setOrigin(e.target.value)}
                             className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#c2410c]/30">
-                            {FACILITIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                            {facilityOptions.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                         </select>
                     </div>
                     <div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Target Unit</label>
                         <select value={dest} onChange={e => setDest(e.target.value)}
                             className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#c2410c]/30">
-                            {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                            {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                         </select>
                     </div>
 

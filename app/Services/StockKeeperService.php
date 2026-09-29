@@ -28,8 +28,6 @@ class StockKeeperService
     public const STORE_TYPE = Store::class;
 
     /**
-<<<<<<< HEAD
-=======
      * Location names keyed by "{type}#{id}", memoized for the request.
      *
      * @var array<string, string>|null
@@ -37,7 +35,6 @@ class StockKeeperService
     private ?array $locationNameCache = null;
 
     /**
->>>>>>> e13f568 (second week session)
      * Headline counters for the StockKeeper dashboard.
      *
      * @return array<string, int>
@@ -269,16 +266,6 @@ class StockKeeperService
 
     /**
      * Human-readable location label for a ledger row.
-<<<<<<< HEAD
-     */
-    public function locationName(ItemStock $stock): string
-    {
-        $resolved = $stock->location_type === self::WAREHOUSE_TYPE
-            ? Warehouse::find($stock->location_id)?->name
-            : Store::find($stock->location_id)?->name;
-
-        return (string) ($resolved ?? 'Unassigned location');
-=======
      *
      * Names are resolved from a memoized map rather than per row: this is
      * called once per ledger row while presenting a page, so a find() here
@@ -315,7 +302,6 @@ class StockKeeperService
         }
 
         return $this->locationNameCache = $names;
->>>>>>> e13f568 (second week session)
     }
 
     /**

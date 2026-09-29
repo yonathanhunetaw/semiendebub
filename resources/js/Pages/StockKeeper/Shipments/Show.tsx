@@ -2,6 +2,7 @@ import { Head, Link, useForm } from "@inertiajs/react";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import {
     Alert,
+    Box,
     Button,
     Grid,
     Snackbar,
@@ -17,6 +18,7 @@ import {
 import React from "react";
 
 import {
+    AgreementPanel,
     LoadBar,
     ShipmentCard,
     ShipmentRouteHeader,
@@ -165,6 +167,16 @@ export default function StockKeeperShipmentShow({
                 </Grid>
 
                 <Grid size={{ xs: 12, lg: 4 }}>
+                    {/* The dock cannot start picking until all four parties land
+                        on the same window, so the keeper needs to accept one
+                        here rather than hunt for the tile on the index card. */}
+                    <Box sx={{ mb: 2.5 }}>
+                        <AgreementPanel
+                            shipment={shipment}
+                            agreeRoute="stock_keeper.shipments.agree"
+                        />
+                    </Box>
+
                     <ShipmentCard>
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
                             Timeline

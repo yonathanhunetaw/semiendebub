@@ -37,7 +37,15 @@ class UserFactory extends Factory
             'phone_number' => $this->faker->unique()->regexify('[0-9]{10}'), // Use regex for phone number
             'email' => $this->faker->unique()->safeEmail(),
             'email_verified_at' => now(),
-            'role' => $this->faker->randomElement(['admin', 'seller', 'stock_keeper']),
+            // A plain user by default.
+            //
+            // This picked randomly from admin/seller/stock_keeper, which was
+            // harmless only while the column was decorative: the seeder then
+            // assigned every factory user the `user` role, so the column and the
+            // gate disagreed on ten accounts. Now that User keeps the two in
+            // step, a random privileged column value would mint real admins.
+            // Tests that want a role pass one.
+            'role' => 'user',
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
             'created_by' => 1, // Assuming a user with ID 1 is creating the user

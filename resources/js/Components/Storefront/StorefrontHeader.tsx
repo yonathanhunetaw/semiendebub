@@ -7,7 +7,11 @@ import type {
     StorefrontCategory,
     StorefrontStore,
 } from "@/types/storefront";
-import { STOREFRONT_BRAND, STOREFRONT_BRAND_SOFT } from "./storefrontConstants";
+import {
+    STOREFRONT_BRAND,
+    STOREFRONT_BRAND_SOFT,
+    STOREFRONT_SHELL,
+} from "./storefrontConstants";
 
 export interface StorefrontHeaderProps {
     store: StorefrontStore | null;
@@ -61,16 +65,16 @@ export default function StorefrontHeader({
     return (
         <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 shadow-sm">
             {/* ── Brand row ── */}
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className={STOREFRONT_SHELL}>
                 <div className="flex h-16 items-center justify-between gap-3">
                     {/* Brand */}
                     <Link
                         href={route("storefront.index")}
-                        className="flex items-center gap-2.5 shrink-0"
+                        className="flex min-w-0 items-center gap-2.5"
                         aria-label="Storefront home"
                     >
                         <span
-                            className="flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-sm"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
                             style={{ backgroundColor: STOREFRONT_BRAND }}
                         >
                             <span
@@ -80,12 +84,16 @@ export default function StorefrontHeader({
                                 edit_note
                             </span>
                         </span>
-                        <span className="flex flex-col leading-none">
-                            <span className="text-[15px] font-bold tracking-tight text-gray-900">
+                        {/* The store name and location are free text of unknown
+                            length. The brand block used to be `shrink-0`, so a long
+                            name widened the masthead and took the whole page with
+                            it — the mark stays fixed, the words give way. */}
+                        <span className="flex min-w-0 flex-col leading-none">
+                            <span className="truncate text-[15px] font-bold tracking-tight text-gray-900">
                                 {store?.name ?? "Stationery Shop"}
                             </span>
                             {store?.location ? (
-                                <span className="mt-0.5 text-[11px] font-medium text-slate-400">
+                                <span className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
                                     {store.location}
                                 </span>
                             ) : null}
@@ -116,13 +124,16 @@ export default function StorefrontHeader({
                     <div className="flex items-center gap-2 shrink-0">
                         {isAuthenticated ? (
                             <Link
-                                href={route("guest.dashboard")}
+                                href={route("dashboard")}
                                 className="hidden sm:flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-700 transition-colors hover:bg-slate-50 active:scale-95"
                             >
                                 <span className="material-symbols-outlined text-[16px]">
                                     account_circle
                                 </span>
-                                <span>
+                                {/* The cluster is deliberately shrink-0 so the
+                                    icon buttons keep their size; the one variable
+                                    string in it is capped instead. */}
+                                <span className="max-w-[9rem] truncate">
                                     {user?.first_name
                                         ? `Hi, ${user.first_name}`
                                         : "My Account"}
@@ -150,7 +161,7 @@ export default function StorefrontHeader({
                         <Link
                             href={
                                 isAuthenticated
-                                    ? route("guest.dashboard")
+                                    ? route("dashboard")
                                     : route("login")
                             }
                             className="sm:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 active:scale-95"

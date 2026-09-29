@@ -179,10 +179,18 @@ export default function AdminSidebar({
                                 </ListItemIcon>
                                 <ListItemText primary="Transfers" />
                             </ListItemButton>
+                            {/*
+                              Points at the real shipment board.
+                              This linked to /inventory/replenish, whose controller
+                              serves five hardcoded demo rows — so "Shipments" on
+                              the admin sidebar showed a fixed 5 while the seller's
+                              board showed the actual records. Two screens, two
+                              data sources, one label.
+                            */}
                             <ListItemButton
                                 component={Link}
-                                href="/inventory/replenish"
-                                selected={url.includes("/inventory/replenish")}
+                                href="/inventory/shipments"
+                                selected={url.includes("/inventory/shipments")}
                                 sx={indentedItemStyle}
                             >
                                 <ListItemIcon sx={{ minWidth: 36 }}>

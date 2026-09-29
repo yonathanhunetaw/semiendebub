@@ -29,7 +29,7 @@ import AdminLayout from "@/Layouts/AdminLayout";
 import type { AdminShipmentIndexProps, Shipment } from "@/types/shipment";
 
 const STATUS_TABS = [
-    "all", "open", "draft", "scheduled", "picking", "ready",
+    "all", "open", "draft", "pending_agreement", "scheduled", "picking", "ready",
     "dispatched", "in_transit", "delivered", "received", "cancelled",
 ] as const;
 
@@ -86,7 +86,7 @@ export default function AdminShipments({
                     {STATUS_TABS.map((tab) => (
                         <Chip
                             key={tab}
-                            label={`${tab.replace("_", " ")}${counts[tab] !== undefined ? ` (${counts[tab]})` : ""}`}
+                            label={`${tab.replaceAll("_", " ")}${counts[tab] !== undefined ? ` (${counts[tab]})` : ""}`}
                             onClick={() =>
                                 router.get(
                                     route("admin.inventory.shipments.index"),

@@ -6,6 +6,7 @@ namespace App\Http\Controllers\StockKeeper;
 
 use App\Http\Controllers\Concerns\DrivesShipments;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Shipment\AgreeShipmentRequest;
 use App\Http\Requests\Shipment\TransitionShipmentRequest;
 use App\Models\Fulfillment\Shipment;
 use App\Services\ShipmentWorkflowService;
@@ -46,46 +47,62 @@ class ShipmentController extends Controller
         return $storeId ? [(int) $storeId] : null;
     }
 
+    /**
+     * The warehouse shipment queue.
+     *
+     * Serves `scheduled_transfers` in the same ScheduledTransfer shape the
+     * Seller screen uses, so StockKeeper/Shipments/index.tsx can reuse that
+     * exact card + filter-chip UI.
+     */
+    /**
+     * The warehouse shipment board.
+     *
+     * Shows every stage, not just the pick queue: the floor has to see a
+     * shipment while the agreement gate is still open in order to tick the
+     * origin or destination party on it.
+     */
     public function index(Request $request): Response
     {
-        $direction = $request->string('direction')->toString() ?: 'outbound';
-        $scope = $this->shipmentStoreScope();
+        // Default to both directions.
+        //
+        // This defaulted to `outbound`, and the toggle only ever flipped between
+        // outbound and inbound — there was no way to see both. A seller raising a
+        // replenishment creates a run that is *inbound* to their store, so the
+        // keeper at that store opened their board and found nothing: the run they
+        // were being asked to receive was one toggle away, with no indication it
+        // existed. Their own dock's dispatches were all they could see.
+        $direction = $request->string('direction')->toString();
+        $direction = in_array($direction, ['inbound', 'outbound'], true) ? $direction : 'all';
 
-        $query = Shipment::query()->with(['origin', 'destination', 'courier', 'items.itemVariant.item']);
+        $storeId = auth()->user()?->store_id ? (int) auth()->user()->store_id : null;
 
-        if ($scope !== null) {
-            $storeId = $scope[0];
+        $query = $this->workflow->visibleQuery(auth()->user())
+            ->with(['origin', 'destination', 'courier', 'creator', 'items.itemVariant.item'])
+            ->where('status', '!=', ShipmentWorkflowService::CANCELLED);
+
+        // A keeper posted to a facility can narrow to one dock; one covering
+        // every dock sees the lot either way.
+        if ($storeId !== null && $direction !== 'all') {
             $direction === 'inbound'
                 ? $query->inboundTo($storeId)
                 : $query->outboundFrom($storeId);
         }
 
-        // Outbound is the pick/dispatch queue; inbound is what is landing.
-        $query->whereIn(
-            'status',
-            $direction === 'inbound'
-                ? [ShipmentWorkflowService::IN_TRANSIT, ShipmentWorkflowService::DELIVERED, ShipmentWorkflowService::RECEIVED]
-                : [
-                    ShipmentWorkflowService::SCHEDULED,
-                    ShipmentWorkflowService::PICKING,
-                    ShipmentWorkflowService::READY,
-                    ShipmentWorkflowService::DISPATCHED,
-                ],
-        );
-
-        $paginator = $query->orderBy('scheduled_for')->orderByDesc('id')->paginate(20)->withQueryString();
+        $shipments = $query
+            ->orderBy('scheduled_for')
+            ->orderByDesc('id')
+            ->get()
+            ->filter(fn (Shipment $s) => $this->workflow->hasLegacyStatus($s));
 
         return Inertia::render('StockKeeper/Shipments/index', [
-            'shipments' => collect($paginator->items())
-                ->map(fn (Shipment $s) => $this->workflow->present($s, 'stock_keeper'))
+            'scheduled_transfers' => $shipments
+                ->map(fn (Shipment $s) => $this->workflow->presentAsScheduledTransfer($s))
                 ->values()
                 ->all(),
-            'filters' => ['direction' => $direction],
-            'pagination' => [
-                'current_page' => $paginator->currentPage(),
-                'last_page' => $paginator->lastPage(),
-                'total' => $paginator->total(),
-            ],
+            'direction' => $direction,
+            // Null for a keeper covering every dock, which is what makes the
+            // direction filter meaningless for them.
+            'store_id' => $storeId,
         ]);
     }
 
@@ -136,5 +153,51 @@ class ShipmentController extends Controller
     public function transition(TransitionShipmentRequest $request, Shipment $shipment): RedirectResponse
     {
         return $this->driveShipment($request, $shipment, $this->workflow);
+    }
+
+    /**
+     * Tick this role's party agreement on a proposed slot.
+     */
+    public function agree(AgreeShipmentRequest $request, Shipment $shipment): RedirectResponse
+    {
+        return $this->agreeAsParty($request, $shipment, $this->workflow);
+    }
+
+    /**
+     * Origin handover: the keeper hands the load to the driver.
+     *
+     * This is the moment stock leaves the origin ledger.
+     */
+    public function handover(Shipment $shipment): RedirectResponse
+    {
+        abort_unless($this->shipmentIsInScope($shipment), 403);
+
+        // advanceTo(), not transition(): `scheduled` cannot jump straight to
+        // `dispatched`, so a bare transition here failed silently.
+        try {
+            $shipment = $this->workflow->advanceTo($shipment, ShipmentWorkflowService::DISPATCHED);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Handed over — stock deducted from {$shipment->origin?->name}.");
+    }
+
+    /**
+     * Destination receipt: the receiver inspects and accepts the goods.
+     *
+     * This is the moment stock is credited to the destination ledger.
+     */
+    public function receive(Shipment $shipment): RedirectResponse
+    {
+        abort_unless($this->shipmentIsInScope($shipment), 403);
+
+        try {
+            $shipment = $this->workflow->advanceTo($shipment, ShipmentWorkflowService::RECEIVED);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Received — stock credited to {$shipment->destination?->name}.");
     }
 }

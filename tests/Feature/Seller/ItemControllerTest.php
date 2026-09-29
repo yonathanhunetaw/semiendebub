@@ -112,7 +112,9 @@ class ItemControllerTest extends TestCase
 
         // 3. Create Polymorphic Stock for this specific store
         ItemStock::create([
-            'item_variant_id' => $storeVariant->id, // As per your logic, this points to store_variant.id
+            // item_stocks keys on the item variant, not the store variant:
+            // that is how every production row and StoreVariant::stocks() join.
+            'item_variant_id' => $storeVariant->item_variant_id,
             'location_id' => $this->store->id,
             'location_type' => Store::class,
             'quantity' => 45,

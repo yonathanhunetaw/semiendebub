@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { Box, CssBaseline, Toolbar, useTheme, Typography, Breadcrumbs, Link as MuiLink } from '@mui/material';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { subdomainConfigs, SubdomainType } from '@/theme';
 // Import dedicated Dev components instead of Admin ones
 import DevNav from '@/Components/Navigation/Dev/DevNav';
 import DevSidebar from '@/Components/Navigation/Dev/DevSidebar';
+import { activeDevEntry } from '@/Components/Navigation/Dev/devNavigation';
 
 export default function DevLayout({ children }: { children: React.ReactNode }) {
     const [mobileOpen, setMobileOpen] = useState(false);
     const theme = useTheme();
+    const { url } = usePage();
+    const active = activeDevEntry(url);
 
     // Subdomain Detection Logic
     const hostParts = window.location.hostname.split('.');
@@ -62,14 +65,26 @@ export default function DevLayout({ children }: { children: React.ReactNode }) {
 
                 <Box sx={{ mb: 4 }}>
                     <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 1, fontSize: '0.75rem' }}>
-                        <MuiLink component={Link} underline="hover" color="inherit" href="/dev/dashboard">
+                        <MuiLink component={Link} underline="hover" color="inherit" href="/dashboard">
                             Dev
                         </MuiLink>
-                        <Typography color="text.primary" sx={{ fontSize: '0.75rem' }}>Workspace</Typography>
+                        {active && (
+                            <Typography color="inherit" sx={{ fontSize: '0.75rem' }}>
+                                {active.group.title}
+                            </Typography>
+                        )}
+                        <Typography color="text.primary" sx={{ fontSize: '0.75rem' }}>
+                            {active?.item.label ?? 'Workspace'}
+                        </Typography>
                     </Breadcrumbs>
                     <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>
-                        &gt; _terminal
+                        &gt; {active?.item.label ?? '_terminal'}
                     </Typography>
+                    {active && (
+                        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                            {active.item.description}
+                        </Typography>
+                    )}
                 </Box>
 
                 <Box sx={{ position: 'relative' }}>

@@ -47,11 +47,22 @@ Route::domain("seller.$baseDomain")
             Route::delete('/carts/{cart}/items/{variant}', [CartController::class, 'destroyItem'])->name('carts.items.destroy');
             Route::get('/settings', [SellerSettingsController::class, 'index'])->name('settings.index');
             Route::patch('/settings', [SellerSettingsController::class, 'update'])->name('settings.update');
-            // ── Shipments (shared cross-role domain) ──
+            // ── Shipments: 3-phase UI over the shared shipments domain ──
             Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
             Route::post('/shipments', [ShipmentController::class, 'store'])->name('shipments.store');
             Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');
+            Route::post('/shipments/{shipment}/manifest', [ShipmentController::class, 'saveManifest'])->name('shipments.manifest.save');
+            Route::get('/shipments/{shipment}/review', [ShipmentController::class, 'review'])->name('shipments.review');
+            Route::post('/shipments/{shipment}/dispatch', [ShipmentController::class, 'dispatchShipment'])->name('shipments.dispatch');
+            Route::get('/shipments/{shipment}/dispatched', [ShipmentController::class, 'dispatched'])->name('shipments.dispatched');
             Route::post('/shipments/{shipment}/items', [ShipmentController::class, 'addItem'])->name('shipments.items.store');
+            Route::post('/shipments/{shipment}/items/bulk', [ShipmentController::class, 'addItems'])->name('shipments.items.bulk');
+            Route::delete('/shipments/{shipment}/items/{variant}', [ShipmentController::class, 'removeItem'])->name('shipments.items.destroy');
+            Route::post('/shipments/{shipment}/items/{variant}/move', [ShipmentController::class, 'moveItem'])->name('shipments.items.move');
+            Route::patch('/shipments/{shipment}/route', [ShipmentController::class, 'updateRoute'])->name('shipments.route.update');
+            Route::post('/shipments/{shipment}/agree', [ShipmentController::class, 'agree'])->name('shipments.agree');
+            Route::post('/shipments/{shipment}/handover', [ShipmentController::class, 'handover'])->name('shipments.handover');
+            Route::post('/shipments/{shipment}/receive', [ShipmentController::class, 'receive'])->name('shipments.receive');
             Route::patch('/shipments/{shipment}/status', [ShipmentController::class, 'transition'])->name('shipments.transition');
         });
     });

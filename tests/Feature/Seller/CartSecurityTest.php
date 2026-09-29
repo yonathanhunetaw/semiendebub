@@ -308,6 +308,76 @@ class CartSecurityTest extends TestCase
         $this->assertSame(1, Cart::find($cart->id)->variants()->count(), 'Should be one line, not two.');
     }
 
+    #[Test]
+    public function the_extra_piece_price_also_comes_from_the_server(): void
+    {
+        $cart = $this->cartFor($this->store);
+
+        // A carton variant, plus its piece-tier sibling priced at 12.00.
+        $item = Item::factory()->create(['status' => 'active']);
+        $pieceType = \App\Models\Item\ItemPackagingType::factory()->create(['name' => 'Piece']);
+        $cartonType = \App\Models\Item\ItemPackagingType::factory()->create(['name' => 'Cartoon']);
+
+        $carton = ItemVariant::factory()->create([
+            'item_id' => $item->id,
+            'item_packaging_type_id' => $cartonType->id,
+        ]);
+        $piece = ItemVariant::factory()->create([
+            'item_id' => $item->id,
+            'item_color_id' => $carton->item_color_id,
+            'item_size_id' => $carton->item_size_id,
+            'item_packaging_type_id' => $pieceType->id,
+        ]);
+
+        foreach ([[$carton, 300.00], [$piece, 12.00]] as [$variant, $price]) {
+            StoreVariant::factory()->create([
+                'store_id' => $this->store->id,
+                'item_variant_id' => $variant->id,
+                'active' => true,
+                'pricing_matrix' => ['price' => $price, 'discount_price' => null, 'discount_ends_at' => null],
+            ]);
+        }
+
+        $this->actingAs($this->seller, 'web')
+            ->post(route('seller.carts.items.store', $cart), [
+                'variant_id' => $carton->id,
+                'quantity' => 1,
+                'extra_pieces' => 3,
+                // A crafted attempt to buy loose pieces for a cent each.
+                'extra_piece_price' => 0.01,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('cart_items', [
+            'cart_id' => $cart->id,
+            'item_variant_id' => $carton->id,
+            'extra_pieces' => 3,
+            'extra_piece_price' => 12.00,
+        ]);
+
+        $this->assertDatabaseMissing('cart_items', [
+            'cart_id' => $cart->id,
+            'extra_piece_price' => 0.01,
+        ]);
+    }
+
+    #[Test]
+    public function extra_pieces_are_refused_when_the_product_has_no_piece_variant(): void
+    {
+        $cart = $this->cartFor($this->store);
+        [$variant] = $this->sellableVariant($this->store, 250.00);
+
+        $this->actingAs($this->seller, 'web')
+            ->post(route('seller.carts.items.store', $cart), [
+                'variant_id' => $variant->id,
+                'quantity' => 1,
+                'extra_pieces' => 5,
+            ])
+            ->assertSessionHasErrors('extra_pieces');
+
+        $this->assertDatabaseMissing('cart_items', ['cart_id' => $cart->id]);
+    }
+
     /* =====================================================================
      | storeItem — edge case: variant not sellable in this store
      |====================================================================*/

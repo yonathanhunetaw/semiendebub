@@ -48,12 +48,41 @@ class CartController extends Controller
             return back()->with('error', 'That product is out of stock.');
         }
 
+        $packPrice = $this->catalog->payablePrice($storeVariant, $store);
+
+        // Sub-units are priced off the pack that was chosen, so topping a carton
+        // up with a few loose pieces charges the carton's rate for them.
+        $rates = $this->cartService->proratedSubUnitPrices($variant, $packPrice);
+
+        // Boxes are folded into pieces at that same rate. Prorating makes this
+        // lossless — per_box is per_piece * box_units by construction — so the
+        // line needs only one extras figure to bill either correctly.
+        $extraPieces = $request->extraPieces();
+
+        if ($request->extraBoxes() > 0) {
+            if ($rates['box_units'] === null) {
+                return back()->withErrors([
+                    'extra_boxes' => 'This product is not sold in boxes at this store.',
+                ]);
+            }
+
+            $extraPieces += $request->extraBoxes() * $rates['box_units'];
+        }
+
+        if ($extraPieces > 0 && $rates['per_piece'] === null) {
+            return back()->withErrors([
+                'extra_pieces' => 'This pack cannot be split into loose pieces.',
+            ]);
+        }
+
         $this->cartService->addVariantToBuyerCart(
             $this->cartService->currentBuyerCart($store, createIfMissing: true),
             $variant,
             $request->quantity(),
-            $this->catalog->payablePrice($storeVariant, $store),
+            $packPrice,
             $available,
+            $extraPieces,
+            $extraPieces > 0 ? round((float) $rates['per_piece'], 2) : null,
         );
 
         return back()->with('success', 'Added to your cart.');

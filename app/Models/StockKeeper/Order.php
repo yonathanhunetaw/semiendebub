@@ -3,7 +3,7 @@
 namespace App\Models\StockKeeper;
 
 use App\Models\Auth\Customer;
-use App\Models\User;
+use App\Models\Auth\User;
 use Illuminate\Database\Eloquent\Model;
 
 class Order extends Model

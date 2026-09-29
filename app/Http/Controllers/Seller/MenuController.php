@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Seller;
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Auth\Customer;
 use App\Models\Auth\User;
+use App\Models\Fulfillment\Shipment;
 use App\Models\Item\Item;
 use App\Models\Seller\Cart;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -29,18 +30,49 @@ class MenuController extends Controller
     /**
      * Display a listing of the resource.
      */
+    /**
+     * The seller's "More" hub.
+     *
+     * The page previously read stats.sales / orders / deliveries while this
+     * method sent customers / carts / items, so none of the badges ever
+     * rendered. The keys now match what the screen asks for.
+     */
     public function index()
     {
+        $user = auth()->user();
+        $storeId = $user?->store_id;
+
         $stats = [
+            // Counters behind the prominent tiles.
+            'orders' => Cart::query()
+                ->where(function ($query) use ($user) {
+                    $query->where('seller_id', $user?->id)
+                        ->orWhere('user_id', $user?->id);
+                })
+                ->count(),
+            'shipments' => $storeId
+                ? Shipment::query()->forStore((int) $storeId)->open()->count()
+                : 0,
+
+            // Counters behind the list rows.
             'customers' => Customer::count(),
-            'carts' => Cart::where(function ($query) {
-                $query->where('seller_id', auth()->id())
-                    ->orWhere('user_id', auth()->id());
-            })->count(),
+            'carts' => Cart::query()
+                ->where(function ($query) use ($user) {
+                    $query->where('seller_id', $user?->id)
+                        ->orWhere('user_id', $user?->id);
+                })
+                ->count(),
             'items' => Item::where('status', 'active')->count(),
         ];
 
-        return Inertia::render('Seller/Menu/Index', compact('stats'));
+        return Inertia::render('Seller/Menu/Index', [
+            'stats' => $stats,
+            'seller' => [
+                'name' => trim((string) ($user?->first_name . ' ' . $user?->last_name)) ?: null,
+                'email' => $user?->email,
+                'store' => $user?->store?->name,
+            ],
+        ]);
     }
 
     public function store(Request $request)

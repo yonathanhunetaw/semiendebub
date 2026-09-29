@@ -1,6 +1,6 @@
 /**
  * Centralized TypeScript contracts for the public storefront
- * (resources/js/Pages/Guest/Dashboard/** and resources/js/Components/Storefront/**).
+ * (resources/js/Pages/User/Dashboard/** and resources/js/Components/Storefront/**).
  *
  * Mirrors the payloads produced by:
  *   - App\Services\StorefrontCatalogService::presentItemCard()
@@ -127,6 +127,9 @@ export interface StorefrontCartLine {
     image_url: string | null;
     unit_price: number;
     quantity: number;
+    /** Loose pieces topped onto the pack, priced at the pack's own rate. */
+    extra_pieces: number;
+    extra_piece_price: number;
     line_total: number;
     available_stock: number;
 }
@@ -153,9 +156,22 @@ export interface StorefrontAuthUser {
     store_id: number | null;
 }
 
+/** Orderings the grid offers; mirrors StorefrontCatalogService::SORTS. */
+export type StorefrontSort = "name" | "newest" | "price_asc" | "price_desc";
+
+export interface StorefrontSortOption {
+    value: StorefrontSort;
+    label: string;
+}
+
 export interface StorefrontFilters {
     search: string;
     category_id: number | null;
+    sort: StorefrontSort;
+    /** Only products this store can ship today. */
+    in_stock: boolean;
+    /** Only products with a live discount on at least one variant. */
+    on_sale: boolean;
 }
 
 export interface StorefrontPagination {
@@ -176,21 +192,24 @@ export interface StorefrontSharedProps {
     flash?: StorefrontFlash;
 }
 
-/** Inertia page props for Guest/Dashboard/index. */
+/** Inertia page props for User/Dashboard/index. */
 export interface StorefrontPageProps extends StorefrontSharedProps {
     store: StorefrontStore | null;
     items: StorefrontItemCard[];
     categories: StorefrontCategory[];
     cart: StorefrontCart;
     filters: StorefrontFilters;
+    sorts: StorefrontSortOption[];
     pagination: StorefrontPagination;
     error?: string | null;
 }
 
-/** Inertia page props for Guest/Dashboard/Show. */
+/** Inertia page props for User/Dashboard/Show. */
 export interface StorefrontShowPageProps extends StorefrontSharedProps {
     store: StorefrontStore | null;
     item: StorefrontItemDetail;
     categories: StorefrontCategory[];
     cart: StorefrontCart;
+    /** Same category, same store — the rail at the foot of the page. */
+    related: StorefrontItemCard[];
 }

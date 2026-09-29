@@ -36,7 +36,7 @@ class StorefrontController extends Controller
         $store = $this->catalog->resolveStore();
 
         if (! $store) {
-            return Inertia::render('Guest/Dashboard/index', $this->emptyProps(
+            return Inertia::render('User/Dashboard/index', $this->emptyProps(
                 'Our catalogue is not published yet. Please check back shortly.'
             ));
         }
@@ -44,10 +44,24 @@ class StorefrontController extends Controller
         $search = $request->filled('search') ? trim((string) $request->string('search')) : '';
         $categoryId = $request->integer('category_id') ?: null;
 
+        // Ordering and the two availability switches. An unknown sort falls back
+        // to the default rather than erroring — these arrive from a query string
+        // a shopper can edit or share.
+        $sort = in_array(
+            $request->string('sort')->toString(),
+            StorefrontCatalogService::SORTS,
+            true
+        ) ? $request->string('sort')->toString() : StorefrontCatalogService::SORT_NAME;
+
+        $inStock = $request->boolean('in_stock');
+        $onSale = $request->boolean('on_sale');
+
         $paginator = $this->catalog->paginateItems(
             $store,
             $search !== '' ? $search : null,
-            $categoryId
+            $categoryId,
+            null,
+            ['sort' => $sort, 'in_stock' => $inStock, 'on_sale' => $onSale],
         );
 
         $items = collect($paginator->items())
@@ -55,7 +69,7 @@ class StorefrontController extends Controller
             ->values()
             ->all();
 
-        return Inertia::render('Guest/Dashboard/index', [
+        return Inertia::render('User/Dashboard/index', [
             'store' => $this->presentStore($store),
             'items' => $items,
             'categories' => $this->catalog->categories($store),
@@ -66,7 +80,11 @@ class StorefrontController extends Controller
             'filters' => [
                 'search' => $search,
                 'category_id' => $categoryId,
+                'sort' => $sort,
+                'in_stock' => $inStock,
+                'on_sale' => $onSale,
             ],
+            'sorts' => $this->sortOptions(),
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
@@ -93,7 +111,7 @@ class StorefrontController extends Controller
         // An item with no active store variant is not on sale here.
         abort_if($detail['variants'] === [], 404);
 
-        return Inertia::render('Guest/Dashboard/Show', [
+        return Inertia::render('User/Dashboard/Show', [
             'store' => $this->presentStore($store),
             'item' => $detail,
             // The masthead keeps its category nav here so a shopper can jump
@@ -103,7 +121,25 @@ class StorefrontController extends Controller
                 $this->cartService->currentBuyerCart($store),
                 $store
             ),
+            // Same shelf, same store — a shopper who has ruled this one out has
+            // somewhere to go that is not the back button.
+            'related' => $this->catalog->relatedItems($item, $store),
         ]);
+    }
+
+    /**
+     * Labels for the sort control.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function sortOptions(): array
+    {
+        return [
+            ['value' => StorefrontCatalogService::SORT_NAME, 'label' => 'Name A–Z'],
+            ['value' => StorefrontCatalogService::SORT_NEWEST, 'label' => 'Newest'],
+            ['value' => StorefrontCatalogService::SORT_PRICE_ASC, 'label' => 'Price: low to high'],
+            ['value' => StorefrontCatalogService::SORT_PRICE_DESC, 'label' => 'Price: high to low'],
+        ];
     }
 
     /**
@@ -134,7 +170,14 @@ class StorefrontController extends Controller
                 'subtotal' => 0.0,
                 'is_guest' => ! auth()->check(),
             ],
-            'filters' => ['search' => '', 'category_id' => null],
+            'filters' => [
+                'search' => '',
+                'category_id' => null,
+                'sort' => StorefrontCatalogService::SORT_NAME,
+                'in_stock' => false,
+                'on_sale' => false,
+            ],
+            'sorts' => $this->sortOptions(),
             'pagination' => [
                 'current_page' => 1,
                 'last_page' => 1,

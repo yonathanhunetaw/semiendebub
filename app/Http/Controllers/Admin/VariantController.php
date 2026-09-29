@@ -8,7 +8,7 @@ use App\Models\ItemVariant;
 use App\Models\StockKeeper\ItemInventoryLocation;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store;
-use App\Models\User;
+use App\Models\Auth\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 

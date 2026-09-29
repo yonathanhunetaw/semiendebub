@@ -128,7 +128,7 @@ export default function Show({ item }: Props) {
                 </Grid>
 
                 {/* DETAILS & VARIATIONS */}
-                <Grid item xs={12} md={7}>
+                <Grid size={{ xs: 12, md: 7 }}>
                     <Typography variant="h6" gutterBottom fontWeight="bold">Description</Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
                         {item.product_description || "No description provided."}

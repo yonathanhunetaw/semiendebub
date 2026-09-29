@@ -15,8 +15,11 @@ class CanvasAssetUploadTest extends TestCase
     /** @test */
     public function it_resolves_uploaded_canvas_images_with_proper_url_structures()
     {
-        // 1. Mock S3/MinIO disk virtualization
-        Storage::fake('s3');
+        // 1. Fake the object store the controller actually writes to.
+        // CanvasController::uploadAsset was migrated from the MinIO `s3` disk
+        // to Cloudflare `r2`; faking `s3` left the upload hitting real R2,
+        // which has no credentials under test and returned a 500.
+        Storage::fake('r2');
 
         $this->withServerVariables(['HTTP_HOST' => 'admin.localhost']);
 
@@ -26,7 +29,9 @@ class CanvasAssetUploadTest extends TestCase
         // 3. Generate a dummy image asset file mock
         $fakeImage = UploadedFile::fake()->image('canvas_diagram.jpg', 800, 600);
 
-        $url = route('canvas.upload-asset', ['subdomain' => 'admin']);
+        // The route is registered inside the admin domain group, so its name
+        // is prefixed: admin.canvas.upload-asset.
+        $url = route('admin.canvas.upload-asset');
         $response = $this->actingAs($user)
             ->post($url, [
                 'file' => $fakeImage
@@ -40,16 +45,16 @@ class CanvasAssetUploadTest extends TestCase
         $this->assertArrayHasKey('path', $data);
         $this->assertArrayHasKey('url', $data);
 
+        // The asset really landed on the disk.
+        Storage::disk('r2')->assertExists($data['path']);
+
         // 6. Inspect the resolved URL path output
         $resolvedUrl = $data['url'];
         
-        // This log will print inside your terminal window when running the test
-        \Log::info("Resolved Canvas Asset URL Structure: " . $resolvedUrl);
-
         // 7. Environmental Proxy Assertions
         // If your application is building URLs with the production environment settings, 
         // this assertion will catch whether the domain matching alignment fails.
-        if (config('filesystems.disks.s3.url')) {
+        if (config('filesystems.disks.r2.url')) {
             $this->assertStringContainsString(
                 'duka-images', 
                 $resolvedUrl, 

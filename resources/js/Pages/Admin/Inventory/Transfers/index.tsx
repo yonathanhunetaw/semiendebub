@@ -53,7 +53,7 @@ interface Props {
 
 const statusConfig: Record<
     TransferStatus,
-    { label: string; color: "warning" | "info" | "success" | "error"; icon: React.ReactNode }
+    { label: string; color: "warning" | "info" | "success" | "error"; icon: React.ReactElement }
 > = {
     pending:    { label: "Pending",    color: "warning", icon: <HourglassEmptyIcon sx={{ fontSize: 14 }} /> },
     in_transit: { label: "In Transit", color: "info",    icon: <LocalShippingIcon sx={{ fontSize: 14 }} /> },

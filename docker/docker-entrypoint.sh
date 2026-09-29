@@ -16,6 +16,12 @@ mkdir -p \
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
+# setgid: anything root creates below (artisan runs as root in here, apache runs
+# as www-data) inherits the www-data group, so both users can append to the same
+# daily log file. Without this a root-created auth-YYYY-MM-DD.log 500s every
+# login for the rest of the day.
+find /var/www/html/storage /var/www/html/bootstrap/cache -type d -exec chmod g+s {} \;
+
 echo "✅ Permissions OK"
 
 # =============================================================================
@@ -103,6 +109,9 @@ else
     php artisan cache:clear || true
     php artisan config:clear || true
 fi
+
+# Artisan above ran as root and may have created fresh log/cache files.
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # =============================================================================
 # 🔒 SSL SETUP

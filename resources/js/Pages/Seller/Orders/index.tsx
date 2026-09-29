@@ -21,6 +21,8 @@ interface CartItem {
 
 interface SellerCart {
     id: number;
+    /** open | pending | processing | completed | canceled */
+    status?: string;
     customer?: {
         first_name?: string;
         last_name?: string;

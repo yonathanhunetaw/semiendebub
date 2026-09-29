@@ -42,6 +42,15 @@ interface Props {
         origin: PartyAgreementInfo;
         destination: PartyAgreementInfo;
     };
+    /** Parties the signed-in user may tick; drives the action bar. */
+    actionableParties?: PartyKey[];
+    /** Parties still outstanding, straight from the server. */
+    outstandingParties?: PartyKey[];
+    /** The slot all four aligned on, once consensus is reached. */
+    agreedSlot?: string | null;
+    /** Submits this user's agreement on the chosen slot. */
+    onAgree?: (party: PartyKey, slot: string, stance: "accepted" | "rescheduled") => void;
+    submitting?: boolean;
 }
 
 const DEFAULT_SCHEDULE_OPTIONS = [
@@ -60,6 +69,11 @@ export default function PartyDetailModal({
     scheduleOptions = DEFAULT_SCHEDULE_OPTIONS,
     selectedSchedule: initialSchedule,
     onSelectSchedule,
+    actionableParties = [],
+    outstandingParties = [],
+    agreedSlot = null,
+    onAgree,
+    submitting = false,
     agreements,
 }: Props) {
     const [selectedSlot, setSelectedSlot] = useState(initialSchedule || scheduleOptions[0]);
@@ -356,18 +370,65 @@ export default function PartyDetailModal({
                             })}
                         </div>
 
-                        {/* Alignment summary */}
+                        {/* Alignment summary — derived from real party stances */}
                         <div className="p-2 rounded-xl bg-white border border-slate-200/70 text-[10px] space-y-1">
                             <div className="flex items-center justify-between">
-                                <span className="text-slate-500">Agreed Run Time:</span>
-                                <strong className="text-gray-900 font-mono font-bold">{selectedSlot}</strong>
+                                <span className="text-slate-500">{agreedSlot ? "Agreed Run Time:" : "Your Selection:"}</span>
+                                <strong className="text-gray-900 font-mono font-bold">{agreedSlot ?? selectedSlot}</strong>
                             </div>
-                            <div className="flex items-center justify-between text-slate-500 text-[9px]">
-                                <span>Driver: <strong className="text-emerald-700">Aligned</strong></span>
-                                <span>Origin SK: <strong className="text-emerald-700">Aligned</strong></span>
-                                <span>Dest SK: <strong className="text-amber-700">Reschedule Opt 2</strong></span>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-slate-500 text-[9px]">
+                                {(["fleet", "origin", "destination"] as PartyKey[]).map(key => {
+                                    const a = agreements[key];
+                                    const aligned = a.status === "accepted";
+                                    return (
+                                        <span key={key}>
+                                            {key === "fleet" ? "Driver" : key === "origin" ? "Origin SK" : "Dest SK"}:{" "}
+                                            <strong className={aligned ? "text-emerald-700" : a.status === "rescheduled" ? "text-amber-700" : "text-slate-500"}>
+                                                {aligned ? "Aligned" : a.status === "rescheduled" ? "Reschedule" : "Pending"}
+                                            </strong>
+                                        </span>
+                                    );
+                                })}
                             </div>
+                            {outstandingParties.length > 0 ? (
+                                <p className="text-[9px] text-amber-700 font-bold pt-0.5">
+                                    Awaiting {outstandingParties.length} of 4 — cannot schedule yet.
+                                </p>
+                            ) : (
+                                <p className="text-[9px] text-emerald-700 font-bold pt-0.5">
+                                    All 4 parties aligned — shipment scheduled.
+                                </p>
+                            )}
                         </div>
+
+                        {/* ── Action bar: only for parties this user may tick ── */}
+                        {onAgree && actionableParties.length > 0 && (
+                            <div className="pt-1 space-y-1.5">
+                                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                    You can respond as {actionableParties.join(" / ")}
+                                </p>
+                                {actionableParties.map(party => (
+                                    <div key={party} className="flex gap-1.5">
+                                        <button
+                                            type="button"
+                                            disabled={submitting}
+                                            onClick={() => onAgree(party, selectedSlot, "accepted")}
+                                            className="flex-1 py-2 rounded-xl bg-[#c2410c] text-white text-[11px] font-bold active:scale-95 transition-transform disabled:bg-slate-300"
+                                        >
+                                            Agree as {party} @ {selectedSlot}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={submitting}
+                                            onClick={() => onAgree(party, selectedSlot, "rescheduled")}
+                                            className="px-3 py-2 rounded-xl bg-white border border-amber-300 text-amber-700 text-[11px] font-bold active:scale-95 transition-transform disabled:opacity-50"
+                                        >
+                                            Reschedule
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 

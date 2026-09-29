@@ -46,5 +46,27 @@ Route::domain("dev.{$baseDomain}")
             */
             require __DIR__ . '/lessons/lesson4.php';
             require __DIR__ . '/lessons/lesson6.php';
+            require __DIR__ . '/lessons/lesson7.php';
+
+            // Domain Module Visualizer -> dev.<domain>/architecture
+            require __DIR__ . '/architecture.php';
         });
     });
+
+/*
+|--------------------------------------------------------------------------
+| Local-only path mount: /dev/architecture
+|--------------------------------------------------------------------------
+| The subdomain group above requires the dev host + an authenticated dev role.
+| While developing we also want the visualizer reachable on the plain host at
+| /dev/architecture. ArchitectureController aborts with a 404 outside
+| local/development, so this mount never exposes anything in production.
+*/
+
+if (app()->environment(['local', 'development', 'testing'])) {
+    Route::prefix('dev')
+        ->name('dev.local.')
+        ->group(function (): void {
+            require __DIR__ . '/architecture.php';
+        });
+}

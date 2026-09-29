@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Http\Requests\Shipment\AgreeShipmentRequest;
 use App\Http\Requests\Shipment\TransitionShipmentRequest;
 use App\Models\Fulfillment\Shipment;
 use App\Services\ShipmentWorkflowService;
@@ -33,6 +34,81 @@ trait DrivesShipments
      */
     abstract protected function shipmentStoreScope(): ?array;
 
+    /**
+     * Record this user's party agreement on a proposed slot.
+     *
+     * The party is inferred from the user's role and store unless supplied, and
+     * is authorized either way: a courier cannot tick for the origin dock, and
+     * a keeper at the destination cannot tick for the origin.
+     */
+    protected function agreeAsParty(
+        AgreeShipmentRequest $request,
+        Shipment $shipment,
+        ShipmentWorkflowService $workflow,
+    ): RedirectResponse {
+        if (! $this->shipmentIsInScope($shipment)) {
+            abort(403, 'That shipment does not involve your store.');
+        }
+
+        $user = Auth::user();
+        $permitted = $workflow->partiesFor($shipment, $user);
+
+        if ($permitted === []) {
+            abort(403, 'You are not a party to this shipment.');
+        }
+
+        $party = $request->validated('party') ?? $this->preferredParty($permitted);
+
+        if (! in_array($party, $permitted, true)) {
+            abort(403, "You cannot agree on behalf of the {$party} party.");
+        }
+
+        try {
+            $shipment = $workflow->recordPartyAgreement(
+                $shipment,
+                (string) $party,
+                $workflow->normaliseSlot($request->slot()) ?? $request->slot(),
+                $user,
+                $request->stance(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['slot' => $e->getMessage()]);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $outstanding = $workflow->outstandingParties($shipment);
+
+        return back()->with(
+            'success',
+            $outstanding === []
+                ? "All parties agreed — {$shipment->reference} is scheduled."
+                : 'Agreement recorded. Still awaiting: ' . implode(', ', $outstanding) . '.'
+        );
+    }
+
+    /**
+     * When a user could act for more than one party, tick the one that is most
+     * specific to their role first.
+     *
+     * @param  array<int, string>  $permitted
+     */
+    private function preferredParty(array $permitted): string
+    {
+        foreach ([
+            ShipmentWorkflowService::PARTY_FLEET,
+            ShipmentWorkflowService::PARTY_ORIGIN,
+            ShipmentWorkflowService::PARTY_DESTINATION,
+            ShipmentWorkflowService::PARTY_CREATOR,
+        ] as $candidate) {
+            if (in_array($candidate, $permitted, true)) {
+                return $candidate;
+            }
+        }
+
+        return $permitted[0];
+    }
+
     protected function driveShipment(
         TransitionShipmentRequest $request,
         Shipment $shipment,
@@ -61,18 +137,12 @@ trait DrivesShipments
     }
 
     /**
-     * A shipment is in scope when the acting user's store is either end of it.
+     * A shipment is in scope when the shared visibility rule says this user can
+     * see it. Defined once in ShipmentWorkflowService so every role agrees.
      */
     protected function shipmentIsInScope(Shipment $shipment): bool
     {
-        $scope = $this->shipmentStoreScope();
-
-        if ($scope === null) {
-            return true;
-        }
-
-        return in_array((int) $shipment->origin_store_id, $scope, true)
-            || in_array((int) $shipment->destination_store_id, $scope, true);
+        return app(ShipmentWorkflowService::class)->isVisibleTo($shipment, Auth::user());
     }
 
     /**

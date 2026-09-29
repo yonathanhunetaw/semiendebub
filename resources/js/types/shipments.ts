@@ -24,14 +24,6 @@ export interface LocationOption {
 /** Fully-resolved 4-party agreement map, keyed by party, as consumed by PartyDetailModal. */
 export type PartyAgreementsMap = Record<PartyKey, PartyAgreementInfo>;
 
-/** Partial agreement data as it may arrive from the backend, before defaults are filled in. */
-export interface ShipmentAgreements {
-    creator?: PartyAgreementInfo;
-    fleet?: PartyAgreementInfo;
-    origin?: PartyAgreementInfo;
-    destination?: PartyAgreementInfo;
-}
-
 export interface StatusConfigEntry {
     label: string;
     color: string;
@@ -114,7 +106,46 @@ export interface ScheduledTransfer {
     created_by?: string;
     created_at?: string;
     schedule_options?: string[];
-    agreements?: ShipmentAgreements;
+    /** Always sent by presentAsScheduledTransfer(); never inferred client-side. */
+    agreements: PartyAgreementsMap;
+    /** Final slot once all four parties aligned; null while pending. */
+    agreed_scheduled_for?: string | null;
+    /** Parties that have not yet accepted. */
+    outstanding_parties?: PartyKey[];
+    /** True when all four accepted the same slot. */
+    can_schedule?: boolean;
+    /** The real backend status, e.g. `pending_agreement`. */
+    workflow_status?: WorkflowStatus;
+    /** Parties the signed-in user may tick on this shipment. */
+    actionable_parties?: PartyKey[];
+    /** Lifecycle steps the signed-in user's role may drive next. */
+    allowed_transitions?: WorkflowStatus[];
+}
+
+/**
+ * The backend lifecycle, distinct from the six-value display status the cards
+ * use. `pending_agreement` is the 4-party consensus gate.
+ */
+export type WorkflowStatus =
+    | "draft"
+    | "pending_agreement"
+    | "scheduled"
+    | "picking"
+    | "ready"
+    | "dispatched"
+    | "in_transit"
+    | "delivered"
+    | "received"
+    | "cancelled";
+
+/** One party's stance on the schedule. */
+export type AgreementStance = "pending" | "accepted" | "rescheduled" | "created";
+
+/** Payload for POST /{role}/shipments/{id}/agree */
+export interface PartyAgreementSubmission {
+    party?: PartyKey;
+    slot: string;
+    stance?: "accepted" | "rescheduled";
 }
 
 /* ----------------------------------------------------------
@@ -131,4 +162,42 @@ export interface NewShipmentInput {
     scheduledDate: string;
     scheduledTime: string;
     alternateOptions: NewShipmentTimeWindow[];
+}
+
+/* ----------------------------------------------------------
+ | Manifest builder (Build / Review pages)
+ |----------------------------------------------------------*/
+
+/** A SKU the Add Items sheet may put on a manifest. */
+export interface VariantOption {
+    id: number;
+    label: string;
+    sku: string | null;
+}
+
+/** Another open run a manifest line can be moved onto. */
+export interface MoveTarget {
+    id: number;
+    reference: string;
+    destination: string;
+    scheduled_run: string | null;
+}
+
+export interface CourierInfo {
+    name: string;
+    phone: string;
+}
+
+/**
+ * The 4-party gate as the server sees it, shared by every screen that renders
+ * PartyDetailModal. Both Build and Review previously invented this locally.
+ */
+export interface PartyGateProps {
+    agreements: PartyAgreementsMap;
+    schedule_options: string[];
+    agreed_scheduled_for: string | null;
+    outstanding_parties: PartyKey[];
+    actionable_parties: PartyKey[];
+    allowed_transitions: WorkflowStatus[];
+    workflow_status: WorkflowStatus;
 }

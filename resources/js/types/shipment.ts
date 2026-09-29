@@ -8,6 +8,10 @@
 /** The one shipment lifecycle, shared by every role. */
 export type ShipmentStatus =
     | "draft"
+    // The 4-party consensus gate. Missing here while present() has always
+    // returned it, so any screen switching on the status fell through its
+    // default for exactly the stage that needs the most attention.
+    | "pending_agreement"
     | "scheduled"
     | "picking"
     | "ready"
@@ -19,6 +23,33 @@ export type ShipmentStatus =
 
 /** Can the origin cover this manifest line right now? */
 export type LineCoverage = "ok" | "low" | "oos";
+
+/* ----------------------------------------------------------
+ | The 4-party agreement gate
+ |
+ | A run carries a set of proposed time windows. The creator, the fleet, the
+ | origin dock and the destination dock each accept one — and only when all four
+ | land on the *same* window does the run become schedulable. Nothing moves
+ | before that, which is why every role needs to see and act on it.
+ |----------------------------------------------------------*/
+
+export type PartyKey = "creator" | "fleet" | "origin" | "destination";
+
+/** `created` is the creator's own accepted state, as the UI labels it. */
+export type PartyStance = "pending" | "accepted" | "rescheduled" | "created";
+
+export interface PartyAgreement {
+    title: string;
+    role: string;
+    party: string;
+    status: PartyStance;
+    status_label: string;
+    detail: string;
+    /** The window this party accepted, or null while pending. */
+    agreed_time: string | null;
+}
+
+export type PartyAgreements = Record<PartyKey, PartyAgreement>;
 
 export interface ShipmentEndpoint {
     id: number;
@@ -84,6 +115,19 @@ export interface Shipment {
      */
     allowed_transitions: ShipmentStatus[];
     items: ShipmentLine[];
+
+    /* -- the agreement gate -- */
+    /** Windows on the table, earliest proposal first. */
+    schedule_options: string[];
+    agreements: PartyAgreements;
+    /** The window all four aligned on; null until they do. */
+    agreed_scheduled_for: string | null;
+    /** Parties yet to accept. */
+    outstanding_parties: PartyKey[];
+    /** True once all four accepted the same window. */
+    can_schedule: boolean;
+    /** Parties the signed-in user may tick — drives whether to offer the action. */
+    actionable_parties: PartyKey[];
 }
 
 export interface StoreOption {

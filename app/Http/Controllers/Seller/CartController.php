@@ -263,7 +263,17 @@ class CartController extends Controller
             return back()->withErrors(['variant_id' => $e->getMessage()]);
         }
 
-        $extraPiecePrice = $request->validated('extra_piece_price');
+        // Derived from the product's piece-tier variant, never from the
+        // request — the same hole that was closed on the main line price.
+        $extraPiecePrice = $request->extraPieces() > 0
+            ? $this->cartService->resolveExtraPiecePrice($cart, $variant)
+            : null;
+
+        if ($request->extraPieces() > 0 && $extraPiecePrice === null) {
+            return back()->withErrors([
+                'extra_pieces' => 'This product is not sold as loose pieces in this store.',
+            ]);
+        }
         $existing = $cart->variants()->where('item_variant_id', $variant->id)->first();
 
         if ($existing) {

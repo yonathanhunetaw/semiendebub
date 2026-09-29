@@ -75,7 +75,7 @@ class SellerDashboardTest extends TestCase
     private function addStock(StoreVariant $storeVariant, int $qty): void
     {
         ItemStock::create([
-            'item_variant_id' => $storeVariant->id,
+            'item_variant_id' => $storeVariant->item_variant_id,
             'location_id'     => $this->store->id,
             'location_type'   => Store::class,
             'quantity'        => $qty,

@@ -15,7 +15,11 @@ export interface UseStorefrontCart {
     isMutating: boolean;
     /** Variant currently being added, for a per-button spinner. */
     pendingVariantId: number | null;
-    addVariant: (variant: StorefrontVariantOption, quantity: number) => void;
+    addVariant: (
+        variant: StorefrontVariantOption,
+        quantity: number,
+        extras?: { extraBoxes?: number; extraPieces?: number },
+    ) => void;
     updateQuantity: (line: StorefrontCartLine, quantity: number) => void;
     removeLine: (line: StorefrontCartLine) => void;
     checkout: () => void;
@@ -58,12 +62,20 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
     const addVariant = (
         variant: StorefrontVariantOption,
         quantity: number,
+        extras?: { extraBoxes?: number; extraPieces?: number },
     ): void => {
         setPendingVariantId(variant.id);
 
         router.post(
             route("storefront.cart.items.store"),
-            { variant_id: variant.id, quantity },
+            {
+                variant_id: variant.id,
+                quantity,
+                // Counts only. The rate for each is prorated from the chosen
+                // pack on the server, which ignores any price posted here.
+                extra_boxes: extras?.extraBoxes ?? 0,
+                extra_pieces: extras?.extraPieces ?? 0,
+            },
             {
                 ...cartVisitOptions,
                 onSuccess: () => setCartOpen(true),

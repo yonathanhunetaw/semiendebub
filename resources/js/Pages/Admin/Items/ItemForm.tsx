@@ -1126,9 +1126,12 @@ export default function ItemForm({
                                     </Card>
                                 ))}
                             </Stack>
-                            {errors.general_images && (
+                            {/* StoreItemRequest validates `images`, not
+                                `general_images`, so the old key could never
+                                surface an upload error to the user. */}
+                            {errors.images && (
                                 <FormHelperText error>
-                                    {errors.general_images}
+                                    {errors.images}
                                 </FormHelperText>
                             )}
                         </Box>

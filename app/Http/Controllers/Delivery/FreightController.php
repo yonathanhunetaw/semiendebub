@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Delivery;
 
 use App\Http\Controllers\Concerns\DrivesShipments;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Shipment\AgreeShipmentRequest;
 use App\Http\Requests\Shipment\TransitionShipmentRequest;
 use App\Models\Fulfillment\Shipment;
 use App\Services\ShipmentWorkflowService;
@@ -41,47 +42,67 @@ class FreightController extends Controller
         return null;
     }
 
+    /**
+     * The courier's freight board.
+     *
+     * Serves `scheduled_transfers` in the same ScheduledTransfer shape the
+     * Seller screen uses, so Delivery/Shipments/index.tsx can reuse that exact
+     * card + filter-chip UI.
+     */
+    /**
+     * The courier's freight board.
+     *
+     * Previously this only listed runs already assigned to them plus the
+     * claimable pool, so a shipment awaiting the *fleet* agreement never
+     * appeared — leaving the gate impossible to clear. It now shows everything
+     * the courier may act on.
+     */
     public function index(Request $request): Response
     {
         $courierId = (int) Auth::id();
-        $tab = $request->string('tab')->toString() ?: 'mine';
+        // Default to everything this courier may act on. Defaulting to "mine"
+        // hid every freshly opened shipment, so nothing ever reached the fleet
+        // party of the agreement gate.
+        $tab = $request->string('tab')->toString() ?: 'all';
 
-        $mine = Shipment::query()
-            ->with(['origin', 'destination', 'items.itemVariant.item'])
-            ->forCourier($courierId)
-            ->whereIn('status', [
-                ShipmentWorkflowService::DISPATCHED,
-                ShipmentWorkflowService::IN_TRANSIT,
-            ])
-            ->orderBy('eta')
-            ->get();
+        $query = $this->workflow->visibleQuery(Auth::user())
+            ->with(['origin', 'destination', 'courier', 'creator', 'items.itemVariant.item'])
+            ->where('status', '!=', ShipmentWorkflowService::CANCELLED);
 
-        $available = Shipment::query()
-            ->with(['origin', 'destination', 'items'])
-            ->claimable()
+        if ($tab === 'available') {
+            // Unclaimed and still open — anything they could take on.
+            $query->whereNull('courier_id');
+        } elseif ($tab === 'mine') {
+            $query->where('courier_id', $courierId);
+        }
+
+        $shipments = $query
             ->orderBy('scheduled_for')
-            ->limit(20)
-            ->get();
-
-        $completed = Shipment::query()
-            ->with(['origin', 'destination'])
-            ->forCourier($courierId)
-            ->whereIn('status', [ShipmentWorkflowService::DELIVERED, ShipmentWorkflowService::RECEIVED])
-            ->orderByDesc('delivered_at')
-            ->limit(20)
-            ->get();
+            ->orderByDesc('id')
+            ->get()
+            ->filter(fn (Shipment $s) => $this->workflow->hasLegacyStatus($s));
 
         return Inertia::render('Delivery/Shipments/index', [
-            'runs' => $mine->map(fn (Shipment $s) => $this->workflow->present($s, 'delivery'))->values()->all(),
-            'available_runs' => $available->map(fn (Shipment $s) => $this->workflow->present($s, 'delivery'))->values()->all(),
-            'completed_runs' => $completed->map(fn (Shipment $s) => $this->workflow->present($s, 'delivery'))->values()->all(),
-            'filters' => ['tab' => $tab],
-            'metrics' => [
-                'assigned' => $mine->where('status', ShipmentWorkflowService::DISPATCHED)->count(),
-                'in_transit' => $mine->where('status', ShipmentWorkflowService::IN_TRANSIT)->count(),
-                'available' => $available->count(),
-                'completed' => $completed->count(),
-            ],
+            'scheduled_transfers' => $shipments
+                ->map(fn (Shipment $s) => $this->workflow->presentAsScheduledTransfer($s))
+                ->values()
+                ->all(),
+            'tab' => $tab,
+            'available_count' => (clone $this->workflow->visibleQuery(Auth::user()))
+                ->whereNull('courier_id')
+                ->whereNotIn('status', [ShipmentWorkflowService::RECEIVED, ShipmentWorkflowService::CANCELLED])
+                ->count(),
+        ]);
+    }
+
+    /**
+     * One freight run in detail, reached from the card on the index.
+     */
+    public function show(Shipment $shipment): Response
+    {
+        return Inertia::render('Delivery/Shipments/Show', [
+            'shipment' => $this->workflow->present($shipment, 'delivery'),
+            'is_mine' => (int) $shipment->courier_id === (int) Auth::id(),
         ]);
     }
 
@@ -102,5 +123,13 @@ class FreightController extends Controller
         }
 
         return $this->driveShipment($request, $shipment, $this->workflow);
+    }
+
+    /**
+     * Tick this role's party agreement on a proposed slot.
+     */
+    public function agree(AgreeShipmentRequest $request, Shipment $shipment): RedirectResponse
+    {
+        return $this->agreeAsParty($request, $shipment, $this->workflow);
     }
 }
