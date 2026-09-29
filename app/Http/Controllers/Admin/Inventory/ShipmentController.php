@@ -8,6 +8,7 @@ use App\Http\Controllers\Concerns\DrivesShipments;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shipment\StoreShipmentItemRequest;
 use App\Http\Requests\Shipment\StoreShipmentRequest;
+use App\Http\Requests\Shipment\AgreeShipmentRequest;
 use App\Http\Requests\Shipment\TransitionShipmentRequest;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Item\ItemVariant;
@@ -90,7 +91,7 @@ class ShipmentController extends Controller
                 (int) $request->validated('origin_store_id'),
                 (int) $request->validated('destination_store_id'),
                 collect($request->validated())
-                    ->only(['scheduled_for', 'vehicle_name', 'vehicle_plate', 'vehicle_max_cbm', 'distance_km', 'slot', 'notes'])
+                    ->only(['scheduled_for', 'schedule_options', 'vehicle_name', 'vehicle_plate', 'vehicle_max_cbm', 'distance_km', 'slot', 'notes'])
                     ->filter(fn ($v) => $v !== null)
                     ->all(),
                 Auth::id(),
@@ -153,7 +154,13 @@ class ShipmentController extends Controller
 
         return [
             'all' => (int) $counts->sum(),
+            'open' => (int) $counts->except(['received', 'cancelled'])->sum(),
             'draft' => (int) ($counts['draft'] ?? 0),
+            // Omitted here and from the board's chip row, so the one status a
+            // seller-raised run actually sits in had no count and no filter:
+            // the runs most in need of an admin's attention were the runs the
+            // admin board could not single out.
+            'pending_agreement' => (int) ($counts['pending_agreement'] ?? 0),
             'scheduled' => (int) ($counts['scheduled'] ?? 0),
             'picking' => (int) ($counts['picking'] ?? 0),
             'ready' => (int) ($counts['ready'] ?? 0),
@@ -163,5 +170,51 @@ class ShipmentController extends Controller
             'received' => (int) ($counts['received'] ?? 0),
             'cancelled' => (int) ($counts['cancelled'] ?? 0),
         ];
+    }
+
+    /**
+     * Tick this role's party agreement on a proposed slot.
+     */
+    public function agree(AgreeShipmentRequest $request, Shipment $shipment): RedirectResponse
+    {
+        return $this->agreeAsParty($request, $shipment, $this->workflow);
+    }
+
+    /**
+     * Origin handover: the keeper hands the load to the driver.
+     *
+     * This is the moment stock leaves the origin ledger.
+     */
+    public function handover(Shipment $shipment): RedirectResponse
+    {
+        abort_unless($this->shipmentIsInScope($shipment), 403);
+
+        // advanceTo(), not transition(): `scheduled` cannot jump straight to
+        // `dispatched`, so a bare transition here failed silently.
+        try {
+            $shipment = $this->workflow->advanceTo($shipment, ShipmentWorkflowService::DISPATCHED);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Handed over — stock deducted from {$shipment->origin?->name}.");
+    }
+
+    /**
+     * Destination receipt: the receiver inspects and accepts the goods.
+     *
+     * This is the moment stock is credited to the destination ledger.
+     */
+    public function receive(Shipment $shipment): RedirectResponse
+    {
+        abort_unless($this->shipmentIsInScope($shipment), 403);
+
+        try {
+            $shipment = $this->workflow->advanceTo($shipment, ShipmentWorkflowService::RECEIVED);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Received — stock credited to {$shipment->destination?->name}.");
     }
 }
