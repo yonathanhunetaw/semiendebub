@@ -31,7 +31,23 @@ Route::domain("seller.$baseDomain")
         Route::middleware(['auth', 'verified', 'role.subdomain:seller'])->group(function () {
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
             Route::get('/menu', [MenuController::class, 'index'])->name('menu.index');
-            Route::get('/orders', [CartController::class, 'index'])->name('orders.index');
+            /*
+             * UI-only preview of the seller order pipeline
+             * (cart → confirmation → to pay → paid → pick & pack).
+             *
+             * The order domain has no backend yet, so these render sample data
+             * from resources/js/Data/sellerOrderFlow.ts. The real cart list
+             * stays at /carts below.
+             */
+            Route::get('/orders', fn () => Inertia::render('Seller/Orders/index'))->name('orders.index');
+            Route::get('/orders/confirmation', fn () => Inertia::render('Seller/Orders/Confirmation'))
+                ->name('orders.confirmation');
+            Route::get('/orders/{reference}/pay', fn (string $reference) => Inertia::render('Seller/Orders/ToPay', [
+                'reference' => $reference,
+            ]))->name('orders.pay');
+            Route::get('/orders/{reference}/pick-pack', fn (string $reference) => Inertia::render('Seller/Orders/PickPack', [
+                'reference' => $reference,
+            ]))->name('orders.pickpack');
             Route::get('/carts', [CartController::class, 'index'])->name('carts.index');
             Route::get('/items/search', [ItemController::class, 'search'])->name('items.search');
             Route::get('/items/page-json', [ItemController::class, 'pageItems'])->name('items.page-json');

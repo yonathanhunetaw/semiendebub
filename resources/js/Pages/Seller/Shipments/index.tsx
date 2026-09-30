@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, router } from "@inertiajs/react";
 import AddShipmentSheet from "@/Components/Seller/Shipments/AddShipmentSheet";
+import ListTopBar, { type TabSpec } from "@/Components/Seller/ListTopBar";
 import TransferCard from "@/Components/Seller/Shipments/TransferCard";
 import type { LocationOption, NewShipmentInput, ScheduledTransfer } from "@/types/shipments";
 
@@ -11,14 +12,56 @@ interface Props {
     stores?: LocationOption[];
 }
 
+const TAB_IDS = ["all", "scheduled", "pending", "en_route", "shipped", "overdue"];
+
+/**
+ * Legacy statuses behind each tab. `dispatched` and `en_route` are both "on
+ * the road" and share a tab — without this a dispatched run appeared under no
+ * tab but "All".
+ */
+const TAB_STATUSES: Record<string, string[]> = {
+    scheduled: ["scheduled"],
+    pending: ["pending"],
+    en_route: ["dispatched", "en_route"],
+    shipped: ["shipped"],
+    overdue: ["overdue"],
+};
+
+/** True when a transfer belongs under the given tab. */
+function inTab(status: string, tab: string): boolean {
+    return tab === "all" || (TAB_STATUSES[tab] ?? []).includes(status);
+}
+
+/** Read `?tab=` so the More hub's shipment tiles can deep-link into a stage. */
+function initialTab(): string {
+    if (typeof window === "undefined") return "all";
+
+    const requested = new URLSearchParams(window.location.search).get("tab");
+
+    return requested && TAB_IDS.includes(requested) ? requested : "all";
+}
+
 /* ----------------------------------------------------------
  | Page Component
  |----------------------------------------------------------*/
 export default function ReplenishIndex({ scheduled_transfers = [], stores = [] }: Props) {
     const [addOpen, setAddOpen] = useState(false);
-    const [filter, setFilter] = useState("all");
+    const [filter, setFilter] = useState<string>(initialTab);
     const [submitting, setSubmitting] = useState(false);
-    const transfers = scheduled_transfers;
+    const [search, setSearch] = useState("");
+    const [sortNewest, setSortNewest] = useState(true);
+    const [selectMode, setSelectMode] = useState(false);
+    const [selected, setSelected] = useState<number[]>([]);
+    /**
+     * Rows hidden by the trash action. There is no seller-side delete endpoint
+     * for shipments, so this only clears them from the current view — it never
+     * touches the record.
+     */
+    const [hidden, setHidden] = useState<number[]>([]);
+    const transfers = useMemo(
+        () => scheduled_transfers.filter(t => !hidden.includes(t.id)),
+        [scheduled_transfers, hidden],
+    );
 
     /**
      * Persist the shipment instead of only adding a local row.
@@ -64,10 +107,48 @@ export default function ReplenishIndex({ scheduled_transfers = [], stores = [] }
         );
     };
 
-    // Filter logic
-    const displayedTransfers = filter === "all"
-        ? transfers
-        : transfers.filter(t => t.status === filter);
+    // Tab + free-text filter, then the sort toggle from the filter button.
+    const displayedTransfers = useMemo(() => {
+        const needle = search.trim().toLowerCase();
+
+        const rows = transfers.filter(t => {
+            if (!inTab(t.status, filter)) return false;
+            if (!needle) return true;
+
+            return (
+                t.reference.toLowerCase().includes(needle) ||
+                t.origin.name.toLowerCase().includes(needle) ||
+                t.destination.name.toLowerCase().includes(needle) ||
+                (t.vehicle_plate ?? "").toLowerCase().includes(needle)
+            );
+        });
+
+        return sortNewest ? rows : [...rows].reverse();
+    }, [transfers, filter, search, sortNewest]);
+
+    const tabs: TabSpec[] = [
+        { id: "all", label: "View all" },
+        { id: "scheduled", label: "Scheduled" },
+        { id: "pending", label: "Pending manifest" },
+        { id: "en_route", label: "En route" },
+        { id: "shipped", label: "Shipped" },
+        { id: "overdue", label: "Overdue" },
+    ].map(tab => ({
+        ...tab,
+        count: tab.id === "all"
+            ? transfers.length
+            : transfers.filter(t => inTab(t.status, tab.id)).length,
+    }));
+
+    const leaveSelectMode = () => {
+        setSelectMode(false);
+        setSelected([]);
+    };
+
+    const hideSelected = () => {
+        setHidden(current => [...current, ...selected]);
+        leaveSelectMode();
+    };
 
     return (
         <>
@@ -75,72 +156,128 @@ export default function ReplenishIndex({ scheduled_transfers = [], stores = [] }
                 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
             </Head>
 
-            {/* ── Top Context Strip: Back button, centered Shipments, and NEW button ── */}
-            <div className="px-4 py-3 flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-20">
-                <button
-                    onClick={() => {
-                        if (window.history.length > 1) {
-                            window.history.back();
-                        } else {
-                            router.visit(route("seller.dashboard"));
-                        }
-                    }}
-                    className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 flex items-center justify-center active:scale-95 transition-all text-slate-600"
-                    aria-label="Back"
-                >
-                    <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                </button>
-
-                <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[#c2410c] text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
-                    <h1 className="text-[16px] font-bold text-gray-900 tracking-tight">Shipments</h1>
-                </div>
-
-                <button onClick={() => setAddOpen(true)}
-                    className="flex items-center gap-1 bg-orange-50 text-[#c2410c] px-3 py-1.5 rounded-full border border-orange-200/60 active:scale-95 transition-transform hover:bg-orange-100">
-                    <span className="material-symbols-outlined text-[14px]">add</span>
-                    <span className="font-bold text-[11px] tracking-wide">NEW</span>
-                </button>
-            </div>
+            <ListTopBar
+                fallbackRoute="seller.dashboard"
+                search={search}
+                onSearch={setSearch}
+                searchPlaceholder="Reference, route, plate…"
+                tabs={tabs}
+                activeTab={filter}
+                onTab={(id) => {
+                    setFilter(id);
+                    leaveSelectMode();
+                }}
+                onFilter={() => setSortNewest(current => !current)}
+                filterActive={!sortNewest}
+                onDelete={() => (selectMode ? leaveSelectMode() : setSelectMode(true))}
+                deleteActive={selectMode}
+                trailing={
+                    <button
+                        type="button"
+                        onClick={() => setAddOpen(true)}
+                        aria-label="New shipment"
+                        title="New shipment"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[999px] bg-[#c2410c] text-white shadow-sm transition-transform active:scale-90"
+                    >
+                        <span className="material-symbols-outlined text-[19px]">add</span>
+                    </button>
+                }
+            />
 
             <div className="px-3.5 pt-3 pb-36 space-y-3">
 
-                {/* ── Status Filter Chips ── */}
-                <div className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-                    {[
-                        { id: "all",       label: "All" },
-                        { id: "scheduled", label: "Scheduled" },
-                        { id: "pending",   label: "Pending Manifest" },
-                        { id: "en_route",  label: "En Route" },
-                        { id: "shipped",   label: "Shipped" },
-                        { id: "overdue",   label: "Overdue" },
-                    ].map(f => (
-                        <button key={f.id} onClick={() => setFilter(f.id)}
-                            className={`px-3 py-1.5 rounded-full text-[11px] font-bold shrink-0 transition-colors border ${
-                                filter === f.id
-                                    ? "bg-[#c2410c] text-white border-[#c2410c]"
-                                    : "bg-white text-slate-600 border-slate-200"
-                            }`}>
-                            {f.label} ({f.id === "all" ? transfers.length : transfers.filter(t => t.status === f.id).length})
-                        </button>
-                    ))}
-                </div>
+                {!sortNewest && (
+                    <p className="text-[11px] text-slate-500">Sorted oldest first</p>
+                )}
 
                 {/* ── Transfer List ── */}
                 <div className="space-y-3">
-                    {displayedTransfers.map(t => (
-                        <TransferCard key={t.id} t={t} />
-                    ))}
+                    {displayedTransfers.map(t => {
+                        const checked = selected.includes(t.id);
+
+                        if (!selectMode) {
+                            return <TransferCard key={t.id} t={t} />;
+                        }
+
+                        return (
+                            <div
+                                key={t.id}
+                                onClick={() => setSelected(current => (
+                                    current.includes(t.id)
+                                        ? current.filter(id => id !== t.id)
+                                        : [...current, t.id]
+                                ))}
+                                className={`relative cursor-pointer rounded-2xl ring-2 ring-offset-2 transition-colors ${
+                                    checked ? "ring-[#c2410c]" : "ring-transparent"
+                                }`}
+                            >
+                                {/* Swallow card clicks so ticking never navigates. */}
+                                <div className="pointer-events-none">
+                                    <TransferCard t={t} />
+                                </div>
+                                <span
+                                    aria-hidden="true"
+                                    className={`absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-[999px] border shadow-sm ${
+                                        checked
+                                            ? "border-[#c2410c] bg-[#c2410c] text-white"
+                                            : "border-slate-300 bg-white"
+                                    }`}
+                                >
+                                    {checked && (
+                                        <span className="material-symbols-outlined text-[15px]">check</span>
+                                    )}
+                                </span>
+                            </div>
+                        );
+                    })}
                     {displayedTransfers.length === 0 && (
-                        <div className="py-8 text-center bg-white rounded-2xl border border-slate-100">
-                            <span className="material-symbols-outlined text-slate-300 text-[36px] mb-2">inbox</span>
-                            <p className="text-[13px] font-bold text-gray-900">No shipments found</p>
-                            <p className="text-[11px] text-slate-400 mt-1">Change the filter or create a new shipment.</p>
+                        <div className="flex flex-col items-center px-6 py-16 text-center">
+                            <div className="flex h-20 w-20 items-center justify-center rounded-[999px] bg-[#FDF0ED]">
+                                <span className="material-symbols-outlined text-[40px] text-[#c2410c]">
+                                    local_shipping
+                                </span>
+                            </div>
+                            <p className="mt-4 text-[16px] font-bold text-gray-900">
+                                {search ? "No matching shipments" : "No shipments in this tab"}
+                            </p>
+                            <p className="mt-1 text-[12px] text-slate-500">
+                                {search
+                                    ? "Try a different reference, route or plate."
+                                    : "Runs at this stage will show up here."}
+                            </p>
+                            {search && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearch("")}
+                                    className="mt-4 rounded-[999px] bg-[#c2410c] px-5 py-2 text-[13px] font-bold text-white active:scale-95"
+                                >
+                                    Clear search
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
 
             </div>
+
+            {/* Selection bar. Clears rows from the view only — see `hidden`. */}
+            {selectMode && (
+                <div className="fixed inset-x-0 bottom-[96px] z-40 mx-auto max-w-[480px] px-4">
+                    <div className="flex items-center justify-between rounded-[999px] border border-slate-200 bg-white px-4 py-2.5 shadow-lg">
+                        <span className="text-[12px] font-semibold text-slate-600">
+                            {selected.length} selected
+                        </span>
+                        <button
+                            type="button"
+                            onClick={hideSelected}
+                            disabled={selected.length === 0}
+                            className="rounded-[999px] bg-rose-600 px-4 py-1.5 text-[12px] font-bold text-white disabled:opacity-40"
+                        >
+                            Clear from view
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* ── Dialogs ── */}
             <AddShipmentSheet

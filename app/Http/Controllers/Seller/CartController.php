@@ -42,18 +42,87 @@ class CartController extends Controller
      */
     // app/Http/Controllers/Seller/CartController.php
 
+    /**
+     * The cart console.
+     *
+     * The screen shows the highest-priority cart in full and keeps the rest in
+     * the "other carts" panel, so the payload carries line detail for every
+     * cart — reordering promotes a different cart client-side and its lines
+     * have to already be there.
+     *
+     * Lines are grouped by their `cart_items.store_id`: the seller's own store
+     * is local stock, anything else is consolidated through the hub.
+     */
     public function index()
     {
         $user = auth()->user();
+        $homeStoreId = (int) ($user->store_id ?? 0);
 
-        $carts = Cart::with(['customer', 'seller', 'variants'])
+        $carts = Cart::with([
+            'customer',
+            'seller',
+            'variants.item',
+            'variants.itemColor',
+            'variants.itemSize',
+        ])
             ->visibleTo($user)
-            ->orderedByPriority() // Changed from ->latest()
-            ->paginate(15);
+            ->orderedByPriority()
+            ->get();
 
         return Inertia::render('Seller/Carts/Index', [
-            'carts' => $carts,
+            'carts' => $carts->map(fn (Cart $cart) => $this->presentCart($cart, $homeStoreId))->values()->all(),
+            'home_store' => $user->store?->name,
         ]);
+    }
+
+    /**
+     * Flatten one cart into the shape the cart screen renders.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentCart(Cart $cart, int $homeStoreId): array
+    {
+        $lines = $cart->variants->map(function ($variant) use ($homeStoreId) {
+            $quantity = (int) ($variant->pivot->quantity ?? 0);
+            $price = (float) ($variant->pivot->price ?? 0);
+            $extraPieces = (int) ($variant->pivot->extra_pieces ?? 0);
+            $extraPrice = (float) ($variant->pivot->extra_piece_price ?? 0);
+            $storeId = (int) ($variant->pivot->store_id ?? 0);
+
+            return [
+                'id' => $variant->id,
+                'sku' => $variant->sku,
+                'name' => $variant->item?->product_name ?? 'Item',
+                'variant_label' => trim(implode(' / ', array_filter([
+                    $variant->itemColor?->name,
+                    $variant->itemSize?->name,
+                ]))) ?: null,
+                'image' => $variant->image_url,
+                'quantity' => $quantity,
+                'price' => $price,
+                'extra_pieces' => $extraPieces,
+                'line_total' => ($quantity * $price) + ($extraPieces * $extraPrice),
+                'store_id' => $storeId,
+                // Drives the two fulfillment groups on the cart screen.
+                'fulfillment' => $storeId === $homeStoreId ? 'local' : 'hub',
+            ];
+        })->values();
+
+        return [
+            'id' => $cart->id,
+            'status' => $cart->status,
+            'priority' => $cart->priority,
+            'customer' => $cart->customer ? [
+                'name' => trim(($cart->customer->first_name ?? '') . ' ' . ($cart->customer->last_name ?? '')) ?: null,
+                'type' => $cart->customer->active_pricing_customer_type ?? null,
+            ] : null,
+            'seller' => $cart->seller ? [
+                'name' => trim(($cart->seller->first_name ?? '') . ' ' . ($cart->seller->last_name ?? '')) ?: null,
+            ] : null,
+            'line_count' => $lines->count(),
+            'total' => round((float) $lines->sum('line_total'), 2),
+            'lines' => $lines->all(),
+        ];
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\Auth\User;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Item\Item;
 use App\Models\Seller\Cart;
+use App\Services\ShipmentWorkflowService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -28,51 +29,121 @@ class MenuController extends Controller
     use AuthorizesRequests;
 
     /**
-     * Display a listing of the resource.
-     */
-    /**
      * The seller's "More" hub.
      *
-     * The page previously read stats.sales / orders / deliveries while this
-     * method sent customers / carts / items, so none of the badges ever
-     * rendered. The keys now match what the screen asks for.
+     * Feeds the shipments pipeline card and the catalogue counters. Every
+     * number here is a real aggregate.
+     *
+     * The order pipeline tiles are *not* served from here: the order domain
+     * has no backend yet, so that card counts the sample orders the order
+     * screens render, keeping a tile badge and the tab it opens in agreement.
      */
     public function index()
     {
         $user = auth()->user();
-        $storeId = $user?->store_id;
-
-        $stats = [
-            // Counters behind the prominent tiles.
-            'orders' => Cart::query()
-                ->where(function ($query) use ($user) {
-                    $query->where('seller_id', $user?->id)
-                        ->orWhere('user_id', $user?->id);
-                })
-                ->count(),
-            'shipments' => $storeId
-                ? Shipment::query()->forStore((int) $storeId)->open()->count()
-                : 0,
-
-            // Counters behind the list rows.
-            'customers' => Customer::count(),
-            'carts' => Cart::query()
-                ->where(function ($query) use ($user) {
-                    $query->where('seller_id', $user?->id)
-                        ->orWhere('user_id', $user?->id);
-                })
-                ->count(),
-            'items' => Item::where('status', 'active')->count(),
-        ];
+        $storeId = (int) ($user?->store_id ?? 0);
 
         return Inertia::render('Seller/Menu/Index', [
-            'stats' => $stats,
+            'stats' => [
+                'shipments' => $this->shipmentPipeline($storeId),
+                'catalogue' => [
+                    'customers' => Customer::count(),
+                    'items' => Item::where('status', 'active')->count(),
+                    'carts' => $this->ownCarts($user)->count(),
+                ],
+            ],
             'seller' => [
                 'name' => trim((string) ($user?->first_name . ' ' . $user?->last_name)) ?: null,
                 'email' => $user?->email,
                 'store' => $user?->store?->name,
             ],
         ]);
+    }
+
+    /**
+     * Carts this seller raised or owns — the "My Orders" scope.
+     */
+    private function ownCarts(?User $user)
+    {
+        return Cart::query()->where(function ($query) use ($user) {
+            $query->where('seller_id', $user?->id)
+                ->orWhere('user_id', $user?->id);
+        });
+    }
+
+    /**
+     * Shipment counts for the seller's store.
+     *
+     * These mirror ShipmentWorkflowService::legacyStatus() exactly, so a tile
+     * badge here matches the count on the tab it links to. That means
+     * `overdue` is exclusive, not additive: a past-due run that has not left
+     * yet reads as overdue and is *not* also counted under manifest or
+     * scheduled, which is how the shipments list buckets it.
+     *
+     * @return array<string, int>
+     */
+    private function shipmentPipeline(int $storeId): array
+    {
+        $empty = [
+            'manifest' => 0,
+            'scheduled' => 0,
+            'en_route' => 0,
+            'shipped' => 0,
+            'overdue' => 0,
+        ];
+
+        if ($storeId === 0) {
+            return $empty;
+        }
+
+        $base = static fn () => Shipment::query()->forStore($storeId);
+
+        // Anything still short of the road can fall overdue.
+        $preTransit = [
+            ShipmentWorkflowService::DRAFT,
+            ShipmentWorkflowService::PENDING_AGREEMENT,
+            ShipmentWorkflowService::SCHEDULED,
+            ShipmentWorkflowService::PICKING,
+            ShipmentWorkflowService::READY,
+        ];
+
+        $onTime = static fn ($query) => $query->where(static function ($inner) {
+            $inner->whereNull('scheduled_for')
+                ->orWhere('scheduled_for', '>=', now());
+        });
+
+        return [
+            // draft/pending_agreement/picking/ready all read as "pending" on
+            // the list — the manifest is still open or the floor is picking.
+            'manifest' => $onTime($base()->whereIn('status', [
+                ShipmentWorkflowService::DRAFT,
+                ShipmentWorkflowService::PENDING_AGREEMENT,
+                ShipmentWorkflowService::PICKING,
+                ShipmentWorkflowService::READY,
+            ]))->count(),
+
+            'scheduled' => $onTime(
+                $base()->where('status', ShipmentWorkflowService::SCHEDULED)
+            )->count(),
+
+            // Dispatched and in-transit are both "on the road"; the list tab
+            // covers the pair so a dispatched run is never invisible.
+            'en_route' => $base()->whereIn('status', [
+                ShipmentWorkflowService::DISPATCHED,
+                ShipmentWorkflowService::IN_TRANSIT,
+            ])->count(),
+
+            'shipped' => $base()->whereIn('status', [
+                ShipmentWorkflowService::DELIVERED,
+                ShipmentWorkflowService::RECEIVED,
+            ])->count(),
+
+            'overdue' => $base()
+                ->whereIn('status', $preTransit)
+                ->whereNotNull('scheduled_for')
+                ->where('scheduled_for', '<', now())
+                ->count(),
+        ];
     }
 
     public function store(Request $request)
