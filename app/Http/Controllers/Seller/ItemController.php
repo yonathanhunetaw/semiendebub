@@ -431,7 +431,16 @@ class ItemController extends Controller
             'variants.storeVariants' => function ($query) use ($storeId) {
                 $query->where('store_id', $storeId)
                     ->where('active', true)
-                    ->with(['sellerPrices', 'customerPrices', 'stocks']);
+                    ->with([
+                        'sellerPrices',
+                        'customerPrices',
+                        // Unconstrained, this counts the variant's stock at
+                        // every store — see StoreVariant::stocks().
+                        'stocks' => function ($stockQuery) use ($storeId) {
+                            $stockQuery->where('location_type', \App\Models\Store\Store::class)
+                                ->where('location_id', $storeId);
+                        },
+                    ]);
             },
             // 'variants.storeVariants.sellerPrices',
             'variants.owner',

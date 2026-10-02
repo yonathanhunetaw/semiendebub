@@ -2,12 +2,15 @@ import { SELLER_BRAND_DARK, SellerCard } from "@/Components/Seller/sellerUi";
 import { Box, Stack } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import React from "react";
+import PackagingPlaceholder from "@/Components/Shared/PackagingPlaceholder";
 import { NO_IMAGE_PLACEHOLDER } from "./itemShowHelpers";
 
 export interface ItemImageGalleryProps {
     productName: string;
     images: string[];
     activeImage: string | null;
+    /** Packaging of the selected variant, for the no-photograph fallback. */
+    packaging?: string | null;
     onSelectImage: (image: string) => void;
     onOpenViewer: () => void;
 }
@@ -16,6 +19,7 @@ export default function ItemImageGallery({
     productName,
     images,
     activeImage,
+    packaging,
     onSelectImage,
     onOpenViewer,
 }: ItemImageGalleryProps) {
@@ -35,19 +39,28 @@ export default function ItemImageGallery({
                 }}
                 onClick={() => activeImage && onOpenViewer()}
             >
-                <Box
-                    component="img"
-                    src={activeImage || NO_IMAGE_PLACEHOLDER}
-                    alt={productName}
-                    onError={(e) => {
-                        e.currentTarget.src = NO_IMAGE_PLACEHOLDER;
-                    }}
-                    sx={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                    }}
-                />
+                {activeImage ? (
+                    <Box
+                        component="img"
+                        src={activeImage}
+                        alt={productName}
+                        onError={(e) => {
+                            e.currentTarget.src = NO_IMAGE_PLACEHOLDER;
+                        }}
+                        sx={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                        }}
+                    />
+                ) : (
+                    <PackagingPlaceholder
+                        packaging={packaging}
+                        label={productName}
+                        size="lg"
+                        className="border-0 bg-transparent"
+                    />
+                )}
             </Box>
 
             {images.length > 1 && (

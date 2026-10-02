@@ -365,6 +365,7 @@ export default function Show({
                         productName={item.product_name}
                         images={mainImages}
                         activeImage={activeMainImage}
+                        packaging={selectedPackagingRaw}
                         onSelectImage={setSelectedMainImage}
                         onOpenViewer={openImageViewer}
                     />

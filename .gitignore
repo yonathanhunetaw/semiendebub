@@ -48,3 +48,4 @@ docs/scribts/dump-module.sh
 .aider*
 CLAUDE.md
 update_item_variants.cjs
+graphify-out/

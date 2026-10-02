@@ -38,8 +38,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         };
     });
 
+    /*
+     * `overflowX: 'clip'`, not `'hidden'`: overflow-x:hidden forces overflow-y
+     * to auto, which would turn the root box into a vertical scroll container
+     * and nest a second scrollbar inside the page.
+     */
     return (
-        <Box sx={{ display: 'flex', bgcolor: 'background.default', minHeight: '100vh' }}>
+        <Box sx={{ display: 'flex', bgcolor: 'background.default', minHeight: '100vh', maxWidth: '100%', overflowX: 'clip' }}>
             <CssBaseline />
             <AdminNav onMenuClick={() => setMobileOpen(!mobileOpen)} />
 
@@ -65,7 +70,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     flexGrow: 1,
                     bgcolor: 'background.default',
                     minHeight: '100vh',
-                    width: { xl: `calc(100% - 260px)` }
+                    width: { xl: `calc(100% - 260px)` },
+                    /*
+                     * A flex item defaults to `min-width: auto`, so this box
+                     * refused to shrink below the widest thing inside it and
+                     * grew past the viewport instead — which is why admin
+                     * pages had to be pinch-zoomed out on a phone before they
+                     * fitted. `minWidth: 0` lets the content wrap or scroll in
+                     * its own right.
+                     */
+                    minWidth: 0,
                 }}
             >
                 <Snackbar
@@ -87,7 +101,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </Alert>
                 </Snackbar>
                 <Toolbar /> {/* This offsets the fixed AppBar */}
-                <Box sx={{ p: { xs: 2, sm: 3 } }}> {/* This is the only padding container you need */}
+                {/*
+                 * One gutter, and a narrow one on a phone. Pages add their own
+                 * padding on top of this, so 16px here became a 28px gutter on
+                 * each side and cost a 390px screen a seventh of its width.
+                 */}
+                <Box sx={{ px: { xs: 1, sm: 3 }, py: { xs: 1.5, sm: 3 }, minWidth: 0 }}>
                     <Box sx={{ mb: 2 }}>
                         <Breadcrumbs aria-label="breadcrumb" sx={{ fontSize: '0.8rem' }}>
                             <MuiLink

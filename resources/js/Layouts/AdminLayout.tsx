@@ -120,6 +120,11 @@ export default function AdminLayout({ children }: Props) {
                 display: "flex",
                 bgcolor: "background.default",
                 minHeight: "100vh",
+                maxWidth: "100%",
+                // `clip`, not `hidden`: overflow-x:hidden forces overflow-y to
+                // auto, which would turn this box into a vertical scroll
+                // container and nest a second scrollbar inside the page.
+                overflowX: "clip",
                 // Ensures smooth transitions if you toggle themes
                 transition: theme.transitions.create(["background-color"], {
                     duration: theme.transitions.duration.standard,
@@ -212,6 +217,15 @@ export default function AdminLayout({ children }: Props) {
                     width: { xl: `calc(100% - 260px)` },
                     display: "flex",
                     flexDirection: "column",
+                    /*
+                     * A flex item defaults to `min-width: auto`, so this box
+                     * refused to shrink below the widest thing inside it and
+                     * grew past the viewport instead — which is why admin
+                     * pages had to be pinch-zoomed out on a phone before they
+                     * fitted. `minWidth: 0` lets the content wrap or scroll in
+                     * its own right.
+                     */
+                    minWidth: 0,
                 }}
             >
                 {/* This Toolbar acts as a spacer.
@@ -219,10 +233,17 @@ export default function AdminLayout({ children }: Props) {
                 */}
                 <Toolbar />
 
+                {/*
+                 * One gutter, and a narrow one on a phone. Pages add their own
+                 * padding on top of this, so 16px here became a 28px gutter on
+                 * each side and cost a 390px screen a seventh of its width.
+                 */}
                 <Box
                     sx={{
-                        p: { xs: 2, sm: 3 }, // Responsive padding
+                        px: { xs: 1, sm: 3 },
+                        py: { xs: 1.5, sm: 3 },
                         flexGrow: 1,
+                        minWidth: 0,
                     }}
                 >
                     {children}

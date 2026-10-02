@@ -19,11 +19,17 @@ class DevNavigationTest extends TestCase
     private const NAVIGATION_FILE = 'resources/js/Components/Navigation/Dev/devNavigation.ts';
 
     /**
-     * Guest-only entry points, linked from the landing page rather than the sidebar.
+     * Routes that are deliberately not sidebar destinations.
      *
      * @var list<string>
      */
-    private const EXCLUDED = ['/', '/login'];
+    private const EXCLUDED = [
+        // Guest-only entry points, linked from the landing page.
+        '/',
+        '/login',
+        // JSON data endpoint polled by the log viewer, not a page a human visits.
+        '/logs/fetch',
+    ];
 
     #[Test]
     public function every_dev_page_route_has_a_sidebar_link(): void

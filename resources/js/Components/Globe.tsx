@@ -12,8 +12,17 @@ export default function Globe() {
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-        // Alpha true allows the CSS background of the parent div to show through
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        // Alpha true allows the CSS background of the parent div to show through.
+        // Browsers without WebGL (hardware acceleration off, headless, locked-down
+        // machines) throw here — bail out to the flat background instead of taking
+        // the whole page down with us.
+        let renderer: THREE.WebGLRenderer;
+        try {
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        } catch (error) {
+            console.warn('Globe: WebGL unavailable, falling back to a flat background.', error);
+            return;
+        }
 
         renderer.setSize(window.innerWidth, window.innerHeight);
         mountRef.current.appendChild(renderer.domElement);

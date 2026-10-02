@@ -112,14 +112,22 @@ export default function Customers({ customers }: { customers: any[] }) {
         setOpenModal(false);
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        // If business, ensure tin_number is cleared
-        const payload = { ...data };
-        if (customerType === "business") {
-            payload.tin_number = "";
+    /*
+     * A business has no TIN, so the field is cleared when the type changes.
+     * It used to be cleared in handleSubmit, onto a local `payload` that was
+     * then dropped — useForm posts its own state, so switching an individual
+     * to a business still submitted the TIN that had been typed.
+     */
+    const changeType = (next: "individual" | "business") => {
+        setCustomerType(next);
+
+        if (next === "business") {
             setData("tin_number", "");
         }
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
 
         if (editingId) {
             put(route("admin.customers.update", editingId), {
@@ -404,7 +412,7 @@ export default function Customers({ customers }: { customers: any[] }) {
                             fullWidth
                             label="Customer Type"
                             value={customerType}
-                            onChange={(e) => setCustomerType(e.target.value as any)}
+                            onChange={(e) => changeType(e.target.value as "individual" | "business")}
                         >
                             <MenuItem value="individual">Individual</MenuItem>
                             <MenuItem value="business">Business</MenuItem>

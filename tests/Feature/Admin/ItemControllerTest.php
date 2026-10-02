@@ -188,30 +188,78 @@ class ItemControllerTest extends TestCase
     }
 
     /** @test */
-    public function it_forces_status_to_draft_if_variants_lack_required_images()
+    public function it_activates_an_item_whose_variants_lack_images_and_flags_it_as_incomplete()
     {
-        // Setup: Item with a variant that has 0 or 1 image
+        /*
+         * Thin imagery used to force the item back to `draft`. Draft items are
+         * excluded by `Item::where('status', 'active')` in both
+         * Seller\DashboardController and Seller\ItemController, so one
+         * unphotographed variant removed the whole item from every seller's
+         * catalogue — it looked deployed in admin and was simply absent.
+         *
+         * The admin's choice now stands, and `is_incomplete` carries the
+         * "needs artwork" hint instead of hiding anything.
+         */
         $color = ItemColor::factory()->create();
         $item = Item::factory()->create(['status' => 'draft']);
         $item->colors()->attach($color);
         $item->variants()->create([
             'sku' => 'SKU-INCOMPLETE',
             'item_color_id' => $color->id,
-            'images' => ['only-one-image.jpg'] // Needs 2 to be active
+            // One image, and no packaging type to illustrate instead: this is
+            // exactly the case the old gate refused.
+            'images' => ['only-one-image.jpg'],
         ]);
 
         $payload = [
             'product_name' => $item->product_name,
             'item_category_id' => $item->item_category_id,
             'color_ids' => [$color->id],
-            'status' => 'active', // User tries to set it to active
+            'status' => 'active',
         ];
 
         $this->put(route('admin.items.update', $item), $payload);
 
-        // The evaluateDraftStatus helper should override 'active' back to 'draft'
-        $this->assertEquals('draft', $item->fresh()->status);
+        $this->assertEquals('active', $item->fresh()->status);
+        // Still recorded as thin, for the admin list's hint.
         $this->assertTrue((bool) $item->fresh()->is_incomplete);
+    }
+
+    /** @test */
+    public function it_activates_an_item_through_the_status_endpoint_without_images()
+    {
+        $color = ItemColor::factory()->create();
+        $item = Item::factory()->create(['status' => 'draft']);
+        $item->colors()->attach($color);
+        $item->variants()->create([
+            'sku' => 'SKU-NO-ART',
+            'item_color_id' => $color->id,
+            'images' => [],
+        ]);
+
+        $this->patch(route('admin.items.updateStatus', $item), ['status' => 'active'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertEquals('active', $item->fresh()->status);
+        $this->assertTrue((bool) $item->fresh()->is_incomplete);
+    }
+
+    /** @test */
+    public function it_clears_the_incomplete_flag_once_every_variant_is_illustrated()
+    {
+        $color = ItemColor::factory()->create();
+        $item = Item::factory()->create(['status' => 'draft']);
+        $item->colors()->attach($color);
+        $item->variants()->create([
+            'sku' => 'SKU-TWO-IMAGES',
+            'item_color_id' => $color->id,
+            'images' => ['one.jpg', 'two.jpg'],
+        ]);
+
+        $this->patch(route('admin.items.updateStatus', $item), ['status' => 'active']);
+
+        $this->assertEquals('active', $item->fresh()->status);
+        $this->assertFalse((bool) $item->fresh()->is_incomplete);
     }
 
     /** @test */

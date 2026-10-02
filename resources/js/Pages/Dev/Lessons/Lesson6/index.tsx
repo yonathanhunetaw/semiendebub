@@ -1,4 +1,4 @@
-import AdminLayout from "@/Layouts/AppLayout";
+import DevLayout from "@/Layouts/DevLayout";
 import {Head} from "@inertiajs/react";
 import React, {useState} from "react";
 import StarRating from "@/Pages/Dev/Lessons/Lesson6/StarRating";
@@ -114,7 +114,7 @@ export default function Index({initialColors}: Lesson6Props) {
 // The version you have (at the bottom of the file) is called a Persistent Layout.
 // The version I gave you is a Standard Wrapper.
 Index.layout = (page: React.ReactNode) => (
-    <AdminLayout>
+    <DevLayout>
         {page}
-    </AdminLayout>
+    </DevLayout>
 );

@@ -11,7 +11,32 @@ export default function Create() {
         email: "",
         phone_number: "",
         city: "",
+        tin_number: "",
     });
+
+    /*
+     * Customer type is the TIN, as it is everywhere else in this application:
+     * a customer holding a TIN is "individual" and is priced with VAT, and one
+     * without is "business". Admin\Customers\Index has offered this choice for
+     * a while; the seller form collected neither the type nor the number, so
+     * every customer a seller added came out as a business and could never be
+     * quoted a VAT-inclusive price.
+     */
+    const [customerType, setCustomerType] = React.useState<"individual" | "business">("individual");
+
+    /*
+     * A business has no TIN by definition, so the field is cleared the moment
+     * the type is switched rather than at submit time. useForm always posts its
+     * own state, so clearing it here is what actually keeps a stale number from
+     * being saved.
+     */
+    const changeType = (next: "individual" | "business") => {
+        setCustomerType(next);
+
+        if (next === "business") {
+            setData("tin_number", "");
+        }
+    };
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -27,6 +52,35 @@ export default function Create() {
             <Box component="form" onSubmit={submit} sx={{ px: 2, pt: 2 }}>
                 <SellerCard>
                     <Stack spacing={2}>
+                        <TextField
+                            select
+                            fullWidth
+                            label="Customer Type"
+                            value={customerType}
+                            onChange={(event) =>
+                                changeType(event.target.value as "individual" | "business")
+                            }
+                            helperText={
+                                customerType === "individual"
+                                    ? "Priced with VAT — needs a TIN."
+                                    : "Priced without VAT."
+                            }
+                        >
+                            <MenuItem value="individual">Individual</MenuItem>
+                            <MenuItem value="business">Business</MenuItem>
+                        </TextField>
+
+                        {customerType === "individual" && (
+                            <TextField
+                                fullWidth
+                                label="TIN Number"
+                                value={data.tin_number}
+                                onChange={(event) => setData("tin_number", event.target.value)}
+                                helperText={errors.tin_number}
+                                error={Boolean(errors.tin_number)}
+                            />
+                        )}
+
                         <TextField
                             fullWidth
                             label="First name"

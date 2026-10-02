@@ -9,6 +9,7 @@ import type {
 } from "@/types/storefront";
 import {
     STOREFRONT_BRAND,
+    STOREFRONT_BRAND_HOVER,
     STOREFRONT_BRAND_SOFT,
     STOREFRONT_SHELL,
 } from "./storefrontConstants";
@@ -27,13 +28,33 @@ export interface StorefrontHeaderProps {
     cartCount: number;
     onOpenCart: () => void;
     user: StorefrontAuthUser | null;
-    /** Categories shown inline on desktop before the rest collapse into the pill strip. */
-    maxVisibleCategories?: number;
+
+    /* ── Search (desktop only; phones use CategoryFilterStrip) ── */
+    /**
+     * Controlled search value. Omit on pages that cannot filter in place — the
+     * search row is then left out rather than rendered inert.
+     */
+    search?: string;
+    onSearchChange?: (value: string) => void;
+    onSearchSubmit?: () => void;
+    onSearchClear?: () => void;
+    isSearching?: boolean;
+    searchPlaceholder?: string;
+
+    /** Opens the "All Categories" drawer — the desktop stand-in for the bottom bar. */
+    onOpenMenu?: () => void;
 }
 
 /**
- * Sticky storefront masthead: brand, desktop category navigation, auth status
- * and the single-cart indicator.
+ * Sticky storefront masthead.
+ *
+ * Two rows on desktop, after the shape a shopper expects from a large
+ * marketplace: brand, a search field wide enough to read, account state and the
+ * cart on the first; an "All Categories" hamburger and the category rail on the
+ * second. On a phone the first row compresses to brand / account / cart and the
+ * second row is dropped entirely — search and categories live in
+ * CategoryFilterStrip there, which scrolls with the page instead of eating a
+ * third of a small viewport.
  */
 export default function StorefrontHeader({
     store,
@@ -43,10 +64,16 @@ export default function StorefrontHeader({
     cartCount,
     onOpenCart,
     user,
-    maxVisibleCategories = 5,
+    search,
+    onSearchChange,
+    onSearchSubmit,
+    onSearchClear,
+    isSearching = false,
+    searchPlaceholder = "Search notebooks, pens, art supplies…",
+    onOpenMenu,
 }: StorefrontHeaderProps): React.ReactElement {
-    const visibleCategories = categories.slice(0, maxVisibleCategories);
     const isAuthenticated = user !== null;
+    const canSearchInPlace = search !== undefined && onSearchChange !== undefined;
 
     // On pages that cannot filter in place, a category navigates back to the
     // grid with that filter already applied.
@@ -62,15 +89,20 @@ export default function StorefrontHeader({
         );
     };
 
+    const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
+        event.preventDefault();
+        onSearchSubmit?.();
+    };
+
     return (
-        <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 shadow-sm">
-            {/* ── Brand row ── */}
+        <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white shadow-sm">
+            {/* ══ Row 1: brand · search · account · cart ══ */}
             <div className={STOREFRONT_SHELL}>
-                <div className="flex h-16 items-center justify-between gap-3">
-                    {/* Brand */}
+                <div className="flex h-16 items-center justify-between gap-3 md:gap-6">
+                    {/* ── Brand ── */}
                     <Link
                         href={route("storefront.index")}
-                        className="flex min-w-0 items-center gap-2.5"
+                        className="flex min-w-0 items-center gap-2.5 md:shrink-0"
                         aria-label="Storefront home"
                     >
                         <span
@@ -89,82 +121,121 @@ export default function StorefrontHeader({
                             name widened the masthead and took the whole page with
                             it — the mark stays fixed, the words give way. */}
                         <span className="flex min-w-0 flex-col leading-none">
-                            <span className="truncate text-[15px] font-bold tracking-tight text-gray-900">
+                            <span className="truncate text-[15px] font-bold tracking-tight text-gray-900 md:max-w-[12rem]">
                                 {store?.name ?? "Stationery Shop"}
                             </span>
                             {store?.location ? (
-                                <span className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
+                                <span className="mt-0.5 truncate text-[11px] font-medium text-slate-400 md:max-w-[12rem]">
                                     {store.location}
                                 </span>
                             ) : null}
                         </span>
                     </Link>
 
-                    {/* ── Desktop category navigation ── */}
-                    <nav
-                        className="hidden lg:flex items-center gap-1"
-                        aria-label="Product categories"
-                    >
-                        <CategoryNavButton
-                            label="All"
-                            active={activeCategoryId === null}
-                            onClick={() => selectCategory(null)}
-                        />
-                        {visibleCategories.map((category) => (
-                            <CategoryNavButton
-                                key={category.id}
-                                label={category.name}
-                                active={activeCategoryId === category.id}
-                                onClick={() => selectCategory(category.id)}
-                            />
-                        ))}
-                    </nav>
+                    {/* ── Search (desktop) ── */}
+                    {canSearchInPlace ? (
+                        <form
+                            onSubmit={handleSubmit}
+                            role="search"
+                            className="hidden min-w-0 flex-1 md:block"
+                        >
+                            <div className="flex items-center gap-2 rounded-full border-2 border-slate-900/10 bg-white py-1 pl-4 pr-1 transition-colors focus-within:border-[#c2410c]">
+                                <input
+                                    type="search"
+                                    value={search}
+                                    onChange={(event) =>
+                                        onSearchChange?.(event.target.value)
+                                    }
+                                    placeholder={searchPlaceholder}
+                                    aria-label="Search products"
+                                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] font-medium text-gray-900 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+                                />
 
-                    {/* ── Auth status + cart ── */}
-                    <div className="flex items-center gap-2 shrink-0">
+                                {search && search.length > 0 ? (
+                                    <button
+                                        type="button"
+                                        onClick={onSearchClear}
+                                        aria-label="Clear search"
+                                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">
+                                            close
+                                        </span>
+                                    </button>
+                                ) : null}
+
+                                {isSearching ? (
+                                    <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-orange-200 border-t-transparent" />
+                                ) : null}
+
+                                <button
+                                    type="submit"
+                                    aria-label="Search"
+                                    className="flex h-9 shrink-0 items-center justify-center rounded-full px-6 text-white transition-colors"
+                                    style={{ backgroundColor: STOREFRONT_BRAND }}
+                                    onMouseEnter={(event) => {
+                                        event.currentTarget.style.backgroundColor =
+                                            STOREFRONT_BRAND_HOVER;
+                                    }}
+                                    onMouseLeave={(event) => {
+                                        event.currentTarget.style.backgroundColor =
+                                            STOREFRONT_BRAND;
+                                    }}
+                                >
+                                    <span className="material-symbols-outlined text-[20px]">
+                                        search
+                                    </span>
+                                </button>
+                            </div>
+                        </form>
+                    ) : null}
+
+                    {/* ── Account + cart ── */}
+                    <div className="flex shrink-0 items-center gap-2">
+                        {/* Two-line account block, as on the reference masthead:
+                            the greeting above, the action below. */}
                         {isAuthenticated ? (
                             <Link
-                                href={route("dashboard")}
-                                className="hidden sm:flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-700 transition-colors hover:bg-slate-50 active:scale-95"
+                                href={route("profile.edit")}
+                                className="hidden items-center gap-2 rounded-full px-2.5 py-1.5 transition-colors hover:bg-slate-100 sm:flex"
                             >
-                                <span className="material-symbols-outlined text-[16px]">
+                                <span className="material-symbols-outlined text-[24px] text-slate-500">
                                     account_circle
                                 </span>
-                                {/* The cluster is deliberately shrink-0 so the
-                                    icon buttons keep their size; the one variable
-                                    string in it is capped instead. */}
-                                <span className="max-w-[9rem] truncate">
-                                    {user?.first_name
-                                        ? `Hi, ${user.first_name}`
-                                        : "My Account"}
+                                <span className="flex flex-col leading-tight">
+                                    <span className="text-[11px] text-slate-500">
+                                        Welcome
+                                    </span>
+                                    <span className="max-w-[9rem] truncate text-[13px] font-bold text-gray-900">
+                                        {user?.first_name ?? "My Account"}
+                                    </span>
                                 </span>
                             </Link>
                         ) : (
-                            <div className="hidden sm:flex items-center gap-1.5">
-                                <Link
-                                    href={route("login")}
-                                    className="rounded-full px-3 py-1.5 text-[12px] font-bold text-slate-600 transition-colors hover:bg-slate-100 active:scale-95"
-                                >
-                                    Sign In
-                                </Link>
-                                <Link
-                                    href={route("register")}
-                                    className="rounded-full px-3.5 py-1.5 text-[12px] font-bold text-white shadow-sm transition-opacity hover:opacity-90 active:scale-95"
-                                    style={{ backgroundColor: STOREFRONT_BRAND }}
-                                >
-                                    Register
-                                </Link>
-                            </div>
+                            <Link
+                                href={route("login")}
+                                className="hidden items-center gap-2 rounded-full px-2.5 py-1.5 transition-colors hover:bg-slate-100 sm:flex"
+                            >
+                                <span className="material-symbols-outlined text-[24px] text-slate-500">
+                                    account_circle
+                                </span>
+                                <span className="flex flex-col leading-tight">
+                                    <span className="text-[11px] text-slate-500">
+                                        Welcome
+                                    </span>
+                                    <span className="text-[13px] font-bold text-gray-900">
+                                        Sign in / Register
+                                    </span>
+                                </span>
+                            </Link>
                         )}
 
                         {/* Compact auth entry point for narrow screens */}
                         <Link
                             href={
-                                isAuthenticated
-                                    ? route("dashboard")
-                                    : route("login")
+                                isAuthenticated ? route("profile.edit") : route("login")
                             }
-                            className="sm:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 active:scale-95"
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 active:scale-95 sm:hidden"
                             aria-label={isAuthenticated ? "My account" : "Sign in"}
                         >
                             <span className="material-symbols-outlined text-[20px]">
@@ -212,6 +283,46 @@ export default function StorefrontHeader({
                     </div>
                 </div>
             </div>
+
+            {/* ══ Row 2 (desktop): All Categories + the category rail ══ */}
+            <div className="hidden border-t border-slate-200/70 md:block">
+                <div className={STOREFRONT_SHELL}>
+                    <div className="flex h-12 items-center gap-1">
+                        {onOpenMenu ? (
+                            <button
+                                type="button"
+                                onClick={onOpenMenu}
+                                className="flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-bold text-gray-900 transition-colors hover:bg-slate-100"
+                                aria-label="Open all categories and menu"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">
+                                    menu
+                                </span>
+                                All Categories
+                            </button>
+                        ) : null}
+
+                        <nav
+                            className="no-scrollbar scroll-smooth flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+                            aria-label="Product categories"
+                        >
+                            <CategoryNavButton
+                                label="All"
+                                active={activeCategoryId === null}
+                                onClick={() => selectCategory(null)}
+                            />
+                            {categories.map((category) => (
+                                <CategoryNavButton
+                                    key={category.id}
+                                    label={category.name}
+                                    active={activeCategoryId === category.id}
+                                    onClick={() => selectCategory(category.id)}
+                                />
+                            ))}
+                        </nav>
+                    </div>
+                </div>
+            </div>
         </header>
     );
 }
@@ -232,10 +343,8 @@ function CategoryNavButton({
             type="button"
             onClick={onClick}
             aria-current={active ? "true" : undefined}
-            className={`rounded-full px-3 py-1.5 text-[12px] font-bold transition-colors ${
-                active
-                    ? "text-white"
-                    : "text-slate-600 hover:bg-slate-100"
+            className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                active ? "text-white" : "text-slate-600 hover:bg-slate-100"
             }`}
             style={active ? { backgroundColor: STOREFRONT_BRAND } : undefined}
         >

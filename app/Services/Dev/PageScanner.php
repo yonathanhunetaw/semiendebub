@@ -2,87 +2,196 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
+namespace App\Services\Dev;
+
+use Symfony\Component\Finder\Finder;
 
 /**
- * A shipment is one vehicle-load moving between two stores, carrying many SKUs.
+ * Indexes every Inertia page component under resources/js/Pages, keyed by the
+ * component name a controller would pass to `Inertia::render()`.
  *
- * The existing `transfers` table cannot express this: it holds a single
- * item_variant_id per row, so a manifest of five SKUs is five unrelated rows
- * with nothing tying them to one run, one vehicle or one driver. That is why
- * the Admin and Seller shipment screens were built on hardcoded demo arrays.
- *
- * `shipments` is the header (route, vehicle, driver, status) and
- * `shipment_items` the manifest lines.
+ * The key has to match that string exactly — `app.tsx` resolves pages with
+ * `import.meta.glob('./Pages/**\/*.{tsx,jsx}')`, so the component name is the
+ * path relative to resources/js/Pages with the extension dropped, original
+ * casing intact ("Seller/Shipments/index", not ".../Index"). Anything the
+ * generator cannot match here is reported as a broken page link instead.
  */
-return new class extends Migration
+final class PageScanner
 {
-    public function up(): void
-    {
-        if (! Schema::hasTable('shipments')) {
-            Schema::create('shipments', function (Blueprint $table): void {
-                $table->id();$table->string('reference')->unique();
+    /**
+     * Extensions `app.tsx` can resolve, in precedence order: a `.tsx` file wins
+     * when both spellings of a component exist, which is what the client does.
+     *
+     * @var list<string>
+     */
+    private const EXTENSIONS = ['tsx', 'jsx'];
 
-                // Route. Both ends are stores; the ledger tracks stock per store.
-                $table->foreignId('origin_store_id')->constrained('stores')->cascadeOnDelete();$table->foreignId('destination_store_id')->constrained('stores')->cascadeOnDelete();
+    /**
+     * How far past a `Page.layout = ...` assignment to look for the layout tag.
+     * Single-line arrows need 1; the parenthesised multi-line form puts the tag
+     * on the next line or two.
+     */
+    private const LAYOUT_LOOKAHEAD = 5;
 
-                $table->enum('status', [
-                    'draft',        // manifest being built
-                    'scheduled',    // committed, awaiting pick
-                    'picking',      // stock keeper picking
-                    'ready',        // picked, awaiting courier
-                    'dispatched',   // stock has left the origin
-                    'in_transit',   // courier on the road
-                    'delivered',    // courier handed over
-                    'received',     // destination confirmed; stock landed
-                    'cancelled',
-                ])->default('draft')->index();
-
-                // Fleet
-                $table->string('vehicle_name')->nullable();$table->string('vehicle_plate')->nullable();
-                $table->decimal('vehicle_max_cbm', 8, 2)->nullable();$table->foreignId('courier_id')->nullable()->constrained('users')->nullOnDelete();
-
-                // Timeline — each transition stamps its own column so a shipment's
-                // history is reconstructable from the row alone.
-                $table->timestamp('scheduled_for')->nullable();$table->timestamp('picked_at')->nullable();
-                $table->timestamp('dispatched_at')->nullable();$table->timestamp('in_transit_at')->nullable();
-                $table->timestamp('delivered_at')->nullable();$table->timestamp('received_at')->nullable();
-                $table->timestamp('cancelled_at')->nullable();$table->timestamp('eta')->nullable();
-
-                $table->string('gate_pass')->nullable();
-                $table->string('slot')->nullable();$table->decimal('distance_km', 8, 2)->nullable();
-                $table->text('notes')->nullable();$table->string('cancel_reason')->nullable();
-
-                $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();$table->timestamps();
-
-                $table->index(['origin_store_id', 'status']);$table->index(['destination_store_id', 'status']);
-            });
-        }
-
-        if (! Schema::hasTable('shipment_items')) {
-            Schema::create('shipment_items', function (Blueprint $table): void {$table->id();
-                $table->foreignId('shipment_id')->constrained('shipments')->cascadeOnDelete();$table->foreignId('item_variant_id')->constrained('item_variants')->cascadeOnDelete();
-
-                $table->unsignedInteger('quantity');
-                // What the stock keeper actually found; may fall short of quantity.
-                $table->unsignedInteger('picked_quantity')->default(0);
-
-                $table->decimal('cbm', 10, 3)->nullable();$table->decimal('weight_kg', 10, 2)->nullable();
-                $table->string('unit')->nullable();$table->string('location')->nullable();
-
-                $table->timestamps();
-
-                // One line per SKU per shipment.
-                $table->unique(['shipment_id', 'item_variant_id']);
-            });
-        }
+    public function __construct(
+        private readonly string $basePath,
+        private readonly DomainClassifier $classifier,
+    ) {
     }
 
-    public function down(): void
+    /**
+     * @return array<string, array<string, mixed>> keyed by Inertia component name
+     */
+    public function all(): array
     {
-        Schema::dropIfExists('shipment_items');
-        Schema::dropIfExists('shipments');
+        $root = $this->basePath.'/resources/js/Pages';
+
+        if (! is_dir($root)) {
+            return [];
+        }
+
+        $pages = [];
+
+        foreach ($this->pageFiles($root) as $component => $file) {
+            $pages[$component] = $this->describe($component, $file);
+        }
+
+        ksort($pages);
+
+        return $pages;
     }
-};
+
+    /**
+     * Every resolvable page file, keyed by component name. Later extensions do
+     * not clobber earlier ones, so self::EXTENSIONS order decides collisions.
+     *
+     * @return array<string, string> component => absolute path
+     */
+    private function pageFiles(string $root): array
+    {
+        $files = [];
+
+        foreach (self::EXTENSIONS as $extension) {
+            $finder = Finder::create()->files()->in($root)->name('*.'.$extension)->sortByName();
+
+            foreach ($finder as $file) {
+                $path = $file->getRealPath() ?: $file->getPathname();
+                $component = $this->componentName($root, $path, $extension);
+
+                if ($component === '') {
+                    continue;
+                }
+
+                $files[$component] ??= $path;
+            }
+        }
+
+        return $files;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function describe(string $component, string $file): array
+    {
+        $source = is_readable($file) ? (string) file_get_contents($file) : '';
+
+        return [
+            'component' => $component,
+            'domain' => $this->domainFor($component),
+            'file' => $this->relative($file),
+            'layout' => $this->layout($source),
+            'lines' => $this->lines($source),
+            'exists' => true,
+            // Filled in by DomainMapGenerator::backfillUsage() once the routes
+            // that render this component are known.
+            'routes' => [],
+        ];
+    }
+
+    /**
+     * "…/resources/js/Pages/Seller/Shipments/index.tsx" => "Seller/Shipments/index".
+     */
+    private function componentName(string $root, string $path, string $extension): string
+    {
+        $relative = ltrim(str_replace($root, '', $path), DIRECTORY_SEPARATOR.'/');
+        $relative = str_replace(DIRECTORY_SEPARATOR, '/', $relative);
+
+        return (string) preg_replace('/\.'.preg_quote($extension, '/').'$/', '', $relative);
+    }
+
+    /**
+     * Classify by walking the component's folders outward-in, so both
+     * "Admin/Items/Index" and "Welcome/Admin" land on `admin` rather than
+     * dumping the whole Welcome/ folder into the shared fallback.
+     */
+    private function domainFor(string $component): string
+    {
+        return $this->classifier->resolve(explode('/', $component));
+    }
+
+    /**
+     * The persistent layout a page opts into with `Page.layout = …`, falling
+     * back to a layout the component wraps itself in. Null when it renders bare
+     * (login screens, co-located partials).
+     */
+    private function layout(string $source): ?string
+    {
+        if ($source === '') {
+            return null;
+        }
+
+        // Split on real newlines only — see lines() for why \R is unsafe here.
+        $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $source));
+
+        foreach ($lines as $number => $line) {
+            if (preg_match('/^\s*[A-Za-z0-9_$]+\s*\.\s*layout\s*=/', $line) !== 1) {
+                continue;
+            }
+
+            $window = implode("\n", array_slice($lines, $number, self::LAYOUT_LOOKAHEAD));
+
+            $layout = $this->firstLayoutTag($window);
+
+            if ($layout !== null) {
+                return $layout;
+            }
+        }
+
+        return $this->firstLayoutTag($source);
+    }
+
+    /**
+     * First `<SomethingLayout …>` (or bare `<Layout …>`) JSX tag in a chunk.
+     */
+    private function firstLayoutTag(string $slice): ?string
+    {
+        if (preg_match('/<((?:[A-Z][A-Za-z0-9_]*)?Layout)\b/', $slice, $matches) === 1) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Counted on bytes rather than with `\R`, which without the /u modifier
+     * also matches a bare 0x85 — the third byte of plenty of Ethiopic
+     * characters, so an Amharic page would be counted a line long per
+     * occurrence (and split mid-character).
+     */
+    private function lines(string $source): int
+    {
+        $normalized = rtrim(str_replace(["\r\n", "\r"], "\n", $source), "\n");
+
+        if ($normalized === '') {
+            return 0;
+        }
+
+        return substr_count($normalized, "\n") + 1;
+    }
+
+    private function relative(string $path): string
+    {
+        return ltrim(str_replace($this->basePath, '', $path), '/');
+    }
+}

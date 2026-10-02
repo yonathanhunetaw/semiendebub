@@ -4,11 +4,9 @@ namespace Database\Seeders;
 
 use Database\Seeders\Admin\ItemCategorySeeder;
 use Database\Seeders\Admin\ItemColorSeeder;
-use Database\Seeders\Admin\ItemImageSeeder;
 use Database\Seeders\Admin\ItemPackagingTypeSeeder;
 use Database\Seeders\Admin\ItemSeeder;
 use Database\Seeders\Admin\ItemSizeSeeder;
-use Database\Seeders\Admin\ItemVariantSeeder;
 use Database\Seeders\Auth\RolePermissionSeeder;
 use Database\Seeders\Customer\CustomerSeeder;
 use Database\Seeders\StockKeeper\ItemInventoryLocationSeeder;
@@ -52,9 +50,13 @@ class DatabaseSeeder extends Seeder
             ItemSizeSeeder::class,
             ItemPackagingTypeSeeder::class,
 
+            // ItemSeeder uploads whatever photography is committed under
+            // storage/app/seed-images and records only the keys that land.
+            // ItemImageSeeder used to run here too, uploading to the wrong
+            // disk from filenames that have never existed — it was removed
+            // rather than fixed, because ItemSeeder already does the job.
             ItemSeeder::class,
 
-            ItemImageSeeder::class,
             ItemOwnerSeeder::class,
 
             ItemStoreSeeder::class,

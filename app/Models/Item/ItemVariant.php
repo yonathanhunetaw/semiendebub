@@ -165,6 +165,75 @@ class ItemVariant extends Model
 
     /*
     |--------------------------------------------------------------------------
+    | Image proof
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * Packaging tier key, or null when the packaging cannot be classified.
+     *
+     * The PHP twin of classifyPackagingTier() in
+     * resources/js/Components/Seller/itemShowHelpers.ts — the two decide the
+     * same thing on either side of the wire and must be changed together.
+     * Both spellings of carton are matched because the catalogue was seeded
+     * as "Cartoon".
+     */
+    public function packagingTier(): ?string
+    {
+        $value = strtolower((string) $this->itemPackagingType?->name);
+
+        if ($value === '') {
+            return null;
+        }
+
+        return match (true) {
+            str_contains($value, 'carton'), str_contains($value, 'cartoon') => 'cartoon',
+            str_contains($value, 'box') => 'box',
+            str_contains($value, 'bundle') => 'bundle',
+            str_contains($value, 'bag'), str_contains($value, 'sack') => 'bag',
+            // Before 'pack', so "packet" cannot swallow it.
+            str_contains($value, 'dozen'), str_contains($value, 'doz'), str_contains($value, 'dz') => 'doz',
+            str_contains($value, 'packet'), str_contains($value, 'pack') => 'packet',
+            str_contains($value, 'piece'), str_contains($value, 'pcs'), str_contains($value, 'pc') => 'piece',
+            default => null,
+        };
+    }
+
+    /** Image keys that are actually set, with blanks and nulls discarded. */
+    public function realImageKeys(): array
+    {
+        $images = is_array($this->images) ? $this->images : [];
+
+        return array_values(array_filter(
+            $images,
+            static fn ($key): bool => is_string($key) && trim($key) !== '',
+        ));
+    }
+
+    /**
+     * Whether this variant may be published.
+     *
+     * Two photographs is the bar, but a variant whose packaging resolves to a
+     * tier also passes: the UI draws a PackagingPlaceholder for it, so it has
+     * something truthful to show rather than a broken image.
+     *
+     * This replaces three separate counts in Admin\ItemController that had
+     * drifted apart — one used bare count(), so a literal null inside the
+     * array satisfied it, while another used array_filter() and did not.
+     */
+    public function hasImageProof(): bool
+    {
+        return count($this->realImageKeys()) >= 2 || $this->packagingTier() !== null;
+    }
+
+    /** True only when real photographs exist — drives the advisory admin hint. */
+    public function hasPhotographicProof(): bool
+    {
+        return count($this->realImageKeys()) >= 2;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | Business Logic
     |--------------------------------------------------------------------------
     */

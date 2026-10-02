@@ -1,4 +1,14 @@
 import SellerLayout from "@/Layouts/SellerLayout";
+import {
+    HUB_BRAND as BRAND,
+    HUB_INK as INK,
+    HUB_PAGE_BG as PAGE_BG,
+    OpsCard,
+    PipelineCard,
+    type Row,
+    type Tile,
+    href,
+} from "@/Components/Shared/OpsHub";
 import { SAMPLE_ORDERS } from "@/Data/sellerOrderFlow";
 import { Head, Link } from "@inertiajs/react";
 import React, { useState } from "react";
@@ -6,32 +16,11 @@ import React, { useState } from "react";
 /**
  * Seller "More" hub.
  *
- * Laid out as a stack of white cards on a near-white page: two pipeline cards
- * (orders, shipments) with 5-up counter grids, then the operations rows.
- *
- * Two notes on styling, because this project's tailwind.config.js overrides
- * parts of the default scale:
- *  - `rounded-full` is redefined to 0.75rem and `rounded-xl`/`rounded-lg` to
- *    0.5rem/0.25rem, so every radius here is an explicit arbitrary value.
- *    Pills and circles use `rounded-[999px]`.
- *  - Tailwind 3 has no `shadow-xs`; `shadow-sm` is the equivalent.
+ * A stack of white cards on a near-white page: two pipeline cards (orders,
+ * shipments) with counter grids, then the operations rows. The card set itself
+ * lives in Components/Shared/OpsHub so the admin inventory hub renders the
+ * same UI rather than a second copy of it.
  */
-
-const BRAND = "#c2410c";
-const INK = "#0b1c30";
-const PAGE_BG = "#F8F9FB";
-
-/** Accent sets kept as literal class strings so the JIT compiler sees them. */
-const TONES = {
-    amber: { badge: "bg-amber-600", caption: "text-amber-700", hover: "group-hover:text-amber-600" },
-    blue: { badge: "bg-blue-600", caption: "text-blue-600", hover: "group-hover:text-blue-600" },
-    brand: { badge: "bg-[#c2410c]", caption: "text-[#c2410c]", hover: "group-hover:text-[#c2410c]" },
-    emerald: { badge: "bg-emerald-600", caption: "text-emerald-600", hover: "group-hover:text-emerald-600" },
-    rose: { badge: "bg-rose-600", caption: "text-rose-600", hover: "group-hover:text-rose-600" },
-    violet: { badge: "bg-violet-600", caption: "text-violet-600", hover: "group-hover:text-violet-600" },
-} as const;
-
-type Tone = keyof typeof TONES;
 
 interface ShipmentStats {
     manifest?: number;
@@ -49,316 +38,6 @@ interface Props {
     seller?: { name: string | null; email: string | null; store: string | null };
 }
 
-interface Tile {
-    label: string;
-    caption: string;
-    icon: string;
-    count: number;
-    tone: Tone;
-    /** Standing warning: carries its accent even at rest, as the design does. */
-    alert?: boolean;
-    /** Tab to open on the destination list, via `?tab=`. */
-    tab?: string;
-}
-
-interface Row {
-    label: string;
-    caption: string;
-    icon: string;
-    /** Registered route name, or null while the module has no page yet. */
-    route: string | null;
-    tone: Tone | "ink";
-    /** Gradient + border pair for the row shell; plain white when omitted. */
-    surface?: string;
-    count?: number;
-}
-
-/** Resolve a route name, or null when Ziggy has no such route registered. */
-function href(name: string | null): string | null {
-    if (!name) return null;
-
-    try {
-        return route(name);
-    } catch {
-        return null;
-    }
-}
-
-/** Icon-only square used by the row list. */
-const ROW_ICON_BG: Record<Tone | "ink", string> = {
-    amber: "bg-amber-500",
-    blue: "bg-blue-600",
-    brand: "bg-[#c2410c]",
-    emerald: "bg-emerald-600",
-    rose: "bg-rose-600",
-    violet: "bg-violet-600",
-    ink: "bg-[#0b1c30]",
-};
-
-const ROW_HOVER: Record<Tone | "ink", string> = {
-    amber: "group-hover:text-amber-600",
-    blue: "group-hover:text-blue-600",
-    brand: "group-hover:text-[#c2410c]",
-    emerald: "group-hover:text-emerald-600",
-    rose: "group-hover:text-rose-600",
-    violet: "group-hover:text-violet-600",
-    ink: "group-hover:text-gray-800",
-};
-
-/**
- * A 5-up counter grid. Every tile leads to the same list page — the order and
- * shipment indexes take no status filter yet — so the tiles read as counters
- * plus a way in, not as saved filters.
- */
-function PipelineCard({
-    title,
-    actionLabel,
-    actionRoute,
-    tiles,
-    footer,
-    preview = false,
-}: {
-    title: string;
-    actionLabel: string;
-    actionRoute: string | null;
-    tiles: Tile[];
-    footer?: Row[];
-    /** Flags a card whose counts come from sample data, not the database. */
-    preview?: boolean;
-}) {
-    const target = href(actionRoute);
-
-    return (
-        <section className="mb-3 px-3.5">
-            <div className="rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
-                <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                        <h2 className="text-[13px] font-bold" style={{ color: INK }}>
-                            {title}
-                        </h2>
-                        {preview ? (
-                            <span className="rounded-[999px] bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                                Preview
-                            </span>
-                        ) : null}
-                    </div>
-                    {target ? (
-                        <Link
-                            href={target}
-                            className="flex items-center text-[11px] font-medium text-gray-500 hover:text-gray-800"
-                        >
-                            <span>{actionLabel}</span>
-                            <span className="material-symbols-outlined ml-0.5 text-xs">chevron_right</span>
-                        </Link>
-                    ) : null}
-                </div>
-
-                <div
-                    className={`grid gap-1 text-center ${
-                        tiles.length === 6 ? "grid-cols-3 gap-y-2" : "grid-cols-5"
-                    } ${footer ? "border-b border-gray-100 pb-3" : ""}`}
-                >
-                    {tiles.map((tile) => {
-                        const tone = TONES[tile.tone];
-                        const tileTarget =
-                            target && tile.tab ? `${target}?tab=${tile.tab}` : target;
-
-                        const body = (
-                            <>
-                                <div
-                                    className={`relative flex h-9 w-9 items-center justify-center transition-colors ${
-                                        tile.alert ? tone.caption : "text-gray-700"
-                                    } ${target && !tile.alert ? tone.hover : ""}`}
-                                >
-                                    <span className="material-symbols-outlined text-[22px]">{tile.icon}</span>
-                                    {tile.count > 0 ? (
-                                        <span
-                                            className={`absolute right-0 top-0 flex h-[15px] min-w-[15px] items-center justify-center rounded-[999px] px-1 font-mono text-[8px] font-bold text-white shadow-sm ${tone.badge}`}
-                                        >
-                                            {tile.count > 99 ? "99+" : tile.count}
-                                        </span>
-                                    ) : null}
-                                </div>
-                                <span
-                                    className={`mt-0.5 text-[10px] font-bold leading-tight ${
-                                        tile.alert ? tone.caption : "text-gray-800"
-                                    }`}
-                                >
-                                    {tile.label}
-                                </span>
-                                <span className={`text-[8px] font-medium leading-tight ${tone.caption}`}>
-                                    {tile.caption}
-                                </span>
-                            </>
-                        );
-
-                        const shell =
-                            "group flex flex-col items-center rounded-[12px] p-1 transition-colors";
-
-                        return tileTarget ? (
-                            <Link
-                                key={tile.label}
-                                href={tileTarget}
-                                className={`${shell} ${tile.alert ? "hover:bg-rose-50/60" : "hover:bg-gray-50"}`}
-                            >
-                                {body}
-                            </Link>
-                        ) : (
-                            <div key={tile.label} className={shell}>
-                                {body}
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {footer ? (
-                    <div className="grid grid-cols-2 gap-2 pt-2.5">
-                        {footer.map((link) => {
-                            const linkTarget = href(link.route);
-
-                            const body = (
-                                <>
-                                    <span
-                                        className={`material-symbols-outlined text-base ${
-                                            linkTarget ? "text-gray-500" : "text-slate-300"
-                                        }`}
-                                    >
-                                        {link.icon}
-                                    </span>
-                                    <span
-                                        className={`text-[11px] font-medium ${
-                                            linkTarget ? "text-gray-800" : "text-slate-400"
-                                        }`}
-                                    >
-                                        {link.label}
-                                    </span>
-                                    {!linkTarget ? (
-                                        <span className="rounded-[999px] bg-slate-100 px-1.5 text-[9px] font-bold uppercase text-slate-400">
-                                            Soon
-                                        </span>
-                                    ) : null}
-                                </>
-                            );
-
-                            const shell =
-                                "flex items-center justify-center gap-1.5 rounded-[10px] bg-gray-50 px-2 py-1";
-
-                            return linkTarget ? (
-                                <Link
-                                    key={link.label}
-                                    href={linkTarget}
-                                    className={`${shell} transition-colors hover:bg-gray-100`}
-                                >
-                                    {body}
-                                </Link>
-                            ) : (
-                                <div
-                                    key={link.label}
-                                    aria-disabled="true"
-                                    title={`${link.label} — not available yet`}
-                                    className={`${shell} cursor-default`}
-                                >
-                                    {body}
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : null}
-            </div>
-        </section>
-    );
-}
-
-/** One row of the operations list. */
-function OpsRow({ row }: { row: Row }) {
-    const target = href(row.route);
-
-    const body = (
-        <>
-            <div className="flex items-center space-x-2.5">
-                <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-white shadow-sm ${
-                        target ? ROW_ICON_BG[row.tone] : "bg-slate-300"
-                    }`}
-                >
-                    <span className="material-symbols-outlined text-lg leading-none">{row.icon}</span>
-                </div>
-                <div className="flex flex-col">
-                    <h4
-                        className={`text-xs font-bold leading-tight ${
-                            target ? "text-gray-900" : "text-slate-400"
-                        }`}
-                    >
-                        {row.label}
-                    </h4>
-                    <span className="mt-0.5 text-[10px] leading-none text-gray-500">{row.caption}</span>
-                </div>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-                {row.count != null && row.count > 0 ? (
-                    <span className="font-mono text-[11px] font-semibold text-gray-400">{row.count}</span>
-                ) : null}
-                {!target ? (
-                    <span className="rounded-[999px] bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase text-slate-400">
-                        Soon
-                    </span>
-                ) : null}
-                <span
-                    className={`material-symbols-outlined text-base leading-none text-gray-400 transition-colors ${
-                        target ? ROW_HOVER[row.tone] : ""
-                    }`}
-                >
-                    chevron_right
-                </span>
-            </div>
-        </>
-    );
-
-    const shell = `flex items-center justify-between rounded-[12px] border px-3 py-2 ${
-        target ? row.surface ?? "border-gray-200 bg-white" : "border-slate-200/70 bg-slate-50/60"
-    }`;
-
-    return target ? (
-        <Link key={row.label} href={target} className={`group ${shell} transition-colors hover:bg-gray-50`}>
-            {body}
-        </Link>
-    ) : (
-        <div
-            key={row.label}
-            aria-disabled="true"
-            title={`${row.label} — not available yet`}
-            className={`group ${shell} cursor-default`}
-        >
-            {body}
-        </div>
-    );
-}
-
-function OpsCard({ title, note, rows }: { title: string; note: string; rows: Row[] }) {
-    return (
-        <section className="mb-3 px-3.5">
-            <div className="rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
-                <div className="mb-3 flex items-center justify-between">
-                    <h3
-                        className="text-xs font-bold uppercase tracking-wider"
-                        style={{ color: INK }}
-                    >
-                        {title}
-                    </h3>
-                    <span className="font-mono text-[10px] text-gray-400">{note}</span>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2.5">
-                    {rows.map((row) => (
-                        <OpsRow key={row.label} row={row} />
-                    ))}
-                </div>
-            </div>
-        </section>
-    );
-}
-
 export default function Index({ stats, seller }: Props): React.ReactElement {
     const shipments = stats?.shipments ?? {};
     const catalogue = stats?.catalogue ?? {};
@@ -372,20 +51,20 @@ export default function Index({ stats, seller }: Props): React.ReactElement {
         SAMPLE_ORDERS.filter((entry) => entry.stage === stage).length;
 
     const orderTiles: Tile[] = [
-        { label: "To Pay", caption: "Awaiting payment", icon: "payments", count: stageCount("to_pay"), tone: "amber", tab: "to_pay" },
-        { label: "Paid", caption: "Payment confirmed", icon: "verified", count: stageCount("paid"), tone: "violet", tab: "paid" },
-        { label: "Pick & Pack", caption: "Being packed", icon: "inventory_2", count: stageCount("packing"), tone: "blue", tab: "packing" },
-        { label: "To Deliver", caption: "Ready to ship", icon: "local_shipping", count: stageCount("to_deliver"), tone: "brand", tab: "to_deliver" },
-        { label: "Delivered", caption: "Completed", icon: "task_alt", count: stageCount("delivered"), tone: "emerald", tab: "delivered" },
-        { label: "Canceled", caption: "Voided", icon: "assignment_return", count: stageCount("canceled"), tone: "rose", tab: "canceled" },
+        { label: "To Pay", caption: "Awaiting payment", icon: "payments", count: stageCount("to_pay"), tone: "amber", tab: "tab=to_pay" },
+        { label: "Paid", caption: "Payment confirmed", icon: "verified", count: stageCount("paid"), tone: "violet", tab: "tab=paid" },
+        { label: "Pick & Pack", caption: "Being packed", icon: "inventory_2", count: stageCount("packing"), tone: "blue", tab: "tab=packing" },
+        { label: "To Deliver", caption: "Ready to ship", icon: "local_shipping", count: stageCount("to_deliver"), tone: "brand", tab: "tab=to_deliver" },
+        { label: "Delivered", caption: "Completed", icon: "task_alt", count: stageCount("delivered"), tone: "emerald", tab: "tab=delivered" },
+        { label: "Canceled", caption: "Voided", icon: "assignment_return", count: stageCount("canceled"), tone: "rose", tab: "tab=canceled" },
     ];
 
     const shipmentTiles: Tile[] = [
-        { label: "Manifest", caption: "Paperwork", icon: "fact_check", count: shipments.manifest ?? 0, tone: "blue", tab: "pending" },
-        { label: "Scheduled", caption: "Booked & picking", icon: "schedule", count: shipments.scheduled ?? 0, tone: "amber", tab: "scheduled" },
-        { label: "En Route", caption: "In transit", icon: "local_shipping", count: shipments.en_route ?? 0, tone: "brand", tab: "en_route" },
-        { label: "Shipped", caption: "Arrived", icon: "check_circle", count: shipments.shipped ?? 0, tone: "emerald", tab: "shipped" },
-        { label: "Overdue", caption: "Action req.", icon: "warning", count: shipments.overdue ?? 0, tone: "rose", alert: true, tab: "overdue" },
+        { label: "Manifest", caption: "Paperwork", icon: "fact_check", count: shipments.manifest ?? 0, tone: "blue", tab: "tab=pending" },
+        { label: "Scheduled", caption: "Booked & picking", icon: "schedule", count: shipments.scheduled ?? 0, tone: "amber", tab: "tab=scheduled" },
+        { label: "En Route", caption: "In transit", icon: "local_shipping", count: shipments.en_route ?? 0, tone: "brand", tab: "tab=en_route" },
+        { label: "Shipped", caption: "Arrived", icon: "check_circle", count: shipments.shipped ?? 0, tone: "emerald", tab: "tab=shipped" },
+        { label: "Overdue", caption: "Action req.", icon: "warning", count: shipments.overdue ?? 0, tone: "rose", alert: true, tab: "tab=overdue" },
     ];
 
     const orderFooter: Row[] = [
@@ -565,6 +244,7 @@ export default function Index({ stats, seller }: Props): React.ReactElement {
                     </div>
                 </section>
 
+                <div className="px-3.5">
                 <PipelineCard
                     title="My Orders"
                     preview
@@ -584,6 +264,7 @@ export default function Index({ stats, seller }: Props): React.ReactElement {
                 <OpsCard title="Merchant Operations" note="Core Tools" rows={opsRows} />
 
                 <OpsCard title="Catalogue" note="Browse" rows={catalogueRows} />
+                </div>
             </div>
         </>
     );

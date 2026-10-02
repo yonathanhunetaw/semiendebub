@@ -47,11 +47,11 @@ export default function UpdatePasswordForm({ className = '' }) {
     return (
         <section className={className}>
             <header>
-                <h2 className="text-lg font-medium text-gray-900">
+                <h2 className="text-lg font-medium text-white">
                     Update Password
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm text-slate-400">
                     Ensure your account is using a long, random password to stay
                     secure.
                 </p>
@@ -62,6 +62,7 @@ export default function UpdatePasswordForm({ className = '' }) {
                     <InputLabel
                         htmlFor="current_password"
                         value="Current Password"
+                        className="!text-slate-300"
                     />
 
                     <TextInput
@@ -83,7 +84,11 @@ export default function UpdatePasswordForm({ className = '' }) {
                 </div>
 
                 <div>
-                    <InputLabel htmlFor="password" value="New Password" />
+                    <InputLabel
+                        htmlFor="password"
+                        value="New Password"
+                        className="!text-slate-300"
+                    />
 
                     <TextInput
                         id="password"
@@ -102,6 +107,7 @@ export default function UpdatePasswordForm({ className = '' }) {
                     <InputLabel
                         htmlFor="password_confirmation"
                         value="Confirm Password"
+                        className="!text-slate-300"
                     />
 
                     <TextInput
@@ -131,7 +137,7 @@ export default function UpdatePasswordForm({ className = '' }) {
                         leave="transition ease-in-out"
                         leaveTo="opacity-0"
                     >
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-emerald-400">
                             Saved.
                         </p>
                     </Transition>

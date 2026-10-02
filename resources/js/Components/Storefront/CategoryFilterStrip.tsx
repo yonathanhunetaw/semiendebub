@@ -37,6 +37,12 @@ export interface CategoryFilterStripProps {
  * The strip scrolls horizontally with its scrollbar hidden
  * (`no-scrollbar scroll-smooth`, utility defined in resources/css/app.css) so
  * a long taxonomy stays usable on a phone without a visible track.
+ *
+ * From `md` up the search field and the category pills are hidden: the
+ * masthead carries both there, and showing them twice would cost a desktop
+ * shopper a third of the fold before the first product. Sorting and the
+ * availability switches have no home in the masthead, so they stay on every
+ * width.
  */
 export default function CategoryFilterStrip({
     categories,
@@ -70,10 +76,11 @@ export default function CategoryFilterStrip({
     };
 
     return (
-        <div className="sticky top-16 z-20 border-b border-slate-200/70 bg-white/95 backdrop-blur">
+        // 64px masthead on phones; 112px once the category row appears at `md`.
+        <div className="sticky top-16 z-20 border-b border-slate-200/70 bg-white/95 backdrop-blur md:top-28">
             <div className={`${STOREFRONT_SHELL} py-3`}>
                 {/* ── Search ── */}
-                <form onSubmit={handleSubmit} role="search">
+                <form onSubmit={handleSubmit} role="search" className="md:hidden">
                     <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 transition-colors focus-within:border-orange-300 focus-within:bg-white">
                         <span className="material-symbols-outlined text-[20px] text-slate-400">
                             search
@@ -106,7 +113,7 @@ export default function CategoryFilterStrip({
 
                 {/* ── Category pills ── */}
                 <div
-                    className="no-scrollbar scroll-smooth mt-2.5 flex gap-1.5 overflow-x-auto"
+                    className="no-scrollbar scroll-smooth mt-2.5 flex gap-1.5 overflow-x-auto md:hidden"
                     role="group"
                     aria-label="Filter by category"
                 >
@@ -128,7 +135,7 @@ export default function CategoryFilterStrip({
                 </div>
 
                 {/* ── Ordering and availability ── */}
-                <div className="no-scrollbar scroll-smooth mt-2 flex items-center gap-1.5 overflow-x-auto">
+                <div className="no-scrollbar scroll-smooth mt-2 flex items-center gap-1.5 overflow-x-auto md:mt-0">
                     <label className="relative shrink-0">
                         <span className="sr-only">Sort products</span>
                         <select

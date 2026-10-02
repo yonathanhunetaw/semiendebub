@@ -45,7 +45,18 @@ Route::domain("admin.{$baseDomain}")
 
             // ── Items ──
             Route::post('items/inline-options', [ItemController::class, 'storeInlineOption'])->name('items.inline-options');
-            Route::patch('items/{item}/variants/{variant}/status', [ItemController::class, 'updateVariantStatus'])->name('items.variants.status');
+            // ItemController::updateStatus() had no route at all, so the only
+            // way an item's status could change was a full resource update.
+            Route::patch('items/{item}/status', [ItemController::class, 'updateStatus'])->name('items.updateStatus');
+            /*
+             * `items/{item}/variants/{variant}/status` used to live here,
+             * pointing at ItemController::updateVariantStatus(). That method was
+             * deliberately removed when variant status became a per-store
+             * concern — store_variants.active, managed by
+             * Admin\Store\StoreController::updateVariant() — so the route was
+             * left aimed at nothing and would have raised a 500 on any request
+             * that reached it. Nothing in resources/js references it.
+             */
             Route::delete('items/{item}/variants/{variant}', [ItemController::class, 'destroyVariant'])->name('items.variants.destroy');
             Route::post('items/{item}/deploy', [ItemDeployController::class, 'deploy'])->name('items.deploy');
             Route::resource('items', ItemController::class);

@@ -7,6 +7,7 @@ import UserBottomNav from "@/Components/Navigation/User/UserBottomNav";
 import CategoryFilterStrip from "@/Components/Storefront/CategoryFilterStrip";
 import ItemCard from "@/Components/Storefront/ItemCard";
 import StorefrontHeader from "@/Components/Storefront/StorefrontHeader";
+import StorefrontMenuDrawer from "@/Components/Storefront/StorefrontMenuDrawer";
 import {
     STOREFRONT_BG,
     STOREFRONT_BRAND,
@@ -43,6 +44,8 @@ export default function StorefrontDashboard({
 }: StorefrontPageProps): React.ReactElement {
     const [search, setSearch] = React.useState<string>(filters.search);
     const [isFiltering, setIsFiltering] = React.useState<boolean>(false);
+    // Desktop stand-in for the phone bottom bar; see StorefrontMenuDrawer.
+    const [menuOpen, setMenuOpen] = React.useState<boolean>(false);
 
     const {
         cartOpen,
@@ -208,6 +211,15 @@ export default function StorefrontDashboard({
                     cartCount={cart.item_count}
                     onOpenCart={openCart}
                     user={auth?.user ?? null}
+                    search={search}
+                    onSearchChange={setSearch}
+                    onSearchSubmit={() => applyFilters({ search })}
+                    onSearchClear={() => {
+                        setSearch("");
+                        applyFilters({ search: "" });
+                    }}
+                    isSearching={isFiltering}
+                    onOpenMenu={() => setMenuOpen(true)}
                 />
 
                 <CategoryFilterStrip
@@ -233,7 +245,7 @@ export default function StorefrontDashboard({
                     onResetFilters={handleResetFilters}
                 />
 
-                <main className={`${STOREFRONT_SHELL} py-5 pb-28`}>
+                <main className={`${STOREFRONT_SHELL} py-5 pb-28 md:pb-10`}>
                     {error ? (
                         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-center">
                             <span className="material-symbols-outlined text-[32px] text-amber-400">
@@ -349,6 +361,17 @@ export default function StorefrontDashboard({
                 cartCount={cart.item_count}
                 onOpenCart={openCart}
                 isAuthenticated={Boolean(auth?.user)}
+            />
+
+            <StorefrontMenuDrawer
+                open={menuOpen}
+                onClose={() => setMenuOpen(false)}
+                categories={categories}
+                activeCategoryId={filters.category_id}
+                onSelectCategory={handleSelectCategory}
+                cartCount={cart.item_count}
+                onOpenCart={openCart}
+                user={auth?.user ?? null}
             />
 
             <CartDrawer

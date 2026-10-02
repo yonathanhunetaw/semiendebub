@@ -58,6 +58,40 @@ class Store extends Model
         return in_array($this->type, [self::TYPE_CENTRAL_WAREHOUSE, self::TYPE_REMOTE_WAREHOUSE], true);
     }
 
+    /**
+     * Every new store gets the sub-locations the stock tool offers.
+     *
+     * The admin stock tool reports a store's holding in three places — Store
+     * Shelf, Store Room, Remote Warehouse — and the shelf needs a row in
+     * item_inventory_locations to hang stock on. A migration backfilled the
+     * stores that existed when it ran, but a store created afterwards had
+     * none, and a store with no shelf row reports its whole total as back room
+     * for ever. Creating them here makes it an invariant of the model rather
+     * than something each caller has to remember.
+     *
+     * Remote Warehouse is deliberately not created here: it is a row in
+     * `warehouses` joined by Store::warehouse(), not every store has one, and
+     * inventing an empty one would duplicate a concept that already exists.
+     *
+     * Quantities start at zero. Nothing records what is on the floor on the
+     * day a store opens, and a figure derived from a percentage is what this
+     * replaces.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (self $store): void {
+            foreach ([
+                ['Shop Floor', ItemInventoryLocation::KIND_SHELF],
+                ['Back Room', ItemInventoryLocation::KIND_BACKROOM],
+            ] as [$name, $kind]) {
+                $store->inventoryLocations()->firstOrCreate(
+                    ['kind' => $kind],
+                    ['name' => $name, 'address' => ''],
+                );
+            }
+        });
+    }
+
     public function scopeWarehouses($query)
     {
         return $query->whereIn('type', [self::TYPE_CENTRAL_WAREHOUSE, self::TYPE_REMOTE_WAREHOUSE]);

@@ -19,6 +19,8 @@ import DevicesIcon from '@mui/icons-material/Devices';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import PaletteIcon from '@mui/icons-material/Palette';
 import CropSquareIcon from '@mui/icons-material/CropSquare';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLongRounded';
+import InventoryIcon from '@mui/icons-material/Inventory2Rounded';
 import DownloadIcon from '@mui/icons-material/Download';
 import type { SxProps, Theme } from '@mui/material/styles';
 
@@ -32,6 +34,8 @@ const ICONS: Record<DevNavIcon, React.ReactElement> = {
     lesson: <PsychologyIcon />,
     colors: <PaletteIcon />,
     box: <CropSquareIcon />,
+    libraries: <InventoryIcon />,
+    logs: <ReceiptLongIcon />,
     download: <DownloadIcon />,
 };
 

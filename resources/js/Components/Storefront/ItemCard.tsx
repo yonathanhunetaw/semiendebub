@@ -1,11 +1,13 @@
 import { Link } from "@inertiajs/react";
 import React from "react";
 
+import PackagingPlaceholder from "@/Components/Shared/PackagingPlaceholder";
 import type { StorefrontItemCard } from "@/types/storefront";
 import {
     STOCK_TONES,
     STOREFRONT_BRAND,
     formatPrice,
+    hasImage,
     resolveImage,
 } from "./storefrontConstants";
 
@@ -38,12 +40,23 @@ export default function ItemCard({
         >
             {/* ── Media ── */}
             <div className="relative aspect-square overflow-hidden bg-slate-50">
-                <img
-                    src={resolveImage(item.image_url)}
-                    alt={item.title}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                />
+                {/* Most of the catalogue has no photograph yet. Rather than a
+                    grid of identical grey tiles, draw the packaging the
+                    cheapest variant comes in — the one thing we do know. */}
+                {hasImage(item.image_url) ? (
+                    <img
+                        src={resolveImage(item.image_url)}
+                        alt={item.title}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                    />
+                ) : (
+                    <PackagingPlaceholder
+                        packaging={item.packaging_from}
+                        size="md"
+                        className="border-0"
+                    />
+                )}
 
                 {/* On a low-stock line the exact figure is the useful part — the
                     ledger already knows it, and "Low Stock" alone does not tell a

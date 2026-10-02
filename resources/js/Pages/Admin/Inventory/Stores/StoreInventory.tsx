@@ -101,6 +101,17 @@ export interface Variant {
     incoming_transfer?: { qty: number; from?: string } | null;
 }
 
+/** One of a store's stock-bearing places, as StoreLocationStockService reports it. */
+export interface StockLocation {
+    /** `shelf`, `store_room` or `remote_warehouse`. */
+    key: string;
+    label: string;
+    /** Pieces. */
+    stock: number;
+    /** True when the figure is the remainder of another, not its own ledger. */
+    derived: boolean;
+}
+
 export interface InventoryItem {
     item_id: number;
     item_name: string;
@@ -109,8 +120,13 @@ export interface InventoryItem {
     total_variants: number;
     total_stock: number;
     remote_total_stock: number;
-    warehouse_a_stock?: number;
-    warehouse_b_stock?: number;
+    /**
+     * Store Shelf / Store Room / Remote Warehouse, from the server.
+     *
+     * Optional because the replenish and deviations screens render this panel
+     * from payloads that do not carry it; `storeFallbackLocations` covers them.
+     */
+    locations?: StockLocation[];
     variants: Variant[];
 }
 
@@ -730,11 +746,61 @@ export function EditDrawer({
 // ─────────────────────────────────────────────────────────────────────────────
 // StockBreakdownPanel
 // ─────────────────────────────────────────────────────────────────────────────
-type StockLocationKey = "shelf" | "store" | "remote" | "whseA" | "whseB";
+/**
+ * Places a replenishment run can pull from.
+ *
+ * Kept in step with the location keys the server sends. The list previously
+ * offered "Warehouse A (Central Hub)" and "Warehouse B (Overflow)", neither of
+ * which corresponds to anything in the schema.
+ */
+const REPLENISH_SOURCES: { value: string; label: string }[] = [
+    { value: "store_room", label: "Store Room (shelf fill)" },
+    { value: "remote_warehouse", label: "Remote Warehouse" },
+];
+
+/** The readable name of a replenishment source, for toasts and hints. */
+const sourceLabel = (value: string): string =>
+    REPLENISH_SOURCES.find(s => s.value === value)?.label ?? value;
+
+/**
+ * A store reports stock at three places, and the server names them.
+ *
+ * These keys used to include "whseA" and "whseB", whose figures came from
+ * `item.warehouse_a_stock` / `warehouse_b_stock` — props no controller has
+ * ever sent, so both pills permanently read 0. Shelf and store room were worse
+ * than absent: they were `total * 0.25` and the remainder, computed here, so
+ * the split on screen was arithmetic rather than a record of where anything
+ * was. Both now come from StoreLocationStockService.
+ */
+type StockLocationKey = "shelf" | "store_room" | "remote_warehouse";
+
+/**
+ * Locations for a payload that predates the server-side breakdown.
+ *
+ * The replenish and deviations screens reuse this panel with item payloads
+ * that carry only the two totals. They get the two totals, honestly labelled,
+ * rather than a shelf figure invented from a percentage.
+ */
+function storeFallbackLocations(item: InventoryItem): StockLocation[] {
+    return [
+        { key: "store_room", label: "In Store", stock: item.total_stock, derived: false },
+        {
+            key: "remote_warehouse",
+            label: "Remote Warehouse",
+            stock: item.remote_total_stock,
+            derived: false,
+        },
+    ];
+}
 
 export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; variants: Variant[] }) {
-    // Multi-select: Default to Store Shelf + Store
-    const [selected, setSelected] = useState<Set<StockLocationKey>>(new Set(["shelf", "store"]));
+    const locations = item.locations?.length ? item.locations : storeFallbackLocations(item);
+
+    // Multi-select: everything inside the store itself, which is what an admin
+    // opening the panel is looking at. Off-site stock is opt-in.
+    const [selected, setSelected] = useState<Set<string>>(
+        () => new Set(locations.filter((l) => l.key !== "remote_warehouse").map((l) => l.key)),
+    );
     const [pkgMode, setPkgMode] = useState<PkgMode>("pieces");
 
     // Replenishment rules state inside the card
@@ -744,32 +810,27 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
     const [minCtn, setMinCtn] = useState<number>(2);
     const [maxCtn, setMaxCtn] = useState<number>(10);
     const [autoBatchCartons, setAutoBatchCartons] = useState<number>(1);
-    const [source, setSource] = useState<string>("remote");
+    const [source, setSource] = useState<string>("remote_warehouse");
     const [toast, setToast] = useState<string | null>(null);
 
-    // Stock counts
-    const totalStoreStock = item.total_stock;
-    const shelfStock = Math.min(totalStoreStock, Math.round(totalStoreStock * 0.25)); // 25% on shelf
-    const storeStock = Math.max(0, totalStoreStock - shelfStock); // 75% in main store room
-    const remoteStock = item.remote_total_stock;
-    const whseAStock = item.warehouse_a_stock ?? 0;
-    const whseBStock = item.warehouse_b_stock ?? 0;
-    const allStock = totalStoreStock + remoteStock + whseAStock + whseBStock;
+    // Stock counts, all from the server.
+    const stockByLoc: Record<string, number> = Object.fromEntries(
+        locations.map((l) => [l.key, l.stock]),
+    );
 
-    const stockByLoc: Record<StockLocationKey, number> = {
-        shelf: shelfStock,
-        store: storeStock,
-        remote: remoteStock,
-        whseA: whseAStock,
-        whseB: whseBStock,
-    };
+    const allKeys = locations.map((l) => l.key);
+    const isAllSelected = allKeys.every((k) => selected.has(k));
 
-    const allKeys: StockLocationKey[] = ["shelf", "store", "remote", "whseA", "whseB"];
-    const isAllSelected = allKeys.every(k => selected.has(k));
+    /*
+     * Store Room is the store total minus the shelf, so adding the two gives
+     * the store's own holding exactly once. Remote Warehouse is a separate
+     * ledger on top of it.
+     */
+    const allStock = locations.reduce((sum, l) => sum + l.stock, 0);
 
     const current = Array.from(selected).reduce((sum, key) => sum + (stockByLoc[key] ?? 0), 0);
 
-    const toggleLocation = (key: StockLocationKey) => {
+    const toggleLocation = (key: string) => {
         setSelected(prev => {
             const next = new Set(prev);
             if (next.has(key)) {
@@ -777,22 +838,18 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
             } else {
                 next.add(key);
             }
-            if (next.has("shelf") && next.size === 1) {
-                setPkgMode("pieces");
-            } else if (!next.has("shelf") && next.size === 1) {
-                setPkgMode("cartons");
+            // A shelf on its own is counted in pieces — that is how it is
+            // picked. Anything else is counted in cartons.
+            if (next.size === 1) {
+                setPkgMode(next.has("shelf") ? "pieces" : "cartons");
             }
             return next;
         });
     };
 
-    const selectPreset = (keys: StockLocationKey[]) => {
+    const selectPreset = (keys: string[]) => {
         setSelected(new Set(keys));
-        if (keys.length === 1 && keys[0] === "shelf") {
-            setPkgMode("pieces");
-        } else {
-            setPkgMode("cartons");
-        }
+        setPkgMode(keys.length === 1 && keys[0] === "shelf" ? "pieces" : "cartons");
     };
 
     const fullCartons = Math.floor(current / perCarton);
@@ -822,17 +879,26 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                 ? `${fullBoxes} × ${perBox} + ${looseFromBoxes} = ${current} pcs total`
                 : `Granular count: ${current} individual units`;
 
-    const pillLocations: { key: StockLocationKey | "all"; label: string; count: number; tone: string; icon: React.ReactNode }[] = [
-        { key: "shelf", label: "Store Shelf", count: shelfStock, tone: "success.main", icon: <StorefrontIcon sx={{ fontSize: 13 }} /> },
-        { key: "store", label: "Store Room", count: storeStock, tone: "info.main", icon: <StoreIcon sx={{ fontSize: 13 }} /> },
-        { key: "remote", label: "Remote Hub", count: remoteStock, tone: "primary.main", icon: <CloudQueueIcon sx={{ fontSize: 13 }} /> },
-        { key: "whseA", label: "Warehouse A", count: whseAStock, tone: "warning.main", icon: <WarehouseIcon sx={{ fontSize: 13 }} /> },
-        { key: "whseB", label: "Warehouse B", count: whseBStock, tone: "grey.500", icon: <WarehouseIcon sx={{ fontSize: 13 }} /> },
+    /** Tone and icon per location key, so the server sends figures, not styling. */
+    const LOCATION_STYLE: Record<string, { tone: string; icon: React.ReactNode }> = {
+        shelf: { tone: "success.main", icon: <StorefrontIcon sx={{ fontSize: 13 }} /> },
+        store_room: { tone: "info.main", icon: <StoreIcon sx={{ fontSize: 13 }} /> },
+        remote_warehouse: { tone: "primary.main", icon: <WarehouseIcon sx={{ fontSize: 13 }} /> },
+    };
+
+    const pillLocations: { key: string; label: string; count: number; tone: string; icon: React.ReactNode }[] = [
+        ...locations.map((l) => ({
+            key: l.key,
+            label: l.label,
+            count: l.stock,
+            tone: LOCATION_STYLE[l.key]?.tone ?? "grey.500",
+            icon: LOCATION_STYLE[l.key]?.icon ?? <CloudQueueIcon sx={{ fontSize: 13 }} />,
+        })),
         { key: "all", label: "All Locations", count: allStock, tone: "grey.900", icon: <PublicIcon sx={{ fontSize: 13 }} /> },
     ];
 
     const selectedLabels = pillLocations
-        .filter(l => l.key !== "all" && selected.has(l.key as StockLocationKey))
+        .filter(l => l.key !== "all" && selected.has(l.key))
         .map(l => l.label)
         .join(" + ");
 
@@ -866,14 +932,14 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                 <Stack direction="row" spacing={0.75} sx={{ overflowX: "auto", pb: 0.5,
                     "&::-webkit-scrollbar": { display: "none" } }}>
                     {pillLocations.map(l => {
-                        const active = l.key === "all" ? isAllSelected : selected.has(l.key as StockLocationKey);
+                        const active = l.key === "all" ? isAllSelected : selected.has(l.key);
                         return (
                             <Paper key={l.key} variant="outlined"
                                 onClick={() => {
                                     if (l.key === "all") {
-                                        selectPreset(isAllSelected ? ["shelf"] : allKeys);
+                                        selectPreset(isAllSelected ? [allKeys[0]] : allKeys);
                                     } else {
-                                        toggleLocation(l.key as StockLocationKey);
+                                        toggleLocation(l.key);
                                     }
                                 }}
                                 sx={{
@@ -1135,7 +1201,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                         <Alert severity="error" icon={<LocalShippingIcon />}
                             sx={{ mt: 1.25, borderRadius: 1.5, py: 0.25 }}>
                             <Typography variant="caption" fontWeight={700}>
-                                Auto-Transfer Triggered: {autoBatchCartons} Ctn ({autoBatchPcs} pcs) from {source.toUpperCase()}
+                                Auto-Transfer Triggered: {autoBatchCartons} Ctn ({autoBatchPcs} pcs) from {sourceLabel(source)}
                             </Typography>
                         </Alert>
                     )}
@@ -1146,16 +1212,15 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                             <InputLabel>Primary Source</InputLabel>
                             <Select value={source} label="Primary Source"
                                 onChange={e => setSource(e.target.value)}>
-                                <MenuItem value="store">Store Room (Backroom Shelf-Fill)</MenuItem>
-                                <MenuItem value="whseA">Warehouse A (Central Hub)</MenuItem>
-                                <MenuItem value="remote">Remote Hub</MenuItem>
-                                <MenuItem value="whseB">Warehouse B (Overflow)</MenuItem>
+                                {REPLENISH_SOURCES.map(s => (
+                                    <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                                ))}
                             </Select>
                         </FormControl>
                         <Button size="small" variant="contained"
                             startIcon={<LocalShippingIcon sx={{ fontSize: 14 }} />}
                             onClick={() =>
-                                setToast(`Transfer requested — ${selectedLabels}: ${autoBatchPcs} pcs (${autoBatchCartons} Ctn) from ${source.toUpperCase()}`)
+                                setToast(`Transfer requested — ${selectedLabels}: ${autoBatchPcs} pcs (${autoBatchCartons} Ctn) from ${sourceLabel(source)}`)
                             }>
                             Request Transfer
                         </Button>
@@ -1191,7 +1256,7 @@ export function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                 minPcs: v.min_reorder ?? perCarton * 2,
                 maxPcs: v.target_cap ?? perCarton * 10,
                 autoBatchCartons: 1,
-                source: "remote",
+                source: "remote_warehouse",
             };
             return acc;
         }, {} as Record<number, RuleState>)
@@ -1345,7 +1410,7 @@ export function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                             <Alert severity="error" icon={<LocalShippingIcon />}
                                 sx={{ mt: 1.25, borderRadius: 1.5, py: 0.25 }}>
                                 <Typography variant="caption" fontWeight={700}>
-                                    Auto-Transfer will fire: {r.autoBatchCartons} Ctn ({autoBatchPcs} pcs) from {r.source.toUpperCase()}
+                                    Auto-Transfer will fire: {r.autoBatchCartons} Ctn ({autoBatchPcs} pcs) from {sourceLabel(r.source)}
                                 </Typography>
                             </Alert>
                         )}
@@ -1355,17 +1420,16 @@ export function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                                 <InputLabel>Primary Source</InputLabel>
                                 <Select value={r.source} label="Primary Source"
                                     onChange={e => update(v.id, { source: e.target.value })}>
-                                    <MenuItem value="store">Store Room (Backroom Shelf-Fill)</MenuItem>
-                                    <MenuItem value="whseA">Warehouse A (Central Hub)</MenuItem>
-                                    <MenuItem value="remote">Remote Hub</MenuItem>
-                                    <MenuItem value="whseB">Warehouse B (Overflow)</MenuItem>
+                                    {REPLENISH_SOURCES.map(s => (
+                                        <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
                             <Button size="small" variant="contained"
                                 disabled={Boolean(incoming)}
                                 startIcon={<LocalShippingIcon sx={{ fontSize: 14 }} />}
                                 onClick={() =>
-                                    setToast(`Transfer requested — ${v.label}: ${autoBatchPcs} pcs (${r.autoBatchCartons} Ctn) from ${r.source.toUpperCase()}`)
+                                    setToast(`Transfer requested — ${v.label}: ${autoBatchPcs} pcs (${r.autoBatchCartons} Ctn) from ${sourceLabel(r.source)}`)
                                 }>
                                 {incoming ? "In Transit" : "Request Transfer"}
                             </Button>
@@ -1476,7 +1540,7 @@ export function StitchVariantCard({ v, highlighted, onEdit }: {
             <Collapse in={open} timeout="auto" unmountOnExit>
                 <Divider />
                 <Stack spacing={1.25} sx={{ p: 1.5 }}>
-                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1 }}>
                         <Paper variant="outlined" sx={{ p: 1, bgcolor: "grey.50" }}>
                             <Typography variant="caption"
                                 sx={{ fontWeight: 800, letterSpacing: "0.05em", color: "info.dark",
@@ -1764,7 +1828,7 @@ function CatalogTopBar({ store, items, onSearch, search }: {
                 <Chip label={`Location: ${store?.name ?? "Store"}`} size="small" variant="outlined" />
             </Stack>
 
-            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1, mb: 1.5 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 1, mb: 1.5 }}>
                 <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
                     <Stack direction="row" justifyContent="space-between">
                         <Typography variant="caption" color="text.secondary"
@@ -1851,7 +1915,9 @@ export default function StoreInventory({ store, inventory, customers = [], selle
     }, [items, search]);
 
     return (
-        <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 }, maxWidth: "100%", overflowX: "hidden" }}>
+        // No horizontal padding on a phone: the layout already supplies the
+        // gutter, and a second one here is what made this page need zooming out.
+        <Box sx={{ px: { xs: 0, sm: 2, md: 3 }, py: { xs: 1, sm: 2, md: 3 }, maxWidth: "100%", minWidth: 0, overflowX: "hidden" }}>
             <Head title={`${store?.name} Inventory`} />
 
             <Stack direction="row" spacing={2} alignItems="center" mb={2} flexWrap="wrap">
@@ -1878,7 +1944,7 @@ export default function StoreInventory({ store, inventory, customers = [], selle
             ) : (
                 <>
                     {/* Same Stitch cards on every breakpoint */}
-                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2 }}>
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
                         {filteredItems.map(item => (
                             <StitchProductCard key={item.item_id} store={store} item={item}
                                 customers={customers} sellers={sellers} />

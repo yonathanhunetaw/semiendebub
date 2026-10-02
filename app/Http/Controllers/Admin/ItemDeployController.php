@@ -16,6 +16,14 @@ class ItemDeployController extends Controller
      * For each ItemVariant that does not yet have a StoreVariant record
      * in the target store, we create one with default stock=0 and an empty
      * pricing matrix. Existing records are left untouched (idempotent).
+     *
+     * Deployed variants arrive active. They used to arrive inactive, which
+     * made "deploy" a half step: `active` is what Seller\DashboardController
+     * and Seller\ItemController filter their catalogue on, so a deployed item
+     * was invisible to the store's own sellers until somebody walked the
+     * variant list and switched each row on by hand. `active` is still the
+     * admin's switch — updateVariant() turns a row back off — it just starts
+     * in the position that makes deployment mean something.
      */
     public function deploy(Request $request, Item $item)
     {
@@ -25,8 +33,12 @@ class ItemDeployController extends Controller
 
         $store = Store::findOrFail($request->store_id);
 
-        $item->load('variants');
+        $item->load('variants.itemPackagingType');
 
+        // Imagery is no longer a condition of deployment. A variant with no
+        // photograph renders PackagingPlaceholder rather than a broken image,
+        // and the gate that used to stand here only meant an admin had to
+        // chase photographs before a store could be given something to sell.
         $created = 0;
 
         foreach ($item->variants as $variant) {
@@ -40,7 +52,7 @@ class ItemDeployController extends Controller
                     'discount_price' => null,
                     'discount_ends_at' => null,
                 ]),
-                'active' => false,
+                'active' => true,
                 'manual_status' => 'auto',
                 'created_at' => now(),
                 'updated_at' => now(),

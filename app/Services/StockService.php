@@ -6,6 +6,7 @@ use App\Exceptions\InsufficientStockException;
 use App\Models\Auth\Customer;
 use App\Models\Inventory\InventoryMovement;
 use App\Models\Inventory\Warehouse;
+use App\Models\StockKeeper\ItemInventoryLocation;
 use App\Models\StockKeeper\Transfer;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
@@ -93,6 +94,96 @@ class StockService
         $result = [];
         foreach ($storeVariantIds as $id) {
             $result[$id] = (int) ($totals[$id] ?? 0);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Where a set of variants' stock physically sits, for one store's screens.
+     *
+     * Replaces the arithmetic the admin stock tool used to do in the browser —
+     * a quarter of the store total called "shelf", three quarters called
+     * "store room", and warehouse figures the server never sent at all, so
+     * every warehouse pill read 0 while item_stocks held 1,443 units.
+     *
+     * The shape per variant id:
+     *   store_total  units at this store (item_stocks at location_type Store)
+     *   shelf        units recorded on this store's shop floor
+     *   backroom     store_total - shelf, derived so the two cannot drift
+     *   warehouses   [warehouse_id => units]
+     *   other_stores [store_id => units]
+     *
+     * @param  array<int>  $itemVariantIds
+     * @return array<int, array<string, mixed>>
+     */
+    public function locationBreakdown(array $itemVariantIds, int $storeId): array
+    {
+        $itemVariantIds = array_values(array_unique(array_map('intval', $itemVariantIds)));
+
+        if ($itemVariantIds === []) {
+            return [];
+        }
+
+        $rows = DB::table('item_stocks')
+            ->whereIn('item_variant_id', $itemVariantIds)
+            ->select('item_variant_id', 'location_type', 'location_id', 'quantity')
+            ->get();
+
+        // Which sub-locations belong to this store, and which are shelves.
+        $shelfIds = DB::table('item_inventory_locations')
+            ->where('store_id', $storeId)
+            ->where('kind', ItemInventoryLocation::KIND_SHELF)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+
+        $blank = [
+            'store_total' => 0,
+            'shelf' => 0,
+            'backroom' => 0,
+            'warehouses' => [],
+            'other_stores' => [],
+        ];
+
+        $result = array_fill_keys($itemVariantIds, $blank);
+
+        foreach ($rows as $row) {
+            $variantId = (int) $row->item_variant_id;
+            $quantity = (int) $row->quantity;
+            $locationId = (int) $row->location_id;
+
+            if ($row->location_type === Store::class) {
+                if ($locationId === $storeId) {
+                    $result[$variantId]['store_total'] += $quantity;
+                } else {
+                    $result[$variantId]['other_stores'][$locationId] =
+                        ($result[$variantId]['other_stores'][$locationId] ?? 0) + $quantity;
+                }
+
+                continue;
+            }
+
+            if ($row->location_type === Warehouse::class) {
+                $result[$variantId]['warehouses'][$locationId] =
+                    ($result[$variantId]['warehouses'][$locationId] ?? 0) + $quantity;
+
+                continue;
+            }
+
+            if ($row->location_type === ItemInventoryLocation::class && in_array($locationId, $shelfIds, true)) {
+                $result[$variantId]['shelf'] += $quantity;
+            }
+        }
+
+        foreach ($result as $variantId => $figures) {
+            // A shelf holding more than the store's recorded total would mean
+            // the two ledgers disagree; clamp rather than report a negative
+            // back room, and let the shelf figure stand as the smaller claim.
+            $shelf = min($figures['shelf'], $figures['store_total']);
+
+            $result[$variantId]['shelf'] = $shelf;
+            $result[$variantId]['backroom'] = max(0, $figures['store_total'] - $shelf);
         }
 
         return $result;

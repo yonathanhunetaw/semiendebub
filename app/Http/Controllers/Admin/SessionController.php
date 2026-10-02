@@ -14,8 +14,16 @@ use Inertia\Response;
 class SessionController extends Controller
 {
     /**
-     * Display all active sessions.
+     * The Inertia page that renders the session list.
+     *
+     * Overridden by the Dev subclass so the dev subdomain gets its own chrome
+     * instead of being dropped into the Admin layout mid-session.
      */
+    protected function component(): string
+    {
+        return 'Admin/Sessions/index';
+    }
+
     /**
      * Display all active sessions.
      */
@@ -121,7 +129,7 @@ class SessionController extends Controller
             ];
         });
 
-        return Inertia::render('Admin/Sessions/index', [
+        return Inertia::render($this->component(), [
             'sessions' => $mappedSessions->values(),
         ]);
     }

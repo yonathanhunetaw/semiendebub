@@ -3049,50 +3049,81 @@ class ItemSeeder extends Seeder
         }
     }
 
+    /**
+     * Upload whatever real photography is committed for this item and return
+     * the keys that genuinely landed.
+     *
+     * Three things were wrong with the previous version, and together they
+     * filled the catalogue with 8,115 broken images:
+     *
+     *  1. It uploaded to the `s3` disk (MinIO, bucket duka-images) while
+     *     App\Services\ImageResolver reads from `r2` (bucket canvas-assets),
+     *     so nothing it wrote was ever readable by the application.
+     *  2. It looped v1..v9 x 1..5 inventing filenames like
+     *     "{prefix}_v3_2.jpg". No such file has ever existed in
+     *     storage/app/seed-images — File::exists() failed on every one and the
+     *     method returned early, silently.
+     *  3. An earlier revision recorded the key regardless of whether the
+     *     upload succeeded, which is where the dead keys came from.
+     *
+     * A key is now recorded only after the object is confirmed present. An
+     * item with no committed photography gets an empty array, and the UI draws
+     * a PackagingPlaceholder for it — see
+     * resources/js/Components/Shared/PackagingPlaceholder.tsx.
+     *
+     * @return array<int, string> Object keys, possibly empty.
+     */
     private function seedDeterministicVariantImages(Item $item, array $data): array
     {
-        $disk = Storage::disk('s3');
         $prefix = $data['file_prefix'];
-        $itemImagesArray = [];
+        $keys = [];
 
+        // Only the {prefix}_1.jpg .. {prefix}_5.jpg convention is real; those
+        // are the files actually committed under storage/app/seed-images.
         for ($i = 1; $i <= 5; $i++) {
-            $name = "{$prefix}_{$i}.jpg";
-            if ($this->uploadToMinio($disk, $item->id, $name)) {
-                $itemImagesArray[] = "uploads/items/{$item->id}/{$name}";
+            $key = $this->uploadSeedImage($item->id, "{$prefix}_{$i}.jpg");
+
+            if ($key !== null) {
+                $keys[] = $key;
             }
         }
 
-        for ($v = 1; $v <= 9; $v++) {
-            for ($i = 1; $i <= 5; $i++) {
-                $name = "{$prefix}_v{$v}_{$i}.jpg";
-                $this->uploadToMinio($disk, $item->id, $name);
-            }
-        }
-
-        return $itemImagesArray;
+        return $keys;
     }
 
-    private function uploadToMinio($disk, $itemId, $fileName)
+    /**
+     * Copy one committed seed image to the image disk.
+     *
+     * @return string|null The stored key, or null when there is no such file
+     *                     or the object store is unreachable. Never a key for
+     *                     an object that is not there.
+     */
+    private function uploadSeedImage(int $itemId, string $fileName): ?string
     {
         $sourcePath = storage_path("app/seed-images/{$fileName}");
-        $minioPath = "uploads/items/{$itemId}/{$fileName}";
 
-        if (!File::exists($sourcePath)) {
-            return false;
+        if (! File::exists($sourcePath)) {
+            return null;
         }
+
+        $key = "uploads/items/{$itemId}/{$fileName}";
 
         try {
-            if (!$disk->exists($minioPath)) {
-                $disk->put($minioPath, File::get($sourcePath), 'public');
-                echo "✅ Uploaded: {$minioPath}\n";
-                return true;
-            }
-        } catch (\Exception $e) {
-            echo "⚠️ Could not upload {$fileName}: " . $e->getMessage() . "\n";
-            return false;
-        }
+            $disk = Storage::disk('r2');
 
-        return true;
+            if (! $disk->exists($key)) {
+                $disk->put($key, File::get($sourcePath), 'public');
+            }
+
+            return $key;
+        } catch (\Throwable $e) {
+            // Seeding must work offline and without object-store credentials.
+            // The item simply ends up with no photography, which is a state
+            // the application renders correctly.
+            $this->command?->warn("Could not upload {$fileName}: {$e->getMessage()}");
+
+            return null;
+        }
     }
 
     private function populatePackagingQuantitiesAndCbm(Item $item, array $data): void

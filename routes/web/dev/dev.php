@@ -1,6 +1,8 @@
 <?php
 
-use App\Http\Controllers\Admin\SessionController;
+use App\Http\Controllers\Dev\LibraryController;
+use App\Http\Controllers\Dev\LogViewerController;
+use App\Http\Controllers\Dev\SessionController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -35,6 +37,19 @@ Route::domain("dev.{$baseDomain}")
             Route::prefix('sessions')->group(function () {
                 Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
                 Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
+            });
+
+            // Live log viewer -> dev.<domain>/logs
+            Route::prefix('logs')->name('logs.')->group(function (): void {
+                Route::get('/', [LogViewerController::class, 'index'])->name('index');
+                Route::get('/fetch', [LogViewerController::class, 'fetch'])->name('fetch');
+                Route::post('/clear', [LogViewerController::class, 'clear'])->name('clear');
+            });
+
+            // Dependency inventory -> dev.<domain>/libraries
+            Route::prefix('libraries')->name('libraries.')->group(function (): void {
+                Route::get('/', [LibraryController::class, 'index'])->name('index');
+                Route::post('/refresh', [LibraryController::class, 'refresh'])->name('refresh');
             });
 
             /*

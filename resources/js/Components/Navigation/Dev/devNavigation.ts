@@ -34,6 +34,8 @@ export type DevNavIcon =
     | 'lesson'
     | 'colors'
     | 'box'
+    | 'libraries'
+    | 'logs'
     | 'download';
 
 export const DEV_NAVIGATION: DevNavGroup[] = [
@@ -51,6 +53,18 @@ export const DEV_NAVIGATION: DevNavGroup[] = [
                 href: '/architecture',
                 icon: 'architecture',
                 description: 'Domain module visualizer',
+            },
+            {
+                label: 'Libraries',
+                href: '/libraries',
+                icon: 'libraries',
+                description: 'Composer, npm & PHP inventory',
+            },
+            {
+                label: 'Log Viewer',
+                href: '/logs',
+                icon: 'logs',
+                description: 'Live Laravel, deploy & Docker container logs',
             },
             {
                 label: 'Shipments Lab',

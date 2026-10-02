@@ -20,6 +20,30 @@ use Carbon\Carbon;
 
 class StoreController extends Controller
 {
+    public function __construct(
+        private readonly \App\Services\StoreLocationStockService $locationStock
+    ) {
+    }
+
+    /**
+     * Pieces per packaging unit, keyed by item_variant_id.
+     *
+     * item_stocks counts packaging units; every figure the stock tool shows is
+     * in pieces. This is the conversion, gathered once per item so the
+     * location breakdown does not re-ask each variant.
+     *
+     * @param  \Illuminate\Support\Collection<int, StoreVariant>  $storeVariants
+     * @return array<int, int>
+     */
+    private function piecesPerUnit($storeVariants): array
+    {
+        return $storeVariants
+            ->mapWithKeys(fn ($sv): array => [
+                (int) $sv->item_variant_id => max(1, (int) ($sv->itemVariant?->calculateTotalPieces() ?: 1)),
+            ])
+            ->all();
+    }
+
     /**
      * List all stores.
      */
@@ -70,7 +94,12 @@ class StoreController extends Controller
                             'storeVariants' => function ($q2) use ($store) {
                                 $q2->where('store_id', $store->id)
                                     ->with([
-                                        'stocks',
+                                        // Unconstrained, this pulls the variant's
+                                        // rows at every store and warehouse — see
+                                        // StoreVariant::stocks().
+                                        'stocks' => fn ($stockQuery) => $stockQuery
+                                            ->where('location_type', Store::class)
+                                            ->where('location_id', $store->id),
                                         'customerPrices.customer',
                                         'sellerPrices.seller',
                                         'individualPrice',
@@ -186,6 +215,11 @@ class StoreController extends Controller
                     ];
                 })->values()->toArray();
 
+            $totalStock = $mappedVariants->reduce(
+                fn($carry, $mv) => $carry + ($mv['stock'] * $mv['multiplier']),
+                0
+            );
+
             return [
                 'item_id' => $item->id,
                 'item_name' => $item->product_name ?? 'Unknown Item',
@@ -193,13 +227,17 @@ class StoreController extends Controller
                 'category' => $item->category->category_name ?? 'N/A',
                 'starting_price' => $mappedVariants->min('final_price'),
                 'total_variants' => $storeVariants->count(),
-                'total_stock' => $mappedVariants->reduce(
-                    fn($carry, $mv) => $carry + ($mv['stock'] * $mv['multiplier']),
-                    0
-                ),
+                'total_stock' => $totalStock,
                 'remote_total_stock' => $mappedVariants->reduce(
                     fn($carry, $mv) => $carry + ($mv['remote_stock'] * $mv['multiplier']),
                     0
+                ),
+                // Store Shelf / Store Room / Remote Warehouse, read from the
+                // ledger instead of split 25/75 in the browser.
+                'locations' => $this->locationStock->locations(
+                    $store,
+                    $this->piecesPerUnit($storeVariants),
+                    (int) $totalStock,
                 ),
                 'variants' => $mappedVariants,
             ];
@@ -324,7 +362,9 @@ class StoreController extends Controller
             'itemVariant' => function ($q) {
                 $q->with(['item.category', 'itemColor', 'itemSize', 'itemPackagingType', 'packagingQuantities']);
             },
-            'stocks',
+            'stocks' => fn ($stockQuery) => $stockQuery
+                ->where('location_type', Store::class)
+                ->where('location_id', $storeVariant->store_id),
         ]);
 
         $priceLadder = PriceProvider::getPriceLadder($storeVariant->id, $storeVariant->store_id, null, null);
@@ -348,7 +388,7 @@ class StoreController extends Controller
                 'discount_ends_at' => $discountEndsAt,
                 'final_price' => $finalPrice,
                 'active' => (bool) $storeVariant->active,
-                'stock' => (int) $storeVariant->stocks->sum('quantity'),
+                'stock' => $storeVariant->stockAtStore(),
                 'status' => $storeVariant->active ? 'active' : 'inactive',
                 'price_ladder' => $priceLadder,
                 'customer_prices' => $storeVariant->customerPrices->map(fn($cp) => [
@@ -669,7 +709,9 @@ class StoreController extends Controller
                         'storeVariants' => function ($q2) use ($store) {
                             $q2->where('store_id', $store->id)
                                 ->with([
-                                    'stocks',
+                                    'stocks' => fn ($stockQuery) => $stockQuery
+                                        ->where('location_type', Store::class)
+                                        ->where('location_id', $store->id),
                                     'customerPrices.customer',
                                     'sellerPrices.seller',
                                     'individualPrice',
@@ -776,6 +818,13 @@ class StoreController extends Controller
             'total_variants' => $mappedVariants->count(),
             'total_stock' => $totalStock,
             'remote_total_stock' => $remoteTotalStock,
+            // Store Shelf / Store Room / Remote Warehouse, read from the
+            // ledger instead of split 25/75 in the browser.
+            'locations' => $this->locationStock->locations(
+                $store,
+                $this->piecesPerUnit($storeVariants),
+                (int) $totalStock,
+            ),
             'variants' => $mappedVariants->values()->all(),
         ];
 

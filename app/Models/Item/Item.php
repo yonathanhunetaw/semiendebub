@@ -105,10 +105,11 @@ class Item extends Model
         return $this->hasMany(ItemVariant::class);
     }
 
-    public function images(): HasMany
-    {
-        return $this->hasMany(ItemImage::class);
-    }
+    // There is no images() relation. The item_images table is keyed by
+    // item_variant_id and holds no rows; a hasMany(ItemImage::class) here
+    // resolved to item_images.item_id, which does not exist, so any call threw
+    // "Unknown column 'item_images.item_id'". Images live in the
+    // general_images JSON column, read through getProcessedImagesAttribute().
 
     public function stores(): BelongsToMany
     {

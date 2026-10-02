@@ -52,8 +52,22 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user() ? [
                     'id' => $request->user()->id,
                     'first_name' => $request->user()->first_name,
+                    // The profile form edits exactly the fields
+                    // ProfileUpdateRequest validates, so all of them have to be
+                    // here or it opens with blanks and overwrites real values
+                    // with empty ones.
+                    'last_name' => $request->user()->last_name,
+                    'phone_number' => $request->user()->phone_number,
                     'email' => $request->user()->email,
+                    'email_verified_at' => $request->user()->email_verified_at,
                     'role' => $request->user()->role,
+                    // Display accessor vs. comparable key: getRoleAttribute()
+                    // returns "Stock Keeper", so the client can never match it
+                    // against a stored value. Anything that branches on role
+                    // (which chrome the profile page wears, for one) needs the
+                    // key, and roleKey() is the same authority the route gates
+                    // use.
+                    'role_key' => $request->user()->roleKey(),
                     'store_id' => $request->user()->store_id,
                 ] : null,
             ],

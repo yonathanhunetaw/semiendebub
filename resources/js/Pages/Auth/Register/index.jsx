@@ -23,17 +23,24 @@ export default function Register() {
 
     return (
         <GuestLayout>
-            <Head title="Register" />
+            <Head title="Sign up" />
+
+            <div className="mb-6">
+                <h1 className="text-xl font-bold text-gray-900">Create your account</h1>
+                <p className="mt-1 text-sm text-gray-500">
+                    Set up your company registry — stores, stock and team come next.
+                </p>
+            </div>
 
             <form onSubmit={submit}>
                 <div>
-                    <InputLabel htmlFor="name" value="Name" />
+                    <InputLabel htmlFor="name" value="Full name" />
 
                     <TextInput
                         id="name"
                         name="name"
                         value={data.name}
-                        className="mt-1 block w-full"
+                        className="block w-full mt-1"
                         autoComplete="name"
                         isFocused={true}
                         onChange={(e) => setData('name', e.target.value)}
@@ -51,7 +58,7 @@ export default function Register() {
                         type="email"
                         name="email"
                         value={data.email}
-                        className="mt-1 block w-full"
+                        className="block w-full mt-1"
                         autoComplete="username"
                         onChange={(e) => setData('email', e.target.value)}
                         required
@@ -68,7 +75,7 @@ export default function Register() {
                         type="password"
                         name="password"
                         value={data.password}
-                        className="mt-1 block w-full"
+                        className="block w-full mt-1"
                         autoComplete="new-password"
                         onChange={(e) => setData('password', e.target.value)}
                         required
@@ -80,7 +87,7 @@ export default function Register() {
                 <div className="mt-4">
                     <InputLabel
                         htmlFor="password_confirmation"
-                        value="Confirm Password"
+                        value="Confirm password"
                     />
 
                     <TextInput
@@ -88,7 +95,7 @@ export default function Register() {
                         type="password"
                         name="password_confirmation"
                         value={data.password_confirmation}
-                        className="mt-1 block w-full"
+                        className="block w-full mt-1"
                         autoComplete="new-password"
                         onChange={(e) =>
                             setData('password_confirmation', e.target.value)
@@ -102,18 +109,22 @@ export default function Register() {
                     />
                 </div>
 
-                <div className="mt-4 flex items-center justify-end">
+                <PrimaryButton
+                    className="justify-center w-full mt-6 bg-orange-600 hover:bg-orange-500 focus:bg-orange-500 active:bg-orange-700 focus:ring-orange-500"
+                    disabled={processing}
+                >
+                    Sign up
+                </PrimaryButton>
+
+                <p className="mt-6 text-sm text-center text-gray-600">
+                    Already have an account?{' '}
                     <Link
                         href="/login"
-                        className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                        className="font-semibold text-orange-700 underline hover:text-orange-600"
                     >
-                        Already registered?
+                        Log in
                     </Link>
-
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Register
-                    </PrimaryButton>
-                </div>
+                </p>
             </form>
         </GuestLayout>
     );

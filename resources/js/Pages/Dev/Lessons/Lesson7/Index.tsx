@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import DevLayout from "@/Layouts/DevLayout";
 
 export default function BoxBasic() {
   return (
@@ -7,3 +8,5 @@ export default function BoxBasic() {
     </Box>
   );
 }
+
+BoxBasic.layout = (page: any) => <DevLayout>{page}</DevLayout>;

@@ -1,10 +1,13 @@
 import { Drawer } from "@mui/material";
 import React from "react";
 
+import PackagingPlaceholder from "@/Components/Shared/PackagingPlaceholder";
+
 import type { StorefrontCart, StorefrontCartLine } from "@/types/storefront";
 import {
     STOREFRONT_BRAND,
     formatPrice,
+    hasImage,
     resolveImage,
 } from "./storefrontConstants";
 
@@ -180,11 +183,23 @@ function CartLineRow({
 
     return (
         <li className="flex gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-2.5">
-            <img
-                src={resolveImage(line.image_url)}
-                alt={line.title}
-                className="h-16 w-16 shrink-0 rounded-xl border border-slate-100 object-cover"
-            />
+            {hasImage(line.image_url) ? (
+                <img
+                    src={resolveImage(line.image_url)}
+                    alt={line.title}
+                    className="h-16 w-16 shrink-0 rounded-xl border border-slate-100 object-cover"
+                />
+            ) : (
+                /* variant_label reads "Blue · A4 · Box of 12", so the
+                   packaging tier can be classified straight out of it. */
+                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl">
+                    <PackagingPlaceholder
+                        packaging={line.variant_label}
+                        label=""
+                        size="sm"
+                    />
+                </div>
+            )}
 
             <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex items-start justify-between gap-2">

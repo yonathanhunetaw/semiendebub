@@ -53,6 +53,8 @@ export interface StorefrontItemCard {
     description: string | null;
     category: StorefrontCategoryRef | null;
     image_url: string | null;
+    /** Packaging of the cheapest variant; drives the fallback placeholder. */
+    packaging_from: string | null;
     /** Cheapest payable price across sellable variants. */
     price_from: number | null;
     /** List price of that same cheapest variant, for strike-through. */
@@ -152,7 +154,10 @@ export interface StorefrontAuthUser {
     id: number;
     first_name: string | null;
     email: string;
+    /** Display form, e.g. "Stock Keeper". For presentation only. */
     role: string | null;
+    /** Comparable key, e.g. `stock_keeper`. Branch on this, never on `role`. */
+    role_key: string | null;
     store_id: number | null;
 }
 

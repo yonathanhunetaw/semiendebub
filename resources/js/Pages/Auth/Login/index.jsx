@@ -25,6 +25,13 @@ export default function Login({ status, canResetPassword }) {
         <GuestLayout>
             <Head title="Log in" />
 
+            <div className="mb-6">
+                <h1 className="text-xl font-bold text-gray-900">Welcome back</h1>
+                <p className="mt-1 text-sm text-gray-500">
+                    Sign in to your Mezgebe Dirijit workspace.
+                </p>
+            </div>
+
             {status && (
                 <div className="mb-4 text-sm font-medium text-green-600">
                     {status}
@@ -65,7 +72,7 @@ export default function Login({ status, canResetPassword }) {
                     <InputError message={errors.password} className="mt-2" />
                 </div>
 
-                <div className="block mt-4">
+                <div className="flex items-center justify-between mt-4">
                     <label className="flex items-center">
                         <Checkbox
                             name="remember"
@@ -78,22 +85,33 @@ export default function Login({ status, canResetPassword }) {
                             Remember me
                         </span>
                     </label>
-                </div>
 
-                <div className="flex items-center justify-end mt-4">
                     {canResetPassword && (
                         <Link
                             href="/forgot-password"
-                            className="text-sm text-gray-600 underline rounded-md hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            className="text-sm text-gray-600 underline rounded-md hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
                         >
                             Forgot your password?
                         </Link>
                     )}
-
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Log in
-                    </PrimaryButton>
                 </div>
+
+                <PrimaryButton
+                    className="justify-center w-full mt-6 bg-orange-600 hover:bg-orange-500 focus:bg-orange-500 active:bg-orange-700 focus:ring-orange-500"
+                    disabled={processing}
+                >
+                    Log in
+                </PrimaryButton>
+
+                <p className="mt-6 text-sm text-center text-gray-600">
+                    New here?{' '}
+                    <Link
+                        href="/register"
+                        className="font-semibold text-orange-700 underline hover:text-orange-600"
+                    >
+                        Create an account
+                    </Link>
+                </p>
             </form>
         </GuestLayout>
     );

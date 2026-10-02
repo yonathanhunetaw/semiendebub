@@ -54,7 +54,10 @@ export default function ItemVariants({ store, item, customers, sellers }: {
     return (
         <AdminLayout>
             <Head title={`${item.item_name} — Variants`} />
-            <Box sx={{ p: { xs: 1.5, md: 3 }, maxWidth: 1200, mx: 'auto' }}>
+            {/* No horizontal padding on a phone: AdminLayout already supplies
+                the gutter, and a second one here is what made this page need
+                zooming out. */}
+            <Box sx={{ px: { xs: 0, md: 3 }, py: { xs: 1, md: 3 }, maxWidth: 1200, minWidth: 0, mx: 'auto' }}>
 
                 {/* ── Back button (standalone, above card) ─────────────── */}
                 <Box sx={{ mb: 1.5 }}>

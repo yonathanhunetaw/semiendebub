@@ -11,6 +11,7 @@ use App\Models\Item\ItemSize;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemInventoryLocation;
 use App\Models\Store\Store;
+use App\Models\Store\StoreVariant;
 use App\Services\ImageResolver;
 use App\Services\ItemVariantGenerationService;
 use Illuminate\Http\Request;
@@ -196,7 +197,14 @@ class ItemController extends Controller
                 'status' => $v->status,
                 'slots' => $slots,
                 'slot_count' => $slotCount,
-                'proof_ok' => $slotCount >= 2,
+                // The publish gate. A packaging tier satisfies it because the
+                // UI can draw a truthful PackagingPlaceholder for one.
+                'proof_ok' => $v->hasImageProof(),
+                // Advisory only: whether real photographs exist. The admin
+                // list still flags "needs photos" on a variant that is
+                // publishable, so missing photography stays visible.
+                'has_photos' => $v->hasPhotographicProof(),
+                'packaging_tier' => $v->packagingTier(),
                 'packaging_data' => $v->packagingQuantities->map(fn($p) => [
                     'name' => $p->name,
                     'pivot' => [
@@ -218,8 +226,51 @@ class ItemController extends Controller
                     : [],
             ],
             'variantData' => $variantData,
-            'stores' => Store::all(),
+            // The deploy dialog reads `already_deployed` to mark a store it has
+            // nothing left to push to. Plain Store::all() never carried the
+            // flag, so every store offered a "Deploy" button whether or not it
+            // already held the item, and the only way to find out was to press
+            // it and read the "already deployed" notice that came back.
+            'stores' => $this->storesWithDeployment($item),
         ]);
+    }
+
+    /**
+     * Every store, each saying whether this item is fully deployed to it.
+     *
+     * "Fully" is the useful question: deployment is per variant, so a store
+     * that received an item before a new colour was added still has variants
+     * waiting, and should keep its Deploy button.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function storesWithDeployment(Item $item): array
+    {
+        $variantCount = $item->variants->count();
+
+        $deployedPerStore = StoreVariant::query()
+            ->where('item_id', $item->id)
+            ->selectRaw('store_id, COUNT(DISTINCT item_variant_id) as deployed')
+            ->groupBy('store_id')
+            ->pluck('deployed', 'store_id');
+
+        return Store::query()
+            ->orderBy('name')
+            ->get()
+            ->map(function (Store $store) use ($deployedPerStore, $variantCount): array {
+                $deployed = (int) ($deployedPerStore[$store->id] ?? 0);
+
+                return [
+                    'id' => (int) $store->id,
+                    'name' => (string) $store->name,
+                    'location' => $store->location,
+                    'deployed_variants' => $deployed,
+                    'total_variants' => $variantCount,
+                    'already_deployed' => $variantCount > 0 && $deployed >= $variantCount,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -251,7 +302,10 @@ class ItemController extends Controller
                 'product_description' => $validated['product_description'] ?? null,
                 'packaging_details' => $validated['packaging_details'] ?? null,
                 'item_category_id' => $this->resolveCategoryId($validated['item_category_id']),
-                'status' => 'draft', // always draft until proof provided
+                // Placeholder only: evaluateDraftStatus() below writes the
+                // status the admin actually asked for, once variants and their
+                // images have been persisted.
+                'status' => 'draft',
                 'general_images' => $this->handleUploads($request, []),
                 'is_incomplete' => true,
             ]);
@@ -430,22 +484,18 @@ class ItemController extends Controller
 
         $newStatus = $request->status;
 
-        if ($newStatus === 'active') {
-            $item->load('variants');
+        // Activation is no longer gated on imagery. A variant with no
+        // photograph renders PackagingPlaceholder, which is a truthful thing
+        // to show, and refusing activation instead hid the item from every
+        // seller's catalogue. The thin-imagery hint lives on `is_incomplete`.
+        $item->load('variants.itemPackagingType');
 
-            $allProven = $item->variants->every(function ($variant) {
-                $images = $variant->images ?? [];
-                return count($images) >= 2;
-            });
-
-            if (!$allProven) {
-                return back()->withErrors([
-                    'status' => 'Cannot activate: every variant must have at least 2 images (proof) before publishing.',
-                ]);
-            }
-        }
-
-        $item->update(['status' => $newStatus]);
+        $item->update([
+            'status' => $newStatus,
+            'is_incomplete' => ! $item->variants->every(
+                fn (ItemVariant $variant): bool => $variant->hasImageProof(),
+            ),
+        ]);
 
         return back()->with('success', 'Item status updated to ' . ucfirst($newStatus) . '.');
     }
@@ -539,23 +589,31 @@ class ItemController extends Controller
     }
 
     /**
-     * After images are saved, decide if the item can leave draft status safely.
-     * Every variant must have at least 2 image files; otherwise lock to draft state.
+     * Apply the status the admin asked for, and record whether imagery is thin.
+     *
+     * Imagery used to be a gate: any variant without two photographs (or a
+     * packaging type we could illustrate) forced the whole item back to
+     * `draft`. Draft items are excluded by `Item::where('status', 'active')`
+     * in both Seller\DashboardController and Seller\ItemController, so a
+     * single unphotographed variant took the entire item out of every seller's
+     * catalogue — the item looked deployed in admin and simply was not there.
+     *
+     * The admin's choice now stands. `is_incomplete` still records thin
+     * imagery so the admin list can flag it, and Admin/Items/Show keeps
+     * showing `proof_ok` per variant, but neither hides anything.
      */
     private function evaluateDraftStatus(Item $item, string $requestedStatus): void
     {
-        $item->refresh()->load('variants');
+        $item->refresh()->load('variants.itemPackagingType');
 
-        $allProven = $item->variants->every(function ($variant) {
-            $images = is_array($variant->images) ? $variant->images : [];
-            return count(array_filter($images)) >= 2;
-        });
-
-        $finalStatus = $allProven ? $requestedStatus : 'draft';
+        $allProven = $item->variants->every(
+            fn (ItemVariant $variant): bool => $variant->hasImageProof(),
+        );
 
         $item->update([
-            'status' => $finalStatus,
-            'is_incomplete' => !$allProven,
+            'status' => $requestedStatus,
+            // Advisory only — drives the "needs photos" hint, not visibility.
+            'is_incomplete' => ! $allProven,
         ]);
     }
 

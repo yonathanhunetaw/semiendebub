@@ -57,8 +57,11 @@ interface Props {
     productsCount: number;
     activeVariantsCount: number;
     lowStockItems: PaginatedData<LowStockItem> | LowStockItem[];
-    stores: Array<{ id: number; name: string }>;
+    stores: Array<{ id: number; name: string; units: number; active_variants: number }>;
+    /** The selected store's id as a string, or 'all'. */
     currentStore?: string;
+    /** Name of the selected store, for labelling scoped figures. */
+    currentStoreName?: string | null;
 }
 
 // ========== PAGINATION COMPONENT ==========
@@ -102,13 +105,18 @@ export default function Dashboard({
     activeVariantsCount,
     lowStockItems = [],
     stores = [],
-    currentStore = 'all'
+    currentStore = 'all',
+    currentStoreName = null
 }: Props) {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuTarget, setMenuTarget] = useState<string | null>(null);
 
-    const handleStoreChange = (storeName: string) => {
-        router.get(window.location.pathname, { store: storeName }, { preserveState: true, preserveScroll: true });
+    /*
+     * Scoped by id, not name: two stores may share a name and any store may be
+     * renamed, which would quietly drop the scope.
+     */
+    const handleStoreChange = (store: string) => {
+        router.get(window.location.pathname, { store }, { preserveState: true, preserveScroll: true });
     };
 
     const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, target: string) => {
@@ -188,9 +196,19 @@ export default function Dashboard({
             
             {/* HEADER with store switcher – chips now wrap */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    Admin Dashboard
-                </Typography>
+                <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                        Admin Dashboard
+                    </Typography>
+                    {/* Says plainly what the figures below cover. Without it
+                        there was no way to tell a scoped tile from an
+                        unscoped one. */}
+                    <Typography variant="caption" color="text.secondary">
+                        {currentStoreName
+                            ? `Products, variants, customers, carts and low stock for ${currentStoreName}. Sessions are company-wide.`
+                            : 'All stores.'}
+                    </Typography>
+                </Box>
                 
                 <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                     <StorefrontIcon color="action" fontSize="small" />
@@ -204,12 +222,12 @@ export default function Dashboard({
                             size="small"
                         />
                         {stores.map((store) => (
-                            <Chip 
-                                key={store.id} 
-                                label={store.name} 
-                                onClick={() => handleStoreChange(store.name)} 
-                                color={currentStore === store.name ? 'primary' : 'default'}
-                                variant={currentStore === store.name ? 'filled' : 'outlined'}
+                            <Chip
+                                key={store.id}
+                                label={store.name}
+                                onClick={() => handleStoreChange(String(store.id))}
+                                color={currentStore === String(store.id) ? 'primary' : 'default'}
+                                variant={currentStore === String(store.id) ? 'filled' : 'outlined'}
                                 size="small"
                             />
                         ))}
@@ -274,7 +292,10 @@ export default function Dashboard({
                 {stores.length > 0 ? (
                     stores.map(store => (
                         <MenuItem key={store.id} onClick={handleMenuClose} sx={{ fontSize: '0.875rem' }}>
-                            {store.name}: <Box component="span" sx={{ fontWeight: 600, ml: 1 }}>-- (Data)</Box>
+                            {store.name}:
+                            <Box component="span" sx={{ fontWeight: 600, ml: 1 }}>
+                                {store.active_variants.toLocaleString()} variants · {store.units.toLocaleString()} pcs
+                            </Box>
                         </MenuItem>
                     ))
                 ) : (

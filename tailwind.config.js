@@ -9,6 +9,12 @@ export default {
         './resources/views/**/*.blade.php',
         './resources/js/**/*.jsx',
         './resources/js/**/*.tsx',
+        // Shared class-name tokens live in plain .ts modules (e.g.
+        // Components/Storefront/storefrontConstants.ts). Without this glob
+        // Tailwind never sees them, so utilities used *only* there are never
+        // generated — which is what silently flattened the storefront's
+        // desktop layout to its 480px mobile shell.
+        './resources/js/**/*.ts',
     ],
 
     theme: {

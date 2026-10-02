@@ -113,26 +113,46 @@ export function visiblePrice(
     );
 }
 
-// --- Hierarchical packaging (Piece / Packet / Carton) ---
+// --- Hierarchical packaging (Piece / Doz / Packet / Box / Carton) ---
 //
 // A variant's `packaging` field is treated as a tier name. We classify the
 // tiers found in `availablePackaging()` into a known order so we can render
-// the Piece/Packet/Carton tab UI, and figure out which tier nests inside
-// which (e.g. a Carton contains N Packets, a Packet contains M Pieces).
+// the packaging tab UI, and figure out which tier nests inside which
+// (e.g. a Carton contains N Boxes, a Box contains M Pieces).
+//
+// The list mirrors database/seeders/Admin/ItemPackagingTypeSeeder.php. Keep
+// the two in step: a packaging type this function cannot classify returns
+// null, and orderedPackagingTiers() then drops that variant from the picker
+// entirely — which is how Bundle and Bag used to disappear from the UI
+// without any error to explain where they had gone.
 
-export type PackagingTier = "piece" | "packet" | "box" | "cartoon";
+export type PackagingTier =
+    | "piece"
+    | "doz"
+    | "packet"
+    | "bundle"
+    | "box"
+    | "bag"
+    | "cartoon";
 
+/** Smallest unit first. Drives the left-to-right order of the tier tabs. */
 export const PACKAGING_TIER_ORDER: PackagingTier[] = [
     "piece",
+    "doz",
     "packet",
+    "bundle",
     "box",
+    "bag",
     "cartoon",
 ];
 
 export const PACKAGING_TIER_LABEL: Record<PackagingTier, string> = {
     piece: "Piece",
+    doz: "Dozen",
     packet: "Packet",
+    bundle: "Bundle",
     box: "Box",
+    bag: "Bag",
     cartoon: "Carton",
 };
 
@@ -141,8 +161,19 @@ export function classifyPackagingTier(
 ): PackagingTier | null {
     const value = (packaging ?? "").toLowerCase();
     if (!value) return null;
+    // "cartoon" is the spelling the catalogue was seeded with; both forms are
+    // matched so rows written before the rename still classify.
     if (value.includes("carton") || value.includes("cartoon")) return "cartoon";
     if (value.includes("box")) return "box";
+    if (value.includes("bundle")) return "bundle";
+    if (value.includes("bag") || value.includes("sack")) return "bag";
+    // Checked before "pack" so "packet" cannot swallow it.
+    if (
+        value.includes("dozen") ||
+        value.includes("doz") ||
+        value.includes("dz")
+    )
+        return "doz";
     if (value.includes("packet") || value.includes("pack")) return "packet";
     if (value.includes("piece") || value.includes("pcs") || value.includes("pc"))
         return "piece";

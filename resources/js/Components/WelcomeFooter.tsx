@@ -1,10 +1,11 @@
+import React from "react";
 import { Link } from "@inertiajs/react";
 import { Container, Box, Typography, IconButton, Divider } from "@mui/material";
-import Grid from '@mui/material/Grid'; // Using Grid2 to solve "squiggly" issues in v6
+import Grid from '@mui/material/Grid';
 import FacebookIcon from '@mui/icons-material/Facebook';
 import TwitterIcon from '@mui/icons-material/Twitter';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
-import InstagramIcon from '@mui/icons-material/Instagram';
+import TelegramIcon from '@mui/icons-material/Telegram';
 
 export default function WelcomeFooter() {
     return (
@@ -20,65 +21,61 @@ export default function WelcomeFooter() {
                 zIndex: 30
             }}
         >
-            {/* If 1337 was giving a squiggle, use 'lg' or a string '1337px' */}
             <Container sx={{ maxWidth: '1337px !important' }}>
                 <Grid container spacing={8}>
 
-                    {/* Brand & Mission */}
+                    {/* Brand & mission */}
                     <Grid size={{ xs: 12, md: 4 }}>
-                        <Typography variant="h5" sx={{ fontWeight: 900, color: '#c05800', mb: 2, letterSpacing: 2 }}>
-                            SEMIEN DEBUB
+                        <Typography variant="h5" sx={{ fontWeight: 900, color: '#c05800', mb: 0.5, letterSpacing: 2 }}>
+                            MEZGEBE DIRIJIT
+                        </Typography>
+                        <Typography sx={{ color: 'rgba(253,251,212,0.5)', fontSize: '0.8rem', letterSpacing: 1, mb: 2 }}>
+                            መዝገበ ድርጅት · Business Registry
                         </Typography>
                         <Typography variant="body2" sx={{ color: '#a1a1aa', lineHeight: 1.8, mb: 3 }}>
-                            The digital ledger of the modern age. We bridge the gap between
-                            ancient commercial wisdom and future-proofed technology.
+                            One registry for the whole company — stock, sales, procurement,
+                            delivery, finance, people and every store you run, online and off.
                         </Typography>
                         <Box sx={{ display: 'flex', gap: 1 }}>
-                            <SocialIcon Icon={FacebookIcon} />
-                            <SocialIcon Icon={TwitterIcon} />
-                            <SocialIcon Icon={LinkedInIcon} />
+                            <SocialIcon Icon={TelegramIcon} label="Telegram" />
+                            <SocialIcon Icon={FacebookIcon} label="Facebook" />
+                            <SocialIcon Icon={TwitterIcon} label="X" />
+                            <SocialIcon Icon={LinkedInIcon} label="LinkedIn" />
                         </Box>
                     </Grid>
 
-                    {/* Quick Links */}
+                    {/* Operations */}
                     <Grid size={{ xs: 6, md: 2 }}>
-                        <FooterHeading>Empire</FooterHeading>
-                        <FooterLink href="/items">Inventory</FooterLink>
-                        <FooterLink href="/sales">Commercial</FooterLink>
-                        <FooterLink href="/balance">Operations</FooterLink>
+                        <FooterHeading>Operations</FooterHeading>
+                        <FooterLink href="#inventory">Items & Stock</FooterLink>
+                        <FooterLink href="#warehouses">Warehouses</FooterLink>
+                        <FooterLink href="#procurement">Procurement</FooterLink>
+                        <FooterLink href="#delivery">Delivery</FooterLink>
                     </Grid>
 
-                    {/* Resources */}
+                    {/* Commerce */}
                     <Grid size={{ xs: 6, md: 2 }}>
-                        <FooterHeading>Archive</FooterHeading>
-                        <FooterLink href="/docs">Docs</FooterLink>
-                        <FooterLink href="/api">API</FooterLink>
-                        <FooterLink href="/support">Support</FooterLink>
+                        <FooterHeading>Commerce</FooterHeading>
+                        <FooterLink href="#sales">Sales</FooterLink>
+                        <FooterLink href="#stores">Multi-Store</FooterLink>
+                        <FooterLink href="#storefront">Online Store</FooterLink>
+                        <FooterLink href="#finance">Finance</FooterLink>
                     </Grid>
 
-                    {/* Newsletter */}
-                    <Grid size={{ xs: 12, md: 4 }}>
-                        <FooterHeading>Imperial Decree</FooterHeading>
-                        <Typography variant="body2" sx={{ color: '#a1a1aa', mb: 2 }}>
-                            Subscribe to receive the latest trade route updates.
-                        </Typography>
-                        <Box sx={{ display: 'flex', border: '1px solid #c05800', borderRadius: '4px', overflow: 'hidden' }}>
-                            <input
-                                type="text"
-                                placeholder="Enter email..."
-                                style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    padding: '12px',
-                                    color: '#fdfbd4',
-                                    flex: 1,
-                                    outline: 'none'
-                                }}
-                            />
-                            <Box sx={{ bgcolor: '#c05800', px: 2, display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'bold' }}>
-                                JOIN
-                            </Box>
-                        </Box>
+                    {/* Company */}
+                    <Grid size={{ xs: 6, md: 2 }}>
+                        <FooterHeading>Company</FooterHeading>
+                        <FooterLink href="#about">About</FooterLink>
+                        <FooterLink href="#workforce">Attendance</FooterLink>
+                        <FooterLink href="#marketing">Marketing & PR</FooterLink>
+                        <FooterLink href="#roles">Roles & Access</FooterLink>
+                    </Grid>
+
+                    {/* Get started */}
+                    <Grid size={{ xs: 6, md: 2 }}>
+                        <FooterHeading>Get started</FooterHeading>
+                        <FooterLink href={route('register')} inertia>Sign up</FooterLink>
+                        <FooterLink href={route('login')} inertia>Log in</FooterLink>
                     </Grid>
                 </Grid>
 
@@ -86,7 +83,7 @@ export default function WelcomeFooter() {
 
                 <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
                     <Typography sx={{ fontSize: '0.75rem', color: '#71717a', fontFamily: 'monospace' }}>
-                        © 2026 SEMIEN DEBUB ENTERPRISE.
+                        © {new Date().getFullYear()} MEZGEBE DIRIJIT · ERP FOR GROWING COMPANIES
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 3 }}>
                         <FooterLink href="#" small>Privacy</FooterLink>
@@ -108,10 +105,18 @@ function FooterHeading({ children }: { children: React.ReactNode }) {
     );
 }
 
-function FooterLink({ children, href, small = false }: { children: React.ReactNode, href: string, small?: boolean }) {
+interface FooterLinkProps {
+    children: React.ReactNode;
+    href: string;
+    /** Use Inertia's router instead of a plain anchor (for real routes, not page anchors). */
+    inertia?: boolean;
+    small?: boolean;
+}
+
+function FooterLink({ children, href, inertia = false, small = false }: FooterLinkProps) {
     return (
         <Typography
-            component={Link}
+            component={inertia ? Link : 'a'}
             href={href}
             sx={{
                 display: 'block',
@@ -127,9 +132,9 @@ function FooterLink({ children, href, small = false }: { children: React.ReactNo
     );
 }
 
-function SocialIcon({ Icon }: { Icon: any }) {
+function SocialIcon({ Icon, label }: { Icon: React.ElementType, label: string }) {
     return (
-        <IconButton sx={{ color: '#c05800', border: '1px solid rgba(192, 88, 0, 0.3)' }}>
+        <IconButton aria-label={label} sx={{ color: '#c05800', border: '1px solid rgba(192, 88, 0, 0.3)' }}>
             <Icon fontSize="small" />
         </IconButton>
     );

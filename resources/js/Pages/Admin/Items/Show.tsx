@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from "react";
+
+import PackagingPlaceholder from "@/Components/Shared/PackagingPlaceholder";
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import {
@@ -54,7 +56,11 @@ interface VariantRow {
     status: string;
     slots: Array<ImageSlotData | null>;
     slot_count: number;
+    /** Publishable: 2 real images, or a packaging tier we can illustrate. */
     proof_ok: boolean;
+    /** Whether real photographs exist. Advisory — does not block publishing. */
+    has_photos: boolean;
+    packaging_tier: string | null;
     packaging_data: PackagingItem[];
 }
 
@@ -70,7 +76,11 @@ interface Store {
     id: number;
     name: string;
     location?: string | null;
-    is_active: boolean;
+    /** Variants of this item the store already holds. */
+    deployed_variants: number;
+    /** Variants the item has in total, so partial deployment is visible. */
+    total_variants: number;
+    /** True only when the store holds every variant. */
     already_deployed: boolean;
 }
 
@@ -336,7 +346,7 @@ export default function Show({
                         <Chip
                             size="small"
                             icon={proofComplete ? <CheckCircleIcon /> : <ErrorOutlineIcon />}
-                            label={proofComplete ? "All variants proven" : "Some variants need images"}
+                            label={proofComplete ? "All variants illustrated" : "Some variants need artwork"}
                             color={proofComplete ? "success" : "warning"}
                             variant="outlined"
                         />
@@ -414,7 +424,11 @@ export default function Show({
                                     sx={{
                                         p: 2,
                                         borderRadius: 2,
-                                        borderColor: variant.proof_ok ? "success.main" : "warning.main",
+                                        borderColor: !variant.proof_ok
+                                            ? "error.main"
+                                            : variant.has_photos
+                                              ? "success.main"
+                                              : "warning.main",
                                         borderWidth: 1.5,
                                     }}
                                 >
@@ -432,13 +446,34 @@ export default function Show({
                                                     {getVariantDisplayText(variant)}
                                                 </Typography>
                                                 <Chip size="small" label={variant.status.toUpperCase()} color={statusColor(variant.status)} />
+                                                {/* Both chips are advice, not gates.
+                                                    Imagery no longer decides whether a
+                                                    variant can be published or deployed —
+                                                    `proof_ok` is whether we have anything
+                                                    to draw at all (a photograph, or a
+                                                    packaging tier the placeholder can
+                                                    render), and `has_photos` is whether
+                                                    anyone has actually photographed it. */}
                                                 {variant.proof_ok ? (
-                                                    <Chip size="small" icon={<CheckCircleIcon />} label="Proof OK" color="success" />
+                                                    <Chip size="small" icon={<CheckCircleIcon />} label="Illustrated" color="success" />
                                                 ) : (
                                                     <Chip
                                                         size="small"
                                                         icon={<ErrorOutlineIcon />}
-                                                        label={`Need ${Math.max(0, 2 - variant.slot_count)} more image${Math.max(0, 2 - variant.slot_count) !== 1 ? "s" : ""}`}
+                                                        label="No artwork"
+                                                        color="warning"
+                                                    />
+                                                )}
+                                                {!variant.has_photos && (
+                                                    <Chip
+                                                        size="small"
+                                                        variant="outlined"
+                                                        icon={<ErrorOutlineIcon />}
+                                                        label={
+                                                            variant.slot_count === 0
+                                                                ? "Placeholder — no photos yet"
+                                                                : `Need ${Math.max(0, 2 - variant.slot_count)} more photo${Math.max(0, 2 - variant.slot_count) !== 1 ? "s" : ""}`
+                                                        }
                                                         color="warning"
                                                     />
                                                 )}
@@ -485,6 +520,18 @@ export default function Show({
                                     )}
 
                                     <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+                                        {/* What a shopper sees while this variant has no
+                                            photograph. Shown here so the stand-in is not a
+                                            surprise discovered on the storefront. */}
+                                        {variant.slot_count === 0 && (
+                                            <Box sx={{ width: 80, height: 80, borderRadius: 1.5, overflow: "hidden" }}>
+                                                <PackagingPlaceholder
+                                                    packaging={variant.packaging}
+                                                    size="sm"
+                                                />
+                                            </Box>
+                                        )}
+
                                         {Array.from({ length: 5 }).map((_, slotIndex) => {
                                             const slot = variant.slots?.[slotIndex];
                                             const isRequiredSlot = slotIndex < 2;
@@ -539,9 +586,12 @@ export default function Show({
                                                             <Typography variant="caption" color={isRequiredSlot ? "warning.main" : "text.disabled"} sx={{ fontSize: "0.65rem", fontWeight: 600 }}>
                                                                 Slot {slotIndex + 1}
                                                             </Typography>
+                                                            {/* Photographs no longer block publishing — a
+                                                                packaging placeholder stands in — so the first
+                                                                two slots are urged rather than demanded. */}
                                                             {isRequiredSlot && (
                                                                 <Typography variant="caption" color="warning.main" sx={{ fontSize: "0.55rem" }}>
-                                                                    Required
+                                                                    Recommended
                                                                 </Typography>
                                                             )}
                                                         </Box>
@@ -597,11 +647,25 @@ export default function Show({
                                                 {store.already_deployed && <Chip size="small" icon={<CheckCircleIcon />} label="Deployed" color="success" variant="outlined" />}
                                             </Stack>
                                         }
-                                        secondary={store.location ?? undefined}
+                                        secondary={[
+                                            store.location,
+                                            // A store that holds some but not all
+                                            // variants still has something to
+                                            // receive, so say which it is.
+                                            store.already_deployed
+                                                ? `All ${store.total_variants} variants`
+                                                : `${store.deployed_variants} of ${store.total_variants} variants deployed`,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(" · ")}
                                     />
                                     {!store.already_deployed && (
                                         <Button size="small" variant="contained" disabled={deployingToId === store.id} onClick={(e) => { e.stopPropagation(); handleDeploy(store.id); }}>
-                                            {deployingToId === store.id ? "Deploying…" : "Deploy"}
+                                            {deployingToId === store.id
+                                                ? "Deploying…"
+                                                : store.deployed_variants > 0
+                                                  ? "Deploy rest"
+                                                  : "Deploy"}
                                         </Button>
                                     )}
                                 </ListItemButton>

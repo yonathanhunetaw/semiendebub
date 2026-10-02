@@ -222,6 +222,11 @@ class StorefrontCatalogService
                 'name' => (string) $item->category->category_name,
             ] : null,
             'image_url' => $this->itemImages($item)[0] ?? null,
+            // Packaging of the cheapest sellable variant. The card uses it to
+            // draw a packaging-shaped placeholder when there is no photograph,
+            // which is most of the catalogue — a grid of identical grey "no
+            // image" tiles tells a shopper nothing about what they are buying.
+            'packaging_from' => $cheapest['packaging'] ?? $options->first()['packaging'] ?? null,
             'price_from' => $prices->isNotEmpty() ? (float) $prices->min() : null,
             'list_price_from' => $cheapest['price'] ?? null,
             'is_discounted' => (bool) ($cheapest['is_discounted'] ?? false),

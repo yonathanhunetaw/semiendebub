@@ -20,6 +20,7 @@ import ImageNotSupportedIcon from "@mui/icons-material/ImageNotSupported";
 import React from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { SellerCard } from "@/Components/Seller/sellerUi";
+import StockCaption from "@/Components/Seller/StockCaption";
 import { SELLER_BRAND_DARK } from "@/Components/Seller/sellerConstants";
 
 // ======================== SVG PLACEHOLDER ========================
@@ -516,14 +517,7 @@ export default function SearchResults({
                                             )}
                                         </Stack>
 
-                                        {/* Stock - plain text */}
-                                        <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                            sx={{ display: "block", mt: 0.5 }}
-                                        >
-                                            Stock: {item.store_stock}
-                                        </Typography>
+                                        <StockCaption stock={item.store_stock} />
                                     </Box>
                                 </SellerCard>
                             );

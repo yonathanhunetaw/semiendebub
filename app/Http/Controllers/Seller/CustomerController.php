@@ -11,6 +11,20 @@ use Inertia\Inertia;
 class CustomerController extends Controller
 {
     /**
+     * A blank TIN is a business, so it is stored as null rather than "".
+     *
+     * Every customer-type check in the application is `->tin_number ?` or
+     * `! empty(...)`, and an empty string reads false to those but still
+     * collides with the unique index on the second business created.
+     */
+    private function normaliseTin(?string $tin): ?string
+    {
+        $tin = trim((string) $tin);
+
+        return $tin === '' ? null : $tin;
+    }
+
+    /**
      * Display a listing of the resource.
      */
     public function index()
@@ -42,9 +56,19 @@ class CustomerController extends Controller
             'email' => 'required|email|unique:customers,email',
             'phone_number' => 'required|string|max:20|unique:customers,phone_number',
             'city' => 'nullable|string|max:255',
+            // Customer type, as the rest of the application reads it: a TIN
+            // means "individual" and VAT-inclusive pricing, no TIN means
+            // "business". Admin\CustomerController has always accepted this;
+            // omitting it here meant every customer a seller created was a
+            // business, whatever the seller intended.
+            'tin_number' => 'nullable|string|max:10|unique:customers,tin_number',
         ]);
 
         $validated['created_by'] = auth()->id();
+
+        // An empty string is a business, not a TIN of "". Stored as null so
+        // the unique rule and every `->tin_number ?` check agree.
+        $validated['tin_number'] = $this->normaliseTin($validated['tin_number'] ?? null);
 
         if (! empty($validated['city'])) {
             $validated['city'] = Str::title($validated['city']);
@@ -87,10 +111,17 @@ class CustomerController extends Controller
             'email' => 'required|email|max:255|unique:customers,email,'.$id,
             'phone_number' => 'required|string|max:20|unique:customers,phone_number,'.$id,
             'city' => 'nullable|string|max:255',
+            'tin_number' => 'nullable|string|max:10|unique:customers,tin_number,'.$id,
         ]);
 
         if (! empty($validated['city'])) {
             $validated['city'] = Str::title($validated['city']);
+        }
+
+        // Only when the form sent the field, so a caller that omits it does
+        // not silently turn an individual into a business.
+        if ($request->has('tin_number')) {
+            $validated['tin_number'] = $this->normaliseTin($validated['tin_number'] ?? null);
         }
 
         $customer = Customer::findOrFail($id);

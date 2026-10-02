@@ -3,7 +3,7 @@ import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
-import { Avatar, Box, IconButton, Stack, Typography } from "@mui/material";
+import { Avatar, Box, Chip, IconButton, Stack, Typography } from "@mui/material";
 import React from "react";
 
 interface Customer {
@@ -12,6 +12,8 @@ interface Customer {
     last_name?: string;
     phone_number?: string;
     city?: string;
+    /** Present means an individual, priced with VAT. Absent means a business. */
+    tin_number?: string | null;
 }
 
 export default function Index({ customers = [] }: { customers?: Customer[] }) {
@@ -49,9 +51,21 @@ export default function Index({ customers = [] }: { customers?: Customer[] }) {
                                         {sellerAvatarText(fullName)}
                                     </Avatar>
                                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                                        <Typography sx={{ fontWeight: 700 }} noWrap>
-                                            {fullName || `Customer #${customer.id}`}
-                                        </Typography>
+                                        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+                                            <Typography sx={{ fontWeight: 700 }} noWrap>
+                                                {fullName || `Customer #${customer.id}`}
+                                            </Typography>
+                                            {/* Which pricing a customer gets is
+                                                the thing a seller needs to see
+                                                before opening a cart for them. */}
+                                            <Chip
+                                                size="small"
+                                                variant="outlined"
+                                                color={customer.tin_number ? "primary" : "default"}
+                                                label={customer.tin_number ? "Individual" : "Business"}
+                                                sx={{ height: 18, fontSize: "0.62rem", fontWeight: 700, flexShrink: 0 }}
+                                            />
+                                        </Stack>
                                         <Typography variant="body2" color="text.secondary" noWrap>
                                             {[customer.phone_number, customer.city].filter(Boolean).join(" • ") || "No phone or city yet"}
                                         </Typography>

@@ -1,4 +1,4 @@
-import { Head, Link } from "@inertiajs/react";
+import { Head, Link, router } from "@inertiajs/react";
 import { Alert, Snackbar } from "@mui/material";
 import React from "react";
 
@@ -6,16 +6,20 @@ import CartDrawer from "@/Components/Storefront/CartDrawer";
 import UserBottomNav from "@/Components/Navigation/User/UserBottomNav";
 import ItemCard from "@/Components/Storefront/ItemCard";
 import StorefrontHeader from "@/Components/Storefront/StorefrontHeader";
+import StorefrontMenuDrawer from "@/Components/Storefront/StorefrontMenuDrawer";
+import PackagingPlaceholder from "@/Components/Shared/PackagingPlaceholder";
 import VariantSelector, {
     type VariantSelection,
 } from "@/Components/Storefront/VariantSelector";
 import {
+    ABOVE_USER_BOTTOM_NAV,
     STOCK_TONES,
     STOREFRONT_BG,
     STOREFRONT_BRAND,
     STOREFRONT_GRID,
     STOREFRONT_SHELL,
     formatPrice,
+    hasImage,
     resolveImage,
 } from "@/Components/Storefront/storefrontConstants";
 import { useStorefrontCart } from "@/Components/Storefront/useStorefrontCart";
@@ -77,6 +81,17 @@ export default function StorefrontItemShow({
     const [activeImage, setActiveImage] = React.useState<string | null>(
         initial?.image_url ?? item.images[0] ?? null,
     );
+    // The masthead search is present here too, but this page has no grid to
+    // filter — submitting carries the term back to the catalogue.
+    const [search, setSearch] = React.useState<string>("");
+    const [menuOpen, setMenuOpen] = React.useState<boolean>(false);
+
+    const submitSearch = (): void => {
+        router.get(
+            route("storefront.index"),
+            search.trim() === "" ? {} : { search: search.trim() },
+        );
+    };
 
     const variant = findVariant(
         item.variants,
@@ -169,9 +184,14 @@ export default function StorefrontItemShow({
                     cartCount={cart.item_count}
                     onOpenCart={openCart}
                     user={auth?.user ?? null}
+                    search={search}
+                    onSearchChange={setSearch}
+                    onSearchSubmit={submitSearch}
+                    onSearchClear={() => setSearch("")}
+                    onOpenMenu={() => setMenuOpen(true)}
                 />
 
-                <main className={`${STOREFRONT_SHELL} py-4 pb-32`}>
+                <main className={`${STOREFRONT_SHELL} py-4 pb-44 md:pb-28`}>
                     {/* ── Breadcrumb ── */}
                     {/* Every crumb is pinned except the product name, which is the
                         one of unbounded length — `truncate` alone does nothing on a
@@ -222,12 +242,25 @@ export default function StorefrontItemShow({
                     <div className="grid gap-4 md:grid-cols-2">
                         {/* ── Gallery ── */}
                         <section className="min-w-0" aria-label="Product images">
-                            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white">
-                                <img
-                                    src={resolveImage(activeImage)}
-                                    alt={item.title}
-                                    className="aspect-square w-full object-cover"
-                                />
+                            <div className="aspect-square overflow-hidden rounded-2xl border border-slate-200/80 bg-white">
+                                {/* Falls back to the packaging of whichever
+                                    pack is currently selected, so the hero
+                                    changes with the picker instead of sitting
+                                    blank. */}
+                                {hasImage(activeImage) ? (
+                                    <img
+                                        src={resolveImage(activeImage)}
+                                        alt={item.title}
+                                        className="h-full w-full object-cover"
+                                    />
+                                ) : (
+                                    <PackagingPlaceholder
+                                        packaging={selection.packaging}
+                                        label={item.title}
+                                        size="lg"
+                                        className="border-0"
+                                    />
+                                )}
                             </div>
 
                             {gallery.length > 1 ? (
@@ -367,11 +400,20 @@ export default function StorefrontItemShow({
                   to, and the action. The steppers live up in the packaging card,
                   so the decision and its consequence stay on screen together
                   however far the page is scrolled.
+
+                  It sits *above* UserBottomNav rather than beside it. Both were
+                  pinned to `bottom-0` with the nav on the higher z-index, so on
+                  a phone the nav covered this bar completely and "Add to Cart"
+                  could not be seen, let alone pressed. The nav is hidden from
+                  `md` up, so the offset is dropped there and the bar returns to
+                  the foot of the window.
                 */}
-                <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
+                <div
+                    className="fixed inset-x-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur md:!bottom-0"
+                    style={{ bottom: ABOVE_USER_BOTTOM_NAV }}
+                >
                     <div
                         className={`${STOREFRONT_SHELL} flex items-center justify-between gap-3 py-3`}
-                        style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}
                     >
                         <div className="min-w-0">
                             <p className="truncate text-[11px] font-semibold text-slate-500">
@@ -418,6 +460,22 @@ export default function StorefrontItemShow({
                 cartCount={cart.item_count}
                 onOpenCart={openCart}
                 isAuthenticated={Boolean(auth?.user)}
+            />
+
+            <StorefrontMenuDrawer
+                open={menuOpen}
+                onClose={() => setMenuOpen(false)}
+                categories={categories}
+                activeCategoryId={item.category?.id ?? null}
+                onSelectCategory={(categoryId) =>
+                    router.get(
+                        route("storefront.index"),
+                        categoryId === null ? {} : { category_id: categoryId },
+                    )
+                }
+                cartCount={cart.item_count}
+                onOpenCart={openCart}
+                user={auth?.user ?? null}
             />
 
             <CartDrawer

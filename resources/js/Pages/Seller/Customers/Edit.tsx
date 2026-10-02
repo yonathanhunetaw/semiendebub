@@ -11,6 +11,7 @@ interface Customer {
     email?: string;
     phone_number?: string;
     city?: string;
+    tin_number?: string | null;
 }
 
 export default function Edit({ customer }: { customer: Customer }) {
@@ -20,7 +21,21 @@ export default function Edit({ customer }: { customer: Customer }) {
         email: customer.email || "",
         phone_number: customer.phone_number || "",
         city: customer.city || "",
+        tin_number: customer.tin_number || "",
     });
+
+    // A TIN means individual, as everywhere else in the application.
+    const [customerType, setCustomerType] = React.useState<"individual" | "business">(
+        customer.tin_number ? "individual" : "business",
+    );
+
+    const changeType = (next: "individual" | "business") => {
+        setCustomerType(next);
+
+        if (next === "business") {
+            setData("tin_number", "");
+        }
+    };
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -36,6 +51,35 @@ export default function Edit({ customer }: { customer: Customer }) {
             <Box component="form" onSubmit={submit} sx={{ px: 2, pt: 2 }}>
                 <SellerCard>
                     <Stack spacing={2}>
+                        <TextField
+                            select
+                            fullWidth
+                            label="Customer Type"
+                            value={customerType}
+                            onChange={(event) =>
+                                changeType(event.target.value as "individual" | "business")
+                            }
+                            helperText={
+                                customerType === "individual"
+                                    ? "Priced with VAT — needs a TIN."
+                                    : "Priced without VAT."
+                            }
+                        >
+                            <MenuItem value="individual">Individual</MenuItem>
+                            <MenuItem value="business">Business</MenuItem>
+                        </TextField>
+
+                        {customerType === "individual" && (
+                            <TextField
+                                fullWidth
+                                label="TIN Number"
+                                value={data.tin_number}
+                                onChange={(event) => setData("tin_number", event.target.value)}
+                                helperText={errors.tin_number}
+                                error={Boolean(errors.tin_number)}
+                            />
+                        )}
+
                         <TextField
                             fullWidth
                             label="First name"

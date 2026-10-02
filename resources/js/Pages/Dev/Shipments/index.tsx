@@ -1,11 +1,19 @@
-import Layout from '@/Layouts/AdminLayout'
-import {Head} from '@inertiajs/react'
+import type { ReactNode } from 'react';
+import { Head } from '@inertiajs/react';
+import { Typography } from '@mui/material';
 
-export default function index({}) {
+import DevLayout from '@/Layouts/DevLayout';
+
+export default function DevShipments({}): ReactNode {
     return (
-        <Layout>
-            <Head title="index"/>
+        <>
+            <Head title="Shipments lab" />
 
-        </Layout>
-    )
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Fulfillment sandbox placeholder.
+            </Typography>
+        </>
+    );
 }
+
+DevShipments.layout = (page: ReactNode) => <DevLayout>{page}</DevLayout>;

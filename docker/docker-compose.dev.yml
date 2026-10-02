@@ -13,7 +13,19 @@ services:
     volumes:
       - ../:/var/www/html:delegated
       - storage_data:/var/www/html/storage
+      # The named volume above shadows the whole of storage/, so the seed
+      # images committed on the host were invisible inside the container and
+      # ItemSeeder could never find one to upload. This more specific mount
+      # layers back over it, read-only.
+      - ../storage/app/seed-images:/var/www/html/storage/app/seed-images
       - vendor_data:/var/www/html/vendor
+      # Read-only Docker socket so /dev/logs can stream other containers' stdout
+      # via the Engine API. DEV ONLY: a writable socket is root on the host, and
+      # even read-only it exposes the whole daemon — never add this to
+      # docker-compose.prod.yml. LogViewerController refuses to run outside
+      # local/development, and the root ./logs dir is already visible through
+      # the ../:/var/www/html bind mount above.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
     environment:
       DB_HOST: duka-db

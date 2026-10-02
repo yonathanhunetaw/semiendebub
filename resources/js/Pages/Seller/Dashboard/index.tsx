@@ -21,6 +21,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import React from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { SellerCard } from "@/Components/Seller/sellerUi";
+import StockCaption from "@/Components/Seller/StockCaption";
 import { SELLER_BRAND_DARK } from "@/Components/Seller/sellerConstants";
 import { Html5QrcodeScanner } from "html5-qrcode";
 
@@ -599,15 +600,7 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                             </Typography>
                                         )}
 
-                                        {item.store_stock !== undefined && (
-                                            <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                                sx={{ display: "block", mt: 0.5 }}
-                                            >
-                                                Stock: {item.store_stock}
-                                            </Typography>
-                                        )}
+                                        <StockCaption stock={item.store_stock} />
                                     </Box>
                                 </SellerCard>
                             );

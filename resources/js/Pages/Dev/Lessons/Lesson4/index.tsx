@@ -1,4 +1,4 @@
-import AdminLayout from "@/Layouts/AppLayout";
+import DevLayout from "@/Layouts/DevLayout";
 import {Head} from "@inertiajs/react";
 import React from "react";
 
@@ -83,7 +83,7 @@ export default function Index(): any {
     )
 }
 Index.layout = (page: React.ReactNode) => (
-    <AdminLayout>
+    <DevLayout>
         {page}
-    </AdminLayout>
+    </DevLayout>
 );

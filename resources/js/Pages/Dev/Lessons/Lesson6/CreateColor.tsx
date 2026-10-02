@@ -1,11 +1,19 @@
-import Layout from '@/Layouts/AdminLayout'
-import {Head} from '@inertiajs/react'
+import type { ReactNode } from 'react';
+import { Head } from '@inertiajs/react';
+import { Typography } from '@mui/material';
 
-export default function CreateColor({}) {
+import DevLayout from '@/Layouts/DevLayout';
+
+export default function CreateColor({}): ReactNode {
     return (
-        <Layout>
-            <Head title="CreateColor"/>
+        <>
+            <Head title="New color" />
 
-        </Layout>
-    )
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Create-color form placeholder.
+            </Typography>
+        </>
+    );
 }
+
+CreateColor.layout = (page: ReactNode) => <DevLayout>{page}</DevLayout>;

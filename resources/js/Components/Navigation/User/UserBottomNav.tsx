@@ -21,6 +21,12 @@ type TabKey = "home" | "discover" | "account";
  * so it clears the home indicator on iOS. Only the active tab is tinted; the
  * rest stay neutral, which is what makes the current position readable at a
  * glance.
+ *
+ * Hidden from `md` up. A bottom tab rail is a phone affordance, and on a wide
+ * screen it strands five tiny targets along the bottom edge while the masthead
+ * sits empty — so the same destinations move into the "All Categories"
+ * hamburger (StorefrontMenuDrawer) there. Anything else pinned to the bottom
+ * offsets by ABOVE_USER_BOTTOM_NAV while this is on screen.
  */
 export default function UserBottomNav({
     cartCount = 0,
@@ -42,7 +48,7 @@ export default function UserBottomNav({
     return (
         <nav
             aria-label="Main"
-            className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white"
+            className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white md:hidden"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
             <div className="mx-auto flex max-w-2xl items-stretch">
@@ -66,13 +72,28 @@ export default function UserBottomNav({
                 */}
                 <NavTab label="Messages" icon="chat" disabled />
 
-                {/* An action, not a destination — it opens the slide-over. */}
-                <NavTab
-                    label="Cart"
-                    icon="shopping_cart"
-                    badge={cartCount}
-                    onClick={onOpenCart}
-                />
+                {/*
+                  An action, not a destination, on pages that mount CartDrawer.
+                  On the ones that do not (the account page), there is no
+                  slide-over to open, so the tab falls back to the catalogue —
+                  where the cart lives — instead of being a button that does
+                  nothing when pressed.
+                */}
+                {onOpenCart ? (
+                    <NavTab
+                        label="Cart"
+                        icon="shopping_cart"
+                        badge={cartCount}
+                        onClick={onOpenCart}
+                    />
+                ) : (
+                    <NavTab
+                        label="Cart"
+                        icon="shopping_cart"
+                        badge={cartCount}
+                        href={route("storefront.index")}
+                    />
+                )}
 
                 <NavTab
                     label="Account"
