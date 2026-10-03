@@ -1221,8 +1221,23 @@ except Exception as e:
         # Export this globally so the final summary box can access it
         export RESTORED_BACKUP_NAME="$TARGET_BACKUP_FILE"
 
+        # Empty the database first. A dump only drops and recreates the tables
+        # it contains, so tables created by migrations newer than the backup
+        # survive the restore while the `migrations` table is rolled back —
+        # and the next `migrate` dies on "table already exists".
+        log_info "Clearing database '${DB_DATABASE}' before restore..."
+        existing_tables=$(docker exec "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" -N -B -e \
+            "SET SESSION group_concat_max_len = 1000000; SELECT GROUP_CONCAT(CONCAT('\`', table_name, '\`')) FROM information_schema.tables WHERE table_schema = '${DB_DATABASE}' AND table_type = 'BASE TABLE'" 2>/dev/null)
+        if [ -n "$existing_tables" ] && [ "$existing_tables" != "NULL" ]; then
+            if ! docker exec "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}" -e \
+                "SET FOREIGN_KEY_CHECKS=0; DROP TABLE IF EXISTS ${existing_tables}; SET FOREIGN_KEY_CHECKS=1;" 2>/dev/null; then
+                log_error "Could not clear database '${DB_DATABASE}' before restore."
+                exit 1
+            fi
+        fi
+
         log_info "Restoring backup file '${RESTORED_BACKUP_NAME}' into database container ($DB_CONTAINER)..."
-        
+
         if gunzip -c "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
             log_success "Database successfully restored from R2 backup (${RESTORED_BACKUP_NAME})!"
         else
