@@ -250,6 +250,14 @@ log_stream() {
     done
 }
 
+# Run a command, stream its output through log_stream, and return the
+# command's own exit status. A bare `cmd | log_stream` reports log_stream's
+# status (always 0), so a failed build or migration would read as success.
+run_logged() {
+    "$@" 2>&1 | log_stream
+    return "${PIPESTATUS[0]}"
+}
+
 
 # Print elapsed time in Xm Xs format (like npm run build)
 elapsed_time() {
@@ -658,7 +666,10 @@ compose_rm_services() {
 
 install_node_dependencies() {
     log_step "Installing Node dependencies from lock file..."
-    exec_in_app npm install --no-audit --no-fund --loglevel=info 2>&1 | log_stream
+    if ! run_logged exec_in_app npm install --no-audit --no-fund --loglevel=info; then
+        log_error "npm install failed"
+        return 1
+    fi
 
     # Fix for hoist-non-react-statics on Raspberry Pi (ARM)
     if [ "$APP_ENV" != "production" ]; then
@@ -671,7 +682,16 @@ install_node_dependencies() {
         log_done "Hoist-non-react-statics fixed for ARM compatibility"
     fi
 
+    # Remember which lock file this install came from (see STEP 5).
+    exec_in_app sh -c "echo '$(node_lock_hash)' > node_modules/.lock-hash"
+
     log_success "Node dependencies installed"
+}
+
+# Fingerprint of package.json + package-lock.json, taken inside the container
+# (sha256sum there is GNU coreutils; the host may be macOS or a Pi).
+node_lock_hash() {
+    exec_in_app sh -c 'cat package.json package-lock.json 2>/dev/null | sha256sum | cut -d" " -f1'
 }
 
 reset_node_dependencies() {
@@ -696,11 +716,11 @@ run_migration_with_retry() {
             log_info "Attempting to refresh and seed database..."
             
             # Try db:wipe first
-            if exec_in_app php artisan db:wipe --force 2>&1 | log_stream; then
+            if run_logged exec_in_app php artisan db:wipe --force; then
                 log_success "Database wiped successfully"
                 
                 # Run migrations first
-                if exec_in_app php artisan migrate --force 2>&1 | log_stream; then
+                if run_logged exec_in_app php artisan migrate --force; then
                     log_success "Migrations completed"
                     
                     # Wait a moment for MinIO to be fully ready after migration
@@ -709,7 +729,7 @@ run_migration_with_retry() {
                     
                     # Run all seeders
                     log_step "Running seeders..."
-                    if exec_in_app php artisan db:seed --force 2>&1 | log_stream; then
+                    if run_logged exec_in_app php artisan db:seed --force; then
                         log_success "All seeders completed successfully"
                         return 0
                     else
@@ -722,14 +742,14 @@ run_migration_with_retry() {
                 log_warning "db:wipe failed, trying migrate:fresh..."
                 
                 # Try migrate:fresh
-                if exec_in_app php artisan migrate:fresh --force 2>&1 | log_stream; then
+                if run_logged exec_in_app php artisan migrate:fresh --force; then
                     log_success "Migration and seeding completed successfully"
                     return 0
                 fi
             fi
         else
             log_info "Skipping database reset, running incremental migrations..."
-            if exec_in_app php artisan migrate --force 2>&1 | log_stream; then
+            if run_logged exec_in_app php artisan migrate --force; then
                 log_success "Incremental migration completed successfully"
                 return 0
             fi
@@ -1002,6 +1022,15 @@ if has_git_path_changes "${NODE_FILES[@]}"; then
     log_info "Node dependency changes detected"
 fi
 
+# has_git_path_changes only sees *uncommitted* edits, so a dependency that
+# arrives via `git pull` was never installed. Compare the lock files against
+# the fingerprint recorded by the last successful install instead.
+installed_lock_hash=$(exec_in_app cat node_modules/.lock-hash 2>/dev/null || true)
+if [ "$(node_lock_hash)" != "$installed_lock_hash" ]; then
+    node_changes=1
+    log_info "package.json / package-lock.json changed since the last npm install"
+fi
+
 # Also check the vite binary exists — node_modules dir can exist but be incomplete
 # (e.g. after a failed previous deploy or a fresh container with a mounted volume)
 if ! exec_in_app test -f node_modules/.bin/vite; then
@@ -1010,7 +1039,10 @@ if ! exec_in_app test -f node_modules/.bin/vite; then
 fi
 
 if [ "$node_changes" -eq 1 ] || ! exec_in_app test -d node_modules; then
-    install_node_dependencies
+    if ! install_node_dependencies; then
+        step_failed 4 "npm install failed"
+        exit 1
+    fi
 else
     log_success "Node dependencies already installed and complete"
 fi
@@ -1030,7 +1062,11 @@ if [ "$APP_ENV" = "production" ]; then
     log_step "Building production assets..."
     exec_in_app rm -f public/hot
     
-    exec_in_app npm run build 2>&1 | log_stream
+    if ! run_logged exec_in_app npm run build; then
+        log_error "Frontend build failed"
+        step_failed 5 "npm run build failed"
+        exit 1
+    fi
     log_success "Production assets built"
 else
     log_step "Cleaning up production assets for development mode..."
