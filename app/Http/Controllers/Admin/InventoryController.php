@@ -32,11 +32,12 @@ class InventoryController extends Controller
         // whether or not it has ever held one.
         $liveByStore = DB::table('item_stocks as s')
             ->join('item_variants as iv', 'iv.id', '=', 's.item_variant_id')
-            ->where('s.location_type', Store::class)
+            ->join('stock_locations as sl', 'sl.id', '=', 's.stock_location_id')
+            ->where(fn ($q) => $this->atAStore($q))
             ->where('s.quantity', '>', 0)
             ->whereNull('iv.deleted_at')
-            ->groupBy('s.location_id')
-            ->selectRaw('s.location_id as store_id, COUNT(DISTINCT iv.item_id) as live_items, COUNT(DISTINCT iv.id) as live_variants, SUM(s.quantity) as units')
+            ->groupByRaw('COALESCE(sl.store_id, s.location_id)')
+            ->selectRaw('COALESCE(sl.store_id, s.location_id) as store_id, COUNT(DISTINCT iv.item_id) as live_items, COUNT(DISTINCT iv.id) as live_variants, SUM(s.quantity) as units')
             ->get()
             ->keyBy('store_id');
 
@@ -73,6 +74,9 @@ class InventoryController extends Controller
                 ])
                 ->values()
                 ->all(),
+            // Real orders per stage across every store — the same mapping
+            // the seller's board uses, so a tile matches the list it opens.
+            'orderStages' => app(\App\Services\Fulfillment\SellerOrderBoard::class)->counts(null),
             'shipmentCounts' => $this->shipmentCounts(),
             'transferCounts' => $this->transferCounts(),
             'catalogue' => [
@@ -162,28 +166,55 @@ class InventoryController extends Controller
      */
     private function deployedItems(): array
     {
+        /*
+         * SUM(quantity) alone adds cartons to pieces.
+         *
+         * item_stocks.quantity is in each variant's own packaging unit, so a
+         * store holding 11 cartons and 6 pieces summed to "17" — a figure that
+         * means nothing. The pieces conversion travels with every total now; the
+         * raw sum is kept beside it for audit.
+         */
+        $pieces = \App\Services\Inventory\PackagingLadder::piecesPerUnitSql();
+
         $storeRows = DB::table('item_stocks as s')
             ->join('item_variants as iv', 'iv.id', '=', 's.item_variant_id')
             ->join('items as i', 'i.id', '=', 'iv.item_id')
-            ->join('stores as st', 'st.id', '=', 's.location_id')
-            ->where('s.location_type', Store::class)
+            ->join('stock_locations as sl', 'sl.id', '=', 's.stock_location_id')
+            ->join('stores as st', 'st.id', '=', DB::raw('COALESCE(sl.store_id, s.location_id)'))
+            ->leftJoin('item_variant_packaging_quantity as ivpq', function ($join): void {
+                $join->on('ivpq.item_variant_id', '=', 'iv.id')
+                    ->whereColumn('ivpq.item_packaging_type_id', 'iv.item_packaging_type_id');
+            })
+            ->leftJoin('item_packaging_type_item as ipti', function ($join): void {
+                $join->on('ipti.item_id', '=', 'iv.item_id')
+                    ->whereColumn('ipti.item_packaging_type_id', 'iv.item_packaging_type_id');
+            })
+            ->where(fn ($q) => $this->atAStore($q))
             ->whereNull('iv.deleted_at')
             ->groupBy('i.id', 'i.product_name', 'st.id', 'st.name', 'st.type')
             // `type` travels with the row because this application models its
             // warehouses twice: as rows in `stores` with a warehouse type, and
             // again in the `warehouses` table. Without it the picker labels
             // "Warehouse A" a store.
-            ->selectRaw('i.id as item_id, i.product_name, st.id as store_id, st.name as store_name, st.type as store_type, COUNT(DISTINCT iv.id) as variants, SUM(s.quantity) as stock')
+            ->selectRaw('i.id as item_id, i.product_name, st.id as store_id, st.name as store_name, st.type as store_type, COUNT(DISTINCT iv.id) as variants, SUM(s.quantity) as stock, SUM(s.quantity * ' . $pieces . ') as pieces')
             ->get();
 
         $warehouseRows = DB::table('item_stocks as s')
             ->join('item_variants as iv', 'iv.id', '=', 's.item_variant_id')
             ->join('items as i', 'i.id', '=', 'iv.item_id')
             ->join('warehouses as w', 'w.id', '=', 's.location_id')
+            ->leftJoin('item_variant_packaging_quantity as ivpq', function ($join): void {
+                $join->on('ivpq.item_variant_id', '=', 'iv.id')
+                    ->whereColumn('ivpq.item_packaging_type_id', 'iv.item_packaging_type_id');
+            })
+            ->leftJoin('item_packaging_type_item as ipti', function ($join): void {
+                $join->on('ipti.item_id', '=', 'iv.item_id')
+                    ->whereColumn('ipti.item_packaging_type_id', 'iv.item_packaging_type_id');
+            })
             ->where('s.location_type', Warehouse::class)
             ->whereNull('iv.deleted_at')
             ->groupBy('i.id', 'w.id', 'w.name')
-            ->selectRaw('i.id as item_id, w.id as warehouse_id, w.name as warehouse_name, SUM(s.quantity) as stock')
+            ->selectRaw('i.id as item_id, w.id as warehouse_id, w.name as warehouse_name, SUM(s.quantity) as stock, SUM(s.quantity * ' . $pieces . ') as pieces')
             ->get()
             ->groupBy('item_id');
 
@@ -191,25 +222,28 @@ class InventoryController extends Controller
             ->groupBy('item_id')
             ->map(function (Collection $group, $itemId) use ($warehouseRows): array {
                 $stores = $group
-                    // Busiest shelf first: an admin opening this is looking for
-                    // where the stock is, not for alphabetical order.
-                    ->sortByDesc('stock')
+                    // Busiest shelf first, by pieces — the only figure that is
+                    // comparable between a carton store and a piece store.
+                    ->sortByDesc('pieces')
                     ->map(fn ($row): array => [
                         'id' => (int) $row->store_id,
                         'name' => (string) $row->store_name,
                         'type' => (string) ($row->store_type ?? 'retail'),
                         'variants' => (int) $row->variants,
+                        // Raw ledger sum, in mixed units. Audit only.
                         'stock' => (int) $row->stock,
+                        'pieces' => (int) $row->pieces,
                     ])
                     ->values()
                     ->all();
 
                 $warehouses = $warehouseRows->get($itemId, collect())
-                    ->sortByDesc('stock')
+                    ->sortByDesc('pieces')
                     ->map(fn ($row): array => [
                         'id' => (int) $row->warehouse_id,
                         'name' => (string) $row->warehouse_name,
                         'stock' => (int) $row->stock,
+                        'pieces' => (int) $row->pieces,
                     ])
                     ->values()
                     ->all();
@@ -218,14 +252,31 @@ class InventoryController extends Controller
                     'id' => (int) $itemId,
                     'name' => (string) $group->first()->product_name,
                     'variants' => (int) $group->max('variants'),
+                    // Mixed-unit ledger sums, kept for audit…
                     'store_stock' => (int) $group->sum('stock'),
                     'warehouse_stock' => (int) collect($warehouses)->sum('stock'),
+                    // …and the comparable figures beside them.
+                    'store_pieces' => (int) $group->sum('pieces'),
+                    'warehouse_pieces' => (int) collect($warehouses)->sum('pieces'),
                     'stores' => $stores,
                     'warehouses' => $warehouses,
                 ];
             })
-            ->sortByDesc('store_stock')
+            ->sortByDesc('store_pieces')
             ->values()
             ->all();
+    }
+
+    /**
+     * Rows held at a `stores` row as a whole: a retail store's shelf and floor
+     * (STOCK_PLAN.md phase 4 — the shelf is no longer inside the store row),
+     * or a warehouse-type facility's hub. Pair with
+     * COALESCE(sl.store_id, s.location_id) as the store key.
+     */
+    private function atAStore($query)
+    {
+        return $query
+            ->whereIn('sl.kind', [\App\Models\Inventory\StockLocation::KIND_SHELF, \App\Models\Inventory\StockLocation::KIND_BACKROOM])
+            ->orWhere('s.location_type', Store::class);
     }
 }

@@ -4,57 +4,66 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\StockKeeper;
 
+use App\Exceptions\InsufficientStockException;
+use App\Exceptions\MovementDomainException;
 use App\Http\Controllers\Controller;
-use App\Models\Item\ItemVariant;
-use App\Models\Seller\Cart;
-use App\Services\StockKeeperService;
+use App\Http\Requests\Fulfillment\ConfirmSourcingRequest;
+use App\Models\Finance\Sale;
+use App\Services\Fulfillment\OrderSourcingService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 /**
- * Outbound work queue.
+ * The floor's pick queue: real orders, not carts.
  *
- * There is no `orders` table in this schema — an order in flight is a cart
- * that has been committed, so the picking queue is built from carts and the
- * variants they hold. Each line is checked against the ledger so the desk can
- * see what is actually pickable before they start.
+ *   to_pick         paid and waiting for Pick & Pack. Each line offers the
+ *                   places that serve customers — the store's shelf, its floor
+ *                   and its Remote Hub — with what each holds, and the nearest
+ *                   that covers it preselected.
+ *   with_delivery   picked: the goods are in Delivery's custody, waiting for
+ *                   or riding with a courier.
+ *
+ * Confirming a pick books the goods out of the chosen places and hands them to
+ * Delivery (OrderSourcingService::confirmSourcing), exactly as the seller's
+ * Pick & Pack screen does. A keeper posted to a store sees that store's orders.
  */
 class OrderController extends Controller
 {
-    public function __construct(private readonly StockKeeperService $stock)
+    public function __construct(private readonly OrderSourcingService $sourcing)
     {
     }
 
     public function index(Request $request): Response
     {
-        $status = $request->string('status')->toString() ?: 'all';
+        $tab = $request->string('tab')->toString() ?: 'to_pick';
+        $storeId = $request->user()?->store_id;
 
-        $query = Cart::query()->with(['customer', 'seller', 'variants.item']);
+        $base = fn () => Sale::query()->when($storeId !== null, fn ($query) => $query->forStore((int) $storeId));
 
-        if ($status !== 'all') {
-            $query->where('status', $status);
-        }
+        $query = $tab === 'with_delivery'
+            ? $base()->where('fulfillment_stage', Sale::STAGE_TO_DELIVER)
+            : $base()->awaitingSourcing();
 
-        $paginator = $query->orderBy('priority')->orderByDesc('id')->paginate(20)->withQueryString();
-
-        $carts = collect($paginator->items())
-            ->map(fn (Cart $cart) => $this->presentCart($cart))
-            ->values()
-            ->all();
-
-        $counts = Cart::query()
-            ->selectRaw('status, COUNT(*) as total')
-            ->groupBy('status')
-            ->pluck('total', 'status');
+        $paginator = $query->oldest('id')->paginate(15)->withQueryString();
 
         return Inertia::render('StockKeeper/Orders/index', [
-            'orders' => $carts,
-            'filters' => ['status' => $status],
+            'orders' => collect($paginator->items())
+                ->map(fn (Sale $sale): array => $this->sourcing->pickPackPlan($sale) + [
+                    'delivery' => $sale->delivery === null ? null : [
+                        'status' => (string) $sale->delivery->status,
+                        'courier' => $sale->delivery->courier_name,
+                        'address' => $sale->delivery->delivery_address,
+                    ],
+                ])
+                ->values()
+                ->all(),
+            'tab' => $tab,
             'counts' => [
-                'all' => (int) $counts->sum(),
-                'open' => (int) ($counts['open'] ?? 0),
-                'pending' => (int) ($counts['pending'] ?? 0),
+                'to_pick' => $base()->awaitingSourcing()->count(),
+                'with_delivery' => $base()->where('fulfillment_stage', Sale::STAGE_TO_DELIVER)->count(),
             ],
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
@@ -64,43 +73,23 @@ class OrderController extends Controller
         ]);
     }
 
-    /**
-     * Shape one cart as a pick job, flagging any line the ledger cannot cover.
-     *
-     * @return array<string, mixed>
-     */
-    private function presentCart(Cart $cart): array
+    /** Pick the order from the chosen places and hand it to Delivery. */
+    public function confirmSourcing(ConfirmSourcingRequest $request, Sale $sale): RedirectResponse
     {
-        $lines = $cart->variants->map(function (ItemVariant $variant) use ($cart) {
-            $required = (int) $variant->pivot->quantity;
-            $onHand = (int) $variant->stocks()
-                ->where('location_type', StockKeeperService::STORE_TYPE)
-                ->where('location_id', $cart->store_id)
-                ->sum('quantity');
+        $storeId = $request->user()?->store_id;
 
-            return [
-                'variant_id' => (int) $variant->id,
-                'product_name' => (string) ($variant->item?->product_name ?? 'Unknown product'),
-                'sku' => $variant->sku,
-                'required' => $required,
-                'on_hand' => $onHand,
-                'short_by' => max(0, $required - $onHand),
-            ];
-        })->values();
+        abort_if($storeId !== null && (int) $sale->store_id !== (int) $storeId, 404);
 
-        return [
-            'id' => (int) $cart->id,
-            'reference' => 'CART-' . $cart->id,
-            'status' => (string) $cart->status,
-            'priority' => (int) $cart->priority,
-            'customer' => $cart->customer?->name,
-            'seller' => trim((string) ($cart->seller?->first_name . ' ' . $cart->seller?->last_name)) ?: null,
-            'line_count' => $lines->count(),
-            'unit_count' => (int) $lines->sum('required'),
-            // A job is only pickable when every line is covered by the ledger.
-            'shortfall_lines' => (int) $lines->where('short_by', '>', 0)->count(),
-            'lines' => $lines->all(),
-            'created_at' => $cart->created_at?->toIso8601String(),
-        ];
+        if (! $sale->isAwaitingSourcing()) {
+            return back()->with('error', 'This order is not waiting to be picked.');
+        }
+
+        try {
+            $this->sourcing->confirmSourcing($sale, $request->decisions(), $request->user());
+        } catch (InsufficientStockException|MovementDomainException|RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', "Order {$sale->reference_number} picked and handed to Delivery.");
     }
 }

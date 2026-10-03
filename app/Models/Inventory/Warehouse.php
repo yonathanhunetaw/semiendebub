@@ -2,7 +2,9 @@
 
 namespace App\Models\Inventory;
 
+use App\Models\Concerns\HasFacilityManagers;
 use App\Models\Inventory\ItemStock;
+use App\Services\Inventory\StockLocationTree;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,6 +12,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Warehouse extends Model
 {
     use HasFactory;
+
+    /**
+     * One or two named users oversee a warehouse, and only they (plus admins)
+     * may drive its operations.
+     *
+     * The `manager` column below is a free-text name and stays for display;
+     * authorization reads the assignments this trait provides.
+     */
+    use HasFacilityManagers;
 
     protected $fillable = [
         'name',
@@ -20,6 +31,21 @@ class Warehouse extends Model
         'manager',
         'status'
     ];
+
+    /**
+     * Each warehouse is mirrored as a shared Main Hub in stock_locations until
+     * this table is retired (STOCK_PLAN.md phase 5).
+     */
+    protected static function booted(): void
+    {
+        static::saved(function (self $warehouse): void {
+            app(StockLocationTree::class)->syncWarehouse($warehouse);
+        });
+
+        static::deleted(function (self $warehouse): void {
+            app(StockLocationTree::class)->forget(self::class, (int) $warehouse->id);
+        });
+    }
 
     public function getLocationAttribute($value): ?string
     {
@@ -38,9 +64,17 @@ class Warehouse extends Model
         return $this->morphMany(ItemStock::class, 'location');
     }
 
+    /**
+     * Capacity bands set for this warehouse, per variant.
+     */
+    public function variantCapacities(): MorphMany
+    {
+        return $this->morphMany(\App\Models\Store\StoreVariantCapacity::class, 'location');
+    }
+
     public function store()
     {
         // If a warehouse belongs to a specific store
-        return $this->belongsTo(\App\Models\Store\Store::class);
+        return $this->belongsTo(\App\Models\Store\Store::class, 'store_id');
     }
 }

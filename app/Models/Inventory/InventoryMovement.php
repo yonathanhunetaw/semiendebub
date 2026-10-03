@@ -18,18 +18,27 @@ class InventoryMovement extends Model
 
     protected $fillable = [
         'store_variant_id',
+        'item_variant_id',
+        'stock_location_id',
         'type',
+        'reason',
         'quantity',
+        'balance_after',
         'source_type',
         'source_id',
         'destination_type',
         'destination_id',
+        'reference_type',
         'reference_id',
         'user_id',
+        'notes',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
+        'balance_after' => 'integer',
+        'item_variant_id' => 'integer',
+        'stock_location_id' => 'integer',
     ];
 
     /*
@@ -41,6 +50,16 @@ class InventoryMovement extends Model
     public function storeVariant(): BelongsTo
     {
         return $this->belongsTo(StoreVariant::class, 'store_variant_id');
+    }
+
+    public function itemVariant(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Item\ItemVariant::class);
+    }
+
+    public function stockLocation(): BelongsTo
+    {
+        return $this->belongsTo(StockLocation::class);
     }
 
     public function user(): BelongsTo

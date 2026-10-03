@@ -45,7 +45,11 @@ class StockAlertController extends Controller
             'summary' => [
                 'low_stock' => $metrics['low_stock'],
                 'out_of_stock' => $metrics['out_of_stock'],
-                'tracked_skus' => $metrics['tracked_skus'],
+                // Items, as everywhere else on this desk. `tracked_skus` is
+                // kept beside it only so the older summary shape still resolves.
+                'items' => $metrics['items'],
+                'variants' => $metrics['variants'],
+                'tracked_skus' => $metrics['variants'],
             ],
             'pagination' => [
                 'current_page' => $paginator->currentPage(),

@@ -8,6 +8,7 @@ import {
 } from "@mui/material";
 import { Dashboard } from "@mui/icons-material";
 import WarehouseRoundedIcon from "@mui/icons-material/WarehouseRounded";
+import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import { CiDeliveryTruck } from "react-icons/ci";
 import { CgProfile } from "react-icons/cg";
 import { Link, usePage, Head } from "@inertiajs/react"; // Add Head
@@ -35,7 +36,8 @@ export default function DeliveryLayout({
         if (url.includes("/dashboard")) return 0;
         if (url.includes("/delivery")) return 1;
         if (url.includes("/shipments")) return 2;
-        if (url.includes("/profile") || url.includes("/sessions")) return 3;
+        if (url.includes("/transfers")) return 3;
+        if (url.includes("/profile") || url.includes("/sessions")) return 4;
         return 0;
     };
 
@@ -98,6 +100,15 @@ export default function DeliveryLayout({
                         icon={<WarehouseRoundedIcon />}
                         component={Link}
                         href={route("delivery.shipments.index")}
+                    />
+                    {/* Transfers between two sites (e.g. Remote Hub → Store):
+                        the courier collects from the origin and hands over at
+                        the destination. */}
+                    <BottomNavigationAction
+                        label="Transfers"
+                        icon={<SwapHorizRoundedIcon />}
+                        component={Link}
+                        href={route("delivery.transfers.index")}
                     />
                     <BottomNavigationAction
                         label="Profile"

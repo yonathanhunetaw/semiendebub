@@ -214,12 +214,21 @@ class DashboardController extends Controller
         $paginator = StoreVariant::query()
             ->select('store_variants.*')
             ->selectRaw('COALESCE(s.quantity, 0) as ledger_quantity')
-            ->leftJoin('item_stocks as s', function ($join): void {
-                $join->on('s.item_variant_id', '=', 'store_variants.item_variant_id')
-                    ->where('s.location_type', '=', Store::class)
-                    ->whereColumn('s.location_id', 'store_variants.store_id');
-            })
-            ->with(['item', 'store'])
+            // A store's stock is its shelf + floor (STOCK_PLAN.md phase 4):
+            // two leaves, so they are summed before the join.
+            ->leftJoinSub(
+                DB::table('item_stocks as st')
+                    ->join('stock_locations as sl', 'sl.id', '=', 'st.stock_location_id')
+                    ->whereIn('sl.kind', [\App\Models\Inventory\StockLocation::KIND_SHELF, \App\Models\Inventory\StockLocation::KIND_BACKROOM])
+                    ->groupBy('st.item_variant_id', 'sl.store_id')
+                    ->selectRaw('st.item_variant_id, sl.store_id, SUM(st.quantity) as quantity'),
+                's',
+                function ($join): void {
+                    $join->on('s.item_variant_id', '=', 'store_variants.item_variant_id')
+                        ->whereColumn('s.store_id', 'store_variants.store_id');
+                },
+            )
+            ->with(['item', 'store', 'itemVariant.itemPackagingType'])
             ->where('store_variants.active', true)
             ->when($store, fn (Builder $query) => $query->where('store_variants.store_id', $store->id))
             ->whereRaw('COALESCE(s.quantity, 0) <= ?', [self::LOW_STOCK_THRESHOLD])
@@ -229,8 +238,19 @@ class DashboardController extends Controller
             ->paginate(5)
             ->withQueryString();
 
-        return $paginator->through(function (StoreVariant $sv): array {
+        /*
+         * The figure is in the variant's own packaging unit, so it is named.
+         * "11" against a carton variant is 11 cartons — 1,320 pieces — and an
+         * unnamed 11 beside a threshold of 10 reads as a crisis that is not one.
+         */
+        $ladder = app(\App\Services\Inventory\PackagingLadder::class);
+
+        return $paginator->through(function (StoreVariant $sv) use ($ladder): array {
             $quantity = (int) $sv->ledger_quantity;
+            $unit = (string) ($sv->itemVariant?->itemPackagingType?->name ?? 'Piece');
+            $piecesPerUnit = $sv->itemVariant !== null
+                ? $ladder->piecesPerUnit((int) $sv->itemVariant->id)
+                : 1;
 
             return [
                 'item_id' => (int) $sv->id,
@@ -238,6 +258,14 @@ class DashboardController extends Controller
                 'store_name' => $sv->store?->name ?? 'Unknown Store',
                 'total_stock' => $quantity,
                 'low_stock_total' => $quantity,
+                'unit' => $unit,
+                'pieces' => $quantity * $piecesPerUnit,
+                // "11 Cartons", ready to print.
+                'display' => $ladder->label([[
+                    'unit' => $unit,
+                    'count' => $quantity,
+                    'pieces' => $piecesPerUnit,
+                ]]),
                 'is_low' => true,
             ];
         });
@@ -282,11 +310,15 @@ class DashboardController extends Controller
      */
     private function storeOptions(): array
     {
-        $unitsByStore = ItemStock::query()
-            ->where('location_type', Store::class)
-            ->groupBy('location_id')
-            ->selectRaw('location_id, SUM(quantity) as units')
-            ->pluck('units', 'location_id');
+        // Shelf + floor per retail store; a warehouse-type facility's hub.
+        $unitsByStore = DB::table('item_stocks as s')
+            ->join('stock_locations as sl', 'sl.id', '=', 's.stock_location_id')
+            ->where(fn ($q) => $q
+                ->whereIn('sl.kind', [\App\Models\Inventory\StockLocation::KIND_SHELF, \App\Models\Inventory\StockLocation::KIND_BACKROOM])
+                ->orWhere('s.location_type', Store::class))
+            ->groupByRaw('COALESCE(sl.store_id, s.location_id)')
+            ->selectRaw('COALESCE(sl.store_id, s.location_id) as store_id, SUM(s.quantity) as units')
+            ->pluck('units', 'store_id');
 
         $variantsByStore = StoreVariant::query()
             ->where('active', true)

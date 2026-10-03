@@ -244,6 +244,62 @@ class User extends Authenticatable
         return $this->belongsTo(Store::class);
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Facility management
+    |--------------------------------------------------------------------------
+    |
+    | A warehouse is overseen by one or two named users. The assignments are
+    | polymorphic because a warehouse is either a `warehouses` row or a `stores`
+    | row of warehouse type; see App\Models\Concerns\HasFacilityManagers.
+    |
+    */
+
+    /**
+     * Every warehouse or facility this user has been assigned to manage.
+     */
+    public function facilityAssignments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\Inventory\FacilityManager::class, 'user_id');
+    }
+
+    public function managedFacilityCount(): int
+    {
+        return $this->relationLoaded('facilityAssignments')
+            ? $this->facilityAssignments->count()
+            : $this->facilityAssignments()->count();
+    }
+
+    /**
+     * Does this user manage the given warehouse or facility?
+     *
+     * Asks the facility rather than scanning assignments here, so the single
+     * implementation in HasFacilityManagers stays authoritative.
+     */
+    public function managesFacility(mixed $facility): bool
+    {
+        return is_object($facility)
+            && method_exists($facility, 'isManagedBy')
+            && $facility->isManagedBy($this);
+    }
+
+    /**
+     * May this user rule on an automated replenishment proposal?
+     *
+     * "Store manager" is a capability, not a subdomain: the role exists so it
+     * can be assigned, and the permission exists so an admin can grant the same
+     * authority to a seller who runs a branch. Either is enough; which
+     * *specific* transfers they may approve is TransferPolicy's business.
+     */
+    public function canApproveReplenishment(): bool
+    {
+        // can(), not hasPermissionTo(): the latter throws when the permission
+        // has not been seeded yet, and an unseeded permission should read as
+        // "not granted", not as a 500 on the approvals screen.
+        return $this->isRole('admin', 'store_manager')
+            || $this->can('approve replenishment transfers');
+    }
+
     /**
      * Get the attributes that should be cast.
      *

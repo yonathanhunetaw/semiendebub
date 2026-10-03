@@ -158,18 +158,8 @@ export default function AccountLayout({
                     </Box>
                 </Box>
             ) : (
-                /* The buyer bar needs the Material Symbols face its tabs are
-                   drawn with; storefront pages load it in their own <Head>, and
-                   this page is reachable without passing through one. */
-                <>
-                    <Head>
-                        <link
-                            rel="stylesheet"
-                            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-                        />
-                    </Head>
-                    <UserBottomNav isAuthenticated />
-                </>
+                /* The buyer bar's Material Symbols face is bundled in app.tsx. */
+                <UserBottomNav isAuthenticated />
             )}
         </Box>
     );

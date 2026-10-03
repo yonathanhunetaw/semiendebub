@@ -10,6 +10,8 @@ interface Props {
     scheduled_transfers: ScheduledTransfer[];
     /** Real stores, so a created shipment resolves to an actual record. */
     stores?: LocationOption[];
+    /** Where freight runs: from Main Hub A/B to a store or a Remote Hub (location ids). */
+    locations?: { origins: LocationOption[]; destinations: LocationOption[] };
 }
 
 const TAB_IDS = ["all", "scheduled", "pending", "en_route", "shipped", "overdue"];
@@ -44,7 +46,7 @@ function initialTab(): string {
 /* ----------------------------------------------------------
  | Page Component
  |----------------------------------------------------------*/
-export default function ReplenishIndex({ scheduled_transfers = [], stores = [] }: Props) {
+export default function ReplenishIndex({ scheduled_transfers = [], locations }: Props) {
     const [addOpen, setAddOpen] = useState(false);
     const [filter, setFilter] = useState<string>(initialTab);
     const [submitting, setSubmitting] = useState(false);
@@ -95,8 +97,8 @@ export default function ReplenishIndex({ scheduled_transfers = [], stores = [] }
         router.post(
             route("seller.shipments.store"),
             {
-                origin_store_id: Number(input.origin),
-                destination_store_id: Number(input.destination),
+                origin_location_id: Number(input.origin),
+                destination_location_id: Number(input.destination),
                 scheduled_for: scheduledRun,
                 schedule_options: proposedWindows,
             },
@@ -152,9 +154,7 @@ export default function ReplenishIndex({ scheduled_transfers = [], stores = [] }
 
     return (
         <>
-            <Head title="Shipments">
-                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-            </Head>
+            <Head title="Shipments" />
 
             <ListTopBar
                 fallbackRoute="seller.dashboard"
@@ -284,8 +284,8 @@ export default function ReplenishIndex({ scheduled_transfers = [], stores = [] }
                 open={addOpen}
                 onClose={() => setAddOpen(false)}
                 onAdd={addShipment}
-                facilities={stores}
-                units={stores}
+                facilities={locations?.origins ?? []}
+                units={locations?.destinations ?? []}
                 submitting={submitting}
             />
         </>

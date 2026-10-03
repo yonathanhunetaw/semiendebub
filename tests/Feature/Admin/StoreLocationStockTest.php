@@ -257,17 +257,18 @@ class StoreLocationStockTest extends TestCase
     }
 
     #[Test]
-    public function remote_warehouse_stock_comes_from_the_warehouse_joined_to_the_store(): void
+    public function remote_warehouse_stock_comes_from_the_stores_own_remote_hub(): void
     {
-        $warehouse = Warehouse::create([
-            'name' => 'Wesen Warehouse',
-            'location' => 'Addis',
-            'store_id' => $this->store->id,
-        ]);
+        // STOCK_PLAN.md phase 4: a store's remote tier is its Remote Hub in
+        // the location tree. A shared main hub is never "this store's" — the
+        // old warehouses.store_id link made Hub A read as Main Store's.
+        $remote = app(\App\Services\Inventory\StockLocationTree::class)->addRemoteHub($this->store);
+        $sharedHub = Warehouse::create(['name' => 'Main Distribution Hub A', 'store_id' => $this->store->id]);
 
         $item = Item::factory()->create();
         $variant = ItemVariant::factory()->create(['item_id' => $item->id]);
-        $this->positionAt($variant, Warehouse::class, $warehouse->id, 500);
+        app(\App\Services\StockService::class)->receive($variant->id, $remote, 500);
+        $this->positionAt($variant, Warehouse::class, $sharedHub->id, 900);
 
         $locations = collect($this->service()->locations($this->store, [$variant->id => 1], 100));
 
@@ -306,7 +307,7 @@ class StoreLocationStockTest extends TestCase
                 array_column($first['locations'], 'key'),
             );
             $this->assertSame(
-                ['Store Shelf', 'Store Room', 'Remote Warehouse'],
+                ['Store Shelf', 'Store', 'Remote Hub'],
                 array_column($first['locations'], 'label'),
             );
         });

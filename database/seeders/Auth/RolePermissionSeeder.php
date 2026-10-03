@@ -29,6 +29,23 @@ class RolePermissionSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'view stockkeeper dashboard']);
         Permission::firstOrCreate(['name' => 'view vendor dashboard']);
 
+        /*
+         * Inventory capacity & replenishment.
+         *
+         * `approve replenishment transfers` is the authority the automated
+         * planner's proposals wait on: a proposal is written unapproved and
+         * cannot be dispatched until someone holding this rules on it. It is a
+         * permission as well as a role so an admin can give a branch seller the
+         * same authority without moving them off the seller subdomain.
+         *
+         * `oversee warehouse` is the network-wide view; being assigned to a
+         * specific warehouse (facility_managers) is what grants rights over
+         * *that* warehouse, and is checked by WarehousePolicy.
+         */
+        Permission::firstOrCreate(['name' => 'approve replenishment transfers']);
+        Permission::firstOrCreate(['name' => 'manage location capacity']);
+        Permission::firstOrCreate(['name' => 'oversee warehouse']);
+
         // Create roles and assign permissions
         $admin = Role::firstOrCreate(['name' => 'admin']);
         $admin->givePermissionTo(Permission::all());
@@ -51,11 +68,28 @@ class RolePermissionSeeder extends Seeder
         $seller = Role::firstOrCreate(['name' => 'seller']);
         $seller->givePermissionTo(['view seller dashboard']);
 
+        /*
+         * Store manager — the role that rules on replenishment proposals.
+         *
+         * Not a subdomain of its own: a store manager works out of the store and
+         * warehouse screens, and what they may act on is decided per facility by
+         * the assignments in `facility_managers` plus the policies. The role
+         * exists so the authority can be granted as a whole.
+         */
+        $storeManager = Role::firstOrCreate(['name' => 'store_manager']);
+        $storeManager->givePermissionTo([
+            'view seller dashboard',
+            'view stockkeeper dashboard',
+            'approve replenishment transfers',
+            'manage location capacity',
+            'oversee warehouse',
+        ]);
+
         $shared = Role::firstOrCreate(['name' => 'shared']);
         $shared->givePermissionTo(['view shared']);
 
         $stock_Keeper = Role::firstOrCreate(['name' => 'stock_keeper']);
-        $stock_Keeper->givePermissionTo(['view stockkeeper dashboard']);
+        $stock_Keeper->givePermissionTo(['view stockkeeper dashboard', 'oversee warehouse']);
 
         $vendor = Role::firstOrCreate(['name' => 'vendor']);
         $vendor->givePermissionTo(['view vendor dashboard']);

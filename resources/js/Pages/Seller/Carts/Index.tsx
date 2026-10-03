@@ -53,7 +53,7 @@ interface Props {
 
 const FULFILLMENT = {
     local: {
-        title: "Store & Remote Warehouse",
+        title: "Store & Remote Hub",
         badge: "Local + Remote",
         badgeClass: "bg-blue-600 text-white",
         tags: ["Express Ready", "Direct Dispatch"],
@@ -179,12 +179,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
 
     return (
         <>
-            <Head title="Carts">
-                <link
-                    rel="stylesheet"
-                    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-                />
-            </Head>
+            <Head title="Carts" />
 
             <div className="min-h-screen bg-white pb-44">
                 {/* ── Top bar ── */}

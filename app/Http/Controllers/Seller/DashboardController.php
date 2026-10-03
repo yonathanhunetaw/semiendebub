@@ -62,8 +62,8 @@ class DashboardController extends Controller
                                 ->where('active', true)
                                 ->with([
                                     'stocks' => function ($stockQuery) use ($storeId) {
-                                        $stockQuery->where('location_type', 'App\Models\Store\Store')
-                                            ->where('location_id', $storeId);
+                                        // Shelf + floor (STOCK_PLAN.md phase 4).
+                                        $stockQuery->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId));
                                     }
                                 ]);
                         }

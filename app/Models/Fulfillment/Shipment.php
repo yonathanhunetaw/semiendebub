@@ -29,6 +29,8 @@ class Shipment extends Model
         'reference',
         'origin_store_id',
         'destination_store_id',
+        'origin_stock_location_id',
+        'destination_stock_location_id',
         'status',
         'vehicle_name',
         'vehicle_plate',
@@ -74,6 +76,18 @@ class Shipment extends Model
     | Relationships
     |--------------------------------------------------------------------------
     */
+
+    /** The Main Hub this run leaves from. */
+    public function originLocation(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Inventory\StockLocation::class, 'origin_stock_location_id');
+    }
+
+    /** The store floor or Remote Hub this run lands at. */
+    public function destinationLocation(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Inventory\StockLocation::class, 'destination_stock_location_id');
+    }
 
     public function items(): HasMany
     {

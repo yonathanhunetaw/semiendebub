@@ -100,6 +100,41 @@ export default function TransferCard({
      */
     const agreements: PartyAgreementsMap = t.agreements;
 
+    /*
+     * Lifecycle steps come from the server (`allowed_transitions`), already
+     * narrowed to this viewer's role, so a button here can never trigger a
+     * transition the backend would refuse.
+     */
+    const StepButtons = (): React.ReactElement => (
+        <>
+            {(t.allowed_transitions ?? [])
+                            .filter(step => step in STEP_LABELS)
+                            .map(step => (
+                                <button
+                                    key={step}
+                                    type="button"
+                                    disabled={advancing}
+                                    onClick={() => {
+                                        setAdvancing(true);
+                                        router.patch(
+                                            route(transitionRoute, t.id),
+                                            { status: step },
+                                            { preserveScroll: true, onFinish: () => setAdvancing(false) },
+                                        );
+                                    }}
+                                    className={`w-full flex items-center justify-center gap-1.5 py-3 rounded-xl text-[13px] font-bold active:scale-95 transition-transform disabled:opacity-50 ${
+                                        step === "cancelled"
+                                            ? "bg-white border border-red-200 text-red-700"
+                                            : "bg-[#c2410c] text-white shadow-md"
+                                    }`}
+                                >
+                                    <span className="material-symbols-outlined text-[16px]">{STEP_ICONS[step]}</span>
+                                    {STEP_LABELS[step]}
+                                </button>
+                            ))}
+        </>
+    );
+
     return (
         <div className={`bg-white rounded-2xl border ${t.status === "overdue" ? "border-red-200 shadow-sm" : "border-slate-100 shadow-sm"} p-4 relative overflow-hidden`}>
             {t.status === "overdue" && <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>}
@@ -187,11 +222,27 @@ export default function TransferCard({
                                 <span className="text-[12px] font-bold text-gray-800">Origin Completed</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
-                                <span className="text-[12px] font-bold text-gray-800">Destination Received</span>
+                                {t.workflow_status === "received" ? (
+                                    <>
+                                        <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+                                        <span className="text-[12px] font-bold text-gray-800">Destination Received</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="material-symbols-outlined text-[16px] text-indigo-500">sync</span>
+                                        <span className="text-[12px] font-bold text-gray-800">At the dock — waiting for the destination to receive</span>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
+
+                    {/* The run is on the road or at the dock: the courier's
+                        "Mark Delivered" and the destination's "Confirm
+                        Receipt" live here, or nobody could finish it. */}
+                    <div className="mt-3 space-y-1.5">
+                        <StepButtons />
+                    </div>
                 </div>
             ) : (
                 <>
@@ -275,36 +326,7 @@ export default function TransferCard({
                             Build Manifest
                         </Link>
 
-                        {/*
-                          Lifecycle steps come from the server (`allowed_transitions`),
-                          already narrowed to this viewer's role, so a button here can
-                          never trigger a transition the backend would refuse.
-                        */}
-                        {(t.allowed_transitions ?? [])
-                            .filter(step => step in STEP_LABELS)
-                            .map(step => (
-                                <button
-                                    key={step}
-                                    type="button"
-                                    disabled={advancing}
-                                    onClick={() => {
-                                        setAdvancing(true);
-                                        router.patch(
-                                            route(transitionRoute, t.id),
-                                            { status: step },
-                                            { preserveScroll: true, onFinish: () => setAdvancing(false) },
-                                        );
-                                    }}
-                                    className={`w-full flex items-center justify-center gap-1.5 py-3 rounded-xl text-[13px] font-bold active:scale-95 transition-transform disabled:opacity-50 ${
-                                        step === "cancelled"
-                                            ? "bg-white border border-red-200 text-red-700"
-                                            : "bg-[#c2410c] text-white shadow-md"
-                                    }`}
-                                >
-                                    <span className="material-symbols-outlined text-[16px]">{STEP_ICONS[step]}</span>
-                                    {STEP_LABELS[step]}
-                                </button>
-                            ))}
+                        <StepButtons />
                     </div>
                 </>
             )}

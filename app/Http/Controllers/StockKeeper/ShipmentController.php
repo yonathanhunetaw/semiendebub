@@ -180,7 +180,7 @@ class ShipmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "Handed over — stock deducted from {$shipment->origin?->name}.");
+        return back()->with('success', "Handed to the courier — stock left {$shipment->originLocation?->name}.");
     }
 
     /**
@@ -198,6 +198,6 @@ class ShipmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "Received — stock credited to {$shipment->destination?->name}.");
+        return back()->with('success', "Received — stock credited to {$shipment->destinationLocation?->name}.");
     }
 }

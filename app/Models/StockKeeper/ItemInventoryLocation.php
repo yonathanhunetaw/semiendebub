@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\StockKeeper;
 
 use App\Models\Store\Store;
+use App\Services\Inventory\StockLocationTree;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,6 +35,21 @@ class ItemInventoryLocation extends Model
     protected $fillable = ['name', 'kind', 'address', 'store_id'];
 
     /**
+     * Shelves and back rooms are mirrored under their store's node in
+     * stock_locations until this table is retired (STOCK_PLAN.md phase 5).
+     */
+    protected static function booted(): void
+    {
+        static::saved(function (self $area): void {
+            app(StockLocationTree::class)->syncArea($area);
+        });
+
+        static::deleted(function (self $area): void {
+            app(StockLocationTree::class)->forget(self::class, (int) $area->id);
+        });
+    }
+
+    /**
      * Positional stock rows pointing at this location.
      *
      * Morph, not hasMany: item_stocks is keyed by (location_type, location_id)
@@ -46,9 +62,27 @@ class ItemInventoryLocation extends Model
         return $this->morphMany(ItemStock::class, 'location');
     }
 
+    /**
+     * Min/max bands set for this shelf or back room, per variant.
+     */
+    public function variantCapacities(): MorphMany
+    {
+        return $this->morphMany(\App\Models\Store\StoreVariantCapacity::class, 'location');
+    }
+
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function isShelf(): bool
+    {
+        return $this->kind === self::KIND_SHELF;
+    }
+
+    public function isBackroom(): bool
+    {
+        return $this->kind === self::KIND_BACKROOM;
     }
 
     /** @param  \Illuminate\Database\Eloquent\Builder<self>  $query */

@@ -4,10 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Shipment;
 
+use App\Exceptions\MovementDomainException;
+use App\Models\Store\Store;
+use App\Services\Fulfillment\MovementDomainService;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StoreShipmentRequest extends FormRequest
 {
+    use Concerns\ResolvesShipmentEnds;
+
     public function authorize(): bool
     {
         return $this->user() !== null;
@@ -19,10 +25,12 @@ class StoreShipmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'origin_store_id' => ['required', 'integer', 'exists:stores,id'],
-            'destination_store_id' => [
-                'required', 'integer', 'exists:stores,id', 'different:origin_store_id',
-            ],
+            // Either a location from the tree (Main Hub A/B → a store or a
+            // Remote Hub) or, as before, two facilities.
+            'origin_location_id' => ['nullable', 'required_without:origin_store_id', 'integer', 'exists:stock_locations,id'],
+            'destination_location_id' => ['nullable', 'required_without:destination_store_id', 'integer', 'exists:stock_locations,id'],
+            'origin_store_id' => ['nullable', 'required_without:origin_location_id', 'integer', 'exists:stores,id'],
+            'destination_store_id' => ['nullable', 'required_without:destination_location_id', 'integer', 'exists:stores,id'],
             'scheduled_for' => ['nullable', 'date'],
             /*
              * The alternative windows the creator puts on the table.
@@ -44,6 +52,46 @@ class StoreShipmentRequest extends FormRequest
             'distance_km' => ['nullable', 'numeric', 'min:0', 'max:99999'],
             'slot' => ['nullable', 'string', 'max:64'],
             'notes' => ['nullable', 'string', 'max:2000'],
+        ];
+    }
+
+    /**
+     * A shipment runs from a Main Hub to a store or a Remote Hub.
+     *
+     * Checked here as well as in the service so the picker gets a field error
+     * rather than a 500.
+     *
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                if ($validator->errors()->isNotEmpty()) {
+                    return;
+                }
+
+                $origin = $this->originLocation();
+                $destination = $this->destinationLocation();
+                $field = $this->filled('destination_location_id') ? 'destination_location_id' : 'destination_store_id';
+
+                if ($origin === null || $destination === null) {
+                    $validator->errors()->add($field, 'Both ends of a shipment must be places that can hold stock.');
+
+                    return;
+                }
+
+                $domain = app(MovementDomainService::class);
+
+                try {
+                    $domain->assertShipmentEnds(
+                        $domain->describe(\App\Models\Inventory\StockLocation::class, (int) $origin->id),
+                        $domain->describe(\App\Models\Inventory\StockLocation::class, (int) $destination->id),
+                    );
+                } catch (MovementDomainException $exception) {
+                    $validator->errors()->add($field, $exception->getMessage());
+                }
+            },
         ];
     }
 

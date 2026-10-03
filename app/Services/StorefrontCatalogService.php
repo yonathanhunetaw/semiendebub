@@ -23,7 +23,6 @@ use Illuminate\Support\Collection;
 class StorefrontCatalogService
 {
     /** Location type used by the stock ledger for store-held inventory. */
-    private const STORE_LOCATION_TYPE = 'App\Models\Store\Store';
 
     /**
      * The store the public storefront sells from.
@@ -288,8 +287,7 @@ class StorefrontCatalogService
         }
 
         return (int) $storeVariant->stocks()
-            ->where('location_type', self::STORE_LOCATION_TYPE)
-            ->where('location_id', $store->id)
+            ->whereIn('stock_location_id', $this->storeLeafIds($store))
             ->sum('quantity');
     }
 
@@ -379,8 +377,7 @@ class StorefrontCatalogService
                 ->where('active', true)
                 ->with([
                     'stocks' => fn ($stockQuery) => $stockQuery
-                        ->where('location_type', self::STORE_LOCATION_TYPE)
-                        ->where('location_id', $store->id),
+                        ->whereIn('stock_location_id', $this->storeLeafIds($store)),
                 ]),
         ]);
 
@@ -482,8 +479,7 @@ class StorefrontCatalogService
                 ->where('active', true)
                 ->with([
                     'stocks' => fn ($stockQuery) => $stockQuery
-                        ->where('location_type', self::STORE_LOCATION_TYPE)
-                        ->where('location_id', $store->id),
+                        ->whereIn('stock_location_id', $this->storeLeafIds($store)),
                 ]),
         ]);
     }
@@ -504,8 +500,7 @@ class StorefrontCatalogService
                 ->where('store_id', $store->id)
                 ->where('active', true))
             ->whereHas('stocks', fn (Builder $stock) => $stock
-                ->where('location_type', self::STORE_LOCATION_TYPE)
-                ->where('location_id', $store->id)
+                ->whereIn('stock_location_id', $this->storeLeafIds($store))
                 ->where('quantity', '>', 0)));
     }
 
@@ -583,5 +578,16 @@ class StorefrontCatalogService
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * The store's shelf + floor — what a shopper can be sold today
+     * (STOCK_PLAN.md phase 4). A Remote Hub is not on hand at the counter.
+     *
+     * @return array<int>
+     */
+    private function storeLeafIds(Store $store): array
+    {
+        return app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $store->id);
     }
 }

@@ -60,9 +60,24 @@ class SellerManifestBuilderTest extends TestCase
             Role::firstOrCreate(['name' => $role]);
         }
 
-        $this->warehouse = Store::factory()->create(['name' => 'Central Hub']);
-        $this->store = Store::factory()->create(['name' => 'Main Store']);
-        $this->otherWarehouse = Store::factory()->create(['name' => 'Bole Depot']);
+        /*
+         * Every endpoint is warehouse-class: a shipment is freight between
+         * structural nodes, and MovementDomainService refuses a leg that touches
+         * a retail store. `$this->store` is the receiving dock, which is a remote
+         * warehouse rather than the shop it serves.
+         */
+        $this->warehouse = Store::factory()->create([
+            'name' => 'Central Hub',
+            'type' => Store::TYPE_CENTRAL_WAREHOUSE,
+        ]);
+        $this->store = Store::factory()->create([
+            'name' => 'Kality Depot',
+            'type' => Store::TYPE_REMOTE_WAREHOUSE,
+        ]);
+        $this->otherWarehouse = Store::factory()->create([
+            'name' => 'Bole Depot',
+            'type' => Store::TYPE_CENTRAL_WAREHOUSE,
+        ]);
 
         $this->seller = $this->userWithRole('seller', $this->store->id);
         $this->stockKeeper = $this->userWithRole('stock_keeper', $this->warehouse->id);
@@ -371,7 +386,7 @@ class SellerManifestBuilderTest extends TestCase
                 'origin_store_id' => $this->warehouse->id,
                 'destination_store_id' => $this->otherWarehouse->id,
             ])
-            ->assertSessionHasErrors('origin_store_id');
+            ->assertSessionHasErrors('destination_location_id');
 
         $this->assertSame($this->store->id, (int) $shipment->fresh()->destination_store_id);
     }
@@ -419,6 +434,8 @@ class SellerManifestBuilderTest extends TestCase
             ->post(route('seller.shipments.agree', $shipment), ['slot' => self::SLOT])
             ->assertSessionHasNoErrors();
 
+        // The origin's floor starts picking.
+        $this->actingAs($this->stockKeeper);
         $this->workflow()->transition($shipment->fresh(), ShipmentWorkflowService::PICKING);
 
         $this->asSeller()
@@ -441,9 +458,10 @@ class SellerManifestBuilderTest extends TestCase
     #[Test]
     public function a_seller_cannot_edit_a_manifest_for_a_run_that_misses_their_store(): void
     {
+        // Main Hub → a store the seller does not belong to.
         $foreign = $this->workflow()->create(
             $this->warehouse->id,
-            $this->otherWarehouse->id,
+            Store::factory()->create(['type' => Store::TYPE_RETAIL])->id,
             ['scheduled_for' => self::SLOT],
             $this->stockKeeper->id,
         );

@@ -5,6 +5,7 @@ import { Head, Link, router } from "@inertiajs/react";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import PlaceIcon from "@mui/icons-material/Place";
 import StorefrontIcon from "@mui/icons-material/Storefront";
@@ -15,7 +16,16 @@ import {
     Box,
     Button,
     Chip,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
+    FormControl,
     Grid,
+    InputLabel,
+    MenuItem,
+    Select,
     IconButton,
     InputAdornment,
     LinearProgress,
@@ -33,6 +43,13 @@ import {
     Typography,
 } from "@mui/material";
 
+/** One of the (at most two) users who oversee a warehouse. */
+interface WarehouseManager {
+    id: number;
+    name: string;
+    is_primary: boolean;
+}
+
 interface Warehouse {
     id: number;
     name: string;
@@ -41,6 +58,18 @@ interface Warehouse {
     stocks_count: number;
     store_name?: string | null;
     total_units: number;
+    /** The assigned managers, primary first. Empty means admin-only. */
+    managers?: WarehouseManager[];
+    /** Legacy free-text manager name, kept for display only. */
+    manager_name?: string | null;
+    /** Whether the signed-in user may drive this warehouse's operations. */
+    can_oversee?: boolean;
+}
+
+interface AssignableManager {
+    id: number;
+    name: string;
+    email: string;
 }
 
 interface StockLine {
@@ -59,6 +88,10 @@ interface Props {
     totalWarehouses: number;
     totalUnits: number;
     lowStockCount: number;
+    /** Staff who can hold a manager slot. */
+    assignable_managers?: AssignableManager[];
+    /** The ceiling, from App\Models\Inventory\FacilityManager. */
+    max_managers?: number;
 }
 
 export default function WarehouseIndex({
@@ -67,7 +100,52 @@ export default function WarehouseIndex({
     totalWarehouses = 0,
     totalUnits = 0,
     lowStockCount = 0,
+    assignable_managers = [],
+    max_managers = 2,
 }: Props) {
+    /*
+     * Manager assignment.
+     *
+     * A warehouse is overseen by one or two named users, and only they (plus an
+     * admin) may drive its operations — WarehousePolicy reads these assignments,
+     * not the legacy free-text `manager` column. Appointing is an admin act, so
+     * the dialog posts to a route the policy gates rather than editing inline.
+     */
+    const [assigning, setAssigning] = useState<Warehouse | null>(null);
+    const [primaryId, setPrimaryId] = useState<string>("");
+    const [secondaryId, setSecondaryId] = useState<string>("");
+    const [savingManagers, setSavingManagers] = useState(false);
+
+    const openAssign = (wh: Warehouse) => {
+        const managers = wh.managers ?? [];
+        setPrimaryId(String(managers.find((m) => m.is_primary)?.id ?? managers[0]?.id ?? ""));
+        setSecondaryId(String(managers.filter((m) => !m.is_primary)[0]?.id ?? ""));
+        setAssigning(wh);
+    };
+
+    const submitManagers = () => {
+        if (!assigning) return;
+
+        // Primary first; the server treats position 0 as the primary slot and an
+        // empty list as "admin-only", which is a legitimate state.
+        const ids = [primaryId, secondaryId]
+            .filter((value) => value !== "")
+            .map(Number)
+            .filter((value, index, all) => all.indexOf(value) === index);
+
+        setSavingManagers(true);
+        router.post(
+            route("admin.inventory.warehouse.managers.assign", assigning.id),
+            { manager_ids: ids },
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setSavingManagers(false);
+                    setAssigning(null);
+                },
+            },
+        );
+    };
     // ── Filtering & Pagination State ──
     const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set(["all"]));
     const [searchQuery, setSearchQuery] = useState<string>("");
@@ -293,6 +371,9 @@ export default function WarehouseIndex({
                                 Linked Store
                             </TableCell>
                             <TableCell sx={{ fontWeight: 800 }}>
+                                Managers
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: 800 }}>
                                 Stock Lines
                             </TableCell>
                             <TableCell sx={{ fontWeight: 800 }}>
@@ -362,6 +443,30 @@ export default function WarehouseIndex({
                                         )}
                                     </TableCell>
                                     <TableCell>
+                                        {(wh.managers ?? []).length > 0 ? (
+                                            <Stack
+                                                direction="row"
+                                                spacing={0.5}
+                                                flexWrap="wrap"
+                                                useFlexGap
+                                            >
+                                                {(wh.managers ?? []).map((manager) => (
+                                                    <Chip
+                                                        key={manager.id}
+                                                        size="small"
+                                                        label={manager.name}
+                                                        color={manager.is_primary ? "primary" : "default"}
+                                                        variant={manager.is_primary ? "filled" : "outlined"}
+                                                    />
+                                                ))}
+                                            </Stack>
+                                        ) : (
+                                            <Tooltip title="Nobody is assigned, so only admins may oversee this warehouse.">
+                                                <Chip size="small" label="Unassigned" variant="outlined" />
+                                            </Tooltip>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
                                         <Chip
                                             size="small"
                                             label={`${wh.stocks_count} lines`}
@@ -386,6 +491,16 @@ export default function WarehouseIndex({
                                             spacing={1}
                                             justifyContent="flex-end"
                                         >
+                                            <Tooltip
+                                                title={`Assign managers (up to ${max_managers})`}
+                                            >
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => openAssign(wh)}
+                                                >
+                                                    <ManageAccountsIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
                                             <Tooltip title="Edit warehouse">
                                                 <IconButton
                                                     size="small"
@@ -416,7 +531,7 @@ export default function WarehouseIndex({
                         ) : (
                             <TableRow>
                                 <TableCell
-                                    colSpan={5}
+                                    colSpan={6}
                                     align="center"
                                     sx={{ py: 6 }}
                                 >
@@ -719,6 +834,79 @@ export default function WarehouseIndex({
                     sx={{ mt: 1 }}
                 />
             )}
+
+            {/* ── Assign managers ── */}
+            <Dialog
+                open={assigning !== null}
+                onClose={() => setAssigning(null)}
+                fullWidth
+                maxWidth="xs"
+            >
+                <DialogTitle>Managers · {assigning?.name}</DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ mb: 2 }}>
+                        At most {max_managers} people oversee a warehouse, and only they
+                        (plus admins) may approve its replenishment or drive its
+                        operations. Leaving both slots empty makes it admin-only.
+                    </DialogContentText>
+
+                    <Stack spacing={2}>
+                        <FormControl size="small" fullWidth>
+                            <InputLabel id="primary-manager-label">
+                                Primary manager
+                            </InputLabel>
+                            <Select
+                                labelId="primary-manager-label"
+                                label="Primary manager"
+                                value={primaryId}
+                                onChange={(event) => setPrimaryId(String(event.target.value))}
+                            >
+                                <MenuItem value="">
+                                    <em>Nobody</em>
+                                </MenuItem>
+                                {assignable_managers.map((candidate) => (
+                                    <MenuItem key={candidate.id} value={String(candidate.id)}>
+                                        {candidate.name} — {candidate.email}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+
+                        <FormControl size="small" fullWidth>
+                            <InputLabel id="second-manager-label">
+                                Second manager (optional)
+                            </InputLabel>
+                            <Select
+                                labelId="second-manager-label"
+                                label="Second manager (optional)"
+                                value={secondaryId}
+                                onChange={(event) => setSecondaryId(String(event.target.value))}
+                            >
+                                <MenuItem value="">
+                                    <em>Nobody</em>
+                                </MenuItem>
+                                {assignable_managers
+                                    .filter((candidate) => String(candidate.id) !== primaryId)
+                                    .map((candidate) => (
+                                        <MenuItem key={candidate.id} value={String(candidate.id)}>
+                                            {candidate.name} — {candidate.email}
+                                        </MenuItem>
+                                    ))}
+                            </Select>
+                        </FormControl>
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setAssigning(null)}>Cancel</Button>
+                    <Button
+                        variant="contained"
+                        onClick={submitManagers}
+                        disabled={savingManagers}
+                    >
+                        Save managers
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }

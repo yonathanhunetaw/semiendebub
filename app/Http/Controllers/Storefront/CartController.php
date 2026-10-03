@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Storefront;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Storefront\CheckoutRequest;
 use App\Http\Requests\Storefront\StoreCartItemRequest;
 use App\Http\Requests\Storefront\UpdateCartItemRequest;
 use App\Models\Item\ItemVariant;
 use App\Services\CartService;
+use App\Services\Fulfillment\OrderSourcingService;
 use App\Services\StorefrontCatalogService;
 use Illuminate\Http\RedirectResponse;
 
@@ -24,6 +26,7 @@ class CartController extends Controller
     public function __construct(
         private readonly StorefrontCatalogService $catalog,
         private readonly CartService $cartService,
+        private readonly OrderSourcingService $sourcing,
     ) {
     }
 
@@ -128,8 +131,15 @@ class CartController extends Controller
      * destination; their cart survives because it is keyed to the pre-login
      * session id, which AuthenticatedSessionController captures and hands to
      * CartService::mergeGuestCart().
+     *
+     * Two gates, in order: signed in, then agreed to any delay. The second is
+     * the buyer's half of order sourcing — a basket holding a line that can only
+     * be sent from a main warehouse will arrive later, and the agreement to that
+     * is a condition of taking the payment rather than a notice shown alongside
+     * it. CheckoutService refuses the same case server-side, so the rule holds
+     * for any caller, not just this button.
      */
-    public function checkout(): RedirectResponse
+    public function checkout(CheckoutRequest $request): RedirectResponse
     {
         $store = $this->catalog->resolveStore();
         $cart = $store ? $this->cartService->currentBuyerCart($store) : null;
@@ -146,6 +156,18 @@ class CartController extends Controller
                 ->with('success', 'Sign in to complete your order — your cart has been saved.');
         }
 
+        $grouped = $this->sourcing->groupCart($cart, $store);
+
+        if ($grouped['requires_agreement'] && ! $request->acceptsDelay()) {
+            return back()->withErrors([
+                'accept_delayed_items' => sprintf(
+                    '%d item(s) in your cart can only be sent from our main warehouse and will arrive later. Please confirm you are happy to wait.',
+                    $grouped['delayed_line_count'],
+                ),
+            ]);
+        }
+
+        // Payment itself is not wired up yet; the sourcing contract above is.
         return back()->with('success', 'Your cart is ready. Checkout and payment are coming soon.');
     }
 }

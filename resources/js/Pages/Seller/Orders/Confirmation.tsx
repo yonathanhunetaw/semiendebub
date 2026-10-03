@@ -9,8 +9,8 @@ import {
     FULFILLMENT_LABELS,
     INK,
     type PaymentLeg,
+    type SellerOrder,
     type Provider,
-    SAMPLE_ORDERS,
     type SplitPreset,
     WALLETS,
     birr,
@@ -22,7 +22,7 @@ import {
     savings,
     subtotal,
 } from "@/Data/sellerOrderFlow";
-import { Head, router } from "@inertiajs/react";
+import { Head, Link, router } from "@inertiajs/react";
 import React, { useMemo, useState } from "react";
 
 /**
@@ -98,9 +98,37 @@ function ProviderRow({
     );
 }
 
-export default function Confirmation(): React.ReactElement {
-    // Sample basis for the screen: the first order still awaiting payment.
-    const order = SAMPLE_ORDERS.find((entry) => entry.stage === "to_pay") ?? SAMPLE_ORDERS[0];
+interface Props {
+    /** The cart being turned into an order; null when none was chosen. */
+    cart_id?: number | null;
+    /** The cart, priced and checked against the store's stock (OrderBoardController::preview). */
+    order?: SellerOrder | null;
+}
+
+export default function Confirmation({ cart_id = null, order = null }: Props): React.ReactElement {
+    if (!order || cart_id === null) {
+        return (
+            <>
+                <Head title="Order confirmation" />
+                <div className="flex min-h-screen flex-col items-center justify-center bg-[#f5f5f7] px-6 text-center">
+                    <span className="material-symbols-outlined text-[44px] text-slate-300">shopping_cart</span>
+                    <p className="mt-3 text-[16px] font-bold text-[#0b1c30]">Pick a cart to check out</p>
+                    <p className="mt-1 text-[12px] text-slate-500">Open one of your carts and tap Checkout.</p>
+                    <Link
+                        href={route("seller.carts.index")}
+                        className="mt-4 rounded-[999px] bg-[#c2410c] px-5 py-2 text-[13px] font-bold text-white"
+                    >
+                        My carts
+                    </Link>
+                </div>
+            </>
+        );
+    }
+
+    return <ConfirmationForm cartId={cart_id} order={order} />;
+}
+
+function ConfirmationForm({ cartId, order }: { cartId: number; order: SellerOrder }): React.ReactElement {
 
     const [tab, setTab] = useState<PayTab>("bank");
     const [single, setSingle] = useState<string>("cbe");
@@ -110,10 +138,18 @@ export default function Confirmation(): React.ReactElement {
     const [placed, setPlaced] = useState(false);
     const [delivery, setDelivery] = useState<"standard" | "express" | "later">("standard");
 
+    const [address, setAddress] = useState(order.destination.address ?? "");
+    const [recipient, setRecipient] = useState(order.destination.name ?? "");
+    const [phone, setPhone] = useState("");
+
     const groups = useMemo(() => groupByFulfillment(order.lines), [order]);
     const total = orderTotal(order);
-    const deliveryFee = delivery === "standard" ? 850 : delivery === "express" ? 1450 : 0;
+    // The delivery fee is quoted when the run is dispatched, not charged here:
+    // adding it to this total would show an amount nobody collects.
+    const deliveryFee = 0;
     const grandTotal = total + deliveryFee;
+    // Lines the store cannot cover today come from a hub: the buyer must accept the wait.
+    const needsDelay = order.lines.some((line) => !line.inStore);
 
     const providers = tab === "wallet" ? WALLETS : BANKS;
     const splitAllocated = legs.reduce((sum, leg) => sum + leg.amount, 0);
@@ -185,20 +221,40 @@ export default function Confirmation(): React.ReactElement {
 
     const canPlace = split ? legsComplete : tab === "later" || tab === "credit" || Boolean(single);
 
+    const payNow = tab !== "later";
+
     const place = () => {
         setPlaced(true);
-        // No backend yet — land on the To pay queue so the flow continues.
-        router.visit(`${route("seller.orders.index")}?tab=to_pay`);
+
+        const method = split
+            ? "split"
+            : tab === "credit"
+              ? "credit_account"
+              : tab === "later"
+                ? null
+                : single;
+
+        router.post(
+            route("seller.orders.store"),
+            {
+                cart_id: cartId,
+                pay_now: payNow,
+                payment_method: method,
+                transaction_reference: split
+                    ? legs.map((leg) => `${leg.providerId}:${leg.reference}:${leg.amount}`).join(" | ")
+                    : null,
+                delivery_address: address || null,
+                recipient_name: recipient || null,
+                recipient_phone: phone || null,
+                delay_agreed: needsDelay,
+            },
+            { onFinish: () => setPlaced(false) },
+        );
     };
 
     return (
         <>
-            <Head title="Order confirmation">
-                <link
-                    rel="stylesheet"
-                    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-                />
-            </Head>
+            <Head title="Order confirmation" />
 
             <div className="min-h-screen bg-[#f5f5f7] pb-[200px]">
                 {/* ── Header ── */}
@@ -221,9 +277,12 @@ export default function Confirmation(): React.ReactElement {
                     <span className="w-6" />
                 </header>
 
-                <p className="px-4 pt-3 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                    Sample data · layout preview
-                </p>
+                {needsDelay ? (
+                    <p className="mx-4 mt-3 rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                        Some lines are not on hand at this store. Placing the order tells the buyer they will
+                        arrive later, from a hub.
+                    </p>
+                ) : null}
 
                 <main className="mx-auto max-w-md space-y-2.5 px-0 pt-2 sm:px-2">
                     {/* ── Items, banded by fulfillment ── */}
@@ -677,16 +736,30 @@ export default function Confirmation(): React.ReactElement {
                                 Carrier delivery
                             </span>
                         </div>
-                        <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                <p className="text-sm font-bold text-gray-900">{order.destination.name}</p>
-                                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-700">
-                                    {order.destination.kind}
-                                </span>
-                            </div>
-                            <p className="text-xs font-medium text-gray-700">{order.destination.vehicle}</p>
-                            <p className="text-xs text-gray-500">Driver: {order.destination.driver}</p>
-                            <p className="text-[11px] text-gray-400">{order.destination.address}</p>
+                        <div className="space-y-2">
+                            <input
+                                value={recipient}
+                                onChange={(event) => setRecipient(event.target.value)}
+                                placeholder="Recipient name"
+                                className="w-full rounded-[10px] border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                            />
+                            <input
+                                value={phone}
+                                onChange={(event) => setPhone(event.target.value)}
+                                placeholder="Recipient phone"
+                                inputMode="tel"
+                                className="w-full rounded-[10px] border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                            />
+                            <textarea
+                                value={address}
+                                onChange={(event) => setAddress(event.target.value)}
+                                placeholder="Delivery address (sub-city, woreda, house no.)"
+                                rows={2}
+                                className="w-full rounded-[10px] border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                            />
+                            <p className="text-[11px] text-gray-400">
+                                A courier is assigned once the order has been picked and packed.
+                            </p>
                         </div>
                     </section>
 
@@ -708,8 +781,8 @@ export default function Confirmation(): React.ReactElement {
 
                         <div className="space-y-1.5">
                             {([
-                                { id: "standard", label: "Standard delivery", hint: "3 – 5 business days", fee: birr(850) },
-                                { id: "express", label: "Express delivery", hint: "Next-day delivery", fee: birr(1450) },
+                                { id: "standard", label: "Standard delivery", hint: "3 – 5 business days", fee: "Quoted at dispatch" },
+                                { id: "express", label: "Express delivery", hint: "Next-day delivery", fee: "Quoted at dispatch" },
                                 { id: "later", label: "Calculate later", hint: "Confirm destination & slot before paying", fee: "Pending" },
                             ] as const).map((option) => (
                                 <button
@@ -785,7 +858,7 @@ export default function Confirmation(): React.ReactElement {
                         <div className="flex items-center justify-between text-sm text-gray-900">
                             <span className="font-medium">Delivery</span>
                             <span className="font-bold">
-                                {delivery === "later" ? "Pending" : birr(deliveryFee)}
+                                {delivery === "later" ? "Pending" : "Quoted at dispatch"}
                             </span>
                         </div>
 

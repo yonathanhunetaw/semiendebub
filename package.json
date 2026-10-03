@@ -43,6 +43,7 @@
         "html5-qrcode": "^2.3.8",
         "install": "^0.13.0",
         "lucide-react": "^0.563.0",
+        "material-symbols": "^0.47.6",
         "npm": "^11.9.0",
         "react-icons": "^5.5.0",
         "three": "^0.183.2",

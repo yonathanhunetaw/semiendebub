@@ -83,17 +83,24 @@ export default function Dashboard({
             {/* ── KPIs ── */}
             <Grid container spacing={2.5} sx={{ mb: 3 }}>
                 <Grid size={{ xs: 6, md: 3 }}>
+                    {/*
+                      Items lead. This tile used to headline `units_on_hand`, a
+                      sum across mixed packaging units — adding 11 cartons to 6
+                      pieces and calling it 17 — beside a "Tracked SKUs" count of
+                      variants. Products and pieces are the two figures that mean
+                      something.
+                    */}
                     <StatCard
-                        label="Units on hand"
-                        value={metrics.units_on_hand}
-                        hint={`${metrics.stock_rows.toLocaleString()} ledger rows`}
+                        label="Items on hand"
+                        value={metrics.items}
+                        hint={`${metrics.variants.toLocaleString()} variants · ${metrics.ledger_rows.toLocaleString()} ledger rows`}
                         icon={<Inventory2RoundedIcon fontSize="small" />}
                     />
                 </Grid>
                 <Grid size={{ xs: 6, md: 3 }}>
                     <StatCard
-                        label="Tracked SKUs"
-                        value={metrics.tracked_skus}
+                        label="Pieces on hand"
+                        value={metrics.pieces_on_hand}
                         hint={`${metrics.warehouses} warehouse${metrics.warehouses === 1 ? "" : "s"}`}
                         icon={<WarehouseRoundedIcon fontSize="small" />}
                     />

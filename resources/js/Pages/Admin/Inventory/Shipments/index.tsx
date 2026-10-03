@@ -40,7 +40,8 @@ export default function AdminShipments({
     shipments,
     counts,
     filters,
-    stores,
+    origins = [],
+    destinations = [],
     pagination,
     flash,
 }: AdminShipmentIndexProps): React.ReactElement {
@@ -109,7 +110,7 @@ export default function AdminShipments({
                         No shipments in this view
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                        Raise one to move stock between stores.
+                        Raise one to send stock from Main Hub A or B to a store or a Remote Hub.
                     </Typography>
                 </ShipmentCard>
             ) : (
@@ -194,7 +195,8 @@ export default function AdminShipments({
             <CreateShipmentDialog
                 open={createOpen}
                 onClose={() => setCreateOpen(false)}
-                stores={stores}
+                origins={origins}
+                destinations={destinations}
             />
             <CancelDialog
                 shipment={cancelling}
@@ -219,15 +221,19 @@ export default function AdminShipments({
 function CreateShipmentDialog({
     open,
     onClose,
-    stores,
+    origins,
+    destinations,
 }: {
     open: boolean;
     onClose: () => void;
-    stores: AdminShipmentIndexProps["stores"];
+    /** Main Hubs A/B. */
+    origins: Array<{ id: number; name: string }>;
+    /** Store floors and Remote Hubs. */
+    destinations: Array<{ id: number; name: string }>;
 }): React.ReactElement {
     const { data, setData, post, processing, errors, reset } = useForm({
-        origin_store_id: "",
-        destination_store_id: "",
+        origin_location_id: "",
+        destination_location_id: "",
         vehicle_name: "",
         vehicle_plate: "",
         vehicle_max_cbm: "",
@@ -253,12 +259,12 @@ function CreateShipmentDialog({
                         <Grid size={6}>
                             <TextField
                                 select fullWidth label="Origin"
-                                value={data.origin_store_id}
-                                onChange={(e) => setData("origin_store_id", e.target.value)}
-                                error={Boolean(errors.origin_store_id)}
-                                helperText={errors.origin_store_id}
+                                value={data.origin_location_id}
+                                onChange={(e) => setData("origin_location_id", e.target.value)}
+                                error={Boolean(errors.origin_location_id)}
+                                helperText={errors.origin_location_id ?? "Main Hub A or B"}
                             >
-                                {stores.map((s) => (
+                                {origins.map((s) => (
                                     <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
                                 ))}
                             </TextField>
@@ -266,12 +272,12 @@ function CreateShipmentDialog({
                         <Grid size={6}>
                             <TextField
                                 select fullWidth label="Destination"
-                                value={data.destination_store_id}
-                                onChange={(e) => setData("destination_store_id", e.target.value)}
-                                error={Boolean(errors.destination_store_id)}
-                                helperText={errors.destination_store_id}
+                                value={data.destination_location_id}
+                                onChange={(e) => setData("destination_location_id", e.target.value)}
+                                error={Boolean(errors.destination_location_id)}
+                                helperText={errors.destination_location_id ?? "A store or a Remote Hub"}
                             >
-                                {stores.map((s) => (
+                                {destinations.map((s) => (
                                     <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
                                 ))}
                             </TextField>

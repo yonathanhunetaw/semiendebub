@@ -38,8 +38,12 @@ interface Props extends PartyGateProps {
     cutoff_label: string;
     vehicles: Vehicle[];
     manifest_items: ManifestItem[];
-    /** Every facility, either end of the run. */
+    /** Every facility, either end of the run (legacy). */
     stores: LocationOption[];
+    /** From Main Hub A/B to a store or a Remote Hub, as location ids. */
+    locations?: { origins: LocationOption[]; destinations: LocationOption[] };
+    origin_location_id?: number | null;
+    destination_location_id?: number | null;
     /** SKUs that may go on the manifest. */
     variants: VariantOption[];
     /** Other open runs from this origin, for the Move Item sheet. */
@@ -116,9 +120,12 @@ function CbmGauge({ percent }: { percent: number }) {
 /* ----------------------------------------------------------
  | Edit Route Bottom Sheet
  |----------------------------------------------------------*/
-function EditRouteSheet({ open, stores, originId, destId, submitting, onClose, onSave }: {
+function EditRouteSheet({ open, origins, destinations, originId, destId, submitting, onClose, onSave }: {
     open: boolean;
-    stores: LocationOption[];
+    /** Main Hubs A/B. */
+    origins: LocationOption[];
+    /** Store floors and Remote Hubs. */
+    destinations: LocationOption[];
     originId: number;
     destId: number;
     submitting: boolean;
@@ -141,14 +148,14 @@ function EditRouteSheet({ open, stores, originId, destId, submitting, onClose, o
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Origin Facility</label>
                         <select value={originVal} onChange={e => setOriginVal(e.target.value)}
                             className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none">
-                            {stores.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            {origins.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
                     </div>
                     <div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Destination Facility</label>
                         <select value={destVal} onChange={e => setDestVal(e.target.value)}
                             className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none">
-                            {stores.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            {destinations.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
                     </div>
                 </div>
@@ -402,9 +409,9 @@ function MoveItemSheet({ open, item, targets, submitting, onClose, onMove }: {
  |----------------------------------------------------------*/
 export default function SellerShipmentsIndex({
     transfer_id, reference, origin, destination,
-    origin_store_id, destination_store_id,
+    origin_location_id, destination_location_id, locations,
     distance_km, scheduled_run, cutoff_label, vehicles, manifest_items: items,
-    stores, variants, move_targets, courier, can_edit_manifest,
+    variants, move_targets, courier, can_edit_manifest,
     agreements, schedule_options, agreed_scheduled_for,
     outstanding_parties, actionable_parties, workflow_status,
 }: Props) {
@@ -449,7 +456,7 @@ export default function SellerShipmentsIndex({
         setBusy("route");
         router.patch(
             route("seller.shipments.route.update", transfer_id),
-            { origin_store_id: originId, destination_store_id: destId },
+            { origin_location_id: originId, destination_location_id: destId },
             {
                 preserveScroll: true,
                 onSuccess: () => setEditRouteOpen(false),
@@ -534,9 +541,7 @@ export default function SellerShipmentsIndex({
 
     return (
         <>
-            <Head title="Build Shipment">
-                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-            </Head>
+            <Head title="Build Shipment" />
 
             {/* ── Sticky Top Context Strip ── */}
             <div className="px-4 pt-3 pb-2.5 flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-20">
@@ -1057,9 +1062,10 @@ export default function SellerShipmentsIndex({
             {/* ── Bottom Sheets ── */}
             <EditRouteSheet
                 open={editRouteOpen}
-                stores={stores}
-                originId={origin_store_id}
-                destId={destination_store_id}
+                origins={locations?.origins ?? []}
+                destinations={locations?.destinations ?? []}
+                originId={origin_location_id ?? 0}
+                destId={destination_location_id ?? 0}
                 submitting={busy === "route"}
                 onClose={() => setEditRouteOpen(false)}
                 onSave={handleSaveRoute}

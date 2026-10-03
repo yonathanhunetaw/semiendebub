@@ -5,14 +5,26 @@ namespace App\Models\Store;
 use Illuminate\Database\Eloquent\Model;
 // Import from the specific domain folders you mentioned
 use App\Models\Auth\Customer;
+use App\Models\Concerns\HasFacilityManagers;
 use App\Models\StockKeeper\ItemInventoryLocation;
 use App\Models\Auth\User;
 use App\Models\Item\Item;
+use App\Services\Inventory\StockLocationTree;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Store extends Model
 {
     use HasFactory;
+
+    /**
+     * Warehouse-type facilities are overseen by one or two named managers.
+     *
+     * A retail store may carry assignments too — nothing forbids it — but the
+     * policies only *require* them for warehouses, which is where the rule the
+     * business asked for applies.
+     */
+    use HasFacilityManagers;
+
     protected $fillable = [
         'name',
         'type',
@@ -43,8 +55,8 @@ class Store extends Model
     {
         return [
             self::TYPE_RETAIL => 'Retail Store',
-            self::TYPE_CENTRAL_WAREHOUSE => 'Central Warehouse',
-            self::TYPE_REMOTE_WAREHOUSE => 'Remote Warehouse',
+            self::TYPE_CENTRAL_WAREHOUSE => 'Main Hub',
+            self::TYPE_REMOTE_WAREHOUSE => 'Remote Hub',
         ];
     }
 
@@ -56,6 +68,23 @@ class Store extends Model
     public function isWarehouse(): bool
     {
         return in_array($this->type, [self::TYPE_CENTRAL_WAREHOUSE, self::TYPE_REMOTE_WAREHOUSE], true);
+    }
+
+    /**
+     * A main (central) warehouse — a structural node in the freight network.
+     *
+     * Movement between two of these is a Shipment, never a Transfer.
+     *
+     * @see \App\Services\Fulfillment\MovementDomainService
+     */
+    public function isMainWarehouse(): bool
+    {
+        return $this->type === self::TYPE_CENTRAL_WAREHOUSE;
+    }
+
+    public function isRemoteWarehouse(): bool
+    {
+        return $this->type === self::TYPE_REMOTE_WAREHOUSE;
     }
 
     /**
@@ -89,6 +118,22 @@ class Store extends Model
                     ['name' => $name, 'address' => ''],
                 );
             }
+
+            // The same store in the one location tree: group node + shelf +
+            // back room. A Remote Hub is never invented (STOCK_PLAN.md §2.1).
+            app(StockLocationTree::class)->syncStore($store);
+        });
+
+        static::updated(function (self $store): void {
+            if ($store->wasChanged(['name', 'location', 'status', 'type'])) {
+                app(StockLocationTree::class)->syncStore($store);
+            }
+        });
+
+        // A retail store's nodes go with it through the stores FK cascade; a
+        // warehouse-type row's hub has no store_id, so it is dropped here.
+        static::deleted(function (self $store): void {
+            app(StockLocationTree::class)->forget(self::class, (int) $store->id);
         });
     }
 
@@ -137,6 +182,14 @@ class Store extends Model
     {
         // This tells Laravel that the store has many records in the store_variants table
         return $this->hasMany(\App\Models\Store\StoreVariant::class, 'store_id');
+    }
+
+    /**
+     * Capacity bands set for this facility as a whole, per variant.
+     */
+    public function variantCapacities()
+    {
+        return $this->morphMany(StoreVariantCapacity::class, 'location');
     }
 
     // Remote warehouse for this store

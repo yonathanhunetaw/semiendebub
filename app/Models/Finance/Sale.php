@@ -18,6 +18,40 @@ class Sale extends Model
 {
     use HasFactory;
 
+    /*
+    |--------------------------------------------------------------------------
+    | Fulfillment pipeline
+    |--------------------------------------------------------------------------
+    |
+    | A third axis beside `status` (commercial) and `payment_status` (money):
+    | where the order is on the floor. Payment moves it to PICK_PACK; it only
+    | reaches TO_DELIVER once every line names the exact place it was picked
+    | from, which is what OrderSourcingService::confirmSourcing() records.
+    |
+    */
+
+    public const STAGE_AWAITING_PAYMENT = 'awaiting_payment';
+
+    public const STAGE_PICK_PACK = 'pick_pack';
+
+    public const STAGE_TO_DELIVER = 'to_deliver';
+
+    public const STAGE_DELIVERED = 'delivered';
+
+    public const STAGE_CANCELLED = 'cancelled';
+
+    /** @return array<string, string> */
+    public static function fulfillmentStages(): array
+    {
+        return [
+            self::STAGE_AWAITING_PAYMENT => 'To pay',
+            self::STAGE_PICK_PACK => 'Pick & pack',
+            self::STAGE_TO_DELIVER => 'To deliver',
+            self::STAGE_DELIVERED => 'Delivered',
+            self::STAGE_CANCELLED => 'Cancelled',
+        ];
+    }
+
     protected $table = 'sales';
 
     protected $fillable = [
@@ -33,6 +67,10 @@ class Sale extends Model
         'total_amount',
         'status',
         'payment_status',
+        'fulfillment_stage',
+        'delay_agreed_at',
+        'sourcing_confirmed_at',
+        'sourcing_confirmed_by',
         'notes',
     ];
 
@@ -41,6 +79,8 @@ class Sale extends Model
         'tax_amount' => 'decimal:2',
         'discount_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
+        'delay_agreed_at' => 'datetime',
+        'sourcing_confirmed_at' => 'datetime',
     ];
 
     /*
@@ -113,5 +153,42 @@ class Sale extends Model
     public function scopeForCustomer(Builder $query, int $customerId): Builder
     {
         return $query->where('customer_id', $customerId);
+    }
+
+    /** Paid orders whose lines still have to be sourced. */
+    public function scopeAwaitingSourcing(Builder $query): Builder
+    {
+        return $query->where('fulfillment_stage', self::STAGE_PICK_PACK);
+    }
+
+    public function scopeAtStage(Builder $query, string $stage): Builder
+    {
+        return $query->where('fulfillment_stage', $stage);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fulfillment state
+    |--------------------------------------------------------------------------
+    */
+
+    public function isAwaitingSourcing(): bool
+    {
+        return $this->fulfillment_stage === self::STAGE_PICK_PACK;
+    }
+
+    public function stageLabel(): string
+    {
+        return self::fulfillmentStages()[$this->fulfillment_stage] ?? 'Unknown';
+    }
+
+    /**
+     * Has the buyer accepted the wait on lines coming from a main warehouse?
+     *
+     * Recorded at checkout because it was a condition of taking the payment.
+     */
+    public function delayAgreed(): bool
+    {
+        return $this->delay_agreed_at !== null;
     }
 }

@@ -1,12 +1,18 @@
 import { Head, router, useForm } from "@inertiajs/react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import ExpandLessRoundedIcon from "@mui/icons-material/ExpandLessRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import {
     Alert,
     Autocomplete,
+    Box,
     Button,
+    Chip,
+    Collapse,
+    CircularProgress,
     Dialog,
     DialogActions,
     DialogContent,
@@ -38,6 +44,8 @@ import {
 } from "@/Components/StockKeeper/stockKeeperUi";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import type {
+    ItemStockRow,
+    ItemVariantStockRow,
     StockKeeperInventoryProps,
     StockRow,
     VariantOption,
@@ -46,11 +54,20 @@ import type {
 const SEARCH_DEBOUNCE_MS = 350;
 
 /**
- * The stock ledger, plus the desk's two write actions: receiving goods in and
- * correcting a count after a physical recount.
+ * The stock ledger, read the way the floor reads it.
+ *
+ * One row per *item*, not per ledger row: this screen used to list `item_stocks`
+ * directly — 4,907 rows — and headline a distinct variant count, so a desk
+ * holding 182 products reported "1,629 tracked SKUs". Quantities are spoken in
+ * the item's own packaging and in the order that location cares about: a shop
+ * floor in its smallest unit ("47 Packets"), everywhere else biggest first
+ * ("30 Cartons · 17 Pieces").
+ *
+ * The variant rows are still here, one expand away, because a receipt or a
+ * recount is always written against a variant.
  */
 export default function Inventory({
-    stock,
+    items,
     locations,
     variants,
     filters,
@@ -62,6 +79,71 @@ export default function Inventory({
     const [receiveOpen, setReceiveOpen] = React.useState<boolean>(false);
     const [adjustRow, setAdjustRow] = React.useState<StockRow | null>(null);
     const [notice, setNotice] = React.useState<string | null>(null);
+
+    /** Item id currently expanded, and the variant rows fetched for it. */
+    const [openItem, setOpenItem] = React.useState<number | null>(null);
+    const [variantRows, setVariantRows] = React.useState<Record<number, ItemVariantStockRow[]>>({});
+    const [loadingItem, setLoadingItem] = React.useState<number | null>(null);
+
+    /**
+     * Variant rows are fetched on demand rather than shipped with the page:
+     * 182 items carry 1,629 variants between them, and almost none of them are
+     * looked at.
+     */
+    const toggleItem = async (row: ItemStockRow): Promise<void> => {
+        if (openItem === row.item_id) {
+            setOpenItem(null);
+            return;
+        }
+
+        setOpenItem(row.item_id);
+
+        if (variantRows[row.item_id]) return;
+
+        setLoadingItem(row.item_id);
+
+        try {
+            const params = new URLSearchParams();
+            if (filters.location_type) params.set("location_type", filters.location_type);
+            if (filters.location_id) params.set("location_id", String(filters.location_id));
+
+            const response = await fetch(
+                `${route("stock_keeper.inventory.items.variants", row.item_id)}?${params.toString()}`,
+                { headers: { Accept: "application/json" } },
+            );
+            const payload = await response.json();
+
+            setVariantRows((current) => ({ ...current, [row.item_id]: payload.variants ?? [] }));
+        } catch {
+            setNotice("Could not load the variants for that item.");
+        } finally {
+            setLoadingItem(null);
+        }
+    };
+
+    /**
+     * The adjust dialog writes against a ledger row, so a variant row is shaped
+     * into the StockRow the dialog already understands.
+     */
+    const adjustVariant = (item: ItemStockRow, variant: ItemVariantStockRow): void =>
+        setAdjustRow({
+            id: variant.stock_id,
+            variant_id: variant.variant_id,
+            item_id: item.item_id,
+            product_name: item.product_name,
+            sku: variant.sku,
+            variant_label: variant.variant_label,
+            location_name: variant.location_name,
+            location_kind: "store",
+            quantity: variant.quantity,
+            unit: variant.unit,
+            pieces_per_unit: variant.pieces_per_unit,
+            pieces: variant.pieces,
+            min_stock_level: variant.min_stock_level,
+            headroom: variant.quantity - variant.min_stock_level,
+            status: item.status,
+            updated_at: variant.updated_at,
+        });
 
     React.useEffect(() => {
         setSearch(filters.search);
@@ -126,7 +208,7 @@ export default function Inventory({
 
             <PageHeader
                 title="Inventory Ledger"
-                subtitle="Every tracked SKU and where its units physically sit."
+                subtitle="Every item on hand, in the units the place it sits is counted in."
                 action={
                     <Button
                         variant="contained"
@@ -138,29 +220,39 @@ export default function Inventory({
                 }
             />
 
+            {/*
+              Items lead. The old headline was `tracked_skus`, a distinct variant
+              count — a figure about how the catalogue is cut, not about what is
+              on the floor. Variants are still shown, under the item count.
+            */}
             <Grid container spacing={2.5} sx={{ mb: 3 }}>
                 <Grid size={{ xs: 6, md: 3 }}>
                     <StatCard
-                        label="Units on hand"
-                        value={metrics.units_on_hand}
+                        label="Items on hand"
+                        value={metrics.items}
                         icon={<Inventory2RoundedIcon fontSize="small" />}
-                    />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard label="Tracked SKUs" value={metrics.tracked_skus} />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard
-                        label="Low stock"
-                        value={metrics.low_stock}
-                        tone={metrics.low_stock > 0 ? "warning" : "success"}
+                        hint={`${metrics.variants.toLocaleString()} variants`}
                     />
                 </Grid>
                 <Grid size={{ xs: 6, md: 3 }}>
                     <StatCard
-                        label="Out of stock"
-                        value={metrics.out_of_stock}
-                        tone={metrics.out_of_stock > 0 ? "danger" : "success"}
+                        label="Pieces on hand"
+                        value={metrics.pieces_on_hand}
+                        hint={`${metrics.ledger_rows.toLocaleString()} ledger rows`}
+                    />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3 }}>
+                    <StatCard
+                        label="Low stock items"
+                        value={metrics.low_stock_items}
+                        tone={metrics.low_stock_items > 0 ? "warning" : "success"}
+                    />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3 }}>
+                    <StatCard
+                        label="Out of stock items"
+                        value={metrics.out_of_stock_items}
+                        tone={metrics.out_of_stock_items > 0 ? "danger" : "success"}
                     />
                 </Grid>
             </Grid>
@@ -210,72 +302,173 @@ export default function Inventory({
                     </TextField>
                 </Stack>
 
-                {stock.length === 0 ? (
+                {items.length === 0 ? (
                     <EmptyState
                         icon={<Inventory2RoundedIcon fontSize="large" />}
-                        title="No stock rows match"
+                        title="No items match"
                         hint="Adjust the search or pick a different location."
                     />
                 ) : (
                     <Table size="small">
                         <TableHead>
                             <TableRow>
-                                <TableCell>Product</TableCell>
-                                <TableCell>SKU</TableCell>
-                                <TableCell>Location</TableCell>
+                                <TableCell sx={{ width: 48 }} />
+                                <TableCell>Item</TableCell>
+                                <TableCell>Variants</TableCell>
                                 <TableCell align="right">On hand</TableCell>
-                                <TableCell align="right">Minimum</TableCell>
+                                <TableCell align="right">Pieces</TableCell>
                                 <TableCell align="right">Status</TableCell>
                                 <TableCell align="right">Updated</TableCell>
-                                <TableCell align="right" />
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {stock.map((row) => (
-                                <TableRow key={row.id} hover>
-                                    <TableCell>
-                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                            {row.product_name}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {row.variant_label}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography
-                                            variant="caption"
-                                            sx={{ fontFamily: "monospace" }}
-                                        >
-                                            {row.sku ?? "—"}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>{row.location_name}</TableCell>
-                                    <TableCell align="right">
-                                        {row.quantity.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        {row.min_stock_level.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <StockStatusChip status={row.status} />
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <Typography variant="caption" color="text.secondary">
-                                            {formatMoment(row.updated_at)}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <Tooltip title="Adjust count">
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => setAdjustRow(row)}
-                                            >
-                                                <EditRoundedIcon fontSize="small" />
-                                            </IconButton>
-                                        </Tooltip>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                            {items.map((row) => {
+                                const expanded = openItem === row.item_id;
+                                const rows = variantRows[row.item_id] ?? [];
+
+                                return (
+                                    <React.Fragment key={row.item_id}>
+                                        <TableRow hover>
+                                            <TableCell>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => void toggleItem(row)}
+                                                    aria-label={expanded ? "Hide variants" : "Show variants"}
+                                                >
+                                                    {expanded ? (
+                                                        <ExpandLessRoundedIcon fontSize="small" />
+                                                    ) : (
+                                                        <ExpandMoreRoundedIcon fontSize="small" />
+                                                    )}
+                                                </IconButton>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                                    {row.product_name}
+                                                </Typography>
+                                                <Typography
+                                                    variant="caption"
+                                                    color="text.secondary"
+                                                    sx={{ fontFamily: "monospace" }}
+                                                >
+                                                    {row.item_sku ?? "—"}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip
+                                                    size="small"
+                                                    variant="outlined"
+                                                    label={`${row.variant_count} variant${row.variant_count === 1 ? "" : "s"}`}
+                                                />
+                                            </TableCell>
+                                            {/*
+                                              The figure, spoken in this location's
+                                              own units — smallest-first on a shop
+                                              floor, biggest-first everywhere else.
+                                            */}
+                                            <TableCell align="right">
+                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                                    {row.display}
+                                                </Typography>
+                                                {row.display_mode === "smallest" ? (
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        shop floor · single units
+                                                    </Typography>
+                                                ) : null}
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                <Typography variant="caption" color="text.secondary">
+                                                    {row.pieces.toLocaleString()}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                <StockStatusChip status={row.status} />
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                <Typography variant="caption" color="text.secondary">
+                                                    {formatMoment(row.updated_at)}
+                                                </Typography>
+                                            </TableCell>
+                                        </TableRow>
+
+                                        <TableRow>
+                                            <TableCell colSpan={7} sx={{ py: 0, border: 0 }}>
+                                                <Collapse in={expanded} timeout="auto" unmountOnExit>
+                                                    <Box sx={{ py: 1.5, pl: 6 }}>
+                                                        {loadingItem === row.item_id ? (
+                                                            <Stack direction="row" spacing={1} alignItems="center">
+                                                                <CircularProgress size={16} />
+                                                                <Typography variant="caption">
+                                                                    Loading variants…
+                                                                </Typography>
+                                                            </Stack>
+                                                        ) : rows.length === 0 ? (
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                No ledger rows for this item here.
+                                                            </Typography>
+                                                        ) : (
+                                                            <Table size="small">
+                                                                <TableHead>
+                                                                    <TableRow>
+                                                                        <TableCell>SKU</TableCell>
+                                                                        <TableCell>Variant</TableCell>
+                                                                        <TableCell>Location</TableCell>
+                                                                        <TableCell align="right">Counted</TableCell>
+                                                                        <TableCell align="right">Pieces</TableCell>
+                                                                        <TableCell align="right">Minimum</TableCell>
+                                                                        <TableCell align="right" />
+                                                                    </TableRow>
+                                                                </TableHead>
+                                                                <TableBody>
+                                                                    {rows.map((variant) => (
+                                                                        <TableRow key={variant.stock_id}>
+                                                                            <TableCell
+                                                                                sx={{ fontFamily: "monospace", fontSize: 12 }}
+                                                                            >
+                                                                                {variant.sku ?? "—"}
+                                                                            </TableCell>
+                                                                            <TableCell>{variant.variant_label}</TableCell>
+                                                                            <TableCell>{variant.location_name}</TableCell>
+                                                                            {/*
+                                                                              Named, not bare: "11 Cartons"
+                                                                              reads very differently from
+                                                                              "11" when a carton is 120.
+                                                                            */}
+                                                                            <TableCell align="right">
+                                                                                {variant.quantity.toLocaleString()}{" "}
+                                                                                {variant.unit}
+                                                                                {variant.quantity === 1 ? "" : "s"}
+                                                                            </TableCell>
+                                                                            <TableCell align="right">
+                                                                                {variant.pieces.toLocaleString()}
+                                                                            </TableCell>
+                                                                            <TableCell align="right">
+                                                                                {variant.min_stock_level.toLocaleString()}
+                                                                            </TableCell>
+                                                                            <TableCell align="right">
+                                                                                <Tooltip title="Adjust count">
+                                                                                    <IconButton
+                                                                                        size="small"
+                                                                                        onClick={() =>
+                                                                                            adjustVariant(row, variant)
+                                                                                        }
+                                                                                    >
+                                                                                        <EditRoundedIcon fontSize="small" />
+                                                                                    </IconButton>
+                                                                                </Tooltip>
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        )}
+                                                    </Box>
+                                                </Collapse>
+                                            </TableCell>
+                                        </TableRow>
+                                    </React.Fragment>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 )}

@@ -195,12 +195,7 @@ export default function StorefrontDashboard({
 
     return (
         <>
-            <Head title={store ? `${store.name} — Stationery` : "Stationery Shop"}>
-                <link
-                    rel="stylesheet"
-                    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-                />
-            </Head>
+            <Head title={store ? `${store.name} — Stationery` : "Stationery Shop"} />
 
             <div className="min-h-screen" style={{ backgroundColor: STOREFRONT_BG }}>
                 <StorefrontHeader

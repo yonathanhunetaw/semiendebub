@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Auth\User;
+use App\Exceptions\MovementDomainException;
 use App\Models\Fulfillment\Delivery;
+use App\Services\Fulfillment\MovementDomainService;
+use App\Services\Inventory\StockScope;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Courier-facing view of the fulfilment queue.
@@ -93,7 +97,7 @@ class DeliveryService
             'delivered_total' => (int) $mine()->where('status', self::STATUS_DELIVERED)->count(),
             'failed' => (int) $mine()->where('status', self::STATUS_FAILED)->count(),
             'open' => (int) $mine()->open()->count(),
-            'unassigned' => (int) Delivery::query()->unassigned()->where('status', self::STATUS_PENDING)->count(),
+            'unassigned' => (int) $this->readyToCollect(Delivery::query()->unassigned()->where('status', self::STATUS_PENDING))->count(),
         ];
     }
 
@@ -137,10 +141,10 @@ class DeliveryService
      */
     public function paginateUnassigned(?string $search = null, ?int $perPage = null): LengthAwarePaginator
     {
-        $query = Delivery::query()
+        $query = $this->readyToCollect(Delivery::query()
             ->with('sale')
             ->unassigned()
-            ->where('status', self::STATUS_PENDING);
+            ->where('status', self::STATUS_PENDING));
 
         $this->applySearch($query, $search);
 
@@ -149,6 +153,15 @@ class DeliveryService
             ->orderByDesc('id')
             ->paginate($perPage ?? 20)
             ->withQueryString();
+    }
+
+    /**
+     * @param  Builder<Delivery>  $query
+     * @return Builder<Delivery>
+     */
+    private function readyToCollect(Builder $query): Builder
+    {
+        return $query->readyToCollect();
     }
 
     /**
@@ -187,6 +200,11 @@ class DeliveryService
             return false;
         }
 
+        // Nothing to collect until Pick & Pack has handed the goods over.
+        if (! $this->readyToCollect(Delivery::query()->whereKey($delivery->id))->exists()) {
+            return false;
+        }
+
         $delivery->update([
             'courier_id' => $courier->id,
             'courier_name' => trim($courier->first_name . ' ' . $courier->last_name),
@@ -202,21 +220,100 @@ class DeliveryService
      */
     public function transition(Delivery $delivery, string $to, array $extra = []): bool
     {
-        $from = (string) $delivery->status;
+        return DB::transaction(function () use ($delivery, $to, $extra): bool {
+            // Re-read under a lock: two taps on "Delivered" must not hand the
+            // same goods to the customer twice.
+            $from = (string) Delivery::query()->whereKey($delivery->id)->lockForUpdate()->value('status');
 
-        if (! in_array($to, self::TRANSITIONS[$from] ?? [], true)) {
-            return false;
+            if (! in_array($to, self::TRANSITIONS[$from] ?? [], true)) {
+                return false;
+            }
+
+            $delivery->refresh()->loadMissing('sale.items.storeVariant');
+            $sale = $delivery->sale;
+
+            // A courier collects goods Pick & Pack has put into Delivery's
+            // custody; an order nobody has picked has nothing to collect.
+            if ($sale !== null && $sale->sourcing_confirmed_at === null
+                && in_array($to, [self::STATUS_DISPATCHED, self::STATUS_IN_TRANSIT, self::STATUS_DELIVERED], true)) {
+                throw new MovementDomainException(
+                    "Order {$sale->reference_number} has not been through Pick & Pack yet, so there is nothing to collect.",
+                    MovementDomainService::DOMAIN_DELIVERY,
+                );
+            }
+
+            if ($sale !== null && $sale->sourcing_confirmed_at !== null) {
+                $this->moveCustody($delivery, $to);
+
+                // The order follows its run: delivered closes it as Delivered;
+                // returned closes it as Cancelled, its goods back in stock.
+                if ($to === self::STATUS_DELIVERED) {
+                    $sale->update(['fulfillment_stage' => \App\Models\Finance\Sale::STAGE_DELIVERED]);
+                } elseif ($to === self::STATUS_RETURNED) {
+                    $sale->update(['fulfillment_stage' => \App\Models\Finance\Sale::STAGE_CANCELLED]);
+                }
+            }
+
+            $payload = array_merge(['status' => $to], $extra);
+
+            if (isset(self::STAMPS[$to])) {
+                $payload[self::STAMPS[$to]] = now();
+            }
+
+            $delivery->update($payload);
+
+            return true;
+        });
+    }
+
+    /**
+     * What a status change does to the goods the courier holds.
+     *
+     *   delivered  every picked line leaves Delivery's custody to the customer
+     *   returned   every picked line goes back to the place it was picked from
+     *
+     * Everything else (collected, on the road, a failed attempt) leaves them in
+     * the courier's custody, which is where Pick & Pack put them.
+     */
+    private function moveCustody(Delivery $delivery, string $to): void
+    {
+        if (! in_array($to, [self::STATUS_DELIVERED, self::STATUS_RETURNED], true)) {
+            return;
         }
 
-        $payload = array_merge(['status' => $to], $extra);
+        $stock = app(StockService::class);
+        $scope = app(StockScope::class);
+        $courierId = $delivery->courier_id !== null ? (int) $delivery->courier_id : null;
 
-        if (isset(self::STAMPS[$to])) {
-            $payload[self::STAMPS[$to]] = now();
+        foreach ($delivery->sale->items as $item) {
+            $quantity = (int) $item->picked_quantity;
+            $variantId = (int) ($item->storeVariant?->item_variant_id ?? 0);
+
+            if ($quantity <= 0 || $variantId === 0) {
+                continue;
+            }
+
+            $context = [
+                'reason' => $to === self::STATUS_DELIVERED ? 'Delivered to customer' : 'Returned by courier',
+                'reference' => $item,
+            ];
+
+            if ($to === self::STATUS_DELIVERED) {
+                $stock->deliverFromCourier($variantId, $quantity, $courierId, $context);
+
+                continue;
+            }
+
+            $source = $item->source_location_type !== null
+                ? $scope->leafFor((string) $item->source_location_type, (int) $item->source_location_id)
+                : null;
+
+            if ($source === null) {
+                throw new MovementDomainException("Line #{$item->id} has no source to return to.", MovementDomainService::DOMAIN_DELIVERY);
+            }
+
+            $stock->returnFromCourier($variantId, $source, $quantity, $courierId, $context);
         }
-
-        $delivery->update($payload);
-
-        return true;
     }
 
     /**

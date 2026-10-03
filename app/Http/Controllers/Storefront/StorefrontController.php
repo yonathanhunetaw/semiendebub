@@ -169,6 +169,11 @@ class StorefrontController extends Controller
                 'item_count' => 0,
                 'subtotal' => 0.0,
                 'is_guest' => ! auth()->check(),
+                // Matches CartService::presentBuyerCart() so the drawer's
+                // contract holds even on the unavailable-storefront path.
+                'sourcing_groups' => [],
+                'requires_delay_agreement' => false,
+                'delayed_line_count' => 0,
             ],
             'filters' => [
                 'search' => '',

@@ -162,6 +162,7 @@ export interface PartyAgreementInfo {
     status_label: string;
     detail: string;
     agreed_time?: string;
+    actor?: string | null;
     stock_keepers?: SubStockKeeper[];
     extra?: {
         label: string;

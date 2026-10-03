@@ -8,7 +8,19 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
+/**
+ * Fulfilment of an external customer order.
+ *
+ * Distinct from a Shipment (bulk freight between structural nodes) and a
+ * Transfer (localized balancing between internal locations): a Delivery always
+ * ends at a customer, and it starts at the one place Pick & Pack picked from.
+ * `source_location_*` is that place, so a driver's run can be traced back to a
+ * shelf rather than to "the store".
+ *
+ * @see \App\Services\Fulfillment\MovementDomainService
+ */
 class Delivery extends Model
 {
     use HasFactory;
@@ -17,6 +29,9 @@ class Delivery extends Model
 
     protected $fillable = [
         'sale_id',
+        'source_location_type',
+        'source_location_id',
+        'source_store_id',
         'tracking_number',
         'status',
         'delivery_address',
@@ -35,6 +50,7 @@ class Delivery extends Model
     ];
 
     protected $casts = [
+        'source_location_id' => 'integer',
         'scheduled_for' => 'datetime',
         'picked_up_at' => 'datetime',
         'shipped_at' => 'datetime',
@@ -45,6 +61,17 @@ class Delivery extends Model
     public function sale(): BelongsTo
     {
         return $this->belongsTo(Sale::class, 'sale_id');
+    }
+
+    /** The exact location the goods were picked from. */
+    public function sourceLocation(): MorphTo
+    {
+        return $this->morphTo('sourceLocation', 'source_location_type', 'source_location_id');
+    }
+
+    public function sourceStore(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Store\Store::class, 'source_store_id');
     }
 
     /**
@@ -70,6 +97,19 @@ class Delivery extends Model
     public function scopeOpen(Builder $query): Builder
     {
         return $query->whereIn('status', ['pending', 'dispatched', 'in_transit']);
+    }
+
+    /**
+     * Runs with something to collect: the order has been through Pick & Pack.
+     * A delivery is opened at checkout (with the address), well before its
+     * goods are picked; offering it to couriers then only leads to a run they
+     * cannot start.
+     */
+    public function scopeReadyToCollect(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->whereNull('sale_id')
+            ->orWhereHas('sale', fn (Builder $sale) => $sale->whereNotNull('sourcing_confirmed_at')));
     }
 
     public function scopeUnassigned(Builder $query): Builder

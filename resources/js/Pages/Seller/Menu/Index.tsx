@@ -9,17 +9,22 @@ import {
     type Tile,
     href,
 } from "@/Components/Shared/OpsHub";
-import { SAMPLE_ORDERS } from "@/Data/sellerOrderFlow";
+import type { OrderStage } from "@/Data/sellerOrderFlow";
+import type { LocationTile } from "@/types/sellerLocations";
 import { Head, Link } from "@inertiajs/react";
 import React, { useState } from "react";
 
 /**
- * Seller "More" hub.
+ * Seller "More" hub — the seller console.
  *
- * A stack of white cards on a near-white page: two pipeline cards (orders,
- * shipments) with counter grids, then the operations rows. The card set itself
- * lives in Components/Shared/OpsHub so the admin inventory hub renders the
- * same UI rather than a second copy of it.
+ * A stack of white cards on a near-white page: My Orders, Shipments and
+ * Storage & Inventory Locations as counter grids, then Merchant Operations.
+ * The card set lives in Components/Shared/OpsHub so the admin inventory hub
+ * renders the same UI rather than a second copy of it.
+ *
+ * Tiles not backed by data yet (Returns, bulk waybills, proof of delivery,
+ * vehicle assignment) are shown read-only so the layout is final; they say
+ * so instead of showing a number.
  */
 
 interface ShipmentStats {
@@ -31,45 +36,112 @@ interface ShipmentStats {
 }
 
 interface Props {
+    /** Store Shelf, Store, Remote Hub, Main Hub A and B, nearest first. */
+    locations?: LocationTile[];
     stats?: {
+        /** Real order counts per stage, from SellerOrderBoard. */
+        order_stages?: Partial<Record<OrderStage, number>>;
         shipments?: ShipmentStats;
         catalogue?: { customers?: number; items?: number; carts?: number };
+        /** Live order counters. Unlike the pipeline tiles these are server-side. */
+        orders?: { awaiting_sourcing?: number };
     };
     seller?: { name: string | null; email: string | null; store: string | null };
 }
 
-export default function Index({ stats, seller }: Props): React.ReactElement {
+/** 1,180 → "1.2k", 24,310 → "24k": the badge has room for four characters. */
+function compact(value: number): string {
+    if (value < 1000) return String(value);
+    if (value < 10_000) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+    if (value < 1_000_000) return `${Math.round(value / 1000)}k`;
+    return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+}
+
+export default function Index({ locations = [], stats, seller }: Props): React.ReactElement {
     const shipments = stats?.shipments ?? {};
     const catalogue = stats?.catalogue ?? {};
+    /** Real count: paid orders whose lines still have to be sourced. */
+    const ordersAwaitingSourcing = stats?.orders?.awaiting_sourcing ?? 0;
 
-    /*
-     * Counted from the same sample orders the order screens render, so a tile
-     * badge matches the tab it opens. Swap `stageCount` for server stats once
-     * the order domain exists.
-     */
-    const stageCount = (stage: string) =>
-        SAMPLE_ORDERS.filter((entry) => entry.stage === stage).length;
+    /* Same stage mapping the order list uses, so a badge matches its tab. */
+    const stageCount = (stage: OrderStage) => stats?.order_stages?.[stage] ?? 0;
 
     const orderTiles: Tile[] = [
-        { label: "To Pay", caption: "Awaiting payment", icon: "payments", count: stageCount("to_pay"), tone: "amber", tab: "tab=to_pay" },
-        { label: "Paid", caption: "Payment confirmed", icon: "verified", count: stageCount("paid"), tone: "violet", tab: "tab=paid" },
-        { label: "Pick & Pack", caption: "Being packed", icon: "inventory_2", count: stageCount("packing"), tone: "blue", tab: "tab=packing" },
-        { label: "To Deliver", caption: "Ready to ship", icon: "local_shipping", count: stageCount("to_deliver"), tone: "brand", tab: "tab=to_deliver" },
+        { label: "To Pay", caption: "Allocated / Unpaid", icon: "payments", count: stageCount("to_pay"), tone: "amber", tab: "tab=to_pay" },
+        { label: "Paid", caption: "Payment Confirmed", icon: "verified", count: stageCount("paid"), tone: "blue", tab: "tab=paid" },
+        { label: "Pick & Pack", caption: "In Progress / Picking", icon: "inventory_2", count: stageCount("packing"), tone: "blue", tab: "tab=packing" },
+        { label: "To Deliver", caption: "Ready to Ship", icon: "local_shipping", count: stageCount("to_deliver"), tone: "brand", tab: "tab=to_deliver" },
         { label: "Delivered", caption: "Completed", icon: "task_alt", count: stageCount("delivered"), tone: "emerald", tab: "tab=delivered" },
-        { label: "Canceled", caption: "Voided", icon: "assignment_return", count: stageCount("canceled"), tone: "rose", tab: "tab=canceled" },
+        { label: "Returns", caption: "Reverse Ops · soon", icon: "assignment_return", count: 0, tone: "rose", disabled: true },
+        { label: "Canceled", caption: "Voided / Closed", icon: "cancel", count: stageCount("canceled"), tone: "ink", tab: "tab=canceled" },
     ];
 
-    const shipmentTiles: Tile[] = [
-        { label: "Manifest", caption: "Paperwork", icon: "fact_check", count: shipments.manifest ?? 0, tone: "blue", tab: "tab=pending" },
-        { label: "Scheduled", caption: "Booked & picking", icon: "schedule", count: shipments.scheduled ?? 0, tone: "amber", tab: "tab=scheduled" },
-        { label: "En Route", caption: "In transit", icon: "local_shipping", count: shipments.en_route ?? 0, tone: "brand", tab: "tab=en_route" },
-        { label: "Shipped", caption: "Arrived", icon: "check_circle", count: shipments.shipped ?? 0, tone: "emerald", tab: "tab=shipped" },
-        { label: "Overdue", caption: "Action req.", icon: "warning", count: shipments.overdue ?? 0, tone: "rose", alert: true, tab: "tab=overdue" },
-    ];
-
+    /*
+     * The live Pick & Pack queue is where batch work happens: a paid order's
+     * lines are sourced from a real shelf, floor or hub there. Batch waybills
+     * and manifests across several orders are shown but not built yet.
+     */
     const orderFooter: Row[] = [
         { label: "Store Orders", caption: "", icon: "receipt_long", route: "seller.carts.index", tone: "ink" },
         { label: "Transfers", caption: "", icon: "rv_hookup", route: null, tone: "ink" },
+        {
+            label: ordersAwaitingSourcing > 0 ? `Pick & Pack queue (${ordersAwaitingSourcing})` : "Pick & Pack queue",
+            caption: "",
+            icon: "where_to_vote",
+            route: "seller.orders.queue",
+            tone: "ink",
+        },
+        { label: "Bulk waybills", caption: "", icon: "library_add_check", route: null, tone: "ink" },
+    ];
+
+    const shipmentTiles: Tile[] = [
+        { label: "Scheduled", caption: "Booked Slot", icon: "schedule", count: shipments.scheduled ?? 0, tone: "amber", tab: "tab=scheduled" },
+        { label: "Pending Manifest", caption: "Paperwork", icon: "fact_check", count: shipments.manifest ?? 0, tone: "blue", tab: "tab=pending" },
+        { label: "En Route", caption: "In Transit", icon: "local_shipping", count: shipments.en_route ?? 0, tone: "brand", tab: "tab=en_route" },
+        { label: "Shipped", caption: "Delivered Hub", icon: "check_circle", count: shipments.shipped ?? 0, tone: "emerald", tab: "tab=shipped" },
+        { label: "Overdue", caption: "Action Req.", icon: "warning", count: shipments.overdue ?? 0, tone: "rose", alert: true, tab: "tab=overdue" },
+    ];
+
+    /* Courier hand-off signals for congested routes. Read-only until shipments
+       record attempts, signatures and the assigned vehicle. */
+    const shipmentFooter: Row[] = [
+        { label: "Proof of delivery", caption: "", icon: "signature", route: null, tone: "ink" },
+        { label: "Vehicle / dispatcher", caption: "", icon: "two_wheeler", route: null, tone: "ink" },
+    ];
+
+    const LOCATION_TONES: Record<string, Tile["tone"]> = {
+        shelf: "emerald",
+        store: "blue",
+        remote_hub: "brand",
+        hub_A: "ink",
+        hub_B: "amber",
+    };
+
+    const locationTiles: Tile[] = locations.map((tile) => ({
+        label: tile.label,
+        caption: tile.alert > 0 ? `${tile.alert} to refill` : tile.caption,
+        icon: tile.key === "hub_B" ? "domain" : tile.icon,
+        count: tile.pieces,
+        badge: tile.location_id && tile.pieces > 0 ? compact(tile.pieces) : undefined,
+        tone: LOCATION_TONES[tile.key] ?? "ink",
+        alert: tile.alert > 0,
+        disabled: !tile.location_id,
+        routeName: "seller.locations.show",
+        routeParams: tile.location_id ? { location: tile.location_id } : undefined,
+    }));
+
+    const shelf = locations.find((tile) => tile.key === "shelf");
+
+    const locationFooter: Row[] = [
+        {
+            label: "Shelf Bin Matrix",
+            caption: "",
+            icon: "grid_view",
+            route: shelf?.location_id ? "seller.locations.show" : null,
+            routeParams: shelf?.location_id ? { location: shelf.location_id } : undefined,
+            tone: "ink",
+        },
+        { label: "Multi-Tier Directory", caption: "", icon: "account_tree", route: null, tone: "ink" },
     ];
 
     const opsRows: Row[] = [
@@ -91,7 +163,7 @@ export default function Index({ stats, seller }: Props): React.ReactElement {
         },
         {
             label: "Customers",
-            caption: "Accounts & directory",
+            caption: catalogue.customers ? `${catalogue.customers} Accounts & directory` : "Accounts & directory",
             icon: "group",
             route: "seller.customers.index",
             tone: "blue",
@@ -114,43 +186,12 @@ export default function Index({ stats, seller }: Props): React.ReactElement {
         },
     ];
 
-    const catalogueRows: Row[] = [
-        {
-            label: "Items",
-            caption: "Active catalogue",
-            icon: "inventory_2",
-            route: "seller.items.index",
-            tone: "brand",
-            count: catalogue.items,
-        },
-        {
-            label: "Categories",
-            caption: "Browse by group",
-            icon: "category",
-            route: "seller.categories.index",
-            tone: "blue",
-        },
-        {
-            label: "Carts",
-            caption: "Open baskets",
-            icon: "shopping_cart",
-            route: "seller.carts.index",
-            tone: "emerald",
-            count: catalogue.carts,
-        },
-    ];
-
     const settingsHref = href("seller.settings.index");
     const [notifyOpen, setNotifyOpen] = useState(false);
 
     return (
         <>
-            <Head title="More">
-                <link
-                    rel="stylesheet"
-                    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-                />
-            </Head>
+            <Head title="More" />
 
             <div className="min-h-screen pb-28" style={{ backgroundColor: PAGE_BG }}>
                 {/* ── Identity header ── */}
@@ -247,10 +288,10 @@ export default function Index({ stats, seller }: Props): React.ReactElement {
                 <div className="px-3.5">
                 <PipelineCard
                     title="My Orders"
-                    preview
-                    actionLabel="Order list"
+                    actionLabel="Pipeline map"
                     actionRoute="seller.orders.index"
                     tiles={orderTiles}
+                    columns={4}
                     footer={orderFooter}
                 />
 
@@ -259,11 +300,18 @@ export default function Index({ stats, seller }: Props): React.ReactElement {
                     actionLabel="Console"
                     actionRoute="seller.shipments.index"
                     tiles={shipmentTiles}
+                    footer={shipmentFooter}
+                />
+
+                <PipelineCard
+                    title="Storage & Inventory Locations"
+                    actionLabel="View all"
+                    actionRoute={null}
+                    tiles={locationTiles}
+                    footer={locationFooter}
                 />
 
                 <OpsCard title="Merchant Operations" note="Core Tools" rows={opsRows} />
-
-                <OpsCard title="Catalogue" note="Browse" rows={catalogueRows} />
                 </div>
             </div>
         </>

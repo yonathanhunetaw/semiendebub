@@ -20,6 +20,8 @@ export interface PartyAgreementInfo {
     status_label: string;
     detail: string;
     agreed_time?: string;
+    /** The person who ticked this party, when someone has. */
+    actor?: string | null;
     stock_keepers?: SubStockKeeper[];
     extra?: {
         label: string;
@@ -272,7 +274,7 @@ export default function PartyDetailModal({
                             <>
                                 <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/60">
                                     <span className="text-[11px] font-medium text-slate-400">Stock Keeper</span>
-                                    <span className="text-[11px] font-semibold text-gray-800">Dawit T.</span>
+                                    <span className="text-[11px] font-semibold text-gray-800">{current.actor ?? "Not yet confirmed"}</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/60">
                                     <span className="text-[11px] font-medium text-slate-400">Staging Status</span>

@@ -53,8 +53,8 @@ class ItemController extends Controller
                                 ->where('active', true)
                                 ->with([
                                     'stocks' => function ($stockQuery) use ($storeId) {
-                                        $stockQuery->where('location_type', 'App\Models\Store\Store')
-                                            ->where('location_id', $storeId);
+                                        // Shelf + floor (STOCK_PLAN.md phase 4).
+                                        $stockQuery->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId));
                                     }
                                 ]);
                         }
@@ -198,8 +198,8 @@ class ItemController extends Controller
                                 ->where('active', true)
                                 ->with([
                                     'stocks' => function ($stockQuery) use ($storeId) {
-                                        $stockQuery->where('location_type', 'App\Models\Store\Store')
-                                            ->where('location_id', $storeId);
+                                        // Shelf + floor (STOCK_PLAN.md phase 4).
+                                        $stockQuery->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId));
                                     }
                                 ]);
                         }
@@ -225,9 +225,12 @@ class ItemController extends Controller
             ->flatten()
             ->unique();
 
-        $stocks = \App\Models\StockKeeper\ItemStock::where('location_id', $storeId)
-            ->where('location_type', 'App\Models\Store\Store')
+        // Shelf + floor, summed per variant (two leaves, so keyBy would drop one).
+        $stocks = \App\Models\StockKeeper\ItemStock::query()
+            ->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId))
             ->whereIn('item_variant_id', $storeVariantIds)
+            ->groupBy('item_variant_id')
+            ->selectRaw('item_variant_id, SUM(quantity) as quantity')
             ->get()
             ->keyBy('item_variant_id');
 
@@ -340,8 +343,8 @@ class ItemController extends Controller
                                 ->where('active', true)
                                 ->with([
                                     'stocks' => function ($stockQuery) use ($storeId) {
-                                        $stockQuery->where('location_type', 'App\Models\Store\Store')
-                                            ->where('location_id', $storeId);
+                                        // Shelf + floor (STOCK_PLAN.md phase 4).
+                                        $stockQuery->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId));
                                     }
                                 ]);
                         }
@@ -437,8 +440,8 @@ class ItemController extends Controller
                         // Unconstrained, this counts the variant's stock at
                         // every store — see StoreVariant::stocks().
                         'stocks' => function ($stockQuery) use ($storeId) {
-                            $stockQuery->where('location_type', \App\Models\Store\Store::class)
-                                ->where('location_id', $storeId);
+                            // Shelf + floor (STOCK_PLAN.md phase 4).
+                                        $stockQuery->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId));
                         },
                     ]);
             },
@@ -506,13 +509,14 @@ class ItemController extends Controller
             // 🛑 FIX: Use StockService SSOT ledger for stock
             $store_stock = $storeVariant ? ($stocks[$storeVariant->id] ?? 0) : 0;
 
-            $remote_stock = 0;
-            if ($store && $store->warehouse) {
-                $remote_stock = \App\Models\StockKeeper\ItemStock::where('location_type', \App\Models\Inventory\Warehouse::class)
-                    ->where('location_id', $store->warehouse->id)
-                    ->where('item_variant_id', $variant->id)
-                    ->sum('quantity');
-            }
+            // The store's own Remote Hub (never a shared main hub).
+            $remoteHubId = $store ? \App\Models\Inventory\StockLocation::query()
+                ->where('store_id', $store->id)
+                ->ofKind(\App\Models\Inventory\StockLocation::KIND_REMOTE_HUB)
+                ->value('id') : null;
+            $remote_stock = $remoteHubId === null ? 0 : (int) \App\Models\StockKeeper\ItemStock::where('stock_location_id', $remoteHubId)
+                ->where('item_variant_id', $variant->id)
+                ->sum('quantity');
 
             $status = $storeVariant?->computed_status ?? 'inactive';
             $store_active = $status === 'active';

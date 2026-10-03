@@ -52,6 +52,12 @@ Route::domain("delivery.{$baseDomain}")
             Route::post('/shipments/{shipment}/agree', [FreightController::class, 'agree'])->name('shipments.agree');
             Route::patch('/shipments/{shipment}/status', [FreightController::class, 'transition'])->name('shipments.transition');
 
+            // Transfers between two sites: claim, collect at the origin (the
+            // origin dispatches), hand over at the destination.
+            Route::get('/transfers', [\App\Http\Controllers\Delivery\TransferController::class, 'index'])->name('transfers.index');
+            Route::post('/transfers/{transfer}/claim', [\App\Http\Controllers\Delivery\TransferController::class, 'claim'])->name('transfers.claim');
+            Route::post('/transfers/{transfer}/handover', [\App\Http\Controllers\Delivery\TransferController::class, 'handover'])->name('transfers.handover');
+
             // --- PROFILE ---
             Route::get('/profile', [ProfileController::class, 'index'])->name('profile.index');
             Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

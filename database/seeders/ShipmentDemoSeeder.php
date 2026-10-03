@@ -6,9 +6,12 @@ namespace Database\Seeders;
 
 use App\Models\Auth\User;
 use App\Models\Fulfillment\Shipment;
+use App\Models\Inventory\StockLocation;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
+use App\Services\Inventory\StockScope;
 use App\Services\ShipmentWorkflowService;
+use App\Services\StockService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -16,22 +19,27 @@ use Illuminate\Support\Str;
 /**
  * Demo shipments covering every filter chip on the shipment screens.
  *
- * Statuses are written directly rather than driven through
- * ShipmentWorkflowService::transition(), so seeding does NOT move stock. These
- * rows exist to populate the UI; the live ledger is left exactly as it was.
+ * Every run follows the real rule (STOCK_PLAN.md phase 4): it leaves a Main
+ * Hub and lands at the seller's store — its floor, or its Remote Hub when it
+ * has one. Statuses are written directly to skip the agreement gate, but the
+ * goods are kept honest: a run parked at dispatched, in transit or delivered
+ * has its load in Delivery's custody, and a received run has landed. Seeding
+ * a stage the ledger could never reach would leave runs nobody can finish.
  *
  *     php artisan db:seed --class=ShipmentDemoSeeder
  *
- * Re-running replaces the previous demo set (matched on the SHP-DEMO prefix).
+ * Re-running replaces the previous demo set (matched on the SHP-DEMO prefix),
+ * returning any of its goods still in a courier's hands to the hub first.
  */
 class ShipmentDemoSeeder extends Seeder
 {
     public function run(): void
     {
-        $stores = Store::query()->orderBy('id')->get();
+        $stores = Store::query()->retail()->orderBy('id')->get();
+        $hubs = StockLocation::query()->ofKind(StockLocation::KIND_MAIN_HUB)->orderBy('id')->get();
 
-        if ($stores->count() < 2) {
-            $this->command->warn('Need at least two stores to seed shipments.');
+        if ($stores->isEmpty() || $hubs->isEmpty()) {
+            $this->command->warn('Need a retail store and a Main Hub to seed shipments.');
 
             return;
         }
@@ -42,10 +50,12 @@ class ShipmentDemoSeeder extends Seeder
         // column was NULL on eight seeded accounts, so a column lookup could pick
         // nobody and leave the demo rows with no creator, courier or keeper on
         // their agreement ledger — a gate that could never be read back.
-        $home = User::role('seller')->whereNotNull('store_id')->first()?->store
-            ?? $stores->first();
+        $home = User::role('seller')->whereNotNull('store_id')->first()?->store;
+        $home = $home !== null && $home->type === Store::TYPE_RETAIL ? $home : $stores->first();
 
-        $others = $stores->where('id', '!=', $home->id)->values();
+        $scope = app(StockScope::class);
+        $floor = $scope->leafFor(Store::class, (int) $home->id);
+        $remote = StockLocation::query()->where('store_id', $home->id)->ofKind(StockLocation::KIND_REMOTE_HUB)->first();
         $courier = User::role('delivery')->first();
 
         $this->clearPreviousDemoSet();
@@ -91,18 +101,20 @@ class ShipmentDemoSeeder extends Seeder
         $created = 0;
 
         foreach ($specs as $index => [$status, $direction, $hours, $withCourier]) {
-            $partner = $others[$index % $others->count()];
-
-            $originId = $direction === 'inbound' ? $partner->id : $home->id;
-            $destinationId = $direction === 'inbound' ? $home->id : $partner->id;
+            // "inbound" lands on the store floor, "outbound" at its Remote Hub
+            // (or the floor when it has none). Both leave a Main Hub.
+            $origin = $hubs[$index % $hubs->count()];
+            $destination = $direction === 'outbound' && $remote !== null ? $remote : $floor;
 
             [$vName, $vPlate, $vCbm, $vSlot] = $vehicles[$index % count($vehicles)];
             $moment = now()->addHours($hours);
 
             $shipment = Shipment::create([
                 'reference' => 'SHP-DEMO-' . str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT),
-                'origin_store_id' => $originId,
-                'destination_store_id' => $destinationId,
+                'origin_store_id' => $origin->legacy_type === Store::class ? (int) $origin->legacy_id : null,
+                'destination_store_id' => $home->id,
+                'origin_stock_location_id' => $origin->id,
+                'destination_stock_location_id' => $destination->id,
                 'status' => $status,
                 'vehicle_name' => $vName,
                 'vehicle_plate' => $vPlate,
@@ -124,11 +136,12 @@ class ShipmentDemoSeeder extends Seeder
             ]);
 
             $this->attachAgreements($shipment, $status, $moment);
-            $this->attachManifest($shipment, $originId);
+            $this->attachManifest($shipment, $origin);
+            $this->settleCustody($shipment, $status, $origin, $destination);
             $created++;
         }
 
-        $this->command->info("Seeded {$created} demo shipments (stock ledger untouched).");
+        $this->command->info("Seeded {$created} demo shipments.");
     }
 
     /**
@@ -196,11 +209,10 @@ class ShipmentDemoSeeder extends Seeder
      * Put 2–4 real SKUs on the manifest, preferring variants that actually have
      * stock at the origin so the coverage badges read realistically.
      */
-    private function attachManifest(Shipment $shipment, int $originId): void
+    private function attachManifest(Shipment $shipment, StockLocation $origin): void
     {
         $variantIds = ItemStock::query()
-            ->where('location_type', Store::class)
-            ->where('location_id', $originId)
+            ->where('stock_location_id', $origin->id)
             ->where('quantity', '>', 30)
             ->inRandomOrder()
             ->limit(random_int(2, 4))
@@ -218,7 +230,9 @@ class ShipmentDemoSeeder extends Seeder
         $aisles = ['Aisle A-04 | Shelf 2', 'Aisle B-08 | Shelf 1', 'Aisle C-02 | Rack 5', 'Aisle D-01 | Bulk Floor'];
 
         foreach ($variantIds->values() as $i => $variantId) {
-            $quantity = random_int(10, 60);
+            // Never more than the hub holds, so a run past dispatch can carry it.
+            $held = (int) ItemStock::query()->where('stock_location_id', $origin->id)->where('item_variant_id', $variantId)->value('quantity');
+            $quantity = max(1, min(random_int(10, 60), $held > 0 ? intdiv($held, 4) : 10));
 
             $shipment->items()->create([
                 'item_variant_id' => $variantId,
@@ -232,6 +246,40 @@ class ShipmentDemoSeeder extends Seeder
                 'unit' => $units[$i % count($units)],
                 'location' => $aisles[$i % count($aisles)],
             ]);
+        }
+    }
+
+    /**
+     * Put the load where its status says it is: in Delivery's custody once
+     * dispatched, at the destination once received. Through the ledger
+     * gateway, so the journal records it like any other run.
+     */
+    private function settleCustody(Shipment $shipment, string $status, StockLocation $origin, StockLocation $destination): void
+    {
+        if (! $this->reached($status, ShipmentWorkflowService::DISPATCHED)) {
+            return;
+        }
+
+        $ledger = app(StockService::class);
+        $courierId = $shipment->courier_id !== null ? (int) $shipment->courier_id : null;
+
+        foreach ($shipment->items()->get() as $item) {
+            $moving = $item->picked_quantity > 0 ? (int) $item->picked_quantity : (int) $item->quantity;
+            $context = ['reason' => 'Shipment '.$shipment->reference.' (demo)', 'reference' => $shipment];
+
+            try {
+                $ledger->handToCourier((int) $item->item_variant_id, $origin, $moving, $courierId, $context);
+            } catch (\App\Exceptions\InsufficientStockException) {
+                // The hub cannot cover it: leave the line off the load rather
+                // than seed stock that does not exist.
+                $item->delete();
+
+                continue;
+            }
+
+            if ($status === ShipmentWorkflowService::RECEIVED) {
+                $ledger->handOverFromCourier((int) $item->item_variant_id, $destination, $moving, $courierId, $context);
+            }
         }
     }
 
@@ -260,6 +308,31 @@ class ShipmentDemoSeeder extends Seeder
 
         if ($ids->isEmpty()) {
             return;
+        }
+
+        // Goods a previous demo run still has in a courier's hands go back to
+        // its hub, so deleting the run cannot strand them in custody.
+        $ledger = app(StockService::class);
+
+        $inCustody = Shipment::query()->whereIn('id', $ids)
+            ->whereIn('status', [ShipmentWorkflowService::DISPATCHED, ShipmentWorkflowService::IN_TRANSIT, ShipmentWorkflowService::DELIVERED])
+            ->whereNotNull('origin_stock_location_id')
+            ->with('items')
+            ->get();
+
+        foreach ($inCustody as $shipment) {
+            foreach ($shipment->items as $item) {
+                $moving = $item->picked_quantity > 0 ? (int) $item->picked_quantity : (int) $item->quantity;
+
+                try {
+                    $ledger->returnFromCourier((int) $item->item_variant_id, (int) $shipment->origin_stock_location_id, $moving, null, [
+                        'reason' => 'Demo shipment cleared',
+                        'reference' => $shipment,
+                    ]);
+                } catch (\App\Exceptions\InsufficientStockException) {
+                    // Seeded before custody existed: nothing is in custody for it.
+                }
+            }
         }
 
         DB::table('shipment_items')->whereIn('shipment_id', $ids)->delete();

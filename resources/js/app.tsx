@@ -1,4 +1,7 @@
 import '../css/app.css';
+// Material Symbols, bundled from npm rather than fonts.googleapis.com: the
+// icons then work offline and never flash their ligature names while loading.
+import 'material-symbols/outlined.css';
 import './bootstrap';
 import * as React from 'react';
 import { ThemeProvider, createTheme, CssBaseline, PaletteMode } from '@mui/material';

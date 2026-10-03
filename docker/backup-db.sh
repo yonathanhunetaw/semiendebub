@@ -1,5 +1,11 @@
 #!/bin/bash
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# Automatically include Homebrew path if it exists (macOS), otherwise use default system PATH
+if [ -d "/opt/homebrew/bin" ]; then
+    export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+fi
+
+TIMESTAMP=$(date "+%b_%a_%Y-%m-%d_%I:%M_%p")
 BACKUP_FILE="/tmp/duka_backup_$TIMESTAMP.sql.gz"
 
 # 1. Dump the database cleanly using --no-tablespaces and compress it

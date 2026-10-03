@@ -5,23 +5,28 @@ import {
     BRAND,
     INK,
     type OrderStage,
-    SAMPLE_ORDERS,
     STAGE_META,
     type SellerOrder,
     birr,
     countdownParts,
     orderTotal,
 } from "@/Data/sellerOrderFlow";
-import { Head, Link } from "@inertiajs/react";
+import { Head, Link, router } from "@inertiajs/react";
 import React, { useEffect, useMemo, useState } from "react";
 
 /**
  * Seller "My Orders".
  *
- * Layout preview over the shared sample data in `@/Data/sellerOrderFlow`.
- * Unpaid orders carry the pay actions and a live countdown; paid ones open
- * straight into pick & pack. Nothing here calls the server.
+ * Real sales, shaped by SellerOrderBoard into the card format the sample data
+ * in `@/Data/sellerOrderFlow` defined. Unpaid orders carry the pay actions;
+ * paid ones open straight into pick & pack.
  */
+
+interface Props {
+    orders?: SellerOrder[];
+    /** The list is capped at the newest N orders. */
+    limit?: number;
+}
 
 const TABS: Array<{ id: string; label: string; stage: OrderStage | null }> = [
     { id: "all", label: "View all", stage: null },
@@ -56,8 +61,13 @@ function useTicker(active: boolean): number {
     return tick;
 }
 
-export default function OrdersIndex(): React.ReactElement {
-    const [orders, setOrders] = useState<SellerOrder[]>(SAMPLE_ORDERS);
+export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): React.ReactElement {
+    /* Hiding is a view filter only; it never deletes an order. */
+    const [hidden, setHidden] = useState<number[]>([]);
+    const orders = useMemo(
+        () => loaded.filter((order) => !hidden.includes(order.id)),
+        [loaded, hidden],
+    );
     const [tab, setTab] = useState<string>(initialTab);
     const [search, setSearch] = useState("");
     const [selectMode, setSelectMode] = useState(false);
@@ -91,7 +101,7 @@ export default function OrdersIndex(): React.ReactElement {
             );
         });
 
-        // Sample rows are listed newest-first; the filter button flips that.
+        // The server lists newest first; the filter button flips that.
         return sortNewest ? rows : [...rows].reverse();
     }, [orders, tab, search, sortNewest]);
 
@@ -106,19 +116,14 @@ export default function OrdersIndex(): React.ReactElement {
         setSelected([]);
     };
 
-    const removeSelected = () => {
-        setOrders((current) => current.filter((order) => !selected.includes(order.id)));
+    const hideSelected = () => {
+        setHidden((current) => [...current, ...selected]);
         leaveSelectMode();
     };
 
     return (
         <>
-            <Head title="My Orders">
-                <link
-                    rel="stylesheet"
-                    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-                />
-            </Head>
+            <Head title="My Orders" />
 
             <div className="min-h-screen bg-[#f5f5f5] pb-[150px]">
                 <ListTopBar
@@ -138,10 +143,15 @@ export default function OrdersIndex(): React.ReactElement {
                     deleteActive={selectMode}
                 />
 
-                <p className="px-4 pt-3 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                    Sample data · layout preview
-                    {!sortNewest ? " · oldest first" : ""}
-                </p>
+                {limit > 0 && loaded.length >= limit ? (
+                    <p className="px-4 pt-3 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                        Newest {limit} orders{!sortNewest ? " · oldest first" : ""}
+                    </p>
+                ) : !sortNewest ? (
+                    <p className="px-4 pt-3 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                        Oldest first
+                    </p>
+                ) : null}
 
                 <main className="space-y-3 p-2.5">
                     {visible.map((order) => {
@@ -208,15 +218,18 @@ export default function OrdersIndex(): React.ReactElement {
                                     </span>
                                 </div>
 
-                                {/* Reference */}
-                                <div className="flex items-center space-x-1">
+                                {/* Reference — opens the order's custody log */}
+                                <Link
+                                    href={route("seller.orders.custody", { reference: order.reference })}
+                                    className="flex items-center space-x-1"
+                                >
                                     <h2 className="font-mono text-[12px] font-bold text-[#111]">
                                         {order.reference}
                                     </h2>
                                     <span className="material-symbols-outlined text-[15px] text-gray-500">
                                         chevron_right
                                     </span>
-                                </div>
+                                </Link>
 
                                 {/* Lines */}
                                 <div className="space-y-2.5">
@@ -265,6 +278,19 @@ export default function OrdersIndex(): React.ReactElement {
                                                 <div className="flex items-center space-x-2">
                                                     <button
                                                         type="button"
+                                                        onClick={() => {
+                                                            const next = window.prompt(
+                                                                "Delivery address",
+                                                                order.destination.address,
+                                                            );
+                                                            if (next !== null && next.trim() !== "") {
+                                                                router.patch(
+                                                                    route("seller.orders.address", { reference: order.reference }),
+                                                                    { delivery_address: next.trim() },
+                                                                    { preserveScroll: true },
+                                                                );
+                                                            }
+                                                        }}
                                                         className="rounded-[999px] border border-gray-800 bg-white px-4 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50 active:scale-95"
                                                     >
                                                         Edit address
@@ -304,6 +330,18 @@ export default function OrdersIndex(): React.ReactElement {
                                                 style={{ backgroundColor: BRAND }}
                                             >
                                                 Start pick &amp; pack
+                                            </Link>
+                                        ) : null}
+
+                                        {["to_deliver", "delivered", "canceled"].includes(order.stage) ? (
+                                            <Link
+                                                href={route("seller.orders.custody", { reference: order.reference })}
+                                                className="flex items-center gap-1 rounded-[999px] border border-gray-800 bg-white px-4 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50 active:scale-95"
+                                            >
+                                                <span className="material-symbols-outlined text-[15px]">
+                                                    {order.stage === "to_deliver" ? "local_shipping" : "receipt_long"}
+                                                </span>
+                                                {order.stage === "to_deliver" ? "Track delivery" : "Custody log"}
                                             </Link>
                                         ) : null}
 
@@ -365,11 +403,11 @@ export default function OrdersIndex(): React.ReactElement {
                         </span>
                         <button
                             type="button"
-                            onClick={removeSelected}
+                            onClick={hideSelected}
                             disabled={selected.length === 0}
                             className="rounded-[999px] bg-rose-600 px-4 py-1.5 text-[12px] font-bold text-white disabled:opacity-40"
                         >
-                            Remove
+                            Hide
                         </button>
                     </div>
                 </div>

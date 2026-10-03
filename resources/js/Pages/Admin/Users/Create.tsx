@@ -7,15 +7,20 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
 
-const ROLES = ['admin', 'seller', 'stock_keeper', 'user'];
+interface Props {
+    /** Every role that exists (spatie roles table). */
+    roles?: string[];
+    stores?: Array<{ id: number; name: string }>;
+}
 
-export default function CreateUser() {
+export default function CreateUser({ roles = [], stores = [] }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         first_name: '',
         last_name: '',
         email: '',
         phone_number: '',
         role: 'user',
+        store_id: '' as number | '',
         password: '',
         password_confirmation: '',
     });
@@ -71,9 +76,25 @@ export default function CreateUser() {
                                 fullWidth select label="Role"
                                 value={data.role}
                                 onChange={e => setData('role', e.target.value)}
+                                error={!!errors.role}
+                                helperText={errors.role}
                             >
-                                {ROLES.map(role => (
+                                {roles.map(role => (
                                     <MenuItem key={role} value={role}>{role.replace('_', ' ')}</MenuItem>
+                                ))}
+                            </TextField>
+                        </Grid>
+                        <Grid size={{ xs: 12 }}>
+                            <TextField
+                                fullWidth select label="Store"
+                                value={data.store_id}
+                                onChange={e => setData('store_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                error={!!errors.store_id}
+                                helperText={errors.store_id ?? 'Sellers and stock keepers work at one store; leave empty for roles that cover all of them.'}
+                            >
+                                <MenuItem value="">No store</MenuItem>
+                                {stores.map(store => (
+                                    <MenuItem key={store.id} value={store.id}>{store.name}</MenuItem>
                                 ))}
                             </TextField>
                         </Grid>

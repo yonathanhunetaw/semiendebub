@@ -11,16 +11,25 @@ interface User {
     last_name: string | null;
     email: string;
     phone_number: string | null;
+    /** The role key (stock_keeper), not its display form. */
     role: string;
+    store_id: number | null;
 }
 
-export default function EditUser({ user }: { user: User }) {
+interface Props {
+    user: User;
+    roles?: string[];
+    stores?: Array<{ id: number; name: string }>;
+}
+
+export default function EditUser({ user, roles = [], stores = [] }: Props) {
     const { data, setData, put, processing, errors } = useForm({
         first_name: user.first_name,
         last_name: user.last_name || '',
         email: user.email,
         phone_number: user.phone_number || '',
         role: user.role,
+        store_id: (user.store_id ?? '') as number | '',
         password: '',
         password_confirmation: '',
     });
@@ -69,9 +78,22 @@ export default function EditUser({ user }: { user: User }) {
                             <TextField
                                 fullWidth select label="Role" value={data.role}
                                 onChange={e => setData('role', e.target.value)}
+                                error={!!errors.role} helperText={errors.role}
                             >
-                                {['admin', 'seller', 'stock_keeper', 'user'].map(r => (
-                                    <MenuItem key={r} value={r}>{r}</MenuItem>
+                                {roles.map(r => (
+                                    <MenuItem key={r} value={r}>{r.replace('_', ' ')}</MenuItem>
+                                ))}
+                            </TextField>
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                            <TextField
+                                fullWidth select label="Store" value={data.store_id}
+                                onChange={e => setData('store_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                error={!!errors.store_id} helperText={errors.store_id}
+                            >
+                                <MenuItem value="">No store</MenuItem>
+                                {stores.map(store => (
+                                    <MenuItem key={store.id} value={store.id}>{store.name}</MenuItem>
                                 ))}
                             </TextField>
                         </Grid>

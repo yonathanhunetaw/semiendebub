@@ -31,11 +31,15 @@ class UserController extends Controller
      */
     public function create()
     {
-        return Inertia::render('Admin/Users/Create');
+        return Inertia::render('Admin/Users/Create', $this->formOptions());
     }
 
     /**
      * Store a newly created user in storage.
+     *
+     * The role is both written to the column and assigned as the access role,
+     * because the subdomain gates read the assignment (User::roleKey()). A user
+     * with only the column set could not get into their own app.
      */
     public function store(Request $request)
     {
@@ -44,25 +48,17 @@ class UserController extends Controller
             'last_name' => 'nullable|string|max:255',
             'email' => 'required|email|unique:users',
             'phone_number' => 'nullable|string|max:20',
-            'role' => 'nullable|string|in:admin,seller,stock_keeper,user',
+            'role' => ['required', 'string', \Illuminate\Validation\Rule::in($this->roleNames())],
+            'store_id' => 'nullable|integer|exists:stores,id',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
-        // Add 'created_by' field as the current authenticated user
-        $validatedData['created_by'] = auth()->id(); // Set the current user as the creator
+        $validatedData['created_by'] = auth()->id();
 
         $user = User::create($validatedData);
+        $user->syncRoles([$validatedData['role']]);
 
-        // Dispatch the custom event after the user is created
         event(new UserCreated($user));
-
-        // Fire the event
-        // UserCreated::dispatch($user);
-        // Testing purpuses
-        // $telegramService = new TelegramService();
-        // $telegramService->sendMessage("Test message");
-
-        Log::info('Firing UserCreated event...');
 
         return redirect()->route('admin.users.index')->with('success', 'User created successfully.');
     }
@@ -72,10 +68,9 @@ class UserController extends Controller
      */
     public function show(User $user)
     {
-        $users = User::with('creator')->get();
-
+        // This used to load every user and pass the collection as "the user".
         return Inertia::render('Admin/Users/Show', [
-            'user' => $users->load('creator')
+            'user' => $user->load(['creator', 'store']),
         ]);
     }
 
@@ -84,67 +79,57 @@ class UserController extends Controller
      */
     public function edit(User $user)
     {
-
-        // Log the raw role value and the old value being used for comparison
-        Log::info('Raw Role Value:', ['role' => $user->role]);
-        Log::info('Old Role Value in Form:', ['old_role' => old('role', $user->role)]);
-
-        return Inertia::render('Admin/Users/Edit', [
-            'user' => $user
+        return Inertia::render('Admin/Users/Edit', $this->formOptions() + [
+            // role_key, not role: the latter is the display form ("Stock
+            // Keeper"), which matches no option and failed validation on save.
+            'user' => $user->only(['id', 'first_name', 'last_name', 'email', 'phone_number', 'store_id']) + [
+                'role' => $user->roleKey(),
+            ],
         ]);
     }
 
     /**
      * Update the specified user in storage.
+     *
+     * A role change is also an access change: the assignment is synced, or the
+     * user kept their old role everywhere that matters.
      */
     public function update(Request $request, User $user)
     {
-        // Log the incoming request data
-        Log::info('Updating user data', ['request' => $request->all()]);
-
-        // Validate non-password fields first
         $validatedData = $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'nullable|string|max:255',
-            'phone_number' => 'required|string|max:20',
-            'email' => 'required|email|unique:users,email,'.$user->id,  // Unique email number
-            'role' => 'required|string|in:admin,seller,stock_keeper,user',
+            'phone_number' => 'nullable|string|max:20',
+            'email' => 'required|email|unique:users,email,'.$user->id,
+            'role' => ['required', 'string', \Illuminate\Validation\Rule::in($this->roleNames())],
+            'store_id' => 'nullable|integer|exists:stores,id',
         ]);
 
-        // Check if any of the non-password data has changed before updating
-        $changes = false;
-        $userAttributes = ['first_name', 'last_name', 'phone_number', 'email', 'role'];
-
-        foreach ($userAttributes as $attribute) {
-            // Use the form input or default to the existing user data
-            $newValue = $request->input($attribute, $user->$attribute);
-
-            if (strtolower($user->$attribute) !== strtolower($newValue)) {
-                $changes = true;
-                Log::info("Detected change in field {$attribute}", ['old' => $user->$attribute, 'new' => $newValue]);
-            }
-        }
-
-        // If the password is provided, validate it
         if ($request->filled('password')) {
             $validatedData['password'] = $request->validate([
                 'password' => 'required|string|min:8|confirmed',
-            ])['password']; // Add validated password to the update array
-            $changes = true;  // Password change is considered as a change
+            ])['password'];
         }
 
-        // If changes were made, save the user
-        if ($changes) {
-            Log::info('Changes were made');
-            // Update the user if changes exist
-            $user->update($validatedData);
+        $user->update($validatedData);
+        $user->syncRoles([$validatedData['role']]);
 
-            return redirect()->route('admin.users.index')->with('success', 'User updated successfully.');
-        } else {
-            Log::info('No changes detected, no update performed');
+        return redirect()->route('admin.users.index')->with('success', 'User updated successfully.');
+    }
 
-            return redirect()->route('admin.users.index')->with('info', 'No changes were made.');
-        }
+    /** @return array<int, string> every role that exists */
+    private function roleNames(): array
+    {
+        return \Spatie\Permission\Models\Role::query()->orderBy('name')->pluck('name')->all();
+    }
+
+    /** @return array<string, mixed> */
+    private function formOptions(): array
+    {
+        return [
+            'roles' => $this->roleNames(),
+            'stores' => \App\Models\Store\Store::query()->orderBy('name')->get(['id', 'name']),
+        ];
     }
 
     /**

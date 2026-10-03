@@ -245,9 +245,8 @@ class ItemVariant extends Model
 
     public function stockAtLocation(string $locationType, int $locationId): int
     {
-        return $this->stocks()
-            ->where('location_type', $locationType)
-            ->where('location_id', $locationId)
+        return (int) $this->stocks()
+            ->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->leafIds($locationType, $locationId))
             ->sum('quantity');
     }
 

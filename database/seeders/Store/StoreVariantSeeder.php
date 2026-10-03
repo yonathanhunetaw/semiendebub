@@ -5,13 +5,27 @@ namespace Database\Seeders\Store;
 use App\Models\Auth\Customer;
 use App\Models\Auth\User;
 use App\Models\Item\ItemVariant;
-use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\StoreVariant;
 use App\Models\Store\Store;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Deploys the catalogue into each store: one `store_variants` row per variant a
+ * store carries, plus its prices.
+ *
+ * It no longer writes `item_stocks`. Stock is the ledger of record and has one
+ * owner, Database\Seeders\Inventory\StockLedgerSeeder — this seeder wrote store
+ * rows only, in flat random quantities with no idea whether a variant was a
+ * carton or a piece, and never touched a shop floor.
+ *
+ * Coverage is now every variant of every item linked to the store through
+ * `item_store`. It used to produce 13 rows for one store out of 1,629 variants
+ * across three, so the seller and storefront catalogues were all but empty while
+ * the stock ledger held a row for every variant at every store — the exact
+ * disagreement that made each role report a different figure.
+ */
 class StoreVariantSeeder extends Seeder
 {
     /**
@@ -45,7 +59,6 @@ class StoreVariantSeeder extends Seeder
             $customers = $createCustomerPrices ? Customer::where('store_id', $store->id)->get() : collect();
 
             $storeVariantsData = [];
-            $stocksData = [];
             
             foreach ($variants as $variant) {
                 // Calculate base price for this variant
@@ -78,26 +91,11 @@ class StoreVariantSeeder extends Seeder
                     'updated_at' => $now,
                 ];
 
-                // Prepare stock data
-                $stocksData[] = [
-                    'item_variant_id' => $variant->id,
-                    'location_id' => $store->id,
-                    'location_type' => Store::class,
-                    'quantity' => rand(5, 50),
-                    'min_stock_level' => 5,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
             }
 
             // Batch insert store variants (ignore duplicates)
-            foreach (array_chunk($storeVariantsData, 100) as $chunk) {
+            foreach (array_chunk($storeVariantsData, 500) as $chunk) {
                 DB::table('store_variants')->upsert($chunk, ['store_id', 'item_variant_id'], ['pricing_matrix', 'active', 'manual_status', 'updated_at']);
-            }
-
-            // Batch insert stocks
-            foreach (array_chunk($stocksData, 100) as $chunk) {
-                DB::table('item_stocks')->upsert($chunk, ['item_variant_id', 'location_id', 'location_type'], ['quantity', 'min_stock_level', 'updated_at']);
             }
 
             // Optional seller/customer prices – run only for small subsets to avoid explosion
@@ -170,7 +168,13 @@ class StoreVariantSeeder extends Seeder
                 $this->command->info("  └─ Individual prices seeded: " . count($individualPriceData));
             }
 
-            $this->command->info("Finished store {$store->id}: created " . count($storeVariantsData) . " store variants.");
+            // Counted back from the table, not from the array we meant to
+            // write: the figure that mattered was always how many rows exist.
+            $deployed = DB::table('store_variants')->where('store_id', $store->id)->count();
+
+            $this->command->info(
+                "Finished store {$store->id}: {$deployed} of " . count($storeVariantsData) . ' variants deployed.'
+            );
         }
     }
 

@@ -68,6 +68,15 @@ class ShipmentController extends Controller
             'counts' => $this->statusCounts(),
             'filters' => ['status' => $status],
             'stores' => Store::query()->orderBy('name')->get(['id', 'name', 'location']),
+            // Freight runs from a Main Hub to a store floor or a Remote Hub.
+            'origins' => \App\Models\Inventory\StockLocation::query()
+                ->ofKind(\App\Models\Inventory\StockLocation::KIND_MAIN_HUB)->orderBy('name')->get(['id', 'name'])
+                ->map(fn ($l) => ['id' => (int) $l->id, 'name' => $l->name])->values(),
+            'destinations' => \App\Models\Inventory\StockLocation::query()
+                ->ofKind(\App\Models\Inventory\StockLocation::KIND_BACKROOM, \App\Models\Inventory\StockLocation::KIND_REMOTE_HUB)
+                ->with('store')->get()
+                ->map(fn ($l) => ['id' => (int) $l->id, 'name' => $l->kind === 'backroom' ? (($l->store?->name ?? $l->name).' — Store') : ($l->name.' — Remote Hub')])
+                ->sortBy('name')->values(),
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
@@ -87,9 +96,9 @@ class ShipmentController extends Controller
     public function store(StoreShipmentRequest $request): RedirectResponse
     {
         try {
-            $shipment = $this->workflow->create(
-                (int) $request->validated('origin_store_id'),
-                (int) $request->validated('destination_store_id'),
+            $shipment = $this->workflow->createBetween(
+                $request->originLocation(),
+                $request->destinationLocation(),
                 collect($request->validated())
                     ->only(['scheduled_for', 'schedule_options', 'vehicle_name', 'vehicle_plate', 'vehicle_max_cbm', 'distance_km', 'slot', 'notes'])
                     ->filter(fn ($v) => $v !== null)
@@ -97,7 +106,7 @@ class ShipmentController extends Controller
                 Auth::id(),
             );
         } catch (\InvalidArgumentException $e) {
-            return back()->withErrors(['destination_store_id' => $e->getMessage()]);
+            return back()->withErrors(['destination_location_id' => $e->getMessage()]);
         }
 
         return redirect()
@@ -197,7 +206,7 @@ class ShipmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "Handed over — stock deducted from {$shipment->origin?->name}.");
+        return back()->with('success', "Handed to the courier — stock left {$shipment->originLocation?->name}.");
     }
 
     /**
@@ -215,6 +224,6 @@ class ShipmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "Received — stock credited to {$shipment->destination?->name}.");
+        return back()->with('success', "Received — stock credited to {$shipment->destinationLocation?->name}.");
     }
 }

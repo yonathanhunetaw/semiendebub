@@ -30,10 +30,30 @@ class InventoryController extends Controller
         $locationType = $request->string('location_type')->toString() ?: null;
         $locationId = $request->integer('location_id') ?: null;
 
-        $paginator = $this->stock->paginateStock($search !== '' ? $search : null, $locationType, $locationId);
+        /*
+         * Items, not ledger rows.
+         *
+         * This screen used to list `item_stocks` directly — one row per variant
+         * per location, 4,907 of them — and headline a distinct variant count,
+         * so a desk holding 182 products read "1,629 variants". It now lists one
+         * row per item, in that location's own units, with the variant rows
+         * underneath for the receive and recount actions, which are always
+         * written against a variant.
+         */
+        $page = $request->integer('page') ?: 1;
+
+        $items = $this->stock->paginateItems(
+            $search !== '' ? $search : null,
+            $locationType,
+            $locationId,
+            $page,
+        );
 
         return Inertia::render('StockKeeper/Inventory/index', [
-            'stock' => collect($paginator->items())
+            'items' => $items['rows'],
+            // The variant-level ledger, still available and still paginated,
+            // for the keeper who needs the row behind a figure.
+            'stock' => collect($this->stock->paginateStock($search !== '' ? $search : null, $locationType, $locationId)->items())
                 ->map(fn (ItemStock $row) => $this->stock->presentStockRow($row))
                 ->values()
                 ->all(),
@@ -44,12 +64,26 @@ class InventoryController extends Controller
                 'location_type' => $locationType,
                 'location_id' => $locationId,
             ],
-            'metrics' => $this->stock->metrics(),
+            'metrics' => $this->stock->metrics($locationType, $locationId),
             'pagination' => [
-                'current_page' => $paginator->currentPage(),
-                'last_page' => $paginator->lastPage(),
-                'total' => $paginator->total(),
+                'current_page' => $items['page'],
+                'last_page' => $items['last_page'],
+                'total' => $items['total_items'],
             ],
+        ]);
+    }
+
+    /**
+     * The variant rows behind one item, fetched when a row is expanded.
+     */
+    public function variants(Request $request, int $item): \Illuminate\Http\JsonResponse
+    {
+        return response()->json([
+            'variants' => $this->stock->variantsForItem(
+                $item,
+                $request->string('location_type')->toString() ?: null,
+                $request->integer('location_id') ?: null,
+            ),
         ]);
     }
 

@@ -22,7 +22,12 @@ export interface UseStorefrontCart {
     ) => void;
     updateQuantity: (line: StorefrontCartLine, quantity: number) => void;
     removeLine: (line: StorefrontCartLine) => void;
-    checkout: () => void;
+    /**
+     * `acceptDelay` is the buyer agreeing to wait for lines that can only be
+     * sent from a main warehouse. The server refuses checkout without it when
+     * the cart holds any, so it is a value rather than a dismissed notice.
+     */
+    checkout: (acceptDelay?: boolean) => void;
     notice: string | null;
     dismissNotice: () => void;
 }
@@ -110,12 +115,12 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
      * Guests are redirected to sign in; the cart survives because it is keyed
      * to the pre-login session id and merged into the account server-side.
      */
-    const checkout = (): void => {
+    const checkout = (acceptDelay: boolean = false): void => {
         setIsMutating(true);
 
         router.post(
             route("storefront.checkout"),
-            {},
+            { accept_delayed_items: acceptDelay },
             { preserveScroll: true, onFinish: () => setIsMutating(false) },
         );
     };

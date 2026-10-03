@@ -136,6 +136,33 @@ export interface StorefrontCartLine {
     available_stock: number;
 }
 
+/**
+ * One bucket of the cart: the lines that would all be served from the same
+ * kind of location.
+ *
+ * Mirrors App\Services\Fulfillment\OrderSourcingService::groupCart(). `key` is
+ * a node kind from MovementDomainService — shelf, backroom, store,
+ * remote_warehouse, main_warehouse — ordered nearest to the shopper first.
+ */
+export interface StorefrontSourcingGroup {
+    key: string;
+    /** e.g. "Store Shelf", "Main Warehouse". */
+    label: string;
+    location_name: string;
+    /** e.g. "Available today" / "Available tomorrow". */
+    promise: string;
+    /** True for a hub group: the buyer must accept the wait before paying. */
+    requires_agreement: boolean;
+    lines: Array<{
+        variant_id: number;
+        title: string;
+        sku: string | null;
+        quantity: number;
+        available_here: number;
+        fully_covered: boolean;
+    }>;
+}
+
 export interface StorefrontCart {
     id: number | null;
     lines: StorefrontCartLine[];
@@ -144,6 +171,11 @@ export interface StorefrontCart {
     subtotal: number;
     /** True while the cart is keyed to a session rather than a user account. */
     is_guest: boolean;
+    /** Lines bucketed by the closest location that can serve them. */
+    sourcing_groups: StorefrontSourcingGroup[];
+    /** True when any line can only come from a main warehouse. */
+    requires_delay_agreement: boolean;
+    delayed_line_count: number;
 }
 
 /* ----------------------------------------------------------

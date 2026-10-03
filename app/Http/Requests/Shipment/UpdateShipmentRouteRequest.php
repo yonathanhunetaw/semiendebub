@@ -14,6 +14,8 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class UpdateShipmentRouteRequest extends FormRequest
 {
+    use Concerns\ResolvesShipmentEnds;
+
     public function authorize(): bool
     {
         return $this->user() !== null;
@@ -25,10 +27,10 @@ class UpdateShipmentRouteRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'origin_location_id' => ['nullable', 'integer', 'exists:stock_locations,id'],
+            'destination_location_id' => ['nullable', 'integer', 'exists:stock_locations,id'],
             'origin_store_id' => ['nullable', 'integer', 'exists:stores,id'],
-            'destination_store_id' => [
-                'nullable', 'integer', 'exists:stores,id', 'different:origin_store_id',
-            ],
+            'destination_store_id' => ['nullable', 'integer', 'exists:stores,id'],
         ];
     }
 

@@ -66,9 +66,17 @@ class PartyAgreementGateTest extends TestCase
             'name' => 'Warehouse A',
             'type' => Store::TYPE_CENTRAL_WAREHOUSE,
         ]);
+        /*
+         * The receiving dock is warehouse-class.
+         *
+         * A shipment is bulk freight between structural nodes, so a retail store
+         * can no longer be an endpoint — a run into a shop floor or back room is a
+         * Transfer. The four-party gate under test is unaffected by which kind of
+         * facility receives; only the leg's legality is.
+         */
         $this->destination = Store::factory()->create([
-            'name' => 'Main Store',
-            'type' => Store::TYPE_RETAIL,
+            'name' => 'Kality Depot',
+            'type' => Store::TYPE_REMOTE_WAREHOUSE,
         ]);
 
         $this->creator = $this->user('admin', null);

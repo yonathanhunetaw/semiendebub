@@ -110,6 +110,17 @@ export interface StockLocation {
     stock: number;
     /** True when the figure is the remainder of another, not its own ledger. */
     derived: boolean;
+    /**
+     * The same figure spoken in this item's own packaging, already in the mode
+     * this location is read in — the shelf in its smallest unit ("47 Packets"),
+     * everywhere else biggest first ("30 Cartons · 17 Pieces").
+     *
+     * Formatted server-side by App\Services\Inventory\PackagingLadder, so every
+     * screen says the same thing about the same stock.
+     */
+    display?: string;
+    display_mode?: "breakdown" | "smallest";
+    units?: { unit: string; count: number; pieces: number }[];
 }
 
 export interface InventoryItem {
@@ -755,7 +766,7 @@ export function EditDrawer({
  */
 const REPLENISH_SOURCES: { value: string; label: string }[] = [
     { value: "store_room", label: "Store Room (shelf fill)" },
-    { value: "remote_warehouse", label: "Remote Warehouse" },
+    { value: "remote_warehouse", label: "Remote Hub" },
 ];
 
 /** The readable name of a replenishment source, for toasts and hints. */
@@ -782,13 +793,21 @@ type StockLocationKey = "shelf" | "store_room" | "remote_warehouse";
  * rather than a shelf figure invented from a percentage.
  */
 function storeFallbackLocations(item: InventoryItem): StockLocation[] {
+    // No ladder is available on these payloads, so the figures stay in pieces.
     return [
-        { key: "store_room", label: "In Store", stock: item.total_stock, derived: false },
+        {
+            key: "store_room",
+            label: "In Store",
+            stock: item.total_stock,
+            derived: false,
+            display: `${item.total_stock.toLocaleString()} pcs`,
+        },
         {
             key: "remote_warehouse",
-            label: "Remote Warehouse",
+            label: "Remote Hub",
             stock: item.remote_total_stock,
             derived: false,
+            display: `${item.remote_total_stock.toLocaleString()} pcs`,
         },
     ];
 }
@@ -886,15 +905,31 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
         remote_warehouse: { tone: "primary.main", icon: <WarehouseIcon sx={{ fontSize: 13 }} /> },
     };
 
-    const pillLocations: { key: string; label: string; count: number; tone: string; icon: React.ReactNode }[] = [
+    const pillLocations: {
+        key: string;
+        label: string;
+        count: number;
+        /** Server-formatted, in this location's own reading order. */
+        display: string;
+        tone: string;
+        icon: React.ReactNode;
+    }[] = [
         ...locations.map((l) => ({
             key: l.key,
             label: l.label,
             count: l.stock,
+            display: l.display ?? `${l.stock.toLocaleString()} pcs`,
             tone: LOCATION_STYLE[l.key]?.tone ?? "grey.500",
             icon: LOCATION_STYLE[l.key]?.icon ?? <CloudQueueIcon sx={{ fontSize: 13 }} />,
         })),
-        { key: "all", label: "All Locations", count: allStock, tone: "grey.900", icon: <PublicIcon sx={{ fontSize: 13 }} /> },
+        {
+            key: "all",
+            label: "All Locations",
+            count: allStock,
+            display: `${allStock.toLocaleString()} pcs`,
+            tone: "grey.900",
+            icon: <PublicIcon sx={{ fontSize: 13 }} />,
+        },
     ];
 
     const selectedLabels = pillLocations
@@ -960,13 +995,19 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                                         {l.label}
                                     </Typography>
                                 </Stack>
-                                <Typography sx={{ fontWeight: 800, fontFamily: "monospace", fontSize: "0.85rem", mt: 0.25 }}>
-                                    {l.count}
-                                    <Typography component="span"
-                                        sx={{ fontSize: "0.6rem", fontWeight: 400, ml: 0.5,
-                                            color: active ? "rgba(255,255,255,0.6)" : "text.secondary" }}>
-                                        pcs
-                                    </Typography>
+                                {/*
+                                  The figure in this location's own units. A shelf
+                                  reads "47 Packets", a store room "30 Cartons ·
+                                  17 Pieces" — the piece count stays underneath so
+                                  the two are reconcilable.
+                                */}
+                                <Typography sx={{ fontWeight: 800, fontSize: "0.78rem", mt: 0.25, lineHeight: 1.2 }}>
+                                    {l.display}
+                                </Typography>
+                                <Typography
+                                    sx={{ fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 400,
+                                        color: active ? "rgba(255,255,255,0.6)" : "text.secondary" }}>
+                                    {l.count.toLocaleString()} pcs
                                 </Typography>
                             </Paper>
                         );

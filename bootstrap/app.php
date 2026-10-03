@@ -51,6 +51,31 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         Integration::handles($exceptions);
 
+        /*
+         * The stock gateway refuses a move a location cannot cover rather than
+         * clamping it (STOCK_PLAN.md §3.1). On a web form that is a user
+         * mistake, not a crash: send them back with the reason. JSON callers
+         * get a 422. Not reported — it is an expected business refusal.
+         */
+        $exceptions->dontReport(\App\Exceptions\InsufficientStockException::class);
+        $exceptions->dontReport(\App\Exceptions\MovementDomainException::class);
+        // A movement-rule refusal (wrong domain, no courier, not a manager of
+        // that location) is the same kind of answer.
+        $exceptions->render(function (\App\Exceptions\MovementDomainException $e, Request $request) {
+            if ($request->expectsJson() && ! $request->header('X-Inertia')) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
+            return back()->with('error', $e->getMessage());
+        });
+        $exceptions->render(function (\App\Exceptions\InsufficientStockException $e, Request $request) {
+            if ($request->expectsJson() && ! $request->header('X-Inertia')) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
+            return back()->with('error', $e->getMessage());
+        });
+
         $exceptions->context(function (): array {
             // 🛑 Check if the 'request' binding exists in the container
             if (!app()->bound('request')) {

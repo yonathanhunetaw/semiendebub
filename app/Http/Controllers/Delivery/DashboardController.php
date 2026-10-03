@@ -42,6 +42,7 @@ class DashboardController extends Controller
         $availableRuns = Delivery::query()
             ->with('sale')
             ->unassigned()
+            ->readyToCollect()
             ->where('status', DeliveryService::STATUS_PENDING)
             ->orderBy('scheduled_for')
             ->limit(5)

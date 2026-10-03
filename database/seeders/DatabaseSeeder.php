@@ -16,6 +16,8 @@ use Database\Seeders\Store\StoreSeeder;
 use Database\Seeders\Store\StoreVariantSeeder;
 use Database\Seeders\Seller\CartSeeder;
 use Database\Seeders\User\UserSeeder;
+use Database\Seeders\Inventory\StockLedgerSeeder;
+use Database\Seeders\Inventory\StockLocationSeeder;
 use Database\Seeders\Inventory\WarehouseSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -73,6 +75,22 @@ class DatabaseSeeder extends Seeder
             // built around. It also has to run after the item seeders, because
             // stocking a warehouse needs variants to stock it with.
             FacilitySeeder::class,
+
+            // The one location tree builds itself from the rows above through
+            // model events; this only adds what nothing derives — Main Store's
+            // Remote Hub.
+            StockLocationSeeder::class,
+
+            /*
+             * item_stocks — the ledger of record — in one place, and last.
+             *
+             * It needs every location to exist first (stores, their shop floors
+             * and back rooms, the off-site warehouses and the hub facilities)
+             * and every variant to exist to be booked against. Three seeders
+             * used to write this table with three different notions of a
+             * quantity, and none of them ever stocked a shop floor.
+             */
+            StockLedgerSeeder::class,
 
             // Inter-store freight. Needs stores, users (for the creator, courier
             // and keeper on each agreement ledger) and stock at the origins, so

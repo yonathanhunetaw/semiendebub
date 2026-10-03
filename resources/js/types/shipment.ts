@@ -47,6 +47,8 @@ export interface PartyAgreement {
     detail: string;
     /** The window this party accepted, or null while pending. */
     agreed_time: string | null;
+    /** The person who ticked this party, when someone has. */
+    actor?: string | null;
 }
 
 export type PartyAgreements = Record<PartyKey, PartyAgreement>;
@@ -166,6 +168,10 @@ export interface AdminShipmentIndexProps extends SharedProps {
     counts: Record<string, number>;
     filters: { status: string };
     stores: StoreOption[];
+    /** Main Hubs A/B — where freight leaves from. */
+    origins?: Array<{ id: number; name: string }>;
+    /** Store floors and Remote Hubs — where freight can land. */
+    destinations?: Array<{ id: number; name: string }>;
     pagination: Pagination;
 }
 

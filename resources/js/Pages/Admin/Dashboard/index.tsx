@@ -17,6 +17,12 @@ interface LowStockItem {
     store_name: string;
     total_stock: number;
     low_stock_total: number;
+    /** The packaging the figure is counted in, e.g. "Carton". */
+    unit?: string;
+    /** The same figure converted to pieces. */
+    pieces?: number;
+    /** Server-formatted, e.g. "11 Cartons". */
+    display?: string;
 }
 
 interface PaginationMeta {
@@ -344,7 +350,9 @@ export default function Dashboard({
                                     </Box>
                                     <Stack direction="row" spacing={2} alignItems="center" sx={{ flexShrink: 0 }}>
                                         <Typography variant="body2" color="text.secondary">
-                                            Remaining: {item.total_stock}
+                                            {/* Named, because 11 cartons and 11
+                                                pieces are not the same crisis. */}
+                                            Remaining: {item.display ?? item.total_stock}
                                         </Typography>
                                         <Chip label="Refill Needed" size="small" color="error" variant="outlined" />
                                     </Stack>

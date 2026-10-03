@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Auth\User;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Fulfillment\ShipmentItem;
+use App\Models\Inventory\StockLocation;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
@@ -108,8 +109,12 @@ class ShipmentWorkflowService
         'delivery' => [self::IN_TRANSIT, self::DELIVERED],
     ];
 
-    public function __construct(private readonly StockKeeperService $stock)
-    {
+    public function __construct(
+        private readonly StockKeeperService $stock,
+        private readonly \App\Services\Fulfillment\MovementDomainService $domain,
+        private readonly StockService $ledger,
+        private readonly \App\Services\Inventory\StockScope $scope,
+    ) {
     }
 
     /*
@@ -119,15 +124,38 @@ class ShipmentWorkflowService
     */
 
     /**
-     * Open a draft shipment between two stores.
+     * Open a draft shipment between two structural nodes.
+     *
+     * A shipment is bulk freight: Warehouse A to Warehouse B, or a warehouse to
+     * a remote warehouse. A leg with a retail store at either end is localized
+     * balancing and belongs to the Transfer domain, so it is refused here rather
+     * than quietly accepted and then presented as freight.
      *
      * @param  array<string, mixed>  $attributes
+     *
+     * @throws \App\Exceptions\MovementDomainException when either end is store-level
      */
     public function create(int $originStoreId, int $destinationStoreId, array $attributes = [], ?int $createdBy = null): Shipment
     {
         if ($originStoreId === $destinationStoreId) {
-            throw new \InvalidArgumentException('Origin and destination must be different stores.');
+            throw new \InvalidArgumentException('Origin and destination must be different places.');
         }
+
+        return $this->createBetween($this->endFor($originStoreId), $this->endFor($destinationStoreId), $attributes, $createdBy);
+    }
+
+    /**
+     * Open a draft shipment from a Main Hub to a store floor or a Remote Hub
+     * (STOCK_PLAN.md phase 4). Delivery carries it: the origin hands the load
+     * to the courier at dispatch, and the courier hands it to the destination.
+     *
+     * @param  array<string, mixed>  $attributes
+     *
+     * @throws \App\Exceptions\MovementDomainException when the ends break the rule
+     */
+    public function createBetween(StockLocation $origin, StockLocation $destination, array $attributes = [], ?int $createdBy = null): Shipment
+    {
+        $this->assertLocationLeg($origin, $destination);
 
         // The creator's primary slot plus any alternatives become the menu the
         // other three parties choose from.
@@ -146,8 +174,10 @@ class ShipmentWorkflowService
 
         $shipment = Shipment::create(array_merge([
             'reference' => $this->nextReference(),
-            'origin_store_id' => $originStoreId,
-            'destination_store_id' => $destinationStoreId,
+            'origin_store_id' => $this->storeIdFor($origin),
+            'destination_store_id' => $this->storeIdFor($destination),
+            'origin_stock_location_id' => $origin->id,
+            'destination_stock_location_id' => $destination->id,
             'status' => self::DRAFT,
             'created_by' => $createdBy,
         ], $attributes, [
@@ -351,7 +381,7 @@ class ShipmentWorkflowService
             }
         }
 
-        if ((int) $from->origin_store_id !== (int) $to->origin_store_id) {
+        if ((int) $from->origin_stock_location_id !== (int) $to->origin_stock_location_id) {
             throw new \RuntimeException('A line can only move between runs leaving the same origin.');
         }
 
@@ -387,7 +417,7 @@ class ShipmentWorkflowService
     {
         return $this->visibleQuery($user)
             ->whereKeyNot($shipment->id)
-            ->where('origin_store_id', $shipment->origin_store_id)
+            ->where('origin_stock_location_id', $shipment->origin_stock_location_id)
             ->whereIn('status', self::MANIFEST_OPEN_STATES)
             ->with('destination')
             ->orderByDesc('id')
@@ -395,7 +425,7 @@ class ShipmentWorkflowService
             ->map(fn (Shipment $target) => [
                 'id' => (int) $target->id,
                 'reference' => (string) $target->reference,
-                'destination' => (string) ($target->destination?->name ?? 'Unknown'),
+                'destination' => $this->endName($target->destinationLocation, $target->destination),
                 'scheduled_run' => $target->scheduled_for?->format('Y-m-d\TH:i'),
             ])
             ->values()
@@ -413,29 +443,37 @@ class ShipmentWorkflowService
      *
      * @throws \RuntimeException when the manifest is already locked
      */
-    public function reroute(Shipment $shipment, ?int $originStoreId, ?int $destinationStoreId): Shipment
-    {
+    public function reroute(
+        Shipment $shipment,
+        ?int $originStoreId,
+        ?int $destinationStoreId,
+        ?StockLocation $originLocation = null,
+        ?StockLocation $destinationLocation = null,
+    ): Shipment {
         if (! in_array($shipment->status, self::MANIFEST_OPEN_STATES, true)) {
             throw new \RuntimeException('The route is fixed once picking has started.');
         }
 
-        $origin = $originStoreId ?? (int) $shipment->origin_store_id;
-        $destination = $destinationStoreId ?? (int) $shipment->destination_store_id;
+        $origin = $originLocation
+            ?? ($originStoreId !== null ? $this->endFor($originStoreId) : $this->originLeaf($shipment));
+        $destination = $destinationLocation
+            ?? ($destinationStoreId !== null ? $this->endFor($destinationStoreId) : $this->destinationLeaf($shipment));
 
-        if ($origin === $destination) {
-            throw new \InvalidArgumentException('Origin and destination must be different stores.');
-        }
+        // Rerouting cannot turn freight into localized balancing.
+        $this->assertLocationLeg($origin, $destination);
 
-        $unchanged = $origin === (int) $shipment->origin_store_id
-            && $destination === (int) $shipment->destination_store_id;
+        $unchanged = (int) $origin->id === (int) $shipment->origin_stock_location_id
+            && (int) $destination->id === (int) $shipment->destination_stock_location_id;
 
         if ($unchanged) {
             return $shipment;
         }
 
         $shipment->update(array_merge([
-            'origin_store_id' => $origin,
-            'destination_store_id' => $destination,
+            'origin_store_id' => $this->storeIdFor($origin),
+            'destination_store_id' => $this->storeIdFor($destination),
+            'origin_stock_location_id' => $origin->id,
+            'destination_stock_location_id' => $destination->id,
         ], $this->withdrawnConsentPayload($shipment)));
 
         return $shipment->refresh();
@@ -582,19 +620,46 @@ class ShipmentWorkflowService
         }
 
         return DB::transaction(function () use ($shipment, $to, $extra) {
+            // Two people moving the same shipment at once must not both move
+            // its stock: re-read the status under a row lock.
+            $current = Shipment::query()->whereKey($shipment->id)->lockForUpdate()->value('status');
+
+            if ($current !== $shipment->status) {
+                throw new \RuntimeException("Shipment {$shipment->reference} changed while you were working on it. Reload and try again.");
+            }
+
             // Stock leaves the origin the moment the vehicle is dispatched.
+            // A location with managers is operated by them (and admins):
+            // they hand the load out of the origin and take it into the
+            // destination. Checked against the signed-in user, so every route
+            // into a dispatch or a receipt is covered.
+            // Each end works its own steps: the origin picks and hands over,
+            // the destination receives. A keeper at the receiving store must
+            // not mark the hub's load as picked or dispatched.
+            $this->assertActsForEnd($shipment, $to);
+
             if ($to === self::DISPATCHED) {
-                $this->moveManifest($shipment, (int) $shipment->origin_store_id, -1);
+                $this->assertMayOperate($this->originLeaf($shipment), 'hand stock out of');
             }
 
-            // ...and lands only when the destination confirms receipt.
             if ($to === self::RECEIVED) {
-                $this->moveManifest($shipment, (int) $shipment->destination_store_id, 1);
+                $this->assertMayOperate($this->destinationLeaf($shipment), 'take stock into');
             }
 
-            // Cancelling after dispatch puts the load back where it came from.
+            // The origin hands the load to the courier: it sits in Delivery's
+            // custody until handed over.
+            if ($to === self::DISPATCHED) {
+                $this->moveManifest($shipment, 'dispatch');
+            }
+
+            // ...and lands only when the destination takes it from the courier.
+            if ($to === self::RECEIVED) {
+                $this->moveManifest($shipment, 'receive');
+            }
+
+            // Cancelling after dispatch brings the load back where it came from.
             if ($to === self::CANCELLED && $this->hasLeftOrigin($shipment)) {
-                $this->moveManifest($shipment, (int) $shipment->origin_store_id, 1);
+                $this->moveManifest($shipment, 'return');
             }
 
             $payload = array_merge(['status' => $to], $extra);
@@ -749,7 +814,7 @@ class ShipmentWorkflowService
      */
     public function present(Shipment $shipment, ?string $role = null): array
     {
-        $shipment->loadMissing(['origin', 'destination', 'courier', 'creator', 'items.itemVariant.item']);
+        $shipment->loadMissing(['origin', 'destination', 'originLocation.store', 'destinationLocation.store', 'courier', 'creator', 'items.itemVariant.item']);
 
         return [
             'id' => (int) $shipment->id,
@@ -757,13 +822,15 @@ class ShipmentWorkflowService
             'status' => (string) $shipment->status,
             'origin' => [
                 'id' => (int) $shipment->origin_store_id,
-                'name' => (string) ($shipment->origin?->name ?? 'Unknown'),
-                'detail' => $shipment->origin?->location,
+                'location_id' => $shipment->origin_stock_location_id !== null ? (int) $shipment->origin_stock_location_id : null,
+                'name' => $this->endName($shipment->originLocation, $shipment->origin),
+                'detail' => $shipment->origin?->location ?? $shipment->originLocation?->address,
             ],
             'destination' => [
                 'id' => (int) $shipment->destination_store_id,
-                'name' => (string) ($shipment->destination?->name ?? 'Unknown'),
-                'detail' => $shipment->destination?->location,
+                'location_id' => $shipment->destination_stock_location_id !== null ? (int) $shipment->destination_stock_location_id : null,
+                'name' => $this->endName($shipment->destinationLocation, $shipment->destination),
+                'detail' => $shipment->destination?->location ?? $shipment->destinationLocation?->address,
             ],
             'vehicle_name' => $shipment->vehicle_name,
             'vehicle_plate' => $shipment->vehicle_plate,
@@ -816,6 +883,21 @@ class ShipmentWorkflowService
         $variant = $item->itemVariant;
         $onHand = $this->originStock($shipment, (int) $item->item_variant_id);
 
+        /*
+         * A manifest line is counted in the variant's own packaging unit, so a
+         * quantity of 20 against a carton variant is 20 cartons — 2,400 pieces.
+         *
+         * `shipment_items.unit` is a free-text column the build screens
+         * sometimes fill and sometimes do not, so every line that was created
+         * without one read as a bare number on the dock and in the van. The
+         * variant's packaging is the answer when the column is empty, and the
+         * piece figure travels with it so a dock can check a load without
+         * knowing the pack size by heart.
+         */
+        $ladder = app(\App\Services\Inventory\PackagingLadder::class);
+        $piecesPerUnit = $variant !== null ? $ladder->piecesPerUnit((int) $variant->id) : 1;
+        $unit = $item->unit ?: (string) ($variant?->itemPackagingType?->name ?? 'Unit');
+
         return [
             'id' => (int) $item->id,
             'variant_id' => (int) $item->item_variant_id,
@@ -824,7 +906,15 @@ class ShipmentWorkflowService
             'quantity' => (int) $item->quantity,
             'picked_quantity' => (int) $item->picked_quantity,
             'shortfall' => $item->shortfall,
-            'unit' => $item->unit,
+            'unit' => $unit,
+            'pieces_per_unit' => $piecesPerUnit,
+            'pieces' => (int) $item->quantity * $piecesPerUnit,
+            // "20 Cartons", ready to print beside the line.
+            'display' => $ladder->label([[
+                'unit' => $unit,
+                'count' => (int) $item->quantity,
+                'pieces' => $piecesPerUnit,
+            ]]),
             'cbm' => $item->cbm !== null ? (float) $item->cbm : null,
             'weight_kg' => $item->weight_kg !== null ? (float) $item->weight_kg : null,
             'location' => $item->location,
@@ -881,12 +971,51 @@ class ShipmentWorkflowService
         }
 
         // Facility staff see shipments with their facility at either end. A
-        // stock keeper with no facility assigned covers every dock.
-        if ($storeId === null) {
-            return $role === 'stock_keeper' ? $query : $query->whereRaw('1 = 0');
+        // stock keeper with no facility assigned covers every dock. A manager
+        // of either end's location sees it too (Hubs A and B have no store).
+        if ($storeId === null && $role === 'stock_keeper') {
+            return $query;
         }
 
-        return $query->forStore($storeId);
+        $managed = $this->managedLocationIds($user);
+
+        return $query->where(function (Builder $q) use ($storeId, $managed): void {
+            $q->whereRaw('1 = 0');
+
+            if ($storeId !== null) {
+                $q->orWhere(fn (Builder $own) => $own->forStore($storeId));
+            }
+
+            if ($managed !== []) {
+                $q->orWhereIn('origin_stock_location_id', $managed)
+                    ->orWhereIn('destination_stock_location_id', $managed);
+            }
+        });
+    }
+
+    /** "Main Distribution Hub A", "Main Store Remote Hub", "Main Store" (its floor). */
+    private function endName(?StockLocation $location, ?Store $store): string
+    {
+        if ($location === null) {
+            return (string) ($store?->name ?? 'Unknown');
+        }
+
+        if ($location->kind === StockLocation::KIND_BACKROOM) {
+            return (string) ($location->store?->name ?? $store?->name ?? $location->name);
+        }
+
+        return (string) $location->name;
+    }
+
+    /** @return array<int> stock location ids this user manages */
+    private function managedLocationIds(User $user): array
+    {
+        return \App\Models\Inventory\FacilityManager::query()
+            ->where('user_id', $user->id)
+            ->where('facility_type', StockLocation::class)
+            ->pluck('facility_id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
     }
 
     /**
@@ -1136,6 +1265,18 @@ class ShipmentWorkflowService
             }
         }
 
+        // A location's managers are its dock: they agree for, hand out of and
+        // take into it — whatever their role.
+        $managed = $this->managedLocationIds($user);
+
+        if (in_array((int) $shipment->origin_stock_location_id, $managed, true)) {
+            $parties[] = self::PARTY_ORIGIN;
+        }
+
+        if (in_array((int) $shipment->destination_stock_location_id, $managed, true)) {
+            $parties[] = self::PARTY_DESTINATION;
+        }
+
         if (in_array($role, ['stock_keeper', 'seller'], true)) {
             // A keeper with no store covers every dock.
             if ($storeId === null && $role === 'stock_keeper') {
@@ -1267,27 +1408,35 @@ class ShipmentWorkflowService
             ],
             self::PARTY_ORIGIN => [
                 'title' => '3. Origin',
-                'role' => $shipment->origin?->type_label ?? 'Facility',
-                'party' => (string) ($shipment->origin?->name ?? 'Unknown'),
+                'role' => $shipment->originLocation?->kind_label ?? $shipment->origin?->type_label ?? 'Facility',
+                'party' => $this->endName($shipment->originLocation, $shipment->origin),
                 'detail' => fn (array $a) => $a['status'] === self::AGREEMENT_ACCEPTED
                     ? 'Dock ready for ' . $slotText($a['slot']) . '.'
                     : 'Awaiting origin dock confirmation.',
             ],
             self::PARTY_DESTINATION => [
                 'title' => '4. Dest.',
-                'role' => $shipment->destination?->type_label ?? 'Facility',
-                'party' => (string) ($shipment->destination?->name ?? 'Unknown'),
+                'role' => $shipment->destinationLocation?->kind_label ?? $shipment->destination?->type_label ?? 'Facility',
+                'party' => $this->endName($shipment->destinationLocation, $shipment->destination),
                 'detail' => fn (array $a) => $a['status'] === self::AGREEMENT_ACCEPTED
                     ? 'Receiving bay ready for ' . $slotText($a['slot']) . '.'
                     : 'Awaiting receiver confirmation.',
             ],
         ];
 
+        // Who actually ticked each party, named rather than made up.
+        $actorIds = collect(self::PARTIES)
+            ->map(fn (string $party) => $agreements[$party][self::PARTY_ACTOR_KEY[$party]] ?? null)
+            ->filter()
+            ->unique();
+        $actors = $actorIds->isEmpty() ? collect() : User::query()->whereIn('id', $actorIds)->get()->keyBy('id');
+
         $out = [];
 
         foreach (self::PARTIES as $party) {
             $agreement = $agreements[$party];
             $status = $agreement['status'];
+            $actor = $actors->get($agreement[self::PARTY_ACTOR_KEY[$party]] ?? null);
 
             // The modal treats the creator's agreed state as "created".
             $uiStatus = $party === self::PARTY_CREATOR && $status === self::AGREEMENT_ACCEPTED
@@ -1302,6 +1451,7 @@ class ShipmentWorkflowService
                 'status_label' => $label($party, $status),
                 'detail' => ($meta[$party]['detail'])($agreement),
                 'agreed_time' => $agreement['slot'],
+                'actor' => $actor ? (trim($actor->first_name.' '.$actor->last_name) ?: $actor->email) : null,
             ];
         }
 
@@ -1316,7 +1466,7 @@ class ShipmentWorkflowService
      */
     public function presentAsScheduledTransfer(Shipment $shipment): array
     {
-        $shipment->loadMissing(['origin', 'destination', 'courier', 'creator', 'items']);
+        $shipment->loadMissing(['origin', 'destination', 'originLocation.store', 'destinationLocation.store', 'courier', 'creator', 'items']);
 
         $maxCbm = (float) ($shipment->vehicle_max_cbm ?? 0);
 
@@ -1325,12 +1475,12 @@ class ShipmentWorkflowService
             'reference' => (string) $shipment->reference,
             'status' => $this->legacyStatus($shipment),
             'origin' => [
-                'name' => (string) ($shipment->origin?->name ?? 'Unknown'),
-                'detail' => (string) ($shipment->origin?->location ?? ''),
+                'name' => $this->endName($shipment->originLocation, $shipment->origin),
+                'detail' => (string) ($shipment->origin?->location ?? $shipment->originLocation?->address ?? ''),
             ],
             'destination' => [
-                'name' => (string) ($shipment->destination?->name ?? 'Unknown'),
-                'detail' => (string) ($shipment->destination?->location ?? ''),
+                'name' => $this->endName($shipment->destinationLocation, $shipment->destination),
+                'detail' => (string) ($shipment->destination?->location ?? $shipment->destinationLocation?->address ?? ''),
             ],
             'distance_km' => (float) ($shipment->distance_km ?? 0),
             'scheduled_run' => $shipment->scheduled_for?->format('Y-m-d\TH:i') ?? '',
@@ -1391,7 +1541,10 @@ class ShipmentWorkflowService
                 },
                 'stock_qty' => $line['stock_qty'],
                 'quantity' => $line['quantity'],
-                'unit' => (string) ($line['unit'] ?? 'Ctns'),
+                // The variant's real packaging, not a hardcoded "Ctns".
+                'unit' => (string) ($line['unit'] ?? 'Unit'),
+                'pieces' => $line['pieces'],
+                'display' => $line['display'],
                 'cbm' => (float) ($line['cbm'] ?? 0),
                 'weight_kg' => (float) ($line['weight_kg'] ?? 0),
                 'location' => (string) ($line['location'] ?? 'Unassigned'),
@@ -1463,7 +1616,7 @@ class ShipmentWorkflowService
 
         foreach ($shipment->items as $item) {
             $moving = $item->picked_quantity > 0 ? $item->picked_quantity : $item->quantity;
-            $onHand = $this->stockAt((int) $item->item_variant_id, (int) $shipment->origin_store_id);
+            $onHand = $this->stockAt((int) $item->item_variant_id, $this->originLeaf($shipment));
 
             if ($onHand < $moving) {
                 $name = $item->itemVariant?->item?->product_name ?? ('variant ' . $item->item_variant_id);
@@ -1474,69 +1627,127 @@ class ShipmentWorkflowService
         return $short;
     }
 
-    /** Units of a variant held at one store. */
-    private function stockAt(int $variantId, int $storeId): int
+    /** Units of a variant at one leaf. */
+    private function stockAt(int $variantId, StockLocation $leaf): int
     {
         return (int) ItemStock::query()
             ->where('item_variant_id', $variantId)
-            ->where('location_type', Store::class)
-            ->where('location_id', $storeId)
+            ->where('stock_location_id', $leaf->id)
             ->sum('quantity');
     }
 
     /**
-     * Apply the whole manifest to one store's ledger.
+     * Apply the whole manifest through Delivery's custody.
      *
-     * $direction is -1 to take stock out, +1 to put it in. Picked quantities
-     * win where they were recorded, because that is what physically moved.
+     *   dispatch  origin hub → In Delivery (the courier now holds the load)
+     *   receive   In Delivery → destination
+     *   return    In Delivery → origin hub (cancelled after dispatch)
+     *
+     * Picked quantities win where they were recorded, because that is what
+     * physically moved. A short origin refuses the dispatch outright.
      */
-    private function moveManifest(Shipment $shipment, int $storeId, int $direction): void
+    private function moveManifest(Shipment $shipment, string $step): void
     {
+        $shipment->loadMissing('items');
+        $courierId = $shipment->courier_id !== null ? (int) $shipment->courier_id : null;
+        $origin = $this->originLeaf($shipment);
+        $destination = $this->destinationLeaf($shipment);
+
         foreach ($shipment->items as $item) {
             $moving = $item->picked_quantity > 0 ? $item->picked_quantity : $item->quantity;
 
-            $this->applyStock(
-                (int) $item->item_variant_id,
-                $storeId,
-                $direction * $moving,
+            if ($moving <= 0) {
+                continue;
+            }
+
+            $context = ['reason' => 'Shipment '.$shipment->reference, 'reference' => $shipment];
+
+            match ($step) {
+                'dispatch' => $this->ledger->handToCourier((int) $item->item_variant_id, $origin, (int) $moving, $courierId, $context),
+                'receive' => $this->ledger->handOverFromCourier((int) $item->item_variant_id, $destination, (int) $moving, $courierId, $context),
+                'return' => $this->ledger->returnFromCourier((int) $item->item_variant_id, $origin, (int) $moving, $courierId, $context),
+            };
+        }
+    }
+
+    /** Origin-side steps need the origin party; receipt needs the destination's. */
+    private function assertActsForEnd(Shipment $shipment, string $to): void
+    {
+        $user = auth()->user();
+
+        if (! $user instanceof User || in_array($user->roleKey(), ['admin', 'dev', 'delivery'], true)) {
+            return;
+        }
+
+        $party = match ($to) {
+            self::PICKING, self::READY, self::DISPATCHED => self::PARTY_ORIGIN,
+            self::RECEIVED => self::PARTY_DESTINATION,
+            default => null,
+        };
+
+        if ($party !== null && ! in_array($party, $this->partiesFor($shipment, $user), true)) {
+            throw new \App\Exceptions\MovementDomainException(
+                $party === self::PARTY_ORIGIN
+                    ? 'Only the origin dock picks and hands over a shipment.'
+                    : 'Only the receiving dock confirms receipt.',
+                \App\Services\Fulfillment\MovementDomainService::DOMAIN_SHIPMENT,
             );
         }
     }
 
-    /**
-     * Apply a signed delta to a store's ledger row, creating it on first use.
-     */
-    private function applyStock(int $variantId, int $storeId, int $delta): void
+    /** @throws \App\Exceptions\MovementDomainException */
+    private function assertMayOperate(StockLocation $location, string $verb): void
     {
-        // Ensure the row exists before locking it; firstOrCreate cannot lock.
-        ItemStock::firstOrCreate(
-            [
-                'item_variant_id' => $variantId,
-                'location_type' => Store::class,
-                'location_id' => $storeId,
-            ],
-            ['quantity' => 0, 'min_stock_level' => 0],
-        );
+        $user = auth()->user();
 
-        // Pessimistic lock: two concurrent dispatches of the same SKU out of the
-        // same facility must not both read the pre-deduction quantity.
-        $stock = ItemStock::query()
-            ->where('item_variant_id', $variantId)
-            ->where('location_type', Store::class)
-            ->where('location_id', $storeId)
-            ->lockForUpdate()
-            ->first();
+        if ($user instanceof User && ! $location->canBeOperatedBy($user)) {
+            throw new \App\Exceptions\MovementDomainException(
+                "Only {$location->name}'s managers can {$verb} it.",
+                \App\Services\Fulfillment\MovementDomainService::DOMAIN_SHIPMENT,
+            );
+        }
+    }
 
-        if (! $stock) {
-            return;
+    /** The leaf a run leaves from. */
+    public function originLeaf(Shipment $shipment): StockLocation
+    {
+        return StockLocation::query()->find($shipment->origin_stock_location_id)
+            ?? ($shipment->origin_store_id !== null ? $this->endFor((int) $shipment->origin_store_id) : null)
+            ?? throw new \RuntimeException("Shipment {$shipment->reference} has no origin.");
+    }
+
+    /** The leaf a run lands at. */
+    public function destinationLeaf(Shipment $shipment): StockLocation
+    {
+        return StockLocation::query()->find($shipment->destination_stock_location_id)
+            ?? ($shipment->destination_store_id !== null ? $this->endFor((int) $shipment->destination_store_id) : null)
+            ?? throw new \RuntimeException("Shipment {$shipment->reference} has no destination.");
+    }
+
+    /** A facility as a shipment end: a hub facility is its hub, a retail store its floor. */
+    private function endFor(int $storeId): StockLocation
+    {
+        return $this->scope->leafFor(Store::class, $storeId)
+            ?? throw new \InvalidArgumentException("Facility #{$storeId} has no location that can hold stock.");
+    }
+
+    /** The `stores` row a shipment end belongs to, if any (Hubs A and B have none). */
+    private function storeIdFor(StockLocation $location): ?int
+    {
+        if ($location->legacy_type === Store::class && $location->legacy_id !== null) {
+            return (int) $location->legacy_id;
         }
 
-        // Never drive a ledger row negative: a short origin books out what it has.
-        $applied = $delta < 0
-            ? -1 * min((int) $stock->quantity, abs($delta))
-            : $delta;
+        return $location->store_id !== null ? (int) $location->store_id : null;
+    }
 
-        $stock->update(['quantity' => (int) $stock->quantity + $applied]);
+    /** @throws \App\Exceptions\MovementDomainException */
+    private function assertLocationLeg(StockLocation $origin, StockLocation $destination): void
+    {
+        $this->domain->assertShipmentEnds(
+            $this->domain->describe(StockLocation::class, (int) $origin->id),
+            $this->domain->describe(StockLocation::class, (int) $destination->id),
+        );
     }
 
     /** Has the load already been deducted from the origin? */
@@ -1547,17 +1758,23 @@ class ShipmentWorkflowService
 
     private function originStock(Shipment $shipment, int $variantId): int
     {
-        return (int) ItemStock::query()
-            ->where('item_variant_id', $variantId)
-            ->where('location_type', Store::class)
-            ->where('location_id', $shipment->origin_store_id)
-            ->sum('quantity');
+        return $this->stockAt($variantId, $this->originLeaf($shipment));
     }
 
     /**
      * Slots are compared as strings, so they must be written one way:
      * `Y-m-d\TH:i`, which is also what the date/time inputs emit.
      */
+    /**
+     * Both ends of a shipment must be warehouse-class facilities.
+     *
+     * @throws \App\Exceptions\MovementDomainException
+     */
+    public function assertFreightLeg(int $originStoreId, int $destinationStoreId): void
+    {
+        $this->assertLocationLeg($this->endFor($originStoreId), $this->endFor($destinationStoreId));
+    }
+
     public function normaliseSlot(mixed $slot): ?string
     {
         if ($slot === null || $slot === '') {

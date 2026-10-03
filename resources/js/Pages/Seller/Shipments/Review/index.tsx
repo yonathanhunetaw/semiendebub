@@ -201,9 +201,7 @@ export default function SellerReplenishReview({
 
     return (
         <>
-            <Head title="Review & Dispatch">
-                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-            </Head>
+            <Head title="Review & Dispatch" />
 
             {/* Top Context Strip */}
             <div className="px-4 pt-3 pb-2.5 flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-20">

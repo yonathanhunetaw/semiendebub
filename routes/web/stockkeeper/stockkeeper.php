@@ -31,6 +31,9 @@ Route::domain("stockkeeper.{$baseDomain}")
 
             // --- INVENTORY LEDGER ---
             Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory.index');
+            // The variant rows behind one item row, fetched on expand.
+            Route::get('/inventory/items/{item}/variants', [InventoryController::class, 'variants'])
+                ->name('inventory.items.variants');
             Route::post('/inventory/receive', [InventoryController::class, 'receive'])->name('inventory.receive');
             Route::patch('/inventory/{stock}/adjust', [InventoryController::class, 'adjust'])->name('inventory.adjust');
 
@@ -51,6 +54,9 @@ Route::domain("stockkeeper.{$baseDomain}")
             Route::patch('/shipments/{shipment}/status', [ShipmentController::class, 'transition'])->name('shipments.transition');
 
             Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
+
+            // Pick the order and hand it to Delivery.
+            Route::post('/orders/{sale}/pick', [OrderController::class, 'confirmSourcing'])->name('orders.pick');
             Route::get('/stock-alerts', [StockAlertController::class, 'index'])->name('alerts.index');
         });
     });

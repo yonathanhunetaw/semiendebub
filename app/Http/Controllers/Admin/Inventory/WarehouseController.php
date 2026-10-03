@@ -2,9 +2,13 @@
 namespace App\Http\Controllers\Admin\Inventory;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Inventory\AssignFacilityManagersRequest;
+use App\Models\Auth\User;
+use App\Models\Inventory\FacilityManager;
 use App\Models\Inventory\Warehouse;
 use App\Models\Inventory\ItemStock;
 use App\Models\Store\Store;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
@@ -15,7 +19,7 @@ class WarehouseController extends Controller
     {
         Log::info('Viewing warehouse index page.');
 
-        $warehouses = Warehouse::with('store')
+        $warehouses = Warehouse::with(['store', 'managerAssignments.user'])
             ->withCount('stocks')
             ->withSum('stocks as total_units', 'quantity')
             ->orderBy('name')
@@ -29,6 +33,12 @@ class WarehouseController extends Controller
                     'store_name' => $wh->store?->name,
                     'stocks_count' => $wh->stocks_count,
                     'total_units' => (int) $wh->total_units,
+                    // The one or two users who may oversee this warehouse.
+                    // `manager` below is the legacy free-text name and is kept
+                    // only for display; authorization reads these assignments.
+                    'managers' => $this->presentManagers($wh),
+                    'manager_name' => $wh->manager,
+                    'can_oversee' => request()->user()?->can('oversee', $wh) ?? false,
                 ];
             })->toArray();
 
@@ -63,11 +73,23 @@ class WarehouseController extends Controller
 
         return Inertia::render('Admin/Inventory/Warehouse/index', [
             'warehouses' => $warehouses,
+            // Candidates for the two manager slots.
+            'assignable_managers' => $this->assignableManagers(),
+            'max_managers' => FacilityManager::MAX_PER_FACILITY,
             'totalWarehouses' => count($warehouses),
             'totalUnits' => $totalUnits,
             'lowStockCount' => $lowStockCount,
             'stockLines' => $stockLines,
         ]);
+    }
+
+    /**
+     * A warehouse is a Main Hub in the location tree; its page is the
+     * Locations screen (STOCK_PLAN.md §5: /warehouse redirects there).
+     */
+    public function show(Warehouse $warehouse): \Illuminate\Http\RedirectResponse
+    {
+        return redirect()->route('admin.inventory.stock-locations.index');
     }
 
     public function create()
@@ -131,6 +153,66 @@ class WarehouseController extends Controller
         Log::info('Warehouse updated successfully', ['warehouse_id' => $warehouse->id]);
 
         return redirect()->route('admin.inventory.warehouse.index')->with('success', 'Warehouse updated successfully.');
+    }
+
+    /**
+     * Appoint the one or two users who oversee this warehouse.
+     *
+     * The first id is the primary. An empty list leaves the warehouse
+     * admin-only rather than open to everyone — see WarehousePolicy::oversee().
+     *
+     * Appointing is an admin act (AssignFacilityManagersRequest authorizes it),
+     * so a manager cannot add a colleague or replace themselves.
+     */
+    public function assignManagers(AssignFacilityManagersRequest $request, Warehouse $warehouse): RedirectResponse
+    {
+        $warehouse->syncManagers($request->managerIds(), $request->user()?->id);
+
+        Log::info('Warehouse managers assigned', [
+            'warehouse_id' => $warehouse->id,
+            'manager_ids' => $request->managerIds(),
+            'assigned_by' => $request->user()?->id,
+        ]);
+
+        return back()->with('success', 'Warehouse managers updated.');
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function presentManagers(Warehouse $warehouse): array
+    {
+        return $warehouse->managerAssignments
+            ->map(fn (FacilityManager $assignment): array => [
+                'id' => (int) $assignment->user_id,
+                'name' => trim((string) ($assignment->user?->first_name . ' ' . $assignment->user?->last_name))
+                    ?: (string) ($assignment->user?->email ?? 'Unknown user'),
+                'is_primary' => (bool) $assignment->is_primary,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Staff who can hold a warehouse manager slot.
+     *
+     * Deliberately not every user: a warehouse is overseen by someone who works
+     * in the inventory chain, so the list is the roles that do.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function assignableManagers(): array
+    {
+        return User::query()
+            ->whereHas('roles', fn ($query) => $query->whereIn('name', ['admin', 'store_manager', 'stock_keeper', 'seller']))
+            ->orderBy('first_name')
+            ->get(['id', 'first_name', 'last_name', 'email'])
+            ->map(fn (User $user): array => [
+                'id' => (int) $user->id,
+                'name' => trim($user->first_name . ' ' . $user->last_name) ?: $user->email,
+                'email' => $user->email,
+            ])
+            ->all();
     }
 
     public function destroy(Warehouse $warehouse)

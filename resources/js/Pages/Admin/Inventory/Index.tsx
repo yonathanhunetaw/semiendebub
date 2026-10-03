@@ -9,7 +9,6 @@ import {
     type Tile,
     href,
 } from "@/Components/Shared/OpsHub";
-import { SAMPLE_ORDERS } from "@/Data/sellerOrderFlow";
 import { Head, Link } from "@inertiajs/react";
 import React, { useMemo, useState } from "react";
 
@@ -21,9 +20,8 @@ import React, { useMemo, useState } from "react";
  * hub (Components/Shared/OpsHub), and ending in an item picker that opens the
  * per-location stock tool at Admin/Inventory/Stores/ItemVariants.
  *
- * Counts come from the database, except the order pipeline: there is no admin
- * order domain yet, so that card reads the shared sample data and carries the
- * Preview chip, exactly as the seller hub's does.
+ * Every count comes from the database, the order pipeline included (the same
+ * stage mapping as the seller's order board).
  */
 
 interface StoreSummary {
@@ -50,7 +48,13 @@ interface StockAtStore {
     /** `retail`, `central_warehouse` or `remote_warehouse`. */
     type: string;
     variants: number;
+    /**
+     * Raw ledger sum, in mixed packaging units — 11 cartons plus 6 pieces is
+     * 17 here, which is why `pieces` exists. Audit only.
+     */
     stock: number;
+    /** The comparable total: every unit converted to pieces. */
+    pieces?: number;
 }
 
 interface DeployedItem {
@@ -59,8 +63,10 @@ interface DeployedItem {
     variants: number;
     store_stock: number;
     warehouse_stock: number;
+    store_pieces?: number;
+    warehouse_pieces?: number;
     stores: StockAtStore[];
-    warehouses: Array<{ id: number; name: string; stock: number }>;
+    warehouses: Array<{ id: number; name: string; stock: number; pieces?: number }>;
 }
 
 interface Props {
@@ -70,6 +76,8 @@ interface Props {
     transferCounts: Record<string, number>;
     catalogue: { items: number; deployed_variants: number };
     deployedItems: DeployedItem[];
+    /** Real order counts per stage, across every store (SellerOrderBoard::counts). */
+    orderStages?: Record<string, number>;
 }
 
 /** Store `type` values, as written by StoreSeeder / FacilitySeeder. */
@@ -95,15 +103,15 @@ export default function InventoryHub({
     transferCounts,
     catalogue,
     deployedItems,
+    orderStages = {},
 }: Props): React.ReactElement {
     const [itemSearch, setItemSearch] = useState("");
 
     const retail = stores.filter((store) => store.type === "retail");
     const facilities = stores.filter((store) => store.type !== "retail");
 
-    /* ── Orders: sample data, as on the seller hub ───────────────────── */
-    const stageCount = (stage: string): number =>
-        SAMPLE_ORDERS.filter((entry) => entry.stage === stage).length;
+    /* ── Orders: real counts per stage, across every store ─────────────── */
+    const stageCount = (stage: string): number => orderStages[stage] ?? 0;
 
     const orderTiles: Tile[] = [
         { label: "To Pay", caption: "Awaiting payment", icon: "payments", count: stageCount("to_pay"), tone: "amber" },
@@ -137,7 +145,7 @@ export default function InventoryHub({
         { label: "In Transit", caption: "On the move", icon: "swap_horiz", count: transferCounts.in_transit ?? 0, tone: "brand" },
         { label: "Completed", caption: "Stock moved", icon: "task_alt", count: transferCounts.completed ?? 0, tone: "emerald" },
         { label: "Cancelled", caption: "Voided", icon: "block", count: transferCounts.cancelled ?? 0, tone: "rose" },
-        { label: "Replenish", caption: "Restock runs", icon: "autorenew", count: 0, tone: "violet", routeName: "admin.inventory.replenish" },
+        { label: "Shipments", caption: "From Hub A/B", icon: "autorenew", count: shipmentCounts.open ?? 0, tone: "violet", routeName: "admin.inventory.shipments.index" },
     ];
 
     /* ── Locations ─────────────────────────────────────────────────────── */
@@ -218,12 +226,7 @@ export default function InventoryHub({
 
     return (
         <>
-            <Head title="Inventory">
-                <link
-                    rel="stylesheet"
-                    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-                />
-            </Head>
+            <Head title="Inventory" />
 
             <div className="min-h-screen" style={{ backgroundColor: PAGE_BG }}>
                 <div className="mx-auto w-full max-w-[1100px] px-3.5 pb-12">
@@ -264,10 +267,9 @@ export default function InventoryHub({
                     </section>
 
                     <PipelineCard
-                        title="My Orders"
-                        preview
+                        title="Orders"
                         actionLabel="Order list"
-                        actionRoute="admin.carts.index"
+                        actionRoute="admin.orders.index"
                         tiles={orderTiles}
                         footer={orderFooter}
                     />

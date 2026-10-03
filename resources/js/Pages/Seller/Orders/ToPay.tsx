@@ -7,7 +7,6 @@ import {
     type SellerOrder,
     birr,
     countdownParts,
-    findOrder,
     groupByFulfillment,
     lineTotal,
     orderTotal,
@@ -19,13 +18,23 @@ import React, { useEffect, useMemo, useState } from "react";
 /**
  * A single unpaid order.
  *
- * Layout preview over sample data. "Pay now" marks the order paid in local
- * state and drops the seller into pick & pack, which is the next real step in
- * the flow; nothing is persisted.
+ * The order is the real sale, served by OrderBoardController. Its stock is
+ * held while it waits; the countdown is when that hold lapses. Confirming the
+ * payment records it and moves the order into Pick & Pack; cancelling gives
+ * the stock back.
  */
+
+/** How a payment can be taken at the counter. */
+const PAY_METHODS = [
+    { id: "cash", label: "Cash" },
+    { id: "telebirr", label: "Telebirr" },
+    { id: "cbe_birr", label: "CBE Birr" },
+    { id: "bank_transfer", label: "Bank transfer" },
+] as const;
 
 interface Props {
     reference?: string;
+    order?: SellerOrder | null;
 }
 
 /** Ticking countdown from a minute budget. */
@@ -49,13 +58,27 @@ function useCountdown(minutes: number | undefined): string | null {
     return minutes ? countdownParts(seconds) : null;
 }
 
-export default function ToPay({ reference }: Props): React.ReactElement {
-    // Fall back to the first unpaid order so the screen is never empty in
-    // preview, whichever reference the URL carries.
-    const order: SellerOrder | undefined = useMemo(() => {
-        const fromUrl = reference ? findOrder(reference) : undefined;
-        return fromUrl;
-    }, [reference]);
+export default function ToPay({ reference, order: served = null }: Props): React.ReactElement {
+    const order: SellerOrder | undefined = useMemo(() => served ?? undefined, [served]);
+    const [method, setMethod] = useState<string>("cash");
+    const [txRef, setTxRef] = useState("");
+    const [busy, setBusy] = useState(false);
+
+    const confirmPayment = (): void => {
+        if (!order) return;
+        setBusy(true);
+        router.post(
+            route("seller.orders.payment", { reference: order.reference }),
+            { payment_method: method, transaction_reference: txRef || null },
+            { onFinish: () => setBusy(false) },
+        );
+    };
+
+    const cancelOrder = (): void => {
+        if (!order || !window.confirm(`Cancel ${order.reference}? Its stock goes back on sale.`)) return;
+        setBusy(true);
+        router.post(route("seller.orders.cancel", { reference: order.reference }), {}, { onFinish: () => setBusy(false) });
+    };
 
     const countdown = useCountdown(order?.expiresInMinutes);
     const [copied, setCopied] = useState(false);
@@ -70,7 +93,7 @@ export default function ToPay({ reference }: Props): React.ReactElement {
                         Order not found
                     </p>
                     <p className="mt-1 text-[12px] text-slate-500">
-                        {reference ? `No sample order matches ${reference}.` : "No reference supplied."}
+                        {reference ? `No order matches ${reference}.` : "No reference supplied."}
                     </p>
                     <Link
                         href={`${route("seller.orders.index")}?tab=to_pay`}
@@ -99,12 +122,7 @@ export default function ToPay({ reference }: Props): React.ReactElement {
 
     return (
         <>
-            <Head title={`To pay · ${order.reference}`}>
-                <link
-                    rel="stylesheet"
-                    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-                />
-            </Head>
+            <Head title={`To pay · ${order.reference}`} />
 
             <div className="min-h-screen bg-[#f2f2f2] pb-[190px]">
                 {/* ── Header ── */}
@@ -284,6 +302,35 @@ export default function ToPay({ reference }: Props): React.ReactElement {
                     </div>
                 </main>
 
+                {/* ── Payment ── */}
+                <section className="mb-3 bg-white px-4 py-3.5 shadow-sm">
+                    <h2 className="mb-2 text-sm font-bold text-gray-900">Payment received by</h2>
+                    <div className="grid grid-cols-2 gap-1.5">
+                        {PAY_METHODS.map((option) => (
+                            <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => setMethod(option.id)}
+                                className={`rounded-[10px] border px-3 py-2 text-xs font-semibold ${
+                                    method === option.id
+                                        ? "border-[#c2410c] bg-orange-50 text-[#c2410c]"
+                                        : "border-gray-200 text-gray-700"
+                                }`}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                    {method !== "cash" ? (
+                        <input
+                            value={txRef}
+                            onChange={(event) => setTxRef(event.target.value)}
+                            placeholder="Transaction reference"
+                            className="mt-2 w-full rounded-[10px] border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs"
+                        />
+                    ) : null}
+                </section>
+
                 {/* ── Order info ── */}
                 <section className="mb-3 bg-white px-4 py-3.5 shadow-sm">
                     <h2 className="mb-1.5 text-sm font-bold text-gray-900">Order info</h2>
@@ -314,18 +361,20 @@ export default function ToPay({ reference }: Props): React.ReactElement {
             >
                 <button
                     type="button"
-                    onClick={() => router.visit(`${route("seller.orders.index")}?tab=to_pay`)}
-                    className="rounded-[999px] border border-gray-300 bg-white px-5 py-2.5 text-xs font-semibold text-gray-800 hover:bg-gray-50"
+                    onClick={cancelOrder}
+                    disabled={busy}
+                    className="rounded-[999px] border border-gray-300 bg-white px-5 py-2.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-40"
                 >
-                    Cancel
+                    Cancel order
                 </button>
-                <Link
-                    href={route("seller.orders.pickpack", { reference: order.reference })}
-                    className="rounded-[999px] px-7 py-2.5 text-xs font-bold text-white shadow-sm active:scale-95"
-                    style={{ backgroundColor: BRAND }}
+                <button
+                    type="button"
+                    onClick={confirmPayment}
+                    disabled={busy}
+                    className="rounded-[999px] bg-[#c2410c] px-7 py-2.5 text-xs font-bold text-white shadow-sm active:scale-95 disabled:opacity-40"
                 >
                     Confirm payment
-                </Link>
+                </button>
             </nav>
         </>
     );

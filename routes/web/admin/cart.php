@@ -15,6 +15,8 @@ Route::domain("admin.{$baseDomain}")
         Route::get('/create', [CartController::class, 'create'])->name('admin.carts.create');
         Route::post('/', [CartController::class, 'store'])->name('admin.carts.store');
 
-        Route::get('/{id}', [CartController::class, 'show'])->name('admin.carts.show');
+        // {cart}, not {id}: show() type-hints Cart, and an unmatched name
+        // bound an empty model.
+        Route::get('/{cart}', [CartController::class, 'show'])->name('admin.carts.show');
         Route::delete('/{id}', [CartController::class, 'destroy'])->name('admin.carts.destroy');
     });

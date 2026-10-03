@@ -78,6 +78,35 @@ class StoreVariant extends Model
     }
 
     /**
+     * Min/max holding bands for this variant, one per location.
+     *
+     * Capacity is set at variant level and applies at every level of the
+     * hierarchy — shop floor, back room, remote warehouse, main warehouse — so
+     * this is a collection keyed by location, not a pair of columns here.
+     */
+    public function capacities(): HasMany
+    {
+        return $this->hasMany(StoreVariantCapacity::class, 'store_variant_id');
+    }
+
+    /**
+     * The band set for this variant at one place, or null when that place is
+     * not monitored.
+     */
+    public function capacityAt(string $locationType, int $locationId): ?StoreVariantCapacity
+    {
+        if ($this->relationLoaded('capacities')) {
+            return $this->capacities
+                ->firstWhere(fn (StoreVariantCapacity $capacity): bool => $capacity->location_type === $locationType
+                    && (int) $capacity->location_id === $locationId);
+        }
+
+        return $this->capacities()
+            ->atLocation($locationType, $locationId)
+            ->first();
+    }
+
+    /**
      * EVERY positional stock row for this variant — at ANY store and ANY
      * warehouse, not just this one.
      *
@@ -93,8 +122,7 @@ class StoreVariant extends Model
      * has to come from the caller. Every eager load must supply it:
      *
      *     ->with(['stocks' => fn ($q) => $q
-     *         ->where('location_type', Store::class)
-     *         ->where('location_id', $store->id)])
+     *         ->whereIn('stock_location_id', app(StockScope::class)->storeLeafIds($store->id))])
      *
      * For a single model, call stockAtStore() instead and let it do this.
      */
@@ -112,16 +140,17 @@ class StoreVariant extends Model
      */
     public function stockAtStore(): int
     {
+        // A store's stock is its shelf + floor (STOCK_PLAN.md phase 4).
+        $leafIds = app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $this->store_id);
+
         if ($this->relationLoaded('stocks')) {
             return (int) $this->stocks
-                ->where('location_type', Store::class)
-                ->where('location_id', $this->store_id)
+                ->whereIn('stock_location_id', $leafIds)
                 ->sum('quantity');
         }
 
         return (int) $this->stocks()
-            ->where('location_type', Store::class)
-            ->where('location_id', $this->store_id)
+            ->whereIn('stock_location_id', $leafIds)
             ->sum('quantity');
     }
 
@@ -149,17 +178,41 @@ class StoreVariant extends Model
     }
 
     /**
-     * Dynamic Stock Balance calculated from the SSOT inventory movements ledger.
+     * Units of this variant on hand at its own store.
+     *
+     * Reads `item_stocks`, the ledger of record. This used to sum
+     * `inventory_movements`, which nothing in production writes — so it
+     * reported 0 for the entire catalogue while item_stocks held the real
+     * figures. Movements are an audit journal, not the balance.
+     *
+     * In the variant's own packaging unit, like item_stocks.quantity itself.
+     *
+     * @see \App\Services\StockService::getBatchStock()
+     * @see \App\Services\Inventory\ItemStockReader for cross-variant totals,
+     *      which must be converted to pieces before they can be added up.
      */
     public function getCurrentStockAttribute(): int
     {
-        return (int) $this->inventoryMovements()->sum('quantity');
+        return $this->stockAtStore();
     }
 
+    /**
+     * Variants with stock on hand at their own store.
+     *
+     * Stock on the store's shelf or floor. The (variant, store's leaves) pair
+     * cannot be expressed as a relation, so the constraint is written out here
+     * rather than through whereHas.
+     */
     public function scopeInStock($query)
     {
-        return $query->whereHas('inventoryMovements', function ($q) {
-            $q->havingRaw('SUM(quantity) > 0');
+        return $query->whereExists(function ($sub) {
+            $sub->selectRaw('1')
+                ->from('item_stocks')
+                ->join('stock_locations as sl', 'sl.id', '=', 'item_stocks.stock_location_id')
+                ->whereColumn('item_stocks.item_variant_id', 'store_variants.item_variant_id')
+                ->whereColumn('sl.store_id', 'store_variants.store_id')
+                ->whereIn('sl.kind', [\App\Models\Inventory\StockLocation::KIND_SHELF, \App\Models\Inventory\StockLocation::KIND_BACKROOM])
+                ->where('item_stocks.quantity', '>', 0);
         });
     }
 

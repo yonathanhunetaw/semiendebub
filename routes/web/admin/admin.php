@@ -9,6 +9,8 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\Inventory\WarehouseController;
 use App\Http\Controllers\Admin\Inventory\TransferController;
 use App\Http\Controllers\Admin\Inventory\ReplenishController;
+use App\Http\Controllers\Admin\Inventory\ReplenishmentController;
+use App\Http\Controllers\Admin\Inventory\VariantCapacityController;
 use App\Http\Controllers\Admin\Inventory\ShipmentController;
 use App\Http\Controllers\Admin\CanvasController;
 use Illuminate\Support\Facades\Route;
@@ -63,7 +65,17 @@ Route::domain("admin.{$baseDomain}")
 
             // ── Users, Sessions & Customers ──
             Route::resource('users', UserController::class);
-            Route::resource('customers', \App\Http\Controllers\Admin\CustomerController::class);
+            // The customers screen creates and edits in dialogs; there are no
+            // create/show/edit pages, so those routes only ever 500'd.
+            // Every order across every store, and each one's custody log.
+            Route::get('/orders', [\App\Http\Controllers\Admin\OrderController::class, 'index'])->name('orders.index');
+            Route::get('/orders/{reference}/custody', [\App\Http\Controllers\Admin\OrderController::class, 'custody'])->name('orders.custody');
+            Route::get('/deliveries', [\App\Http\Controllers\Admin\DeliveryController::class, 'index'])->name('deliveries.index');
+            Route::patch('/deliveries/{delivery}/courier', [\App\Http\Controllers\Admin\DeliveryController::class, 'assign'])->name('deliveries.assign');
+            Route::get('/payments', [\App\Http\Controllers\Admin\PaymentController::class, 'index'])->name('payments.index');
+
+            Route::resource('customers', \App\Http\Controllers\Admin\CustomerController::class)
+                ->only(['index', 'store', 'update', 'destroy']);
             Route::prefix('sessions')->group(function () {
                 Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
                 Route::post('/{id}/extend', [SessionController::class, 'extend'])->name('sessions.extend');
@@ -86,6 +98,29 @@ Route::domain("admin.{$baseDomain}")
                 Route::patch('/warehouse/locations/{location}', [WarehouseController::class, 'update'])->name('locations.update');
                 Route::delete('/warehouse/locations/{location}', [WarehouseController::class, 'destroy'])->name('locations.destroy');
 
+                // The one or two users who may oversee a warehouse. Admin-only;
+                // see App\Policies\Inventory\WarehousePolicy.
+                Route::post('/warehouse/{warehouse}/managers', [WarehouseController::class, 'assignManagers'])
+                    ->name('warehouse.managers.assign');
+
+                // ── Locations: the one tree, and each location's managers ──
+                Route::get('/locations', [\App\Http\Controllers\Admin\Inventory\LocationController::class, 'index'])
+                    ->name('stock-locations.index');
+                Route::post('/locations/{stockLocation}/managers', [\App\Http\Controllers\Admin\Inventory\LocationController::class, 'assignManagers'])
+                    ->name('stock-locations.managers');
+
+                // ── Variant capacity: min/max per variant, at every level ──
+                Route::get('/capacity', [VariantCapacityController::class, 'index'])->name('capacity.index');
+                Route::get('/capacity/{storeVariant}', [VariantCapacityController::class, 'edit'])->name('capacity.edit');
+                Route::patch('/capacity/{storeVariant}', [VariantCapacityController::class, 'update'])->name('capacity.update');
+
+                // ── Replenishment proposals: the store manager's approval gate ──
+                Route::get('/replenishment', [ReplenishmentController::class, 'index'])->name('replenishment.index');
+                Route::post('/replenishment/{transfer}/approve', [ReplenishmentController::class, 'approve'])
+                    ->name('replenishment.approve');
+                Route::post('/replenishment/{transfer}/reject', [ReplenishmentController::class, 'reject'])
+                    ->name('replenishment.reject');
+
                 // Transfers
                 Route::get('/transfers', [TransferController::class, 'index'])->name('transfers');
                 Route::get('/transfers/create', [TransferController::class, 'create'])->name('transfers.create');
@@ -93,6 +128,8 @@ Route::domain("admin.{$baseDomain}")
                 Route::get('/transfers/{transfer}', [TransferController::class, 'show'])->name('transfers.show');
                 Route::patch('/transfers/{transfer}/complete', [TransferController::class, 'complete'])->name('transfers.complete');
                 Route::patch('/transfers/{transfer}/cancel', [TransferController::class, 'cancel'])->name('transfers.cancel');
+                Route::patch('/transfers/{transfer}/dispatch', [TransferController::class, 'dispatchTransfer'])->name('transfers.dispatch');
+                Route::patch('/transfers/{transfer}/courier', [TransferController::class, 'assignCourier'])->name('transfers.courier');
 
                 // Shipments (shared cross-role domain)
                 Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');

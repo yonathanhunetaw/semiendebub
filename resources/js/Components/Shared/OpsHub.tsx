@@ -26,6 +26,7 @@ export const TONES = {
     emerald: { badge: "bg-emerald-600", caption: "text-emerald-600", hover: "group-hover:text-emerald-600" },
     rose: { badge: "bg-rose-600", caption: "text-rose-600", hover: "group-hover:text-rose-600" },
     violet: { badge: "bg-violet-600", caption: "text-violet-600", hover: "group-hover:text-violet-600" },
+    ink: { badge: "bg-[#0b1c30]", caption: "text-gray-500", hover: "group-hover:text-gray-900" },
 } as const;
 
 export type Tone = keyof typeof TONES;
@@ -45,6 +46,10 @@ export interface Tile {
     routeName?: string;
     /** Named route parameters, when `routeName` takes any. */
     routeParams?: Record<string, string | number>;
+    /** Badge text in place of the count, e.g. "1.2k" for a stock total. */
+    badge?: string;
+    /** Shown for the layout but not backed by data yet: no link, no badge. */
+    disabled?: boolean;
 }
 
 export interface Row {
@@ -100,15 +105,108 @@ const ROW_HOVER: Record<Tone | "ink", string> = {
     ink: "group-hover:text-gray-800",
 };
 
+/** One stop on a location strip: an icon that opens a place stock sits in. */
+export interface Place {
+    key: string;
+    label: string;
+    caption: string;
+    icon: string;
+    /** Null renders the stop greyed out (the store has no such place). */
+    routeName: string | null;
+    routeParams?: Record<string, string | number>;
+    /** Red count badge, e.g. shelf lines that need a refill. */
+    alert?: number;
+}
+
 export interface PipelineCardProps {
     title: string;
     actionLabel: string;
     actionRoute: string | null;
     actionParams?: Record<string, string | number>;
     tiles: Tile[];
+    /** Icon strip shown between the tiles and the footer links. */
+    places?: Place[];
     footer?: Row[];
     /** Flags a card whose counts come from sample data, not the database. */
     preview?: boolean;
+    /** Tiles per row. Defaults to 3 for six tiles, otherwise 5. */
+    columns?: 3 | 4 | 5;
+}
+
+/** Literal class strings so the JIT compiler keeps them. */
+const GRID_COLUMNS: Record<3 | 4 | 5, string> = {
+    3: "grid-cols-3 gap-y-2",
+    4: "grid-cols-4 gap-y-3",
+    5: "grid-cols-5",
+};
+
+/**
+ * Store Shelf → Store → Remote Hub → Main Hub A / B, nearest first.
+ *
+ * `activeKey` marks the place currently open; `bordered` draws the divider
+ * used when the strip sits inside a PipelineCard.
+ */
+export function PlaceStrip({
+    places,
+    activeKey,
+    bordered = true,
+}: {
+    places: Place[];
+    activeKey?: string;
+    bordered?: boolean;
+}): React.ReactElement {
+    return (
+        <div className={`grid grid-cols-5 gap-1 py-2.5 text-center ${bordered ? "border-b border-gray-100" : ""}`}>
+            {places.map((place) => {
+                const target = href(place.routeName, place.routeParams);
+                const alert = place.alert ?? 0;
+                const active = place.key === activeKey;
+
+                const body = (
+                    <>
+                        <div
+                            className={`relative flex h-9 w-9 items-center justify-center rounded-[10px] ${
+                                active
+                                    ? "bg-[#c2410c] text-white shadow-sm ring-2 ring-orange-200"
+                                    : target
+                                      ? "bg-[#0b1c30] text-white shadow-sm"
+                                      : "bg-slate-100 text-slate-300"
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-[20px]">{place.icon}</span>
+                            {alert > 0 ? (
+                                <span className="absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-[999px] bg-rose-600 px-1 font-mono text-[8px] font-bold text-white shadow-sm">
+                                    {alert > 99 ? "99+" : alert}
+                                </span>
+                            ) : null}
+                        </div>
+                        <span
+                            className={`mt-1 text-[10px] font-bold leading-tight ${
+                                target ? "text-gray-800" : "text-slate-400"
+                            }`}
+                        >
+                            {place.label}
+                        </span>
+                        <span className={`text-[8px] font-medium leading-tight ${target ? "text-gray-500" : "text-slate-300"}`}>
+                            {place.caption}
+                        </span>
+                    </>
+                );
+
+                const shell = "group flex flex-col items-center rounded-[12px] p-1";
+
+                return target ? (
+                    <Link key={place.key} href={target} className={`${shell} transition-colors hover:bg-gray-50`}>
+                        {body}
+                    </Link>
+                ) : (
+                    <div key={place.key} aria-disabled="true" className={`${shell} cursor-default`}>
+                        {body}
+                    </div>
+                );
+            })}
+        </div>
+    );
 }
 
 /**
@@ -123,8 +221,10 @@ export function PipelineCard({
     actionRoute,
     actionParams,
     tiles,
+    places,
     footer,
     preview = false,
+    columns,
 }: PipelineCardProps): React.ReactElement {
     const target = href(actionRoute, actionParams);
 
@@ -155,14 +255,21 @@ export function PipelineCard({
 
                 <div
                     className={`grid gap-1 text-center ${
-                        tiles.length === 6 ? "grid-cols-3 gap-y-2" : "grid-cols-5"
-                    } ${footer ? "border-b border-gray-100 pb-3" : ""}`}
+                        GRID_COLUMNS[columns ?? (tiles.length === 6 ? 3 : 5)]
+                    } ${footer && !places?.length ? "border-b border-gray-100 pb-3" : ""} ${
+                        places?.length ? "pb-1" : ""
+                    }`}
                 >
                     {tiles.map((tile) => {
                         const tone = TONES[tile.tone];
-                        const own = tile.routeName
-                            ? href(tile.routeName, tile.routeParams)
-                            : target;
+                        const own = tile.disabled
+                            ? null
+                            : tile.routeName
+                              ? href(tile.routeName, tile.routeParams)
+                              : target;
+                        const badge = tile.disabled
+                            ? null
+                            : (tile.badge ?? (tile.count > 0 ? (tile.count > 99 ? "99+" : String(tile.count)) : null));
                         const tileTarget = own && tile.tab ? `${own}?${tile.tab}` : own;
 
                         const body = (
@@ -173,11 +280,11 @@ export function PipelineCard({
                                     } ${own && !tile.alert ? tone.hover : ""}`}
                                 >
                                     <span className="material-symbols-outlined text-[22px]">{tile.icon}</span>
-                                    {tile.count > 0 ? (
+                                    {badge ? (
                                         <span
-                                            className={`absolute right-0 top-0 flex h-[15px] min-w-[15px] items-center justify-center rounded-[999px] px-1 font-mono text-[8px] font-bold text-white shadow-sm ${tone.badge}`}
+                                            className={`absolute -right-1 top-0 flex h-[15px] min-w-[15px] items-center justify-center rounded-[999px] px-1 font-mono text-[8px] font-bold text-white shadow-sm ${tone.badge}`}
                                         >
-                                            {tile.count > 99 ? "99+" : tile.count}
+                                            {badge}
                                         </span>
                                     ) : null}
                                 </div>
@@ -188,7 +295,11 @@ export function PipelineCard({
                                 >
                                     {tile.label}
                                 </span>
-                                <span className={`text-[8px] font-medium leading-tight ${tone.caption}`}>
+                                <span
+                                    className={`text-[8px] font-medium leading-tight ${
+                                        tile.disabled ? "text-slate-400" : tone.caption
+                                    }`}
+                                >
                                     {tile.caption}
                                 </span>
                             </>
@@ -212,6 +323,8 @@ export function PipelineCard({
                         );
                     })}
                 </div>
+
+                {places?.length ? <PlaceStrip places={places} /> : null}
 
                 {footer ? (
                     <div className="grid grid-cols-2 gap-2 pt-2.5">

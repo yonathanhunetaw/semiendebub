@@ -11,6 +11,7 @@ use App\Http\Requests\Shipment\SaveShipmentManifestRequest;
 use App\Http\Requests\Shipment\StoreShipmentItemRequest;
 use App\Http\Requests\Shipment\StoreShipmentItemsRequest;
 use App\Http\Requests\Shipment\StoreShipmentRequest;
+use App\Models\Inventory\StockLocation;
 use App\Http\Requests\Shipment\AgreeShipmentRequest;
 use App\Http\Requests\Shipment\TransitionShipmentRequest;
 use App\Http\Requests\Shipment\UpdateShipmentRouteRequest;
@@ -86,6 +87,7 @@ class ShipmentController extends Controller
             // Real stores for the "new shipment" sheet, so the created record
             // points at actual rows rather than demo slugs.
             'stores' => $this->storeOptions(),
+            'locations' => $this->locationOptions(),
         ]);
     }
 
@@ -121,6 +123,9 @@ class ShipmentController extends Controller
                 // Both ends are re-pointable while the manifest is open, so the
                 // Edit Route sheet offers every facility rather than a fixed three.
                 'stores' => $this->storeOptions(),
+                'locations' => $this->locationOptions(),
+                'origin_location_id' => $shipment->origin_stock_location_id !== null ? (int) $shipment->origin_stock_location_id : null,
+                'destination_location_id' => $shipment->destination_stock_location_id !== null ? (int) $shipment->destination_stock_location_id : null,
                 // The SKUs the Add Items sheet may put on the manifest.
                 'variants' => $this->stock->variantOptions()->all(),
                 // Other open runs from the same dock, for the Move Item sheet.
@@ -189,30 +194,26 @@ class ShipmentController extends Controller
         abort_unless($this->shipmentIsInScope($shipment), 403);
 
         $storeId = (int) (Auth::user()->store_id ?? 0);
-        $origin = $request->validated('origin_store_id') !== null
-            ? (int) $request->validated('origin_store_id')
-            : (int) $shipment->origin_store_id;
-        $destination = $request->validated('destination_store_id') !== null
-            ? (int) $request->validated('destination_store_id')
-            : (int) $shipment->destination_store_id;
+        $origin = $request->originLocation() ?? $this->workflow->originLeaf($shipment);
+        $destination = $request->destinationLocation() ?? $this->workflow->destinationLeaf($shipment);
 
         // The same rule as raising one: a seller cannot reroute a run away from
         // their own store and keep hold of it.
-        if ($origin !== $storeId && $destination !== $storeId) {
+        if (! $this->touchesStore($origin, $storeId) && ! $this->touchesStore($destination, $storeId)) {
             return back()->withErrors([
-                'origin_store_id' => 'A shipment must start or end at your own store.',
+                'destination_location_id' => 'A shipment must end at your own store or its Remote Hub.',
             ]);
         }
 
         try {
-            $shipment = $this->workflow->reroute($shipment, $origin, $destination);
+            $shipment = $this->workflow->reroute($shipment, null, null, $origin, $destination);
         } catch (\RuntimeException | \InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
 
         return back()->with(
             'success',
-            "Route set to {$shipment->origin?->name} → {$shipment->destination?->name}. "
+            "Route set to {$shipment->originLocation?->name} → {$shipment->destinationLocation?->name}. "
                 . 'Fleet, origin and destination have been asked to agree again.',
         );
     }
@@ -335,20 +336,19 @@ class ShipmentController extends Controller
     public function store(StoreShipmentRequest $request): RedirectResponse
     {
         $storeId = (int) (Auth::user()->store_id ?? 0);
+        $origin = $request->originLocation();
+        $destination = $request->destinationLocation();
 
-        // A seller may raise a shipment only with their own store at one end,
-        // inbound (replenishment) or outbound (sending stock on).
-        $origin = (int) $request->validated('origin_store_id');
-        $destination = (int) $request->validated('destination_store_id');
-
-        if ($origin !== $storeId && $destination !== $storeId) {
+        // A seller may raise a shipment only into their own store (or its
+        // Remote Hub): freight runs from a Main Hub, so it is always inbound.
+        if (! $this->touchesStore($origin, $storeId) && ! $this->touchesStore($destination, $storeId)) {
             return back()->withErrors([
-                'origin_store_id' => 'A shipment must start or end at your own store.',
+                'destination_location_id' => 'A shipment must end at your own store or its Remote Hub.',
             ]);
         }
 
         try {
-            $shipment = $this->workflow->create(
+            $shipment = $this->workflow->createBetween(
                 $origin,
                 $destination,
                 collect($request->validated())
@@ -358,12 +358,45 @@ class ShipmentController extends Controller
                 Auth::id(),
             );
         } catch (\InvalidArgumentException $e) {
-            return back()->withErrors(['origin_store_id' => $e->getMessage()]);
+            return back()->withErrors(['destination_location_id' => $e->getMessage()]);
         }
 
         return redirect()
             ->route('seller.shipments.show', $shipment)
             ->with('success', "Replenishment {$shipment->reference} opened.");
+    }
+
+    /** Is this end the seller's store — its floor, shelf or Remote Hub? */
+    private function touchesStore(?StockLocation $location, int $storeId): bool
+    {
+        return $location !== null && $storeId > 0 && StoreShipmentRequest::storeIdOf($location) === $storeId;
+    }
+
+    /**
+     * Where freight can run: from a Main Hub (A or B) to a store or a Remote
+     * Hub, as location ids from the tree.
+     *
+     * @return array{origins: array<int, array<string, string>>, destinations: array<int, array<string, string>>}
+     */
+    private function locationOptions(): array
+    {
+        $option = fn (StockLocation $location, string $label): array => [
+            'value' => (string) $location->id,
+            'label' => $label,
+        ];
+
+        $hubs = StockLocation::query()->ofKind(StockLocation::KIND_MAIN_HUB)->orderBy('name')->get();
+        $floors = StockLocation::query()->ofKind(StockLocation::KIND_BACKROOM)->with('store')->get()
+            ->sortBy(fn (StockLocation $l) => $l->store?->name);
+        $remotes = StockLocation::query()->ofKind(StockLocation::KIND_REMOTE_HUB)->orderBy('name')->get();
+
+        return [
+            'origins' => $hubs->map(fn (StockLocation $hub) => $option($hub, $hub->name.' — Main Hub'))->values()->all(),
+            'destinations' => $floors->map(fn (StockLocation $floor) => $option($floor, ($floor->store?->name ?? $floor->name).' — Store'))
+                ->concat($remotes->map(fn (StockLocation $remote) => $option($remote, $remote->name.' — Remote Hub')))
+                ->values()
+                ->all(),
+        ];
     }
 
     /**
@@ -561,7 +594,7 @@ class ShipmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "Handed over — stock deducted from {$shipment->origin?->name}.");
+        return back()->with('success', "Handed to the courier — stock left {$shipment->originLocation?->name}.");
     }
 
     /**
@@ -579,6 +612,6 @@ class ShipmentController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "Received — stock credited to {$shipment->destination?->name}.");
+        return back()->with('success', "Received — stock credited to {$shipment->destinationLocation?->name}.");
     }
 }

@@ -76,10 +76,10 @@ class CheckoutServiceTest extends TestCase
         ]);
     }
 
-    public function test_successful_cart_checkout_generates_sale_and_deducts_stock(): void
+    public function test_successful_cart_checkout_generates_sale_and_reserves_stock(): void
     {
-        // 1. Initial stock: 20 units
-        $this->stockService->recordPurchase($this->storeVariant, 20, 'PO-PEN-01');
+        // 1. Initial stock: 20 units on the store floor
+        $this->stockOnFloor(20);
         $this->assertEquals(20, $this->stockService->getCurrentStock($this->storeVariant));
 
         // 2. Create an open cart with 3 items
@@ -117,8 +117,11 @@ class CheckoutServiceTest extends TestCase
         $this->assertCount(1, $sale->items);
         $this->assertEquals(3, $sale->items->first()->quantity);
 
-        // 5. Stock verification: 20 - 3 = 17 remaining
-        $this->assertEquals(17, $this->stockService->getCurrentStock($this->storeVariant));
+        // 5. Checkout reserves; nothing leaves the floor until Pick & Pack.
+        $this->assertEquals(20, $this->stockService->getCurrentStock($this->storeVariant));
+        $this->assertEquals(17, $this->stockService->availableAtStore($this->itemVariant->id, $this->store->id));
+        $this->assertSame(1, \App\Models\Inventory\StockReservation::query()->open()
+            ->where('sale_item_id', $sale->items->first()->id)->where('quantity', 3)->count());
 
         // 6. Cart transitioned to completed
         $this->assertEquals('completed', $cart->fresh()->status);
@@ -135,7 +138,7 @@ class CheckoutServiceTest extends TestCase
     public function test_checkout_fails_if_insufficient_stock(): void
     {
         // Only 2 units in stock
-        $this->stockService->recordPurchase($this->storeVariant, 2, 'PO-PEN-02');
+        $this->stockOnFloor(2);
 
         // Cart wants 5 units
         $cart = Cart::create([
@@ -168,7 +171,7 @@ class CheckoutServiceTest extends TestCase
 
     public function test_checkout_fails_on_already_completed_cart(): void
     {
-        $this->stockService->recordPurchase($this->storeVariant, 10, 'PO-PEN-03');
+        $this->stockOnFloor(10);
 
         $cart = Cart::create([
             'store_id' => $this->store->id,
@@ -183,5 +186,16 @@ class CheckoutServiceTest extends TestCase
 
         $this->expectException(CartCheckoutException::class);
         $this->checkoutService->checkout($cart);
+    }
+
+    /** Real stock: item_stocks on the store's floor, through the ledger gateway. */
+    private function stockOnFloor(int $quantity): void
+    {
+        $floor = \App\Models\Inventory\StockLocation::query()
+            ->where('store_id', $this->store->id)
+            ->where('kind', \App\Models\Inventory\StockLocation::KIND_BACKROOM)
+            ->sole();
+
+        $this->stockService->receive($this->itemVariant->id, $floor, $quantity);
     }
 }

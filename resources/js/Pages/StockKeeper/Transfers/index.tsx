@@ -33,7 +33,7 @@ import {
     formatMoment,
 } from "@/Components/StockKeeper/stockKeeperUi";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
-import type { StockKeeperTransfersProps, TransferRow } from "@/types/stockkeeper";
+import type { StockKeeperTransfersProps, StockLocation, TransferRow } from "@/types/stockkeeper";
 
 const STATUS_TABS: Array<{ value: string; label: string }> = [
     { value: "all", label: "All" },
@@ -53,7 +53,7 @@ export default function Transfers({
     transfers,
     filters,
     counts,
-    stores,
+    locations = [],
     variants,
     pagination,
     flash,
@@ -181,9 +181,14 @@ export default function Transfers({
                                     </TableCell>
                                     <TableCell>
                                         <Typography variant="body2">
-                                            {transfer.from_store ?? "—"} →{" "}
-                                            {transfer.to_store ?? "—"}
+                                            {transfer.source_label ?? transfer.from_store ?? "—"} →{" "}
+                                            {transfer.destination_label ?? transfer.to_store ?? "—"}
                                         </Typography>
+                                        {transfer.needs_courier ? (
+                                            <Typography variant="caption" color={transfer.courier ? "text.secondary" : "warning.main"}>
+                                                {transfer.courier ? `Courier: ${transfer.courier}` : "Waiting for a courier to claim it"}
+                                            </Typography>
+                                        ) : null}
                                     </TableCell>
                                     <TableCell>
                                         <TransferStatusChip status={transfer.status} />
@@ -203,9 +208,10 @@ export default function Transfers({
                                                 <Button
                                                     size="small"
                                                     variant="contained"
+                                                    disabled={Boolean(transfer.needs_courier && !transfer.courier)}
                                                     onClick={() => act(transfer, "dispatch")}
                                                 >
-                                                    Dispatch
+                                                    {transfer.needs_courier ? "Hand to courier" : "Dispatch"}
                                                 </Button>
                                             ) : null}
                                             {transfer.status === "in_transit" ? (
@@ -278,7 +284,7 @@ export default function Transfers({
             <RaiseTransferDialog
                 open={createOpen}
                 onClose={() => setCreateOpen(false)}
-                stores={stores}
+                locations={locations}
                 variants={variants}
             />
 
@@ -300,29 +306,58 @@ export default function Transfers({
     );
 }
 
+/** Human label for a location kind in the pick list. */
+const KIND_LABEL: Record<string, string> = {
+    store: "whole store",
+    shelf: "shelf",
+    backroom: "store floor",
+    remote_hub: "remote hub",
+    main_hub: "main hub",
+    warehouse: "warehouse",
+};
+
+/** "App\Models\…#12" — the pair the server resolves to a location. */
+const pairOf = (location: StockLocation): string => `${location.type}#${location.id}`;
+
 function RaiseTransferDialog({
     open,
     onClose,
-    stores,
+    locations,
     variants,
 }: {
     open: boolean;
     onClose: () => void;
-    stores: StockKeeperTransfersProps["stores"];
+    locations: StockLocation[];
     variants: StockKeeperTransfersProps["variants"];
 }): React.ReactElement {
-    const { data, setData, post, processing, errors, reset } = useForm<{
+    const { data, setData, post, processing, errors, reset, transform } = useForm<{
         item_variant_id: number | "";
-        from_store_id: number | "";
-        to_store_id: number | "";
+        from: string;
+        to: string;
         quantity: number | "";
         notes: string;
     }>({
         item_variant_id: "",
-        from_store_id: "",
-        to_store_id: "",
+        from: "",
+        to: "",
         quantity: 1,
         notes: "",
+    });
+
+    // The pick lists carry "type#id"; the server takes the pair split out.
+    transform((form) => {
+        const [sourceType, sourceId] = form.from.split("#");
+        const [destinationType, destinationId] = form.to.split("#");
+
+        return {
+            item_variant_id: form.item_variant_id,
+            quantity: form.quantity,
+            notes: form.notes,
+            source_location_type: sourceType || null,
+            source_location_id: sourceId ? Number(sourceId) : null,
+            destination_location_type: destinationType || null,
+            destination_location_id: destinationId ? Number(destinationId) : null,
+        };
     });
 
     const submit = (event: React.FormEvent): void => {
@@ -335,6 +370,11 @@ function RaiseTransferDialog({
             },
         });
     };
+
+    // The server reports against the fields it received, not the form's.
+    const serverErrors = errors as Record<string, string | undefined>;
+    const fromError = serverErrors.source_location_id ?? serverErrors.from_store_id;
+    const toError = serverErrors.destination_location_id ?? serverErrors.to_store_id;
 
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -360,34 +400,31 @@ function RaiseTransferDialog({
 
                         <TextField
                             select
-                            label="From store"
-                            value={data.from_store_id}
-                            onChange={(event) =>
-                                setData("from_store_id", Number(event.target.value))
-                            }
-                            error={Boolean(errors.from_store_id)}
-                            helperText={errors.from_store_id}
+                            label="From"
+                            value={data.from}
+                            onChange={(event) => setData("from", event.target.value)}
+                            error={Boolean(fromError)}
+                            helperText={fromError ?? "A whole store sends from its floor."}
                         >
-                            {stores.map((store) => (
-                                <MenuItem key={store.id} value={store.id}>
-                                    {store.name} ({store.units.toLocaleString()} units)
+                            {locations.map((location) => (
+                                <MenuItem key={pairOf(location)} value={pairOf(location)}>
+                                    {location.name} · {KIND_LABEL[location.kind] ?? location.kind} (
+                                    {location.units.toLocaleString()} units)
                                 </MenuItem>
                             ))}
                         </TextField>
 
                         <TextField
                             select
-                            label="To store"
-                            value={data.to_store_id}
-                            onChange={(event) =>
-                                setData("to_store_id", Number(event.target.value))
-                            }
-                            error={Boolean(errors.to_store_id)}
-                            helperText={errors.to_store_id}
+                            label="To"
+                            value={data.to}
+                            onChange={(event) => setData("to", event.target.value)}
+                            error={Boolean(toError)}
+                            helperText={toError ?? "e.g. a store floor to its Store Shelf."}
                         >
-                            {stores.map((store) => (
-                                <MenuItem key={store.id} value={store.id}>
-                                    {store.name}
+                            {locations.map((location) => (
+                                <MenuItem key={pairOf(location)} value={pairOf(location)}>
+                                    {location.name} · {KIND_LABEL[location.kind] ?? location.kind}
                                 </MenuItem>
                             ))}
                         </TextField>
@@ -403,7 +440,7 @@ function RaiseTransferDialog({
                                 )
                             }
                             error={Boolean(errors.quantity)}
-                            helperText={errors.quantity}
+                            helperText={errors.quantity ?? "In the variant's own unit."}
                             slotProps={{ htmlInput: { min: 1 } }}
                         />
 

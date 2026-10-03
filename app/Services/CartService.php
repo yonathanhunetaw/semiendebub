@@ -130,12 +130,13 @@ class CartService
      * Returns null when the product has no piece-tier variant, in which case
      * loose pieces are not sellable for it.
      */
-    public function resolveExtraPiecePrice(Cart $cart, ItemVariant $variant): ?float
+    /**
+     * The same product, colour and size, packaged as loose pieces — what a
+     * cart line's "extra pieces" are actually sold (and picked) as.
+     */
+    public function pieceVariantFor(ItemVariant $variant): ?ItemVariant
     {
-        $variant->loadMissing(['itemPackagingType', 'itemColor', 'itemSize']);
-
-        // Same product, same colour/size, but packaged as loose pieces.
-        $pieceVariant = ItemVariant::query()
+        return ItemVariant::query()
             ->where('item_id', $variant->item_id)
             ->where('item_color_id', $variant->item_color_id)
             ->where('item_size_id', $variant->item_size_id)
@@ -144,6 +145,11 @@ class CartService
                     ->orWhereRaw('LOWER(name) LIKE ?', ['%pcs%']);
             })
             ->first();
+    }
+
+    public function resolveExtraPiecePrice(Cart $cart, ItemVariant $variant): ?float
+    {
+        $pieceVariant = $this->pieceVariantFor($variant);
 
         if (! $pieceVariant) {
             return null;
@@ -351,6 +357,8 @@ class CartService
     {
         $isGuest = ! auth()->check();
 
+        $sourcing = app(\App\Services\Fulfillment\OrderSourcingService::class);
+
         if (! $cart) {
             return [
                 'id' => null,
@@ -358,6 +366,9 @@ class CartService
                 'item_count' => 0,
                 'subtotal' => 0.0,
                 'is_guest' => $isGuest,
+                'sourcing_groups' => [],
+                'requires_delay_agreement' => false,
+                'delayed_line_count' => 0,
             ];
         }
 
@@ -402,12 +413,25 @@ class CartService
             ];
         })->values();
 
+        /*
+         * Where each line would come from, grouped by closest location.
+         *
+         * The drawer shows the basket split that way — "three of these are in
+         * the store, this one comes from the hub" — and a hub line carries a
+         * later promise the buyer has to accept before paying. Computed server
+         * side because the stock figures and the hierarchy both live here.
+         */
+        $grouped = $sourcing->groupCart($cart, $store);
+
         return [
             'id' => (int) $cart->id,
             'lines' => $lines->all(),
             'item_count' => (int) $lines->sum('quantity'),
             'subtotal' => round((float) $lines->sum('line_total'), 2),
             'is_guest' => $isGuest,
+            'sourcing_groups' => $grouped['groups'],
+            'requires_delay_agreement' => $grouped['requires_agreement'],
+            'delayed_line_count' => $grouped['delayed_line_count'],
         ];
     }
 

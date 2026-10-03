@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Models\Inventory\Warehouse;
-use App\Models\StockKeeper\ItemInventoryLocation;
+use App\Models\Inventory\StockLocation;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
+use App\Services\Fulfillment\MovementDomainService;
+use App\Services\Inventory\ItemStockReader;
+use App\Services\Inventory\PackagingLadder;
 
 /**
  * Where a store's stock sits: on the shelf, in the store room, or off-site.
@@ -15,13 +17,11 @@ use App\Models\Store\Store;
  * The admin stock tool offers three places for a store, and until now only one
  * of them was a record of anything:
  *
- *   Store Shelf      item_stocks at an item_inventory_locations row of kind
- *                    `shelf` belonging to this store.
- *   Store Room       the store's own total, minus the shelf. Derived rather
- *                    than stored, so the pair always adds back up to the
- *                    figure every other reader means by "the store's stock".
- *   Remote Warehouse item_stocks at the Warehouse joined to the store by
- *                    Store::warehouse().
+ *   Store Shelf      item_stocks at the store's shelf leaf.
+ *   Store            item_stocks at the store's floor leaf. Shelf + floor is
+ *                    what every reader means by "the store's stock".
+ *   Remote Warehouse item_stocks at the store's own Remote Hub, if it has one
+ *                    (relabelled "Remote Hub" in STOCK_PLAN phase 6).
  *
  * Previously the browser computed the first two as
  * `Math.round(totalStoreStock * 0.25)` and the remainder, and sat them beside
@@ -36,55 +36,65 @@ use App\Models\Store\Store;
  */
 class StoreLocationStockService
 {
+    public function __construct(
+        private readonly PackagingLadder $ladder,
+        private readonly ItemStockReader $reader,
+    ) {
+    }
+
     /**
-     * Pieces of the given variants sitting on this store's shelves.
+     * Pieces of the given variants on this store's Store Shelf.
      *
      * @param  array<int, int>  $piecesPerUnit  item_variant_id => pieces per unit
      */
     public function shelfPieces(Store $store, array $piecesPerUnit): int
     {
-        if ($piecesPerUnit === []) {
-            return 0;
-        }
-
-        $shelfIds = ItemInventoryLocation::query()
-            ->where('store_id', $store->id)
-            ->shelves()
-            ->pluck('id');
-
-        if ($shelfIds->isEmpty()) {
-            return 0;
-        }
-
-        return $this->sumPieces(
-            ItemStock::query()
-                ->where('location_type', ItemInventoryLocation::class)
-                ->whereIn('location_id', $shelfIds)
-                ->whereIn('item_variant_id', array_keys($piecesPerUnit))
-                ->pluck('quantity', 'item_variant_id')
-                ->all(),
-            $piecesPerUnit,
-        );
+        return $this->piecesAtKind($store, StockLocation::KIND_SHELF, $piecesPerUnit);
     }
 
     /**
-     * Pieces of the given variants held at this store's remote warehouse.
+     * Pieces of the given variants on this store's floor ("Store").
+     *
+     * @param  array<int, int>  $piecesPerUnit  item_variant_id => pieces per unit
+     */
+    public function floorPieces(Store $store, array $piecesPerUnit): int
+    {
+        return $this->piecesAtKind($store, StockLocation::KIND_BACKROOM, $piecesPerUnit);
+    }
+
+    /**
+     * Pieces of the given variants at this store's own Remote Hub — never a
+     * shared main hub (warehouses.store_id used to make Hub A read as one).
      *
      * @param  array<int, int>  $piecesPerUnit  item_variant_id => pieces per unit
      */
     public function remoteWarehousePieces(Store $store, array $piecesPerUnit): int
     {
-        $warehouse = $store->warehouse;
+        return $this->piecesAtKind($store, StockLocation::KIND_REMOTE_HUB, $piecesPerUnit);
+    }
 
-        if (! $warehouse || $piecesPerUnit === []) {
+    /** @param  array<int, int>  $piecesPerUnit */
+    private function piecesAtKind(Store $store, string $kind, array $piecesPerUnit): int
+    {
+        if ($piecesPerUnit === []) {
+            return 0;
+        }
+
+        $leafIds = StockLocation::query()
+            ->where('store_id', $store->id)
+            ->where('kind', $kind)
+            ->pluck('id');
+
+        if ($leafIds->isEmpty()) {
             return 0;
         }
 
         return $this->sumPieces(
             ItemStock::query()
-                ->where('location_type', Warehouse::class)
-                ->where('location_id', $warehouse->id)
+                ->whereIn('stock_location_id', $leafIds)
                 ->whereIn('item_variant_id', array_keys($piecesPerUnit))
+                ->groupBy('item_variant_id')
+                ->selectRaw('item_variant_id, SUM(quantity) as quantity')
                 ->pluck('quantity', 'item_variant_id')
                 ->all(),
             $piecesPerUnit,
@@ -100,34 +110,71 @@ class StoreLocationStockService
      * opinion on the same number is how the shelf and the total drifted apart
      * in the first place.
      *
+     * Each entry carries both the raw piece figure and the way that place
+     * speaks it:
+     *
+     *   shelf             the smallest unit only — "3,617 Pieces". A floor is
+     *                     handled and sold one at a time.
+     *   store room        biggest unit first — "30 Cartons · 17 Pieces".
+     *   remote warehouse  biggest unit first, for the same reason.
+     *
+     * $itemId is what makes that possible: the packaging ladder belongs to the
+     * item, so without it there is nothing to name the units with. Omit it and
+     * the figures still come back, labelled in plain pieces.
+     *
      * @param  array<int, int>  $piecesPerUnit  item_variant_id => pieces per unit
-     * @return array<int, array{key: string, label: string, stock: int, derived: bool}>
+     * @return array<int, array<string, mixed>>
      */
-    public function locations(Store $store, array $piecesPerUnit, int $storeTotalPieces): array
+    public function locations(Store $store, array $piecesPerUnit, int $storeTotalPieces, ?int $itemId = null): array
     {
+        // $storeTotalPieces is shelf + floor (StockService::getBatchStock), so
+        // total − shelf is exactly the floor — and the pair always adds back
+        // up to the figure the caller shows as the store's stock.
         $shelf = min($storeTotalPieces, $this->shelfPieces($store, $piecesPerUnit));
 
-        return [
+        $rows = [
             [
                 'key' => 'shelf',
                 'label' => 'Store Shelf',
                 'stock' => $shelf,
                 'derived' => false,
+                'kind' => MovementDomainService::NODE_SHELF,
             ],
             [
                 'key' => 'store_room',
-                'label' => 'Store Room',
-                // The remainder, so shelf + room is always the store's total.
+                'label' => 'Store',
                 'stock' => max(0, $storeTotalPieces - $shelf),
                 'derived' => true,
+                'kind' => MovementDomainService::NODE_BACKROOM,
             ],
             [
                 'key' => 'remote_warehouse',
-                'label' => 'Remote Warehouse',
+                'label' => 'Remote Hub',
                 'stock' => $this->remoteWarehousePieces($store, $piecesPerUnit),
                 'derived' => false,
+                'kind' => MovementDomainService::NODE_REMOTE_WAREHOUSE,
             ],
         ];
+
+        return array_map(function (array $row) use ($itemId): array {
+            $mode = $this->reader->displayModeFor($row['kind']);
+
+            if ($itemId === null) {
+                return $row + [
+                    'display' => number_format($row['stock']) . ' pcs',
+                    'units' => [],
+                    'display_mode' => $mode,
+                ];
+            }
+
+            $units = $this->ladder->units($row['stock'], $itemId, $mode);
+
+            return $row + [
+                'display' => $this->ladder->label($units),
+                'units' => $units,
+                'display_mode' => $mode,
+            ];
+        }, $rows);
     }
 
     /**

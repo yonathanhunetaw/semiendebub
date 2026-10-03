@@ -2,6 +2,7 @@
 
 namespace App\Models\StockKeeper;
 
+use App\Models\Concerns\BooksAgainstStockLocation;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 class ItemStock extends Model
 {
     use HasFactory;
+    use BooksAgainstStockLocation;
 
     protected $fillable = [
         'item_variant_id', // This is the column that actually exists in your DB
@@ -17,6 +19,7 @@ class ItemStock extends Model
         'location_type',
         'quantity',
         'min_stock_level',
+        'stock_location_id',
     ];
 
     public function location(): MorphTo

@@ -94,36 +94,30 @@ class CartController extends Controller
 
     public function show(Cart $cart)
     {
-        // 1. Authorization (Keep this! It's good practice)
-        $this->authorize('view', $cart);
+        $cart->load(['customer', 'store', 'seller', 'variants.item', 'variants.itemPackagingType']);
 
-        // 2. Eager load everything needed for the UI
-        // We load 'customer' for the header and 'items.product' to get names/prices
-        $cart->load([
-            'customer',
-            'items.product' // Assuming items belong to a product
-        ]);
+        $lines = $cart->variants->map(fn ($variant): array => [
+            'id' => (int) $variant->id,
+            'product_name' => $variant->item?->product_name ?? 'Unknown',
+            'sku' => $variant->sku,
+            'packaging' => $variant->itemPackagingType?->name,
+            'price' => (float) $variant->pivot->price,
+            'quantity' => (int) $variant->pivot->quantity,
+            'extra_pieces' => (int) ($variant->pivot->extra_pieces ?? 0),
+            'extra_piece_price' => $variant->pivot->extra_piece_price !== null ? (float) $variant->pivot->extra_piece_price : null,
+        ])->values();
 
-        // 3. Map items to match your React Interface
-        // This ensures your frontend doesn't have to guess where 'price' or 'name' is.
-        $cartData = [
-            'id' => $cart->id,
-            'status' => $cart->status,
-            'session_id' => $cart->session_id,
-            'customer' => $cart->customer,
-            'items' => $cart->items->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'product_name' => $item->product?->name ?? 'Unknown Product',
-                    'price' => $item->price, // Usually stored on the pivot/item table
-                    'quantity' => $item->quantity,
-                ];
-            }),
-        ];
-
-        // 4. Render with Inertia (Not the blade view)
-        return Inertia::render('Seller/Carts/Show', [
-            'cart' => $cartData
+        return Inertia::render('Admin/Carts/Show', [
+            'cart' => [
+                'id' => (int) $cart->id,
+                'status' => (string) $cart->status,
+                'store' => $cart->store?->name,
+                'seller' => $cart->seller ? trim($cart->seller->first_name.' '.$cart->seller->last_name) : null,
+                'customer' => $cart->customer?->name,
+                'created_at' => $cart->created_at?->toIso8601String(),
+                'items' => $lines,
+                'total' => round($lines->sum(fn (array $l): float => $l['price'] * $l['quantity'] + ($l['extra_piece_price'] ?? 0) * $l['extra_pieces']), 2),
+            ],
         ]);
     }
 

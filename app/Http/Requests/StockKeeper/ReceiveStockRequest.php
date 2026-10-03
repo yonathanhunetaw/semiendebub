@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\StockKeeper;
 
+use App\Models\Inventory\StockLocation;
+use App\Models\StockKeeper\ItemInventoryLocation;
+use App\Services\Inventory\StockScope;
 use App\Services\StockKeeperService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -28,7 +31,15 @@ class ReceiveStockRequest extends FormRequest
             'location_type' => [
                 'required',
                 'string',
-                Rule::in([StockKeeperService::WAREHOUSE_TYPE, StockKeeperService::STORE_TYPE]),
+                // A shop floor and a back room hold stock in the same ledger, so
+                // goods can be booked straight onto the floor rather than into
+                // the store as an abstraction and then "found" there later.
+                Rule::in([
+                    StockLocation::class,
+                    StockKeeperService::WAREHOUSE_TYPE,
+                    StockKeeperService::STORE_TYPE,
+                    ItemInventoryLocation::class,
+                ]),
             ],
             'location_id' => ['required', 'integer', 'min:1'],
             'quantity' => ['required', 'integer', 'min:1', 'max:1000000'],
@@ -42,27 +53,30 @@ class ReceiveStockRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'location_type.in' => 'Stock can only be received into a warehouse or a store.',
+            'location_type.in' => 'Stock can only be received into a shelf, a store floor or a hub.',
             'quantity.min' => 'Receive at least one unit.',
         ];
     }
 
     /**
-     * The location must actually exist in whichever table its type names.
+     * The location must resolve to a place that can hold stock — a shelf, a
+     * store floor, a remote hub or a main hub (a store as a whole means its
+     * floor). See App\Services\Inventory\StockScope::leafFor().
      */
     public function withValidator($validator): void
     {
         $validator->after(function ($validator): void {
-            $table = $this->input('location_type') === StockKeeperService::WAREHOUSE_TYPE
-                ? 'warehouses'
-                : 'stores';
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
 
-            $exists = \Illuminate\Support\Facades\DB::table($table)
-                ->where('id', $this->input('location_id'))
-                ->exists();
+            $leaf = app(StockScope::class)->leafFor(
+                (string) $this->input('location_type'),
+                (int) $this->input('location_id'),
+            );
 
-            if (! $exists) {
-                $validator->errors()->add('location_id', 'That location does not exist.');
+            if ($leaf === null) {
+                $validator->errors()->add('location_id', 'That location does not exist or cannot hold stock.');
             }
         });
     }

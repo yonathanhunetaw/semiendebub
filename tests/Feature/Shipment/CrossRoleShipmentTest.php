@@ -56,8 +56,24 @@ class CrossRoleShipmentTest extends TestCase
             Role::firstOrCreate(['name' => $role]);
         }
 
-        $this->origin = Store::factory()->create(['name' => 'Central Hub']);
-        $this->destination = Store::factory()->create(['name' => 'Main Store']);
+        /*
+         * Both ends are warehouse-class facilities.
+         *
+         * A shipment is bulk freight between structural nodes — warehouse to
+         * warehouse, or warehouse to remote warehouse. A leg with a retail store
+         * at either end is localized balancing and belongs to the Transfer
+         * domain, which MovementDomainService now enforces. These fixtures used
+         * an untyped (therefore retail) destination, from when `shipments` was
+         * the only multi-SKU movement the system had.
+         */
+        $this->origin = Store::factory()->create([
+            'name' => 'Central Hub',
+            'type' => Store::TYPE_CENTRAL_WAREHOUSE,
+        ]);
+        $this->destination = Store::factory()->create([
+            'name' => 'Kality Depot',
+            'type' => Store::TYPE_REMOTE_WAREHOUSE,
+        ]);
 
         $this->admin = $this->userWithRole('admin', null);
         $this->stockKeeper = $this->userWithRole('stock_keeper', $this->origin->id);

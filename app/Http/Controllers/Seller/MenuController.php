@@ -8,6 +8,8 @@ use App\Models\Auth\User;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Item\Item;
 use App\Models\Seller\Cart;
+use App\Services\Fulfillment\SellerOrderBoard;
+use App\Services\Inventory\SellerLocationBoard;
 use App\Services\ShipmentWorkflowService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
@@ -31,21 +33,34 @@ class MenuController extends Controller
     /**
      * The seller's "More" hub.
      *
-     * Feeds the shipments pipeline card and the catalogue counters. Every
-     * number here is a real aggregate.
-     *
-     * The order pipeline tiles are *not* served from here: the order domain
-     * has no backend yet, so that card counts the sample orders the order
-     * screens render, keeping a tile badge and the tab it opens in agreement.
+     * Feeds the order and shipment pipeline cards, the location strip and the
+     * catalogue counters. Every number here is a real aggregate. Order tiles
+     * come from SellerOrderBoard, the same mapping the order list uses, so a
+     * badge and the tab it opens agree.
      */
-    public function index()
+    public function index(SellerOrderBoard $orderBoard, SellerLocationBoard $locationBoard)
     {
         $user = auth()->user();
         $storeId = (int) ($user?->store_id ?? 0);
 
         return Inertia::render('Seller/Menu/Index', [
+            'locations' => $locationBoard->strip($storeId > 0 ? $storeId : null),
             'stats' => [
+                'order_stages' => $orderBoard->counts($storeId > 0 ? $storeId : null),
                 'shipments' => $this->shipmentPipeline($storeId),
+                /*
+                 * The one order counter that is real.
+                 *
+                 * The pipeline tiles above still count sample orders, but Pick &
+                 * Pack is backed: these are paid sales whose lines have yet to be
+                 * sourced from a location, which is what the queue screen lists.
+                 */
+                'orders' => [
+                    'awaiting_sourcing' => \App\Models\Finance\Sale::query()
+                        ->when($storeId > 0, fn ($query) => $query->forStore($storeId))
+                        ->awaitingSourcing()
+                        ->count(),
+                ],
                 'catalogue' => [
                     'customers' => Customer::count(),
                     'items' => Item::where('status', 'active')->count(),

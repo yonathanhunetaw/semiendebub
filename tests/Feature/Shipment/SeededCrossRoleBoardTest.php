@@ -119,16 +119,40 @@ class SeededCrossRoleBoardTest extends TestCase
         return app(ShipmentWorkflowService::class);
     }
 
-    /** A facility that holds enough stock to actually dispatch from. */
+    /**
+     * The seeded seller, at a retail store that receives freight.
+     *
+     * Shipments run from a Main Hub to a store or a Remote Hub (STOCK_PLAN.md
+     * phase 4), so a seller's own shop is a legal destination and they are
+     * kept there. Only the store_id is pinned, so everything they can see
+     * follows from it exactly as before. The write rolls back with the test.
+     */
+    private function sellerAtFreightDock(string $email = 'seller@seller.com'): User
+    {
+        $seller = $this->seededUser($email);
+
+        $dock = Store::query()->retail()->orderBy('id')->first();
+
+        $this->assertNotNull($dock, 'The seeders are expected to create retail stores.');
+
+        $seller->forceFill(['store_id' => $dock->id])->save();
+
+        return $seller->refresh();
+    }
+
+    /** A Main Hub facility that holds enough stock to actually dispatch from. */
     private function stockedOrigin(int $notStoreId): Store
     {
+        $hubIds = Store::query()->where('type', Store::TYPE_CENTRAL_WAREHOUSE)->pluck('id');
+
         $storeId = ItemStock::query()
             ->where('location_type', Store::class)
+            ->whereIn('location_id', $hubIds)
             ->where('location_id', '!=', $notStoreId)
             ->where('quantity', '>', 50)
             ->value('location_id');
 
-        $this->assertNotNull($storeId, 'The seeders are expected to stock at least one other facility.');
+        $this->assertNotNull($storeId, 'The seeders are expected to stock at least one Main Hub.');
 
         return Store::findOrFail($storeId);
     }
@@ -304,7 +328,7 @@ class SeededCrossRoleBoardTest extends TestCase
     #[Test]
     public function a_run_the_seller_raises_appears_on_the_delivery_stock_keeper_and_admin_boards(): void
     {
-        $seller = $this->seededUser('seller@seller.com');
+        $seller = $this->sellerAtFreightDock();
         $origin = $this->stockedOrigin((int) $seller->store_id);
 
         $this->asUser($seller, 'seller')
@@ -334,7 +358,7 @@ class SeededCrossRoleBoardTest extends TestCase
     public function a_run_the_admin_raises_appears_on_the_seller_delivery_and_stock_keeper_boards(): void
     {
         $admin = $this->seededUser('admin@admin.com');
-        $seller = $this->seededUser('seller@seller.com');
+        $seller = $this->sellerAtFreightDock();
         $origin = $this->stockedOrigin((int) $seller->store_id);
 
         $this->asUser($admin, 'admin')
@@ -363,7 +387,7 @@ class SeededCrossRoleBoardTest extends TestCase
     #[Test]
     public function the_stock_keeper_board_shows_inbound_runs_without_switching_direction(): void
     {
-        $seller = $this->seededUser('seller@seller.com');
+        $seller = $this->sellerAtFreightDock();
         $origin = $this->stockedOrigin((int) $seller->store_id);
 
         // A keeper posted to the store being replenished. The seeded keepers
@@ -433,7 +457,7 @@ class SeededCrossRoleBoardTest extends TestCase
     #[Test]
     public function the_alternate_windows_a_seller_proposes_reach_the_record(): void
     {
-        $seller = $this->seededUser('seller@seller.com');
+        $seller = $this->sellerAtFreightDock();
         $origin = $this->stockedOrigin((int) $seller->store_id);
 
         $primary = now()->addDay()->setTime(8, 30)->format('Y-m-d\TH:i');
@@ -517,7 +541,7 @@ class SeededCrossRoleBoardTest extends TestCase
     #[Test]
     public function the_parties_can_settle_on_an_alternate_window_rather_than_the_first(): void
     {
-        $seller = $this->seededUser('seller@seller.com');
+        $seller = $this->sellerAtFreightDock();
         $courier = User::role('delivery')->firstOrFail();
         $keeper = $this->seededUser('stockkeeper@stockkeeper.com');
         $origin = $this->stockedOrigin((int) $seller->store_id);
@@ -599,7 +623,7 @@ class SeededCrossRoleBoardTest extends TestCase
     #[Test]
     public function seller_admin_delivery_and_the_stock_keeper_carry_one_run_to_received(): void
     {
-        $seller = $this->seededUser('seller@seller.com');
+        $seller = $this->sellerAtFreightDock();
         $courier = User::role('delivery')->firstOrFail();
         $keeper = $this->seededUser('stockkeeper@stockkeeper.com');
         $destination = Store::findOrFail((int) $seller->store_id);

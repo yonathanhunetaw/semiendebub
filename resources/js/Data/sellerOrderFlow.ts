@@ -26,7 +26,7 @@ export type Fulfillment = "local" | "hub";
 
 export const FULFILLMENT_LABELS: Record<Fulfillment, { title: string; badge: string; badgeClass: string }> = {
     local: {
-        title: "Store & Remote Warehouse",
+        title: "Store & Remote Hub",
         badge: "Local + Remote",
         badgeClass: "bg-blue-600 text-white",
     },

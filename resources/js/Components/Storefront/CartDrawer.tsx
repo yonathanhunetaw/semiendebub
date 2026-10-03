@@ -3,7 +3,11 @@ import React from "react";
 
 import PackagingPlaceholder from "@/Components/Shared/PackagingPlaceholder";
 
-import type { StorefrontCart, StorefrontCartLine } from "@/types/storefront";
+import type {
+    StorefrontCart,
+    StorefrontCartLine,
+    StorefrontSourcingGroup,
+} from "@/types/storefront";
 import {
     STOREFRONT_BRAND,
     formatPrice,
@@ -18,18 +22,39 @@ export interface CartDrawerProps {
     /** Set an absolute quantity on a line; 0 clears it. */
     onUpdateQuantity: (line: StorefrontCartLine, quantity: number) => void;
     onRemove: (line: StorefrontCartLine) => void;
-    onCheckout: () => void;
+    /**
+     * `acceptDelay` carries the buyer's agreement to wait for lines that can
+     * only be sent from a main warehouse. The server refuses checkout without
+     * it, so the button stays disabled until it is ticked.
+     */
+    onCheckout: (acceptDelay: boolean) => void;
     /** True while any cart mutation is in flight. */
     isBusy?: boolean;
     /** Drives the checkout copy: guests are told they will sign in first. */
     isAuthenticated: boolean;
 }
 
+/** Icon per node kind, nearest to furthest. */
+const GROUP_ICONS: Record<string, string> = {
+    shelf: "storefront",
+    backroom: "inventory_2",
+    store: "store",
+    remote_warehouse: "warehouse",
+    main_warehouse: "factory",
+    other: "location_on",
+};
+
 /**
  * Slide-over cart for the current shopper.
  *
  * Single-cart by design: unlike the Seller workspace there is no cart picker,
  * vendor split or manifest here — one shopper, one cart.
+ *
+ * Lines are shown grouped by the closest location that can serve them, because
+ * that is what decides when the order arrives. A group sourced from a main
+ * warehouse is explicitly marked as arriving later, and checkout is blocked
+ * until the buyer agrees to that wait — the same rule CheckoutService enforces
+ * server-side, so the agreement cannot be skipped by posting directly.
  */
 export default function CartDrawer({
     open,
@@ -42,6 +67,23 @@ export default function CartDrawer({
     isAuthenticated,
 }: CartDrawerProps): React.ReactElement {
     const isEmpty = cart.lines.length === 0;
+
+    const groups: StorefrontSourcingGroup[] = cart.sourcing_groups ?? [];
+    const needsAgreement = Boolean(cart.requires_delay_agreement);
+    const [acceptedDelay, setAcceptedDelay] = React.useState(false);
+
+    // A changed basket is a changed promise: re-tick rather than carry an
+    // agreement over to items the buyer has not seen the wait for.
+    React.useEffect(() => {
+        if (!needsAgreement) {
+            setAcceptedDelay(false);
+        }
+    }, [needsAgreement, cart.delayed_line_count]);
+
+    const lineFor = (variantId: number): StorefrontCartLine | undefined =>
+        cart.lines.find((line) => line.variant_id === variantId);
+
+    const checkoutBlocked = isBusy || (needsAgreement && !acceptedDelay);
 
     return (
         <Drawer
@@ -109,7 +151,8 @@ export default function CartDrawer({
                             Start shopping
                         </button>
                     </div>
-                ) : (
+                ) : groups.length === 0 ? (
+                    /* No grouping from the server: one flat list, as before. */
                     <ul className="space-y-2">
                         {cart.lines.map((line) => (
                             <CartLineRow
@@ -121,6 +164,75 @@ export default function CartDrawer({
                             />
                         ))}
                     </ul>
+                ) : (
+                    <div className="space-y-4">
+                        {groups.map((group) => (
+                            <section key={group.key}>
+                                <header
+                                    className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 ${
+                                        group.requires_agreement
+                                            ? "border-amber-200 bg-amber-50"
+                                            : "border-slate-200 bg-slate-50"
+                                    }`}
+                                >
+                                    <span
+                                        className="material-symbols-outlined text-[18px]"
+                                        style={{
+                                            color: group.requires_agreement
+                                                ? "#b45309"
+                                                : STOREFRONT_BRAND,
+                                        }}
+                                    >
+                                        {GROUP_ICONS[group.key] ?? GROUP_ICONS.other}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-[11px] font-bold text-gray-900">
+                                            {group.label}
+                                            <span className="font-medium text-slate-500">
+                                                {" · "}
+                                                {group.location_name}
+                                            </span>
+                                        </p>
+                                        <p
+                                            className={`text-[10px] font-semibold ${
+                                                group.requires_agreement
+                                                    ? "text-amber-800"
+                                                    : "text-emerald-700"
+                                            }`}
+                                        >
+                                            {group.promise}
+                                        </p>
+                                    </div>
+                                    <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                                        {group.lines.length}
+                                    </span>
+                                </header>
+
+                                <ul className="mt-2 space-y-2">
+                                    {group.lines.map((groupLine) => {
+                                        const line = lineFor(groupLine.variant_id);
+
+                                        if (!line) return null;
+
+                                        return (
+                                            <CartLineRow
+                                                key={line.variant_id}
+                                                line={line}
+                                                isBusy={isBusy}
+                                                onUpdateQuantity={onUpdateQuantity}
+                                                onRemove={onRemove}
+                                                shortfall={
+                                                    groupLine.fully_covered
+                                                        ? null
+                                                        : groupLine.available_here
+                                                }
+                                            />
+                                        );
+                                    })}
+                                </ul>
+                            </section>
+                        ))}
+                    </div>
                 )}
             </div>
 
@@ -141,12 +253,38 @@ export default function CartDrawer({
                         Delivery and taxes are calculated at checkout.
                     </p>
 
+                    {/* The buyer's half of order sourcing. */}
+                    {needsAgreement ? (
+                        <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-2">
+                            <input
+                                type="checkbox"
+                                checked={acceptedDelay}
+                                onChange={(event) => setAcceptedDelay(event.target.checked)}
+                                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#c2410c]"
+                            />
+                            <span className="text-[10px] leading-snug text-amber-900">
+                                <strong className="font-bold">
+                                    {cart.delayed_line_count} item
+                                    {cart.delayed_line_count === 1 ? "" : "s"}
+                                </strong>{" "}
+                                will be sent from our main warehouse and arrive later than
+                                the rest of your order. I agree to the longer delivery
+                                time.
+                            </span>
+                        </label>
+                    ) : null}
+
                     <button
                         type="button"
-                        onClick={onCheckout}
-                        disabled={isBusy}
+                        onClick={() => onCheckout(acceptedDelay)}
+                        disabled={checkoutBlocked}
+                        title={
+                            needsAgreement && !acceptedDelay
+                                ? "Confirm you are happy to wait for the warehouse items"
+                                : undefined
+                        }
                         className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-3 text-[13px] font-bold text-white shadow-md transition-transform active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-                        style={isBusy ? undefined : { backgroundColor: STOREFRONT_BRAND }}
+                        style={checkoutBlocked ? undefined : { backgroundColor: STOREFRONT_BRAND }}
                     >
                         <span className="material-symbols-outlined text-[18px]">
                             lock
@@ -170,6 +308,11 @@ interface CartLineRowProps {
     isBusy: boolean;
     onUpdateQuantity: (line: StorefrontCartLine, quantity: number) => void;
     onRemove: (line: StorefrontCartLine) => void;
+    /**
+     * Units the chosen location can actually cover, when it cannot cover the
+     * whole line. Null when it can.
+     */
+    shortfall?: number | null;
 }
 
 function CartLineRow({
@@ -177,6 +320,7 @@ function CartLineRow({
     isBusy,
     onUpdateQuantity,
     onRemove,
+    shortfall = null,
 }: CartLineRowProps): React.ReactElement {
     const atStockCeiling =
         line.available_stock > 0 && line.quantity >= line.available_stock;
@@ -222,6 +366,11 @@ function CartLineRow({
                                 + {line.extra_pieces} Piece
                                 {line.extra_pieces === 1 ? "" : "s"} ×{" "}
                                 {formatPrice(line.extra_piece_price)}
+                            </p>
+                        ) : null}
+                        {shortfall !== null ? (
+                            <p className="mt-0.5 text-[10px] font-semibold text-amber-700">
+                                Only {shortfall} here — the rest follows on
                             </p>
                         ) : null}
                     </div>

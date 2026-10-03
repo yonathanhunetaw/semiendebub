@@ -15,7 +15,8 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\StockKeeper\Transfer;
 use App\Models\StockKeeper\ItemStock;
-use App\Models\Inventory\ItemInventoryLocation;
+use App\Services\TransferWorkflowService;
+use App\Services\Inventory\StockScope;
 use Carbon\Carbon;
 
 class StoreController extends Controller
@@ -47,6 +48,17 @@ class StoreController extends Controller
     /**
      * List all stores.
      */
+    /** The store's Remote Hub in the location tree, if it has one. */
+    private function remoteHubId(Store $store): ?int
+    {
+        $id = \App\Models\Inventory\StockLocation::query()
+            ->where('store_id', $store->id)
+            ->ofKind(\App\Models\Inventory\StockLocation::KIND_REMOTE_HUB)
+            ->value('id');
+
+        return $id === null ? null : (int) $id;
+    }
+
     public function index()
     {
         $paginator = Store::withCount('storeVariants')
@@ -98,8 +110,7 @@ class StoreController extends Controller
                                         // rows at every store and warehouse — see
                                         // StoreVariant::stocks().
                                         'stocks' => fn ($stockQuery) => $stockQuery
-                                            ->where('location_type', Store::class)
-                                            ->where('location_id', $store->id),
+                                            ->whereIn('stock_location_id', app(StockScope::class)->storeLeafIds((int) $store->id)),
                                         'customerPrices.customer',
                                         'sellerPrices.seller',
                                         'individualPrice',
@@ -110,7 +121,9 @@ class StoreController extends Controller
             ])
             ->paginate(25);
 
-        $inventory = $paginatedItems->through(function ($item) use ($store) {
+        $remoteHubId = $this->remoteHubId($store);
+
+        $inventory = $paginatedItems->through(function ($item) use ($store, $remoteHubId) {
             $storeVariants = collect();
             foreach ($item->variants as $itemVariant) {
                 foreach ($itemVariant->storeVariants as $sv) {
@@ -123,7 +136,7 @@ class StoreController extends Controller
             $storeVariantIds = $storeVariants->pluck('id')->toArray();
             $batchStocks = app(\App\Services\StockService::class)->getBatchStock($storeVariantIds);
 
-            $mappedVariants = $storeVariants->map(function ($sv) use ($store, $batchStocks) {
+            $mappedVariants = $storeVariants->map(function ($sv) use ($store, $batchStocks, $remoteHubId) {
                 $priceLadder = PriceProvider::getPriceLadder($sv->id, $store->id, null, null);
                 $finalPrice = PriceProvider::getFinalPrice($priceLadder);
 
@@ -132,13 +145,11 @@ class StoreController extends Controller
                 $discountEndsAt = $priceLadder[0]['discount_ends_at'] ?? null;
 
                 $store_stock = $batchStocks[$sv->id] ?? 0;
-                $remote_stock = 0;
-                if ($store->warehouse) {
-                    $remote_stock = ItemStock::where('location_type', \App\Models\Inventory\Warehouse::class)
-                        ->where('location_id', $store->warehouse->id)
-                        ->where('item_variant_id', $sv->itemVariant->id)
-                        ->sum('quantity');
-                }
+                // The store's own Remote Hub from the location tree. It used
+                // to be warehouses.store_id, which read Hub A as Main Store's.
+                $remote_stock = $remoteHubId === null ? 0 : (int) ItemStock::where('stock_location_id', $remoteHubId)
+                    ->where('item_variant_id', $sv->itemVariant->id)
+                    ->sum('quantity');
 
                 $pieces = $sv->itemVariant->calculateTotalPieces();
                 $multiplier = $pieces > 0 ? $pieces : 1;
@@ -196,13 +207,16 @@ class StoreController extends Controller
             })->values();
 
             $itemVariantIds = $storeVariants->pluck('item_variant_id')->toArray();
-            $warehouseStocks = ItemStock::where('location_type', \App\Models\Inventory\Warehouse::class)
+            // The shared main hubs, from the location tree.
+            $warehouseStocks = ItemStock::query()
+                ->whereIn('stock_location_id', \App\Models\Inventory\StockLocation::query()
+                    ->ofKind(\App\Models\Inventory\StockLocation::KIND_MAIN_HUB)->pluck('id'))
                 ->whereIn('item_variant_id', $itemVariantIds)
-                ->with('location')
+                ->with('stockLocation')
                 ->get()
-                ->groupBy('location_id')
+                ->groupBy('stock_location_id')
                 ->map(function ($stocks) use ($storeVariants) {
-                    $loc = $stocks->first()->location;
+                    $loc = $stocks->first()->stockLocation;
                     $qtyInPieces = $stocks->reduce(function ($carry, $stock) use ($storeVariants) {
                         $sv = $storeVariants->firstWhere('item_variant_id', $stock->item_variant_id);
                         $mult = $sv ? max(1, $sv->itemVariant->calculateTotalPieces()) : 1;
@@ -238,6 +252,9 @@ class StoreController extends Controller
                     $store,
                     $this->piecesPerUnit($storeVariants),
                     (int) $totalStock,
+                    // The ladder belongs to the item, so the figures can be read
+                    // as "30 Cartons · 17 Pieces" rather than a bare piece count.
+                    (int) $item->id,
                 ),
                 'variants' => $mappedVariants,
             ];
@@ -363,8 +380,7 @@ class StoreController extends Controller
                 $q->with(['item.category', 'itemColor', 'itemSize', 'itemPackagingType', 'packagingQuantities']);
             },
             'stocks' => fn ($stockQuery) => $stockQuery
-                ->where('location_type', Store::class)
-                ->where('location_id', $storeVariant->store_id),
+                ->whereIn('stock_location_id', app(StockScope::class)->storeLeafIds((int) $storeVariant->store_id)),
         ]);
 
         $priceLadder = PriceProvider::getPriceLadder($storeVariant->id, $storeVariant->store_id, null, null);
@@ -606,7 +622,15 @@ class StoreController extends Controller
                 $perCarton = $piecesPerUnit * 10;
                 $minReorder = $perCarton * 2;
 
-                if ((int) $sv->stock >= $minReorder) {
+                /*
+                 * `store_variants.stock` is a legacy column nothing maintains —
+                 * it is 0 for every row, so this comparison put the whole
+                 * catalogue on the replenishment queue. The ledger of record is
+                 * item_stocks, which is what current_stock now reads.
+                 */
+                $onHandPieces = $sv->current_stock * $piecesPerUnit;
+
+                if ($onHandPieces >= $minReorder) {
                     return null;
                 }
 
@@ -695,6 +719,8 @@ class StoreController extends Controller
     
     public function itemVariants(Store $store, \App\Models\Item\Item $item)
     {
+        $remoteHubId = $this->remoteHubId($store);
+
         $item->load([
             'category',
             'variants' => function ($q) use ($store) {
@@ -710,8 +736,7 @@ class StoreController extends Controller
                             $q2->where('store_id', $store->id)
                                 ->with([
                                     'stocks' => fn ($stockQuery) => $stockQuery
-                                        ->where('location_type', Store::class)
-                                        ->where('location_id', $store->id),
+                                        ->whereIn('stock_location_id', app(StockScope::class)->storeLeafIds((int) $store->id)),
                                     'customerPrices.customer',
                                     'sellerPrices.seller',
                                     'individualPrice',
@@ -733,7 +758,7 @@ class StoreController extends Controller
         $storeVariantIds = $storeVariants->pluck('id')->toArray();
         $batchStocks = app(\App\Services\StockService::class)->getBatchStock($storeVariantIds);
 
-        $mappedVariants = $storeVariants->map(function ($sv) use ($store, $batchStocks) {
+        $mappedVariants = $storeVariants->map(function ($sv) use ($store, $batchStocks, $remoteHubId) {
             $priceLadder = \App\Services\PriceProvider::getPriceLadder($sv->id, $store->id, null, null);
             $finalPrice = \App\Services\PriceProvider::getFinalPrice($priceLadder);
 
@@ -742,13 +767,9 @@ class StoreController extends Controller
             $discountEndsAt = $priceLadder[0]['discount_ends_at'] ?? null;
 
             $store_stock = $batchStocks[$sv->id] ?? 0;
-            $remote_stock = 0;
-            if ($store->warehouse) {
-                $remote_stock = \App\Models\Inventory\ItemStock::where('location_type', \App\Models\Inventory\Warehouse::class)
-                    ->where('location_id', $store->warehouse->id)
-                    ->where('item_variant_id', $sv->itemVariant->id)
-                    ->sum('quantity');
-            }
+            $remote_stock = $remoteHubId === null ? 0 : (int) ItemStock::where('stock_location_id', $remoteHubId)
+                ->where('item_variant_id', $sv->itemVariant->id)
+                ->sum('quantity');
 
             $pieces = $sv->itemVariant->calculateTotalPieces();
             $multiplier = $pieces > 0 ? $pieces : 1;
@@ -824,6 +845,7 @@ class StoreController extends Controller
                 $store,
                 $this->piecesPerUnit($storeVariants),
                 (int) $totalStock,
+                (int) $item->id,
             ),
             'variants' => $mappedVariants->values()->all(),
         ];
@@ -979,110 +1001,93 @@ class StoreController extends Controller
     // TRANSFER ACTIONS
     // ═════════════════════════════════════════════════════════════════════════
 
+    /*
+     * The replenish screen's transfer actions. All four go through
+     * TransferWorkflowService, so stock leaves an origin before it lands
+     * anywhere and a short origin is refused (STOCK_PLAN.md phase 4). They
+     * used to flip statuses and write item_stocks directly — "fire now" booked
+     * stock into a store without debiting any origin at all.
+     */
+
     public function cancelTransfer(Request $request, $id)
     {
-        if ((int)$id === 0) {
+        if ((int) $id === 0) {
             return back();
         }
 
         $transfer = Transfer::findOrFail($id);
+
         abort_unless(
-            in_array($transfer->status, ['pending', 'in_transit', 'queued']),
+            app(TransferWorkflowService::class)->cancel($transfer, auth()->id()),
             422,
             'Only pending or in-transit transfers can be cancelled.'
         );
-
-        $transfer->update([
-            'status' => 'cancelled',
-            'cancelled_at' => now(),
-            'cancelled_by' => auth()->id(),
-        ]);
 
         return back();
     }
 
     public function dispatchTransfer(Request $request, $id)
     {
-        if ((int)$id === 0 || $request->has('store_variant_id')) {
-            $svId = $request->input('store_variant_id');
-            $sv = StoreVariant::find($svId);
+        $workflow = app(TransferWorkflowService::class);
 
-            if ($sv) {
-                $iv = $sv->itemVariant;
-                $piecesPerUnit = max(1, (int) ($iv?->calculateTotalPieces() ?: 1));
-                $perCarton = $piecesPerUnit * 10;
-                $qty = (int) $request->input('quantity', $perCarton);
+        if ((int) $id === 0 || $request->has('store_variant_id')) {
+            $sv = StoreVariant::with('store')->find($request->input('store_variant_id'));
 
-                $reference = 'TR-' . str_pad((Transfer::max('id') ?? 0) + 1, 6, '0', STR_PAD_LEFT);
+            if ($sv && $sv->store) {
+                $quantity = max(1, (int) $request->input('quantity', 1));
 
-                Transfer::create([
-                    'reference' => $reference,
-                    'item_variant_id' => $sv->item_variant_id,
-                    'store_variant_id' => $sv->id,
-                    'to_store_id' => $sv->store_id,
-                    'quantity' => $qty,
-                    'status' => 'in_transit',
-                    'dispatched_at' => now(),
-                    'eta' => now()->addHours(24),
-                    'notes' => 'Auto-queued dispatch',
-                ]);
+                // A top-up comes from the store's own Remote Hub. Main Hubs A
+                // and B send stock as shipments, carried by Delivery.
+                $remote = \App\Models\Inventory\StockLocation::query()
+                    ->where('store_id', $sv->store_id)
+                    ->ofKind(\App\Models\Inventory\StockLocation::KIND_REMOTE_HUB)
+                    ->first();
+
+                abort_if(
+                    $remote === null || app(\App\Services\StockService::class)->availableAt((int) $sv->item_variant_id, $remote) < $quantity,
+                    422,
+                    'The Remote Hub does not hold enough. Raise a shipment from Main Hub A or B instead.',
+                );
+
+                // Raised, not dispatched: it leaves the Remote Hub when a
+                // courier collects it.
+                $workflow->create(
+                    variantId: (int) $sv->item_variant_id,
+                    fromStoreId: null,
+                    toStoreId: (int) $sv->store_id,
+                    quantity: $quantity,
+                    initiatedBy: auth()->id(),
+                    notes: 'Raised from the replenish screen',
+                    sourceLocationType: \App\Models\Inventory\StockLocation::class,
+                    sourceLocationId: (int) $remote->id,
+                    storeVariantId: (int) $sv->id,
+                );
 
                 return back();
             }
         }
 
         $transfer = Transfer::findOrFail($id);
-        abort_unless(in_array($transfer->status, ['pending', 'queued', 'draft']), 422, 'Only pending transfers can be dispatched.');
 
-        $transfer->update([
-            'status' => 'in_transit',
-            'dispatched_at' => now(),
-            'eta' => now()->addHours(24),
-        ]);
+        abort_unless($workflow->markDispatched($transfer, auth()->user()), 422, 'Only pending, approved transfers can be dispatched.');
 
         return back();
     }
 
     public function receiveTransfer(Transfer $transfer)
     {
-        abort_unless($transfer->status === 'in_transit', 422, 'Only in-transit transfers can be received.');
-
-        \DB::transaction(function () use ($transfer) {
-            $transfer->update([
-                'status' => 'completed',
-                'completed_at' => now(),
-            ]);
-
-            if ($transfer->storeVariant) {
-                $transfer->storeVariant()->increment('stock', $transfer->quantity);
-            }
-
-            if ($transfer->from_location_id && $transfer->item_variant_id) {
-                ItemStock::where([
-                    'item_variant_id' => $transfer->item_variant_id,
-                    'location_type' => ItemInventoryLocation::class,
-                    'location_id' => $transfer->from_location_id,
-                ])->decrement('quantity', $transfer->quantity);
-            }
-
-            $storeId = $transfer->storeVariant?->store_id ?? $transfer->to_store_id;
-            if ($storeId && $transfer->item_variant_id) {
-                ItemStock::firstOrCreate(
-                    [
-                        'location_type' => Store::class,
-                        'location_id' => $storeId,
-                        'item_variant_id' => $transfer->item_variant_id,
-                    ],
-                    ['quantity' => 0]
-                )->increment('quantity', $transfer->quantity);
-            }
-        });
+        abort_unless(
+            app(TransferWorkflowService::class)->markCompleted($transfer, auth()->user()),
+            422,
+            'Only in-transit transfers can be received.'
+        );
 
         return back();
     }
 
     /**
-     * POST /stores/{store}/transfers
+     * POST /stores/{store}/transfers — from one of the store's areas to the
+     * store (its floor).
      */
     public function storeTransfer(Request $request, Store $store)
     {
@@ -1095,20 +1100,23 @@ class StoreController extends Controller
 
         $sv = StoreVariant::findOrFail($validated['store_variant_id']);
 
-        $reference = 'TR-' . str_pad((Transfer::max('id') ?? 0) + 1, 6, '0', STR_PAD_LEFT);
-
-        Transfer::create([
-            'reference' => $reference,
-            'item_variant_id' => $sv->item_variant_id,
-            'store_variant_id' => $sv->id,
-            'to_store_id' => $store->id,
-            'from_location_id' => $validated['from_location_id'],
-            'to_location_id' => $validated['from_location_id'],
-            'quantity' => $validated['quantity'],
-            'status' => 'pending',
-            'initiated_by' => auth()->id(),
-            'notes' => $validated['notes'] ?? null,
-        ]);
+        try {
+            app(TransferWorkflowService::class)->create(
+                variantId: (int) $sv->item_variant_id,
+                fromStoreId: (int) $store->id,
+                toStoreId: (int) $store->id,
+                quantity: (int) $validated['quantity'],
+                initiatedBy: auth()->id(),
+                notes: $validated['notes'] ?? null,
+                sourceLocationType: \App\Models\StockKeeper\ItemInventoryLocation::class,
+                sourceLocationId: (int) $validated['from_location_id'],
+                destinationLocationType: Store::class,
+                destinationLocationId: (int) $store->id,
+                storeVariantId: (int) $sv->id,
+            );
+        } catch (\App\Exceptions\MovementDomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back();
     }

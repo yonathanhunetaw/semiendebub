@@ -5,7 +5,10 @@ use App\Http\Controllers\Seller\CategoryController;
 use App\Http\Controllers\Seller\CustomerController;
 use App\Http\Controllers\Seller\DashboardController;
 use App\Http\Controllers\Seller\ItemController;
+use App\Http\Controllers\Seller\LocationController;
 use App\Http\Controllers\Seller\MenuController;
+use App\Http\Controllers\Seller\OrderBoardController;
+use App\Http\Controllers\Seller\OrderController;
 use App\Http\Controllers\Seller\SellerSettingsController;
 use App\Http\Controllers\Seller\ShipmentController;
 use Illuminate\Support\Facades\Route;
@@ -32,22 +35,36 @@ Route::domain("seller.$baseDomain")
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
             Route::get('/menu', [MenuController::class, 'index'])->name('menu.index');
             /*
-             * UI-only preview of the seller order pipeline
-             * (cart → confirmation → to pay → paid → pick & pack).
-             *
-             * The order domain has no backend yet, so these render sample data
-             * from resources/js/Data/sellerOrderFlow.ts. The real cart list
-             * stays at /carts below.
+             * The seller order pipeline (to pay → paid → pick & pack → to
+             * deliver → delivered), read from real sales by SellerOrderBoard.
+             * Confirmation is still a UI-only preview over sample data from
+             * resources/js/Data/sellerOrderFlow.ts: there is no payment capture
+             * behind it yet.
              */
-            Route::get('/orders', fn () => Inertia::render('Seller/Orders/index'))->name('orders.index');
-            Route::get('/orders/confirmation', fn () => Inertia::render('Seller/Orders/Confirmation'))
-                ->name('orders.confirmation');
-            Route::get('/orders/{reference}/pay', fn (string $reference) => Inertia::render('Seller/Orders/ToPay', [
-                'reference' => $reference,
-            ]))->name('orders.pay');
-            Route::get('/orders/{reference}/pick-pack', fn (string $reference) => Inertia::render('Seller/Orders/PickPack', [
-                'reference' => $reference,
-            ]))->name('orders.pickpack');
+            Route::get('/orders', [OrderBoardController::class, 'index'])->name('orders.index');
+            Route::get('/orders/confirmation', [OrderBoardController::class, 'confirmation'])->name('orders.confirmation');
+            // Cart → order, payment (To pay → Paid) and cancellation.
+            Route::post('/orders', [OrderBoardController::class, 'store'])->name('orders.store');
+            Route::post('/orders/{reference}/payment', [OrderBoardController::class, 'payment'])->name('orders.payment');
+            Route::post('/orders/{reference}/cancel', [OrderBoardController::class, 'cancel'])->name('orders.cancel');
+            Route::patch('/orders/{reference}/address', [OrderBoardController::class, 'address'])->name('orders.address');
+            Route::get('/orders/{reference}/pay', [OrderBoardController::class, 'pay'])->name('orders.pay');
+            // Chain of custody: who held the order's goods, where, and when.
+            Route::get('/orders/{reference}/custody', [OrderBoardController::class, 'custody'])->name('orders.custody');
+            // Store Shelf, Store, Remote Hub and the main hubs, from stock_locations.
+            Route::get('/locations/{location}', [LocationController::class, 'show'])->name('locations.show');
+            // Shelf bins: an item's band, and a refill from the store floor.
+            Route::patch('/locations/{location}/bands/{item}', [LocationController::class, 'updateBand'])->name('locations.bands.update');
+            Route::post('/locations/{location}/bands/{item}/refill', [LocationController::class, 'requestRefill'])->name('locations.bands.refill');
+            /*
+             * Pick & Pack is the real half of the pipeline: a paid order's lines
+             * are sourced from an exact shelf, back room or warehouse before the
+             * order can become a delivery.
+             */
+            Route::get('/orders/pick-pack', [OrderController::class, 'queue'])->name('orders.queue');
+            Route::get('/orders/{reference}/pick-pack', [OrderController::class, 'pickPack'])->name('orders.pickpack');
+            Route::post('/orders/{sale}/sourcing', [OrderController::class, 'confirmSourcing'])
+                ->name('orders.sourcing.confirm');
             Route::get('/carts', [CartController::class, 'index'])->name('carts.index');
             Route::get('/items/search', [ItemController::class, 'search'])->name('items.search');
             Route::get('/items/page-json', [ItemController::class, 'pageItems'])->name('items.page-json');

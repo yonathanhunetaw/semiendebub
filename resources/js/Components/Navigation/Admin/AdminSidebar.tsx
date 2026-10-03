@@ -6,7 +6,10 @@ import {
     Layers,
     Inventory,
     MultipleStop,
+    AccountTree,
+    PendingActions,
     Storefront,
+    Tune,
     Warehouse,
     PointOfSale,
     Payments,
@@ -47,7 +50,14 @@ export default function AdminSidebar({
 
     // Only one dropdown state now: Inventory
     const [inventoryOpen, setInventoryOpen] = useState(
-        ["/inventory/transfers", "/inventory/stores", "/inventory/warehouse", "/inventory/replenish"].some((path) => url.includes(path))
+        [
+            "/inventory/transfers",
+            "/inventory/stores",
+            "/inventory/warehouse",
+            "/inventory/replenish",
+            "/inventory/capacity",
+            "/inventory/locations",
+        ].some((path) => url.includes(path))
     );
 
     const mainItemStyle = {
@@ -157,6 +167,18 @@ export default function AdminSidebar({
                                 </ListItemIcon>
                                 <ListItemText primary="Stores" />
                             </ListItemButton>
+                            {/* The location tree and each location's managers. */}
+                            <ListItemButton
+                                component={Link}
+                                href={route("admin.inventory.stock-locations.index")}
+                                selected={url.includes("/inventory/locations")}
+                                sx={indentedItemStyle}
+                            >
+                                <ListItemIcon sx={{ minWidth: 36 }}>
+                                    <AccountTree fontSize="small" />
+                                </ListItemIcon>
+                                <ListItemText primary="Locations" />
+                            </ListItemButton>
                             <ListItemButton
                                 component={Link}
                                 href="/inventory/warehouse"
@@ -178,6 +200,35 @@ export default function AdminSidebar({
                                     <MultipleStop fontSize="small" />
                                 </ListItemIcon>
                                 <ListItemText primary="Transfers" />
+                            </ListItemButton>
+                            {/*
+                              Variant capacity and the approvals it generates.
+                              Capacity is where a location's min/max is set, and
+                              Approvals is where the transfers that breaching it
+                              proposes wait for a store manager — they are two
+                              halves of one loop, so they sit together.
+                            */}
+                            <ListItemButton
+                                component={Link}
+                                href="/inventory/capacity"
+                                selected={url.includes("/inventory/capacity")}
+                                sx={indentedItemStyle}
+                            >
+                                <ListItemIcon sx={{ minWidth: 36 }}>
+                                    <Tune fontSize="small" />
+                                </ListItemIcon>
+                                <ListItemText primary="Capacity" />
+                            </ListItemButton>
+                            <ListItemButton
+                                component={Link}
+                                href="/inventory/replenishment"
+                                selected={url.includes("/inventory/replenishment")}
+                                sx={indentedItemStyle}
+                            >
+                                <ListItemIcon sx={{ minWidth: 36 }}>
+                                    <PendingActions fontSize="small" />
+                                </ListItemIcon>
+                                <ListItemText primary="Approvals" />
                             </ListItemButton>
                             {/*
                               Points at the real shipment board.
@@ -205,18 +256,18 @@ export default function AdminSidebar({
                 {/* 6. Operations */}
                 <ListItemButton
                     component={Link}
-                    href="/sales"
-                    selected={url.includes("/sales")}
+                    href={route("admin.orders.index")}
+                    selected={url.startsWith("/orders")}
                     sx={mainItemStyle}
                 >
                     <ListItemIcon><PointOfSale /></ListItemIcon>
-                    <ListItemText primary="Sales" />
+                    <ListItemText primary="Orders" />
                 </ListItemButton>
 
                 <ListItemButton
                     component={Link}
-                    href="/payments"
-                    selected={url.includes("/payments")}
+                    href={route("admin.payments.index")}
+                    selected={url.startsWith("/payments")}
                     sx={mainItemStyle}
                 >
                     <ListItemIcon><Payments /></ListItemIcon>
@@ -225,33 +276,24 @@ export default function AdminSidebar({
 
                 <ListItemButton
                     component={Link}
-                    href="/delivery"
-                    selected={url.includes("/delivery")}
+                    href={route("admin.deliveries.index")}
+                    selected={url.startsWith("/deliveries")}
                     sx={mainItemStyle}
                 >
                     <ListItemIcon><LocalShipping /></ListItemIcon>
                     <ListItemText primary="Delivery" />
                 </ListItemButton>
 
+                {/* Purchase orders live in the Procurement app. */}
                 <ListItemButton
-                    component={Link}
-                    href="/purchase-orders"
-                    selected={url.includes("/purchase-orders")}
+                    component="a"
+                    href={route("procurement.purchase_orders.index")}
                     sx={mainItemStyle}
                 >
                     <ListItemIcon><ReceiptLong /></ListItemIcon>
                     <ListItemText primary="Purchase Orders" />
                 </ListItemButton>
 
-                <ListItemButton
-                    component={Link}
-                    href="/tasks"
-                    selected={url.includes("/tasks")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><TaskAlt /></ListItemIcon>
-                    <ListItemText primary="Tasks" />
-                </ListItemButton>
                 {/* White Board / Canvas */}
                 <ListItemButton
                     component="a"

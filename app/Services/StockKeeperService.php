@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Auth\User;
+use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\Warehouse;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
+use App\Services\Inventory\ItemStockReader;
+use App\Services\Inventory\PackagingLadder;
+use App\Services\Inventory\StockScope;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -27,6 +31,14 @@ class StockKeeperService
 
     public const STORE_TYPE = Store::class;
 
+    public function __construct(
+        private readonly ItemStockReader $reader,
+        private readonly PackagingLadder $ladder,
+        private readonly StockScope $scope,
+        private readonly StockService $ledger,
+    ) {
+    }
+
     /**
      * Location names keyed by "{type}#{id}", memoized for the request.
      *
@@ -39,20 +51,68 @@ class StockKeeperService
      *
      * @return array<string, int>
      */
-    public function metrics(): array
+    public function metrics(?string $locationType = null, ?int $locationId = null): array
     {
-        $base = ItemStock::query();
+        // Delivery's custody is not stock on a shelf; an emptied custody row
+        // must not read as an out-of-stock line.
+        $base = ItemStock::query()->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'));
+
+        /*
+         * Items lead.
+         *
+         * This used to headline `tracked_skus`, a distinct count of
+         * item_variant_id — so a desk holding 182 products reported "1,629
+         * variants", a figure about how the catalogue is cut rather than about
+         * what is on the floor. Variants are still reported, below the items.
+         */
+        $itemMetrics = $this->reader->metrics($locationType, $locationId);
 
         return [
-            'tracked_skus' => (int) (clone $base)->distinct('item_variant_id')->count('item_variant_id'),
-            'units_on_hand' => (int) (clone $base)->sum('quantity'),
-            'stock_rows' => (int) (clone $base)->count(),
+            'items' => $itemMetrics['items'],
+            'variants' => $itemMetrics['variants'],
+            // Kept so older screens keep rendering; prefer `variants`.
+            'tracked_skus' => $itemMetrics['variants'],
+            'ledger_rows' => $itemMetrics['ledger_rows'],
+            'stock_rows' => $itemMetrics['ledger_rows'],
+            // Raw ledger sum, in mixed packaging units — not comparable across
+            // variants. `pieces_on_hand` is the figure that is.
+            'units_on_hand' => $itemMetrics['units_on_hand'],
+            'pieces_on_hand' => $itemMetrics['pieces_on_hand'],
             'low_stock' => (int) $this->lowStockQuery()->count(),
+            'low_stock_items' => $itemMetrics['low_stock_items'],
             'out_of_stock' => (int) (clone $base)->where('quantity', '<=', 0)->count(),
-            'warehouse_units' => (int) (clone $base)->where('location_type', self::WAREHOUSE_TYPE)->sum('quantity'),
-            'store_units' => (int) (clone $base)->where('location_type', self::STORE_TYPE)->sum('quantity'),
+            'out_of_stock_items' => $itemMetrics['out_of_stock_items'],
+            'warehouse_units' => (int) (clone $base)->whereIn('stock_location_id', $this->scope->leafIdsForType(self::WAREHOUSE_TYPE))->sum('quantity'),
+            'store_units' => (int) (clone $base)->whereIn('stock_location_id', $this->scope->leafIdsForType(self::STORE_TYPE))->sum('quantity'),
             'warehouses' => Warehouse::query()->count(),
         ];
+    }
+
+    /**
+     * The ledger as the floor reads it: one row per item, in that location's
+     * own units.
+     *
+     * @return array{rows: array<int, array<string, mixed>>, total_items: int, page: int, last_page: int}
+     */
+    public function paginateItems(
+        ?string $search = null,
+        ?string $locationType = null,
+        ?int $locationId = null,
+        int $page = 1,
+        int $perPage = 25,
+    ): array {
+        return $this->reader->paginateItems($locationType, $locationId, $search, $page, $perPage);
+    }
+
+    /**
+     * The variant rows behind one item, which is what a receive or a recount is
+     * actually written against.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function variantsForItem(int $itemId, ?string $locationType = null, ?int $locationId = null): array
+    {
+        return $this->reader->variantsForItem($itemId, $locationType, $locationId);
     }
 
     /**
@@ -66,6 +126,7 @@ class StockKeeperService
     public function lowStockQuery(): Builder
     {
         return ItemStock::query()
+            ->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'))
             ->whereColumn('quantity', '<=', 'min_stock_level')
             ->where('min_stock_level', '>', 0);
     }
@@ -111,14 +172,14 @@ class StockKeeperService
         ?int $perPage = null
     ): LengthAwarePaginator {
         $query = ItemStock::query()
-            ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize']);
+            ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
+            // Goods in a courier's hands are Delivery's, not a shelf to count.
+            ->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'));
 
         if ($locationType !== null) {
-            $query->where('location_type', $locationType);
-        }
-
-        if ($locationId !== null) {
-            $query->where('location_id', $locationId);
+            $query->whereIn('stock_location_id', $locationId !== null
+                ? $this->scope->leafIds($locationType, $locationId)
+                : $this->scope->leafIdsForType($locationType));
         }
 
         $this->applyVariantSearch($query, $search);
@@ -130,35 +191,57 @@ class StockKeeperService
     }
 
     /**
-     * Every place stock can sit, as one flat pick list.
+     * Every place stock can sit, as one flat pick list, from the one location
+     * tree (STOCK_PLAN.md §2.1): each store as a whole, its Store Shelf and
+     * Store (floor), its Remote Hub if it has one, and the shared main hubs.
      *
-     * @return array<int, array{id: int, name: string, type: string, kind: string, units: int}>
+     * Addressed as (StockLocation, id) pairs, which every reader and writer
+     * resolves through StockScope — a store node means its shelf + floor.
+     * `units` is the raw ledger sum in mixed packaging units, as before.
+     *
+     * @return array<int, array{id: int, name: string, type: string, kind: string, units: int, store_id: int|null}>
      */
     public function locations(): array
     {
-        $totals = ItemStock::query()
-            ->selectRaw('location_type, location_id, SUM(quantity) as units')
-            ->groupBy('location_type', 'location_id')
-            ->get()
-            ->keyBy(fn ($row) => $row->location_type . '#' . $row->location_id);
+        $units = ItemStock::query()
+            ->whereNotNull('stock_location_id')
+            ->selectRaw('stock_location_id, SUM(quantity) as units')
+            ->groupBy('stock_location_id')
+            ->pluck('units', 'stock_location_id')
+            ->map(fn ($n): int => (int) $n);
 
-        $warehouses = Warehouse::query()->orderBy('name')->get()->map(fn (Warehouse $warehouse) => [
-            'id' => (int) $warehouse->id,
-            'name' => (string) $warehouse->name,
-            'type' => self::WAREHOUSE_TYPE,
-            'kind' => 'warehouse',
-            'units' => (int) ($totals[self::WAREHOUSE_TYPE . '#' . $warehouse->id]->units ?? 0),
-        ]);
+        // "In Delivery" is the courier's custody, never a place to pick.
+        $nodes = StockLocation::query()->with('store')->where('kind', '!=', StockLocation::KIND_TRANSIT)->get();
+        $order = [
+            StockLocation::KIND_MAIN_HUB => 0,
+            StockLocation::KIND_STORE => 1,
+            StockLocation::KIND_SHELF => 2,
+            StockLocation::KIND_BACKROOM => 3,
+            StockLocation::KIND_REMOTE_HUB => 4,
+        ];
 
-        $stores = Store::query()->orderBy('name')->get()->map(fn (Store $store) => [
-            'id' => (int) $store->id,
-            'name' => (string) $store->name,
-            'type' => self::STORE_TYPE,
-            'kind' => 'store',
-            'units' => (int) ($totals[self::STORE_TYPE . '#' . $store->id]->units ?? 0),
-        ]);
-
-        return $warehouses->concat($stores)->values()->all();
+        return $nodes
+            ->sortBy(fn (StockLocation $node): string => sprintf(
+                '%d-%s-%d-%s',
+                $node->kind === StockLocation::KIND_MAIN_HUB ? 0 : 1,
+                $node->store?->name ?? '',
+                $order[$node->kind] ?? 9,
+                $node->name,
+            ))
+            ->map(fn (StockLocation $node): array => [
+                'id' => (int) $node->id,
+                'name' => $node->store_id !== null && $node->kind !== StockLocation::KIND_STORE && $node->kind !== StockLocation::KIND_REMOTE_HUB
+                    ? ($node->store?->name ?? '').' — '.$node->name
+                    : $node->name,
+                'type' => StockLocation::class,
+                'kind' => (string) $node->kind,
+                'units' => $node->is_stockable
+                    ? (int) ($units[$node->id] ?? 0)
+                    : (int) collect($this->scope->leafIdsForNode($node))->sum(fn (int $id): int => (int) ($units[$id] ?? 0)),
+                'store_id' => $node->store_id !== null ? (int) $node->store_id : null,
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -189,12 +272,21 @@ class StockKeeperService
         $quantity = (int) $stock->quantity;
         $minimum = (int) $stock->min_stock_level;
 
+        // The unit the row is counted in. A bare "11" was read as 11 pieces on
+        // every screen; against a carton variant it is 11 × 120.
+        $unit = (string) ($variant?->itemPackagingType?->name ?? 'Piece');
+        $piecesPerUnit = $variant !== null ? $this->ladder->piecesPerUnit((int) $variant->id) : 1;
+
         return [
             'id' => (int) $stock->id,
             'variant_id' => (int) $stock->item_variant_id,
+            'item_id' => (int) ($variant?->item_id ?? 0),
             'product_name' => (string) ($variant?->item?->product_name ?? 'Unknown product'),
             'sku' => $variant?->sku,
             'variant_label' => $this->variantLabel($variant),
+            'unit' => $unit,
+            'pieces_per_unit' => $piecesPerUnit,
+            'pieces' => $quantity * $piecesPerUnit,
             'location_name' => $this->locationName($stock),
             'location_kind' => $stock->location_type === self::WAREHOUSE_TYPE ? 'warehouse' : 'store',
             'quantity' => $quantity,
@@ -224,23 +316,15 @@ class StockKeeperService
     }
 
     /**
-     * Book stock into a location, creating the ledger row on first receipt.
+     * Book stock into a location through the ledger gateway: locked and
+     * journalled. A store as a whole books onto its floor.
      */
     public function receive(int $variantId, string $locationType, int $locationId, int $quantity, ?int $minStockLevel = null): ItemStock
     {
-        $stock = ItemStock::firstOrCreate(
-            [
-                'item_variant_id' => $variantId,
-                'location_type' => $locationType,
-                'location_id' => $locationId,
-            ],
-            [
-                'quantity' => 0,
-                'min_stock_level' => $minStockLevel ?? 0,
-            ],
-        );
+        $leaf = $this->scope->leafFor($locationType, $locationId)
+            ?? throw new \InvalidArgumentException('That location cannot hold stock.');
 
-        $stock->increment('quantity', $quantity);
+        $stock = $this->ledger->receive($variantId, $leaf, $quantity, ['reason' => 'Received by stock keeper']);
 
         if ($minStockLevel !== null) {
             $stock->update(['min_stock_level' => $minStockLevel]);
@@ -251,15 +335,28 @@ class StockKeeperService
 
     /**
      * Correct a count after a physical recount. Returns the signed delta.
+     *
+     * The difference goes through the gateway as an adjustment, so the recount
+     * is journalled with who made it.
      */
     public function adjust(ItemStock $stock, int $countedQuantity, ?int $minStockLevel = null): int
     {
+        if ($stock->stockLocation?->isTransit()) {
+            throw new \App\Exceptions\MovementDomainException(
+                'Goods In Delivery are counted by the hand-offs, not by a recount.',
+                \App\Services\Fulfillment\MovementDomainService::DOMAIN_TRANSFER,
+            );
+        }
+
         $delta = $countedQuantity - (int) $stock->quantity;
 
-        $stock->update(array_filter([
-            'quantity' => $countedQuantity,
-            'min_stock_level' => $minStockLevel,
-        ], fn ($value) => $value !== null));
+        if ($delta !== 0 && $stock->stock_location_id !== null) {
+            $this->ledger->adjust((int) $stock->item_variant_id, (int) $stock->stock_location_id, $delta, ['reason' => 'Recount']);
+        }
+
+        if ($minStockLevel !== null) {
+            $stock->update(['min_stock_level' => $minStockLevel]);
+        }
 
         return $delta;
     }
