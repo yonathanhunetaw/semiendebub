@@ -17,15 +17,13 @@ import {
     List,
     Grid,
 } from "@mui/material";
-import {
-    SettingsSuggest,
-    Storefront,
-    People,
-    AccountBalance,
-    Description,
-    History,
-    EventNote,
-} from "@mui/icons-material";
+import SettingsSuggest from "@mui/icons-material/SettingsSuggest";
+import Storefront from "@mui/icons-material/Storefront";
+import People from "@mui/icons-material/People";
+import AccountBalance from "@mui/icons-material/AccountBalance";
+import Description from "@mui/icons-material/Description";
+import History from "@mui/icons-material/History";
+import EventNote from "@mui/icons-material/EventNote";
 import { ThemeContext } from "@/app";
 
 type ThemeSetting = "light" | "dark" | "system";

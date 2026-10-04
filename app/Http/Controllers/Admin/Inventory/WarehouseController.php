@@ -73,9 +73,9 @@ class WarehouseController extends Controller
 
         return Inertia::render('Admin/Inventory/Warehouse/index', [
             'warehouses' => $warehouses,
-            // Candidates for the two manager slots.
+            // Candidates for manager. Any number may be appointed.
             'assignable_managers' => $this->assignableManagers(),
-            'max_managers' => FacilityManager::MAX_PER_FACILITY,
+            'max_managers' => null,
             'totalWarehouses' => count($warehouses),
             'totalUnits' => $totalUnits,
             'lowStockCount' => $lowStockCount,

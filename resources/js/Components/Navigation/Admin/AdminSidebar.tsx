@@ -1,26 +1,24 @@
 import React, { useState } from "react";
-import {
-    Dashboard,
-    ShoppingCart,
-    People,
-    Layers,
-    Inventory,
-    MultipleStop,
-    AccountTree,
-    PendingActions,
-    Storefront,
-    Tune,
-    Warehouse,
-    PointOfSale,
-    Payments,
-    LocalShipping,
-    ReceiptLong,
-    TaskAlt,
-    Settings,
-    ExpandLess,
-    ExpandMore,
-    Draw,
-} from "@mui/icons-material";
+import Dashboard from "@mui/icons-material/Dashboard";
+import ShoppingCart from "@mui/icons-material/ShoppingCart";
+import People from "@mui/icons-material/People";
+import Layers from "@mui/icons-material/Layers";
+import Inventory from "@mui/icons-material/Inventory";
+import MultipleStop from "@mui/icons-material/MultipleStop";
+import AccountTree from "@mui/icons-material/AccountTree";
+import PendingActions from "@mui/icons-material/PendingActions";
+import Storefront from "@mui/icons-material/Storefront";
+import Tune from "@mui/icons-material/Tune";
+import Warehouse from "@mui/icons-material/Warehouse";
+import PointOfSale from "@mui/icons-material/PointOfSale";
+import Payments from "@mui/icons-material/Payments";
+import LocalShipping from "@mui/icons-material/LocalShipping";
+import ReceiptLong from "@mui/icons-material/ReceiptLong";
+import TaskAlt from "@mui/icons-material/TaskAlt";
+import Settings from "@mui/icons-material/Settings";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
+import Draw from "@mui/icons-material/Draw";
 import { Link, usePage } from "@inertiajs/react";
 import {
     Box,

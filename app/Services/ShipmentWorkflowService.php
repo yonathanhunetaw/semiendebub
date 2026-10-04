@@ -352,7 +352,9 @@ class ShipmentWorkflowService
             throw new \RuntimeException('The manifest is locked once picking has started.');
         }
 
-        return (bool) $shipment->items()->where('item_variant_id', $variant->id)->delete();
+        // Deleted as a model, not by query, so observers hear it: a refill
+        // suggestion on this line goes back to the manager's list.
+        return (bool) $shipment->items()->where('item_variant_id', $variant->id)->first()?->delete();
     }
 
     /**
@@ -398,6 +400,10 @@ class ShipmentWorkflowService
                 'unit' => $line->unit,
                 'location' => $line->location,
             ], fn ($v) => $v !== null));
+
+            // Refill suggestions on the line move with it rather than going
+            // back to the manager's list when the old line is deleted.
+            app(\App\Services\Inventory\RefillWorkflow::class)->manifestLineMoved((int) $line->shipment_id, (int) $to->id, (int) $variant->id);
 
             $line->delete();
 
@@ -1007,15 +1013,26 @@ class ShipmentWorkflowService
         return (string) $location->name;
     }
 
-    /** @return array<int> stock location ids this user manages */
+    /**
+     * Stock location ids this user manages — including the floor, shelf and
+     * Remote Hub of a store they manage as a whole.
+     *
+     * @return array<int>
+     */
     private function managedLocationIds(User $user): array
     {
-        return \App\Models\Inventory\FacilityManager::query()
+        $direct = \App\Models\Inventory\FacilityManager::query()
             ->where('user_id', $user->id)
             ->where('facility_type', StockLocation::class)
             ->pluck('facility_id')
-            ->map(fn ($id): int => (int) $id)
-            ->all();
+            ->map(fn ($id): int => (int) $id);
+
+        $children = $direct->isEmpty() ? collect() : StockLocation::query()
+            ->whereIn('parent_id', $direct)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id);
+
+        return $direct->merge($children)->unique()->values()->all();
     }
 
     /**

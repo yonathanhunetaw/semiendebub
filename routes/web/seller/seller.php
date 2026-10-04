@@ -9,6 +9,7 @@ use App\Http\Controllers\Seller\LocationController;
 use App\Http\Controllers\Seller\MenuController;
 use App\Http\Controllers\Seller\OrderBoardController;
 use App\Http\Controllers\Seller\OrderController;
+use App\Http\Controllers\Seller\RefillRequestController;
 use App\Http\Controllers\Seller\SellerSettingsController;
 use App\Http\Controllers\Seller\ShipmentController;
 use Illuminate\Support\Facades\Route;
@@ -53,9 +54,23 @@ Route::domain("seller.$baseDomain")
             Route::get('/orders/{reference}/custody', [OrderBoardController::class, 'custody'])->name('orders.custody');
             // Store Shelf, Store, Remote Hub and the main hubs, from stock_locations.
             Route::get('/locations/{location}', [LocationController::class, 'show'])->name('locations.show');
-            // Shelf bins: an item's band, and a refill from the store floor.
+            // Shelf bins: assign an item (its band) or take it off, raise a
+            // refill, and set where the store refills the item from.
+            Route::get('/locations/{location}/assignable', [LocationController::class, 'assignable'])->name('locations.assignable');
             Route::patch('/locations/{location}/bands/{item}', [LocationController::class, 'updateBand'])->name('locations.bands.update');
+            Route::delete('/locations/{location}/bands/{item}', [LocationController::class, 'destroyBand'])->name('locations.bands.destroy');
             Route::post('/locations/{location}/bands/{item}/refill', [LocationController::class, 'requestRefill'])->name('locations.bands.refill');
+            Route::put('/locations/{location}/routes/{item}', [LocationController::class, 'updateRoute'])->name('locations.routes.update');
+            // The refill list: the store manager takes suggestions onto the
+            // Remote Hub list or a shipment manifest, adjusts or cancels them.
+            Route::get('/refills', [RefillRequestController::class, 'index'])->name('refills.index');
+            Route::get('/refills/permissions', [RefillRequestController::class, 'permissions'])->name('refills.permissions');
+            Route::post('/refills/shipments', [RefillRequestController::class, 'ship'])->name('refills.ship');
+            Route::post('/refills/{refillRequest}/remote', [RefillRequestController::class, 'addToRemoteList'])->name('refills.remote');
+            Route::post('/shipments/{shipment}/refills', [RefillRequestController::class, 'addToManifest'])->name('refills.manifest');
+            Route::patch('/refills/{refillRequest}', [RefillRequestController::class, 'update'])->name('refills.update');
+            Route::post('/refills/{refillRequest}/cancel', [RefillRequestController::class, 'cancel'])->name('refills.cancel');
+            Route::post('/refills/{refillRequest}/accept', [RefillRequestController::class, 'accept'])->name('refills.accept');
             /*
              * Pick & Pack is the real half of the pipeline: a paid order's lines
              * are sourced from an exact shelf, back room or warehouse before the

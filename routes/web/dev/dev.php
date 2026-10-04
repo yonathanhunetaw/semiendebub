@@ -34,10 +34,8 @@ Route::domain("dev.{$baseDomain}")
                 return Inertia::render('Dev/Shipments/index');
             })->name('shipments.index');
 
-            Route::prefix('sessions')->group(function () {
-                Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
-                Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
-            });
+            $sessionController = SessionController::class;
+            require __DIR__ . '/../sessions.php';
 
             // Live log viewer -> dev.<domain>/logs
             Route::prefix('logs')->name('logs.')->group(function (): void {

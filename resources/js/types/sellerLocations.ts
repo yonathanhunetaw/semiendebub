@@ -58,6 +58,41 @@ export interface ShelfBin {
     max_pieces: number;
     fill: number;
     status: "empty" | "critical" | "refill" | "ok";
+    /** False = stock on the shelf for an item with no bin: shown as unassigned, never refilled. */
+    assigned: boolean;
+    /** Open refill legs for the item at this store (RefillRequest), urgent first. */
+    refills: ShelfRefillLeg[];
+    /** Where the store refills this item from, in order. */
+    route: RefillSource[];
+}
+
+/** floor = store floor → shelf; remote_hub = Remote Hub → floor; shipment = Hub A/B → floor. */
+export type RefillSource = "floor" | "remote_hub" | "shipment";
+
+export type RefillStatus = "pending" | "approved" | "in_progress" | "fulfilled" | "cancelled";
+
+/** One leg of a shelf refill (ShelfMatrix::withRefills). */
+export interface ShelfRefillLeg {
+    id: number;
+    reference: string;
+    source: RefillSource;
+    destination: "store" | "remote_hub" | null;
+    status: RefillStatus;
+    /** On the Remote Hub list, not yet accepted by the hub. */
+    awaits_hub: boolean;
+    requested_quantity: number;
+    urgent: boolean;
+    /** Units of the leg's own pack variant. */
+    quantity: number;
+    /** The same, spoken biggest unit first. */
+    display: string;
+}
+
+/** An item a shelf manager may assign to a bin (LocationController::assignable). */
+export interface AssignableItem {
+    id: number;
+    name: string;
+    units: Array<{ id: number | null; name: string; pieces: number }>;
 }
 
 export interface ShelfMatrixData {
@@ -66,5 +101,14 @@ export interface ShelfMatrixData {
     columns: string[];
     rows: number;
     bins: ShelfBin[];
-    totals: { items: number; occupied: number; pieces: number; banded: number; refill_queue: number; critical: number };
+    totals: {
+        items: number;
+        occupied: number;
+        pieces: number;
+        banded: number;
+        refill_queue: number;
+        critical: number;
+        unassigned: number;
+        refill_pending: number;
+    };
 }

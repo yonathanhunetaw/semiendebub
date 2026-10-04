@@ -38,6 +38,21 @@ return [
 
     'delayed_promise' => env('INVENTORY_DELAYED_PROMISE', 'Available tomorrow'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Shelf refills
+    |--------------------------------------------------------------------------
+    |
+    | A Store Shelf bin at its refill line raises a refill as soon as its stock
+    | changes (App\Observers\ShelfRefillObserver). Turn it off for bulk imports;
+    | stock keepers can still raise refills by hand.
+    |
+    */
+
+    'shelf_refill' => [
+        'observe_stock_changes' => (bool) env('INVENTORY_SHELF_REFILL_ON_STOCK_CHANGE', true),
+    ],
+
     'same_day_promise' => env('INVENTORY_SAME_DAY_PROMISE', 'Available today'),
 
     /*

@@ -10,6 +10,7 @@ use App\Models\Inventory\StockLocation;
 use App\Models\StockKeeper\Transfer;
 use App\Models\Store\Store;
 use App\Services\Fulfillment\MovementDomainService;
+use App\Services\Inventory\ShelfAssignmentGuard;
 use App\Services\Inventory\StockScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -47,6 +48,7 @@ class TransferWorkflowService
         private readonly MovementDomainService $domain,
         private readonly StockService $stock,
         private readonly StockScope $scope,
+        private readonly ShelfAssignmentGuard $shelfGuard,
     ) {
     }
 
@@ -94,6 +96,9 @@ class TransferWorkflowService
             $destinationLocationType,
             $destinationLocationId,
         );
+
+        // Planogram first: only an item with a bin there may go onto a shelf.
+        $this->shelfGuard->assertMayStock($variantId, $destinationLocationType, $destinationLocationId);
 
         return Transfer::create([
             'reference' => $this->nextReference(),

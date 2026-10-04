@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Inventory;
 
-use App\Models\Inventory\FacilityManager;
 use App\Models\Inventory\Warehouse;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -32,7 +31,7 @@ class AssignFacilityManagersRequest extends FormRequest
     {
         return [
             // An empty array is legitimate: it leaves the warehouse admin-only.
-            'manager_ids' => ['present', 'array', 'max:' . FacilityManager::MAX_PER_FACILITY],
+            'manager_ids' => ['present', 'array'],
             'manager_ids.*' => ['integer', 'distinct', 'exists:users,id'],
         ];
     }
@@ -43,8 +42,7 @@ class AssignFacilityManagersRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'manager_ids.max' => 'A warehouse may have at most ' . FacilityManager::MAX_PER_FACILITY . ' managers.',
-            'manager_ids.*.distinct' => 'The same user cannot fill both manager slots.',
+            'manager_ids.*.distinct' => 'The same user cannot be listed twice.',
         ];
     }
 

@@ -33,17 +33,15 @@ import {
     Divider,
     Tooltip
 } from "@mui/material";
-import {
-    Delete,
-    Edit,
-    Add,
-    Email,
-    Phone,
-    LocationOn,
-    Business,
-    Person,
-    PeopleAltOutlined
-} from "@mui/icons-material";
+import Delete from "@mui/icons-material/Delete";
+import Edit from "@mui/icons-material/Edit";
+import Add from "@mui/icons-material/Add";
+import Email from "@mui/icons-material/Email";
+import Phone from "@mui/icons-material/Phone";
+import LocationOn from "@mui/icons-material/LocationOn";
+import Business from "@mui/icons-material/Business";
+import Person from "@mui/icons-material/Person";
+import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
 import { useState, useEffect } from "react";
 
 const getInitials = (first: string, last: string) => {

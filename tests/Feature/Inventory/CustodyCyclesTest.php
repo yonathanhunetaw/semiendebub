@@ -11,6 +11,7 @@ use App\Models\Finance\Sale;
 use App\Models\Fulfillment\Delivery;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Inventory\InventoryMovement;
+use App\Models\Inventory\ShelfItemBand;
 use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\Warehouse;
 use App\Models\Item\Item;
@@ -93,6 +94,15 @@ class CustodyCyclesTest extends TestCase
             'item_id' => $item->id,
             'item_variant_id' => $this->variant->id,
             'active' => true,
+        ]);
+
+        // Planogram first: the item has a bin on the shelf.
+        ShelfItemBand::query()->create([
+            'stock_location_id' => $this->shelf->id,
+            'item_id' => $item->id,
+            'max_units' => 100,
+            'refill_units' => 10,
+            'critical_units' => 5,
         ]);
 
         $this->courier = $this->user('delivery');

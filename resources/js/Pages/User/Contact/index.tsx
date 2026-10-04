@@ -3,7 +3,10 @@ import AdminLayout from "@/Layouts/AppLayout"; // Adjust path if needed
 import { Head } from "@inertiajs/react";
 import {CardMedia, IconButton, Stack, Typography} from "@mui/material";
 import { Card } from "@mui/material";
-import {FastForwardRounded, FastRewindRounded, PauseRounded, PlayArrowRounded} from "@mui/icons-material";
+import FastForwardRounded from "@mui/icons-material/FastForwardRounded";
+import FastRewindRounded from "@mui/icons-material/FastRewindRounded";
+import PauseRounded from "@mui/icons-material/PauseRounded";
+import PlayArrowRounded from "@mui/icons-material/PlayArrowRounded";
 
 function ShuffleRoundedIcon(props: { fontSize: string }) {
     return null;

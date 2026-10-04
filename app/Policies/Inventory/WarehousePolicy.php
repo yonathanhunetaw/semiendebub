@@ -65,8 +65,8 @@ class WarehousePolicy
     /**
      * Appointing managers is an admin act.
      *
-     * A facility may hold at most two assignments; the ceiling itself is
-     * enforced in App\Models\Concerns\HasFacilityManagers::syncManagers().
+     * A facility may hold any number of assignments
+     * (App\Models\Concerns\HasFacilityManagers::syncManagers()).
      */
     public function assignManagers(User $user, Warehouse $warehouse): bool
     {

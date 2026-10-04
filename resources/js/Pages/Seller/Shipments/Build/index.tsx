@@ -2,6 +2,8 @@ import React, { useMemo, useState } from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, router } from "@inertiajs/react";
 import PartyDetailModal from "@/Components/Seller/PartyDetailModal";
+import RefillSuggestionsPanel from "@/Components/Seller/Shipments/RefillSuggestionsPanel";
+import type { ReplenishmentPanel } from "@/types/refills";
 import type {
     CourierInfo,
     Location,
@@ -51,6 +53,8 @@ interface Props extends PartyGateProps {
     /** The driver, once the fleet party has taken the run. */
     courier: CourierInfo | null;
     can_edit_manifest: boolean;
+    /** Refill requests this run could take (RefillBoard::manifestPanel). */
+    replenishment?: ReplenishmentPanel;
 }
 
 /** Packaging units the Add Items sheet offers. */
@@ -412,6 +416,7 @@ export default function SellerShipmentsIndex({
     origin_location_id, destination_location_id, locations,
     distance_km, scheduled_run, cutoff_label, vehicles, manifest_items: items,
     variants, move_targets, courier, can_edit_manifest,
+    replenishment = { suggestions: [], can_add: false, manifest_open: false },
     agreements, schedule_options, agreed_scheduled_for,
     outstanding_parties, actionable_parties, workflow_status,
 }: Props) {
@@ -899,6 +904,9 @@ export default function SellerShipmentsIndex({
                         ))}
                     </div>
                 </div>
+
+                {/* ── Requested refills: picked onto the manifest below ── */}
+                <RefillSuggestionsPanel shipmentId={transfer_id} panel={replenishment} />
 
                 {/* ── Replenishment Manifest ── */}
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">

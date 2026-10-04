@@ -6,7 +6,7 @@ import {
     BottomNavigationAction,
     useTheme, // Add this
 } from "@mui/material";
-import { Dashboard } from "@mui/icons-material";
+import Dashboard from "@mui/icons-material/Dashboard";
 import WarehouseRoundedIcon from "@mui/icons-material/WarehouseRounded";
 import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import { CiDeliveryTruck } from "react-icons/ci";

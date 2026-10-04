@@ -41,11 +41,28 @@ use Illuminate\Support\Facades\DB;
  */
 class ItemStockReader
 {
+    /** Leaf ids every query is limited to; null = unrestricted. @var array<int>|null */
+    private ?array $onlyLeafIds = null;
+
     public function __construct(
         private readonly PackagingLadder $ladder,
         private readonly MovementDomainService $domain,
         private readonly StockScope $scope,
     ) {
+    }
+
+    /**
+     * A copy of this reader that only ever sees the given leaf locations —
+     * a stock keeper's view of the ledger. Null lifts the restriction.
+     *
+     * @param  array<int>|null  $leafIds
+     */
+    public function restrictedTo(?array $leafIds): static
+    {
+        $copy = clone $this;
+        $copy->onlyLeafIds = $leafIds;
+
+        return $copy;
     }
 
     /*
@@ -317,6 +334,10 @@ class ItemStockReader
             $query->whereIn('s.stock_location_id', $locationId !== null
                 ? $this->scope->leafIds($locationType, $locationId)
                 : $this->scope->leafIdsForType($locationType));
+        }
+
+        if ($this->onlyLeafIds !== null) {
+            $query->whereIn('s.stock_location_id', $this->onlyLeafIds);
         }
 
         return $query;

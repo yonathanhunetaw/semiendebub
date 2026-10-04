@@ -58,10 +58,11 @@ class LocationManagersTest extends TestCase
     }
 
     #[Test]
-    public function an_admin_appoints_up_to_two_managers_primary_first(): void
+    public function an_admin_appoints_any_number_of_managers_primary_first_with_their_ticks(): void
     {
         [$first, $second, $third] = [$this->user('stock_keeper'), $this->user('stock_keeper'), $this->user('seller')];
 
+        // The older form still works: everyone named gets every tick.
         $this->asAdmin()
             ->post(route('admin.inventory.stock-locations.managers', $this->hubA), ['manager_ids' => [$second->id, $first->id]])
             ->assertSessionHasNoErrors();
@@ -69,11 +70,41 @@ class LocationManagersTest extends TestCase
         $this->assertTrue($this->hubA->isManagedBy($first));
         $this->assertSame($second->id, $this->hubA->primaryManager()?->id);
 
+        // A third is no longer refused, and each carries their own ticks.
         $this->asAdmin()
-            ->post(route('admin.inventory.stock-locations.managers', $this->hubA), ['manager_ids' => [$first->id, $second->id, $third->id]])
-            ->assertSessionHasErrors('manager_ids');
+            ->post(route('admin.inventory.stock-locations.managers', $this->hubA), ['managers' => [
+                ['user_id' => $first->id, 'abilities' => \App\Models\Inventory\FacilityManager::ABILITIES],
+                ['user_id' => $second->id, 'abilities' => []],
+                ['user_id' => $third->id, 'abilities' => [\App\Models\Inventory\FacilityManager::SHELVE]],
+            ]])
+            ->assertSessionHasNoErrors();
 
-        $this->assertFalse($this->hubA->isManagedBy($third));
+        $this->assertTrue($this->hubA->isManagedBy($third));
+        $this->assertSame($first->id, $this->hubA->primaryManager()?->id);
+        $this->assertSame([], $this->hubA->managerAssignmentFor($second)->grantedAbilities());
+        $this->assertSame([\App\Models\Inventory\FacilityManager::SHELVE], $this->hubA->managerAssignmentFor($third)->grantedAbilities());
+
+        // An unknown tick is refused.
+        $this->asAdmin()
+            ->post(route('admin.inventory.stock-locations.managers', $this->hubA), ['managers' => [['user_id' => $first->id, 'abilities' => ['fly']]]])
+            ->assertSessionHasErrors('managers.0.abilities.0');
+    }
+
+    #[Test]
+    public function an_admin_assigns_stock_keepers_to_a_location(): void
+    {
+        $keepers = [$this->user('stock_keeper'), $this->user('stock_keeper'), $this->user('stock_keeper')];
+
+        $this->asAdmin()
+            ->post(route('admin.inventory.stock-locations.staff', $this->hubA), ['staff_ids' => array_map(fn ($k) => $k->id, $keepers)])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(3, $this->hubA->staffAssignments()->count());
+        $this->assertTrue($this->hubA->isStaffedBy($keepers[2]));
+
+        $this->asAdmin()
+            ->get(route('admin.inventory.stock-locations.index'))
+            ->assertInertia(fn ($page) => $page->has('abilities', count(\App\Models\Inventory\FacilityManager::ABILITIES))->has('staff_candidates'));
     }
 
     #[Test]

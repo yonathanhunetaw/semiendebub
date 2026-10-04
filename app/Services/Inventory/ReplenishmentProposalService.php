@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Inventory;
 
+use App\Exceptions\MovementDomainException;
 use App\Models\Auth\User;
 use App\Models\StockKeeper\Transfer;
 use App\Models\Store\Store;
@@ -33,6 +34,7 @@ class ReplenishmentProposalService
     public function __construct(
         private readonly MovementDomainService $domain,
         private readonly LocationCapacityService $capacity,
+        private readonly ShelfAssignmentGuard $shelfGuard,
     ) {
     }
 
@@ -164,6 +166,14 @@ class ReplenishmentProposalService
                 'reason' => 'Both ends are warehouses — this must be raised as a Shipment.',
                 'source' => $source['node'],
             ];
+        }
+
+        // Planogram first: the planner never proposes an item onto a shelf it
+        // has no bin on.
+        try {
+            $this->shelfGuard->assertMayStock((int) $storeVariant->item_variant_id, (string) $destination['type'], (int) $destination['id']);
+        } catch (MovementDomainException $e) {
+            return $base + ['result' => 'skipped', 'reason' => $e->getMessage()];
         }
 
         $quantity = min($shortfall, (int) $source['available']);

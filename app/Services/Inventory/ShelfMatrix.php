@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Inventory;
 
 use App\Models\Auth\User;
+use App\Models\Inventory\ItemRefillRoute;
+use App\Models\Inventory\RefillRequest;
 use App\Models\Inventory\ShelfItemBand;
 use App\Models\Inventory\StockLocation;
 use App\Models\Item\Item;
 use App\Models\StockKeeper\ItemStock;
-use App\Models\StockKeeper\Transfer;
-use App\Services\StockService;
-use App\Services\TransferWorkflowService;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 
@@ -31,8 +30,10 @@ use InvalidArgumentException;
  *   refill    at or below the refill line
  *   ok        above it
  *
- * A refill request moves the shortfall from the store's floor onto the shelf
- * as a same-site transfer — staff carry it across, no courier.
+ * A bin exists because a shelf manager assigned the item (its band), so an
+ * empty bin still shows with its lines. Stock on the shelf for an item with no
+ * band reads as unassigned and is never queued for refill. Refills themselves
+ * are raised by App\Services\Inventory\RefillEngine.
  */
 class ShelfMatrix
 {
@@ -44,7 +45,6 @@ class ShelfMatrix
 
     public function __construct(
         private readonly PackagingLadder $ladder,
-        private readonly StockService $stock,
     ) {
     }
 
@@ -68,6 +68,9 @@ class ShelfMatrix
                 return $bin;
             });
 
+        $page = $this->withRefills($shelf, $page);
+        $pendingItems = $this->openLegs($shelf)->distinct()->pluck('item_id');
+
         return [
             'tier' => $tier,
             'tiers' => $tiers,
@@ -80,9 +83,62 @@ class ShelfMatrix
                 'pieces' => (int) $bins->sum('pieces'),
                 'banded' => $bins->whereNotNull('band')->count(),
                 'refill_queue' => $bins->whereIn('status', ['critical', 'refill', 'empty'])->whereNotNull('band')->count(),
+                'unassigned' => $bins->where('assigned', false)->count(),
                 'critical' => $bins->where('status', 'critical')->count(),
+                'refill_pending' => $bins->whereIn('item_id', $pendingItems)->count(),
             ],
         ];
+    }
+
+    /**
+     * Each bin's open refill legs and its refill route.
+     *
+     * Legs are per store, so a Remote Hub or shipment leg raised for this
+     * shelf's item shows here wherever it was raised from.
+     *
+     * @param  Collection<int, array<string, mixed>>  $page
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function withRefills(StockLocation $shelf, Collection $page): Collection
+    {
+        $itemIds = $page->pluck('item_id')->all();
+
+        $legs = $this->openLegs($shelf)
+            ->whereIn('item_id', $itemIds)
+            ->orderByDesc('urgent')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('item_id');
+
+        $routes = ItemRefillRoute::query()
+            ->where('store_id', $shelf->store_id)
+            ->whereIn('item_id', $itemIds)
+            ->get()
+            ->keyBy('item_id');
+
+        return $page->map(function (array $bin) use ($legs, $routes): array {
+            $bin['refills'] = ($legs->get($bin['item_id']) ?? collect())
+                ->map(fn (RefillRequest $leg): array => [
+                    'id' => (int) $leg->id,
+                    'reference' => (string) $leg->reference,
+                    'source' => (string) $leg->source,
+                    'destination' => $leg->destination,
+                    'status' => (string) $leg->status,
+                    'awaits_hub' => $leg->awaitsHub(),
+                    'requested_quantity' => (int) ($leg->requested_quantity ?? $leg->quantity),
+                    'urgent' => (bool) $leg->urgent,
+                    'quantity' => (int) $leg->quantity,
+                    'display' => $this->ladder->label($this->ladder->breakdown(
+                        $leg->quantity * $this->ladder->piecesPerUnit((int) $leg->item_variant_id),
+                        (int) $bin['item_id'],
+                    )),
+                ])
+                ->values()
+                ->all();
+            $bin['route'] = array_values($routes->get($bin['item_id'])?->sources ?? ItemRefillRoute::DEFAULT_SOURCES);
+
+            return $bin;
+        });
     }
 
     /**
@@ -117,71 +173,31 @@ class ShelfMatrix
     }
 
     /**
-     * Ask for the shortfall to come from the store floor onto the shelf.
+     * Take an item off the shelf's planogram.
      *
-     * Moves the item's variant packed in the band's unit (or, failing that,
-     * the one with the most on the floor), as many whole units as close the
-     * gap to max without exceeding what the floor holds.
-     *
-     * @throws InvalidArgumentException when there is nothing to move
+     * Stock already on the shelf stays where it is and shows as unassigned
+     * until a manager gives the item a bin again or it is moved off.
      */
-    public function requestRefill(StockLocation $shelf, Item $item, ?User $by = null): Transfer
+    public function removeBand(StockLocation $shelf, Item $item): bool
     {
         $this->assertShelf($shelf);
 
-        $band = ShelfItemBand::query()->where('stock_location_id', $shelf->id)->where('item_id', $item->id)->first();
+        return ShelfItemBand::query()
+            ->where('stock_location_id', $shelf->id)
+            ->where('item_id', $item->id)
+            ->delete() > 0;
+    }
 
-        if ($band === null) {
-            throw new InvalidArgumentException("Set {$item->product_name}'s band before asking for a refill.");
-        }
+    /**
+     * Every bin on the shelf, in layout order, without tiering.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function bins(StockLocation $shelf): Collection
+    {
+        $this->assertShelf($shelf);
 
-        $floor = StockLocation::query()
-            ->where('parent_id', $shelf->parent_id)
-            ->where('kind', StockLocation::KIND_BACKROOM)
-            ->firstOrFail();
-
-        $bin = $this->bin($shelf, $item, $band);
-        $shortfallPieces = $bin['max_pieces'] - $bin['pieces'];
-
-        if ($shortfallPieces <= 0) {
-            throw new InvalidArgumentException("{$item->product_name} is already full.");
-        }
-
-        // The floor's variants of this item, the band's unit first.
-        $candidates = ItemStock::query()
-            ->with('itemVariant')
-            ->where('stock_location_id', $floor->id)
-            ->whereHas('itemVariant', fn ($q) => $q->where('item_id', $item->id))
-            ->get()
-            ->map(fn (ItemStock $row): array => [
-                'variant_id' => (int) $row->item_variant_id,
-                'packaging_type_id' => $row->itemVariant?->item_packaging_type_id,
-                'per' => $this->ladder->piecesPerUnit((int) $row->item_variant_id),
-                'available' => $this->stock->availableAt((int) $row->item_variant_id, $floor),
-            ])
-            ->filter(fn (array $c): bool => $c['available'] > 0)
-            ->sortByDesc(fn (array $c): int => ((int) $c['packaging_type_id'] === (int) $band->item_packaging_type_id ? 1_000_000 : 0) + $c['available']);
-
-        foreach ($candidates as $candidate) {
-            $units = min($candidate['available'], intdiv($shortfallPieces, $candidate['per']));
-
-            if ($units > 0) {
-                return app(TransferWorkflowService::class)->create(
-                    variantId: $candidate['variant_id'],
-                    fromStoreId: null,
-                    toStoreId: null,
-                    quantity: $units,
-                    initiatedBy: $by?->id,
-                    notes: "Shelf refill for {$item->product_name}",
-                    sourceLocationType: StockLocation::class,
-                    sourceLocationId: (int) $floor->id,
-                    destinationLocationType: StockLocation::class,
-                    destinationLocationId: (int) $shelf->id,
-                );
-            }
-        }
-
-        throw new InvalidArgumentException("The store floor has no {$item->product_name} to bring out.");
+        return $this->allBins($shelf);
     }
 
     /**
@@ -259,13 +275,32 @@ class ShelfMatrix
             'max_pieces' => $maxPieces,
             'fill' => $maxPieces > 0 ? round(min(1, $pieces / $maxPieces), 3) : ($pieces > 0 ? 1 : 0),
             'status' => $status,
+            // False = stock on the shelf for an item with no bin: shown as
+            // unassigned, never queued for refill.
+            'assigned' => $band !== null,
         ];
     }
 
+    /**
+     * Open refill legs for this location: raised for it (a shelf's legs from
+     * before targets were recorded count for the store's shelf).
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<RefillRequest>
+     */
+    private function openLegs(StockLocation $location): \Illuminate\Database\Eloquent\Builder
+    {
+        return RefillRequest::query()
+            ->open()
+            ->where('store_id', $location->store_id)
+            ->where(fn ($q) => $q->where('target_location_id', $location->id)
+                ->when($location->kind === StockLocation::KIND_SHELF, fn ($q) => $q->orWhereNull('target_location_id')));
+    }
+
+    /** A Store Shelf, or a Remote Hub — which keeps lines per item the same way. */
     private function assertShelf(StockLocation $shelf): void
     {
-        if ($shelf->kind !== StockLocation::KIND_SHELF) {
-            throw new InvalidArgumentException("{$shelf->name} is not a Store Shelf.");
+        if (! in_array($shelf->kind, [StockLocation::KIND_SHELF, StockLocation::KIND_REMOTE_HUB], true)) {
+            throw new InvalidArgumentException("{$shelf->name} is not a Store Shelf or a Remote Hub.");
         }
     }
 }

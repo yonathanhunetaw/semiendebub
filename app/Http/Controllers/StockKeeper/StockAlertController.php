@@ -26,12 +26,14 @@ class StockAlertController extends Controller
         $search = $request->filled('search') ? trim((string) $request->string('search')) : '';
         $severity = $request->string('severity')->toString() ?: null;
 
-        $paginator = $this->stock->paginateAlerts(
+        $stock = $this->stock->forUser($request->user());
+
+        $paginator = $stock->paginateAlerts(
             $search !== '' ? $search : null,
             in_array($severity, ['low_stock', 'out_of_stock'], true) ? $severity : null,
         );
 
-        $metrics = $this->stock->metrics();
+        $metrics = $stock->metrics();
 
         return Inertia::render('StockKeeper/StockAlerts/index', [
             'alerts' => collect($paginator->items())

@@ -76,11 +76,8 @@ Route::domain("admin.{$baseDomain}")
 
             Route::resource('customers', \App\Http\Controllers\Admin\CustomerController::class)
                 ->only(['index', 'store', 'update', 'destroy']);
-            Route::prefix('sessions')->group(function () {
-                Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
-                Route::post('/{id}/extend', [SessionController::class, 'extend'])->name('sessions.extend');
-                Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
-            });
+            $sessionController = SessionController::class;
+            require __DIR__ . '/../sessions.php';
 
             // ── Stores ──
             Route::resource('stores', StoreController::class);
@@ -108,6 +105,8 @@ Route::domain("admin.{$baseDomain}")
                     ->name('stock-locations.index');
                 Route::post('/locations/{stockLocation}/managers', [\App\Http\Controllers\Admin\Inventory\LocationController::class, 'assignManagers'])
                     ->name('stock-locations.managers');
+                Route::post('/locations/{stockLocation}/staff', [\App\Http\Controllers\Admin\Inventory\LocationController::class, 'assignStaff'])
+                    ->name('stock-locations.staff');
 
                 // ── Variant capacity: min/max per variant, at every level ──
                 Route::get('/capacity', [VariantCapacityController::class, 'index'])->name('capacity.index');

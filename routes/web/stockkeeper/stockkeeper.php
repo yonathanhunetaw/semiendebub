@@ -3,6 +3,8 @@
 use App\Http\Controllers\StockKeeper\DashboardController;
 use App\Http\Controllers\StockKeeper\InventoryController;
 use App\Http\Controllers\StockKeeper\OrderController;
+use App\Http\Controllers\StockKeeper\ShelfRefillController;
+use App\Http\Controllers\StockKeeper\ShelvingController;
 use App\Http\Controllers\StockKeeper\ShipmentController;
 use App\Http\Controllers\StockKeeper\StockAlertController;
 use App\Http\Controllers\StockKeeper\TransferController;
@@ -43,6 +45,15 @@ Route::domain("stockkeeper.{$baseDomain}")
             Route::post('/transfers/{transfer}/dispatch', [TransferController::class, 'dispatchTransfer'])->name('transfers.dispatch');
             Route::post('/transfers/{transfer}/complete', [TransferController::class, 'complete'])->name('transfers.complete');
             Route::post('/transfers/{transfer}/cancel', [TransferController::class, 'cancel'])->name('transfers.cancel');
+
+            // --- SHELF REFILLS ---
+            // Raise one by hand (start_at skips to the Remote Hub or a shipment),
+            // and accept an approved one at the Remote Hub.
+            Route::get('/shelving', [ShelvingController::class, 'index'])->name('shelving.index');
+            Route::post('/shelving/{transfer}', [ShelvingController::class, 'shelve'])->name('shelving.shelve');
+            Route::get('/shelving/permissions', [ShelvingController::class, 'permissions'])->name('shelving.permissions');
+            Route::post('/shelves/{location}/refills/{item}', [ShelfRefillController::class, 'store'])->name('shelves.refill');
+            Route::post('/refills/{refillRequest}/accept', [ShelfRefillController::class, 'accept'])->name('refills.accept');
 
             // --- SHIPMENTS (shared cross-role domain) ---
             Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');

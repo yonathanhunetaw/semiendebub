@@ -121,6 +121,33 @@ class StockLocation extends Model
         return StockLocationFactory::new();
     }
 
+    /**
+     * A Store Shelf belongs to exactly one store, for good: it sits under that
+     * store's node, carries its store_id, and is never moved to another store.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $location): void {
+            if ($location->kind !== self::KIND_SHELF) {
+                return;
+            }
+
+            if ($location->exists && ($location->isDirty('store_id') || $location->isDirty('parent_id'))) {
+                throw new \InvalidArgumentException('A Store Shelf belongs to one store and cannot be moved to another.');
+            }
+
+            if ($location->store_id === null || $location->parent_id === null) {
+                throw new \InvalidArgumentException('A Store Shelf must belong to a store.');
+            }
+
+            $parent = self::query()->find($location->parent_id);
+
+            if ($parent === null || $parent->kind !== self::KIND_STORE || (int) $parent->store_id !== (int) $location->store_id) {
+                throw new \InvalidArgumentException('A Store Shelf must sit under its own store.');
+            }
+        });
+    }
+
     public function parent(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_id');
@@ -170,8 +197,10 @@ class StockLocation extends Model
 
     /**
      * May this user hand stock out of, or take stock into, this location?
-     * Admins always; otherwise its managers when it has any. A location with
-     * no managers yet falls back to the role checks the routes already make.
+     *
+     * Admins always. Otherwise, once the location — or the store it sits in —
+     * has managers or assigned stock keepers, only they may. A location with
+     * neither yet falls back to the role checks the routes already make.
      */
     public function canBeOperatedBy(?\App\Models\Auth\User $user): bool
     {
@@ -183,7 +212,63 @@ class StockLocation extends Model
             return true;
         }
 
-        return ! $this->managerAssignments()->exists() || $this->isManagedBy($user);
+        $nodes = array_filter([$this, $this->storeNode()]);
+        $assigned = false;
+
+        foreach ($nodes as $node) {
+            if ($node->isManagedBy($user) || $node->isStaffedBy($user)) {
+                return true;
+            }
+
+            $assigned = $assigned || $node->managerAssignments()->exists() || $node->staffAssignments()->exists();
+        }
+
+        return ! $assigned;
+    }
+
+    /** The stock keepers assigned here. */
+    public function staffAssignments(): HasMany
+    {
+        return $this->hasMany(LocationStaff::class, 'stock_location_id');
+    }
+
+    public function isStaffedBy(?\App\Models\Auth\User $user): bool
+    {
+        return $user !== null && $this->staffAssignments()->where('user_id', $user->id)->exists();
+    }
+
+    /**
+     * Replace this location's stock keepers. Any number; empty leaves it to
+     * the store's staff (for a leaf) or to role checks.
+     *
+     * @param  array<int, int>  $userIds
+     */
+    public function syncStaff(array $userIds, ?int $assignedBy = null): void
+    {
+        $userIds = array_values(array_unique(array_map('intval', $userIds)));
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($userIds, $assignedBy): void {
+            $this->staffAssignments()->whereNotIn('user_id', $userIds ?: [0])->delete();
+
+            foreach ($userIds as $userId) {
+                $this->staffAssignments()->firstOrCreate(['user_id' => $userId], ['assigned_by' => $assignedBy]);
+            }
+        });
+    }
+
+    /**
+     * The store node this leaf belongs to: its shelf, floor or Remote Hub sit
+     * under one. Null for a store node itself, a main hub, or In Delivery.
+     */
+    public function storeNode(): ?self
+    {
+        if ($this->kind === self::KIND_STORE || $this->parent_id === null) {
+            return null;
+        }
+
+        $parent = $this->relationLoaded('parent') ? $this->parent : $this->parent()->first();
+
+        return $parent !== null && $parent->kind === self::KIND_STORE ? $parent : null;
     }
 
     public function getKindLabelAttribute(): string

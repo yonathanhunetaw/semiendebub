@@ -23,7 +23,12 @@ interface Props {
     rowSize?: number;
     /** The shelf as bins (ShelfMatrix); null for other kinds of location. */
     matrix?: ShelfMatrixData | null;
+    /** The shelf's managers (and admins): assign items and set their lines. */
     canEditShelf?: boolean;
+    /** Raise a refill by hand. */
+    canRaiseRefill?: boolean;
+    /** The store's managers: choose where each item is refilled from. */
+    canSetRoute?: boolean;
 }
 
 const KIND_META: Record<string, { label: string; icon: string; key: string }> = {
@@ -51,6 +56,8 @@ export default function LocationShow({
     rowSize = 10,
     matrix = null,
     canEditShelf = false,
+    canRaiseRefill = false,
+    canSetRoute = false,
 }: Props): React.ReactElement {
     const meta = KIND_META[location.kind] ?? { label: "Location", icon: "location_on", key: "" };
     const isShelf = location.kind === "shelf";
@@ -104,8 +111,15 @@ export default function LocationShow({
                         </section>
                     ) : null}
 
-                    {isShelf && matrix ? (
-                        <ShelfBinMatrix locationId={location.id} matrix={matrix} canEdit={canEditShelf} />
+                    {(isShelf || location.kind === "remote_hub") && matrix ? (
+                        <ShelfBinMatrix
+                            isShelf={isShelf}
+                            locationId={location.id}
+                            matrix={matrix}
+                            canEdit={canEditShelf}
+                            canRaiseRefill={canRaiseRefill}
+                            canSetRoute={canSetRoute}
+                        />
                     ) : isShelf ? (
                         <ReplenishmentRow lines={shelfLines} size={rowSize} />
                     ) : null}

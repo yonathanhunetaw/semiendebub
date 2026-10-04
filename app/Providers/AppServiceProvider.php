@@ -75,5 +75,13 @@ class AppServiceProvider extends ServiceProvider
     {
         \App\Models\StockKeeper\ItemStock::observe(ItemStockObserver::class);
         \App\Models\Inventory\ItemStock::observe(ItemStockObserver::class);
+
+        // Shelf bins at their refill line raise a refill; legs follow the
+        // transfer or shipment carrying them.
+        \App\Models\StockKeeper\ItemStock::observe(\App\Observers\ShelfRefillObserver::class);
+        \App\Models\Inventory\ItemStock::observe(\App\Observers\ShelfRefillObserver::class);
+        \App\Models\StockKeeper\Transfer::observe(\App\Observers\RefillCarrierObserver::class);
+        \App\Models\Fulfillment\Shipment::observe(\App\Observers\RefillCarrierObserver::class);
+        \App\Models\Fulfillment\ShipmentItem::observe(\App\Observers\RefillCarrierObserver::class);
     }
 }

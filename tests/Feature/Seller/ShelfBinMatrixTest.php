@@ -68,8 +68,10 @@ class ShelfBinMatrixTest extends TestCase
         $stock->receive($this->piece->id, $this->shelf, 5);    //  5 pieces
         $stock->receive($this->packet->id, $this->floor, 100);
 
+        // The seller runs this shelf: its planogram is theirs to edit.
         $this->seller = User::factory()->create(['role' => 'seller', 'store_id' => $this->store->id]);
         $this->seller->assignRole('seller');
+        $this->shelf->syncManagers([$this->seller->id]);
     }
 
     #[Test]
@@ -151,6 +153,117 @@ class ShelfBinMatrixTest extends TestCase
         $this->asSeller($outsider)
             ->post(route('seller.locations.bands.refill', ['location' => $this->shelf, 'item' => $this->pen]))
             ->assertForbidden();
+    }
+
+    #[Test]
+    public function a_seller_who_does_not_manage_the_shelf_sees_it_but_cannot_change_it(): void
+    {
+        $colleague = User::factory()->create(['role' => 'seller', 'store_id' => $this->store->id]);
+        $colleague->assignRole('seller');
+
+        $this->asSeller($colleague)
+            ->get(route('seller.locations.show', $this->shelf))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('canEditShelf', false)
+                ->where('canRaiseRefill', false)
+                ->where('matrix.bins.0.name', 'Bic Pen'));
+
+        $this->asSeller($colleague)
+            ->patch(route('seller.locations.bands.update', ['location' => $this->shelf, 'item' => $this->pen]), ['max' => 10, 'refill' => 5, 'critical' => 2])
+            ->assertForbidden();
+
+        $this->asSeller($colleague)
+            ->delete(route('seller.locations.bands.destroy', ['location' => $this->shelf, 'item' => $this->pen]))
+            ->assertForbidden();
+    }
+
+    #[Test]
+    public function an_unmanaged_shelf_cannot_be_edited_by_its_stores_sellers(): void
+    {
+        $this->shelf->syncManagers([]);
+
+        $this->asSeller($this->seller)
+            ->patch(route('seller.locations.bands.update', ['location' => $this->shelf, 'item' => $this->pen]), ['max' => 10, 'refill' => 5, 'critical' => 2])
+            ->assertForbidden();
+    }
+
+    #[Test]
+    public function an_assigned_item_shows_as_an_empty_bin_and_removing_it_leaves_its_stock_unassigned(): void
+    {
+        $notebook = Item::factory()->create(['product_name' => 'Notebook', 'status' => 'active']);
+
+        $this->asSeller($this->seller)
+            ->patch(route('seller.locations.bands.update', ['location' => $this->shelf, 'item' => $notebook]), ['max' => 20, 'refill' => 8, 'critical' => 3])
+            ->assertSessionHasNoErrors();
+
+        // Banded first: the notebook's empty bin is A1, the unbanded pens follow.
+        $this->asSeller($this->seller)
+            ->get(route('seller.locations.show', $this->shelf))
+            ->assertInertia(fn ($page) => $page
+                ->where('matrix.totals.items', 2)
+                ->where('matrix.totals.unassigned', 1)
+                ->where('matrix.bins.0.name', 'Notebook')
+                ->where('matrix.bins.0.status', 'empty')
+                ->where('matrix.bins.0.assigned', true)
+                ->where('matrix.bins.0.band.refill', 8)
+                ->where('matrix.bins.1.name', 'Bic Pen')
+                ->where('matrix.bins.1.assigned', false));
+
+        $this->asSeller($this->seller)
+            ->delete(route('seller.locations.bands.destroy', ['location' => $this->shelf, 'item' => $notebook]))
+            ->assertSessionHas('success');
+
+        $this->asSeller($this->seller)
+            ->get(route('seller.locations.show', $this->shelf))
+            ->assertInertia(fn ($page) => $page->where('matrix.totals.items', 1)->where('matrix.bins.0.name', 'Bic Pen'));
+    }
+
+    #[Test]
+    public function a_manager_finds_items_to_assign_with_their_pack_units(): void
+    {
+        $notebook = Item::factory()->create(['product_name' => 'Notebook', 'status' => 'active']);
+        $notebookVariant = ItemVariant::factory()->create(['item_id' => $notebook->id]);
+        \App\Models\Store\StoreVariant::factory()->create(['store_id' => $this->store->id, 'item_id' => $notebook->id, 'item_variant_id' => $notebookVariant->id]);
+        \App\Models\Store\StoreVariant::factory()->create(['store_id' => $this->store->id, 'item_id' => $this->pen->id, 'item_variant_id' => $this->packet->id]);
+
+        // Pens already have a bin here once banded; only the notebook is offered then.
+        $this->asSeller($this->seller)->patch(route('seller.locations.bands.update', ['location' => $this->shelf, 'item' => $this->pen]), [
+            'item_packaging_type_id' => $this->packetType->id, 'max' => 10, 'refill' => 5, 'critical' => 2,
+        ]);
+
+        $this->asSeller($this->seller)
+            ->getJson(route('seller.locations.assignable', $this->shelf).'?q=note')
+            ->assertOk()
+            ->assertJsonCount(1, 'items')
+            ->assertJsonPath('items.0.name', 'Notebook');
+
+        $this->asSeller($this->seller)
+            ->getJson(route('seller.locations.assignable', $this->shelf))
+            ->assertJsonMissing(['name' => 'Bic Pen']);
+
+        $colleague = User::factory()->create(['role' => 'seller', 'store_id' => $this->store->id]);
+        $colleague->assignRole('seller');
+        $this->asSeller($colleague)->getJson(route('seller.locations.assignable', $this->shelf))->assertForbidden();
+    }
+
+    #[Test]
+    public function a_bin_shows_its_refill_on_its_way_and_its_route(): void
+    {
+        $this->asSeller($this->seller)->patch(route('seller.locations.bands.update', ['location' => $this->shelf, 'item' => $this->pen]), [
+            'item_packaging_type_id' => $this->packetType->id, 'max' => 10, 'refill' => 5, 'critical' => 2,
+        ]);
+        $this->asSeller($this->seller)->post(route('seller.locations.bands.refill', ['location' => $this->shelf, 'item' => $this->pen]));
+
+        $this->asSeller($this->seller)
+            ->get(route('seller.locations.show', $this->shelf))
+            ->assertInertia(fn ($page) => $page
+                ->where('canSetRoute', false)
+                ->where('matrix.totals.refill_pending', 1)
+                ->where('matrix.bins.0.route', ['floor', 'remote_hub', 'shipment'])
+                ->where('matrix.bins.0.refills.0.source', 'floor')
+                ->where('matrix.bins.0.refills.0.status', 'in_progress')
+                ->where('matrix.bins.0.refills.0.display', '5 Packets'));
     }
 
     private function asSeller(User $user): self

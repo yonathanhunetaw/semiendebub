@@ -9,13 +9,11 @@ import {
     IconButton, Alert, Tabs, Tab, Snackbar, useMediaQuery,
     useTheme, Card, CardContent, Tooltip, Pagination,
 } from "@mui/material";
-import {
-    ArrowBack as ArrowBackIcon,
-    LocalShipping as LocalShippingIcon,
-    CheckCircle as CheckCircleIcon,
-    Cancel as CancelIcon,
-    Autorenew as AutorenewIcon,
-} from "@mui/icons-material";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CancelIcon from "@mui/icons-material/Cancel";
+import AutorenewIcon from "@mui/icons-material/Autorenew";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types

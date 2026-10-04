@@ -24,7 +24,9 @@ class DashboardController extends Controller
 
     public function index(): Response
     {
-        $alerts = $this->stock->lowStockQuery()
+        $stock = $this->stock->forUser(Auth::user());
+
+        $alerts = $stock->lowStockQuery()
             ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
             ->orderByRaw('(quantity - min_stock_level) ASC')
             ->limit(8)
@@ -33,7 +35,7 @@ class DashboardController extends Controller
             ->values()
             ->all();
 
-        $recentMovements = ItemStock::query()
+        $recentMovements = $stock->visibleOnly(ItemStock::query())
             ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
             ->orderByDesc('updated_at')
             ->limit(8)
@@ -43,10 +45,10 @@ class DashboardController extends Controller
             ->all();
 
         return Inertia::render('StockKeeper/Dashboard/index', [
-            'metrics' => $this->stock->metrics(),
+            'metrics' => $stock->metrics(),
             'alerts' => $alerts,
             'recent_movements' => $recentMovements,
-            'locations' => $this->stock->locations(),
+            'locations' => $stock->locations(),
             'assigned_location' => $this->stock->assignedLocation(Auth::user()),
             'transfer_summary' => [
                 'pending' => Transfer::query()->where('status', 'pending')->count(),

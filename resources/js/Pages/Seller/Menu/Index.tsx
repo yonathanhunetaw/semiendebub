@@ -141,6 +141,9 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
             routeParams: shelf?.location_id ? { location: shelf.location_id } : undefined,
             tone: "ink",
         },
+        // Remote Hub and shipment refills the store floor could not cover,
+        // waiting for the store manager.
+        { label: "Refill requests", caption: "", icon: "playlist_add_check", route: "seller.refills.index", tone: "ink" },
         { label: "Multi-Tier Directory", caption: "", icon: "account_tree", route: null, tone: "ink" },
     ];
 

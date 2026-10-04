@@ -6,6 +6,7 @@ namespace Tests\Feature\Inventory;
 
 use App\Exceptions\InsufficientStockException;
 use App\Models\Auth\User;
+use App\Models\Inventory\ShelfItemBand;
 use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\StockReservation;
 use App\Models\Item\Item;
@@ -69,6 +70,15 @@ class StockCutoverTest extends TestCase
             'item_id' => $item->id,
             'item_variant_id' => $this->variant->id,
             'active' => true,
+        ]);
+
+        // Planogram first: the item has a bin on the shelf.
+        ShelfItemBand::query()->create([
+            'stock_location_id' => $this->shelf->id,
+            'item_id' => $item->id,
+            'max_units' => 100,
+            'refill_units' => 10,
+            'critical_units' => 5,
         ]);
     }
 

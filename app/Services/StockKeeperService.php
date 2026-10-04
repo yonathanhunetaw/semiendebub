@@ -12,6 +12,7 @@ use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
 use App\Services\Inventory\ItemStockReader;
 use App\Services\Inventory\PackagingLadder;
+use App\Services\Inventory\StockKeeperVisibility;
 use App\Services\Inventory\StockScope;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -32,7 +33,7 @@ class StockKeeperService
     public const STORE_TYPE = Store::class;
 
     public function __construct(
-        private readonly ItemStockReader $reader,
+        private ItemStockReader $reader,
         private readonly PackagingLadder $ladder,
         private readonly StockScope $scope,
         private readonly StockService $ledger,
@@ -46,6 +47,56 @@ class StockKeeperService
      */
     private ?array $locationNameCache = null;
 
+    /** Leaf / node ids this view is limited to; null = unrestricted. @var array<int>|null */
+    private ?array $onlyLeafIds = null;
+
+    /** @var array<int>|null */
+    private ?array $onlyNodeIds = null;
+
+    /**
+     * This service as one stock keeper sees it: the ledger, alerts, metrics and
+     * location lists are limited to what StockKeeperVisibility allows them.
+     */
+    public function forUser(?User $user): static
+    {
+        $scope = app(StockKeeperVisibility::class)->scopeFor($user);
+
+        $copy = clone $this;
+        $copy->onlyLeafIds = $scope['leaves'] ?? null;
+        $copy->onlyNodeIds = $scope['nodes'] ?? null;
+        $copy->reader = $this->reader->restrictedTo($copy->onlyLeafIds);
+
+        return $copy;
+    }
+
+    /**
+     * Limit any ItemStock query to the locations this view may see.
+     *
+     * @template TQuery of Builder
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    public function visibleOnly(Builder $query): Builder
+    {
+        return $this->onlyLeafIds === null ? $query : $query->whereIn('stock_location_id', $this->onlyLeafIds);
+    }
+
+    /** May this user book stock into, or recount, the leaf behind this address? Unknown addresses fall through to the usual error. */
+    public function mayOperateAddress(?User $user, string $locationType, int $locationId): bool
+    {
+        $leaf = $this->scope->leafFor($locationType, $locationId);
+
+        return $leaf === null || app(StockKeeperVisibility::class)->mayOperate($user, $leaf);
+    }
+
+    public function mayOperateRow(?User $user, ItemStock $stock): bool
+    {
+        $leaf = $stock->stockLocation;
+
+        return $leaf === null || app(StockKeeperVisibility::class)->mayOperate($user, $leaf);
+    }
+
     /**
      * Headline counters for the StockKeeper dashboard.
      *
@@ -55,7 +106,7 @@ class StockKeeperService
     {
         // Delivery's custody is not stock on a shelf; an emptied custody row
         // must not read as an out-of-stock line.
-        $base = ItemStock::query()->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'));
+        $base = $this->visibleOnly(ItemStock::query()->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id')));
 
         /*
          * Items lead.
@@ -125,7 +176,7 @@ class StockKeeperService
      */
     public function lowStockQuery(): Builder
     {
-        return ItemStock::query()
+        return $this->visibleOnly(ItemStock::query())
             ->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'))
             ->whereColumn('quantity', '<=', 'min_stock_level')
             ->where('min_stock_level', '>', 0);
@@ -171,7 +222,7 @@ class StockKeeperService
         ?int $locationId = null,
         ?int $perPage = null
     ): LengthAwarePaginator {
-        $query = ItemStock::query()
+        $query = $this->visibleOnly(ItemStock::query())
             ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
             // Goods in a courier's hands are Delivery's, not a shelf to count.
             ->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'));
@@ -211,7 +262,9 @@ class StockKeeperService
             ->map(fn ($n): int => (int) $n);
 
         // "In Delivery" is the courier's custody, never a place to pick.
-        $nodes = StockLocation::query()->with('store')->where('kind', '!=', StockLocation::KIND_TRANSIT)->get();
+        $nodes = StockLocation::query()->with('store')->where('kind', '!=', StockLocation::KIND_TRANSIT)
+            ->when($this->onlyNodeIds !== null, fn ($q) => $q->whereIn('id', $this->onlyNodeIds))
+            ->get();
         $order = [
             StockLocation::KIND_MAIN_HUB => 0,
             StockLocation::KIND_STORE => 1,

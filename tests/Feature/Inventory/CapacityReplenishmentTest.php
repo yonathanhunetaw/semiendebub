@@ -7,6 +7,8 @@ namespace Tests\Feature\Inventory;
 use App\Exceptions\MovementDomainException;
 use App\Models\Auth\User;
 use App\Models\Inventory\FacilityManager;
+use App\Models\Inventory\ShelfItemBand;
+use App\Models\Inventory\StockLocation;
 use App\Models\Item\Item;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemInventoryLocation;
@@ -70,6 +72,16 @@ class CapacityReplenishmentTest extends TestCase
         $this->storeVariant = StoreVariant::factory()->create([
             'store_id' => $this->store->id,
             'item_variant_id' => $this->variant->id,
+        ]);
+
+        // Planogram first: the item has a bin on the shelf, so the planner may
+        // propose stock onto it.
+        ShelfItemBand::query()->create([
+            'stock_location_id' => StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_SHELF)->sole()->id,
+            'item_id' => $item->id,
+            'max_units' => 100,
+            'refill_units' => 10,
+            'critical_units' => 5,
         ]);
     }
 
@@ -392,7 +404,7 @@ class CapacityReplenishmentTest extends TestCase
      |--------------------------------------------------------------------*/
 
     #[Test]
-    public function a_warehouse_takes_at_most_two_managers_and_only_they_may_oversee_it(): void
+    public function a_warehouse_takes_any_number_of_managers_and_only_they_may_oversee_it(): void
     {
         $warehouse = \App\Models\Inventory\Warehouse::create([
             'name' => 'Remote Unit 1',
@@ -418,14 +430,9 @@ class CapacityReplenishmentTest extends TestCase
         // Appointing is an admin act, even for a sitting manager.
         $this->assertFalse($first->can('assignManagers', $warehouse));
 
-        $this->expectException(\InvalidArgumentException::class);
+        // No ceiling any more: a third manager is simply a manager.
         $warehouse->syncManagers([$first->id, $second->id, $third->id]);
-    }
-
-    #[Test]
-    public function the_two_manager_ceiling_is_a_named_constant_not_a_magic_number(): void
-    {
-        $this->assertSame(2, FacilityManager::MAX_PER_FACILITY);
+        $this->assertTrue($warehouse->isManagedBy($third));
     }
 
     /** A shelf below its floor, with the back room able to serve it. */

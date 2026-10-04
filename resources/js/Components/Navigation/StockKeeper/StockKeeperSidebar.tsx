@@ -2,6 +2,7 @@ import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
 import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import NotificationsActiveRoundedIcon from "@mui/icons-material/NotificationsActiveRounded";
 import SpaceDashboardRoundedIcon from "@mui/icons-material/SpaceDashboardRounded";
+import ViewModuleRoundedIcon from "@mui/icons-material/ViewModuleRounded";
 import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import WarehouseRoundedIcon from "@mui/icons-material/WarehouseRounded";
 import {
@@ -40,6 +41,12 @@ export default function StockKeeperSidebar({
             label: "Transfers",
             icon: <SwapHorizRoundedIcon />,
             href: "/transfers",
+        },
+        // Floor → shelf refills to carry across, and Remote Hub refills to send.
+        {
+            label: "Shelving",
+            icon: <ViewModuleRoundedIcon />,
+            href: "/shelving",
         },
         // Inter-store freight. The board and its pick/handover/receive routes
         // existed but nothing linked to them, so the keeper had no way to reach

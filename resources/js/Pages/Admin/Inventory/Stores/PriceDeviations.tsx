@@ -10,15 +10,13 @@ import {
     useTheme, Card, CardContent, Tooltip, TextField,
     InputAdornment,
 } from "@mui/material";
-import {
-    ArrowBack as ArrowBackIcon,
-    Edit as EditIcon,
-    TrendingDown as TrendingDownIcon,
-    Schedule as ScheduleIcon,
-    Cancel as CancelIcon,
-    Save as SaveIcon,
-    Warning as WarningIcon,
-} from "@mui/icons-material";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import EditIcon from "@mui/icons-material/Edit";
+import TrendingDownIcon from "@mui/icons-material/TrendingDown";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import CancelIcon from "@mui/icons-material/Cancel";
+import SaveIcon from "@mui/icons-material/Save";
+import WarningIcon from "@mui/icons-material/Warning";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types

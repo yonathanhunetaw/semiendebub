@@ -13,12 +13,10 @@ import {
     Alert,
     Stack,
 } from "@mui/material";
-import {
-    DeleteForever,
-    PhoneIphone,
-    Computer,
-    ArrowBack,
-} from "@mui/icons-material";
+import DeleteForever from "@mui/icons-material/DeleteForever";
+import PhoneIphone from "@mui/icons-material/PhoneIphone";
+import Computer from "@mui/icons-material/Computer";
+import ArrowBack from "@mui/icons-material/ArrowBack";
 import { router, Head, Link } from "@inertiajs/react";
 
 

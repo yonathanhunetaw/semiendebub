@@ -6,21 +6,26 @@ namespace App\Http\Controllers\Admin\Inventory;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventory\AssignLocationManagersRequest;
+use App\Http\Requests\Inventory\AssignLocationStaffRequest;
 use App\Models\Auth\User;
+use App\Models\Inventory\FacilityManager;
+use App\Models\Inventory\LocationStaff;
 use App\Models\Inventory\StockLocation;
 use App\Models\StockKeeper\ItemStock;
+use App\Services\Inventory\StockPermissions;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use InvalidArgumentException;
 
 /**
  * Every place stock can sit, and who runs each one (STOCK_PLAN.md §5).
  *
- * Main Hub A and B, then each store with its Store Shelf, Store (floor) and
- * Remote Hub. A location's managers are the people who hand stock out of it
- * and take stock into it — dispatching a transfer, agreeing a shipment as its
- * dock, receiving from a courier. A location with no managers is run by role,
- * as before.
+ * Main Hub A and B, then each store — the store as a whole, and its Store
+ * Shelf, Store (floor) and Remote Hub. A location has any number of managers,
+ * each with tick boxes for what they may do there, and any number of stock
+ * keepers. A store's managers and stock keepers reach its shelf, floor and
+ * Remote Hub too (StockPermissions). A location with neither is run by role.
  */
 class LocationController extends Controller
 {
@@ -36,22 +41,32 @@ class LocationController extends Controller
             ->pluck('units', 'stock_location_id');
 
         $nodes = StockLocation::query()
-            ->with(['store', 'managers'])
+            ->with(['store', 'managerAssignments.user', 'staffAssignments.user'])
             ->where('kind', '!=', StockLocation::KIND_TRANSIT)
             ->get();
+
+        $name = fn (?User $user): string => $user === null ? 'Unknown' : (trim($user->first_name.' '.$user->last_name) ?: (string) $user->email);
 
         $present = fn (StockLocation $node): array => [
             'id' => (int) $node->id,
             'name' => $node->name,
             'code' => $node->code,
             'kind' => $node->kind,
-            'kind_label' => $node->kind_label,
+            'kind_label' => $node->kind === StockLocation::KIND_STORE ? 'Whole store' : $node->kind_label,
             'units' => (int) ($units[$node->id] ?? 0),
-            'managers' => $node->managers->map(fn (User $user): array => [
-                'id' => (int) $user->id,
-                'name' => trim($user->first_name.' '.$user->last_name) ?: (string) $user->email,
-                'primary' => (bool) $user->pivot->is_primary,
-            ])->values()->all(),
+            'managers' => $node->managerAssignments
+                ->sortByDesc('is_primary')
+                ->map(fn (FacilityManager $assignment): array => [
+                    'id' => (int) $assignment->user_id,
+                    'name' => $name($assignment->user),
+                    'primary' => (bool) $assignment->is_primary,
+                    'abilities' => $assignment->grantedAbilities(),
+                ])->values()->all(),
+            'staff' => $node->staffAssignments
+                ->map(fn (LocationStaff $staff): array => [
+                    'id' => (int) $staff->user_id,
+                    'name' => $name($staff->user),
+                ])->values()->all(),
         ];
 
         $order = [StockLocation::KIND_SHELF => 0, StockLocation::KIND_BACKROOM => 1, StockLocation::KIND_REMOTE_HUB => 2];
@@ -62,6 +77,9 @@ class LocationController extends Controller
                 'id' => (int) $store->id,
                 'name' => $store->name,
                 'code' => $store->code,
+                // The store as a whole: its managers and stock keepers reach
+                // every location below.
+                'node' => $present($store),
                 'locations' => $nodes->where('parent_id', $store->id)
                     ->sortBy(fn (StockLocation $leaf) => $order[$leaf->kind] ?? 9)
                     ->map($present)->values(),
@@ -70,15 +88,12 @@ class LocationController extends Controller
             'in_delivery' => (int) ItemStock::query()
                 ->whereIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'))
                 ->sum('quantity'),
-            'candidates' => User::query()
-                ->whereIn('role', self::MANAGER_ROLES)
-                ->orderBy('first_name')
-                ->get(['id', 'first_name', 'last_name', 'email', 'role'])
-                ->map(fn (User $user): array => [
-                    'id' => (int) $user->id,
-                    'name' => trim($user->first_name.' '.$user->last_name) ?: (string) $user->email,
-                    'role' => $user->roleKey(),
-                ])->values(),
+            'candidates' => $this->people(self::MANAGER_ROLES),
+            'staff_candidates' => $this->people(['stock_keeper']),
+            'abilities' => array_map(
+                fn (string $ability): array => ['key' => $ability, 'label' => StockPermissions::TICK_LABELS[$ability]],
+                FacilityManager::ABILITIES,
+            ),
         ]);
     }
 
@@ -86,8 +101,38 @@ class LocationController extends Controller
     {
         abort_if($stockLocation->kind === StockLocation::KIND_TRANSIT, 404);
 
-        $stockLocation->syncManagers($request->managerIds(), $request->user()?->id);
+        try {
+            $stockLocation->syncManagers($request->managerIds(), $request->user()?->id, $request->abilities());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['managers' => $e->getMessage()]);
+        }
 
         return back()->with('success', "Managers of {$stockLocation->name} updated.");
+    }
+
+    public function assignStaff(AssignLocationStaffRequest $request, StockLocation $stockLocation): RedirectResponse
+    {
+        abort_if(in_array($stockLocation->kind, [StockLocation::KIND_TRANSIT], true), 404);
+
+        $stockLocation->syncStaff($request->staffIds(), $request->user()?->id);
+
+        return back()->with('success', "Stock keepers of {$stockLocation->name} updated.");
+    }
+
+    /**
+     * @param  array<int, string>  $roles
+     * @return array<int, array{id: int, name: string, role: string}>
+     */
+    private function people(array $roles): array
+    {
+        return User::query()
+            ->whereIn('role', $roles)
+            ->orderBy('first_name')
+            ->get(['id', 'first_name', 'last_name', 'email', 'role'])
+            ->map(fn (User $user): array => [
+                'id' => (int) $user->id,
+                'name' => trim($user->first_name.' '.$user->last_name) ?: (string) $user->email,
+                'role' => $user->roleKey(),
+            ])->values()->all();
     }
 }

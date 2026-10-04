@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Sessions\ExtendSessionsRequest;
+use App\Http\Requests\Admin\Sessions\TerminateSessionsRequest;
 use App\Models\Auth\User;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -126,11 +127,20 @@ class SessionController extends Controller
                  * Pass the dynamic remember-me status to the frontend
                  */
                 'remember_me' => $isRemembered,
+
+                // Total lifetime (minutes) this session is currently granted,
+                // and whether an admin overrode the default for it.
+                'lifetime_minutes' => (int) $effectiveLifetime,
+                'has_custom_lifetime' => $session->custom_lifetime !== null,
             ];
         });
 
         return Inertia::render($this->component(), [
             'sessions' => $mappedSessions->values(),
+            'lifetimes' => [
+                'default' => $sessionLifetime,
+                'remember' => $rememberLifetime,
+            ],
         ]);
     }
 
@@ -166,10 +176,7 @@ class SessionController extends Controller
             return redirect()->route('login');
         }
 
-        return back()->with(
-            'message',
-            'Session terminated successfully.'
-        );
+        return back()->with('success', 'Session terminated successfully.');
     }
 
     /**
@@ -181,11 +188,9 @@ class SessionController extends Controller
      * Refreshing last_activity effectively gives the session a fresh
      * session lifetime from the current moment.
      */
-    public function extend(Request $request, string $id): RedirectResponse
+    public function extend(ExtendSessionsRequest $request, string $id): RedirectResponse
     {
-        $validated = $request->validate([
-            'minutes' => ['required', 'integer', 'min:1'],
-        ]);
+        $validated = $request->validated();
 
         $session = DB::table('sessions')
             ->where('id', $id)
@@ -202,42 +207,63 @@ class SessionController extends Controller
                 'custom_lifetime' => $validated['minutes'],
             ]);
 
-        return back()->with(
-            'message',
-            'Session lifetime extended successfully.'
-        );
+        return back()->with('success', 'Session lifetime updated.');
+    }
+
+    /**
+     * Drop a session's custom lifetime so it follows the default again.
+     */
+    public function reset(string $id): RedirectResponse
+    {
+        $updated = DB::table('sessions')
+            ->where('id', $id)
+            ->update(['custom_lifetime' => null]);
+
+        if ($updated === 0) {
+            return back()->with('error', 'Session not found.');
+        }
+
+        return back()->with('success', 'Session lifetime reset to the default.');
+    }
+
+    /**
+     * Terminate every session belonging to one user, except the current one.
+     */
+    public function destroyUser(int $user): RedirectResponse
+    {
+        $deleted = DB::table('sessions')
+            ->where('user_id', $user)
+            ->where('id', '!=', session()->getId())
+            ->delete();
+
+        return back()->with('success', "{$deleted} session(s) for that user terminated.");
     }
 
     /**
      * Extend all sessions.
      */
-    public function extendAll(Request $request): RedirectResponse
+    public function extendAll(ExtendSessionsRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'minutes' => ['required', 'integer', 'min:1'],
-        ]);
+        $validated = $request->validated();
 
         $updated = DB::table('sessions')->update([
             'last_activity' => now()->timestamp,
             'custom_lifetime' => $validated['minutes'],
         ]);
 
-        return back()->with(
-            'message',
-            "{$updated} session(s) extended successfully."
-        );
+        return back()->with('success', "{$updated} session(s) extended successfully.");
     }
 
     /**
      * Extend selected sessions.
      */
-    public function extendSelected(Request $request): RedirectResponse
+    public function extendSelected(ExtendSessionsRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['required', 'string'],
-            'minutes' => ['required', 'integer', 'min:1'],
-        ]);
+        $validated = $request->validated();
+
+        if (empty($validated['ids'])) {
+            return back()->with('error', 'Select at least one session.');
+        }
 
         $updated = DB::table('sessions')
             ->whereIn('id', $validated['ids'])
@@ -246,10 +272,7 @@ class SessionController extends Controller
                 'custom_lifetime' => $validated['minutes'],
             ]);
 
-        return back()->with(
-            'message',
-            "{$updated} session(s) extended successfully."
-        );
+        return back()->with('success', "{$updated} session(s) extended successfully.");
     }
 
     /**
@@ -263,21 +286,15 @@ class SessionController extends Controller
             ->where('id', '!=', $currentSessionId)
             ->delete();
 
-        return back()->with(
-            'message',
-            "{$deleted} other session(s) terminated successfully."
-        );
+        return back()->with('success', "{$deleted} other session(s) terminated successfully.");
     }
 
     /**
      * Terminate selected sessions.
      */
-    public function destroySelected(Request $request): RedirectResponse
+    public function destroySelected(TerminateSessionsRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['required', 'string'],
-        ]);
+        $validated = $request->validated();
 
         $currentSessionId = session()->getId();
 
@@ -301,9 +318,6 @@ class SessionController extends Controller
             ->whereIn('id', $ids)
             ->delete();
 
-        return back()->with(
-            'message',
-            "{$deleted} session(s) terminated successfully."
-        );
+        return back()->with('success', "{$deleted} session(s) terminated successfully.");
     }
 }

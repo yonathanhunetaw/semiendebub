@@ -132,6 +132,10 @@ class ShipmentController extends Controller
                 'move_targets' => $this->workflow->moveTargets($shipment, Auth::user()),
                 'courier' => $this->courierProp($shipment),
                 'can_edit_manifest' => $this->workflow->manifestIsOpen($shipment),
+                // The Replenishment Manifest panel: refill suggestions from stock
+                // keepers and the auto trigger this shipment could take.
+                'replenishment' => app(\App\Services\Inventory\RefillBoard::class)
+                    ->manifestPanel($shipment, Auth::user(), $this->workflow->manifestIsOpen($shipment)),
             ],
         ));
     }

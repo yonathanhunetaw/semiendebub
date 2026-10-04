@@ -42,7 +42,11 @@ class InventoryController extends Controller
          */
         $page = $request->integer('page') ?: 1;
 
-        $items = $this->stock->paginateItems(
+        // The ledger as this keeper sees it: only the locations they manage,
+        // or their own store's, or everything when neither applies.
+        $stock = $this->stock->forUser($request->user());
+
+        $items = $stock->paginateItems(
             $search !== '' ? $search : null,
             $locationType,
             $locationId,
@@ -53,18 +57,18 @@ class InventoryController extends Controller
             'items' => $items['rows'],
             // The variant-level ledger, still available and still paginated,
             // for the keeper who needs the row behind a figure.
-            'stock' => collect($this->stock->paginateStock($search !== '' ? $search : null, $locationType, $locationId)->items())
-                ->map(fn (ItemStock $row) => $this->stock->presentStockRow($row))
+            'stock' => collect($stock->paginateStock($search !== '' ? $search : null, $locationType, $locationId)->items())
+                ->map(fn (ItemStock $row) => $stock->presentStockRow($row))
                 ->values()
                 ->all(),
-            'locations' => $this->stock->locations(),
+            'locations' => $stock->locations(),
             'variants' => $this->stock->variantOptions($search !== '' ? $search : null)->all(),
             'filters' => [
                 'search' => $search,
                 'location_type' => $locationType,
                 'location_id' => $locationId,
             ],
-            'metrics' => $this->stock->metrics($locationType, $locationId),
+            'metrics' => $stock->metrics($locationType, $locationId),
             'pagination' => [
                 'current_page' => $items['page'],
                 'last_page' => $items['last_page'],
@@ -79,7 +83,7 @@ class InventoryController extends Controller
     public function variants(Request $request, int $item): \Illuminate\Http\JsonResponse
     {
         return response()->json([
-            'variants' => $this->stock->variantsForItem(
+            'variants' => $this->stock->forUser($request->user())->variantsForItem(
                 $item,
                 $request->string('location_type')->toString() ?: null,
                 $request->integer('location_id') ?: null,
@@ -92,6 +96,10 @@ class InventoryController extends Controller
      */
     public function receive(ReceiveStockRequest $request): RedirectResponse
     {
+        if (! $this->stock->mayOperateAddress($request->user(), (string) $request->validated('location_type'), (int) $request->validated('location_id'))) {
+            return back()->with('error', 'You do not manage that location, so you cannot book stock into it.');
+        }
+
         $stock = $this->stock->receive(
             (int) $request->validated('item_variant_id'),
             (string) $request->validated('location_type'),
@@ -113,6 +121,10 @@ class InventoryController extends Controller
      */
     public function adjust(AdjustStockRequest $request, ItemStock $stock): RedirectResponse
     {
+        if (! $this->stock->mayOperateRow($request->user(), $stock)) {
+            return back()->with('error', 'You do not manage that location, so you cannot recount it.');
+        }
+
         $delta = $this->stock->adjust(
             $stock,
             (int) $request->validated('counted_quantity'),

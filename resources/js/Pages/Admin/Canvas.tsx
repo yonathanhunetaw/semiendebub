@@ -10,11 +10,19 @@ import {
     ListItemText, ListItemAvatar, Avatar, Tooltip, Snackbar,
     Alert, Fab, FormControl, InputLabel, ListSubheader
 } from '@mui/material';
-import {
-    Menu as MenuIcon, Add as AddIcon, Delete as DeleteIcon, Save as SaveIcon,
-    History as HistoryIcon, Person as PersonIcon, AccessTime as AccessTimeIcon,
-    Close as CloseIcon, CameraAlt, Layers, Share, Draw, PersonAdd
-} from '@mui/icons-material';
+import MenuIcon from '@mui/icons-material/Menu';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SaveIcon from '@mui/icons-material/Save';
+import HistoryIcon from '@mui/icons-material/History';
+import PersonIcon from '@mui/icons-material/Person';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import CloseIcon from '@mui/icons-material/Close';
+import CameraAlt from '@mui/icons-material/CameraAlt';
+import Layers from '@mui/icons-material/Layers';
+import Share from '@mui/icons-material/Share';
+import Draw from '@mui/icons-material/Draw';
+import PersonAdd from '@mui/icons-material/PersonAdd';
 
 // Global Ziggy route declaration
 declare function route(name?: string, params?: any, absolute?: boolean): string;

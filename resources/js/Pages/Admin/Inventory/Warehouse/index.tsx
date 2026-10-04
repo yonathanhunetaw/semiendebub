@@ -91,7 +91,8 @@ interface Props {
     /** Staff who can hold a manager slot. */
     assignable_managers?: AssignableManager[];
     /** The ceiling, from App\Models\Inventory\FacilityManager. */
-    max_managers?: number;
+    /** No longer limited; kept so an old payload still type-checks. */
+    max_managers?: number | null;
 }
 
 export default function WarehouseIndex({
@@ -101,7 +102,7 @@ export default function WarehouseIndex({
     totalUnits = 0,
     lowStockCount = 0,
     assignable_managers = [],
-    max_managers = 2,
+    max_managers = null,
 }: Props) {
     /*
      * Manager assignment.
@@ -492,7 +493,7 @@ export default function WarehouseIndex({
                                             justifyContent="flex-end"
                                         >
                                             <Tooltip
-                                                title={`Assign managers (up to ${max_managers})`}
+                                                title={max_managers ? `Assign managers (up to ${max_managers})` : "Assign managers"}
                                             >
                                                 <IconButton
                                                     size="small"
@@ -845,9 +846,9 @@ export default function WarehouseIndex({
                 <DialogTitle>Managers · {assigning?.name}</DialogTitle>
                 <DialogContent>
                     <DialogContentText sx={{ mb: 2 }}>
-                        At most {max_managers} people oversee a warehouse, and only they
-                        (plus admins) may approve its replenishment or drive its
-                        operations. Leaving both slots empty makes it admin-only.
+                        The people who oversee a warehouse — as many as you need. Only
+                        they (plus admins) may approve its replenishment or drive its
+                        operations. Leaving it empty makes it admin-only.
                     </DialogContentText>
 
                     <Stack spacing={2}>
