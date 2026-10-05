@@ -1,7 +1,6 @@
 import {
     SellerHeader,
-    SELLER_BRAND_DARK,
-    SellerCard,
+        SellerCard,
 } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, useForm } from "@inertiajs/react";
@@ -100,7 +99,7 @@ export default function Create({ customers, auth }: Props) {
                                                 <PersonRoundedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
                                                 <Typography variant="body2">{customer.name}</Typography>
                                             </Stack>
-                                            <Chip label={`TIN: ${customer.tin_number}`} size="small" sx={{ fontSize: 10, height: 18, bgcolor: "#edf7ed" }} />
+                                            <Chip label={`TIN: ${customer.tin_number}`} size="small" sx={{ fontSize: 10, height: 18, bgcolor: "rgb(var(--success-container))", color: "rgb(var(--on-success-container))" }} />
                                         </Stack>
                                     </MenuItem>
                                 ))}
@@ -144,7 +143,7 @@ export default function Create({ customers, auth }: Props) {
                                 sx={{
                                     py: 1.5,
                                     fontWeight: 900,
-                                    bgcolor: SELLER_BRAND_DARK, // Using your brand constant
+                                    bgcolor: "primary.main",
                                     "&:hover": { bgcolor: "primary.dark" }
                                 }}
                             >

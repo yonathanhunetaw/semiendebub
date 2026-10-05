@@ -1,4 +1,4 @@
-import { SELLER_BRAND_DARK, SELLER_CITY_OPTIONS, SellerCard, SellerHeader } from "@/Components/Seller/sellerUi";
+import { SELLER_CITY_OPTIONS, SellerCard, SellerHeader } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, useForm } from "@inertiajs/react";
 import { Box, Button, MenuItem, Stack, TextField } from "@mui/material";
@@ -136,8 +136,8 @@ export default function Create() {
                             sx={{
                                 borderRadius: 3,
                                 textTransform: "none",
-                                bgcolor: SELLER_BRAND_DARK,
-                                "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                                bgcolor: "primary.main",
+                                "&:hover": { bgcolor: "primary.main" },
                             }}
                         >
                             Save Customer

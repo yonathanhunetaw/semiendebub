@@ -1,4 +1,4 @@
-import { SellerCard, SellerHeader, SELLER_BRAND_DARK, sellerAvatarText, sellerHeaderButtonSx, sellerName } from "@/Components/Seller/sellerUi";
+import { SellerCard, SellerHeader, sellerAvatarText, sellerHeaderButtonSx, sellerName } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
@@ -47,7 +47,7 @@ export default function Index({ customers = [] }: { customers?: Customer[] }) {
                                 sx={{ textDecoration: "none", color: "inherit" }}
                             >
                                 <Stack direction="row" spacing={2} alignItems="center">
-                                    <Avatar sx={{ bgcolor: SELLER_BRAND_DARK }}>
+                                    <Avatar sx={{ bgcolor: "primary.main", color: "primary.contrastText" }}>
                                         {sellerAvatarText(fullName)}
                                     </Avatar>
                                     <Box sx={{ flex: 1, minWidth: 0 }}>

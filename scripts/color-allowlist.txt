@@ -46,16 +46,9 @@ resources/js/Pages/Dev/Architecture/Index.tsx 2
 resources/js/Pages/Dev/Dashboard/Lesson6/Index.tsx 12
 resources/js/Pages/Dev/Logs/index.tsx 23
 resources/js/Pages/Dev/Welcome/index.tsx 2
-resources/js/Pages/Seller/Carts/Create.tsx 1
-resources/js/Pages/Seller/Carts/Index.tsx 8
-resources/js/Pages/Seller/Carts/Show.tsx 2
-resources/js/Pages/Seller/Categories/Show.tsx 11
 resources/js/Pages/Seller/Dashboard/index.tsx 29
 resources/js/Pages/Seller/Items/Index.tsx 24
 resources/js/Pages/Seller/Items/SearchResults.tsx 23
-resources/js/Pages/Seller/Locations/Show.tsx 3
-resources/js/Pages/Seller/Refills/Index.tsx 12
-resources/js/Pages/Seller/Refills/Permissions.tsx 2
 resources/js/Pages/Seller/Settings/Index.tsx 5
 resources/js/Pages/Shared/Profile/Edit.jsx 4
 resources/js/Pages/StockKeeper/Shipments/index.tsx 5

@@ -18,8 +18,6 @@ import React, { useMemo, useState } from "react";
  * Radii are explicit: tailwind.config.js redefines `rounded-full` to 0.75rem.
  */
 
-const BRAND = "#c2410c";
-const INK = "#0b1c30";
 
 interface CartLine {
     id: number;
@@ -55,13 +53,13 @@ const FULFILLMENT = {
     local: {
         title: "Store & Remote Hub",
         badge: "Local + Remote",
-        badgeClass: "bg-blue-600 text-white",
+        badgeClass: "bg-info text-on-info",
         tags: ["Express Ready", "Direct Dispatch"],
     },
     hub: {
         title: "Warehouse",
         badge: "Hub Consolidation",
-        badgeClass: "bg-amber-300 text-amber-950",
+        badgeClass: "bg-warning-container text-on-warning-container",
         tags: ["Consolidated", "Scheduled Run"],
     },
 } as const;
@@ -85,9 +83,8 @@ function SelectDot({ checked, onClick, className = "" }: {
             role="checkbox"
             aria-checked={checked}
             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[999px] border transition-colors ${
-                checked ? "border-[#c2410c] text-white" : "border-slate-300 bg-white"
-            } ${className}`}
-            style={checked ? { backgroundColor: BRAND } : undefined}
+                checked ? "border-primary text-on-primary" : "border-outline/50 bg-surface-container-lowest"
+            } ${className} ${checked ? "bg-primary" : ""}`}
         >
             {checked ? <span className="material-symbols-outlined text-[13px]">check</span> : null}
         </button>
@@ -181,9 +178,9 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
         <>
             <Head title="Carts" />
 
-            <div className="min-h-screen bg-white pb-44">
+            <div className="min-h-screen bg-surface-container-lowest pb-44">
                 {/* ── Top bar ── */}
-                <header className="sticky top-0 z-40 border-b border-gray-100 bg-white px-4 pb-2 pt-3">
+                <header className="sticky top-0 z-40 border-b border-outline-variant/60 bg-surface-container-lowest px-4 pb-2 pt-3">
                     <div className="flex items-center justify-between">
                         <div className="flex min-w-0 items-center space-x-3">
                             <button
@@ -194,22 +191,22 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                         : router.visit(route("seller.dashboard"))
                                 }
                                 aria-label="Back"
-                                className="-ml-1 p-1 text-gray-800 active:scale-90"
+                                className="-ml-1 p-1 text-on-surface active:scale-90"
                             >
                                 <span className="material-symbols-outlined text-[22px]">chevron_left</span>
                             </button>
-                            <h1 className="truncate text-xl font-bold tracking-tight" style={{ color: INK }}>
+                            <h1 className="truncate text-xl font-bold tracking-tight text-on-surface">
                                 Cart ({active?.line_count ?? 0})
                             </h1>
                         </div>
 
-                        <div className="flex items-center space-x-3 text-gray-800">
+                        <div className="flex items-center space-x-3 text-on-surface">
                             {home_store ? (
                                 <div className="flex items-center space-x-1">
-                                    <span className="material-symbols-outlined text-[17px] text-gray-700">
+                                    <span className="material-symbols-outlined text-[17px] text-on-surface-variant">
                                         location_on
                                     </span>
-                                    <span className="max-w-[70px] truncate text-xs font-medium text-gray-700">
+                                    <span className="max-w-[70px] truncate text-xs font-medium text-on-surface-variant">
                                         {home_store}
                                     </span>
                                 </div>
@@ -221,13 +218,12 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                 onClick={() => setPanelOpen((open) => !open)}
                                 aria-label="Other carts"
                                 aria-expanded={panelOpen}
-                                className="relative p-1 text-gray-700 active:scale-90"
+                                className="relative p-1 text-on-surface-variant active:scale-90"
                             >
                                 <span className="material-symbols-outlined text-[21px]">shopping_bag</span>
                                 {others.length > 0 ? (
                                     <span
-                                        className="absolute -right-1 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-[999px] px-1 font-mono text-[9px] font-bold text-white"
-                                        style={{ backgroundColor: BRAND }}
+                                        className="absolute -right-1 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-[999px] px-1 font-mono text-[9px] font-bold text-on-primary bg-primary"
                                     >
                                         {others.length}
                                     </span>
@@ -237,7 +233,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                             <Link
                                 href={route("seller.carts.create")}
                                 aria-label="New cart"
-                                className="p-1 text-gray-700 active:scale-90"
+                                className="p-1 text-on-surface-variant active:scale-90"
                             >
                                 <span className="material-symbols-outlined text-[21px]">add_shopping_cart</span>
                             </Link>
@@ -253,24 +249,24 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                 className="fixed inset-0 z-30 cursor-default bg-black/10"
                             />
                             <div className="absolute inset-x-0 top-full z-50 px-3">
-                                <div className="relative ml-auto mt-2 w-[280px] rounded-[14px] border border-gray-200 bg-white p-3 shadow-xl">
-                                    <div className="absolute right-12 top-0 h-4 w-4 -translate-y-1/2 rotate-45 border-l border-t border-gray-200 bg-white" />
+                                <div className="relative ml-auto mt-2 w-[280px] rounded-[14px] border border-outline-variant bg-surface-container-lowest p-3 shadow-xl">
+                                    <div className="absolute right-12 top-0 h-4 w-4 -translate-y-1/2 rotate-45 border-l border-t border-outline-variant bg-surface-container-lowest" />
 
                                     <div className="relative z-10 mb-1 flex items-center justify-between">
-                                        <span className="text-xs font-bold text-gray-900">
+                                        <span className="text-xs font-bold text-on-surface">
                                             Other cart(s)
                                         </span>
                                         <button
                                             type="button"
                                             onClick={() => setPanelOpen(false)}
                                             aria-label="Close"
-                                            className="p-0.5 text-gray-400 hover:text-gray-700"
+                                            className="p-0.5 text-outline hover:text-on-surface-variant"
                                         >
                                             <span className="material-symbols-outlined text-[14px]">close</span>
                                         </button>
                                     </div>
 
-                                    <p className="relative z-10 mb-2 text-[10px] leading-tight text-gray-500">
+                                    <p className="relative z-10 mb-2 text-[10px] leading-tight text-on-surface-variant">
                                         Only the top cart is open on screen. Promote one to switch, or reorder
                                         to change the queue.
                                     </p>
@@ -288,8 +284,8 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                                 onClick={() => setSortMode(option.id)}
                                                 className={`rounded-[999px] border px-2 py-0.5 text-[10px] font-bold transition-colors ${
                                                     sortMode === option.id
-                                                        ? "border-[#c2410c] bg-orange-50 text-[#c2410c]"
-                                                        : "border-slate-200 bg-white text-slate-500"
+                                                        ? "border-primary bg-primary-container/60 text-primary"
+                                                        : "border-outline-variant bg-surface-container-lowest text-on-surface-variant"
                                                 }`}
                                             >
                                                 {option.label}
@@ -301,24 +297,24 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                         {panelCarts.map((cart) => (
                                             <div
                                                 key={cart.id}
-                                                className="flex items-center justify-between gap-2 rounded-[10px] border border-gray-100 bg-gray-50 p-2"
+                                                className="flex items-center justify-between gap-2 rounded-[10px] border border-outline-variant/60 bg-surface-container-low p-2"
                                             >
                                                 <button
                                                     type="button"
                                                     onClick={() => promote(cart.id)}
                                                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                                                 >
-                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[999px] border border-orange-200/60 bg-orange-50 text-[#c2410c]">
+                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[999px] border border-primary/20 bg-primary-container/60 text-primary">
                                                         <span className="material-symbols-outlined text-[14px]">
                                                             shopping_cart
                                                         </span>
                                                     </span>
                                                     <span className="min-w-0 flex-1">
-                                                        <span className="block truncate text-[11px] font-bold text-gray-900">
+                                                        <span className="block truncate text-[11px] font-bold text-on-surface">
                                                             {cartLabel(cart)}
                                                         </span>
-                                                        <span className="block text-[10px] leading-none text-gray-500">
-                                                            <span className="font-bold" style={{ color: BRAND }}>
+                                                        <span className="block text-[10px] leading-none text-on-surface-variant">
+                                                            <span className="font-bold text-primary">
                                                                 {cart.line_count}
                                                             </span>{" "}
                                                             line(s) · {birr(cart.total)}
@@ -334,7 +330,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                                             onClick={() => nudge(cart.id, -1)}
                                                             aria-label={`Move ${cartLabel(cart)} up`}
                                                             disabled={order.indexOf(cart.id) <= 1}
-                                                            className="text-gray-400 disabled:opacity-25"
+                                                            className="text-outline disabled:opacity-25"
                                                         >
                                                             <span className="material-symbols-outlined text-[15px]">
                                                                 keyboard_arrow_up
@@ -345,7 +341,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                                             onClick={() => nudge(cart.id, 1)}
                                                             aria-label={`Move ${cartLabel(cart)} down`}
                                                             disabled={order.indexOf(cart.id) >= order.length - 1}
-                                                            className="text-gray-400 disabled:opacity-25"
+                                                            className="text-outline disabled:opacity-25"
                                                         >
                                                             <span className="material-symbols-outlined text-[15px]">
                                                                 keyboard_arrow_down
@@ -357,7 +353,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                         ))}
 
                                         {panelCarts.length === 0 ? (
-                                            <p className="py-3 text-center text-[11px] text-gray-400">
+                                            <p className="py-3 text-center text-[11px] text-outline">
                                                 No other carts.
                                             </p>
                                         ) : null}
@@ -371,41 +367,40 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                 {/* ── Active cart ── */}
                 {!active ? (
                     <div className="flex flex-col items-center px-6 py-20 text-center">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-[999px] bg-[#FDF0ED]">
-                            <span className="material-symbols-outlined text-[40px]" style={{ color: BRAND }}>
+                        <div className="flex h-20 w-20 items-center justify-center rounded-[999px] bg-primary-container">
+                            <span className="material-symbols-outlined text-[40px] text-primary">
                                 shopping_cart
                             </span>
                         </div>
-                        <p className="mt-4 text-[16px] font-bold" style={{ color: INK }}>
+                        <p className="mt-4 text-[16px] font-bold text-on-surface">
                             No active carts
                         </p>
-                        <p className="mt-1 text-[12px] text-slate-500">
+                        <p className="mt-1 text-[12px] text-on-surface-variant">
                             Start a cart to build an order for a customer.
                         </p>
                         <Link
                             href={route("seller.carts.create")}
-                            className="mt-4 rounded-[999px] px-5 py-2 text-[13px] font-bold text-white active:scale-95"
-                            style={{ backgroundColor: BRAND }}
+                            className="mt-4 rounded-[999px] px-5 py-2 text-[13px] font-bold text-on-primary active:scale-95 bg-primary"
                         >
                             New cart
                         </Link>
                     </div>
                 ) : (
-                    <main className="bg-white">
+                    <main className="bg-surface-container-lowest">
                         {/* Whose cart is open */}
-                        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+                        <div className="flex items-center justify-between border-b border-outline-variant/60 px-4 py-2.5">
                             <div className="min-w-0">
-                                <p className="truncate text-[13px] font-bold" style={{ color: INK }}>
+                                <p className="truncate text-[13px] font-bold text-on-surface">
                                     {cartLabel(active)}
                                 </p>
-                                <p className="truncate text-[11px] text-gray-500">
+                                <p className="truncate text-[11px] text-on-surface-variant">
                                     {active.seller?.name ?? "Unassigned"}
                                     {active.customer?.type === "business" ? " · Business" : ""}
                                 </p>
                             </div>
                             <Link
                                 href={route("seller.carts.show", active.id)}
-                                className="flex shrink-0 items-center text-[11px] font-medium text-gray-500 hover:text-gray-800"
+                                className="flex shrink-0 items-center text-[11px] font-medium text-on-surface-variant hover:text-on-surface"
                             >
                                 Open
                                 <span className="material-symbols-outlined ml-0.5 text-xs">chevron_right</span>
@@ -420,7 +415,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                             return (
                                 <div
                                     key={key}
-                                    className={groupIndex === 0 ? "pb-3" : "border-t-8 border-gray-100 pb-3 pt-3.5"}
+                                    className={groupIndex === 0 ? "pb-3" : "border-t-8 border-surface-container pb-3 pt-3.5"}
                                 >
                                     <div className="px-4 pb-2 pt-3.5">
                                         <div className="flex items-center space-x-3">
@@ -434,7 +429,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                                 >
                                                     {meta.badge}
                                                 </span>
-                                                <span className="text-sm font-bold tracking-tight text-gray-900">
+                                                <span className="text-sm font-bold tracking-tight text-on-surface">
                                                     {meta.title}
                                                 </span>
                                             </div>
@@ -444,37 +439,36 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                             {meta.tags.map((tag) => (
                                                 <span
                                                     key={tag}
-                                                    className="rounded bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-800"
+                                                    className="rounded bg-surface-container px-2 py-0.5 text-[10px] font-semibold text-on-surface"
                                                 >
                                                     {tag}
                                                 </span>
                                             ))}
-                                            <span className="ml-1 text-xs font-medium text-gray-500">
+                                            <span className="ml-1 text-xs font-medium text-on-surface-variant">
                                                 {lines.length} line{lines.length === 1 ? "" : "s"}
                                             </span>
                                         </div>
 
                                         {key === "hub" ? (
-                                            <div className="ml-8 mt-2 flex flex-col space-y-0.5 rounded bg-[#fdf5e6] px-2.5 py-1.5">
+                                            <div className="ml-8 mt-2 flex flex-col space-y-0.5 rounded bg-warning-container/50 px-2.5 py-1.5">
                                                 <div className="flex items-center space-x-1.5">
                                                     <span
-                                                        className="material-symbols-outlined text-[13px]"
-                                                        style={{ color: BRAND }}
+                                                        className="material-symbols-outlined text-[13px] text-primary"
                                                     >
                                                         hourglass_top
                                                     </span>
-                                                    <span className="text-[11px] font-bold text-gray-900">
+                                                    <span className="text-[11px] font-bold text-on-surface">
                                                         Moves on the next scheduled shipment
                                                     </span>
                                                 </div>
-                                                <span className="text-[10px] text-gray-600">
+                                                <span className="text-[10px] text-on-surface-variant">
                                                     Consolidated at the hub before dispatch
                                                 </span>
                                             </div>
                                         ) : null}
                                     </div>
 
-                                    <div className="divide-y divide-gray-100">
+                                    <div className="divide-y divide-outline-variant/60">
                                         {lines.map((line) => (
                                             <div key={line.id} className="flex items-start space-x-3 px-4 py-3">
                                                 <SelectDot
@@ -483,7 +477,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                                     className="mt-9"
                                                 />
 
-                                                <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-[10px] bg-gray-100">
+                                                <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-[10px] bg-surface-container">
                                                     <img
                                                         src={line.image}
                                                         alt={line.name}
@@ -498,13 +492,13 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                                 </div>
 
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="line-clamp-2 text-xs font-medium leading-snug text-gray-800">
+                                                    <p className="line-clamp-2 text-xs font-medium leading-snug text-on-surface">
                                                         {line.name}
                                                     </p>
 
                                                     {line.variant_label ? (
-                                                        <div className="mt-1 inline-flex items-center space-x-1 rounded border border-gray-200/80 bg-gray-50 px-1.5 py-0.5">
-                                                            <span className="text-[11px] font-normal text-gray-500">
+                                                        <div className="mt-1 inline-flex items-center space-x-1 rounded border border-outline-variant/80 bg-surface-container-low px-1.5 py-0.5">
+                                                            <span className="text-[11px] font-normal text-on-surface-variant">
                                                                 {line.variant_label}
                                                             </span>
                                                         </div>
@@ -512,12 +506,12 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
 
                                                     <div className="mt-2 flex items-center justify-between">
                                                         <div className="flex items-baseline space-x-1.5">
-                                                            <span className="text-base font-bold leading-none tracking-tight text-gray-900">
+                                                            <span className="text-base font-bold leading-none tracking-tight text-on-surface">
                                                                 {birr(line.price)}
                                                             </span>
                                                         </div>
-                                                        <div className="flex h-6 items-center rounded-[999px] border border-gray-200 bg-white px-2">
-                                                            <span className="px-1 text-xs font-semibold text-gray-800">
+                                                        <div className="flex h-6 items-center rounded-[999px] border border-outline-variant bg-surface-container-lowest px-2">
+                                                            <span className="px-1 text-xs font-semibold text-on-surface">
                                                                 ×{line.quantity}
                                                             </span>
                                                         </div>
@@ -525,17 +519,17 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
 
                                                     {line.extra_pieces > 0 ? (
                                                         <div className="mt-0.5">
-                                                            <span className="text-[11px] font-medium leading-none" style={{ color: BRAND }}>
+                                                            <span className="text-[11px] font-medium leading-none text-primary">
                                                                 +{line.extra_pieces} loose piece(s)
                                                             </span>
                                                         </div>
                                                     ) : null}
 
-                                                    <div className="mt-1 flex items-center text-[10px] text-gray-400">
+                                                    <div className="mt-1 flex items-center text-[10px] text-outline">
                                                         <span className="truncate">
                                                             {line.sku ?? `Variant #${line.id}`}
                                                         </span>
-                                                        <span className="ml-auto font-mono text-[10px] text-gray-500">
+                                                        <span className="ml-auto font-mono text-[10px] text-on-surface-variant">
                                                             {birr(line.line_total)}
                                                         </span>
                                                     </div>
@@ -549,11 +543,11 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
 
                         {active.lines.length === 0 ? (
                             <div className="px-4 py-14 text-center">
-                                <span className="material-symbols-outlined text-[36px] text-slate-300">
+                                <span className="material-symbols-outlined text-[36px] text-outline">
                                     remove_shopping_cart
                                 </span>
-                                <p className="mt-2 text-[13px] font-bold text-gray-900">This cart is empty</p>
-                                <p className="mt-1 text-[11px] text-slate-400">
+                                <p className="mt-2 text-[13px] font-bold text-on-surface">This cart is empty</p>
+                                <p className="mt-1 text-[11px] text-outline">
                                     Add items from the catalogue to get started.
                                 </p>
                             </div>
@@ -565,7 +559,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
             {/* ── Sticky checkout bar ── */}
             {active && active.lines.length > 0 ? (
                 <section
-                    className="fixed inset-x-0 z-40 mx-auto flex max-w-[480px] items-center justify-between rounded-t-[16px] border-t border-gray-200/80 bg-white px-4 py-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
+                    className="fixed inset-x-0 z-40 mx-auto flex max-w-[480px] items-center justify-between rounded-t-[16px] border-t border-outline-variant/80 bg-surface-container-lowest px-4 py-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
                     style={{ bottom: ABOVE_NAV }}
                 >
                     <div className="flex items-center space-x-2">
@@ -573,22 +567,21 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                             checked={allSelected}
                             onClick={() => setSelected(allSelected ? [] : allLineIds)}
                         />
-                        <span className="text-xs font-semibold text-gray-700">All</span>
+                        <span className="text-xs font-semibold text-on-surface-variant">All</span>
                     </div>
 
                     <div className="flex flex-col items-end pr-2">
-                        <span className="text-[15px] font-bold leading-tight" style={{ color: INK }}>
+                        <span className="text-[15px] font-bold leading-tight text-on-surface">
                             {birr(selected.length ? selectedTotal : active.total)}
                         </span>
-                        <span className="mt-0.5 text-[10px] leading-none text-gray-500">
+                        <span className="mt-0.5 text-[10px] leading-none text-on-surface-variant">
                             {selected.length ? `${selected.length} selected` : "Cart total"}
                         </span>
                     </div>
 
                     <Link
                         href={`${route("seller.orders.confirmation")}?cart=${active.id}`}
-                        className="flex flex-col items-center justify-center rounded-[999px] px-5 py-2 text-white shadow-md active:scale-95"
-                        style={{ backgroundColor: BRAND }}
+                        className="flex flex-col items-center justify-center rounded-[999px] px-5 py-2 text-on-primary shadow-md active:scale-95 bg-primary"
                     >
                         <span className="text-xs font-bold leading-none tracking-wide">
                             Checkout ({selected.length || active.line_count})

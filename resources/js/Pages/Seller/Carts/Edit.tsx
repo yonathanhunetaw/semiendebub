@@ -1,4 +1,4 @@
-import { SellerCard, SellerHeader, SELLER_BRAND_DARK, sellerName } from "@/Components/Seller/sellerUi";
+import { SellerCard, SellerHeader, sellerName } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, useForm, usePage } from "@inertiajs/react";
 import { Box, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
@@ -85,8 +85,8 @@ export default function Edit({
                             sx={{
                                 borderRadius: 3,
                                 textTransform: "none",
-                                bgcolor: SELLER_BRAND_DARK,
-                                "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                                bgcolor: "primary.main",
+                                "&:hover": { bgcolor: "primary.main" },
                             }}
                         >
                             Save Cart
