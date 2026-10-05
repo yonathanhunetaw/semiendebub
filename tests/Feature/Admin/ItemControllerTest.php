@@ -90,7 +90,7 @@ class ItemControllerTest extends TestCase
             );
     }
 
-    /** @test */
+    #[Test]
     public function it_stores_a_new_item_and_resolves_category_from_string()
     {
         Storage::fake('public');
@@ -115,7 +115,7 @@ class ItemControllerTest extends TestCase
         $response->assertRedirect(route('admin.items.show', $item));
     }
 
-    /** @test */
+    #[Test]
     public function it_updates_item_details_and_syncs_colors()
     {
         $item = Item::factory()->create();
@@ -187,7 +187,7 @@ class ItemControllerTest extends TestCase
         ], $variant->fresh()->images);
     }
 
-    /** @test */
+    #[Test]
     public function it_activates_an_item_whose_variants_lack_images_and_flags_it_as_incomplete()
     {
         /*
@@ -225,7 +225,7 @@ class ItemControllerTest extends TestCase
         $this->assertTrue((bool) $item->fresh()->is_incomplete);
     }
 
-    /** @test */
+    #[Test]
     public function it_activates_an_item_through_the_status_endpoint_without_images()
     {
         $color = ItemColor::factory()->create();
@@ -244,7 +244,7 @@ class ItemControllerTest extends TestCase
         $this->assertTrue((bool) $item->fresh()->is_incomplete);
     }
 
-    /** @test */
+    #[Test]
     public function it_clears_the_incomplete_flag_once_every_variant_is_illustrated()
     {
         $color = ItemColor::factory()->create();
@@ -262,7 +262,7 @@ class ItemControllerTest extends TestCase
         $this->assertFalse((bool) $item->fresh()->is_incomplete);
     }
 
-    /** @test */
+    #[Test]
     public function it_can_permanently_delete_an_item()
     {
         $item = Item::factory()->create();
