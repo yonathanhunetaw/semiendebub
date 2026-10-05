@@ -40,20 +40,23 @@ import DevLayout from '@/Layouts/DevLayout';
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
-/** Levels we colour explicitly; anything else falls back to neutral. */
-const LEVEL_COLORS: Record<string, string> = {
-    EMERGENCY: '#ff5370',
-    ALERT: '#ff5370',
-    CRITICAL: '#ff5370',
-    ERROR: '#ff5370',
-    STDERR: '#ff8f6b',
-    WARNING: '#ffcb6b',
-    WARN: '#ffcb6b',
-    NOTICE: '#7dd3fc',
-    INFO: '#7dd3fc',
-    SUCCESS: '#36d399',
-    DEBUG: '#a78bfa',
-    TRACE: '#a78bfa',
+/**
+ * Levels we colour explicitly, as theme token names (each has an `on-` ink);
+ * anything else falls back to neutral (outline).
+ */
+const LEVEL_TONES: Record<string, 'error' | 'warning' | 'info' | 'success' | 'primary'> = {
+    EMERGENCY: 'error',
+    ALERT: 'error',
+    CRITICAL: 'error',
+    ERROR: 'error',
+    STDERR: 'error',
+    WARNING: 'warning',
+    WARN: 'warning',
+    NOTICE: 'info',
+    INFO: 'info',
+    SUCCESS: 'success',
+    DEBUG: 'primary',
+    TRACE: 'primary',
 };
 
 const SEVERITIES = ['all', 'ERROR', 'STDERR', 'WARNING', 'SUCCESS', 'INFO', 'DEBUG'] as const;
@@ -100,7 +103,14 @@ interface LogsPageProps {
 }
 
 function levelColor(level: string): string {
-    return LEVEL_COLORS[level.toUpperCase()] ?? '#94a3b8';
+    const tone = LEVEL_TONES[level.toUpperCase()];
+    return tone ? `rgb(var(--${tone}))` : 'rgb(var(--outline))';
+}
+
+/** Text color for a chip filled with levelColor(level). */
+function levelInk(level: string): string {
+    const tone = LEVEL_TONES[level.toUpperCase()];
+    return tone ? `rgb(var(--on-${tone}))` : 'rgb(var(--surface-container-lowest))';
 }
 
 function formatBytes(bytes: number | null): string {
@@ -477,8 +487,8 @@ export default function DevLogs({ categories, docker }: LogsPageProps): React.Re
                         <Box
                             ref={scrollRef}
                             sx={{
-                                bgcolor: '#0b1118',
-                                color: '#e2e8f0',
+                                bgcolor: 'rgb(var(--surface-container-low))',
+                                color: 'text.primary',
                                 fontFamily: MONO,
                                 fontSize: 12,
                                 lineHeight: 1.6,
@@ -488,7 +498,7 @@ export default function DevLogs({ categories, docker }: LogsPageProps): React.Re
                             }}
                         >
                             {visible.length === 0 && !loading && (
-                                <Typography sx={{ color: '#64748b', fontFamily: MONO, fontSize: 12 }}>
+                                <Typography sx={{ color: 'rgb(var(--outline))', fontFamily: MONO, fontSize: 12 }}>
                                     {entries.length === 0 ? 'No log entries.' : 'No lines match the current filters.'}
                                 </Typography>
                             )}
@@ -502,7 +512,7 @@ export default function DevLogs({ categories, docker }: LogsPageProps): React.Re
                                         borderLeftColor: levelColor(entry.level),
                                         pl: 1,
                                         mb: 0.35,
-                                        '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+                                        '&:hover': { bgcolor: 'rgb(var(--on-surface) / 0.04)' },
                                     }}
                                 >
                                     <Stack direction="row" spacing={1} alignItems="flex-start">
@@ -515,14 +525,14 @@ export default function DevLogs({ categories, docker }: LogsPageProps): React.Re
                                                 fontFamily: MONO,
                                                 fontWeight: 700,
                                                 flexShrink: 0,
-                                                color: '#0b1118',
+                                                color: levelInk(entry.level),
                                                 bgcolor: levelColor(entry.level),
                                             }}
                                         />
                                         {entry.timestamp && (
                                             <Typography
                                                 component="span"
-                                                sx={{ color: '#64748b', fontFamily: MONO, fontSize: 11, flexShrink: 0 }}
+                                                sx={{ color: 'rgb(var(--outline))', fontFamily: MONO, fontSize: 11, flexShrink: 0 }}
                                             >
                                                 {entry.timestamp}
                                             </Typography>
@@ -553,10 +563,10 @@ export default function DevLogs({ categories, docker }: LogsPageProps): React.Re
                                             }}
                                         >
                                             <AccordionSummary
-                                                expandIcon={<ExpandMoreIcon sx={{ color: '#64748b', fontSize: 16 }} />}
+                                                expandIcon={<ExpandMoreIcon sx={{ color: 'rgb(var(--outline))', fontSize: 16 }} />}
                                                 sx={{ minHeight: 24, px: 0, '& .MuiAccordionSummary-content': { my: 0 } }}
                                             >
-                                                <Typography sx={{ color: '#94a3b8', fontFamily: MONO, fontSize: 11 }}>
+                                                <Typography sx={{ color: 'text.secondary', fontFamily: MONO, fontSize: 11 }}>
                                                     {entry.trace.split('\n').length} more line
                                                     {entry.trace.split('\n').length === 1 ? '' : 's'} (stack trace)
                                                 </Typography>
@@ -567,9 +577,9 @@ export default function DevLogs({ categories, docker }: LogsPageProps): React.Re
                                                     sx={{
                                                         m: 0,
                                                         p: 1,
-                                                        bgcolor: 'rgba(0,0,0,0.35)',
+                                                        bgcolor: 'rgb(var(--surface-container))',
                                                         borderRadius: 1,
-                                                        color: '#94a3b8',
+                                                        color: 'text.secondary',
                                                         fontFamily: MONO,
                                                         fontSize: 11,
                                                         whiteSpace: 'pre-wrap',

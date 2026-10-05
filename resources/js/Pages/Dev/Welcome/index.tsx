@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Head, Link } from '@inertiajs/react';
-import { Box, Button, Chip, Paper, Stack, Typography, useTheme } from '@mui/material';
+import { Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
@@ -34,7 +34,6 @@ const CAPABILITIES = [
 ];
 
 export default function Welcome({ auth }: WelcomeProps): React.ReactElement {
-    const theme = useTheme();
     const user = auth?.user ?? null;
 
     return (
@@ -50,10 +49,7 @@ export default function Welcome({ auth }: WelcomeProps): React.ReactElement {
                     px: 2,
                     py: 6,
                     bgcolor: 'background.default',
-                    backgroundImage:
-                        theme.palette.mode === 'dark'
-                            ? 'radial-gradient(rgba(255,255,255,0.06) 1px, transparent 0)'
-                            : 'radial-gradient(rgba(0,0,0,0.06) 1px, transparent 0)',
+                    backgroundImage: 'radial-gradient(rgb(var(--on-surface) / 0.06) 1px, transparent 0)',
                     backgroundSize: '22px 22px',
                 }}
             >

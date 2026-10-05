@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, CssBaseline, Toolbar, useTheme, Typography, Breadcrumbs, Link as MuiLink } from '@mui/material';
+import { Box, CssBaseline, Toolbar, Typography, Breadcrumbs, Link as MuiLink } from '@mui/material';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { getRole, useRole, useRoleFavicon } from '@/theme';
 // Import dedicated Dev components instead of Admin ones
@@ -9,7 +9,6 @@ import { activeDevEntry } from '@/Components/Navigation/Dev/devNavigation';
 
 export default function DevLayout({ children }: { children: React.ReactNode }) {
     const [mobileOpen, setMobileOpen] = useState(false);
-    const theme = useTheme();
     const { url } = usePage();
     const active = activeDevEntry(url);
 
@@ -52,9 +51,8 @@ export default function DevLayout({ children }: { children: React.ReactNode }) {
                     flexGrow: 1,
                     p: 3,
                     width: { xl: `calc(100% - 260px)` },
-                    backgroundImage: theme.palette.mode === 'dark'
-                        ? 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0)'
-                        : 'radial-gradient(rgba(0,0,0,0.05) 1px, transparent 0)',
+                    // Dot grid in the ink color, so it is dark dots on light and light dots on dark.
+                    backgroundImage: 'radial-gradient(rgb(var(--on-surface) / 0.05) 1px, transparent 0)',
                     backgroundSize: '20px 20px',
                 }}
             >

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AppBar, IconButton, Toolbar, Typography, Stack, Box, useTheme } from '@mui/material';
+import { AppBar, IconButton, Toolbar, Typography, Stack, Box } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import ColorModeIconDropdown from '@/theme/ColorModeIconDropdown';
@@ -9,7 +9,6 @@ interface DevNavProps {
 }
 
 export default function DevNav({ onMenuClick }: DevNavProps) {
-    const theme = useTheme();
 
     return (
         <AppBar
@@ -61,7 +60,7 @@ export default function DevNav({ onMenuClick }: DevNavProps) {
                             sx={{
                                 display: { xs: 'none', md: 'block' },
                                 fontFamily: 'monospace',
-                                bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200',
+                                bgcolor: 'rgb(var(--surface-container-high))',
                                 px: 1,
                                 borderRadius: 1
                             }}

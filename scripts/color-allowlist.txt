@@ -19,14 +19,10 @@ resources/js/Components/Storefront/StorefrontHeader.tsx 4
 resources/js/Components/Storefront/VariantSelector.tsx 4
 resources/js/Components/WelcomeFooter.tsx 13
 resources/js/Layouts/AccountLayout.tsx 8
-resources/js/Layouts/DevLayout.tsx 2
 resources/js/Layouts/GuestLayout.tsx 9
 resources/js/Pages/Admin/Canvas.tsx 10
 resources/js/Pages/Admin/Inventory/Stores/StoreInventory.tsx 47
 resources/js/Pages/Dev/Architecture/Index.tsx 2
-resources/js/Pages/Dev/Dashboard/Lesson6/Index.tsx 12
-resources/js/Pages/Dev/Logs/index.tsx 23
-resources/js/Pages/Dev/Welcome/index.tsx 2
 resources/js/Pages/Shared/Profile/Edit.jsx 4
 resources/js/Pages/User/Contact/index.tsx 1
 resources/js/Pages/User/Dashboard/Show.tsx 3

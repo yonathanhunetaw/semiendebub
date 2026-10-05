@@ -22,12 +22,12 @@ export default function Color({
                                   onRate
                               }: ColorProps) {
     return (
-        <section className="border rounded-lg shadow-sm bg-white overflow-hidden">
-            <div className="flex justify-between items-center p-3 border-b">
+        <section className="border border-outline-variant rounded-lg shadow-sm bg-surface-container-lowest overflow-hidden">
+            <div className="flex justify-between items-center p-3 border-b border-outline-variant">
                 <h1 className="font-bold capitalize">{title}</h1>
                 <button
                     onClick={() => onRemove(id)}
-                    className="text-red-500 hover:bg-red-50 p-2 rounded"
+                    className="text-error hover:bg-error-container p-2 rounded"
                 >
                     <FaTrash/>
                 </button>
