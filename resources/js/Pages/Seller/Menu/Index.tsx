@@ -6,6 +6,12 @@ import {
     type Tile,
     href,
 } from "@/Components/Shared/OpsHub";
+import {
+    EmptyState,
+    HeaderIconButton,
+    PageHeader,
+    headerIconButtonClass,
+} from "@/Components/Shared/ui";
 import type { OrderStage } from "@/Data/sellerOrderFlow";
 import type { LocationTile } from "@/types/sellerLocations";
 import { Head, Link } from "@inertiajs/react";
@@ -16,8 +22,9 @@ import React, { useState } from "react";
  *
  * A stack of surface cards on the page background: My Orders, Shipments and
  * Storage & Inventory Locations as counter grids, then Merchant Operations.
- * The card set lives in Components/Shared/OpsHub so the admin inventory hub
- * renders the same UI rather than a second copy of it.
+ * The card set lives in Components/Shared/OpsHub (built from the shared
+ * components in Components/Shared/ui) so the admin inventory hub renders the
+ * same UI rather than a second copy of it.
  *
  * Tiles not backed by data yet (Returns, bulk waybills, proof of delivery,
  * vehicle assignment) are shown read-only so the layout is final; they say
@@ -195,41 +202,14 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
 
             <div className="min-h-screen bg-background pb-28">
                 {/* ── Identity header ── */}
-                <section className="px-4 pb-3 pt-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex min-w-0 items-center space-x-3">
-                            <div
-                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-primary-container bg-primary text-on-primary shadow-sm"
-                            >
-                                <span className="material-symbols-outlined text-2xl">warehouse</span>
-                            </div>
-
-                            {seller?.name ? (
-                                <div className="min-w-0">
-                                    <h1 className="truncate text-[17px] font-bold tracking-tight text-on-surface">
-                                        {seller.name}
-                                    </h1>
-                                    <p className="mt-0.5 truncate text-[11px] text-on-surface-variant">
-                                        {seller.store ?? seller.email}
-                                    </p>
-                                </div>
-                            ) : (
-                                <Link
-                                    href={route("seller.login")}
-                                    className="rounded-[999px] bg-primary px-5 py-2 text-[14px] font-bold text-on-primary active:scale-95"
-                                >
-                                    Sign in or Register
-                                </Link>
-                            )}
-                        </div>
-
-                        <div className="flex shrink-0 items-center space-x-1">
+                <PageHeader
+                    icon="warehouse"
+                    title={seller?.name}
+                    subtitle={seller?.store ?? seller?.email ?? ""}
+                    actions={
+                        <>
                             {settingsHref ? (
-                                <Link
-                                    href={settingsHref}
-                                    aria-label="Settings"
-                                    className="flex h-9 w-9 items-center justify-center rounded-[999px] text-on-surface transition-all hover:bg-surface-container-high/60 active:scale-95"
-                                >
+                                <Link href={settingsHref} aria-label="Settings" className={headerIconButtonClass}>
                                     <span className="material-symbols-outlined text-[20px]">settings</span>
                                 </Link>
                             ) : null}
@@ -238,21 +218,13 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
                                 opens an empty-state panel rather than navigating
                                 to a route that does not exist. */}
                             <div className="relative">
-                                <button
-                                    type="button"
+                                <HeaderIconButton
+                                    icon="notifications"
                                     onClick={() => setNotifyOpen((open) => !open)}
                                     aria-label="Notifications"
                                     aria-expanded={notifyOpen}
-                                    className={`flex h-9 w-9 items-center justify-center rounded-[999px] transition-all active:scale-95 ${
-                                        notifyOpen
-                                            ? "bg-surface-container-high/70 text-on-surface"
-                                            : "text-on-surface hover:bg-surface-container-high/60"
-                                    }`}
-                                >
-                                    <span className="material-symbols-outlined text-[20px]">
-                                        notifications
-                                    </span>
-                                </button>
+                                    active={notifyOpen}
+                                />
 
                                 {notifyOpen ? (
                                     <>
@@ -262,23 +234,28 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
                                             onClick={() => setNotifyOpen(false)}
                                             className="fixed inset-0 z-30 cursor-default"
                                         />
-                                        <div className="absolute right-0 z-40 mt-2 w-56 rounded-[12px] border border-outline-variant bg-surface-container-lowest p-4 text-center shadow-lg">
-                                            <span className="material-symbols-outlined text-[26px] text-on-surface-variant/40">
-                                                notifications_off
-                                            </span>
-                                            <p className="mt-1 text-[12px] font-bold text-on-surface">
-                                                You're all caught up
-                                            </p>
-                                            <p className="mt-0.5 text-[10px] text-on-surface-variant">
-                                                Alerts will appear here once the feed is live.
-                                            </p>
+                                        <div className="absolute right-0 z-40 mt-2 w-56 rounded-[12px] border border-outline-variant bg-surface-container-lowest p-4 shadow-lg">
+                                            <EmptyState
+                                                icon="notifications_off"
+                                                title="You're all caught up"
+                                                description="Alerts will appear here once the feed is live."
+                                            />
                                         </div>
                                     </>
                                 ) : null}
                             </div>
-                        </div>
-                    </div>
-                </section>
+                        </>
+                    }
+                >
+                    {seller?.name ? undefined : (
+                        <Link
+                            href={route("seller.login")}
+                            className="rounded-[999px] bg-primary px-5 py-2 text-[14px] font-bold text-on-primary active:scale-95"
+                        >
+                            Sign in or Register
+                        </Link>
+                    )}
+                </PageHeader>
 
                 <div className="px-3.5">
                 <PipelineCard

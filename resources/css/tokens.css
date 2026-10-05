@@ -3,7 +3,8 @@
  * Do not edit by hand.
  */
 
-:root {
+:root,
+[data-mode="light"] {
     color-scheme: light;
     --background: 248 250 252;
     --surface: 248 250 252;
@@ -46,24 +47,6 @@
     --on-info: 255 255 255;
     --info-container: 220 234 242;
     --on-info-container: 9 64 102;
-    --primary: 79 70 229;
-    --on-primary: 255 255 255;
-    --primary-container: 230 229 251;
-    --on-primary-container: 47 47 136;
-    --inverse-primary: 129 140 248;
-    --surface-tint: 79 70 229;
-    --primary-fixed: 230 229 251;
-    --primary-fixed-dim: 129 140 248;
-    --on-primary-fixed: 37 39 107;
-    --on-primary-fixed-variant: 79 70 229;
-    --tertiary: 79 70 229;
-    --on-tertiary: 255 255 255;
-    --tertiary-container: 230 229 251;
-    --on-tertiary-container: 47 47 136;
-    --tertiary-fixed: 230 229 251;
-    --tertiary-fixed-dim: 129 140 248;
-    --on-tertiary-fixed: 37 39 107;
-    --on-tertiary-fixed-variant: 79 70 229;
 }
 
 [data-mode="dark"] {
@@ -109,6 +92,30 @@
     --on-info: 15 23 42;
     --info-container: 7 61 93;
     --on-info-container: 195 235 253;
+}
+
+:root {
+    --primary: 79 70 229;
+    --on-primary: 255 255 255;
+    --primary-container: 230 229 251;
+    --on-primary-container: 47 47 136;
+    --inverse-primary: 129 140 248;
+    --surface-tint: 79 70 229;
+    --primary-fixed: 230 229 251;
+    --primary-fixed-dim: 129 140 248;
+    --on-primary-fixed: 37 39 107;
+    --on-primary-fixed-variant: 79 70 229;
+    --tertiary: 79 70 229;
+    --on-tertiary: 255 255 255;
+    --tertiary-container: 230 229 251;
+    --on-tertiary-container: 47 47 136;
+    --tertiary-fixed: 230 229 251;
+    --tertiary-fixed-dim: 129 140 248;
+    --on-tertiary-fixed: 37 39 107;
+    --on-tertiary-fixed-variant: 79 70 229;
+}
+
+:root[data-mode="dark"] {
     --primary: 129 140 248;
     --on-primary: 15 23 42;
     --primary-container: 45 44 127;

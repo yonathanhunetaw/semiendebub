@@ -61,6 +61,12 @@ export const DEV_NAVIGATION: DevNavGroup[] = [
                 description: 'Composer, npm & PHP inventory',
             },
             {
+                label: 'Design System',
+                href: '/design-system',
+                icon: 'colors',
+                description: 'Shared UI components in every role, light and dark',
+            },
+            {
                 label: 'Log Viewer',
                 href: '/logs',
                 icon: 'logs',
