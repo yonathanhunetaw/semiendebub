@@ -193,7 +193,7 @@ function RadialGauge({ percent }: { percent: number }) {
     return (
         <Box sx={{ position: "relative", width: 96, height: 96, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg viewBox="0 0 36 36" style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
-                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3.8" style={{ color: "rgba(0,0,0,0.08)" }} />
+                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgb(var(--on-surface) / 0.08)" strokeWidth="3.8" />
                 <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3.8" strokeDasharray={`${dash}, ${circumference}`} strokeLinecap="round" style={{ color: "inherit", transition: "stroke-dasharray 0.5s ease" }} />
             </svg>
             <Box sx={{ position: "absolute", textAlign: "center" }}>

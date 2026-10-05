@@ -254,6 +254,11 @@ const packagingGroupKey = (label: string) => {
     return parts.length > 1 ? parts.slice(0, -1).join(" / ") : label;
 };
 
+/**
+ * Swatch per product color name ("navy" -> navy). These are the product's own
+ * colors, not theme colors, so they stay fixed in every module and mode; the
+ * fallbacks are a fixed categorical set for labels that name no color.
+ */
 const COLOR_MAP: Record<string, string> = {
     gray: "#9ca3af", grey: "#9ca3af", silver: "#c0c0c0",
     white: "#e5e7eb", black: "#1f2937", charcoal: "#374151",
@@ -474,17 +479,18 @@ export function EditDrawer({
     return (
         <>
             <Drawer anchor="right" open onClose={onClose} PaperProps={{ sx: { width: { xs: "100%", sm: 520 }, p: 0 } }}>
-                <Box sx={{ px: 3, py: 2, bgcolor: "grey.900", color: "white" }}>
+                <Box sx={{ px: 3, py: 2, bgcolor: "rgb(var(--inverse-surface))", color: "rgb(var(--inverse-on-surface))" }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                         <Box>
                             <Typography variant="h6" fontWeight={700}>{variant.label}</Typography>
                             <Typography variant="caption" sx={{ opacity: 0.6 }}>{variant.sku}</Typography>
                         </Box>
-                        <IconButton onClick={onClose} sx={{ color: "white" }} size="small"><CloseIcon /></IconButton>
+                        <IconButton onClick={onClose} sx={{ color: "rgb(var(--inverse-on-surface))" }} size="small"><CloseIcon /></IconButton>
                     </Stack>
                     <Tabs value={tab}
                         onChange={(_, v) => { setTab(v); setPricingSection("default"); }}
-                        textColor="inherit" TabIndicatorProps={{ style: { backgroundColor: "#fff" } }} sx={{ mt: 1 }}>
+                        textColor="inherit"
+                        sx={{ mt: 1, "& .MuiTabs-indicator": { bgcolor: "rgb(var(--inverse-on-surface))" } }}>
                         <Tab label="Business" sx={{ fontSize: 12 }} />
                         <Tab label="Individual" sx={{ fontSize: 12 }} />
                     </Tabs>
@@ -579,7 +585,7 @@ export function EditDrawer({
                             {visibleCustomerPrices.length > 0 ? (
                                 <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
                                     <Table size="small">
-                                        <TableHead sx={{ bgcolor: "grey.50" }}>
+                                        <TableHead sx={{ bgcolor: "rgb(var(--surface-container-low))" }}>
                                             <TableRow>
                                                 <TableCell sx={{ fontWeight: 700 }}>Customer</TableCell>
                                                 <TableCell sx={{ fontWeight: 700 }}>Price</TableCell>
@@ -668,7 +674,7 @@ export function EditDrawer({
                             {visibleSellerPrices.length > 0 ? (
                                 <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
                                     <Table size="small">
-                                        <TableHead sx={{ bgcolor: "grey.50" }}>
+                                        <TableHead sx={{ bgcolor: "rgb(var(--surface-container-low))" }}>
                                             <TableRow>
                                                 <TableCell sx={{ fontWeight: 700 }}>Seller</TableCell>
                                                 <TableCell sx={{ fontWeight: 700 }}>Price</TableCell>
@@ -919,7 +925,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
             label: l.label,
             count: l.stock,
             display: l.display ?? `${l.stock.toLocaleString()} pcs`,
-            tone: LOCATION_STYLE[l.key]?.tone ?? "grey.500",
+            tone: LOCATION_STYLE[l.key]?.tone ?? "text.secondary",
             icon: LOCATION_STYLE[l.key]?.icon ?? <CloudQueueIcon sx={{ fontSize: 13 }} />,
         })),
         {
@@ -927,7 +933,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
             label: "All Locations",
             count: allStock,
             display: `${allStock.toLocaleString()} pcs`,
-            tone: "grey.900",
+            tone: "text.primary",
             icon: <PublicIcon sx={{ fontSize: 13 }} />,
         },
     ];
@@ -980,18 +986,18 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                                 sx={{
                                     flex: "0 0 auto", px: 1.25, py: 0.75, borderRadius: 2,
                                     cursor: "pointer", minWidth: 92,
-                                    bgcolor: active ? "grey.900" : "background.paper",
-                                    color: active ? "#fff" : "text.primary",
-                                    borderColor: active ? "grey.900" : "divider",
+                                    bgcolor: active ? "rgb(var(--inverse-surface))" : "background.paper",
+                                    color: active ? "rgb(var(--inverse-on-surface))" : "text.primary",
+                                    borderColor: active ? "rgb(var(--inverse-surface))" : "divider",
                                     transition: "all 0.15s",
                                 }}>
                                 <Stack direction="row" spacing={0.5} alignItems="center">
-                                    <Box sx={{ color: active ? "#fff" : l.tone, display: "flex", alignItems: "center" }}>
+                                    <Box sx={{ color: active ? "rgb(var(--inverse-on-surface))" : l.tone, display: "flex", alignItems: "center" }}>
                                         {l.icon}
                                     </Box>
                                     <Typography variant="caption"
                                         sx={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase",
-                                            color: active ? "rgba(255,255,255,0.9)" : "text.secondary" }}>
+                                            color: active ? "rgb(var(--inverse-on-surface) / 0.9)" : "text.secondary" }}>
                                         {l.label}
                                     </Typography>
                                 </Stack>
@@ -1006,7 +1012,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                                 </Typography>
                                 <Typography
                                     sx={{ fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 400,
-                                        color: active ? "rgba(255,255,255,0.6)" : "text.secondary" }}>
+                                        color: active ? "rgb(var(--inverse-on-surface) / 0.6)" : "text.secondary" }}>
                                     {l.count.toLocaleString()} pcs
                                 </Typography>
                             </Paper>
@@ -1016,7 +1022,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
             </Box>
 
             {/* 2. Packaging Mode Selector */}
-            <Box sx={{ bgcolor: "grey.100", p: 0.5, borderRadius: 2, display: "flex", gap: 0.5 }}>
+            <Box sx={{ bgcolor: "rgb(var(--surface-container))", p: 0.5, borderRadius: 2, display: "flex", gap: 0.5 }}>
                 {(["cartons", "boxes", "pieces"] as PkgMode[]).map(m => {
                     const active = pkgMode === m;
                     const icon = m === "cartons" ? <InventoryIcon sx={{ fontSize: 14 }} />
@@ -1033,7 +1039,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                                 py: 0.5, fontSize: "0.7rem", textTransform: "none", fontWeight: 700,
                                 bgcolor: active ? "background.paper" : "transparent",
                                 color: active ? "text.primary" : "text.secondary",
-                                "&:hover": { bgcolor: active ? "background.paper" : "grey.200" },
+                                "&:hover": { bgcolor: active ? "background.paper" : "rgb(var(--surface-container-high))" },
                             }}>
                             {label}
                         </Button>
@@ -1043,8 +1049,8 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
 
             {/* 3. Single Unified Card: Location Breakdown + Composition + Trigger Bar + Replenishment Rules */}
             <Paper elevation={0} sx={{ p: 2, borderRadius: 3,
-                background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.04))",
-                border: "1px solid rgba(59,130,246,0.18)" }}>
+                background: "linear-gradient(135deg, rgb(var(--primary) / 0.08), rgb(var(--primary) / 0.04))",
+                border: "1px solid rgb(var(--primary) / 0.18)" }}>
                 
                 {/* Location Header & Icon */}
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -1052,20 +1058,20 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                         <Chip size="small"
                             label={(selectedLabels || "No Location Selected").toUpperCase()}
                             sx={{ height: 20, fontSize: "0.6rem", fontWeight: 800,
-                                bgcolor: "primary.100", color: "primary.700", maxWidth: "100%" }} />
+                                bgcolor: "rgb(var(--primary-container))", color: "rgb(var(--on-primary-container))", maxWidth: "100%" }} />
                         <Typography sx={{ fontWeight: 800, fontSize: "1.2rem", mt: 0.75, lineHeight: 1.25 }}>
                             {heading}
                         </Typography>
                     </Box>
                     <Box sx={{ width: 36, height: 36, borderRadius: "50%", bgcolor: "primary.main",
-                        color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", ml: 1, flexShrink: 0 }}>
+                        color: "primary.contrastText", display: "flex", alignItems: "center", justifyContent: "center", ml: 1, flexShrink: 0 }}>
                         <Inventory2Icon sx={{ fontSize: 20 }} />
                     </Box>
                 </Stack>
 
                 {/* Math Formula Box */}
                 <Paper variant="outlined" sx={{ mt: 1.25, px: 1.25, py: 0.5, display: "inline-block",
-                    bgcolor: "rgba(255,255,255,0.7)" }}>
+                    bgcolor: "rgb(var(--surface-container-lowest) / 0.7)" }}>
                     <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary", fontWeight: 600 }}>
                         {math}
                     </Typography>
@@ -1081,15 +1087,15 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                             {current} Pieces
                         </Typography>
                     </Stack>
-                    <Box sx={{ height: 10, width: "100%", bgcolor: "grey.200", borderRadius: 999,
+                    <Box sx={{ height: 10, width: "100%", bgcolor: "rgb(var(--surface-container-high))", borderRadius: 999,
                         overflow: "hidden", display: "flex" }}>
-                        <Box sx={{ width: `${bulkPct}%`, bgcolor: "grey.900", transition: "width .3s" }} />
+                        <Box sx={{ width: `${bulkPct}%`, bgcolor: "text.primary", transition: "width .3s" }} />
                         <Box sx={{ width: `${sealedPct}%`, bgcolor: "primary.main", transition: "width .3s" }} />
                         <Box sx={{ width: `${loosePct}%`, bgcolor: "success.main", transition: "width .3s" }} />
                     </Box>
                     <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
                         <Stack direction="row" spacing={0.5} alignItems="center">
-                            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "grey.900" }} />
+                            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "text.primary" }} />
                             <Typography variant="caption" color="text.secondary">Bulk Ctn ({bulkPct}%)</Typography>
                         </Stack>
                         <Stack direction="row" spacing={0.5} alignItems="center">
@@ -1104,7 +1110,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                 </Box>
 
                 {/* ── Capacity & Next Replenishment Trigger Bar with Vertical Marker Line ── */}
-                <Box sx={{ mt: 2, pt: 1.5, borderTop: "1px dashed rgba(59,130,246,0.2)" }}>
+                <Box sx={{ mt: 2, pt: 1.5, borderTop: "1px dashed rgb(var(--primary) / 0.2)" }}>
                     <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
                         <Typography variant="caption" color="text.secondary" fontWeight={700}
                             sx={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -1117,7 +1123,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                     </Stack>
 
                     {/* Progress Bar Container with Vertical Refill Line Marker */}
-                    <Box sx={{ position: "relative", height: 14, width: "100%", bgcolor: "grey.200", borderRadius: 999 }}>
+                    <Box sx={{ position: "relative", height: 14, width: "100%", bgcolor: "rgb(var(--surface-container-high))", borderRadius: 999 }}>
                         {/* Fill Level */}
                         <Box sx={{
                             height: "100%",
@@ -1137,7 +1143,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                             bgcolor: "warning.main",
                             borderRadius: "2px",
                             zIndex: 3,
-                            boxShadow: "0 0 6px rgba(237, 108, 2, 0.9)",
+                            boxShadow: "0 0 6px rgb(var(--warning) / 0.9)",
                         }} />
                     </Box>
 
@@ -1156,7 +1162,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                             </Typography>
                         </Stack>
                         <Stack direction="row" spacing={0.5} alignItems="center">
-                            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "grey.400" }} />
+                            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "rgb(var(--outline))" }} />
                             <Typography variant="caption" color="text.secondary">
                                 Max Cap (${maxCtn} Ctn)
                             </Typography>
@@ -1165,7 +1171,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                 </Box>
 
                 {/* ── Embedded Replenishment Rules ── */}
-                <Paper variant="outlined" sx={{ mt: 2, p: 1.5, borderRadius: 2.5, bgcolor: "rgba(255,255,255,0.85)" }}>
+                <Paper variant="outlined" sx={{ mt: 2, p: 1.5, borderRadius: 2.5, bgcolor: "rgb(var(--surface-container-lowest) / 0.85)" }}>
                     <Typography variant="caption" fontWeight={800} color="primary.main"
                         sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
                         Replenishment Rules &amp; Thresholds
@@ -1182,7 +1188,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                             </Stack>
                             <Chip size="small" label={`${minCtn} Ctn (${minPcs} pcs)`}
                                 sx={{ height: 20, fontFamily: "monospace", fontSize: "0.65rem",
-                                    fontWeight: 700, bgcolor: "grey.100" }} />
+                                    fontWeight: 700, bgcolor: "rgb(var(--surface-container))" }} />
                         </Stack>
                         <Slider size="small" value={minCtn} min={1} max={Math.min(9, maxCtn - 1)} step={1}
                             onChange={(_, val) => setMinCtn(val as number)}
@@ -1212,7 +1218,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
                     </Box>
 
                     {/* Auto Transfer Batch Size */}
-                    <Paper variant="outlined" sx={{ mt: 1.25, p: 1, borderRadius: 1.5, bgcolor: "grey.50" }}>
+                    <Paper variant="outlined" sx={{ mt: 1.25, p: 1, borderRadius: 1.5, bgcolor: "rgb(var(--surface-container-low))" }}>
                         <Stack direction="row" justifyContent="space-between" alignItems="center">
                             <Box>
                                 <Typography variant="caption" fontWeight={700} display="block">
@@ -1362,7 +1368,7 @@ export function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                             </Stack>
                         </Stack>
 
-                        <Paper variant="outlined" sx={{ mt: 1, p: 1, bgcolor: "white", borderRadius: 1.5 }}>
+                        <Paper variant="outlined" sx={{ mt: 1, p: 1, bgcolor: "background.paper", borderRadius: 1.5 }}>
                             <Stack direction="row" justifyContent="space-between" alignItems="baseline">
                                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
                                     Current Store Stock
@@ -1394,7 +1400,7 @@ export function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                                 </Typography>
                                 <Chip size="small" label={`${minCtn} Ctn`}
                                     sx={{ height: 20, fontFamily: "monospace", fontSize: "0.65rem",
-                                        fontWeight: 700, bgcolor: "grey.100" }} />
+                                        fontWeight: 700, bgcolor: "rgb(var(--surface-container))" }} />
                             </Stack>
                             <Slider size="small" value={minCtn} min={1} max={Math.max(2, maxCtn - 1)} step={1}
                                 onChange={(_, val) => update(v.id, { minPcs: (val as number) * perCarton })}
@@ -1419,7 +1425,7 @@ export function ReplenishmentPanel({ variants }: { variants: Variant[] }) {
                                 sx={{ mt: 0.5 }} />
                         </Box>
 
-                        <Paper variant="outlined" sx={{ mt: 1.25, p: 1, borderRadius: 1.5, bgcolor: "grey.50" }}>
+                        <Paper variant="outlined" sx={{ mt: 1.25, p: 1, borderRadius: 1.5, bgcolor: "rgb(var(--surface-container-low))" }}>
                             <Stack direction="row" justifyContent="space-between" alignItems="center">
                                 <Box>
                                     <Typography variant="caption" fontWeight={700} display="block">
@@ -1582,7 +1588,7 @@ export function StitchVariantCard({ v, highlighted, onEdit }: {
                 <Divider />
                 <Stack spacing={1.25} sx={{ p: 1.5 }}>
                     <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1 }}>
-                        <Paper variant="outlined" sx={{ p: 1, bgcolor: "grey.50" }}>
+                        <Paper variant="outlined" sx={{ p: 1, bgcolor: "rgb(var(--surface-container-low))" }}>
                             <Typography variant="caption"
                                 sx={{ fontWeight: 800, letterSpacing: "0.05em", color: "info.dark",
                                     textTransform: "uppercase", fontSize: "0.6rem" }}>
@@ -1621,7 +1627,7 @@ export function StitchVariantCard({ v, highlighted, onEdit }: {
                             </Stack>
                         </Paper>
 
-                        <Paper variant="outlined" sx={{ p: 1, bgcolor: "grey.50" }}>
+                        <Paper variant="outlined" sx={{ p: 1, bgcolor: "rgb(var(--surface-container-low))" }}>
                             <Typography variant="caption"
                                 sx={{ fontWeight: 800, letterSpacing: "0.05em", color: "primary.main",
                                     textTransform: "uppercase", fontSize: "0.6rem" }}>
@@ -1718,17 +1724,17 @@ function StitchProductCard({ store, item, customers, sellers }: {
             <CardContent sx={{ pb: 1 }}>
                 <Stack direction="row" spacing={1.25} alignItems="flex-start">
                     <Box sx={{ position: "relative", width: 72, height: 72, borderRadius: 2, flex: "0 0 auto",
-                        bgcolor: "grey.100", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Inventory2Icon sx={{ color: "grey.400", fontSize: 32 }} />
+                        bgcolor: "rgb(var(--surface-container))", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Inventory2Icon sx={{ color: "rgb(var(--outline))", fontSize: 32 }} />
                         <Chip label={item.category} size="small"
                             sx={{ position: "absolute", bottom: 4, right: 4, height: 18, fontSize: "0.6rem",
-                                bgcolor: "rgba(15,23,42,0.85)", color: "#fff" }} />
+                                bgcolor: "rgb(var(--inverse-surface) / 0.85)", color: "rgb(var(--inverse-on-surface))" }} />
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
                             <Chip label={`SKU-${item.item_id}`} size="small"
                                 sx={{ height: 20, fontSize: "0.65rem", fontFamily: "monospace",
-                                    bgcolor: "grey.100", color: "text.secondary" }} />
+                                    bgcolor: "rgb(var(--surface-container))", color: "text.secondary" }} />
                             <Chip size="small" variant="outlined"
                                 label={hasLow ? `${lowStockVariants} low` : "In-Stock"}
                                 color={hasLow ? "error" : "success"}
@@ -1750,7 +1756,7 @@ function StitchProductCard({ store, item, customers, sellers }: {
                             </Typography>
                             <Chip size="small"
                                 label={`${stockAggregate.cartons} Ctns • ${stockAggregate.boxes} Bx • ${stockAggregate.pieces} Pcs`}
-                                sx={{ height: 20, fontSize: "0.65rem", fontWeight: 600, bgcolor: "grey.100" }} />
+                                sx={{ height: 20, fontSize: "0.65rem", fontWeight: 600, bgcolor: "rgb(var(--surface-container))" }} />
                         </Stack>
                     </Box>
                 </Stack>
@@ -1761,8 +1767,8 @@ function StitchProductCard({ store, item, customers, sellers }: {
                     onClick={() => router.visit(route("store.item.variants", { store: store.id, item: item.item_id }))}
                     sx={{
                         justifyContent: "space-between", px: 1.5, py: 1, borderRadius: 2,
-                        bgcolor: "grey.50", textTransform: "none", color: "text.primary",
-                        "&:hover": { bgcolor: "grey.100" },
+                        bgcolor: "rgb(var(--surface-container-low))", textTransform: "none", color: "text.primary",
+                        "&:hover": { bgcolor: "rgb(var(--surface-container))" },
                     }}>
                     <Stack direction="row" spacing={1} alignItems="center">
                         <RuleSettingsIcon fontSize="small" sx={{ color: "primary.main" }} />

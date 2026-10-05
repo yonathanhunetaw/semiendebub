@@ -6,12 +6,11 @@ use App\Http\Controllers\Admin\Controller;
 use App\Models\Item\Item;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Seller\Cart;
-use App\Services\ImageResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
-use App\Services\PriceProvider;
+use App\Services\Seller\SellerCatalog;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
@@ -51,32 +50,18 @@ class DashboardController extends Controller
         $topCartIsIndividual = $topCart && ($topCart->customer_id === null || !empty($topCart->customer?->tin_number));
         $topCartIsGuest      = $topCart && is_null($topCart->customer_id);
 
-        // 🔹 1. Build the query – identical to ItemController::index
-        $query = Item::where('status', 'active')
-            ->with([
-                'category',
-                'variants' => function ($q) use ($storeId) {
-                    $q->with([
-                        'storeVariants' => function ($sq) use ($storeId) {
-                            $sq->where('store_id', $storeId)
-                                ->where('active', true)
-                                ->with([
-                                    'stocks' => function ($stockQuery) use ($storeId) {
-                                        // Shelf + floor (STOCK_PLAN.md phase 4).
-                                        $stockQuery->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId));
-                                    }
-                                ]);
-                        }
-                    ]);
-                },
-            ]);
+        $catalog = app(SellerCatalog::class);
+        $categoryId = $request->integer('category_id') ?: null;
 
-        $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
-            $q->where('store_id', $storeId)->where('active', true);
-        });
+        // 🔹 1. Active items this store carries (shared with ItemController)
+        $query = $catalog->query($storeId);
 
         if ($search) {
             $query->where('product_name', 'LIKE', '%' . $search . '%');
+        }
+
+        if ($categoryId) {
+            $query->where('item_category_id', $categoryId);
         }
 
         $cartId = $request->integer('cart_id') ?: null;
@@ -84,19 +69,11 @@ class DashboardController extends Controller
         $customer = $cart ? $cart->customer : null;
 
         $paginator = $query->orderBy('product_name')->paginate($perPage);
-        $items = collect($paginator->items())->map(function ($item) use ($storeId, $customer) {
-            return $this->enrichItemForIndex($item, $storeId, $customer);
+        $items = collect($paginator->items())->map(function ($item) use ($catalog, $storeId, $customer) {
+            return $catalog->present($item, $storeId, $customer);
         });
 
-        // 🔹 2. Extract categories from the enriched items
-        $categoryNames = $items
-            ->pluck('category.category_name')
-            ->filter()
-            ->unique()
-            ->values()
-            ->toArray();
-
-        // 🔹 3. Return the exact same structure as ItemController::index
+        // 🔹 2. Return the exact same structure as ItemController::index
         $props = [
             'items'       => $items,
             'store'       => $store,
@@ -104,8 +81,11 @@ class DashboardController extends Controller
             'filters'     => [
                 'search'  => $search ?? '',
                 'cart_id' => $request->integer('cart_id') ?: null,
+                'category_id' => $categoryId,
             ],
-            'categories'           => $categoryNames,
+            // Every category the store carries, not just this page's, so the
+            // filter pills stay put while the grid is filtered or paged.
+            'categories'           => $catalog->categories($storeId),
             'has_tin_cart'         => $hasTinCart,
             'top_cart_is_individual' => $topCartIsIndividual,
         ];
@@ -113,68 +93,5 @@ class DashboardController extends Controller
         \Log::info('Seller Dashboard Props', $props);
 
         return Inertia::render('Seller/Items/Index', $props);
-    }
-
-    /**
-     * Enrich a single item with all required fields for the index page.
-     * Now correctly sets original_price to the base price (non‑discounted)
-     * and discount_price in the pricing_matrix.
-     */
-    private function enrichItemForIndex(Item $item, int $storeId, $customer = null): array
-    {
-        // 1. Restore Image Resolution Logic
-        $generalImages = is_string($item->general_images) ? json_decode($item->general_images, true) : ($item->general_images ?? []);
-
-        $variantImages = collect();
-        foreach ($item->variants as $variant) {
-            $raw = is_string($variant->images) ? json_decode($variant->images, true) : ($variant->images ?? []);
-            foreach ((array) $raw as $img) {
-                if (!empty($img))
-                    $variantImages->push($this->resolveImageUrl($img));
-            }
-        }
-
-        $imageUrls = collect((array) $generalImages)
-            ->map(fn($path) => $this->resolveImageUrl($path))
-            ->merge($variantImages)
-            ->filter()
-            ->unique()
-            ->values()
-            ->toArray();
-
-        $sellerId = Auth::id();
-        $priceInfo = PriceProvider::getItemPriceRange($item, $storeId, $sellerId, $customer);
-
-        $totalStock = 0;
-        foreach ($item->variants as $variant) {
-            foreach ($variant->storeVariants->where('store_id', $storeId) as $sv) {
-                if (!$sv->active) {
-                    continue;
-                }
-                $pieces = $variant->calculateTotalPieces();
-                $multiplier = $pieces > 0 ? $pieces : 1;
-                $totalStock += ((int) $sv->stocks->sum('quantity')) * $multiplier;
-            }
-        }
-
-        return [
-            'id' => $item->id,
-            'product_name' => $item->product_name,
-            'sold_count' => $item->sold_count ?? 0,
-            'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
-            'image_urls' => $imageUrls,
-            'original_price' => $priceInfo['store_price'],
-            'store_price' => $priceInfo['store_price'],
-            'final_price' => $priceInfo['final_price'],
-            'discount_ends_at' => $priceInfo['discount_ends_at'],
-            'pricing_matrix' => $priceInfo['pricing_matrix'],
-            'individual_price' => collect($priceInfo['pricing_matrix'])->firstWhere('level', 'individual'),
-            'store_stock' => $totalStock,
-        ];
-    }
-
-    private function resolveImageUrl(?string $path): ?string
-    {
-        return empty($path) ? null : ImageResolver::resolve($path);
     }
 }

@@ -49,17 +49,17 @@ export default function StorefrontMenuDrawer({
             onClose={onClose}
             slotProps={{ paper: { sx: { width: 320, maxWidth: "88vw" } } }}
         >
-            <div className="flex h-full flex-col bg-white">
+            <div className="flex h-full flex-col bg-surface-container-lowest">
                 {/* ── Header ── */}
-                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                    <span className="text-[14px] font-extrabold tracking-tight text-gray-900">
+                <div className="flex items-center justify-between border-b border-outline-variant px-4 py-3">
+                    <span className="text-[14px] font-extrabold tracking-tight text-on-surface">
                         Browse
                     </span>
                     <button
                         type="button"
                         onClick={onClose}
                         aria-label="Close menu"
-                        className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                        className="flex h-8 w-8 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container hover:text-on-surface-variant"
                     >
                         <span className="material-symbols-outlined text-[20px]">close</span>
                     </button>
@@ -67,7 +67,7 @@ export default function StorefrontMenuDrawer({
 
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     {/* ── Categories ── */}
-                    <p className="px-4 pb-1 pt-4 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                    <p className="px-4 pb-1 pt-4 text-[10px] font-bold uppercase tracking-wide text-outline">
                         All categories
                     </p>
                     <nav aria-label="Product categories">
@@ -89,10 +89,10 @@ export default function StorefrontMenuDrawer({
                         ))}
                     </nav>
 
-                    <div className="mx-4 my-3 h-px bg-slate-100" />
+                    <div className="mx-4 my-3 h-px bg-surface-container" />
 
                     {/* ── The buyer destinations the bottom bar carries on phones ── */}
-                    <p className="px-4 pb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                    <p className="px-4 pb-1 text-[10px] font-bold uppercase tracking-wide text-outline">
                         My shopping
                     </p>
                     <nav aria-label="Account">
@@ -133,10 +133,10 @@ export default function StorefrontMenuDrawer({
 
                 {/* ── Auth footer ── */}
                 {!isAuthenticated ? (
-                    <div className="border-t border-slate-200 p-4">
+                    <div className="border-t border-outline-variant p-4">
                         <Link
                             href={route("register")}
-                            className="flex h-10 w-full items-center justify-center rounded-full text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+                            className="flex h-10 w-full items-center justify-center rounded-full text-[13px] font-bold text-on-primary transition-opacity hover:opacity-90"
                             style={{ backgroundColor: STOREFRONT_BRAND }}
                         >
                             Create an account
@@ -181,7 +181,7 @@ function DrawerRow({
             </span>
             <span className="min-w-0 flex-1 truncate text-left">{label}</span>
             {trailing ? (
-                <span className="shrink-0 text-[11px] font-bold text-slate-400">
+                <span className="shrink-0 text-[11px] font-bold text-outline">
                     {trailing}
                 </span>
             ) : null}
@@ -196,7 +196,7 @@ function DrawerRow({
             <span
                 aria-disabled="true"
                 title={`${label} — coming soon`}
-                className={`${shared} cursor-default text-slate-300`}
+                className={`${shared} cursor-default text-outline/60`}
             >
                 {body}
             </span>
@@ -204,8 +204,8 @@ function DrawerRow({
     }
 
     const tone = active
-        ? "text-gray-900"
-        : "text-slate-600 hover:bg-slate-50 hover:text-gray-900";
+        ? "text-on-surface"
+        : "text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface";
     const style = active ? { backgroundColor: STOREFRONT_BRAND_SOFT } : undefined;
 
     if (href) {

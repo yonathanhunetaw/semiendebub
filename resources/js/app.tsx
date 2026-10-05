@@ -2,6 +2,8 @@ import '../css/app.css';
 // Material Symbols, bundled from npm rather than fonts.googleapis.com: the
 // icons then work offline and never flash their ligature names while loading.
 import 'material-symbols/outlined.css';
+// Inter, bundled for the same reason (variable weight axis, all subsets).
+import '@fontsource-variable/inter';
 import './bootstrap';
 import * as React from 'react';
 import { ThemeProvider, createTheme, CssBaseline, PaletteMode } from '@mui/material';
@@ -9,7 +11,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
-import { getDesignTokens, SubdomainType } from './theme';
+import { getDesignTokens, resolveRole, RoleContext, RoleFavicon, THEME_STORAGE_KEY, DEFAULT_THEME_SETTING } from './theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -18,8 +20,6 @@ export const ThemeContext = React.createContext({
     toggleTheme: (newMode: 'light' | 'dark' | 'system') => {},
     currentSetting: 'light'
 });
-
-const THEME_STORAGE_KEY = 'duka.theme.mode';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
@@ -57,30 +57,10 @@ createInertiaApp({
     },
     setup({ el, App, props }) {
         const Root = () => {
-            // --- SUBDOMAIN DETECTION ---
-            const subdomain = React.useMemo(() => {
-                const host = window.location.hostname;
-                const parts = host.split('.');
-
-                // 1. Root domain handling (e.g., duka.pi, localhost, mysite.com)
-                // If parts length is 2 or less, we are at the root, so default to admin.
-                if (parts.length <= 2) return 'admin' as SubdomainType;
-
-                // 2. Subdomain handling (e.g., dev.duka.pi, admin.mysite.com)
-                const detected = parts[0].toLowerCase();
-
-                // 3. Fallback: If the detected string isn't a valid module, return 'admin'
-                // This prevents the app from crashing if someone types a fake subdomain.
-                const validSubdomains = [
-                    'admin', 'auth', 'dev', 'finance', 'marketing',
-                    'seller', 'delivery', 'procurement',
-                    'stockkeeper', 'vendor', 'shared'
-                ];
-
-                return validSubdomains.includes(detected)
-                    ? (detected as SubdomainType)
-                    : 'admin';
-            }, []);
+            // --- ROLE (module) DETECTION ---
+            // Same hostname rule as the pre-paint script in app.blade.php.
+            // Provided as RoleContext; layouts read it with useRole().
+            const role = React.useMemo(() => resolveRole(window.location.hostname), []);
 
             // --- THEME STATE LOGIC ---
             const [setting, setSetting] = React.useState<'light' | 'dark' | 'system'>(() => {
@@ -90,10 +70,12 @@ createInertiaApp({
                 } catch {
                     // ignore storage errors
                 }
-                return 'light';
+                return DEFAULT_THEME_SETTING;
             });
 
-            const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
+            // noSsr: read matchMedia on the first render, so 'system' never
+            // renders light for one frame after the pre-paint script chose dark.
+            const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)', { noSsr: true });
 
             const setThemeSetting = React.useCallback((newSetting: 'light' | 'dark' | 'system') => {
                 setSetting(newSetting);
@@ -112,18 +94,29 @@ createInertiaApp({
                 return setting;
             }, [setting, prefersDarkMode]);
 
-            // 4. Generate the theme dynamically using the detected subdomain
+            // 4. Generate the MUI theme from the same tokens Tailwind uses
             const theme = React.useMemo(
-                () => createTheme(getDesignTokens(mode, subdomain)),
-                [mode, subdomain]
+                () => createTheme(getDesignTokens(mode, role)),
+                [mode, role]
             );
+
+            // 5. Mirror role + mode onto <html> so the Tailwind tokens
+            //    (resources/css/tokens.css) and `dark:` variants follow them.
+            React.useEffect(() => {
+                const root = document.documentElement;
+                root.setAttribute('data-role', role);
+                root.setAttribute('data-mode', mode);
+            }, [role, mode]);
 
             return (
                 <ThemeContext.Provider value={{ toggleTheme: setThemeSetting, currentSetting: setting }}>
-                    <ThemeProvider theme={theme}>
-                        <CssBaseline />
-                        <App {...props} />
-                    </ThemeProvider>
+                    <RoleContext.Provider value={role}>
+                        <ThemeProvider theme={theme}>
+                            <CssBaseline />
+                            <RoleFavicon />
+                            <App {...props} />
+                        </ThemeProvider>
+                    </RoleContext.Provider>
                 </ThemeContext.Provider>
             );
         };
@@ -131,6 +124,8 @@ createInertiaApp({
         createRoot(el).render(<Root />);
     },
     progress: {
-        color: '#ff9800',
+        // Injected into a <style> as plain CSS, so the theme variable resolves:
+        // the page-load bar follows the role accent.
+        color: 'rgb(var(--primary))',
     },
 });

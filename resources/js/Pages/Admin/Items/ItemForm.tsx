@@ -1331,7 +1331,7 @@ export default function ItemForm({
                                                                                     right: -6,
                                                                                     bgcolor:
                                                                                         "error.main",
-                                                                                    color: "#fff",
+                                                                                    color: "error.contrastText",
                                                                                     width: 20,
                                                                                     height: 20,
                                                                                     "&:hover":

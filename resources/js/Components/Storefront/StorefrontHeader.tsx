@@ -95,7 +95,7 @@ export default function StorefrontHeader({
     };
 
     return (
-        <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white shadow-sm">
+        <header className="sticky top-0 z-30 border-b border-outline-variant/80 bg-surface-container-lowest shadow-sm">
             {/* ══ Row 1: brand · search · account · cart ══ */}
             <div className={STOREFRONT_SHELL}>
                 <div className="flex h-16 items-center justify-between gap-3 md:gap-6">
@@ -106,7 +106,7 @@ export default function StorefrontHeader({
                         aria-label="Storefront home"
                     >
                         <span
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-on-primary shadow-sm"
                             style={{ backgroundColor: STOREFRONT_BRAND }}
                         >
                             <span
@@ -121,11 +121,11 @@ export default function StorefrontHeader({
                             name widened the masthead and took the whole page with
                             it — the mark stays fixed, the words give way. */}
                         <span className="flex min-w-0 flex-col leading-none">
-                            <span className="truncate text-[15px] font-bold tracking-tight text-gray-900 md:max-w-[12rem]">
+                            <span className="truncate text-[15px] font-bold tracking-tight text-on-surface md:max-w-[12rem]">
                                 {store?.name ?? "Stationery Shop"}
                             </span>
                             {store?.location ? (
-                                <span className="mt-0.5 truncate text-[11px] font-medium text-slate-400 md:max-w-[12rem]">
+                                <span className="mt-0.5 truncate text-[11px] font-medium text-outline md:max-w-[12rem]">
                                     {store.location}
                                 </span>
                             ) : null}
@@ -139,7 +139,7 @@ export default function StorefrontHeader({
                             role="search"
                             className="hidden min-w-0 flex-1 md:block"
                         >
-                            <div className="flex items-center gap-2 rounded-full border-2 border-slate-900/10 bg-white py-1 pl-4 pr-1 transition-colors focus-within:border-[#c2410c]">
+                            <div className="flex items-center gap-2 rounded-full border-2 border-outline-variant bg-surface-container-lowest py-1 pl-4 pr-1 transition-colors focus-within:border-primary">
                                 <input
                                     type="search"
                                     value={search}
@@ -148,7 +148,7 @@ export default function StorefrontHeader({
                                     }
                                     placeholder={searchPlaceholder}
                                     aria-label="Search products"
-                                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] font-medium text-gray-900 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+                                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] font-medium text-on-surface placeholder:text-outline focus:outline-none focus:ring-0"
                                 />
 
                                 {search && search.length > 0 ? (
@@ -156,7 +156,7 @@ export default function StorefrontHeader({
                                         type="button"
                                         onClick={onSearchClear}
                                         aria-label="Clear search"
-                                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container hover:text-on-surface-variant"
                                     >
                                         <span className="material-symbols-outlined text-[18px]">
                                             close
@@ -165,13 +165,13 @@ export default function StorefrontHeader({
                                 ) : null}
 
                                 {isSearching ? (
-                                    <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-orange-200 border-t-transparent" />
+                                    <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
                                 ) : null}
 
                                 <button
                                     type="submit"
                                     aria-label="Search"
-                                    className="flex h-9 shrink-0 items-center justify-center rounded-full px-6 text-white transition-colors"
+                                    className="flex h-9 shrink-0 items-center justify-center rounded-full px-6 text-on-primary transition-colors"
                                     style={{ backgroundColor: STOREFRONT_BRAND }}
                                     onMouseEnter={(event) => {
                                         event.currentTarget.style.backgroundColor =
@@ -197,16 +197,16 @@ export default function StorefrontHeader({
                         {isAuthenticated ? (
                             <Link
                                 href={route("profile.edit")}
-                                className="hidden items-center gap-2 rounded-full px-2.5 py-1.5 transition-colors hover:bg-slate-100 sm:flex"
+                                className="hidden items-center gap-2 rounded-full px-2.5 py-1.5 transition-colors hover:bg-surface-container sm:flex"
                             >
-                                <span className="material-symbols-outlined text-[24px] text-slate-500">
+                                <span className="material-symbols-outlined text-[24px] text-on-surface-variant">
                                     account_circle
                                 </span>
                                 <span className="flex flex-col leading-tight">
-                                    <span className="text-[11px] text-slate-500">
+                                    <span className="text-[11px] text-on-surface-variant">
                                         Welcome
                                     </span>
-                                    <span className="max-w-[9rem] truncate text-[13px] font-bold text-gray-900">
+                                    <span className="max-w-[9rem] truncate text-[13px] font-bold text-on-surface">
                                         {user?.first_name ?? "My Account"}
                                     </span>
                                 </span>
@@ -214,16 +214,16 @@ export default function StorefrontHeader({
                         ) : (
                             <Link
                                 href={route("login")}
-                                className="hidden items-center gap-2 rounded-full px-2.5 py-1.5 transition-colors hover:bg-slate-100 sm:flex"
+                                className="hidden items-center gap-2 rounded-full px-2.5 py-1.5 transition-colors hover:bg-surface-container sm:flex"
                             >
-                                <span className="material-symbols-outlined text-[24px] text-slate-500">
+                                <span className="material-symbols-outlined text-[24px] text-on-surface-variant">
                                     account_circle
                                 </span>
                                 <span className="flex flex-col leading-tight">
-                                    <span className="text-[11px] text-slate-500">
+                                    <span className="text-[11px] text-on-surface-variant">
                                         Welcome
                                     </span>
-                                    <span className="text-[13px] font-bold text-gray-900">
+                                    <span className="text-[13px] font-bold text-on-surface">
                                         Sign in / Register
                                     </span>
                                 </span>
@@ -235,7 +235,7 @@ export default function StorefrontHeader({
                             href={
                                 isAuthenticated ? route("profile.edit") : route("login")
                             }
-                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 active:scale-95 sm:hidden"
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-outline-variant text-on-surface-variant active:scale-95 sm:hidden"
                             aria-label={isAuthenticated ? "My account" : "Sign in"}
                         >
                             <span className="material-symbols-outlined text-[20px]">
@@ -254,9 +254,9 @@ export default function StorefrontHeader({
                                     color: STOREFRONT_BRAND,
                                     backgroundColor: STOREFRONT_BRAND_SOFT,
                                     border: "1px solid",
-                                    borderColor: "rgba(194, 65, 12, 0.18)",
+                                    borderColor: "rgb(var(--primary) / 0.18)",
                                     "&:hover": {
-                                        backgroundColor: "rgba(194, 65, 12, 0.12)",
+                                        backgroundColor: "rgb(var(--primary) / 0.12)",
                                     },
                                 }}
                             >
@@ -266,7 +266,7 @@ export default function StorefrontHeader({
                                     sx={{
                                         "& .MuiBadge-badge": {
                                             backgroundColor: STOREFRONT_BRAND,
-                                            color: "#fff",
+                                            color: "rgb(var(--on-primary))",
                                             fontSize: 10,
                                             fontWeight: 700,
                                             minWidth: 16,
@@ -285,14 +285,14 @@ export default function StorefrontHeader({
             </div>
 
             {/* ══ Row 2 (desktop): All Categories + the category rail ══ */}
-            <div className="hidden border-t border-slate-200/70 md:block">
+            <div className="hidden border-t border-outline-variant/70 md:block">
                 <div className={STOREFRONT_SHELL}>
                     <div className="flex h-12 items-center gap-1">
                         {onOpenMenu ? (
                             <button
                                 type="button"
                                 onClick={onOpenMenu}
-                                className="flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-bold text-gray-900 transition-colors hover:bg-slate-100"
+                                className="flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-bold text-on-surface transition-colors hover:bg-surface-container"
                                 aria-label="Open all categories and menu"
                             >
                                 <span className="material-symbols-outlined text-[20px]">
@@ -344,7 +344,7 @@ function CategoryNavButton({
             onClick={onClick}
             aria-current={active ? "true" : undefined}
             className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                active ? "text-white" : "text-slate-600 hover:bg-slate-100"
+                active ? "text-on-primary" : "text-on-surface-variant hover:bg-surface-container"
             }`}
             style={active ? { backgroundColor: STOREFRONT_BRAND } : undefined}
         >

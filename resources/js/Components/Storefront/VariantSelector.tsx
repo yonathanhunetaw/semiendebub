@@ -178,7 +178,7 @@ function ChipGroup({
 }: ChipGroupProps): React.ReactElement {
     return (
         <div>
-            <p className="mb-2.5 text-[18px] font-bold leading-none text-gray-900">
+            <p className="mb-2.5 text-[18px] font-bold leading-none text-on-surface">
                 {label}
             </p>
 
@@ -202,10 +202,10 @@ function ChipGroup({
                             }
                             className={`min-w-0 max-w-full break-words rounded-full border px-5 py-2.5 text-[14px] font-semibold transition-all active:scale-95 ${
                                 active
-                                    ? "border-transparent text-white"
+                                    ? "border-transparent text-on-primary"
                                     : option.available
-                                      ? "border-black/10 bg-[#f5f5f5] text-gray-900 hover:bg-slate-200"
-                                      : "border-black/10 bg-[#f5f5f5] text-slate-400 line-through"
+                                      ? "border-outline-variant bg-surface-container text-on-surface hover:bg-surface-container-high"
+                                      : "border-outline-variant bg-surface-container text-outline line-through"
                             }`}
                             style={
                                 active
@@ -299,7 +299,7 @@ function PackagingTiers({
 
     return (
         <div>
-            <p className="mb-2.5 text-[18px] font-bold leading-none text-gray-900">
+            <p className="mb-2.5 text-[18px] font-bold leading-none text-on-surface">
                 Packaging
             </p>
 
@@ -319,10 +319,10 @@ function PackagingTiers({
                             }
                             className={`min-w-[5.5rem] flex-1 break-words rounded-2xl border py-2 text-[14px] font-bold transition-all active:scale-95 ${
                                 active
-                                    ? "border-transparent text-white"
+                                    ? "border-transparent text-on-primary"
                                     : tier.available
-                                      ? "border-black/10 bg-[#f5f5f5] text-slate-600 hover:bg-slate-200"
-                                      : "border-black/10 bg-[#f5f5f5] text-slate-400 line-through"
+                                      ? "border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                                      : "border-outline-variant bg-surface-container text-outline line-through"
                             }`}
                             style={
                                 active
@@ -358,11 +358,11 @@ function PackagingTiers({
                 >
                     <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                            <p className="truncate text-[15px] font-bold text-gray-900">
+                            <p className="truncate text-[15px] font-bold text-on-surface">
                                 {tierLabel}
                             </p>
                             {contains ? (
-                                <p className="mt-0.5 text-[12px] font-medium text-slate-500">
+                                <p className="mt-0.5 text-[12px] font-medium text-on-surface-variant">
                                     {contains}
                                 </p>
                             ) : null}
@@ -385,7 +385,7 @@ function PackagingTiers({
                     </div>
 
                     {canAddBoxes || canAddPieces ? (
-                        <div className="ml-3 mt-3 space-y-3 border-l-2 border-black/10 pl-3">
+                        <div className="ml-3 mt-3 space-y-3 border-l-2 border-outline-variant pl-3">
                             {canAddBoxes ? (
                                 <SubUnitRow
                                     label="+ Boxes"
@@ -425,7 +425,7 @@ function SubUnitRow({
     return (
         <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-slate-600">{label}</p>
+                <p className="text-[13px] font-semibold text-on-surface-variant">{label}</p>
                 {rate !== null ? (
                     <p
                         className="mt-0.5 text-[12px] font-bold"
@@ -466,20 +466,20 @@ function Stepper({
     const icon = size === "lg" ? "text-[20px]" : "text-[16px]";
 
     return (
-        <div className="flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
+        <div className="flex shrink-0 items-center gap-1 rounded-full border border-outline-variant bg-surface-container-lowest p-1">
             <button
                 type="button"
                 onClick={() => onChange(clamp(value - 1))}
                 disabled={value <= min}
                 aria-label={`Decrease ${label}`}
-                className={`${dimension} flex items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30`}
+                className={`${dimension} flex items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container disabled:opacity-30`}
             >
                 <span className={`material-symbols-outlined ${icon}`}>remove</span>
             </button>
 
             <span
                 aria-live="polite"
-                className={`text-center font-bold text-gray-900 ${
+                className={`text-center font-bold text-on-surface ${
                     size === "lg" ? "min-w-[2rem] text-[16px]" : "min-w-[1.5rem] text-[14px]"
                 }`}
             >
@@ -491,7 +491,7 @@ function Stepper({
                 onClick={() => onChange(clamp(value + 1))}
                 disabled={max !== undefined && value >= max}
                 aria-label={`Increase ${label}`}
-                className={`${dimension} flex items-center justify-center rounded-full text-white transition-opacity hover:opacity-90 disabled:opacity-30`}
+                className={`${dimension} flex items-center justify-center rounded-full text-on-primary transition-opacity hover:opacity-90 disabled:opacity-30`}
                 style={{ backgroundColor: STOREFRONT_BRAND }}
             >
                 <span className={`material-symbols-outlined ${icon}`}>add</span>

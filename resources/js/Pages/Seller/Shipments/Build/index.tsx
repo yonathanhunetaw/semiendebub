@@ -85,16 +85,16 @@ const STAGE_LABELS: Record<string, string> = {
  |----------------------------------------------------------*/
 function StatusBadge({ status, label }: { status: ManifestItemStatus; label: string }) {
     const cls =
-        status === "oos"     ? "bg-red-100 text-red-800" :
-        status === "sold"    ? "bg-blue-100 text-blue-800" :
-        status === "low"     ? "bg-amber-100 text-amber-800" :
-                               "bg-slate-100 text-slate-600";
+        status === "oos"     ? "bg-error-container text-on-error-container" :
+        status === "sold"    ? "bg-info-container text-on-info-container" :
+        status === "low"     ? "bg-warning-container text-on-warning-container" :
+                               "bg-surface-container text-on-surface-variant";
     return <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wide shrink-0 ${cls}`}>{label}</span>;
 }
 
 function ItemIcon({ icon }: { icon: string }) {
     const iconName = icon === "report" ? "error" : icon === "warning" ? "warning" : icon === "sell" ? "sell" : "inventory_2";
-    const colorCls = icon === "report" ? "text-red-500" : icon === "warning" ? "text-amber-500" : icon === "sell" ? "text-blue-500" : "text-slate-500";
+    const colorCls = icon === "report" ? "text-error" : icon === "warning" ? "text-warning" : icon === "sell" ? "text-info" : "text-on-surface-variant";
     return <span className={`material-symbols-outlined text-[18px] ${colorCls}`}>{iconName}</span>;
 }
 
@@ -102,20 +102,20 @@ function CbmGauge({ percent }: { percent: number }) {
     const r    = 15.9155;
     const circ = 2 * Math.PI * r;
     const dash = (Math.min(percent, 100) / 100) * circ;
-    const color = percent > 85 ? "#dc2626" : percent > 60 ? "#d97706" : "#c2410c";
+    const tone = percent > 85 ? "text-error" : percent > 60 ? "text-warning" : "text-primary";
     return (
         <div style={{ position: "relative", width: 80, height: 80, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg viewBox="0 0 36 36" style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
                 <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="3.8" />
+                    fill="none" stroke="currentColor" strokeWidth="3.8" className="text-on-surface/10" />
                 <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none" stroke={color} strokeWidth="3.8"
+                    fill="none" stroke="currentColor" strokeWidth="3.8" className={tone}
                     strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
                     style={{ transition: "stroke-dasharray 0.4s ease" }} />
             </svg>
             <div style={{ position: "absolute", textAlign: "center" }}>
-                <div style={{ fontSize: 13, fontWeight: 800, lineHeight: 1, color }}>{percent}%</div>
-                <div style={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", marginTop: 2 }}>Cubed</div>
+                <div className={tone} style={{ fontSize: 13, fontWeight: 800, lineHeight: 1 }}>{percent}%</div>
+                <div className="text-outline" style={{ fontSize: 9, textTransform: "uppercase", marginTop: 2 }}>Cubed</div>
             </div>
         </div>
     );
@@ -144,37 +144,37 @@ function EditRouteSheet({ open, origins, destinations, originId, destId, submitt
     const handleSave = () => onSave(Number(originVal), Number(destVal));
     return (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="w-full max-w-[425px] bg-white rounded-t-3xl p-5 pb-10 shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
-                <h3 className="text-[16px] font-bold text-gray-900 mb-4">Edit Route</h3>
+            <div className="w-full max-w-[425px] bg-surface-container-lowest rounded-t-3xl p-5 pb-10 shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="w-10 h-1 bg-surface-container-high rounded-full mx-auto mb-4" />
+                <h3 className="text-[16px] font-bold text-on-surface mb-4">Edit Route</h3>
                 <div className="space-y-3 mb-5">
                     <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Origin Facility</label>
+                        <label className="text-[10px] font-bold text-outline uppercase tracking-wide mb-1 block">Origin Facility</label>
                         <select value={originVal} onChange={e => setOriginVal(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none">
+                            className="w-full border border-outline-variant rounded-xl px-3 py-2.5 text-[13px] font-semibold text-on-surface bg-surface-container-low focus:outline-none">
                             {origins.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 block">Destination Facility</label>
+                        <label className="text-[10px] font-bold text-outline uppercase tracking-wide mb-1 block">Destination Facility</label>
                         <select value={destVal} onChange={e => setDestVal(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-gray-900 bg-slate-50 focus:outline-none">
+                            className="w-full border border-outline-variant rounded-xl px-3 py-2.5 text-[13px] font-semibold text-on-surface bg-surface-container-low focus:outline-none">
                             {destinations.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
                     </div>
                 </div>
                 {/* Rerouting withdraws the other parties' consent, so say so before
                     the seller commits rather than after. */}
-                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-100 flex items-start gap-1.5 mb-4">
-                    <span className="material-symbols-outlined text-[15px] text-amber-600 shrink-0 mt-0.5">warning</span>
-                    <p className="text-[11px] text-amber-900 leading-snug">
+                <div className="p-2.5 rounded-xl bg-warning-container/60 border border-warning/20 flex items-start gap-1.5 mb-4">
+                    <span className="material-symbols-outlined text-[15px] text-warning shrink-0 mt-0.5">warning</span>
+                    <p className="text-[11px] text-on-warning-container leading-snug">
                         Changing either end asks the driver, origin dock and receiving dock to agree again.
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-600">Cancel</button>
+                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-outline-variant text-[13px] font-semibold text-on-surface-variant">Cancel</button>
                     <button onClick={handleSave} disabled={sameEnds || submitting}
-                        className="flex-1 py-3 rounded-xl bg-[#c2410c] text-white text-[13px] font-bold disabled:opacity-40">
+                        className="flex-1 py-3 rounded-xl bg-primary text-on-primary text-[13px] font-bold disabled:opacity-40">
                         {sameEnds ? "Pick two facilities" : submitting ? "Saving…" : "Save Route"}
                     </button>
                 </div>
@@ -240,25 +240,25 @@ function AddItemsSheet({ open, variants, existingIds, submitting, onClose, onAdd
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="w-full max-w-[425px] bg-white rounded-t-3xl p-5 pb-10 max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4 shrink-0" />
-                <h3 className="text-[16px] font-bold text-gray-900 mb-1 shrink-0">Add Items to Manifest</h3>
-                <p className="text-[11px] text-slate-400 mb-3 shrink-0">Set a packaging unit and carton count for each SKU</p>
+            <div className="w-full max-w-[425px] bg-surface-container-lowest rounded-t-3xl p-5 pb-10 max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="w-10 h-1 bg-surface-container-high rounded-full mx-auto mb-4 shrink-0" />
+                <h3 className="text-[16px] font-bold text-on-surface mb-1 shrink-0">Add Items to Manifest</h3>
+                <p className="text-[11px] text-outline mb-3 shrink-0">Set a packaging unit and carton count for each SKU</p>
 
                 <div className="relative mb-3 shrink-0">
-                    <span className="material-symbols-outlined text-[16px] text-slate-400 absolute left-3 top-1/2 -translate-y-1/2">search</span>
+                    <span className="material-symbols-outlined text-[16px] text-outline absolute left-3 top-1/2 -translate-y-1/2">search</span>
                     <input
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Search product or SKU"
-                        className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-[13px] text-gray-900 bg-slate-50 focus:outline-none focus:border-[#c2410c]"
+                        className="w-full border border-outline-variant rounded-xl pl-9 pr-3 py-2.5 text-[13px] text-on-surface bg-surface-container-low focus:outline-none focus:border-primary"
                     />
                 </div>
 
                 <div className="overflow-y-auto flex-1 space-y-2 pr-1">
                     {available.length === 0
                         ? (
-                            <p className="text-[13px] text-slate-400 text-center py-6">
+                            <p className="text-[13px] text-outline text-center py-6">
                                 {variants.length === 0
                                     ? "No product variants are set up yet."
                                     : search.trim() !== ""
@@ -271,39 +271,39 @@ function AddItemsSheet({ open, variants, existingIds, submitting, onClose, onAdd
                             const isSel = !!line;
                             return (
                                 <div key={variant.id} onClick={() => toggle(variant)}
-                                    className={`p-3 rounded-xl border cursor-pointer transition-all ${isSel ? "border-[#c2410c] bg-orange-50/40" : "border-slate-100 bg-slate-50"}`}>
+                                    className={`p-3 rounded-xl border cursor-pointer transition-all ${isSel ? "border-primary bg-primary-container/25" : "border-outline-variant/60 bg-surface-container-low"}`}>
                                     <div className="flex items-center gap-2.5">
-                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${isSel ? "bg-[#c2410c] border-[#c2410c]" : "border-slate-300"}`}>
-                                            {isSel && <span className="material-symbols-outlined text-white text-[12px]">check</span>}
+                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${isSel ? "bg-primary border-primary" : "border-outline/50"}`}>
+                                            {isSel && <span className="material-symbols-outlined text-on-primary text-[12px]">check</span>}
                                         </div>
                                         <ItemIcon icon="inventory" />
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-[12px] font-bold text-gray-900 truncate">{variant.label}</p>
-                                            <p className="text-[10px] font-mono text-slate-400">{variant.sku ?? "No SKU"}</p>
+                                            <p className="text-[12px] font-bold text-on-surface truncate">{variant.label}</p>
+                                            <p className="text-[10px] font-mono text-outline">{variant.sku ?? "No SKU"}</p>
                                         </div>
                                     </div>
                                     {isSel && (
-                                        <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 space-y-2" onClick={e => e.stopPropagation()}>
+                                        <div className="mt-2.5 pt-2 border-t border-dashed border-outline-variant space-y-2" onClick={e => e.stopPropagation()}>
                                             <div>
-                                                <p className="text-[10px] font-semibold text-slate-500 mb-1">Packaging Unit:</p>
+                                                <p className="text-[10px] font-semibold text-on-surface-variant mb-1">Packaging Unit:</p>
                                                 <div className="flex gap-1.5">
                                                     {PACK_UNITS.map(u => (
                                                         <button key={u}
                                                             type="button"
                                                             onClick={e => { e.stopPropagation(); setLine(variant.id, { unit: u }); }}
-                                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${line.unit === u ? "bg-[#c2410c] text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
+                                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${line.unit === u ? "bg-primary text-on-primary" : "bg-surface-container-lowest border border-outline-variant text-on-surface-variant"}`}>
                                                             {u}
                                                         </button>
                                                     ))}
                                                 </div>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-semibold text-slate-500 mb-1">Quantity:</p>
+                                                <p className="text-[10px] font-semibold text-on-surface-variant mb-1">Quantity:</p>
                                                 <div className="flex items-center gap-1.5">
                                                     <button type="button"
                                                         onClick={e => { e.stopPropagation(); setLine(variant.id, { quantity: Math.max(1, line.quantity - 1) }); }}
-                                                        className="w-7 h-7 rounded-lg border border-slate-200 bg-white flex items-center justify-center">
-                                                        <span className="material-symbols-outlined text-[14px] text-slate-600">remove</span>
+                                                        className="w-7 h-7 rounded-lg border border-outline-variant bg-surface-container-lowest flex items-center justify-center">
+                                                        <span className="material-symbols-outlined text-[14px] text-on-surface-variant">remove</span>
                                                     </button>
                                                     <input
                                                         type="number"
@@ -311,14 +311,14 @@ function AddItemsSheet({ open, variants, existingIds, submitting, onClose, onAdd
                                                         value={line.quantity}
                                                         onClick={e => e.stopPropagation()}
                                                         onChange={e => setLine(variant.id, { quantity: Math.max(1, Number(e.target.value) || 1) })}
-                                                        className="w-16 text-center border border-slate-200 rounded-lg py-1 text-[12px] font-bold font-mono text-gray-900 bg-white focus:outline-none"
+                                                        className="w-16 text-center border border-outline-variant rounded-lg py-1 text-[12px] font-bold font-mono text-on-surface bg-surface-container-lowest focus:outline-none"
                                                     />
                                                     <button type="button"
                                                         onClick={e => { e.stopPropagation(); setLine(variant.id, { quantity: line.quantity + 1 }); }}
-                                                        className="w-7 h-7 rounded-lg border border-slate-200 bg-white flex items-center justify-center">
-                                                        <span className="material-symbols-outlined text-[14px] text-slate-600">add</span>
+                                                        className="w-7 h-7 rounded-lg border border-outline-variant bg-surface-container-lowest flex items-center justify-center">
+                                                        <span className="material-symbols-outlined text-[14px] text-on-surface-variant">add</span>
                                                     </button>
-                                                    <span className="text-[10px] text-slate-400 ml-1">{line.unit}</span>
+                                                    <span className="text-[10px] text-outline ml-1">{line.unit}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -328,10 +328,10 @@ function AddItemsSheet({ open, variants, existingIds, submitting, onClose, onAdd
                         })
                     }
                 </div>
-                <div className="flex gap-2 mt-4 shrink-0 pt-4 border-t border-slate-100 pb-4">
-                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-600">Cancel</button>
+                <div className="flex gap-2 mt-4 shrink-0 pt-4 border-t border-outline-variant/60 pb-4">
+                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-outline-variant text-[13px] font-semibold text-on-surface-variant">Cancel</button>
                     <button onClick={handleAdd} disabled={count === 0 || submitting}
-                        className="flex-1 py-3 rounded-xl bg-[#c2410c] text-white text-[13px] font-bold disabled:opacity-40">
+                        className="flex-1 py-3 rounded-xl bg-primary text-on-primary text-[13px] font-bold disabled:opacity-40">
                         {submitting ? "Adding…" : `Add ${count > 0 ? `(${count})` : ""} Items`}
                     </button>
                 </div>
@@ -357,20 +357,20 @@ function MoveItemSheet({ open, item, targets, submitting, onClose, onMove }: {
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="w-full max-w-[425px] bg-white rounded-t-3xl p-5 pb-10 shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
-                <h3 className="text-[16px] font-bold text-gray-900 mb-1">Move Item</h3>
-                <p className="text-[12px] text-slate-500 mb-4">
-                    Move <strong className="text-gray-800">{item.name}</strong> onto another run leaving this origin.
+            <div className="w-full max-w-[425px] bg-surface-container-lowest rounded-t-3xl p-5 pb-10 shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="w-10 h-1 bg-surface-container-high rounded-full mx-auto mb-4" />
+                <h3 className="text-[16px] font-bold text-on-surface mb-1">Move Item</h3>
+                <p className="text-[12px] text-on-surface-variant mb-4">
+                    Move <strong className="text-on-surface">{item.name}</strong> onto another run leaving this origin.
                 </p>
 
                 {/* Only open runs from the same dock can take the line, so the
                     server decides what is on offer here. */}
                 {targets.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center mb-4">
-                        <span className="material-symbols-outlined text-slate-300 text-[28px]">route</span>
-                        <p className="text-[12px] font-bold text-gray-700 mt-1">No other open run from this origin</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Create a second run first, then move the line onto it.</p>
+                    <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/60 text-center mb-4">
+                        <span className="material-symbols-outlined text-outline text-[28px]">route</span>
+                        <p className="text-[12px] font-bold text-on-surface-variant mt-1">No other open run from this origin</p>
+                        <p className="text-[11px] text-outline mt-0.5">Create a second run first, then move the line onto it.</p>
                     </div>
                 ) : (
                     <div className="space-y-2 mb-4 max-h-[40vh] overflow-y-auto pr-1">
@@ -378,13 +378,13 @@ function MoveItemSheet({ open, item, targets, submitting, onClose, onMove }: {
                             const sel = target === String(t.id);
                             return (
                                 <button key={t.id} type="button" onClick={() => setTarget(String(t.id))}
-                                    className={`w-full text-left p-3 rounded-xl border transition-all ${sel ? "border-[#c2410c] bg-orange-50/40" : "border-slate-100 bg-slate-50"}`}>
+                                    className={`w-full text-left p-3 rounded-xl border transition-all ${sel ? "border-primary bg-primary-container/25" : "border-outline-variant/60 bg-surface-container-low"}`}>
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="min-w-0">
-                                            <p className="text-[12px] font-bold text-gray-900 truncate">→ {t.destination}</p>
-                                            <p className="text-[10px] font-mono text-slate-400">{t.reference}</p>
+                                            <p className="text-[12px] font-bold text-on-surface truncate">→ {t.destination}</p>
+                                            <p className="text-[10px] font-mono text-outline">{t.reference}</p>
                                         </div>
-                                        <span className="text-[10px] font-mono text-slate-500 shrink-0">
+                                        <span className="text-[10px] font-mono text-on-surface-variant shrink-0">
                                             {t.scheduled_run ? t.scheduled_run.replace("T", " • ") : "Unscheduled"}
                                         </span>
                                     </div>
@@ -395,11 +395,11 @@ function MoveItemSheet({ open, item, targets, submitting, onClose, onMove }: {
                 )}
 
                 <div className="flex gap-2">
-                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-600">Cancel</button>
+                    <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-outline-variant text-[13px] font-semibold text-on-surface-variant">Cancel</button>
                     <button
                         onClick={() => onMove(item.id, Number(target))}
                         disabled={target === "" || submitting}
-                        className="flex-1 py-3 rounded-xl bg-[#c2410c] text-white text-[13px] font-bold disabled:opacity-40">
+                        className="flex-1 py-3 rounded-xl bg-primary text-on-primary text-[13px] font-bold disabled:opacity-40">
                         {submitting ? "Moving…" : "Move Line"}
                     </button>
                 </div>
@@ -542,14 +542,14 @@ export default function SellerShipmentsIndex({
             : agreements[party].status === "accepted";
 
     const loadLabel = cbmPercent <= 40 ? "Under Capacity" : cbmPercent <= 75 ? "Optimal Load" : "Near Capacity";
-    const loadCls   = cbmPercent <= 40 ? "bg-emerald-100 text-emerald-800" : cbmPercent <= 75 ? "bg-orange-100 text-[#c2410c]" : "bg-red-100 text-red-800";
+    const loadCls   = cbmPercent <= 40 ? "bg-success-container text-on-success-container" : cbmPercent <= 75 ? "bg-primary-container text-on-primary-container" : "bg-error-container text-on-error-container";
 
     return (
         <>
             <Head title="Build Shipment" />
 
             {/* ── Sticky Top Context Strip ── */}
-            <div className="px-4 pt-3 pb-2.5 flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-20">
+            <div className="px-4 pt-3 pb-2.5 flex items-center justify-between bg-surface-container-lowest border-b border-outline-variant/60 sticky top-0 z-20">
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => {
@@ -559,19 +559,19 @@ export default function SellerShipmentsIndex({
                                 router.visit(route("seller.shipments.index"));
                             }
                         }}
-                        className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 flex items-center justify-center mr-1 active:scale-95 transition-all text-slate-600"
+                        className="w-8 h-8 rounded-xl bg-surface-container-low hover:bg-surface-container border border-outline-variant/80 flex items-center justify-center mr-1 active:scale-95 transition-all text-on-surface-variant"
                         aria-label="Back"
                     >
                         <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                     </button>
-                    <span className="material-symbols-outlined text-[#c2410c] text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
+                    <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
                     <div className="min-w-0">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">{reference}</p>
-                        <p className="text-[15px] font-bold text-gray-900 leading-tight">Phase 1 of 3 — Manifest</p>
+                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider truncate">{reference}</p>
+                        <p className="text-[15px] font-bold text-on-surface leading-tight">Phase 1 of 3 — Manifest</p>
                     </div>
                 </div>
                 <span className={`text-[9px] font-bold uppercase tracking-wide px-2 py-1 rounded-full shrink-0 ${
-                    can_edit_manifest ? "bg-orange-50 text-[#c2410c] border border-orange-200/60" : "bg-slate-100 text-slate-500 border border-slate-200"
+                    can_edit_manifest ? "bg-primary-container/60 text-primary border border-primary/20" : "bg-surface-container text-on-surface-variant border border-outline-variant"
                 }`}>
                     {STAGE_LABELS[workflow_status] ?? workflow_status}
                 </span>
@@ -581,7 +581,7 @@ export default function SellerShipmentsIndex({
             <div className="px-3.5 pt-3 pb-52 space-y-3">
 
                 {/* ── Phase Stepper ── */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
+                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-3">
                     <div className="flex items-center">
                         {[
                             { n: 1, label: "Manifest", sub: "Active"  },
@@ -590,77 +590,77 @@ export default function SellerShipmentsIndex({
                         ].map((step, i) => (
                             <React.Fragment key={step.n}>
                                 <div className="flex items-center gap-1.5">
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${step.n === 1 ? "bg-[#c2410c] text-white" : "bg-slate-100 text-slate-400"}`}>
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${step.n === 1 ? "bg-primary text-on-primary" : "bg-surface-container text-outline"}`}>
                                         {step.n}
                                     </div>
                                     <div>
-                                        <p className={`text-[11px] font-bold leading-none ${step.n === 1 ? "text-[#c2410c]" : "text-slate-400"}`}>{step.label}</p>
-                                        <p className={`text-[9px] leading-none mt-0.5 ${step.n === 1 ? "text-[#c2410c]/70" : "text-slate-300"}`}>{step.sub}</p>
+                                        <p className={`text-[11px] font-bold leading-none ${step.n === 1 ? "text-primary" : "text-outline"}`}>{step.label}</p>
+                                        <p className={`text-[9px] leading-none mt-0.5 ${step.n === 1 ? "text-primary/70" : "text-outline"}`}>{step.sub}</p>
                                     </div>
                                 </div>
-                                {i < 2 && <div className="flex-1 h-0.5 mx-2 bg-slate-100" />}
+                                {i < 2 && <div className="flex-1 h-0.5 mx-2 bg-surface-container" />}
                             </React.Fragment>
                         ))}
                     </div>
                 </div>
 
                 {/* ── Route Matrix Card ── */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
                     <div className="flex items-center justify-between mb-3">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Replenishment Corridor</p>
+                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider">Replenishment Corridor</p>
                         <div className="flex items-center gap-1.5">
-                            <span className="px-2 py-0.5 rounded-full bg-orange-100 text-[#c2410c] text-[10px] font-bold">WH → Retail</span>
+                            <span className="px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container text-[10px] font-bold">WH → Retail</span>
                             <button onClick={() => setEditRouteOpen(true)}
-                                className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center">
-                                <span className="material-symbols-outlined text-[14px] text-slate-500">edit</span>
+                                className="w-7 h-7 rounded-lg bg-surface-container-low border border-outline-variant/60 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-[14px] text-on-surface-variant">edit</span>
                             </button>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 bg-slate-50 rounded-xl p-3 mb-3">
+                    <div className="flex items-center gap-2 bg-surface-container-low rounded-xl p-3 mb-3">
                         <div className="flex-1 min-w-0">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-0.5">
+                            <p className="text-[9px] font-bold text-outline uppercase flex items-center gap-1 mb-0.5">
                                 <span className="material-symbols-outlined text-[11px]">warehouse</span> Origin
                             </p>
-                            <p className="text-[13px] font-bold text-gray-900 truncate">{origin.name}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{origin.detail}</p>
+                            <p className="text-[13px] font-bold text-on-surface truncate">{origin.name}</p>
+                            <p className="text-[10px] text-outline truncate">{origin.detail}</p>
                         </div>
                         <div className="flex flex-col items-center shrink-0">
-                            <span className="material-symbols-outlined text-[#c2410c] text-[18px]">arrow_forward</span>
-                            <span className="text-[9px] text-slate-400">{distance_km} km</span>
+                            <span className="material-symbols-outlined text-primary text-[18px]">arrow_forward</span>
+                            <span className="text-[9px] text-outline">{distance_km} km</span>
                         </div>
                         <div className="flex-1 min-w-0 text-right">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase flex items-center justify-end gap-1 mb-0.5">
+                            <p className="text-[9px] font-bold text-outline uppercase flex items-center justify-end gap-1 mb-0.5">
                                 Target <span className="material-symbols-outlined text-[11px]">storefront</span>
                             </p>
-                            <p className="text-[13px] font-bold text-gray-900 truncate">{destination.name}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{destination.detail}</p>
+                            <p className="text-[13px] font-bold text-on-surface truncate">{destination.name}</p>
+                            <p className="text-[10px] text-outline truncate">{destination.detail}</p>
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3 mb-2">
+                    <div className="flex items-center justify-between bg-surface-container-low rounded-xl p-3 mb-2">
                         <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-8 h-8 rounded-lg bg-[#c2410c] flex items-center justify-center shrink-0">
-                                <span className="material-symbols-outlined text-white text-[16px]">schedule</span>
+                            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
+                                <span className="material-symbols-outlined text-on-primary text-[16px]">schedule</span>
                             </div>
                             <div className="min-w-0">
-                                <p className="text-[9px] text-slate-400 mb-0.5">Scheduled Time</p>
+                                <p className="text-[9px] text-outline mb-0.5">Scheduled Time</p>
                                 <input type="datetime-local" value={scheduleInput}
                                     onChange={e => setScheduleInput(e.target.value)}
-                                    className="text-[13px] font-bold text-gray-900 bg-transparent border-none outline-none w-full" />
+                                    className="text-[13px] font-bold text-on-surface bg-transparent border-none outline-none w-full" />
                             </div>
                         </div>
-                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold shrink-0">{cutoff_label}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-warning-container text-on-warning-container text-[10px] font-bold shrink-0">{cutoff_label}</span>
                     </div>
 
                     {/* The windows actually on the table. These are the slots the
                         other three parties are choosing from, so they come from
                         the record rather than from four fixed October dates. */}
                     {schedule_options.length > 0 && (
-                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 mb-3 space-y-1.5">
+                        <div className="p-2.5 rounded-xl bg-surface-container-low border border-outline-variant/60 mb-3 space-y-1.5">
                             <div className="flex items-center justify-between">
-                                <p className="text-[10px] font-bold text-slate-700">Proposed Time Windows:</p>
-                                <span className="text-[9px] text-[#c2410c] font-semibold">Multi-Party Agreement</span>
+                                <p className="text-[10px] font-bold text-on-surface-variant">Proposed Time Windows:</p>
+                                <span className="text-[9px] text-primary font-semibold">Multi-Party Agreement</span>
                             </div>
                             <div className="grid grid-cols-2 gap-1.5">
                                 {schedule_options.map((slotOpt, idx) => {
@@ -672,11 +672,11 @@ export default function SellerShipmentsIndex({
                                             onClick={() => setScheduleInput(slotOpt)}
                                             className={`p-1.5 rounded-lg text-left text-[10px] font-mono active:scale-95 transition-all border ${
                                                 isCurrent
-                                                    ? "bg-orange-50 border-[#c2410c] text-[#c2410c]"
-                                                    : "bg-white border-slate-200/80 text-slate-700 hover:border-[#c2410c] hover:text-[#c2410c]"
+                                                    ? "bg-primary-container/60 border-primary text-primary"
+                                                    : "bg-surface-container-lowest border-outline-variant/80 text-on-surface-variant hover:border-primary hover:text-primary"
                                             }`}
                                         >
-                                            <span className="text-[8px] font-bold uppercase text-slate-400 block">
+                                            <span className="text-[8px] font-bold uppercase text-outline block">
                                                 {slotOpt === agreed_scheduled_for ? "Agreed" : `Window ${idx + 1}`}
                                             </span>
                                             {slotOpt.replace("T", " • ")}
@@ -687,27 +687,27 @@ export default function SellerShipmentsIndex({
                         </div>
                     )}
 
-                    <div className="p-2.5 rounded-xl bg-blue-50/60 flex items-start gap-1.5">
-                        <span className="material-symbols-outlined text-[15px] text-blue-500 shrink-0 mt-0.5">info</span>
-                        <p className="text-[11px] text-slate-500 leading-snug">
-                            <strong className="text-gray-700">Agreement Protocol:</strong> Picking cannot start until the
+                    <div className="p-2.5 rounded-xl bg-info-container/35 flex items-start gap-1.5">
+                        <span className="material-symbols-outlined text-[15px] text-info shrink-0 mt-0.5">info</span>
+                        <p className="text-[11px] text-on-surface-variant leading-snug">
+                            <strong className="text-on-surface-variant">Agreement Protocol:</strong> Picking cannot start until the
                             fleet, the origin dock and the receiving dock all accept the same window.
                         </p>
                     </div>
                 </div>
 
                 {/* ── 4-Party Inbound Agreement Gate ── */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
                     <div className="flex items-center justify-between mb-3">
                         <div>
-                            <p className="text-[13px] font-bold text-gray-900">4-Party Inbound Agreement Gate</p>
-                            <p className="text-[10px] text-slate-400">
+                            <p className="text-[13px] font-bold text-on-surface">4-Party Inbound Agreement Gate</p>
+                            <p className="text-[10px] text-outline">
                                 {outstanding_parties.length === 0
                                     ? "All parties agreed"
                                     : `Awaiting ${outstanding_parties.length} of 4 — tap a party for detail`}
                             </p>
                         </div>
-                        <span className="text-[10px] font-bold text-[#c2410c] bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200/50">
+                        <span className="text-[10px] font-bold text-primary bg-primary-container/60 px-2 py-0.5 rounded-full border border-primary/15">
                             {4 - outstanding_parties.length}/4 AGREED
                         </span>
                     </div>
@@ -725,25 +725,25 @@ export default function SellerShipmentsIndex({
                             sub: agreements[key].role,
                             agreed: hasAgreed(key),
                         })).map((p, idx) => {
-                            const color = p.agreed ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-400 border-slate-200";
+                            const color = p.agreed ? "bg-success-container text-on-success-container border-success/30" : "bg-surface-container-low text-outline border-outline-variant";
                             return (
                             <button
                                 key={idx}
                                 type="button"
                                 onClick={() => setActivePartyModal(p.key)}
                                 className={`flex flex-col items-center p-1.5 rounded-xl border text-center transition-all cursor-pointer hover:shadow-xs active:scale-95 ${
-                                    p.agreed ? 'border-emerald-100 bg-emerald-50/50 hover:bg-emerald-100/60' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
+                                    p.agreed ? 'border-success/20 bg-success-container/30 hover:bg-success-container/60' : 'border-outline-variant/60 bg-surface-container-low hover:bg-surface-container'
                                 }`}
                             >
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center mb-1 border ${color}`}>
                                     <span className="material-symbols-outlined text-[12px]">{p.icon}</span>
                                 </div>
-                                <span className={`text-[8px] font-bold leading-tight w-full truncate ${p.agreed ? 'text-emerald-900' : 'text-gray-500'}`}>{p.label}</span>
-                                <span className="text-[7px] text-slate-400 leading-tight w-full truncate">{p.sub}</span>
+                                <span className={`text-[8px] font-bold leading-tight w-full truncate ${p.agreed ? 'text-on-success-container' : 'text-on-surface-variant'}`}>{p.label}</span>
+                                <span className="text-[7px] text-outline leading-tight w-full truncate">{p.sub}</span>
                                 <div className="mt-1 flex items-center justify-center w-full">
                                     {p.agreed 
-                                        ? <span className="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span> 
-                                        : <span className="material-symbols-outlined text-[12px] text-slate-300">hourglass_empty</span>
+                                        ? <span className="material-symbols-outlined text-[12px] text-success">check_circle</span> 
+                                        : <span className="material-symbols-outlined text-[12px] text-outline">hourglass_empty</span>
                                     }
                                 </div>
                             </button>
@@ -769,13 +769,13 @@ export default function SellerShipmentsIndex({
                 />
 
                 {/* ── Vehicle & Driver Selection ── */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-[#c2410c] text-[18px]">local_shipping</span>
-                            <p className="text-[13px] font-bold text-gray-900">Dedicated Fleet Carrier</p>
+                            <span className="material-symbols-outlined text-primary text-[18px]">local_shipping</span>
+                            <p className="text-[13px] font-bold text-on-surface">Dedicated Fleet Carrier</p>
                         </div>
-                        <span className="text-[10px] font-semibold text-slate-400">{vehicles.length} Available</span>
+                        <span className="text-[10px] font-semibold text-outline">{vehicles.length} Available</span>
                     </div>
                     
                     <div className="space-y-2 mb-3">
@@ -783,36 +783,36 @@ export default function SellerShipmentsIndex({
                             const sel = selectedVehicle === v.id;
                             return (
                                 <div key={v.id} onClick={() => setSelectedVehicle(v.id)}
-                                    className={`relative p-3 rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${sel ? "border-[#c2410c] bg-orange-50/30" : "border-slate-100 bg-slate-50 opacity-70"}`}>
-                                    {sel && <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#c2410c]" />}
+                                    className={`relative p-3 rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${sel ? "border-primary bg-primary-container/20" : "border-outline-variant/60 bg-surface-container-low opacity-70"}`}>
+                                    {sel && <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />}
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="flex items-center gap-2.5 min-w-0">
-                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${sel ? "bg-[#c2410c]" : "bg-slate-200"}`}>
-                                                <span className={`material-symbols-outlined text-[20px] ${sel ? "text-white" : "text-slate-500"}`}>
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${sel ? "bg-primary" : "bg-surface-container-high"}`}>
+                                                <span className={`material-symbols-outlined text-[20px] ${sel ? "text-on-primary" : "text-on-surface-variant"}`}>
                                                     {v.icon === "directions_car" ? "directions_car" : "local_shipping"}
                                                 </span>
                                             </div>
                                             <div className="min-w-0">
-                                                <p className="text-[13px] font-bold text-gray-900 truncate">{v.name}</p>
-                                                <p className="text-[10px] font-mono text-slate-400">Plate: {v.plate}</p>
+                                                <p className="text-[13px] font-bold text-on-surface truncate">{v.name}</p>
+                                                <p className="text-[10px] font-mono text-outline">Plate: {v.plate}</p>
                                                 <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                                                    <span className="px-1.5 py-0.5 rounded border border-slate-200 text-[9px] text-slate-500">{v.max_cbm} CBM</span>
-                                                    <span className="px-1.5 py-0.5 rounded border border-slate-200 text-[9px] text-slate-500">{v.payload_kg.toLocaleString()} kg</span>
+                                                    <span className="px-1.5 py-0.5 rounded border border-outline-variant text-[9px] text-on-surface-variant">{v.max_cbm} CBM</span>
+                                                    <span className="px-1.5 py-0.5 rounded border border-outline-variant text-[9px] text-on-surface-variant">{v.payload_kg.toLocaleString()} kg</span>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${sel ? "bg-[#c2410c]" : "bg-slate-200"}`}>
-                                            <span className={`material-symbols-outlined text-[13px] ${sel ? "text-white" : "text-slate-400"}`}>
+                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${sel ? "bg-primary" : "bg-surface-container-high"}`}>
+                                            <span className={`material-symbols-outlined text-[13px] ${sel ? "text-on-primary" : "text-outline"}`}>
                                                 {sel ? "check" : "add"}
                                             </span>
                                         </div>
                                     </div>
                                     {sel && v.bay && (
-                                        <div className="mt-2 px-3 py-1.5 bg-white rounded-lg flex items-center justify-between border border-slate-100">
-                                            <span className="text-[10px] text-slate-400">Bay Status</span>
+                                        <div className="mt-2 px-3 py-1.5 bg-surface-container-lowest rounded-lg flex items-center justify-between border border-outline-variant/60">
+                                            <span className="text-[10px] text-outline">Bay Status</span>
                                             <div className="flex items-center gap-1">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-[#c2410c]" />
-                                                <span className="text-[10px] font-mono font-bold text-[#c2410c]">{v.bay} RESERVED</span>
+                                                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                                                <span className="text-[10px] font-mono font-bold text-primary">{v.bay} RESERVED</span>
                                             </div>
                                         </div>
                                     )}
@@ -827,29 +827,29 @@ export default function SellerShipmentsIndex({
                       accepts a window takes it. This used to be a picker over two
                       invented drivers that wrote to nothing.
                     */}
-                    <div className="mt-4 pt-3 border-t border-slate-100">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 block">Driver</label>
+                    <div className="mt-4 pt-3 border-t border-outline-variant/60">
+                        <label className="text-[10px] font-bold text-outline uppercase tracking-wide mb-2 block">Driver</label>
                         {courier ? (
-                            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-50/60 border border-emerald-100">
-                                <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center shrink-0">
-                                    <span className="material-symbols-outlined text-white text-[18px]">person</span>
+                            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-success-container/35 border border-success/20">
+                                <div className="w-9 h-9 rounded-xl bg-success flex items-center justify-center shrink-0">
+                                    <span className="material-symbols-outlined text-on-success text-[18px]">person</span>
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-[12px] font-bold text-gray-900 truncate">{courier.name}</p>
-                                    <p className="text-[10px] font-mono text-slate-500">{courier.phone || "No number on file"}</p>
+                                    <p className="text-[12px] font-bold text-on-surface truncate">{courier.name}</p>
+                                    <p className="text-[10px] font-mono text-on-surface-variant">{courier.phone || "No number on file"}</p>
                                 </div>
-                                <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-700 shrink-0">
+                                <span className="text-[9px] font-bold uppercase tracking-wide text-success shrink-0">
                                     {agreements.fleet.status_label}
                                 </span>
                             </div>
                         ) : (
-                            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                                <div className="w-9 h-9 rounded-xl bg-slate-200 flex items-center justify-center shrink-0">
-                                    <span className="material-symbols-outlined text-slate-500 text-[18px]">person_search</span>
+                            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-surface-container-low border border-outline-variant/60">
+                                <div className="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center shrink-0">
+                                    <span className="material-symbols-outlined text-on-surface-variant text-[18px]">person_search</span>
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="text-[12px] font-bold text-gray-700">On the courier board</p>
-                                    <p className="text-[10px] text-slate-400">The driver who accepts a window takes the run.</p>
+                                    <p className="text-[12px] font-bold text-on-surface-variant">On the courier board</p>
+                                    <p className="text-[10px] text-outline">The driver who accepts a window takes the run.</p>
                                 </div>
                             </div>
                         )}
@@ -857,11 +857,11 @@ export default function SellerShipmentsIndex({
                 </div>
 
                 {/* ── Volumetric Load Telemetry ── */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-[#c2410c] text-[18px]">view_in_ar</span>
-                            <p className="text-[13px] font-bold text-gray-900">Volumetric Load Telemetry</p>
+                            <span className="material-symbols-outlined text-primary text-[18px]">view_in_ar</span>
+                            <p className="text-[13px] font-bold text-on-surface">Volumetric Load Telemetry</p>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${loadCls}`}>{loadLabel} ({cbmPercent}%)</span>
                     </div>
@@ -870,36 +870,36 @@ export default function SellerShipmentsIndex({
                         <div className="flex-1 min-w-0 space-y-3">
                             <div>
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[11px] font-semibold text-slate-500">Volume</span>
-                                    <span className="text-[11px] font-bold font-mono text-gray-800">{totalCbm.toFixed(1)} / {maxCbm} m³</span>
+                                    <span className="text-[11px] font-semibold text-on-surface-variant">Volume</span>
+                                    <span className="text-[11px] font-bold font-mono text-on-surface">{totalCbm.toFixed(1)} / {maxCbm} m³</span>
                                 </div>
-                                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full transition-all ${cbmPercent > 85 ? "bg-red-500" : "bg-[#c2410c]"}`}
+                                <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full transition-all ${cbmPercent > 85 ? "bg-error" : "bg-primary"}`}
                                         style={{ width: `${cbmPercent}%` }} />
                                 </div>
-                                <p className="text-[10px] font-bold text-[#c2410c] mt-0.5">{(maxCbm - totalCbm).toFixed(1)} CBM Remaining</p>
+                                <p className="text-[10px] font-bold text-primary mt-0.5">{(maxCbm - totalCbm).toFixed(1)} CBM Remaining</p>
                             </div>
                             <div>
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[11px] font-semibold text-slate-500">Mass</span>
-                                    <span className="text-[11px] font-bold font-mono text-gray-800">{Math.round(totalKg).toLocaleString()} / {maxKg.toLocaleString()} kg</span>
+                                    <span className="text-[11px] font-semibold text-on-surface-variant">Mass</span>
+                                    <span className="text-[11px] font-bold font-mono text-on-surface">{Math.round(totalKg).toLocaleString()} / {maxKg.toLocaleString()} kg</span>
                                 </div>
-                                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full transition-all ${kgPercent > 90 ? "bg-red-500" : "bg-slate-400"}`}
+                                <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full transition-all ${kgPercent > 90 ? "bg-error" : "bg-outline"}`}
                                         style={{ width: `${kgPercent}%` }} />
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 text-center gap-2">
+                    <div className="mt-3 pt-3 border-t border-outline-variant/60 grid grid-cols-3 text-center gap-2">
                         {[
                             { label: "SKUs",      value: items.length },
                             { label: "Cartons",   value: totalCartons },
                             { label: "Pallet Eq", value: (totalCbm / 2.07).toFixed(1) },
                         ].map(s => (
                             <div key={s.label}>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">{s.label}</p>
-                                <p className="text-[17px] font-bold text-gray-900">{s.value}</p>
+                                <p className="text-[9px] font-bold text-outline uppercase tracking-wide">{s.label}</p>
+                                <p className="text-[17px] font-bold text-on-surface">{s.value}</p>
                             </div>
                         ))}
                     </div>
@@ -909,15 +909,15 @@ export default function SellerShipmentsIndex({
                 <RefillSuggestionsPanel shipmentId={transfer_id} panel={replenishment} />
 
                 {/* ── Replenishment Manifest ── */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
                     <div className="flex items-center justify-between mb-2">
                         <div>
-                            <p className="text-[13px] font-bold text-gray-900">Replenishment Manifest</p>
-                            <p className="text-[10px] text-slate-400">Calculated from inventory velocity</p>
+                            <p className="text-[13px] font-bold text-on-surface">Replenishment Manifest</p>
+                            <p className="text-[10px] text-outline">Calculated from inventory velocity</p>
                         </div>
                         <button onClick={() => setAddItemsOpen(true)} disabled={!can_edit_manifest}
                             title={can_edit_manifest ? undefined : "The manifest is locked once picking has started"}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#c2410c] text-white text-[12px] font-bold active:scale-95 transition-transform shrink-0 disabled:opacity-40">
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-[12px] font-bold active:scale-95 transition-transform shrink-0 disabled:opacity-40">
                             <span className="material-symbols-outlined text-[14px]">add</span>
                             Add Items
                         </button>
@@ -925,17 +925,17 @@ export default function SellerShipmentsIndex({
 
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-1">
-                            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 text-red-700 text-[11px] font-semibold bg-red-50">
+                            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-error/30 text-on-error-container text-[11px] font-semibold bg-error-container/60">
                                 <span className="material-symbols-outlined text-[13px]">priority_high</span>
                                 Priority: OOS First
                             </div>
                             <button onClick={() => alert("OOS (Out of Stock) items are given highest priority for replenishment runs to prevent lost sales.")} 
-                                className="w-6 h-6 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors">
+                                className="w-6 h-6 rounded-full flex items-center justify-center bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors">
                                 <span className="material-symbols-outlined text-[13px]">info</span>
                             </button>
                         </div>
                         <button onClick={() => setQuantities(Object.fromEntries(items.map(i => [i.id, i.quantity])))}
-                            className="flex items-center gap-1 text-red-400 text-[11px] font-medium">
+                            className="flex items-center gap-1 text-error text-[11px] font-medium">
                             <span className="material-symbols-outlined text-[13px]">delete_sweep</span>
                             Reset
                         </button>
@@ -943,23 +943,23 @@ export default function SellerShipmentsIndex({
 
                     <div className="space-y-2.5">
                         {items.length === 0 && (
-                            <div className="py-8 text-center bg-slate-50 rounded-xl border border-slate-100">
-                                <span className="material-symbols-outlined text-slate-300 text-[32px]">inventory_2</span>
-                                <p className="text-[13px] font-bold text-gray-900 mt-1">Manifest is empty</p>
-                                <p className="text-[11px] text-slate-400 mt-0.5">Add at least one line before this run can be scheduled.</p>
+                            <div className="py-8 text-center bg-surface-container-low rounded-xl border border-outline-variant/60">
+                                <span className="material-symbols-outlined text-outline text-[32px]">inventory_2</span>
+                                <p className="text-[13px] font-bold text-on-surface mt-1">Manifest is empty</p>
+                                <p className="text-[11px] text-outline mt-0.5">Add at least one line before this run can be scheduled.</p>
                             </div>
                         )}
                         {items.map(item => (
-                            <div key={item.id} className="p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                            <div key={item.id} className="p-3 rounded-xl border border-outline-variant/60 bg-surface-container-low/50">
                                 <div className="flex items-start justify-between gap-3 mb-2">
                                     <div className="flex items-start gap-2 min-w-0">
-                                        <div className={`w-9 h-9 mt-0.5 rounded-xl flex items-center justify-center shrink-0 ${item.status === "oos" ? "bg-red-100" : item.status === "low" ? "bg-amber-100" : item.status === "sold" ? "bg-blue-100" : "bg-slate-100"}`}>
+                                        <div className={`w-9 h-9 mt-0.5 rounded-xl flex items-center justify-center shrink-0 ${item.status === "oos" ? "bg-error-container" : item.status === "low" ? "bg-warning-container" : item.status === "sold" ? "bg-info-container" : "bg-surface-container"}`}>
                                             <ItemIcon icon={item.icon} />
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-[12px] font-bold text-gray-900 truncate">{item.name}</p>
+                                            <p className="text-[12px] font-bold text-on-surface truncate">{item.name}</p>
                                             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                                <span className="text-[10px] font-mono text-slate-400">{item.sku}</span>
+                                                <span className="text-[10px] font-mono text-outline">{item.sku}</span>
                                                 <StatusBadge status={item.status}
                                                     label={item.status === "oos"
                                                         ? `${item.status_label} (0)`
@@ -975,57 +975,57 @@ export default function SellerShipmentsIndex({
                                                   means two runs — the swap button below
                                                   moves a line onto the other one.
                                                 */}
-                                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-0.5">
+                                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-info-container/60 text-on-info-container border-info/30 flex items-center gap-0.5">
                                                     <span className="material-symbols-outlined text-[10px]">storefront</span>
                                                     To: {destination.name}
                                                 </span>
                                             </div>
                                             {/* Who added it / reason row */}
                                             {item.added_by && (
-                                                <div className="flex items-center gap-1 bg-slate-100/80 px-2 py-1 rounded mt-1.5 w-fit border border-slate-200/50">
-                                                    <span className={`material-symbols-outlined text-[11px] ${item.added_by.type === 'auto' ? 'text-blue-500' : 'text-emerald-500'}`}>
+                                                <div className="flex items-center gap-1 bg-surface-container/80 px-2 py-1 rounded mt-1.5 w-fit border border-outline-variant/50">
+                                                    <span className={`material-symbols-outlined text-[11px] ${item.added_by.type === 'auto' ? 'text-info' : 'text-success'}`}>
                                                         {item.added_by.type === 'auto' ? 'smart_toy' : 'person'}
                                                     </span>
-                                                    <span className="text-[9px] text-slate-500 font-medium">
-                                                        {item.added_by.type === 'auto' ? 'Auto-added:' : `Added by ${item.added_by.name}:`} <span className="text-slate-700">{item.added_by.reason}</span>
+                                                    <span className="text-[9px] text-on-surface-variant font-medium">
+                                                        {item.added_by.type === 'auto' ? 'Auto-added:' : `Added by ${item.added_by.name}:`} <span className="text-on-surface-variant">{item.added_by.reason}</span>
                                                     </span>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
                                     <div className="text-right shrink-0">
-                                        <p className="text-[13px] font-bold text-[#c2410c]">{quantities[item.id]} {item.unit}</p>
-                                        <p className="text-[10px] font-mono text-slate-400">
+                                        <p className="text-[13px] font-bold text-primary">{quantities[item.id]} {item.unit}</p>
+                                        <p className="text-[10px] font-mono text-outline">
                                             {(item.cbm * (quantities[item.id] ?? 0) / item.quantity).toFixed(1)} CBM
                                         </p>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center justify-between bg-white rounded-lg px-2.5 py-1.5 border border-slate-100 mt-2">
+                                <div className="flex items-center justify-between bg-surface-container-lowest rounded-lg px-2.5 py-1.5 border border-outline-variant/60 mt-2">
                                     <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="material-symbols-outlined text-[13px] text-slate-400 shrink-0">warehouse</span>
-                                        <span className="text-[11px] text-slate-500 truncate">{item.location}</span>
+                                        <span className="material-symbols-outlined text-[13px] text-outline shrink-0">warehouse</span>
+                                        <span className="text-[11px] text-on-surface-variant truncate">{item.location}</span>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
                                         <button onClick={() => setMoveItem(item)} disabled={!can_edit_manifest}
-                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-slate-100 disabled:opacity-30" title="Move line to another run">
-                                            <span className="material-symbols-outlined text-[13px] text-slate-400">swap_horiz</span>
+                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-surface-container disabled:opacity-30" title="Move line to another run">
+                                            <span className="material-symbols-outlined text-[13px] text-outline">swap_horiz</span>
                                         </button>
                                         <button onClick={() => handleRemoveItem(item.id)}
                                             disabled={!can_edit_manifest || busy === "remove"}
-                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-red-50 disabled:opacity-30" title="Remove line">
-                                            <span className="material-symbols-outlined text-[13px] text-red-400">delete_outline</span>
+                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-error-container/60 disabled:opacity-30" title="Remove line">
+                                            <span className="material-symbols-outlined text-[13px] text-error">delete_outline</span>
                                         </button>
                                         <button onClick={() => handleQty(item.id, -1)}
-                                            className="w-6 h-6 rounded-lg border border-slate-200 bg-white flex items-center justify-center active:bg-slate-100">
-                                            <span className="material-symbols-outlined text-[13px] text-slate-600">remove</span>
+                                            className="w-6 h-6 rounded-lg border border-outline-variant bg-surface-container-lowest flex items-center justify-center active:bg-surface-container">
+                                            <span className="material-symbols-outlined text-[13px] text-on-surface-variant">remove</span>
                                         </button>
-                                        <span className="text-[13px] font-bold font-mono text-gray-900 min-w-[22px] text-center">
+                                        <span className="text-[13px] font-bold font-mono text-on-surface min-w-[22px] text-center">
                                             {quantities[item.id]}
                                         </span>
                                         <button onClick={() => handleQty(item.id, 1)}
-                                            className="w-6 h-6 rounded-lg border border-slate-200 bg-white flex items-center justify-center active:bg-slate-100">
-                                            <span className="material-symbols-outlined text-[13px] text-slate-600">add</span>
+                                            className="w-6 h-6 rounded-lg border border-outline-variant bg-surface-container-lowest flex items-center justify-center active:bg-surface-container">
+                                            <span className="material-symbols-outlined text-[13px] text-on-surface-variant">add</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1037,29 +1037,29 @@ export default function SellerShipmentsIndex({
             </div>
 
             {/* ── Fixed Bottom Actions Layer (Positioned ABOVE the SellerLayout Bottom Nav) ── */}
-            <div className="fixed left-0 right-0 z-40 bg-gradient-to-t from-white via-white/95 to-transparent pt-8 pb-3 px-4 pointer-events-none" style={{ bottom: "calc(85px + env(safe-area-inset-bottom, 0px))" }}>
+            <div className="fixed left-0 right-0 z-40 bg-gradient-to-t from-surface-container-lowest via-surface-container-lowest/95 to-transparent pt-8 pb-3 px-4 pointer-events-none" style={{ bottom: "calc(85px + env(safe-area-inset-bottom, 0px))" }}>
                 <div className="max-w-[425px] mx-auto flex items-center justify-between gap-3 pointer-events-auto">
-                    <div className="flex items-center gap-1.5 bg-slate-800 text-white px-3 py-2 rounded-2xl shadow-lg shrink-0">
-                        <span className="material-symbols-outlined text-[18px] text-emerald-400">speed</span>
+                    <div className="flex items-center gap-1.5 bg-inverse-surface text-inverse-on-surface px-3 py-2 rounded-2xl shadow-lg shrink-0">
+                        <span className="material-symbols-outlined text-[18px] text-success">speed</span>
                         <div className="flex flex-col">
-                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wide leading-none mb-0.5">Volumetric Load</span>
+                            <span className="text-[8px] font-bold text-outline uppercase tracking-wide leading-none mb-0.5">Volumetric Load</span>
                             <span className="text-[10px] font-bold tracking-wide leading-none">Telemetry</span>
                         </div>
                     </div>
 
-                    <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-xl px-3 py-2 flex items-center justify-between gap-2 min-w-0 pointer-events-auto">
+                    <div className="flex-1 bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-xl px-3 py-2 flex items-center justify-between gap-2 min-w-0 pointer-events-auto">
                         <div className="min-w-0">
                             <div className="flex items-baseline gap-1 truncate">
-                                <span className="text-[14px] font-bold text-[#c2410c]">{totalCbm.toFixed(1)} CBM</span>
-                                <span className="w-1 h-1 rounded-full bg-slate-300 inline-block shrink-0" />
-                                <span className="text-[13px] font-bold text-gray-900">{items.length} SKUs</span>
+                                <span className="text-[14px] font-bold text-primary">{totalCbm.toFixed(1)} CBM</span>
+                                <span className="w-1 h-1 rounded-full bg-surface-container-highest inline-block shrink-0" />
+                                <span className="text-[13px] font-bold text-on-surface">{items.length} SKUs</span>
                             </div>
-                            <p className="text-[10px] text-slate-400 truncate">{Math.round(totalKg).toLocaleString()} kg • {activeVehicle?.name ?? "No vehicle"}</p>
+                            <p className="text-[10px] text-outline truncate">{Math.round(totalKg).toLocaleString()} kg • {activeVehicle?.name ?? "No vehicle"}</p>
                         </div>
                         <button
                             onClick={handleSaveManifest}
                             disabled={busy === "save"}
-                            className="flex items-center gap-1 px-3 py-2 rounded-xl bg-[#c2410c] text-white font-bold text-[12px] shadow-md shrink-0 active:scale-95 transition-transform disabled:opacity-50">
+                            className="flex items-center gap-1 px-3 py-2 rounded-xl bg-primary text-on-primary font-bold text-[12px] shadow-md shrink-0 active:scale-95 transition-transform disabled:opacity-50">
                             {busy === "save" ? "Saving…" : "Review"}
                             <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                         </button>

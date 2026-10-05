@@ -177,7 +177,7 @@ export default function Dashboard({
                     </Typography>
                 </Box>
                 <Stack direction="row" spacing={0.5} alignItems="center">
-                    <Box sx={{ bgcolor: `${color}.main`, p: 1.5, borderRadius: '10px', color: 'white', display: 'flex' }}>
+                    <Box sx={{ bgcolor: `${color}.main`, p: 1.5, borderRadius: '10px', color: `${color}.contrastText`, display: 'flex' }}>
                         {icon}
                     </Box>
                     {cardKey && (

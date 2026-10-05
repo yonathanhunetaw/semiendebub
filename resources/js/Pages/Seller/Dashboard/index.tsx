@@ -20,9 +20,8 @@ import ImageNotSupportedIcon from "@mui/icons-material/ImageNotSupported";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import React from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { SellerCard } from "@/Components/Seller/sellerUi";
+import { SellerCard, sellerShadow } from "@/Components/Seller/sellerUi";
 import StockCaption from "@/Components/Seller/StockCaption";
-import { SELLER_BRAND_DARK } from "@/Components/Seller/sellerConstants";
 import { Html5QrcodeScanner } from "html5-qrcode";
 
 // ======================== SVG PLACEHOLDER ========================
@@ -114,8 +113,8 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
     return (
         <Tooltip title={`Discount ends: ${new Date(endsAt).toLocaleString()}`} arrow>
             <Stack direction="row" alignItems="center" spacing={0.5}>
-                <AccessTimeIcon sx={{ fontSize: "0.85rem", color: "#fbbf24" }} />
-                <Typography variant="caption" sx={{ fontWeight: 700, color: "#fff", fontSize: "0.75rem" }}>
+                <AccessTimeIcon sx={{ fontSize: "0.85rem", color: "rgb(var(--inverse-primary))" }} />
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "rgb(var(--inverse-on-surface))", fontSize: "0.75rem" }}>
                     {label}
                 </Typography>
             </Stack>
@@ -249,9 +248,9 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
     return (
         <SellerLayout>
             <Head title="Seller Dashboard" />
-            <Box sx={{ bgcolor: "#f8fafc", minHeight: "100vh", pb: 10 }}>
+            <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pb: 10 }}>
                 {/* ========== SEARCH HEADER ========== */}
-                <Box sx={{ px: { xs: 2, md: 4 }, pt: 2, pb: 2, bgcolor: "background.paper", borderBottom: "1px solid #e2e8f0" }}>
+                <Box sx={{ px: { xs: 2, md: 4 }, pt: 2, pb: 2, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }}>
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%" }}>
                         <Box
                             sx={{
@@ -261,10 +260,11 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                 px: 2,
                                 py: 1,
                                 borderRadius: 999,
-                                bgcolor: "#f1f5f9",
-                                border: "1px solid #e2e8f0",
+                                bgcolor: "rgb(var(--surface-container))",
+                                border: "1px solid",
+                                borderColor: "divider",
                                 transition: "border-color 0.2s, background 0.2s",
-                                "&:focus-within": { borderColor: SELLER_BRAND_DARK, bgcolor: "#fff" },
+                                "&:focus-within": { borderColor: "primary.main", bgcolor: "background.paper" },
                             }}
                         >
                             <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
@@ -284,9 +284,9 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                 width: 48,
                                 height: 48,
                                 borderRadius: 999,
-                                bgcolor: SELLER_BRAND_DARK,
-                                color: "#fff",
-                                "&:hover": { bgcolor: "#0f2b4a" },
+                                bgcolor: "primary.main",
+                                color: "primary.contrastText",
+                                "&:hover": { bgcolor: "rgb(var(--primary) / 0.9)" },
                             }}
                         >
                             <SearchRoundedIcon />
@@ -298,7 +298,8 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                 width: 48,
                                 height: 48,
                                 borderRadius: 999,
-                                border: "1px solid #e2e8f0",
+                                border: "1px solid",
+                                borderColor: "divider",
                                 color: "text.secondary",
                             }}
                         >
@@ -347,13 +348,13 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                                     width: 56,
                                                     height: 56,
                                                     borderRadius: "50%",
-                                                    bgcolor: cat === "Active Inventory" ? "#dae2fd" : "#f1f5f9",
+                                                    bgcolor: cat === "Active Inventory" ? "rgb(var(--primary-container))" : "rgb(var(--surface-container))",
                                                     display: "flex",
                                                     alignItems: "center",
                                                     justifyContent: "center",
-                                                    border: cat === "Active Inventory" ? "2px solid #131b2e" : "none",
+                                                    border: cat === "Active Inventory" ? "2px solid rgb(var(--on-surface))" : "none",
                                                     transition: "all 0.2s",
-                                                    "&:hover": { transform: "scale(1.05)", bgcolor: "#dae2fd" },
+                                                    "&:hover": { transform: "scale(1.05)", bgcolor: "rgb(var(--primary-container))" },
                                                 }}
                                             >
                                                 {iconMap[cat] || <span className="material-symbols-outlined">category</span>}
@@ -373,7 +374,7 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                         px: 2,
                                         py: 0.5,
                                         borderRadius: 999,
-                                        bgcolor: "#e2e8f0",
+                                        bgcolor: "rgb(var(--surface-container-high))",
                                         color: "text.secondary",
                                         fontSize: "0.75rem",
                                         fontWeight: 500,
@@ -435,13 +436,13 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                         p: 0,
                                         overflow: "hidden",
                                         borderRadius: 3,
-                                        bgcolor: "#fff",
-                                        border: "1px solid #f1f5f9",
-                                        boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                                        bgcolor: "background.paper",
+                                        border: "1px solid rgb(var(--outline-variant) / 0.6)",
+                                        boxShadow: sellerShadow("0 2px 8px", 0.04),
                                         transition: "transform 0.2s, box-shadow 0.2s",
                                         "&:hover": {
                                             transform: "translateY(-4px)",
-                                            boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+                                            boxShadow: sellerShadow("0 8px 24px", 0.08),
                                         },
                                         cursor: "pointer",
                                         textDecoration: "none",
@@ -453,7 +454,7 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                             position: "relative",
                                             width: "100%",
                                             aspectRatio: "1 / 1",
-                                            bgcolor: "#f0f0f0",
+                                            bgcolor: "rgb(var(--surface-container))",
                                             overflow: "hidden",
                                         }}
                                     >
@@ -463,7 +464,7 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                                     position: "absolute",
                                                     inset: 0,
                                                     background:
-                                                        "linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.2) 50%, transparent 75%)",
+                                                        "linear-gradient(90deg, transparent 25%, rgb(var(--surface-bright) / 0.2) 50%, transparent 75%)",
                                                     backgroundSize: "200% 100%",
                                                     animation: "shimmer 1.4s infinite",
                                                 }}
@@ -501,14 +502,14 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                                             left: 0,
                                                             width: "100%",
                                                             zIndex: 3,
-                                                            bgcolor: "rgba(0,0,0,0.7)",
+                                                            bgcolor: "rgb(var(--inverse-surface) / 0.7)",
                                                             backdropFilter: "blur(4px)",
                                                             px: 1,
                                                             py: 0.5,
                                                             display: "flex",
                                                             justifyContent: "center",
                                                             alignItems: "center",
-                                                            borderBottom: "1px solid rgba(255,255,255,0.1)",
+                                                            borderBottom: "1px solid rgb(var(--inverse-on-surface) / 0.1)",
                                                         }}
                                                     >
                                                         <DiscountCountdown endsAt={discountEnds} />
@@ -522,13 +523,13 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                                         top: 36,
                                                         left: 8,
                                                         zIndex: 2,
-                                                        bgcolor: "#b61722",
-                                                        color: "#fff",
+                                                        bgcolor: "error.main",
+                                                        color: "error.contrastText",
                                                         fontWeight: 700,
                                                         fontSize: "0.7rem",
                                                         height: 26,
                                                         borderRadius: 1,
-                                                        boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                                                        boxShadow: sellerShadow("0 2px 8px", 0.15),
                                                         pointerEvents: "none",
                                                     }}
                                                 />
@@ -543,13 +544,13 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
                                                     bottom: 8,
                                                     left: 8,
                                                     zIndex: 2,
-                                                    bgcolor: "#1e293b",
-                                                    color: "#fff",
+                                                    bgcolor: "rgb(var(--inverse-surface))",
+                                                    color: "rgb(var(--inverse-on-surface))",
                                                     fontWeight: 600,
                                                     fontSize: "0.65rem",
                                                     height: 22,
                                                     borderRadius: 1,
-                                                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                                                    boxShadow: sellerShadow("0 2px 4px", 0.2),
                                                     pointerEvents: "none",
                                                 }}
                                             />

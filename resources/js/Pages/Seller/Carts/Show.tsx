@@ -1,7 +1,7 @@
 import {
     SellerCard,
     SellerHeader,
-    SELLER_BRAND_DARK,
+    
     sellerName,
     sellerPrice,
 } from "@/Components/Seller/sellerUi";
@@ -19,7 +19,6 @@ import {
     ListItemText,
     Stack,
     Typography,
-    useTheme,
     Chip,
 } from "@mui/material";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -51,8 +50,6 @@ interface Cart {
 }
 
 export default function Show({ cart }: { cart: Cart }) {
-    const theme = useTheme();
-    const isDark = theme.palette.mode === "dark";
 
     const customerFullname = cart.customer
         ? sellerName([cart.customer.first_name, cart.customer.last_name])
@@ -136,9 +133,7 @@ export default function Show({ cart }: { cart: Cart }) {
                                                 </IconButton>
                                             }
                                             sx={{
-                                                bgcolor: isDark
-                                                    ? "rgba(255,255,255,0.03)"
-                                                    : "rgba(0,0,0,0.02)",
+                                                bgcolor: "rgb(var(--on-surface) / 0.03)",
                                                 borderRadius: 2,
                                                 mb: 1,
                                             }}
@@ -146,8 +141,8 @@ export default function Show({ cart }: { cart: Cart }) {
                                             <ListItemAvatar>
                                                 <Avatar
                                                     sx={{
-                                                        bgcolor:
-                                                            SELLER_BRAND_DARK,
+                                                        bgcolor: "primary.main",
+                                                        color: "primary.contrastText",
                                                     }}
                                                 >
                                                     <ShoppingCartIcon fontSize="small" />
@@ -264,7 +259,7 @@ export default function Show({ cart }: { cart: Cart }) {
                                         <Typography
                                             variant="h5"
                                             fontWeight={900}
-                                            color={SELLER_BRAND_DARK}
+                                            color="primary.main"
                                         >
                                             {sellerPrice(totalAmount)} Birr
                                         </Typography>
@@ -275,7 +270,7 @@ export default function Show({ cart }: { cart: Cart }) {
                                         size="large"
                                         sx={{
                                             mt: 2,
-                                            bgcolor: SELLER_BRAND_DARK,
+                                            bgcolor: "primary.main",
                                             fontWeight: 900,
                                             py: 1.5,
                                         }}

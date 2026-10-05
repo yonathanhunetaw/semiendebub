@@ -8,7 +8,7 @@ interface StarProps {
 
 const Star = ({selected = false, onSelect}: StarProps) => (
     <FaStar
-        color={selected ? 'red' : 'gray'}
+        color={selected ? 'rgb(var(--primary))' : 'rgb(var(--outline))'}
         onClick={onSelect}
         style={{cursor: 'pointer'}}
     />

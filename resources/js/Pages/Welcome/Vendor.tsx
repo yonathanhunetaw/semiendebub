@@ -9,11 +9,11 @@ export default function VendorWelcome({auth}: PageProps) {
         <>
             <Head title="Vendor Portal"/>
             <AppNavbar auth={auth}/>
-            <div className="bg-orange-50 text-orange-900 min-h-screen flex flex-col">
+            <div className="bg-primary-container text-on-primary-container min-h-screen flex flex-col">
                 <main className="flex-1 flex items-center justify-center px-6">
                     <div className="max-w-xl text-center">
                         <h1 className="text-2xl font-semibold">Vendor Portal</h1>
-                        <p className="mt-2 text-orange-700">
+                        <p className="mt-2 text-primary">
                             Sign in to manage vendor products and listings.
                         </p>
                     </div>

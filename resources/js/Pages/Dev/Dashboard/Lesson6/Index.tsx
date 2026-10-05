@@ -24,10 +24,10 @@ export default function Index({ initialColors }: IndexProps) {
                     variant="h5"
                     sx={{
                         fontFamily: 'monospace',
-                        color: '#f1f1f1',
+                        color: 'text.primary',
                         mb: 3,
                         fontWeight: 700,
-                        borderBottom: '1px solid #2f2f2f',
+                        borderBottom: '1px solid rgb(var(--outline-variant))',
                         pb: 2
                     }}
                 >
@@ -40,8 +40,8 @@ export default function Index({ initialColors }: IndexProps) {
                             <Paper
                                 elevation={0}
                                 sx={{
-                                    bgcolor: '#1f1f1f',
-                                    border: '1px solid #2f2f2f',
+                                    bgcolor: 'background.paper',
+                                    border: '1px solid rgb(var(--outline-variant))',
                                     borderRadius: '8px',
                                     overflow: 'hidden',
                                     display: 'flex',
@@ -58,7 +58,7 @@ export default function Index({ initialColors }: IndexProps) {
                                     sx={{
                                         width: '100%',
                                         height: '180px',
-                                        bgcolor: '#0a0a0a',
+                                        bgcolor: 'rgb(var(--surface-container))',
                                         position: 'relative',
                                         display: 'flex',
                                         alignItems: 'center',
@@ -79,7 +79,7 @@ export default function Index({ initialColors }: IndexProps) {
                                     ) : (
                                         <Typography
                                             variant="body2"
-                                            sx={{ fontFamily: 'monospace', color: '#aaaaaa' }}
+                                            sx={{ fontFamily: 'monospace', color: 'text.secondary' }}
                                         >
                                             [ No Asset Registered ]
                                         </Typography>
@@ -91,11 +91,12 @@ export default function Index({ initialColors }: IndexProps) {
                                             position: 'absolute',
                                             bottom: '10px',
                                             right: '10px',
-                                            bgcolor: 'rgba(15, 15, 15, 0.85)',
+                                            // Dark chip on light, light chip on dark; the text is the asset's own (data) color.
+                                            bgcolor: 'rgb(var(--inverse-surface) / 0.85)',
                                             px: 1.5,
                                             py: 0.5,
                                             borderRadius: '4px',
-                                            border: '1px solid #2f2f2f',
+                                            border: '1px solid rgb(var(--inverse-on-surface) / 0.1)',
                                             fontSize: '12px',
                                             fontFamily: 'monospace',
                                             color: color.color,
@@ -111,7 +112,7 @@ export default function Index({ initialColors }: IndexProps) {
                                     <Typography
                                         variant="subtitle1"
                                         sx={{
-                                            color: '#f1f1f1',
+                                            color: 'text.primary',
                                             fontWeight: 600,
                                             textTransform: 'capitalize',
                                             fontFamily: 'Roboto, sans-serif'
@@ -121,7 +122,7 @@ export default function Index({ initialColors }: IndexProps) {
                                     </Typography>
 
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#888888' }}>
+                                        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
                                             RATING:
                                         </Typography>
                                         <Rating
@@ -129,8 +130,8 @@ export default function Index({ initialColors }: IndexProps) {
                                             readOnly
                                             size="small"
                                             sx={{
-                                                color: '#ffc107',
-                                                '& .MuiRating-iconEmpty': { color: '#333333' }
+                                                color: 'warning.main',
+                                                '& .MuiRating-iconEmpty': { color: 'rgb(var(--outline-variant))' }
                                             }}
                                         />
                                     </Box>

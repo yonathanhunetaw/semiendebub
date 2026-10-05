@@ -152,7 +152,7 @@ export default function Customers({ customers }: { customers: any[] }) {
                 textAlign: "center",
                 borderStyle: "dashed",
                 borderRadius: 3,
-                bgcolor: "grey.50",
+                bgcolor: "rgb(var(--surface-container-low))",
             }}
         >
             <PeopleAltOutlined sx={{ fontSize: 40, color: "text.disabled", mb: 1 }} />
@@ -212,7 +212,7 @@ export default function Customers({ customers }: { customers: any[] }) {
                 >
                     <Table>
                         <TableHead>
-                            <TableRow sx={{ "& th": { bgcolor: "grey.50", fontWeight: 700, color: "text.secondary", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "2px solid", borderColor: "divider" } }}>
+                            <TableRow sx={{ "& th": { bgcolor: "rgb(var(--surface-container-low))", fontWeight: 700, color: "text.secondary", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "2px solid", borderColor: "divider" } }}>
                                 <TableCell>Customer</TableCell>
                                 <TableCell>Type</TableCell>
                                 <TableCell>Contact</TableCell>

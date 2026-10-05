@@ -1,5 +1,5 @@
 import SellerLayout from "@/Layouts/SellerLayout";
-import { ABOVE_NAV, BRAND, INK, birr } from "@/Data/sellerOrderFlow";
+import { ABOVE_NAV, birr } from "@/Data/sellerOrderFlow";
 import type { PickPackLine, PickPackPlan, SourceRef, SourcingOption } from "@/types/sourcing";
 import { Head, Link, router } from "@inertiajs/react";
 import React, { useMemo, useState } from "react";
@@ -71,20 +71,19 @@ export default function PickPack({ reference, plan = null }: Props): React.React
         return (
             <>
                 <Head title="Pick & pack" />
-                <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F9FB] px-6 text-center">
-                    <span className="material-symbols-outlined text-[44px] text-slate-300">inventory_2</span>
-                    <p className="mt-3 text-[16px] font-bold" style={{ color: INK }}>
+                <div className="flex min-h-screen flex-col items-center justify-center bg-surface-container-low px-6 text-center">
+                    <span className="material-symbols-outlined text-[44px] text-outline">inventory_2</span>
+                    <p className="mt-3 text-[16px] font-bold text-on-surface">
                         Order not found
                     </p>
-                    <p className="mt-1 text-[12px] text-slate-500">
+                    <p className="mt-1 text-[12px] text-on-surface-variant">
                         {reference
                             ? `No paid order matches ${reference}.`
                             : "No reference supplied."}
                     </p>
                     <Link
                         href={route("seller.orders.queue")}
-                        className="mt-4 rounded-[999px] px-5 py-2 text-[13px] font-bold text-white active:scale-95"
-                        style={{ backgroundColor: BRAND }}
+                        className="mt-4 rounded-[999px] px-5 py-2 text-[13px] font-bold text-on-primary active:scale-95 bg-primary"
                     >
                         Orders to pick
                     </Link>
@@ -122,9 +121,9 @@ export default function PickPack({ reference, plan = null }: Props): React.React
         <>
             <Head title={`Pick & pack · ${sale.reference}`} />
 
-            <div className="min-h-screen bg-[#F8F9FB] pb-[200px]">
+            <div className="min-h-screen bg-surface-container-low pb-[200px]">
                 {/* ── Header ── */}
-                <header className="sticky top-0 z-40 border-b border-gray-100 bg-white px-4 py-3">
+                <header className="sticky top-0 z-40 border-b border-outline-variant/60 bg-surface-container-lowest px-4 py-3">
                     <div className="flex items-center justify-between">
                         <div className="flex min-w-0 items-center space-x-3">
                             <button
@@ -135,20 +134,20 @@ export default function PickPack({ reference, plan = null }: Props): React.React
                                         : router.visit(route("seller.orders.queue"))
                                 }
                                 aria-label="Back"
-                                className="-ml-1 p-1 text-gray-800"
+                                className="-ml-1 p-1 text-on-surface"
                             >
                                 <span className="material-symbols-outlined text-[22px]">chevron_left</span>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="truncate text-lg font-bold tracking-tight" style={{ color: INK }}>
+                                <h1 className="truncate text-lg font-bold tracking-tight text-on-surface">
                                     Pick &amp; pack
                                 </h1>
-                                <p className="truncate font-mono text-[11px] text-gray-400">
+                                <p className="truncate font-mono text-[11px] text-outline">
                                     {sale.reference} · {sale.customer ?? "Walk-in"}
                                 </p>
                             </div>
                         </div>
-                        <span className="shrink-0 rounded-[999px] border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+                        <span className="shrink-0 rounded-[999px] border border-info/30 bg-info-container/60 px-2 py-0.5 text-[10px] font-bold text-on-info-container">
                             {sale.stage_label}
                         </span>
                     </div>
@@ -157,13 +156,13 @@ export default function PickPack({ reference, plan = null }: Props): React.React
                         <div className="flex flex-1 items-center gap-1.5">
                             <span
                                 className={`material-symbols-outlined text-[15px] ${
-                                    allChosen ? "text-emerald-600" : "text-gray-400"
+                                    allChosen ? "text-success" : "text-outline"
                                 }`}
                             >
                                 where_to_vote
                             </span>
-                            <span className="text-[11px] font-semibold text-gray-600">Sourced</span>
-                            <span className="ml-auto font-mono text-[11px] font-bold text-gray-900">
+                            <span className="text-[11px] font-semibold text-on-surface-variant">Sourced</span>
+                            <span className="ml-auto font-mono text-[11px] font-bold text-on-surface">
                                 {stats.chosen}/{stats.total}
                             </span>
                         </div>
@@ -171,22 +170,22 @@ export default function PickPack({ reference, plan = null }: Props): React.React
                 </header>
 
                 {alreadyConfirmed ? (
-                    <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-[10px] border border-emerald-200 bg-emerald-50 px-3 py-2">
-                        <span className="material-symbols-outlined mt-0.5 shrink-0 text-[15px] text-emerald-800">
+                    <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-[10px] border border-success/30 bg-success-container/60 px-3 py-2">
+                        <span className="material-symbols-outlined mt-0.5 shrink-0 text-[15px] text-on-success-container">
                             check_circle
                         </span>
-                        <p className="text-[11px] leading-snug text-emerald-900">
+                        <p className="text-[11px] leading-snug text-on-success-container">
                             Sourcing was confirmed and this order has moved on to delivery.
                         </p>
                     </div>
                 ) : null}
 
                 {sale.delay_agreed ? (
-                    <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-[10px] border border-amber-200/80 bg-amber-100/50 px-3 py-2">
-                        <span className="material-symbols-outlined mt-0.5 shrink-0 text-[15px] text-amber-900">
+                    <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-[10px] border border-warning/25 bg-warning-container/50 px-3 py-2">
+                        <span className="material-symbols-outlined mt-0.5 shrink-0 text-[15px] text-on-warning-container">
                             schedule
                         </span>
-                        <p className="text-[11px] leading-snug text-amber-900">
+                        <p className="text-[11px] leading-snug text-on-warning-container">
                             The buyer agreed to a longer wait for warehouse-sourced items on this
                             order.
                         </p>
@@ -194,11 +193,11 @@ export default function PickPack({ reference, plan = null }: Props): React.React
                 ) : null}
 
                 {stats.unservable > 0 ? (
-                    <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-2">
-                        <span className="material-symbols-outlined mt-0.5 shrink-0 text-[15px] text-rose-700">
+                    <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-[10px] border border-error/30 bg-error-container/60 px-3 py-2">
+                        <span className="material-symbols-outlined mt-0.5 shrink-0 text-[15px] text-error">
                             error
                         </span>
-                        <p className="text-[11px] leading-snug text-rose-900">
+                        <p className="text-[11px] leading-snug text-on-error-container">
                             <strong className="font-bold">{stats.unservable} line(s)</strong> have no
                             single location holding the full quantity. Replenish first, or split the
                             order.
@@ -222,15 +221,15 @@ export default function PickPack({ reference, plan = null }: Props): React.React
 
             {/* ── Sticky CTA ── */}
             <nav
-                className="fixed inset-x-0 z-50 mx-auto max-w-[480px] rounded-t-[16px] border-t border-gray-200 bg-white px-4 py-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
+                className="fixed inset-x-0 z-50 mx-auto max-w-[480px] rounded-t-[16px] border-t border-outline-variant bg-surface-container-lowest px-4 py-2.5 shadow-[0_-4px_16px_rgb(var(--on-surface)/0.08)] dark:shadow-none"
                 style={{ bottom: ABOVE_NAV }}
             >
                 <div className="mx-auto flex max-w-md items-center justify-between gap-3">
                     <div>
-                        <span className="block font-mono text-[11px] text-gray-500">
+                        <span className="block font-mono text-[11px] text-on-surface-variant">
                             {stats.chosen}/{stats.total} sourced
                         </span>
-                        <span className="text-[11px] font-semibold text-gray-700">
+                        <span className="text-[11px] font-semibold text-on-surface-variant">
                             {alreadyConfirmed
                                 ? "Already confirmed"
                                 : allChosen
@@ -242,8 +241,7 @@ export default function PickPack({ reference, plan = null }: Props): React.React
                         type="button"
                         disabled={!allChosen || submitting || alreadyConfirmed}
                         onClick={confirm}
-                        className="max-w-[220px] flex-1 rounded-[999px] px-6 py-3 text-center text-sm font-bold text-white shadow-md transition-transform active:scale-[0.98] disabled:opacity-40"
-                        style={{ backgroundColor: BRAND }}
+                        className="max-w-[220px] flex-1 rounded-[999px] px-6 py-3 text-center text-sm font-bold text-on-primary shadow-md transition-transform active:scale-[0.98] disabled:opacity-40 bg-primary"
                     >
                         {submitting ? "Confirming…" : "Confirm & move to delivery"}
                     </button>
@@ -272,34 +270,34 @@ function LineCard({ line, chosen, disabled, onChoose }: LineCardProps): React.Re
 
     return (
         <div
-            className={`rounded-[16px] border bg-white p-3.5 shadow-sm ${
-                settled ? "border-emerald-300" : "border-gray-100"
+            className={`rounded-[16px] border bg-surface-container-lowest p-3.5 shadow-sm ${
+                settled ? "border-success/40" : "border-outline-variant/60"
             }`}
         >
             {/* Line identity */}
             <div className="flex items-start gap-3">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] border border-gray-100 bg-gray-50">
-                    <span className="material-symbols-outlined text-[22px] text-gray-400">inventory_2</span>
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] border border-outline-variant/60 bg-surface-container-low">
+                    <span className="material-symbols-outlined text-[22px] text-outline">inventory_2</span>
                 </div>
                 <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-[13px] font-bold leading-snug text-gray-900">
+                    <p className="line-clamp-2 text-[13px] font-bold leading-snug text-on-surface">
                         {line.title}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-gray-500">
+                    <p className="mt-0.5 text-[11px] text-on-surface-variant">
                         {line.variant_label} · ×{line.quantity}
                     </p>
-                    <p className="mt-0.5 font-mono text-[11px] text-gray-400">{birr(line.line_total)}</p>
+                    <p className="mt-0.5 font-mono text-[11px] text-outline">{birr(line.line_total)}</p>
                 </div>
                 {line.is_sourced ? (
-                    <span className="shrink-0 rounded-[999px] border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-700">
+                    <span className="shrink-0 rounded-[999px] border border-success/30 bg-success-container/60 px-2 py-0.5 text-[9px] font-bold uppercase text-on-success-container">
                         Picked
                     </span>
                 ) : null}
             </div>
 
             {/* Where it is picked from */}
-            <div className="mt-3 border-t border-slate-100 pt-2.5">
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+            <div className="mt-3 border-t border-outline-variant/60 pt-2.5">
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
                     Pick from
                 </p>
 
@@ -321,32 +319,31 @@ function LineCard({ line, chosen, disabled, onChoose }: LineCardProps): React.Re
                                 onClick={() => onChoose(option)}
                                 className={`flex w-full items-center gap-2 rounded-[10px] border px-2.5 py-2 text-left transition-colors ${
                                     active
-                                        ? "border-[#c2410c] bg-orange-50/60"
-                                        : "border-slate-200 bg-white hover:bg-slate-50"
+                                        ? "border-primary bg-primary-container/35"
+                                        : "border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low"
                                 } disabled:cursor-not-allowed disabled:opacity-40`}
                             >
                                 <span
-                                    className="material-symbols-outlined text-[18px]"
-                                    style={{ color: active ? BRAND : "#94a3b8" }}
+                                    className={`material-symbols-outlined text-[18px] ${active ? "text-primary" : "text-outline"}`}
                                 >
                                     {LEVEL_ICONS[option.kind] ?? LEVEL_ICONS.other}
                                 </span>
                                 <span className="min-w-0 flex-1">
                                     <span
                                         className={`block truncate text-[11px] font-bold ${
-                                            active ? "text-gray-900" : "text-gray-600"
+                                            active ? "text-on-surface" : "text-on-surface-variant"
                                         }`}
                                     >
                                         {option.level_label}
-                                        <span className="font-medium text-gray-400"> · {option.name}</span>
+                                        <span className="font-medium text-outline"> · {option.name}</span>
                                     </span>
-                                    <span className="block truncate text-[9px] text-gray-400">
+                                    <span className="block truncate text-[9px] text-outline">
                                         {option.on_hand} on hand
                                         {option.delayed ? ` · ${option.promise}` : ""}
                                     </span>
                                 </span>
                                 {active ? (
-                                    <span className="material-symbols-outlined shrink-0 text-[16px] text-emerald-600">
+                                    <span className="material-symbols-outlined shrink-0 text-[16px] text-success">
                                         check_circle
                                     </span>
                                 ) : null}
@@ -355,7 +352,7 @@ function LineCard({ line, chosen, disabled, onChoose }: LineCardProps): React.Re
                     })}
 
                     {line.options.length === 0 ? (
-                        <p className="text-[11px] text-slate-500">
+                        <p className="text-[11px] text-on-surface-variant">
                             This store has no stock-bearing locations configured.
                         </p>
                     ) : null}

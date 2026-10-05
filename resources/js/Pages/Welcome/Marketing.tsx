@@ -9,11 +9,11 @@ export default function MarketingWelcome({auth}: PageProps) {
         <>
             <Head title="Marketing Portal"/>
             <AppNavbar auth={auth}/>
-            <div className="bg-rose-50 text-rose-900 min-h-screen flex flex-col">
+            <div className="bg-primary-container text-on-primary-container min-h-screen flex flex-col">
                 <main className="flex-1 flex items-center justify-center px-6">
                     <div className="max-w-xl text-center">
                         <h1 className="text-2xl font-semibold">Marketing Portal</h1>
-                        <p className="mt-2 text-rose-700">
+                        <p className="mt-2 text-primary">
                             Log in to manage campaigns and promotions.
                         </p>
                     </div>

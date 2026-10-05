@@ -103,7 +103,7 @@ export default function Index({initialColors}: Lesson6Props) {
             {<div>{separator}</div>}
             {/*</Color>*/}
 
-            <Box component="section" sx={{ p: 2, border: '1px dashed grey' }}>
+            <Box component="section" sx={{ p: 2, border: '1px dashed rgb(var(--outline))' }}>
                 This Box renders as an HTML section element.
             </Box>
         </>

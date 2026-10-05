@@ -1,6 +1,5 @@
-import { SELLER_BRAND_DARK, SellerCard } from "@/Components/Seller/sellerUi";
+import { SellerCard } from "@/Components/Seller/sellerUi";
 import { Box, Stack } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import React from "react";
 import PackagingPlaceholder from "@/Components/Shared/PackagingPlaceholder";
 import { NO_IMAGE_PLACEHOLDER } from "./itemShowHelpers";
@@ -23,8 +22,6 @@ export default function ItemImageGallery({
     onSelectImage,
     onOpenViewer,
 }: ItemImageGalleryProps) {
-    const theme = useTheme();
-
     return (
         <SellerCard sx={{ p: 0, overflow: "hidden" }}>
             <Box
@@ -33,8 +30,7 @@ export default function ItemImageGallery({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    backgroundColor:
-                        theme.palette.mode === "dark" ? "#1a1a1a" : "#fff7ed",
+                    backgroundColor: "rgb(var(--primary-container) / 0.6)",
                     cursor: activeImage ? "zoom-in" : "default",
                 }}
                 onClick={() => activeImage && onOpenViewer()}
@@ -77,11 +73,11 @@ export default function ItemImageGallery({
                                 p: 0,
                                 border:
                                     activeImage === image
-                                        ? `2px solid ${SELLER_BRAND_DARK}`
-                                        : "1px solid rgba(148, 163, 184, 0.24)",
+                                        ? "2px solid rgb(var(--primary))"
+                                        : "1px solid rgb(var(--outline) / 0.24)",
                                 borderRadius: 2,
                                 overflow: "hidden",
-                                background: theme.palette.mode === "dark" ? "#333" : "#fff",
+                                bgcolor: "rgb(var(--surface-bright))",
                                 flexShrink: 0,
                                 cursor: "pointer",
                                 transition: "all 0.2s",

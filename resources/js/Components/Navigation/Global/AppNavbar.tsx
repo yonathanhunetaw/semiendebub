@@ -35,7 +35,10 @@ function AppNavbar({ auth }: AppNavbarProps) {
     const handleCloseUserMenu = () => setAnchorElUser(null);
 
     return (
-        <AppBar position="static" sx={{ backgroundColor: '#1f2937' }}>
+        <AppBar
+            position="static"
+            sx={{ bgcolor: 'rgb(var(--inverse-surface))', color: 'rgb(var(--inverse-on-surface))' }}
+        >
             <Container maxWidth="xl">
                 <Toolbar disableGutters>
                     {/* Mobile Menu */}
@@ -92,7 +95,7 @@ function AppNavbar({ auth }: AppNavbarProps) {
                                 component={Link} // Use Inertia Link for SPA navigation
                                 href={page.url}   // Points to the URL in your object
                                 onClick={handleCloseNavMenu}
-                                sx={{ my: 2, color: 'white', display: 'block' }}
+                                sx={{ my: 2, color: 'inherit', display: 'block' }}
                             >
                                 {page.name}
                             </Button>
@@ -177,7 +180,7 @@ export default AppNavbar;
 //         {pages.map((page) => (
 //             <Button
 //                 key={page}
-//                 sx={{ my: 2, color: 'white', display: 'block' }}
+//                 sx={{ my: 2, color: 'inherit', display: 'block' }}
 //             >
 //                 {page}
 //             </Button>

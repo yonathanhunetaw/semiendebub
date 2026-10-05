@@ -6,28 +6,17 @@ import {
     Paper,
     type PaperProps,
     Stack,
+    type Theme,
     Typography,
     useTheme,
 } from "@mui/material";
 import React from "react";
 
-// At the top of sellerUi.tsx
-import { 
-    SELLER_BRAND, 
-    SELLER_BRAND_DARK, 
-    SELLER_BG, 
-    SELLER_SURFACE, 
-    SELLER_CITY_OPTIONS 
-} from "./sellerConstants";
+import { SELLER_CITY_OPTIONS } from "./sellerConstants";
+import { FONT_SANS } from "@/theme";
 
-// Re-export them
-export { 
-    SELLER_BRAND, 
-    SELLER_BRAND_DARK, 
-    SELLER_BG, 
-    SELLER_SURFACE, 
-    SELLER_CITY_OPTIONS 
-};
+// Colors come from the theme tokens (MUI palette / rgb(var(--token))), not constants.
+export { SELLER_CITY_OPTIONS };
 
 export interface SellerHeaderProps {
     title: string;
@@ -44,20 +33,17 @@ export function SellerHeader({
     subtitle,
     children,
 }: SellerHeaderProps) {
-    const theme = useTheme();
-    const brandColor = theme.palette.primary.main;
-
     return (
         <Box
             sx={{
                 px: 2,
                 pt: 0, // Changed from "calc(16px + env(safe-area-inset-top))" to 0
                 pb: children ? 2 : 1.5,
-                color: "#fff",
-                background: `linear-gradient(180deg, ${brandColor} 0%, ${brandColor}dd 100%)`,
+                color: "primary.contrastText",
+                background: "linear-gradient(180deg, rgb(var(--primary)) 0%, rgb(var(--primary) / 0.87) 100%)",
                 borderBottomLeftRadius: 24,
                 borderBottomRightRadius: 24,
-                boxShadow: `0 18px 40px ${brandColor}33`,
+                boxShadow: "0 18px 40px rgb(var(--primary) / 0.2)",
             }}
         >
             <Stack spacing={children || subtitle ? 2 : 0}>
@@ -85,7 +71,7 @@ export function SellerHeader({
                             sx={{
                                 fontWeight: 800,
                                 lineHeight: 1.2,
-                                fontFamily: "Figtree, sans-serif",
+                                fontFamily: FONT_SANS,
                             }}
                         >
                             {title}
@@ -95,8 +81,8 @@ export function SellerHeader({
                                 variant="body2"
                                 sx={{
                                     mt: 0.5,
-                                    color: "rgba(255,255,255,0.86)",
-                                    fontFamily: "Figtree, sans-serif",
+                                    color: "rgb(var(--on-primary) / 0.86)",
+                                    fontFamily: FONT_SANS,
                                 }}
                             >
                                 {subtitle}
@@ -139,15 +125,12 @@ export function SellerCard({ children, sx, ...props }: SellerCardProps) {
                 p: 2,
                 borderRadius: 3,
                 border: "1px solid",
-                borderColor:
-                    theme.palette.mode === "dark"
-                        ? "rgba(255, 255, 255, 0.05)"
-                        : "rgba(148, 163, 184, 0.18)",
+                borderColor: "divider",
                 backgroundColor: "background.paper",
                 boxShadow:
                     theme.palette.mode === "dark"
                         ? "none"
-                        : "0 10px 30px rgba(15, 23, 42, 0.05)",
+                        : "0 10px 30px rgb(var(--on-surface) / 0.05)",
                 backgroundImage: "none",
                 ...sx,
             }}
@@ -228,15 +211,25 @@ export function sellerImage(src?: string | string[] | null) {
     return `/storage/${cleanPath.replace(/^\/+/, "")}`;
 }
 
+/**
+ * A soft drop shadow for an MUI `sx` boxShadow: ink-tinted (the on-surface
+ * token) in light mode, none in dark mode, where surfaces separate by tone.
+ *   boxShadow: sellerShadow("0 2px 8px", 0.04)
+ */
+export const sellerShadow =
+    (offsets: string, alpha: number) =>
+    ({ palette }: Theme): string =>
+        palette.mode === "dark" ? "none" : `${offsets} rgb(var(--on-surface) / ${alpha})`;
+
 export const sellerHeaderButtonSx = {
     width: 40,
     height: 40,
     flexShrink: 0,
-    color: "#fff",
-    border: "1px solid rgba(255,255,255,0.44)",
-    backgroundColor: "rgba(255,255,255,0.14)",
+    color: "primary.contrastText",
+    border: "1px solid rgb(var(--on-primary) / 0.44)",
+    backgroundColor: "rgb(var(--on-primary) / 0.14)",
     backdropFilter: "blur(8px)",
     "&:hover": {
-        backgroundColor: "rgba(255,255,255,0.22)",
+        backgroundColor: "rgb(var(--on-primary) / 0.22)",
     },
 };

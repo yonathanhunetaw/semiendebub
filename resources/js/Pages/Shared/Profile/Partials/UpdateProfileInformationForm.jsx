@@ -38,11 +38,11 @@ export default function UpdateProfileInformation({
     return (
         <section className={className}>
             <header>
-                <h2 className="text-lg font-medium text-white">
+                <h2 className="text-lg font-medium text-on-surface">
                     Profile Information
                 </h2>
 
-                <p className="mt-1 text-sm text-slate-400">
+                <p className="mt-1 text-sm text-on-surface-variant">
                     Update your account's profile information and email address.
                 </p>
             </header>
@@ -53,7 +53,6 @@ export default function UpdateProfileInformation({
                         <InputLabel
                             htmlFor="first_name"
                             value="First name"
-                            className="!text-slate-300"
                         />
 
                         <TextInput
@@ -74,7 +73,6 @@ export default function UpdateProfileInformation({
                         <InputLabel
                             htmlFor="last_name"
                             value="Last name"
-                            className="!text-slate-300"
                         />
 
                         <TextInput
@@ -94,7 +92,6 @@ export default function UpdateProfileInformation({
                     <InputLabel
                         htmlFor="email"
                         value="Email"
-                        className="!text-slate-300"
                     />
 
                     <TextInput
@@ -115,7 +112,6 @@ export default function UpdateProfileInformation({
                     <InputLabel
                         htmlFor="phone_number"
                         value="Phone number"
-                        className="!text-slate-300"
                     />
 
                     <TextInput
@@ -133,20 +129,20 @@ export default function UpdateProfileInformation({
 
                 {mustVerifyEmail && user.email_verified_at === null && (
                     <div>
-                        <p className="mt-2 text-sm text-slate-300">
+                        <p className="mt-2 text-sm text-on-surface-variant">
                             Your email address is unverified.
                             <Link
                                 href={route('verification.send')}
                                 method="post"
                                 as="button"
-                                className="ms-1 text-sm text-slate-400 underline rounded-md hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                                className="ms-1 text-sm text-on-surface-variant underline rounded-md hover:text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
                             >
                                 Click here to re-send the verification email.
                             </Link>
                         </p>
 
                         {status === 'verification-link-sent' && (
-                            <div className="mt-2 text-sm font-medium text-green-400">
+                            <div className="mt-2 text-sm font-medium text-success">
                                 A new verification link has been sent to your
                                 email address.
                             </div>
@@ -164,7 +160,7 @@ export default function UpdateProfileInformation({
                         leave="transition ease-in-out"
                         leaveTo="opacity-0"
                     >
-                        <p className="text-sm text-emerald-400">Saved.</p>
+                        <p className="text-sm text-success">Saved.</p>
                     </Transition>
                 </div>
             </form>

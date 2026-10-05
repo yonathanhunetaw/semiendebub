@@ -37,6 +37,9 @@ export default function ImageViewerDialog({
 }: ImageViewerDialogProps) {
     const hasThumbnailStrip = thumbnails && thumbnails.length > 0;
 
+    // Photo lightbox: a black backdrop with white controls in both light and
+    // dark mode, so photos are judged against a neutral black. These fixed
+    // colors are deliberate (kept in scripts/color-allowlist.txt).
     return (
         <Dialog
             open={open}

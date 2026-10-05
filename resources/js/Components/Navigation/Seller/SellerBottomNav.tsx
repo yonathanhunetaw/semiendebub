@@ -1,104 +1,79 @@
 import { Link, usePage } from "@inertiajs/react";
-import AppsRoundedIcon from "@mui/icons-material/AppsRounded";
-import CategoryRoundedIcon from "@mui/icons-material/CategoryRounded";
-import StorefrontRoundedIcon from "@mui/icons-material/StorefrontRounded";
-import ShoppingCartRoundedIcon from "@mui/icons-material/ShoppingCartRounded";
-import { BottomNavigation, BottomNavigationAction, Paper, useTheme } from "@mui/material";
 import React from "react";
 
 const navItems = [
-    {
-        value: "dashboard",
-        label: "Store",
-        icon: <StorefrontRoundedIcon />,
-        href: route("seller.dashboard"),
-    },
-    {
-        value: "categories",
-        label: "Categories",
-        icon: <CategoryRoundedIcon />,
-        href: route("seller.categories.index"),
-    },
-    {
-        value: "carts",
-        label: "Carts",
-        icon: <ShoppingCartRoundedIcon />,
-        href: route("seller.carts.index"),
-    },
-    {
-        value: "more",
-        label: "More",
-        icon: <AppsRoundedIcon />,
-        href: route("seller.menu.index"),
-    },
-];
+    { value: "dashboard", label: "Store", icon: "storefront", href: () => route("seller.dashboard") },
+    { value: "categories", label: "Categories", icon: "category", href: () => route("seller.categories.index") },
+    { value: "carts", label: "Carts", icon: "shopping_cart", href: () => route("seller.carts.index") },
+    { value: "more", label: "More", icon: "apps", href: () => route("seller.menu.index") },
+] as const;
 
-function currentTab(url: string) {
+type Tab = (typeof navItems)[number]["value"];
+
+function currentTab(url: string): Tab {
     const path = url.split("?")[0];
-
-    if (path.startsWith("/dashboard")) {
-        return "dashboard";
-    }
-
-    if (path.startsWith("/categories")) {
-        return "categories";
-    }
-
-    if (path.startsWith("/orders") || path.startsWith("/carts")) {
-        return "carts";
-    }
-
+    if (path.startsWith("/dashboard")) return "dashboard";
+    if (path.startsWith("/categories")) return "categories";
+    if (path.startsWith("/orders") || path.startsWith("/carts")) return "carts";
     return "more";
 }
 
-export default function SellerBottomNav() {
-    const { url } = usePage();
-    const theme = useTheme();
+interface SellerNavProps {
+    /** Shared by HandleInertiaRequests for sellers; null for other roles. */
+    seller?: { open_carts: number } | null;
+    [key: string]: unknown;
+}
+
+/**
+ * The seller's floating bottom bar: a rounded `primary` slab with `on-primary`
+ * tabs. The active tab gets a filled icon, bold label and a dot; Carts carries
+ * a badge with the seller's open carts. Positions itself (fixed, centred on
+ * the 480px shell), so layouts just render it.
+ */
+export default function SellerBottomNav(): React.ReactElement {
+    const { url, props } = usePage<SellerNavProps>();
+    const active = currentTab(url);
+    const openCarts = props.seller?.open_carts ?? 0;
 
     return (
-        <Paper
-            elevation={0}
-            sx={{
-                borderRadius: 999,
-                overflow: "hidden",
-                border: "1px solid",
-                borderColor: "divider",
-                boxShadow: theme.palette.mode === 'dark' ? "none" : "0 20px 48px rgba(15, 23, 42, 0.18)",
-                backdropFilter: "blur(16px)",
-                bgcolor: "background.paper",
-            }}
-        >
-            <BottomNavigation
-                showLabels
-                value={currentTab(url)}
-                sx={{
-                    height: 68,
-                    backgroundColor: "transparent",
-                    "& .MuiBottomNavigationAction-root": {
-                        minWidth: 0,
-                        color: "text.secondary",
-                        fontFamily: "Figtree, sans-serif",
-                    },
-                    "& .Mui-selected": {
-                        color: "primary.main",
-                    },
-                    "& .MuiBottomNavigationAction-label": {
-                        fontSize: 12,
-                        fontWeight: 700,
-                    },
-                }}
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[480px] px-3 pb-[calc(8px+env(safe-area-inset-bottom))] sm:max-w-full md:max-w-[1200px]">
+            <nav
+                aria-label="Seller navigation"
+                className="pointer-events-auto mx-auto flex h-16 max-w-[456px] items-center justify-around rounded-2xl bg-primary px-2 text-on-primary shadow-xl"
             >
-                {navItems.map((item) => (
-                    <BottomNavigationAction
-                        key={item.value}
-                        component={Link}
-                        href={item.href}
-                        value={item.value}
-                        label={item.label}
-                        icon={item.icon}
-                    />
-                ))}
-            </BottomNavigation>
-        </Paper>
+                {navItems.map((item) => {
+                    const isActive = item.value === active;
+                    return (
+                        <Link
+                            key={item.value}
+                            href={item.href()}
+                            aria-current={isActive ? "page" : undefined}
+                            className={`relative flex w-16 flex-col items-center justify-center py-1 transition-transform active:scale-95 ${
+                                isActive ? "text-on-primary" : "text-on-primary/80 hover:text-on-primary"
+                            }`}
+                        >
+                            <span className="relative">
+                                <span
+                                    className={`material-symbols-outlined text-[24px] ${
+                                        isActive ? "[font-variation-settings:'FILL'_1,'wght'_600]" : ""
+                                    }`}
+                                >
+                                    {item.icon}
+                                </span>
+                                {item.value === "carts" && openCarts > 0 && (
+                                    <span className="absolute -right-2 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-[999px] bg-on-primary px-1 text-[10px] font-bold text-primary shadow-sm">
+                                        {openCarts > 99 ? "99+" : openCarts}
+                                    </span>
+                                )}
+                            </span>
+                            <span className={`mt-0.5 text-[11px] tracking-tight ${isActive ? "font-bold" : "font-medium"}`}>
+                                {item.label}
+                            </span>
+                            {isActive && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-[999px] bg-on-primary" />}
+                        </Link>
+                    );
+                })}
+            </nav>
+        </div>
     );
 }

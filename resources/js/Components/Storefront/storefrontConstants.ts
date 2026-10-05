@@ -1,18 +1,20 @@
 import type { StockStatus } from "@/types/storefront";
 
 /**
- * Design tokens for the public storefront.
+ * Color tokens for the public storefront, for the places that set a color
+ * through `style` (hover handlers, conditional fills).
  *
- * Borrowed from the Seller module (`theme.ts` -> roles.seller.color, used
- * throughout Pages/Seller/Shipments) so buyer and seller surfaces read as one
- * product.
+ * They read the theme's CSS variables, so the storefront follows the role of
+ * the host it is served on (the root domain resolves to `admin`; the shop has
+ * no brand color of its own yet) and the app's light/dark mode. Text on a
+ * STOREFRONT_BRAND fill is `text-on-primary`.
  */
-export const STOREFRONT_BRAND = "#c2410c";
-export const STOREFRONT_BRAND_HOVER = "#9a3412";
-export const STOREFRONT_BRAND_SOFT = "#fff7ed";
-export const STOREFRONT_BRAND_BORDER = "#fed7aa";
-export const STOREFRONT_BG = "#f8fafc";
-export const STOREFRONT_SURFACE = "#ffffff";
+export const STOREFRONT_BRAND = "rgb(var(--primary))";
+export const STOREFRONT_BRAND_HOVER = "rgb(var(--primary) / 0.9)";
+export const STOREFRONT_BRAND_SOFT = "rgb(var(--primary-container))";
+export const STOREFRONT_BRAND_BORDER = "rgb(var(--primary) / 0.3)";
+export const STOREFRONT_BG = "rgb(var(--background))";
+export const STOREFRONT_SURFACE = "rgb(var(--surface-container-lowest))";
 
 export const STOREFRONT_CURRENCY = "ETB";
 
@@ -41,7 +43,11 @@ export const STOREFRONT_SHELL =
 export const STOREFRONT_GRID =
     "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4";
 
-/** Neutral SVG shown when a variant and its parent item both lack imagery. */
+/**
+ * Neutral SVG shown when a variant and its parent item both lack imagery.
+ * An image asset (data URI), so its slate fills are fixed: CSS variables do
+ * not reach inside it.
+ */
 export const NO_IMAGE_PLACEHOLDER =
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23f8fafc'/%3E%3Crect x='130' y='140' width='140' height='120' rx='10' fill='none' stroke='%23cbd5e1' stroke-width='8'/%3E%3Cpath d='M150 240 L190 195 L220 230 L245 205 L250 240 Z' fill='%23cbd5e1'/%3E%3Ccircle cx='230' cy='172' r='12' fill='%23cbd5e1'/%3E%3C/svg%3E";
 
@@ -55,18 +61,18 @@ export interface StockTone {
 export const STOCK_TONES: Record<StockStatus, StockTone> = {
     in_stock: {
         label: "In Stock",
-        className: "bg-emerald-50 text-emerald-700 border-emerald-200/70",
-        dotClassName: "bg-emerald-500",
+        className: "bg-success-container text-on-success-container border-success/30",
+        dotClassName: "bg-success",
     },
     low_stock: {
         label: "Low Stock",
-        className: "bg-amber-50 text-amber-700 border-amber-200/70",
-        dotClassName: "bg-amber-500",
+        className: "bg-warning-container text-on-warning-container border-warning/30",
+        dotClassName: "bg-warning",
     },
     out_of_stock: {
         label: "Out of Stock",
-        className: "bg-slate-100 text-slate-500 border-slate-200",
-        dotClassName: "bg-slate-400",
+        className: "bg-surface-container text-on-surface-variant border-outline-variant",
+        dotClassName: "bg-outline",
     },
 };
 

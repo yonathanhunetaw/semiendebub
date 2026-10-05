@@ -12,11 +12,11 @@ export default function WelcomeFooter() {
         <Box
             component="footer"
             sx={{
-                bgcolor: '#1a120b',
-                color: '#fdfbd4',
+                bgcolor: 'rgb(var(--surface-container-low))',
+                color: 'text.primary',
                 pt: 10,
                 pb: 4,
-                borderTop: '2px solid #c05800',
+                borderTop: '2px solid rgb(var(--primary))',
                 position: 'relative',
                 zIndex: 30
             }}
@@ -26,13 +26,13 @@ export default function WelcomeFooter() {
 
                     {/* Brand & mission */}
                     <Grid size={{ xs: 12, md: 4 }}>
-                        <Typography variant="h5" sx={{ fontWeight: 900, color: '#c05800', mb: 0.5, letterSpacing: 2 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 900, color: 'primary.main', mb: 0.5, letterSpacing: 2 }}>
                             MEZGEBE DIRIJIT
                         </Typography>
-                        <Typography sx={{ color: 'rgba(253,251,212,0.5)', fontSize: '0.8rem', letterSpacing: 1, mb: 2 }}>
+                        <Typography sx={{ color: 'text.secondary', fontSize: '0.8rem', letterSpacing: 1, mb: 2 }}>
                             መዝገበ ድርጅት · Business Registry
                         </Typography>
-                        <Typography variant="body2" sx={{ color: '#a1a1aa', lineHeight: 1.8, mb: 3 }}>
+                        <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.8, mb: 3 }}>
                             One registry for the whole company — stock, sales, procurement,
                             delivery, finance, people and every store you run, online and off.
                         </Typography>
@@ -79,10 +79,10 @@ export default function WelcomeFooter() {
                     </Grid>
                 </Grid>
 
-                <Divider sx={{ my: 6, borderColor: 'rgba(192, 88, 0, 0.2)' }} />
+                <Divider sx={{ my: 6, borderColor: 'rgb(var(--primary) / 0.2)' }} />
 
                 <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-                    <Typography sx={{ fontSize: '0.75rem', color: '#71717a', fontFamily: 'monospace' }}>
+                    <Typography sx={{ fontSize: '0.75rem', color: 'rgb(var(--outline))', fontFamily: 'monospace' }}>
                         © {new Date().getFullYear()} MEZGEBE DIRIJIT · ERP FOR GROWING COMPANIES
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 3 }}>
@@ -99,7 +99,7 @@ export default function WelcomeFooter() {
 
 function FooterHeading({ children }: { children: React.ReactNode }) {
     return (
-        <Typography variant="overline" sx={{ color: '#fdfbd4', fontWeight: 800, mb: 3, display: 'block', fontSize: '0.9rem' }}>
+        <Typography variant="overline" sx={{ color: 'text.primary', fontWeight: 800, mb: 3, display: 'block', fontSize: '0.9rem' }}>
             {children}
         </Typography>
     );
@@ -120,11 +120,11 @@ function FooterLink({ children, href, inertia = false, small = false }: FooterLi
             href={href}
             sx={{
                 display: 'block',
-                color: '#a1a1aa',
+                color: 'text.secondary',
                 textDecoration: 'none',
                 mb: small ? 0 : 1.5,
                 fontSize: small ? '0.75rem' : '0.875rem',
-                '&:hover': { color: '#c05800' }
+                '&:hover': { color: 'primary.main' }
             }}
         >
             {children}
@@ -134,7 +134,7 @@ function FooterLink({ children, href, inertia = false, small = false }: FooterLi
 
 function SocialIcon({ Icon, label }: { Icon: React.ElementType, label: string }) {
     return (
-        <IconButton aria-label={label} sx={{ color: '#c05800', border: '1px solid rgba(192, 88, 0, 0.3)' }}>
+        <IconButton aria-label={label} sx={{ color: 'primary.main', border: '1px solid rgb(var(--primary) / 0.3)' }}>
             <Icon fontSize="small" />
         </IconButton>
     );

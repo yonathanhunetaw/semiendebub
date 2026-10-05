@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Dev\DesignSystemController;
 use App\Http\Controllers\Dev\LibraryController;
 use App\Http\Controllers\Dev\LogViewerController;
 use App\Http\Controllers\Dev\SessionController;
@@ -49,6 +50,9 @@ Route::domain("dev.{$baseDomain}")
                 Route::get('/', [LibraryController::class, 'index'])->name('index');
                 Route::post('/refresh', [LibraryController::class, 'refresh'])->name('refresh');
             });
+
+            // Shared UI component showcase -> dev.<domain>/design-system
+            Route::get('/design-system', [DesignSystemController::class, 'index'])->name('design-system.index');
 
             /*
             |--------------------------------------------------------------------------

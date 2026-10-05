@@ -4,46 +4,58 @@ namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Item\ItemCategory;
+use App\Services\Seller\SellerCatalog;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class CategoryController extends Controller
 {
     /**
-     * Display a listing of the main item categories.
+     * Departments (top-level categories) in a rail, and the selected one's
+     * subcategories beside it. Categories are two levels deep, so a
+     * department's product count is its own active items plus its children's.
      * Corresponds to the route: seller.categories.index
      */
-    /**
-     * Display a listing of main item categories in a sidebar,
-     * and show the subcategories of the selected parent in the main area.
-     * Corresponds to the route: seller.categories.index
-     */
-    public function index(Request $request)
+    public function index(Request $request, SellerCatalog $catalog)
     {
-        // 1. Get all top-level categories for the sidebar
-        $mainCategories = ItemCategory::whereNull('parent_id')
+        $all = ItemCategory::withCount('items as active_items_count')
             ->orderBy('category_name')
-            ->get();
+            ->get(['id', 'category_name', 'parent_id']);
 
-        $selectedCategory = null;
-        $subcategories = collect();
+        $children = $all->whereNotNull('parent_id')->groupBy('parent_id');
 
-        // 2. Determine which category is currently selected via URL parameter 'category_id'
-        $selectedId = $request->query('category_id');
+        $mainCategories = $all->whereNull('parent_id')->values()->map(fn (ItemCategory $c) => [
+            'id' => $c->id,
+            'category_name' => $c->category_name,
+            'product_count' => $c->active_items_count
+                + (int) ($children->get($c->id)?->sum('active_items_count') ?? 0),
+        ]);
 
-        // Fallback: If no category is selected, select the first one found (if any)
-        if (is_null($selectedId) && $mainCategories->isNotEmpty()) {
-            $selectedId = $mainCategories->first()->id;
-        }
+        // Fallback: with no category_id, open the first department.
+        $selectedId = $request->integer('category_id') ?: $mainCategories->first()['id'] ?? null;
+        $selectedCategory = $mainCategories->firstWhere('id', $selectedId);
 
-        if ($selectedId) {
-            $selectedCategory = ItemCategory::with('children')->find($selectedId);
-            if ($selectedCategory) {
-                $subcategories = $selectedCategory->children()->orderBy('category_name')->get();
-            }
-        }
+        $subcategories = $selectedCategory
+            ? ($children->get($selectedCategory['id']) ?? collect())->values()->map(fn (ItemCategory $c) => [
+                'id' => $c->id,
+                'category_name' => $c->category_name,
+                'active_items_count' => $c->active_items_count,
+            ])
+            : collect();
 
-        return Inertia::render('Seller/Categories/Index', compact('mainCategories', 'selectedCategory', 'subcategories'));
+        // The department's best seller at this store; null until something sells.
+        $storeId = $request->user()->store?->id;
+        $featuredItem = $selectedCategory && $storeId
+            ? $catalog->bestSeller((int) $storeId, $subcategories->pluck('id')->push($selectedCategory['id']))
+            : null;
+
+        return Inertia::render('Seller/Categories/Index', [
+            'mainCategories' => $mainCategories,
+            'selectedCategory' => $selectedCategory,
+            'subcategories' => $subcategories,
+            'subcategoryCount' => $all->whereNotNull('parent_id')->count(),
+            'featuredItem' => $featuredItem,
+        ]);
     }
 
     /**

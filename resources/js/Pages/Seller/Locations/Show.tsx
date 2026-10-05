@@ -1,6 +1,7 @@
 import SellerLayout from "@/Layouts/SellerLayout";
-import { HUB_BRAND, HUB_INK, HUB_PAGE_BG, type Place, PlaceStrip } from "@/Components/Shared/OpsHub";
+import { type Place, PlaceStrip } from "@/Components/Shared/OpsHub";
 import ShelfBinMatrix from "@/Components/Seller/Locations/ShelfBinMatrix";
+import { EmptyState } from "@/Components/Shared/ui";
 import type { LocationItem, LocationTile, ShelfLine, ShelfMatrixData } from "@/types/sellerLocations";
 import { Head, Link } from "@inertiajs/react";
 import React, { useMemo, useState } from "react";
@@ -41,9 +42,9 @@ const KIND_META: Record<string, { label: string; icon: string; key: string }> = 
 
 /** Literal class strings so the JIT compiler keeps them. */
 const STATUS_STYLE: Record<ShelfLine["status"], { fill: string; chip: string; label: string }> = {
-    ok: { fill: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Stocked" },
-    refill: { fill: "bg-amber-500", chip: "bg-amber-50 text-amber-700 border-amber-200", label: "Refill" },
-    empty: { fill: "bg-rose-500", chip: "bg-rose-50 text-rose-700 border-rose-200", label: "Empty" },
+    ok: { fill: "bg-success", chip: "bg-success-container/60 text-on-success-container border-success/30", label: "Stocked" },
+    refill: { fill: "bg-warning", chip: "bg-warning-container/60 text-on-warning-container border-warning/30", label: "Refill" },
+    empty: { fill: "bg-error", chip: "bg-error-container/60 text-on-error-container border-error/30", label: "Empty" },
 };
 
 const pct = (value: number) => `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
@@ -77,27 +78,26 @@ export default function LocationShow({
         <>
             <Head title={location.name} />
 
-            <div className="min-h-screen pb-28" style={{ backgroundColor: HUB_PAGE_BG }}>
+            <div className="min-h-screen bg-background pb-28">
                 {/* ── Header ── */}
                 <section className="flex items-center space-x-3 px-4 pb-3 pt-4">
                     <Link
                         href={route("seller.menu.index")}
                         aria-label="Back"
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[999px] text-gray-700 transition-all hover:bg-gray-200/60 active:scale-95"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[999px] text-on-surface-variant transition-all hover:bg-surface-container-high/60 active:scale-95"
                     >
                         <span className="material-symbols-outlined text-[20px]">arrow_back</span>
                     </Link>
                     <div
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-orange-200 text-white shadow-sm"
-                        style={{ backgroundColor: HUB_BRAND }}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-primary-container bg-primary text-on-primary shadow-sm"
                     >
                         <span className="material-symbols-outlined text-2xl">{meta.icon}</span>
                     </div>
                     <div className="min-w-0">
-                        <h1 className="truncate text-[17px] font-bold tracking-tight" style={{ color: HUB_INK }}>
+                        <h1 className="truncate text-[17px] font-bold tracking-tight text-on-surface">
                             {location.name}
                         </h1>
-                        <p className="mt-0.5 truncate text-[11px] text-gray-500">
+                        <p className="mt-0.5 truncate text-[11px] text-on-surface-variant">
                             {meta.label}
                             {location.code ? ` · ${location.code}` : ""}
                         </p>
@@ -106,7 +106,7 @@ export default function LocationShow({
 
                 <div className="px-3.5">
                     {places.length ? (
-                        <section className="mb-3 rounded-[16px] border border-gray-100 bg-white px-3.5 py-1 shadow-sm">
+                        <section className="mb-3 rounded-[16px] border border-outline-variant/60 bg-surface-container-lowest px-3.5 py-1 shadow-sm">
                             <PlaceStrip places={places} activeKey={activeKey} bordered={false} />
                         </section>
                     ) : null}
@@ -148,14 +148,14 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
     );
 
     return (
-        <section className="mb-3 rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
+        <section className="mb-3 rounded-[16px] border border-outline-variant/60 bg-surface-container-lowest p-3.5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                    <h2 className="text-[13px] font-bold" style={{ color: HUB_INK }}>
+                    <h2 className="text-[13px] font-bold text-on-surface">
                         Replenishment
                     </h2>
                     {needRefill > 0 ? (
-                        <span className="rounded-[999px] bg-rose-600 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white">
+                        <span className="rounded-[999px] bg-error px-1.5 py-0.5 font-mono text-[9px] font-bold text-on-error">
                             {needRefill} to refill
                         </span>
                     ) : null}
@@ -167,11 +167,11 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
                             aria-label="Previous ten"
                             disabled={current === 0}
                             onClick={() => setPage(current - 1)}
-                            className="flex h-7 w-7 items-center justify-center rounded-[999px] text-gray-600 hover:bg-gray-100 disabled:opacity-30"
+                            className="flex h-7 w-7 items-center justify-center rounded-[999px] text-on-surface-variant hover:bg-surface-container disabled:opacity-30"
                         >
                             <span className="material-symbols-outlined text-[18px]">chevron_left</span>
                         </button>
-                        <span className="font-mono text-[10px] text-gray-400">
+                        <span className="font-mono text-[10px] text-outline">
                             {current + 1}/{pages}
                         </span>
                         <button
@@ -179,7 +179,7 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
                             aria-label="Next ten"
                             disabled={current >= pages - 1}
                             onClick={() => setPage(current + 1)}
-                            className="flex h-7 w-7 items-center justify-center rounded-[999px] text-gray-600 hover:bg-gray-100 disabled:opacity-30"
+                            className="flex h-7 w-7 items-center justify-center rounded-[999px] text-on-surface-variant hover:bg-surface-container disabled:opacity-30"
                         >
                             <span className="material-symbols-outlined text-[18px]">chevron_right</span>
                         </button>
@@ -194,7 +194,7 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
                         return (
                             <div
                                 key={`empty-${index}`}
-                                className="h-24 rounded-[6px] border border-dashed border-gray-200 bg-gray-50/60"
+                                className="h-24 rounded-[6px] border border-dashed border-outline-variant bg-surface-container-low/60"
                             />
                         );
                     }
@@ -209,8 +209,8 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
                             onClick={() => setSelectedId(line.id)}
                             aria-label={`${line.name}: ${line.on_hand} of ${line.max} ${line.unit}`}
                             aria-pressed={isSelected}
-                            className={`relative h-24 overflow-hidden rounded-[6px] border bg-gray-50 transition-all ${
-                                isSelected ? "border-[#c2410c] ring-2 ring-orange-200" : "border-gray-200"
+                            className={`relative h-24 overflow-hidden rounded-[6px] border bg-surface-container-low transition-all ${
+                                isSelected ? "border-primary ring-2 ring-primary/30" : "border-outline-variant"
                             }`}
                         >
                             {/* What is on the shelf, from the bottom. */}
@@ -220,7 +220,7 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
                             />
                             {/* The refill line: the band's minimum. */}
                             <span
-                                className="absolute inset-x-0 border-t-2 border-dashed border-[#0b1c30]"
+                                className="absolute inset-x-0 border-t-2 border-dashed border-on-surface"
                                 style={{ bottom: pct(line.min / line.max) }}
                             />
                         </button>
@@ -228,31 +228,30 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
                 })}
             </div>
 
-            <div className="mt-2 flex items-center justify-center gap-3 text-[9px] font-medium text-gray-500">
+            <div className="mt-2 flex items-center justify-center gap-3 text-[9px] font-medium text-on-surface-variant">
                 <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-[2px] bg-emerald-500" /> On shelf
+                    <span className="h-2 w-2 rounded-[2px] bg-success" /> On shelf
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="w-3 border-t-2 border-dashed border-[#0b1c30]" /> Refill line
+                    <span className="w-3 border-t-2 border-dashed border-on-surface" /> Refill line
                 </span>
                 <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-[2px] border border-gray-300" /> Top = full
+                    <span className="h-2 w-2 rounded-[2px] border border-outline/50" /> Top = full
                 </span>
             </div>
 
             {lines.length === 0 ? (
-                <div className="mt-3 rounded-[12px] bg-gray-50 px-3 py-4 text-center">
-                    <span className="material-symbols-outlined text-[26px] text-slate-300">tune</span>
-                    <p className="mt-1 text-[12px] font-bold text-gray-900">No shelf bands yet</p>
-                    <p className="mt-0.5 text-[10px] text-slate-500">
-                        Set a min and max for a product on this shelf and it appears in the row.
-                    </p>
-                </div>
+                <EmptyState
+                    icon="tune"
+                    title="No shelf bands yet"
+                    description="Set a min and max for a product on this shelf and it appears in the row."
+                    className="mt-3 rounded-[12px] bg-surface-container-low px-3 py-4"
+                />
             ) : selected ? (
-                <div className="mt-3 flex items-center justify-between rounded-[12px] border border-gray-100 bg-gray-50/70 px-3 py-2.5">
+                <div className="mt-3 flex items-center justify-between rounded-[12px] border border-outline-variant/60 bg-surface-container-low/70 px-3 py-2.5">
                     <div className="min-w-0">
-                        <h3 className="truncate text-xs font-bold text-gray-900">{selected.name}</h3>
-                        <p className="mt-0.5 truncate text-[10px] text-gray-500">
+                        <h3 className="truncate text-xs font-bold text-on-surface">{selected.name}</h3>
+                        <p className="mt-0.5 truncate text-[10px] text-on-surface-variant">
                             {selected.variant} · {selected.on_hand} on shelf · refill at {selected.min} · full at{" "}
                             {selected.max} {selected.unit}
                         </p>
@@ -262,7 +261,7 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
                             {STATUS_STYLE[selected.status].label}
                         </span>
                         {selected.refill > 0 ? (
-                            <span className="font-mono text-[10px] font-semibold" style={{ color: HUB_BRAND }}>
+                            <span className="font-mono text-[10px] font-semibold text-primary">
                                 +{selected.refill} {selected.unit}
                             </span>
                         ) : null}
@@ -275,43 +274,43 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
 
 function StockList({ items, spokenIn }: { items: LocationItem[]; spokenIn: string }): React.ReactElement {
     return (
-        <section className="mb-3 rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
+        <section className="mb-3 rounded-[16px] border border-outline-variant/60 bg-surface-container-lowest p-3.5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: HUB_INK }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface">
                     Stock here
                 </h3>
-                <span className="font-mono text-[10px] text-gray-400">
+                <span className="font-mono text-[10px] text-outline">
                     {items.length} item{items.length === 1 ? "" : "s"} · {spokenIn}
                 </span>
             </div>
 
             {items.length === 0 ? (
                 <div className="flex flex-col items-center py-6 text-center">
-                    <span className="material-symbols-outlined text-[30px] text-slate-300">inventory_2</span>
-                    <p className="mt-1 text-[12px] font-bold text-gray-900">Nothing booked here yet</p>
+                    <span className="material-symbols-outlined text-[30px] text-outline">inventory_2</span>
+                    <p className="mt-1 text-[12px] font-bold text-on-surface">Nothing booked here yet</p>
                 </div>
             ) : (
                 <div className="grid gap-2">
                     {items.map((item) => (
                         <div
                             key={item.item_id}
-                            className="flex items-center justify-between rounded-[12px] border border-gray-200 bg-white px-3 py-2"
+                            className="flex items-center justify-between rounded-[12px] border border-outline-variant bg-surface-container-lowest px-3 py-2"
                         >
                             <div className="flex min-w-0 items-center space-x-2.5">
-                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-gray-100 text-gray-500">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-surface-container text-on-surface-variant">
                                     <span className="material-symbols-outlined text-lg leading-none">inventory_2</span>
                                 </div>
                                 <div className="min-w-0">
-                                    <h4 className="truncate text-xs font-bold leading-tight text-gray-900">
+                                    <h4 className="truncate text-xs font-bold leading-tight text-on-surface">
                                         {item.product_name}
                                     </h4>
-                                    <span className="mt-0.5 block truncate text-[10px] leading-none text-gray-500">
+                                    <span className="mt-0.5 block truncate text-[10px] leading-none text-on-surface-variant">
                                         {item.variant_count} variant{item.variant_count === 1 ? "" : "s"}
                                         {item.item_sku ? ` · ${item.item_sku}` : ""}
                                     </span>
                                 </div>
                             </div>
-                            <span className="shrink-0 pl-2 text-right font-mono text-[11px] font-semibold text-gray-700">
+                            <span className="shrink-0 pl-2 text-right font-mono text-[11px] font-semibold text-on-surface-variant">
                                 {item.display}
                             </span>
                         </div>

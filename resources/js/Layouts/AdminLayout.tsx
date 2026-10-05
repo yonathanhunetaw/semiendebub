@@ -10,7 +10,7 @@ import {
     useTheme,
 } from "@mui/material";
 import { Head } from "@inertiajs/react";
-import { subdomainConfigs, SubdomainType } from "@/theme";
+import { FONT_SANS, getRole, roleUrl, useRole } from "@/theme";
 
 // Updated paths to match your new modular folder structure
 import AdminNav from "@/Components/Navigation/Admin/AdminNav";
@@ -36,33 +36,8 @@ export default function AdminLayout({ children }: Props) {
     );
     const theme = useTheme();
 
-    // --- 1. SUBDOMAIN & IDENTITY DETECTION ---
-    // Extract the subdomain (e.g., 'admin' from 'admin.duka.test')
-    const host =
-        typeof window !== "undefined"
-            ? window.location.hostname.split(".")[0].toLowerCase()
-            : "admin";
-
-    // Safety check to ensure we have a valid config, otherwise fallback to admin
-    const isKnownSubdomain = host in subdomainConfigs;
-    const activeKey: SubdomainType = isKnownSubdomain
-        ? (host as SubdomainType)
-        : "admin";
-    const config = subdomainConfigs[activeKey];
-
-    const buildRoleUrl = (subdomain: "finance" | "procurement" | "stockkeeper") => {
-        if (typeof window === "undefined") {
-            return "#";
-        }
-
-        const { protocol, hostname, port } = window.location;
-        const hostParts = hostname.split(".");
-        const baseDomain =
-            hostParts.length > 1 ? hostParts.slice(1).join(".") : hostname;
-        const portSuffix = port ? `:${port}` : "";
-
-        return `${protocol}//${subdomain}.${baseDomain}${portSuffix}/dashboard`;
-    };
+    // --- 1. ROLE (from the hostname, resolved once in app.tsx) ---
+    const config = getRole(useRole());
 
     const roleSwitcher = (
         <>
@@ -76,7 +51,7 @@ export default function AdminLayout({ children }: Props) {
                     borderRadius: 3,
                     textTransform: "none",
                     fontWeight: 700,
-                    fontFamily: "Figtree, sans-serif",
+                    fontFamily: FONT_SANS,
                     display: { xs: "none", sm: "inline-flex" },
                 }}
             >
@@ -91,21 +66,21 @@ export default function AdminLayout({ children }: Props) {
             >
                 <MenuItem
                     component="a"
-                    href={buildRoleUrl("finance")}
+                    href={roleUrl("finance", "/dashboard")}
                     onClick={() => setRoleMenuAnchor(null)}
                 >
                     Finance
                 </MenuItem>
                 <MenuItem
                     component="a"
-                    href={buildRoleUrl("procurement")}
+                    href={roleUrl("procurement", "/dashboard")}
                     onClick={() => setRoleMenuAnchor(null)}
                 >
                     Procurement
                 </MenuItem>
                 <MenuItem
                     component="a"
-                    href={buildRoleUrl("stockkeeper")}
+                    href={roleUrl("stock_keeper", "/dashboard")}
                     onClick={() => setRoleMenuAnchor(null)}
                 >
                     StockKeeper
@@ -135,30 +110,9 @@ export default function AdminLayout({ children }: Props) {
 
             {/* --- 2. DYNAMIC BROWSER TAB (The "Clear Tab" Goal) --- */}
             <Head>
-                {/* Sets the Tab Title: e.g., "Admin | Duka" */}
+                {/* Tab title, e.g. "Admin | Duka" */}
                 <title>{`${config.label} | Duka`}</title>
 
-                {/* DYNAMIC SVG FAVICON:
-                  - Uses the Brand Color from theme.ts
-                  - Renders the first letter of the subdomain (e.g., "A" for Admin)
-                */}
-                <link
-                    rel="icon"
-                    href={`data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22>
-                        <rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22${encodeURIComponent(theme.palette.primary.main)}%22/>
-                        <text
-                            y=%2255%22
-                            x=%2210%22
-                            font-size=%2255%22
-                            fill=%22white%22
-                            font-family=%22sans-serif%22
-                            font-weight=%22900%22
-                            text-anchor=%22start%22
-                        >
-                            ${config.label.charAt(0)}
-                        </text>
-                    </svg>`}
-                />
             </Head>
 
             {/* --- 3. TOP NAVIGATION BAR --- */}

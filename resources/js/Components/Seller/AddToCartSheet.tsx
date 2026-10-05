@@ -1,4 +1,4 @@
-import { SELLER_BRAND_DARK, sellerPrice } from "@/Components/Seller/sellerUi";
+import { sellerPrice } from "@/Components/Seller/sellerUi";
 import { Link } from "@inertiajs/react";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import ShoppingCartRoundedIcon from "@mui/icons-material/ShoppingCartRounded";
@@ -10,7 +10,6 @@ import {
     Stack,
     Typography,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import {
     NO_IMAGE_PLACEHOLDER,
     type OpenCart,
@@ -99,9 +98,6 @@ export default function AddToCartSheet({
     processing,
     onAddToCart,
 }: AddToCartSheetProps) {
-    const theme = useTheme();
-    const isDark = theme.palette.mode === "dark";
-
     const hasDiscount =
         variant?.discount_price != null &&
         variant?.price != null &&
@@ -152,7 +148,7 @@ export default function AddToCartSheet({
                     flexDirection: "column",
                     pb: "calc(0px + env(safe-area-inset-bottom))",
                     overflow: "hidden",
-                    bgcolor: isDark ? "#1e1e1e" : "#fff",
+                    bgcolor: "background.paper",
                 },
             }}
         >
@@ -164,7 +160,7 @@ export default function AddToCartSheet({
                     gap: 1.5,
                     p: 2,
                     pb: 1.5,
-                    bgcolor: isDark ? "#2a2a2a" : "#fff7ed",
+                    bgcolor: "rgb(var(--primary-container) / 0.6)",
                     position: "relative",
                 }}
             >
@@ -179,10 +175,10 @@ export default function AddToCartSheet({
                         border: "none",
                         borderRadius: 2,
                         overflow: "hidden",
-                        background: isDark ? "#333" : "#fff",
+                        bgcolor: "rgb(var(--surface-bright))",
                         p: 0,
                         cursor: hasVariantImages ? "zoom-in" : "default",
-                        boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
+                        boxShadow: 3,
                         mb: -2,
                     }}
                 >
@@ -218,7 +214,7 @@ export default function AddToCartSheet({
                         {unitCountLabel && (
                             <Typography
                                 sx={{
-                                    color: isDark ? "rgba(255,255,255,0.6)" : "text.secondary",
+                                    color: "text.secondary",
                                     fontWeight: 600,
                                     fontSize: 13,
                                     whiteSpace: "nowrap",
@@ -258,8 +254,8 @@ export default function AddToCartSheet({
                         position: "absolute",
                         top: 10,
                         right: 10,
-                        bgcolor: "rgba(0,0,0,0.06)",
-                        "&:hover": { bgcolor: "rgba(0,0,0,0.12)" },
+                        bgcolor: "rgb(var(--on-surface) / 0.06)",
+                        "&:hover": { bgcolor: "rgb(var(--on-surface) / 0.12)" },
                     }}
                 >
                     <CloseRoundedIcon fontSize="small" />
@@ -273,7 +269,7 @@ export default function AddToCartSheet({
                         {openCarts.length === 0 ? (
                             <Box>
                                 <Typography
-                                    sx={{ fontWeight: 700, color: isDark ? "#fff" : "inherit" }}
+                                    sx={{ fontWeight: 700, color: "text.primary" }}
                                 >
                                     No open carts yet.
                                 </Typography>
@@ -292,8 +288,8 @@ export default function AddToCartSheet({
                                         mt: 2,
                                         borderRadius: 3,
                                         textTransform: "none",
-                                        bgcolor: SELLER_BRAND_DARK,
-                                        "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                                        bgcolor: "primary.main",
+                                        "&:hover": { bgcolor: "primary.main" },
                                     }}
                                 >
                                     Create Cart
@@ -307,7 +303,6 @@ export default function AddToCartSheet({
                                         options={colors}
                                         selected={selectedColor}
                                         onSelect={onChooseColor}
-                                        isDark={isDark}
                                     />
                                 )}
 
@@ -317,7 +312,6 @@ export default function AddToCartSheet({
                                         options={sizes}
                                         selected={selectedSize}
                                         onSelect={onChooseSize}
-                                        isDark={isDark}
                                     />
                                 )}
 
@@ -353,8 +347,8 @@ export default function AddToCartSheet({
                     sx={{
                         p: 2,
                         borderTop: "1px solid",
-                        borderColor: isDark ? "#444" : "divider",
-                        bgcolor: isDark ? "#1e1e1e" : "#fff",
+                        borderColor: "divider",
+                        bgcolor: "background.paper",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
@@ -365,12 +359,12 @@ export default function AddToCartSheet({
                     <Box sx={{ display: "flex", flexDirection: "column" }}>
                         <Typography
                             variant="caption"
-                            sx={{ color: isDark ? "#999" : "text.secondary", fontWeight: 600 }}
+                            sx={{ color: "text.secondary", fontWeight: 600 }}
                         >
                             {totalLabel}
                         </Typography>
                         <Typography
-                            sx={{ fontWeight: 800, color: SELLER_BRAND_DARK, fontSize: 16 }}
+                            sx={{ fontWeight: 800, color: "primary.main", fontSize: 16 }}
                         >
                             Total: {sellerPrice(totalPrice)}
                         </Typography>
@@ -388,10 +382,10 @@ export default function AddToCartSheet({
                             fontSize: 15,
                             fontWeight: 700,
                             whiteSpace: "nowrap",
-                            bgcolor: SELLER_BRAND_DARK,
-                            "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                            bgcolor: "primary.main",
+                            "&:hover": { bgcolor: "primary.main" },
                             "&:active": { transform: "scale(0.95)" },
-                            boxShadow: `0 8px 20px ${SELLER_BRAND_DARK}33`,
+                            boxShadow: "0 8px 20px rgb(var(--primary) / 0.2)",
                         }}
                     >
                         {processing ? "Adding..." : "Add to Cart"}
@@ -407,13 +401,11 @@ function ChipGroup({
     options,
     selected,
     onSelect,
-    isDark,
 }: {
     label: string;
     options: string[];
     selected: string;
     onSelect: (value: string) => void;
-    isDark: boolean;
 }) {
     return (
         <Box>
@@ -422,7 +414,7 @@ function ChipGroup({
                     fontWeight: 700,
                     fontSize: 18,
                     mb: 1.25,
-                    color: isDark ? "#fff" : "inherit",
+                    color: "text.primary",
                 }}
             >
                 {label}
@@ -441,32 +433,16 @@ function ChipGroup({
                                 py: 1.25,
                                 borderRadius: 99,
                                 border: "1px solid",
-                                borderColor: active
-                                    ? SELLER_BRAND_DARK
-                                    : isDark
-                                      ? "rgba(255,255,255,0.1)"
-                                      : "rgba(0,0,0,0.1)",
-                                bgcolor: active
-                                    ? SELLER_BRAND_DARK
-                                    : isDark
-                                      ? "#1e1e1e"
-                                      : "#f5f5f5",
-                                color: active
-                                    ? "#fff"
-                                    : isDark
-                                      ? "rgba(255,255,255,0.78)"
-                                      : "text.primary",
+                                borderColor: active ? "primary.main" : "rgb(var(--on-surface) / 0.1)",
+                                bgcolor: active ? "primary.main" : "rgb(var(--surface-container))",
+                                color: active ? "primary.contrastText" : "text.primary",
                                 fontWeight: 600,
                                 fontSize: 14,
                                 cursor: "pointer",
                                 transition: "all 0.15s",
                                 "&:active": { transform: "scale(0.95)" },
                                 "&:hover": {
-                                    bgcolor: active
-                                        ? SELLER_BRAND_DARK
-                                        : isDark
-                                          ? "rgba(255,255,255,0.1)"
-                                          : "#e0e0e0",
+                                    bgcolor: active ? "primary.main" : "rgb(var(--surface-container-high))",
                                 },
                             }}
                         >

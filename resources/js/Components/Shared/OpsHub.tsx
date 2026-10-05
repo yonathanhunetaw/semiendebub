@@ -1,35 +1,30 @@
 import { Link } from "@inertiajs/react";
 import React from "react";
+import { ActionTile, Card, StatCard, StatusPill, TONES, type Tone } from "@/Components/Shared/ui";
 
 /**
- * The operations-hub card set.
+ * The operations-hub card set, used by the Seller "More" hub and the admin
+ * inventory hub.
  *
- * Lifted verbatim out of Pages/Seller/Menu/Index.tsx so the admin inventory
- * hub is the same UI rather than a second implementation of it. Two notes on
- * styling, because this project's tailwind.config.js overrides parts of the
- * default scale:
+ * The building blocks (Card, SectionTitle, StatCard, ActionTile, StatusPill)
+ * live in Components/Shared/ui; this module composes them into the hub's
+ * data-driven cards (PipelineCard, OpsCard, OpsRow) and keeps PlaceStrip.
+ * TONES / Tone are re-exported from there so existing importers keep working.
+ *
+ * Styling notes, because this project's tailwind.config.js overrides parts of
+ * the default scale:
  *  - `rounded-full` is redefined to 0.75rem and `rounded-xl`/`rounded-lg` to
  *    0.5rem/0.25rem, so every radius here is an explicit arbitrary value.
  *    Pills and circles use `rounded-[999px]`.
  *  - Tailwind 3 has no `shadow-xs`; `shadow-sm` is the equivalent.
+ *
+ * Colors are theme tokens only (resources/js/theme): `primary` follows the
+ * module's role color, the status tones are the same in every module, and
+ * neutrals are the surface / on-surface scale, so the cards work in light
+ * and dark mode.
  */
 
-export const HUB_BRAND = "#c2410c";
-export const HUB_INK = "#0b1c30";
-export const HUB_PAGE_BG = "#F8F9FB";
-
-/** Accent sets kept as literal class strings so the JIT compiler sees them. */
-export const TONES = {
-    amber: { badge: "bg-amber-600", caption: "text-amber-700", hover: "group-hover:text-amber-600" },
-    blue: { badge: "bg-blue-600", caption: "text-blue-600", hover: "group-hover:text-blue-600" },
-    brand: { badge: "bg-[#c2410c]", caption: "text-[#c2410c]", hover: "group-hover:text-[#c2410c]" },
-    emerald: { badge: "bg-emerald-600", caption: "text-emerald-600", hover: "group-hover:text-emerald-600" },
-    rose: { badge: "bg-rose-600", caption: "text-rose-600", hover: "group-hover:text-rose-600" },
-    violet: { badge: "bg-violet-600", caption: "text-violet-600", hover: "group-hover:text-violet-600" },
-    ink: { badge: "bg-[#0b1c30]", caption: "text-gray-500", hover: "group-hover:text-gray-900" },
-} as const;
-
-export type Tone = keyof typeof TONES;
+export { TONES, type Tone };
 
 export interface Tile {
     label: string;
@@ -59,8 +54,8 @@ export interface Row {
     /** Registered route name, or null while the module has no page yet. */
     route: string | null;
     routeParams?: Record<string, string | number>;
-    tone: Tone | "ink";
-    /** Gradient + border pair for the row shell; plain white when omitted. */
+    tone: Tone;
+    /** Gradient + border pair for the row shell (token classes); plain surface when omitted. */
     surface?: string;
     count?: number;
 }
@@ -84,26 +79,6 @@ export function href(
     }
 }
 
-/** Icon-only square used by the row list. */
-const ROW_ICON_BG: Record<Tone | "ink", string> = {
-    amber: "bg-amber-500",
-    blue: "bg-blue-600",
-    brand: "bg-[#c2410c]",
-    emerald: "bg-emerald-600",
-    rose: "bg-rose-600",
-    violet: "bg-violet-600",
-    ink: "bg-[#0b1c30]",
-};
-
-const ROW_HOVER: Record<Tone | "ink", string> = {
-    amber: "group-hover:text-amber-600",
-    blue: "group-hover:text-blue-600",
-    brand: "group-hover:text-[#c2410c]",
-    emerald: "group-hover:text-emerald-600",
-    rose: "group-hover:text-rose-600",
-    violet: "group-hover:text-violet-600",
-    ink: "group-hover:text-gray-800",
-};
 
 /** One stop on a location strip: an icon that opens a place stock sits in. */
 export interface Place {
@@ -156,7 +131,7 @@ export function PlaceStrip({
     bordered?: boolean;
 }): React.ReactElement {
     return (
-        <div className={`grid grid-cols-5 gap-1 py-2.5 text-center ${bordered ? "border-b border-gray-100" : ""}`}>
+        <div className={`grid grid-cols-5 gap-1 py-2.5 text-center ${bordered ? "border-b border-outline-variant" : ""}`}>
             {places.map((place) => {
                 const target = href(place.routeName, place.routeParams);
                 const alert = place.alert ?? 0;
@@ -167,27 +142,27 @@ export function PlaceStrip({
                         <div
                             className={`relative flex h-9 w-9 items-center justify-center rounded-[10px] ${
                                 active
-                                    ? "bg-[#c2410c] text-white shadow-sm ring-2 ring-orange-200"
+                                    ? "bg-primary text-on-primary shadow-sm ring-2 ring-primary-container"
                                     : target
-                                      ? "bg-[#0b1c30] text-white shadow-sm"
-                                      : "bg-slate-100 text-slate-300"
+                                      ? "bg-inverse-surface text-inverse-on-surface shadow-sm"
+                                      : "bg-surface-container text-on-surface-variant/40"
                             }`}
                         >
                             <span className="material-symbols-outlined text-[20px]">{place.icon}</span>
                             {alert > 0 ? (
-                                <span className="absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-[999px] bg-rose-600 px-1 font-mono text-[8px] font-bold text-white shadow-sm">
+                                <span className="absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-[999px] bg-error px-1 font-mono text-[8px] font-bold text-on-error shadow-sm">
                                     {alert > 99 ? "99+" : alert}
                                 </span>
                             ) : null}
                         </div>
                         <span
                             className={`mt-1 text-[10px] font-bold leading-tight ${
-                                target ? "text-gray-800" : "text-slate-400"
+                                target ? "text-on-surface" : "text-on-surface-variant/60"
                             }`}
                         >
                             {place.label}
                         </span>
-                        <span className={`text-[8px] font-medium leading-tight ${target ? "text-gray-500" : "text-slate-300"}`}>
+                        <span className={`text-[8px] font-medium leading-tight ${target ? "text-on-surface-variant" : "text-on-surface-variant/40"}`}>
                             {place.caption}
                         </span>
                     </>
@@ -196,7 +171,7 @@ export function PlaceStrip({
                 const shell = "group flex flex-col items-center rounded-[12px] p-1";
 
                 return target ? (
-                    <Link key={place.key} href={target} className={`${shell} transition-colors hover:bg-gray-50`}>
+                    <Link key={place.key} href={target} className={`${shell} transition-colors hover:bg-surface-container-low`}>
                         {body}
                     </Link>
                 ) : (
@@ -229,225 +204,74 @@ export function PipelineCard({
     const target = href(actionRoute, actionParams);
 
     return (
-        <section className="mb-3">
-            <div className="rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
-                <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                        <h2 className="text-[13px] font-bold" style={{ color: HUB_INK }}>
-                            {title}
-                        </h2>
-                        {preview ? (
-                            <span className="rounded-[999px] bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                                Preview
-                            </span>
-                        ) : null}
-                    </div>
-                    {target ? (
-                        <Link
-                            href={target}
-                            className="flex items-center text-[11px] font-medium text-gray-500 hover:text-gray-800"
-                        >
-                            <span>{actionLabel}</span>
-                            <span className="material-symbols-outlined ml-0.5 text-xs">chevron_right</span>
-                        </Link>
-                    ) : null}
-                </div>
+        <Card
+            title={title}
+            badge={preview ? <StatusPill label="Preview" tone="neutral" size="sm" /> : undefined}
+            action={{ label: actionLabel, href: target }}
+        >
+            <div
+                className={`grid gap-1 text-center ${
+                    GRID_COLUMNS[columns ?? (tiles.length === 6 ? 3 : 5)]
+                } ${footer && !places?.length ? "border-b border-outline-variant pb-3" : ""} ${
+                    places?.length ? "pb-1" : ""
+                }`}
+            >
+                {tiles.map((tile) => {
+                    const own = tile.disabled
+                        ? null
+                        : tile.routeName
+                          ? href(tile.routeName, tile.routeParams)
+                          : target;
+                    const tileTarget = own && tile.tab ? `${own}?${tile.tab}` : own;
 
-                <div
-                    className={`grid gap-1 text-center ${
-                        GRID_COLUMNS[columns ?? (tiles.length === 6 ? 3 : 5)]
-                    } ${footer && !places?.length ? "border-b border-gray-100 pb-3" : ""} ${
-                        places?.length ? "pb-1" : ""
-                    }`}
-                >
-                    {tiles.map((tile) => {
-                        const tone = TONES[tile.tone];
-                        const own = tile.disabled
-                            ? null
-                            : tile.routeName
-                              ? href(tile.routeName, tile.routeParams)
-                              : target;
-                        const badge = tile.disabled
-                            ? null
-                            : (tile.badge ?? (tile.count > 0 ? (tile.count > 99 ? "99+" : String(tile.count)) : null));
-                        const tileTarget = own && tile.tab ? `${own}?${tile.tab}` : own;
-
-                        const body = (
-                            <>
-                                <div
-                                    className={`relative flex h-9 w-9 items-center justify-center transition-colors ${
-                                        tile.alert ? tone.caption : "text-gray-700"
-                                    } ${own && !tile.alert ? tone.hover : ""}`}
-                                >
-                                    <span className="material-symbols-outlined text-[22px]">{tile.icon}</span>
-                                    {badge ? (
-                                        <span
-                                            className={`absolute -right-1 top-0 flex h-[15px] min-w-[15px] items-center justify-center rounded-[999px] px-1 font-mono text-[8px] font-bold text-white shadow-sm ${tone.badge}`}
-                                        >
-                                            {badge}
-                                        </span>
-                                    ) : null}
-                                </div>
-                                <span
-                                    className={`mt-0.5 text-[10px] font-bold leading-tight ${
-                                        tile.alert ? tone.caption : "text-gray-800"
-                                    }`}
-                                >
-                                    {tile.label}
-                                </span>
-                                <span
-                                    className={`text-[8px] font-medium leading-tight ${
-                                        tile.disabled ? "text-slate-400" : tone.caption
-                                    }`}
-                                >
-                                    {tile.caption}
-                                </span>
-                            </>
-                        );
-
-                        const shell =
-                            "group flex flex-col items-center rounded-[12px] p-1 transition-colors";
-
-                        return tileTarget ? (
-                            <Link
-                                key={tile.label}
-                                href={tileTarget}
-                                className={`${shell} ${tile.alert ? "hover:bg-rose-50/60" : "hover:bg-gray-50"}`}
-                            >
-                                {body}
-                            </Link>
-                        ) : (
-                            <div key={tile.label} className={shell}>
-                                {body}
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {places?.length ? <PlaceStrip places={places} /> : null}
-
-                {footer ? (
-                    <div className="grid grid-cols-2 gap-2 pt-2.5">
-                        {footer.map((link) => {
-                            const linkTarget = href(link.route, link.routeParams);
-
-                            const body = (
-                                <>
-                                    <span
-                                        className={`material-symbols-outlined text-base ${
-                                            linkTarget ? "text-gray-500" : "text-slate-300"
-                                        }`}
-                                    >
-                                        {link.icon}
-                                    </span>
-                                    <span
-                                        className={`text-[11px] font-medium ${
-                                            linkTarget ? "text-gray-800" : "text-slate-400"
-                                        }`}
-                                    >
-                                        {link.label}
-                                    </span>
-                                    {!linkTarget ? (
-                                        <span className="rounded-[999px] bg-slate-100 px-1.5 text-[9px] font-bold uppercase text-slate-400">
-                                            Soon
-                                        </span>
-                                    ) : null}
-                                </>
-                            );
-
-                            const shell =
-                                "flex items-center justify-center gap-1.5 rounded-[10px] bg-gray-50 px-2 py-1";
-
-                            return linkTarget ? (
-                                <Link
-                                    key={link.label}
-                                    href={linkTarget}
-                                    className={`${shell} transition-colors hover:bg-gray-100`}
-                                >
-                                    {body}
-                                </Link>
-                            ) : (
-                                <div
-                                    key={link.label}
-                                    aria-disabled="true"
-                                    title={`${link.label} — not available yet`}
-                                    className={`${shell} cursor-default`}
-                                >
-                                    {body}
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : null}
+                    return (
+                        <StatCard
+                            key={tile.label}
+                            label={tile.label}
+                            caption={tile.caption}
+                            icon={tile.icon}
+                            tone={tile.tone}
+                            count={tile.count}
+                            badge={tile.badge}
+                            alert={tile.alert}
+                            disabled={tile.disabled}
+                            href={tileTarget}
+                        />
+                    );
+                })}
             </div>
-        </section>
+
+            {places?.length ? <PlaceStrip places={places} /> : null}
+
+            {footer ? (
+                <div className="grid grid-cols-2 gap-2 pt-2.5">
+                    {footer.map((link) => (
+                        <ActionTile
+                            key={link.label}
+                            variant="chip"
+                            label={link.label}
+                            icon={link.icon}
+                            href={href(link.route, link.routeParams)}
+                        />
+                    ))}
+                </div>
+            ) : null}
+        </Card>
     );
 }
 
 /** One row of the operations list. */
 export function OpsRow({ row }: { row: Row }): React.ReactElement {
-    const target = href(row.route, row.routeParams);
-
-    const body = (
-        <>
-            <div className="flex min-w-0 items-center space-x-2.5">
-                <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-white shadow-sm ${
-                        target ? ROW_ICON_BG[row.tone] : "bg-slate-300"
-                    }`}
-                >
-                    <span className="material-symbols-outlined text-lg leading-none">{row.icon}</span>
-                </div>
-                <div className="flex min-w-0 flex-col">
-                    <h4
-                        className={`truncate text-xs font-bold leading-tight ${
-                            target ? "text-gray-900" : "text-slate-400"
-                        }`}
-                    >
-                        {row.label}
-                    </h4>
-                    <span className="mt-0.5 truncate text-[10px] leading-none text-gray-500">
-                        {row.caption}
-                    </span>
-                </div>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-1.5">
-                {row.count != null && row.count > 0 ? (
-                    <span className="font-mono text-[11px] font-semibold text-gray-400">{row.count}</span>
-                ) : null}
-                {!target ? (
-                    <span className="rounded-[999px] bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase text-slate-400">
-                        Soon
-                    </span>
-                ) : null}
-                <span
-                    className={`material-symbols-outlined text-base leading-none text-gray-400 transition-colors ${
-                        target ? ROW_HOVER[row.tone] : ""
-                    }`}
-                >
-                    chevron_right
-                </span>
-            </div>
-        </>
-    );
-
-    const shell = `flex items-center justify-between rounded-[12px] border px-3 py-2 ${
-        target ? (row.surface ?? "border-gray-200 bg-white") : "border-slate-200/70 bg-slate-50/60"
-    }`;
-
-    return target ? (
-        <Link href={target} className={`group ${shell} transition-colors hover:bg-gray-50`}>
-            {body}
-        </Link>
-    ) : (
-        <div
-            aria-disabled="true"
-            title={`${row.label} — not available yet`}
-            className={`group ${shell} cursor-default`}
-        >
-            {body}
-        </div>
+    return (
+        <ActionTile
+            label={row.label}
+            caption={row.caption}
+            icon={row.icon}
+            href={href(row.route, row.routeParams)}
+            tone={row.tone}
+            count={row.count}
+            surface={row.surface}
+        />
     );
 }
 
@@ -462,23 +286,14 @@ export interface OpsCardProps {
 
 export function OpsCard({ title, note, rows, wide = false, children }: OpsCardProps): React.ReactElement {
     return (
-        <section className="mb-3">
-            <div className="rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
-                <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: HUB_INK }}>
-                        {title}
-                    </h3>
-                    <span className="font-mono text-[10px] text-gray-400">{note}</span>
-                </div>
-
-                <div className={`grid gap-2.5 ${wide ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
-                    {rows.map((row) => (
-                        <OpsRow key={row.label} row={row} />
-                    ))}
-                </div>
-
-                {children}
+        <Card title={title} titleVariant="caps" note={note}>
+            <div className={`grid gap-2.5 ${wide ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+                {rows.map((row) => (
+                    <OpsRow key={row.label} row={row} />
+                ))}
             </div>
-        </section>
+
+            {children}
+        </Card>
     );
 }

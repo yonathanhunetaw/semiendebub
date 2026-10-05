@@ -14,8 +14,6 @@ import React from "react";
  * so pills use `rounded-[999px]`.
  */
 
-const INK = "#0b1c30";
-
 export interface TabSpec {
     id: string;
     label: string;
@@ -66,41 +64,40 @@ export default function ListTopBar({
     };
 
     return (
-        <div className="sticky top-0 z-20 bg-white">
+        <div className="sticky top-0 z-20 bg-surface-container-lowest">
             <div className="flex items-center gap-2 px-3 pb-2 pt-3">
                 <button
                     type="button"
                     onClick={goBack}
                     aria-label="Back"
-                    className="flex h-9 w-7 shrink-0 items-center justify-center text-gray-900 active:scale-90"
+                    className="flex h-9 w-7 shrink-0 items-center justify-center text-on-surface active:scale-90"
                 >
                     <span className="material-symbols-outlined text-[26px]">chevron_left</span>
                 </button>
 
                 {/* Search pill — the submit button sits inside the rounded field. */}
-                <div className="flex h-10 min-w-0 flex-1 items-center rounded-[999px] border border-gray-900/85 pl-4 pr-1">
+                <div className="flex h-10 min-w-0 flex-1 items-center rounded-[999px] border border-on-surface/85 pl-4 pr-1">
                     <input
                         type="text"
                         value={search}
                         onChange={(event) => onSearch(event.target.value)}
                         placeholder={searchPlaceholder}
                         aria-label={searchPlaceholder}
-                        className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-0 focus:outline-none focus:ring-0"
+                        className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-on-surface placeholder:text-outline focus:border-0 focus:outline-none focus:ring-0"
                     />
                     {search ? (
                         <button
                             type="button"
                             onClick={() => onSearch("")}
                             aria-label="Clear search"
-                            className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center text-gray-400 active:scale-90"
+                            className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center text-outline active:scale-90"
                         >
                             <span className="material-symbols-outlined text-[18px]">close</span>
                         </button>
                     ) : null}
                     <span
                         aria-hidden="true"
-                        className="flex h-8 w-11 shrink-0 items-center justify-center rounded-[999px] text-white"
-                        style={{ backgroundColor: INK }}
+                        className="flex h-8 w-11 shrink-0 items-center justify-center rounded-[999px] bg-inverse-surface text-inverse-on-surface"
                     >
                         <span className="material-symbols-outlined text-[19px]">search</span>
                     </span>
@@ -113,7 +110,7 @@ export default function ListTopBar({
                         aria-label="Filter"
                         aria-pressed={filterActive}
                         className={`flex h-9 w-8 shrink-0 items-center justify-center active:scale-90 ${
-                            filterActive ? "text-[#c2410c]" : "text-gray-900"
+                            filterActive ? "text-primary" : "text-on-surface"
                         }`}
                     >
                         <span className="material-symbols-outlined text-[24px]">tune</span>
@@ -127,7 +124,7 @@ export default function ListTopBar({
                         aria-label={deleteActive ? "Exit selection mode" : "Select and remove"}
                         aria-pressed={deleteActive}
                         className={`flex h-9 w-8 shrink-0 items-center justify-center active:scale-90 ${
-                            deleteActive ? "text-rose-600" : "text-gray-900"
+                            deleteActive ? "text-error" : "text-on-surface"
                         }`}
                     >
                         <span className="material-symbols-outlined text-[23px]">
@@ -155,14 +152,14 @@ export default function ListTopBar({
                         >
                             <span
                                 className={`whitespace-nowrap text-[15px] ${
-                                    active ? "font-bold text-gray-900" : "font-normal text-gray-400"
+                                    active ? "font-bold text-on-surface" : "font-normal text-outline"
                                 }`}
                             >
                                 {tab.label}
                                 {tab.count != null && tab.count > 0 ? (
                                     <span
                                         className={`ml-1 font-mono text-[11px] ${
-                                            active ? "text-gray-900" : "text-gray-400"
+                                            active ? "text-on-surface" : "text-outline"
                                         }`}
                                     >
                                         {tab.count}
@@ -171,8 +168,7 @@ export default function ListTopBar({
                             </span>
                             {active ? (
                                 <span
-                                    className="absolute inset-x-2 bottom-0 h-[3px] rounded-[999px]"
-                                    style={{ backgroundColor: INK }}
+                                    className="absolute inset-x-2 bottom-0 h-[3px] rounded-[999px] bg-on-surface"
                                 />
                             ) : null}
                         </button>
@@ -180,7 +176,7 @@ export default function ListTopBar({
                 })}
             </div>
 
-            <div className="h-px w-full bg-slate-100" />
+            <div className="h-px w-full bg-outline-variant/60" />
         </div>
     );
 }

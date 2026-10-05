@@ -299,9 +299,9 @@ export default function Replenish({ store, transfers = [] }: Props) {
                 <Box>{rows.map(t => <TransferCard key={t.id} t={t} />)}</Box>
             ) : (
                 <TableContainer component={Paper} elevation={0}
-                    sx={{ border: "1px solid #e0e0e0", borderRadius: 3 }}>
+                    sx={{ border: "1px solid rgb(var(--outline-variant))", borderRadius: 3 }}>
                     <Table size="small">
-                        <TableHead sx={{ bgcolor: "grey.50" }}>
+                        <TableHead sx={{ bgcolor: "rgb(var(--surface-container-low))" }}>
                             <TableRow>
                                 <TableCell sx={{ fontWeight: 700 }}>#</TableCell>
                                 <TableCell sx={{ fontWeight: 700 }}>Variant</TableCell>

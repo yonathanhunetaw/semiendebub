@@ -54,7 +54,7 @@ export default function DeliveryShipmentsIndex({
             <Head title="Shipments" />
 
             {/* ── Top Context Strip: Back button, centered Shipments, and pool toggle ── */}
-            <div className="px-4 py-3 flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-20">
+            <div className="px-4 py-3 flex items-center justify-between bg-surface-container-lowest border-b border-outline-variant sticky top-0 z-20">
                 <button
                     onClick={() => {
                         if (window.history.length > 1) {
@@ -63,18 +63,18 @@ export default function DeliveryShipmentsIndex({
                             router.visit(route("delivery.dashboard"));
                         }
                     }}
-                    className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 flex items-center justify-center active:scale-95 transition-all text-slate-600"
+                    className="w-8 h-8 rounded-xl bg-surface-container-low hover:bg-surface-container border border-outline-variant flex items-center justify-center active:scale-95 transition-all text-on-surface-variant"
                     aria-label="Back"
                 >
                     <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                 </button>
 
                 <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[#c2410c] text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
-                    <h1 className="text-[16px] font-bold text-gray-900 tracking-tight">Shipments</h1>
+                    <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
+                    <h1 className="text-[16px] font-bold text-on-surface tracking-tight">Shipments</h1>
                 </div>
 
-                <div className="flex items-center gap-0.5 bg-slate-50 p-0.5 rounded-full border border-slate-200/80">
+                <div className="flex items-center gap-0.5 bg-surface-container-low p-0.5 rounded-full border border-outline-variant">
                     {([
                         { id: "all" as Tab, label: "ALL" },
                         { id: "available" as Tab, label: `POOL (${available_count})` },
@@ -82,7 +82,7 @@ export default function DeliveryShipmentsIndex({
                     ]).map(t => (
                         <button key={t.id} onClick={() => setTab(t.id)}
                             className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wide transition-colors ${
-                                tab === t.id ? "bg-[#c2410c] text-white" : "text-slate-500 hover:text-[#c2410c]"
+                                tab === t.id ? "bg-primary text-on-primary" : "text-on-surface-variant hover:text-primary"
                             }`}>
                             {t.label}
                         </button>
@@ -105,8 +105,8 @@ export default function DeliveryShipmentsIndex({
                         <button key={f.id} onClick={() => setFilter(f.id)}
                             className={`px-3 py-1.5 rounded-full text-[11px] font-bold shrink-0 transition-colors border ${
                                 filter === f.id
-                                    ? "bg-[#c2410c] text-white border-[#c2410c]"
-                                    : "bg-white text-slate-600 border-slate-200"
+                                    ? "bg-primary text-on-primary border-primary"
+                                    : "bg-surface-container-lowest text-on-surface-variant border-outline-variant"
                             }`}>
                             {f.label} ({f.id === "all" ? transfers.length : transfers.filter(t => t.status === f.id).length})
                         </button>
@@ -119,10 +119,10 @@ export default function DeliveryShipmentsIndex({
                         <TransferCard key={t.id} t={t} showRoute="delivery.shipments.show" agreeRoute="delivery.shipments.agree" transitionRoute="delivery.shipments.transition" />
                     ))}
                     {displayedTransfers.length === 0 && (
-                        <div className="py-8 text-center bg-white rounded-2xl border border-slate-100">
-                            <span className="material-symbols-outlined text-slate-300 text-[36px] mb-2">inbox</span>
-                            <p className="text-[13px] font-bold text-gray-900">No shipments found</p>
-                            <p className="text-[11px] text-slate-400 mt-1">
+                        <div className="py-8 text-center bg-surface-container-lowest rounded-2xl border border-outline-variant">
+                            <span className="material-symbols-outlined text-outline/60 text-[36px] mb-2">inbox</span>
+                            <p className="text-[13px] font-bold text-on-surface">No shipments found</p>
+                            <p className="text-[11px] text-outline mt-1">
                                 {tab === "mine"
                                     ? "Nothing assigned to you — claim a run from the pool."
                                     : tab === "available"
