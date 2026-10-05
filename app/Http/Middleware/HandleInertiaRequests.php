@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Seller\Cart;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -71,6 +72,11 @@ class HandleInertiaRequests extends Middleware
                     'store_id' => $request->user()->store_id,
                 ] : null,
             ],
+            // The seller bottom nav badges its Carts tab with the open carts.
+            // Lazy, and null for every other role, so nobody else pays the query.
+            'seller' => fn () => $request->user()?->roleKey() === 'seller'
+                ? ['open_carts' => Cart::where('seller_id', $request->user()->id)->where('status', 'open')->count()]
+                : null,
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use App\Services\Seller\SellerCatalog;
 use Inertia\Inertia;
 
 class ItemController extends Controller
@@ -43,28 +44,7 @@ class ItemController extends Controller
             ]);
         }
 
-        $query = Item::where('status', 'active')
-            ->with([
-                'category',
-                'variants' => function ($q) use ($storeId) {
-                    $q->with([
-                        'storeVariants' => function ($sq) use ($storeId) {
-                            $sq->where('store_id', $storeId)
-                                ->where('active', true)
-                                ->with([
-                                    'stocks' => function ($stockQuery) use ($storeId) {
-                                        // Shelf + floor (STOCK_PLAN.md phase 4).
-                                        $stockQuery->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId));
-                                    }
-                                ]);
-                        }
-                    ]);
-                },
-            ]);
-
-        $query->whereHas('variants.storeVariants', function ($q) use ($storeId) {
-            $q->where('store_id', $storeId)->where('active', true);
-        });
+        $query = app(SellerCatalog::class)->query((int) $storeId);
 
         if ($search) {
             $query->where('product_name', 'LIKE', '%' . $search . '%');
@@ -96,13 +76,6 @@ class ItemController extends Controller
             'execution_ms' => $executionTime,
         ]);
 
-        // After $items = collect(...)->map(...)
-        $categoryNames = $items
-            ->pluck('category.category_name')
-            ->filter()
-            ->unique()
-            ->values()
-            ->toArray();
 
         $hasTinCart = $cart && ($cart->customer_id === null || !empty($cart->customer?->tin_number));
         $topCartIsIndividual = $cart && ($cart->customer_id === null || !empty($cart->customer?->tin_number));
@@ -111,7 +84,7 @@ class ItemController extends Controller
             'items' => $items,
             'nextPageUrl' => $paginator->nextPageUrl(),
             'filters' => ['search' => $search ?? '', 'cart_id' => $cartId],
-            'categories' => $categoryNames,
+            'categories' => app(SellerCatalog::class)->categories((int) $storeId),
             'has_tin_cart' => $hasTinCart,
             'top_cart_is_individual' => $topCartIsIndividual,
         ]);
@@ -119,56 +92,9 @@ class ItemController extends Controller
 
     private function enrichItemForIndex(Item $item, int $storeId, $customer = null): array
     {
-        // 1. Restore Image Resolution Logic
-        $generalImages = is_string($item->general_images) ? json_decode($item->general_images, true) : ($item->general_images ?? []);
-
-        $variantImages = collect();
-        foreach ($item->variants as $variant) {
-            $raw = is_string($variant->images) ? json_decode($variant->images, true) : ($variant->images ?? []);
-            foreach ((array) $raw as $img) {
-                if (!empty($img))
-                    $variantImages->push($this->resolveImageUrl($img));
-            }
-        }
-
-        $imageUrls = collect((array) $generalImages)
-            ->map(fn($path) => $this->resolveImageUrl($path))
-            ->merge($variantImages)
-            ->filter()
-            ->unique()
-            ->values()
-            ->toArray();
-
-        $sellerId = Auth::id();
-        $priceInfo = PriceProvider::getItemPriceRange($item, $storeId, $sellerId, $customer);
-
-        $totalStock = 0;
-        foreach ($item->variants as $variant) {
-            foreach ($variant->storeVariants->where('store_id', $storeId) as $sv) {
-                if (!$sv->active) {
-                    continue;
-                }
-                $pieces = $variant->calculateTotalPieces();
-                $multiplier = $pieces > 0 ? $pieces : 1;
-                $totalStock += ((int) $sv->stocks->sum('quantity')) * $multiplier;
-            }
-        }
-
-        return [
-            'id' => $item->id,
-            'product_name' => $item->product_name,
-            'sold_count' => $item->sold_count ?? 0,
-            'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
-            'image_urls' => $imageUrls,
-            'original_price' => $priceInfo['store_price'],
-            'store_price' => $priceInfo['store_price'],
-            'final_price' => $priceInfo['final_price'],
-            'discount_ends_at' => $priceInfo['discount_ends_at'],
-            'pricing_matrix' => $priceInfo['pricing_matrix'],
-            'individual_price' => collect($priceInfo['pricing_matrix'])->firstWhere('level', 'individual'),
-            'store_stock' => $totalStock,
-        ];
+        return app(SellerCatalog::class)->present($item, $storeId, $customer);
     }
+
     private function resolveImageUrl(?string $path): ?string
     {
         return empty($path) ? null : ImageResolver::resolve($path);
@@ -333,27 +259,7 @@ class ItemController extends Controller
         $search = $request->filled('search') ? trim($request->search) : null;
         $cartId = $request->integer('cart_id') ?: null;
 
-        $query = Item::where('status', 'active')
-            ->with([
-                'category',
-                'variants' => function ($q) use ($storeId) {
-                    $q->with([
-                        'storeVariants' => function ($sq) use ($storeId) {
-                            $sq->where('store_id', $storeId)
-                                ->where('active', true)
-                                ->with([
-                                    'stocks' => function ($stockQuery) use ($storeId) {
-                                        // Shelf + floor (STOCK_PLAN.md phase 4).
-                                        $stockQuery->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId));
-                                    }
-                                ]);
-                        }
-                    ]);
-                },
-            ])
-            ->whereHas('variants.storeVariants', function ($q) use ($storeId) {
-                $q->where('store_id', $storeId)->where('active', true);
-            });
+        $query = app(SellerCatalog::class)->query((int) $storeId);
 
         if ($search) {
             $query->where('product_name', 'LIKE', '%' . $search . '%');
