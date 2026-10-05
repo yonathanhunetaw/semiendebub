@@ -438,7 +438,10 @@ function shellOf(layoutFile: string): Shell {
     const navFiles = [...src.matchAll(/from\s+["'](?:@\/|\.\.\/)(Components\/Navigation\/[^"']+)["']/g)].map(
         (m) => `resources/js/${m[1]}.tsx`,
     );
-    const bottomFile = [layoutFile, ...navFiles].find((f) => /<BottomNavigation\b/.test(read(f)));
+    // MUI <BottomNavigation>, or a Tailwind bar in a *BottomNav component.
+    const bottomFile = [layoutFile, ...navFiles].find(
+        (f) => /<BottomNavigation\b/.test(read(f)) || (/BottomNav\.tsx$/.test(f) && /<nav\b/.test(read(f))),
+    );
     const phoneColumn = /maxWidth:\s*\{\s*xs:\s*["']480px["']/.test(src);
 
     if (!bottomFile) {
@@ -446,16 +449,20 @@ function shellOf(layoutFile: string): Shell {
         return { kind: sidebar ? 'fixed app bar + left sidebar (temporary drawer on phones)' : 'custom', navFiles, tabs: [] };
     }
     const bottomSrc = read(bottomFile);
-    const tabs = [...bottomSrc.matchAll(/label(?:=|:\s*)["']([^"']+)["']/g)].map((m) => m[1]);
+    const tabs = [...bottomSrc.matchAll(/(?<![\w-])label(?:=|:\s*)["']([^"']+)["']/g)].map((m) => m[1]);
     // Layout-level `sx` overrides win over the nav component's own styles.
     const bar = src.match(/MuiBottomNavigation-root["']?\s*:\s*\{[^}]*?bgcolor:\s*["']([^"']+)["']/)?.[1];
     const ink = src.match(/Mui-selected \.MuiSvgIcon-root["']?\s*:\s*\{[^}]*?color:\s*["']([^"']+)["']/)?.[1];
+    // A Tailwind bar names its tokens on the <nav> element itself.
+    const navClass = bottomSrc.match(/<nav\b[^>]*?className="([^"]+)"/s)?.[1] ?? '';
+    const twBar = navClass.match(/\bbg-([a-z-]+)\b/)?.[1];
+    const twInk = navClass.match(/\btext-([a-z-]+)\b/)?.[1];
     return {
         kind: `${phoneColumn ? '480px phone column on xs, ' : ''}fixed bottom navigation`,
         navFiles: bottomFile === layoutFile ? navFiles : [bottomFile],
         tabs,
-        bar: bar ? muiColor(bar) : '`surface-container-lowest` (MUI default paper)',
-        ink: ink ? muiColor(ink) : '`primary` on the selected tab, `on-surface-variant` otherwise',
+        bar: bar ? muiColor(bar) : twBar ? code(twBar) : '`surface-container-lowest` (MUI default paper)',
+        ink: ink ? muiColor(ink) : twInk ? `${code(twInk)} (full on the active tab, 80% otherwise)` : '`primary` on the selected tab, `on-surface-variant` otherwise',
     };
 }
 

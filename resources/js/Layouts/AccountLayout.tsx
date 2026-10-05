@@ -105,51 +105,7 @@ export default function AccountLayout({
             </Box>
 
             {isSellerWorkspace ? (
-                <Box
-                    sx={{
-                        position: "fixed",
-                        left: "50%",
-                        bottom: 0,
-                        transform: "translateX(-50%)",
-                        width: "100%",
-                        maxWidth: { xs: "480px", sm: "100%", md: "1200px" },
-                        px: 2,
-                        pb: "calc(12px + env(safe-area-inset-bottom))",
-                        pointerEvents: "none",
-                        zIndex: 50,
-                    }}
-                >
-                    <Box
-                        sx={{
-                            pointerEvents: "auto",
-                            "& .MuiBottomNavigation-root": {
-                                bgcolor: "primary.main",
-                                borderRadius: 4,
-                                height: 70,
-                            },
-                            "& .MuiBottomNavigationAction-label": {
-                                color: "rgb(var(--on-primary)) !important",
-                                fontWeight: 600,
-                                opacity: 0.8,
-                            },
-                            "& .Mui-selected .MuiBottomNavigationAction-label": {
-                                color: "rgb(var(--on-primary)) !important",
-                                fontWeight: 900,
-                                opacity: 1,
-                            },
-                            "& .MuiSvgIcon-root": {
-                                color: "rgb(var(--on-primary)) !important",
-                                opacity: 0.8,
-                            },
-                            "& .Mui-selected .MuiSvgIcon-root": {
-                                color: "rgb(var(--on-primary)) !important",
-                                opacity: 1,
-                            },
-                        }}
-                    >
-                        <SellerBottomNav />
-                    </Box>
-                </Box>
+                <SellerBottomNav />
             ) : (
                 /* The buyer bar's Material Symbols face is bundled in app.tsx. */
                 <UserBottomNav isAuthenticated />

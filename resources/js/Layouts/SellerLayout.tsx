@@ -75,53 +75,7 @@ export default function SellerLayout({
                 </Box>
             </Box>
 
-            <Box
-                sx={{
-                    position: "fixed",
-                    left: "50%",
-                    bottom: 0,
-                    transform: "translateX(-50%)",
-                    width: "100%",
-                    maxWidth: { xs: "480px", sm: "100%", md: "1200px" },
-                    px: 2,
-                    pb: "calc(12px + env(safe-area-inset-bottom))",
-                    pointerEvents: "none",
-                    zIndex: 50,
-                }}
-            >
-                <Box
-                    sx={{
-                        pointerEvents: "auto",
-                        "& .MuiBottomNavigation-root": {
-                            bgcolor: "primary.main",
-                            borderRadius: 4,
-                            height: 70,
-                        },
-                        // Text and icons on the primary-colored bar use the
-                        // on-primary token (contrast-checked per role and mode).
-                        "& .MuiBottomNavigationAction-label": {
-                            color: "primary.contrastText",
-                            fontWeight: 600,
-                            opacity: 0.8,
-                        },
-                        "& .Mui-selected .MuiBottomNavigationAction-label": {
-                            color: "primary.contrastText",
-                            fontWeight: 900,
-                            opacity: 1,
-                        },
-                        "& .MuiSvgIcon-root": {
-                            color: "primary.contrastText",
-                            opacity: 0.8,
-                        },
-                        "& .Mui-selected .MuiSvgIcon-root": {
-                            color: "primary.contrastText",
-                            opacity: 1,
-                        },
-                    }}
-                >
-                    <SellerBottomNav />
-                </Box>
-            </Box>
+            <SellerBottomNav />
         </Box>
     );
 }

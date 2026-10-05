@@ -1,673 +1,408 @@
 import { Head, Link, router } from "@inertiajs/react";
-import {
-    Box,
-    IconButton,
-    InputBase,
-    Stack,
-    Typography,
-    useTheme,
-    CircularProgress,
-    Tooltip,
-    Chip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-} from "@mui/material";
-import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import ImageNotSupportedIcon from "@mui/icons-material/ImageNotSupported";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import React from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { SellerCard, sellerShadow } from "@/Components/Seller/sellerUi";
-import StockCaption from "@/Components/Seller/StockCaption";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import BarcodeScannerDialog from "@/Components/Seller/BarcodeScannerDialog";
+import { type CatalogItem, cardPricing, money } from "@/Components/Seller/catalogPricing";
+import { EmptyState } from "@/Components/Shared/ui";
 
-// ======================== SVG PLACEHOLDER ========================
-const NO_IMAGE_PLACEHOLDER =
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23f5f5f5'/%3E%3Cpath d='M160 160 L240 160 M200 120 L200 200' stroke='%23999' stroke-width='8' fill='none'/%3E%3Ccircle cx='200' cy='200' r='80' fill='none' stroke='%23999' stroke-width='8'/%3E%3C/svg%3E";
-
-// ======================== TYPES ========================
-interface DashboardItem {
+interface CategoryFilter {
     id: number;
-    product_name: string;
-    image_urls: string[];
-    store_price: number | null;        // base store price
-    final_price: number | null;        // discounted price (if any)
-    discount_ends_at: string | null;   // when discount ends
-    sold_count: number;
-    store_stock?: number;
-    category?: { category_name: string } | null;
-    pricing_matrix?: Array<{
-        level: string;
-        price: number;
-        discount_price: number | null;
-        discount_ends_at: string | null;
-        final: number;
-    }>;
-    individual_price?: {
-        price: number | null;
-        discount_price: number | null;
-        discount_ends_at: string | null;
-    } | null;
+    name: string;
 }
 
 interface Props {
-    items: DashboardItem[];
-    store: any;
+    items?: CatalogItem[];
     nextPageUrl?: string | null;
-    filters?: { search: string };
+    filters?: { search?: string; category_id?: number | null };
+    /** Every category the store carries (SellerCatalog::categories). */
+    categories?: CategoryFilter[];
     has_tin_cart?: boolean;
     top_cart_is_individual?: boolean;
 }
 
-// ======================== IMAGE RESOLVER ========================
-const resolveImageUrl = (path?: string): string => {
-    console.log("[resolveImageUrl] path:", path);
-    if (!path) {
-        console.log("[resolveImageUrl] No path, using placeholder");
-        return NO_IMAGE_PLACEHOLDER;
-    }
-    if (path.startsWith("http") || path.startsWith("data:")) {
-        console.log("[resolveImageUrl] Using absolute URL:", path);
-        return path;
-    }
-    const baseUrl = import.meta.env.VITE_AWS_URL || "http://duka.test:9000/duka-images";
-    const resolved = `${baseUrl}/${path.replace(/^\//, "")}`;
-    console.log("[resolveImageUrl] Resolved:", resolved);
-    return resolved;
-};
+/** Stored paths come back absolute from ImageResolver; this covers stragglers. */
+function imageUrl(path?: string): string | null {
+    if (!path) return null;
+    if (path.startsWith("http") || path.startsWith("data:")) return path;
+    const base = import.meta.env.VITE_AWS_URL || "http://duka.test:9000/duka-images";
+    return `${base}/${path.replace(/^\//, "")}`;
+}
 
-// ======================== DISCOUNT COUNTDOWN (full‑width) ========================
-function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
-    const [timeLeft, setTimeLeft] = React.useState<{
-        days: number;
-        hours: number;
-        minutes: number;
-        seconds: number;
-    } | null>(null);
-    const [isExpired, setIsExpired] = React.useState(false);
+// ======================== DISCOUNT COUNTDOWN ========================
 
-    console.log("[DiscountCountdown] rendered with endsAt:", endsAt);
+function useCountdown(endsAt: string | null): string | null {
+    const [now, setNow] = React.useState(() => Date.now());
 
     React.useEffect(() => {
-        console.log("[DiscountCountdown] useEffect - endsAt:", endsAt);
         if (!endsAt) return;
-        const calculate = () => {
-            const diff = new Date(endsAt).getTime() - Date.now();
-            console.log("[DiscountCountdown] diff (ms):", diff);
-            if (diff <= 0) {
-                setIsExpired(true);
-                return null;
-            }
-            return {
-                days: Math.floor(diff / (1000 * 60 * 60 * 24)),
-                hours: Math.floor((diff % 86400000) / 3600000),
-                minutes: Math.floor((diff % 3600000) / 60000),
-                seconds: Math.floor((diff % 60000) / 1000),
-            };
-        };
-        const update = () => setTimeLeft(calculate());
-        update();
-        const interval = setInterval(update, 1000);
-        return () => {
-            console.log("[DiscountCountdown] clearing interval");
-            clearInterval(interval);
-        };
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
     }, [endsAt]);
 
-    if (isExpired || !endsAt || !timeLeft) {
-        if (isExpired) console.log("[DiscountCountdown] expired");
-        return null;
-    }
-    const { days, hours, minutes, seconds } = timeLeft;
-    let label = "";
-    if (days > 0) label = `${days}d ${hours}h`;
-    else if (hours > 0) label = `${hours}h ${minutes}m`;
-    else if (minutes > 0) label = `${minutes}m ${seconds}s`;
-    else label = `${seconds}s`;
+    if (!endsAt) return null;
+    const diff = new Date(endsAt).getTime() - now;
+    if (diff <= 0) return null;
 
-    console.log("[DiscountCountdown] timeLeft:", timeLeft, "label:", label);
+    const days = Math.floor(diff / 86_400_000);
+    const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+    const minutes = Math.floor((diff % 3_600_000) / 60_000);
+    const seconds = Math.floor((diff % 60_000) / 1000);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+}
+
+function DiscountCountdown({ endsAt }: { endsAt: string }): React.ReactElement | null {
+    const label = useCountdown(endsAt);
+    if (!label) return null;
 
     return (
-        <Tooltip title={`Discount ends on ${new Date(endsAt).toLocaleString()}`}>
-            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
-                <AccessTimeIcon sx={{ fontSize: 16, color: "rgb(var(--inverse-on-surface))" }} />
-                <Typography variant="caption" sx={{ fontWeight: 700, color: "rgb(var(--inverse-on-surface))", fontSize: "0.75rem" }}>
-                    {label}
-                </Typography>
-            </Stack>
-        </Tooltip>
+        <span
+            title={`Discount ends ${new Date(endsAt).toLocaleString()}`}
+            className="inline-flex items-center gap-0.5 rounded-md bg-inverse-surface/80 px-1.5 py-0.5 text-[10px] font-bold text-inverse-on-surface backdrop-blur-sm"
+        >
+            <span className="material-symbols-outlined text-[12px]">schedule</span>
+            {label}
+        </span>
     );
 }
 
-// ======================== MAIN DASHBOARD ========================
-export default function Dashboard({ items: initialItems, store, nextPageUrl, filters = { search: '' }, has_tin_cart = false, top_cart_is_individual = false }: Props) {
-    console.log("[Dashboard] Component rendered with props:", { initialItems: initialItems?.length, store, nextPageUrl, filters, has_tin_cart, top_cart_is_individual });
-    console.log("🔥 [INDEX] RAW ITEMS DUMP:", JSON.stringify(initialItems, null, 2));
+// ======================== SEARCH BAR ========================
 
-    const theme = useTheme();
-    const [items, setItems] = React.useState(initialItems);
-    const [hasNextPage, setHasNextPage] = React.useState(!!nextPageUrl);
-    const [isLoading, setIsLoading] = React.useState(false);
-    const [page, setPage] = React.useState(2);
-    const [searchInput, setSearchInput] = React.useState(filters?.search || "");
-    const observerRef = React.useRef<HTMLDivElement | null>(null);
-    const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
-    const isScrollingRef = React.useRef(false);
-
-    console.log("[Dashboard] Initial state:", { itemsCount: items.length, hasNextPage, page, searchInput });
+/** Cycles example searches through the empty search box, like the shelf talker on a till. */
+function useRotatingHint(hints: string[]): { hint: string; visible: boolean } {
+    const [index, setIndex] = React.useState(0);
+    const [visible, setVisible] = React.useState(true);
 
     React.useEffect(() => {
-        console.log("[Dashboard] useEffect - props updated, resetting state");
-        if (isScrollingRef.current) {
-            console.log("[Dashboard] skipping reset due to scroll load");
-            isScrollingRef.current = false;
+        if (hints.length < 2) return;
+        let swap: number | undefined;
+        const timer = window.setInterval(() => {
+            setVisible(false);
+            swap = window.setTimeout(() => {
+                setIndex((i) => (i + 1) % hints.length);
+                setVisible(true);
+            }, 300);
+        }, 2500);
+        return () => {
+            window.clearInterval(timer);
+            window.clearTimeout(swap);
+        };
+    }, [hints.length]);
+
+    return { hint: hints[index % Math.max(hints.length, 1)] ?? "", visible };
+}
+
+// ======================== PRODUCT CARD ========================
+
+function ProductCard({ item, hasTinCart, topCartIsIndividual }: { item: CatalogItem; hasTinCart: boolean; topCartIsIndividual: boolean }) {
+    const pricing = cardPricing(item, topCartIsIndividual);
+    const src = imageUrl(item.image_urls?.[0]);
+    const [loaded, setLoaded] = React.useState(false);
+    const [broken, setBroken] = React.useState(!src);
+    const stock = item.store_stock;
+    const outOfStock = stock !== undefined && stock !== null && stock <= 0;
+
+    return (
+        <Link
+            href={route("seller.items.show", item.id)}
+            className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-sm transition-shadow hover:shadow-md"
+        >
+            <div>
+                <div className="relative aspect-square w-full overflow-hidden bg-surface-container-low">
+                    {broken ? (
+                        <div className="flex h-full w-full items-center justify-center text-outline">
+                            <span className="material-symbols-outlined text-[40px]">image</span>
+                        </div>
+                    ) : (
+                        <>
+                            {!loaded && <div className="absolute inset-0 animate-pulse bg-surface-container" />}
+                            <img
+                                src={src!}
+                                alt={item.product_name}
+                                loading="lazy"
+                                onLoad={() => setLoaded(true)}
+                                onError={() => setBroken(true)}
+                                className={`h-full w-full object-cover transition duration-300 group-hover:scale-105 ${loaded ? "opacity-100" : "opacity-0"}`}
+                            />
+                        </>
+                    )}
+
+                    {stock !== undefined && stock !== null && (
+                        <span
+                            className={`absolute left-2 top-2 rounded-[999px] border px-2 py-0.5 text-[10px] font-bold shadow-sm ${
+                                outOfStock
+                                    ? "border-warning/30 bg-warning-container text-on-warning-container"
+                                    : "border-success/30 bg-success-container text-on-success-container"
+                            }`}
+                        >
+                            {outOfStock ? "Out of stock" : "In stock"}
+                        </span>
+                    )}
+                    {pricing.hasDiscount && (
+                        <span className="absolute right-2 top-2 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-bold text-on-primary shadow-sm">
+                            -{pricing.discountPercent}%
+                        </span>
+                    )}
+                    {((pricing.hasDiscount && pricing.discountEndsAt) || pricing.isSellerPrice) && (
+                        <div className="absolute bottom-2 left-2 flex flex-col items-start gap-1">
+                            {pricing.hasDiscount && pricing.discountEndsAt && <DiscountCountdown endsAt={pricing.discountEndsAt} />}
+                            {pricing.isSellerPrice && (
+                                <span className="rounded-md bg-inverse-surface px-1.5 py-0.5 text-[10px] font-semibold text-inverse-on-surface">
+                                    Seller price
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-2.5 pt-2">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                        {item.category?.category_name || "General"}
+                    </span>
+                    <h2 className="mt-0.5 line-clamp-2 text-[13px] font-bold leading-tight text-on-surface" title={item.product_name}>
+                        {item.product_name}
+                    </h2>
+                </div>
+            </div>
+
+            <div className="mt-1 p-2.5 pt-0">
+                {(pricing.hasDiscount || hasTinCart) && (
+                    <div className="mb-0.5 flex items-center justify-between gap-1">
+                        {pricing.hasDiscount ? (
+                            <span className="text-[11px] text-outline line-through">{money(pricing.original)}</span>
+                        ) : (
+                            <span />
+                        )}
+                        {hasTinCart && (
+                            <span className="rounded-[4px] border border-success/30 bg-success-container px-1 text-[10px] font-medium text-on-success-container">
+                                incl. VAT
+                            </span>
+                        )}
+                    </div>
+                )}
+                <span className="text-[16px] font-extrabold text-on-surface">{money(pricing.price)}</span>
+
+                {stock !== undefined && stock !== null && (
+                    <div className="mt-2 border-t border-outline-variant pt-2 text-[11px] font-medium">
+                        {outOfStock ? (
+                            <span className="font-bold text-warning">Out of stock</span>
+                        ) : (
+                            <span className="text-on-surface-variant">
+                                Stock: <strong className="font-semibold text-on-surface">{stock.toLocaleString()}</strong>
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
+        </Link>
+    );
+}
+
+// ======================== PAGE ========================
+
+/**
+ * The seller's Store tab (/dashboard, also /items): a dense two-column
+ * catalogue of what this store carries, with search, barcode scan and
+ * category pills. Pages in with infinite scroll.
+ */
+export default function Index({
+    items: initialItems = [],
+    nextPageUrl = null,
+    filters = {},
+    categories = [],
+    has_tin_cart = false,
+    top_cart_is_individual = false,
+}: Props) {
+    const [items, setItems] = React.useState(initialItems);
+    const [hasNextPage, setHasNextPage] = React.useState(!!nextPageUrl);
+    const [page, setPage] = React.useState(2);
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [search, setSearch] = React.useState(filters.search ?? "");
+    const [scannerOpen, setScannerOpen] = React.useState(false);
+    const observerRef = React.useRef<HTMLDivElement | null>(null);
+    const appendingRef = React.useRef(false);
+    const categoryId = filters.category_id ?? null;
+
+    // A fresh visit (search, category, back/forward) replaces the list; a
+    // load-more response is appended in loadMore instead.
+    React.useEffect(() => {
+        if (appendingRef.current) {
+            appendingRef.current = false;
             return;
         }
         setItems(initialItems);
         setHasNextPage(!!nextPageUrl);
         setPage(2);
-        console.log("[Dashboard] State reset: items count", initialItems.length, "nextPageUrl:", nextPageUrl);
     }, [initialItems, nextPageUrl]);
 
-    // Barcode scanner
-    const [scannerOpen, setScannerOpen] = React.useState(false);
-    const scannerRef = React.useRef<Html5QrcodeScanner | null>(null);
-    const [scannerInitialized, setScannerInitialized] = React.useState(false);
-
-    console.log("[Dashboard] scanner state:", { scannerOpen, scannerInitialized });
-
-    // ========== INFINITE SCROLL ==========
-    const loadMore = () => {
-        console.log("[loadMore] called, isLoading:", isLoading, "hasNextPage:", hasNextPage);
-        if (isLoading || !hasNextPage) {
-            console.log("[loadMore] skipping because loading or no next page");
-            return;
-        }
+    const loadMore = React.useCallback(() => {
+        if (isLoading || !hasNextPage) return;
         setIsLoading(true);
-        isScrollingRef.current = true;
-        console.log("[loadMore] fetching page:", page, "search:", searchInput);
+        appendingRef.current = true;
         router.get(
             route("seller.dashboard"),
-            { page, search: searchInput },
+            { page, search: filters.search || undefined, category_id: categoryId ?? undefined },
             {
                 preserveState: true,
                 preserveScroll: true,
                 only: ["items", "nextPageUrl"],
-                onSuccess: (resp: any) => {
-                    console.log("[loadMore] onSuccess, response props:", resp.props);
-                    const newItems = resp.props.items || [];
-                    console.log("[loadMore] new items count:", newItems.length);
-                    setItems((prev) => {
-                        console.log("[loadMore] previous items count:", prev.length);
-                        const merged = [...prev, ...newItems];
-                        console.log("[loadMore] merged items count:", merged.length);
-                        return merged;
-                    });
+                onSuccess: (resp) => {
+                    const more = (resp.props.items as CatalogItem[] | undefined) ?? [];
+                    setItems((prev) => [...prev, ...more]);
                     setHasNextPage(!!resp.props.nextPageUrl);
-                    setPage((p) => {
-                        console.log("[loadMore] incrementing page from", p, "to", p + 1);
-                        return p + 1;
-                    });
-                    setIsLoading(false);
+                    setPage((p) => p + 1);
                 },
-                onError: (error) => {
-                    console.error("[loadMore] onError:", error);
-                    setIsLoading(false);
-                },
-            }
-        );
-    };
-
-    React.useEffect(() => {
-        console.log("[Dashboard] useEffect - setting up intersection observer, hasNextPage:", hasNextPage);
-        if (!observerRef.current || !hasNextPage) return;
-        const observer = new IntersectionObserver(
-            (entries) => {
-                console.log("[IntersectionObserver] entries:", entries);
-                if (entries[0].isIntersecting && !isLoading) {
-                    console.log("[IntersectionObserver] intersecting, loading more");
-                    loadMore();
-                }
+                onFinish: () => setIsLoading(false),
             },
-            { threshold: 0.1, rootMargin: "100px" }
         );
-        observer.observe(observerRef.current);
-        console.log("[Dashboard] observer attached");
-        return () => {
-            console.log("[Dashboard] observer disconnected");
-            observer.disconnect();
-        };
-    }, [hasNextPage, isLoading]);
+    }, [isLoading, hasNextPage, page, filters.search, categoryId]);
 
-    // ========== SEARCH ==========
-    const navigateToSearch = (query: string) => {
-        console.log("[navigateToSearch] query:", query);
-        if (!query.trim()) {
-            console.log("[navigateToSearch] empty query, ignoring");
-            return;
-        }
-        router.get(route("seller.items.search"), { search: query }, {
-            preserveState: true,
-        });
-    };
-
-    const handleSearchIconClick = () => {
-        console.log("[handleSearchIconClick] searchInput:", searchInput);
-        navigateToSearch(searchInput);
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            console.log("[handleKeyDown] Enter pressed, searchInput:", searchInput);
-            navigateToSearch(searchInput);
-        }
-    };
-
-    // ========== BARCODE SCANNER ==========
     React.useEffect(() => {
-        console.log("[Dashboard] scanner useEffect - scannerOpen:", scannerOpen, "scannerInitialized:", scannerInitialized);
-        if (scannerOpen && !scannerInitialized) {
-            console.log("[Dashboard] initializing scanner");
-            setTimeout(() => {
-                const element = document.getElementById("barcode-reader-dashboard");
-                if (element) {
-                    console.log("[Dashboard] scanner element found, creating scanner");
-                    scannerRef.current = new Html5QrcodeScanner(
-                        "barcode-reader-dashboard",
-                        { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
-                        false
-                    );
-                    scannerRef.current.render(
-                        (decodedText) => {
-                            console.log("[Scanner] decoded text:", decodedText);
-                            setScannerOpen(false);
-                            if (decodedText.trim()) {
-                                console.log("[Scanner] navigating to search with:", decodedText);
-                                router.get(route("seller.items.search"), { search: decodedText });
-                            }
-                        },
-                        (error) => {
-                            console.warn("[Scanner] error:", error);
-                        }
-                    );
-                    setScannerInitialized(true);
-                } else {
-                    console.warn("[Dashboard] scanner element not found");
-                }
-            }, 100);
-        }
-        return () => {
-            if (scannerOpen === false && scannerRef.current) {
-                console.log("[Dashboard] cleaning up scanner");
-                scannerRef.current.clear();
-                scannerRef.current = null;
-                setScannerInitialized(false);
-            }
-        };
-    }, [scannerOpen, scannerInitialized]);
+        if (!observerRef.current || !hasNextPage) return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) loadMore();
+        }, { rootMargin: "100px" });
+        observer.observe(observerRef.current);
+        return () => observer.disconnect();
+    }, [hasNextPage, loadMore]);
+
+    const runSearch = (query: string) => {
+        if (!query.trim()) return;
+        router.get(route("seller.items.search"), { search: query.trim() }, { preserveState: true });
+    };
+
+    const hints = React.useMemo(() => {
+        const names = initialItems.slice(0, 4).map((i) => `Search '${i.product_name}'…`);
+        return [...names, "Scan or type a barcode…"];
+    }, [initialItems]);
+    const { hint, visible } = useRotatingHint(hints);
+
+    const pillClass = (active: boolean) =>
+        `flex-shrink-0 whitespace-nowrap rounded-[999px] px-3 py-1 text-[12px] transition-colors ${
+            active
+                ? "bg-primary font-semibold tracking-wide text-on-primary shadow-sm"
+                : "border border-outline-variant bg-surface-container-lowest font-medium text-on-surface-variant hover:bg-surface-container"
+        }`;
 
     return (
-        <SellerLayout>
-            <Head title="Seller Dashboard" />
-            <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pb: 10 }}>
-                {/* ========== SEARCH HEADER (same as Items) ========== */}
-                <Box sx={{ px: { xs: 2, md: 4 }, pt: 2, pb: 2, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }}>
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%" }}>
-                        <Box
-                            sx={{
-                                flex: 1,
-                                display: "flex",
-                                alignItems: "center",
-                                px: 2,
-                                py: 1,
-                                borderRadius: 999,
-                                bgcolor: "rgb(var(--surface-container))",
-                                border: "1px solid",
-                                borderColor: "divider",
-                                transition: "border-color 0.2s, background 0.2s",
-                                "&:focus-within": { borderColor: "primary.main", bgcolor: "background.paper" },
-                            }}
-                        >
-                            <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
-                            <InputBase
-                                fullWidth
-                                placeholder="Search products..."
-                                value={searchInput}
-                                onChange={(e) => {
-                                    console.log("[SearchInput] onChange, value:", e.target.value);
-                                    setSearchInput(e.target.value);
-                                }}
-                                onKeyDown={handleKeyDown}
-                                sx={{ fontSize: "0.95rem" }}
-                            />
-                        </Box>
+        <>
+            <Head title="Store" />
 
-                        <IconButton
-                            onClick={handleSearchIconClick}
-                            sx={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 999,
-                                bgcolor: "primary.main",
-                                color: "primary.contrastText",
-                                "&:hover": { bgcolor: "rgb(var(--primary) / 0.9)" },
-                            }}
-                        >
-                            <SearchRoundedIcon />
-                        </IconButton>
-
-                        <IconButton
-                            onClick={() => {
-                                console.log("[Scanner] button clicked, opening scanner");
-                                setScannerOpen(true);
-                            }}
-                            sx={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 999,
-                                border: "1px solid",
-                                borderColor: "divider",
-                                color: "text.secondary",
-                            }}
-                        >
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                                <rect x="4" y="6" width="2" height="12" />
-                                <rect x="7" y="6" width="1" height="12" />
-                                <rect x="9" y="6" width="3" height="12" />
-                                <rect x="13" y="6" width="1" height="12" />
-                                <rect x="15" y="6" width="2" height="12" />
-                                <rect x="18" y="6" width="2" height="12" />
-                                <rect x="21" y="6" width="1" height="12" />
-                            </svg>
-                        </IconButton>
-                    </Stack>
-                </Box>
-
-                {/* ========== MAIN CONTENT ========== */}
-                <Box sx={{ px: { xs: 2, md: 4 }, pt: 3 }}>
-                    {/* ========== ITEMS GRID (matching Items page) ========== */}
-                    <Box
-                        sx={{
-                            display: "grid",
-                            gap: 3,
-                            gridTemplateColumns: {
-                                xs: "repeat(2, 1fr)",
-                                sm: "repeat(3, 1fr)",
-                                md: "repeat(4, 1fr)",
-                            },
-                            width: "100%",
-                        }}
+            {/* ========== HEADER: search + category pills ========== */}
+            <header className="sticky top-0 z-40 border-b border-outline-variant bg-surface-container-lowest/95 px-3.5 py-2.5 backdrop-blur-md">
+                <form
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        runSearch(search);
+                    }}
+                    className="relative flex items-center rounded-[999px] border border-outline-variant bg-surface-container-low py-1.5 pl-3.5 pr-1.5 shadow-inner transition-all focus-within:border-primary focus-within:bg-surface-container-lowest focus-within:ring-2 focus-within:ring-primary/20"
+                >
+                    <span className="material-symbols-outlined mr-2 flex-shrink-0 text-[20px] text-outline">search</span>
+                    <div className="relative flex h-[22px] w-full items-center overflow-hidden">
+                        <input
+                            aria-label="Search catalogue"
+                            type="search"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="absolute inset-0 z-10 h-full w-full border-0 bg-transparent p-0 text-[13px] font-medium text-on-surface focus:outline-none focus:ring-0"
+                        />
+                        {!search && (
+                            <span
+                                aria-hidden
+                                className={`pointer-events-none select-none truncate text-[13px] font-medium text-on-surface-variant transition duration-300 motion-reduce:transition-none ${
+                                    visible ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"
+                                }`}
+                            >
+                                {hint}
+                            </span>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        title="Scan barcode / QR"
+                        onClick={() => setScannerOpen(true)}
+                        className="flex flex-shrink-0 items-center justify-center rounded-[999px] p-1.5 text-on-surface-variant transition-colors hover:text-on-surface active:scale-95"
                     >
-                        {items.map((item) => {
-                            // The backend (enrichItemForIndex) already resolved everything:
-                            // Individual carts, Business VAT, Customer prices, and Seller prices.
-                            let originalPrice = item.store_price ?? 0;
-                            if (top_cart_is_individual && item.individual_price?.price != null) {
-                                originalPrice = item.individual_price.price;
-                            }
-                            const displayPrice = item.final_price ?? originalPrice;
-                            
-                            const deepestTier = item.pricing_matrix?.[item.pricing_matrix.length - 1];
-                            const discountEnds = deepestTier?.discount_ends_at ?? item.discount_ends_at ?? null;
-                            const isSellerPrice = deepestTier?.level === "seller";
+                        <span className="material-symbols-outlined text-[20px]">barcode_scanner</span>
+                    </button>
+                    <button
+                        type="submit"
+                        aria-label="Search"
+                        className="ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[999px] bg-primary text-on-primary shadow-sm transition-all hover:bg-primary/90 active:scale-90"
+                    >
+                        <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                    </button>
+                </form>
 
-                            const hasDiscount = displayPrice < originalPrice;
-                            const discountPercent =
-                                hasDiscount && originalPrice > 0
-                                    ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100)
-                                    : 0;
+                {categories.length > 0 && (
+                    <nav
+                        aria-label="Product categories"
+                        className="-mx-3.5 flex items-center gap-1.5 overflow-x-auto px-3.5 pb-0.5 pt-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    >
+                        <Link href={route("seller.dashboard")} preserveScroll className={pillClass(categoryId === null)}>
+                            All categories
+                        </Link>
+                        {categories.map((c) => (
+                            <Link
+                                key={c.id}
+                                href={route("seller.dashboard", { category_id: c.id })}
+                                preserveScroll
+                                className={pillClass(categoryId === c.id)}
+                            >
+                                {c.name}
+                            </Link>
+                        ))}
+                    </nav>
+                )}
+            </header>
 
-                            if (hasDiscount) {
-                                console.log(`[Price] item ${item.id} has discount: displayPrice=${displayPrice}, discountPercent=${discountPercent}`);
-                            }
+            {/* ========== CATALOGUE GRID ========== */}
+            <main className="space-y-3.5 px-3 pt-3">
+                {items.length > 0 ? (
+                    <section aria-label="Products" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
+                        {items.map((item) => (
+                            <ProductCard key={item.id} item={item} hasTinCart={has_tin_cart} topCartIsIndividual={top_cart_is_individual} />
+                        ))}
+                    </section>
+                ) : (
+                    !isLoading && (
+                        <EmptyState
+                            framed
+                            icon="inventory_2"
+                            title="No items found"
+                            description={filters.search || categoryId ? "Try another search or category." : "This store has no active items yet."}
+                        />
+                    )
+                )}
 
-                            const imgSrc = item.image_urls?.[0]
-                                ? resolveImageUrl(item.image_urls[0])
-                                : NO_IMAGE_PLACEHOLDER;
+                {isLoading && (
+                    <div className="flex justify-center py-4">
+                        <span className="h-6 w-6 animate-spin rounded-[999px] border-2 border-primary/30 border-t-primary" />
+                    </div>
+                )}
+                {hasNextPage && items.length > 0 && <div ref={observerRef} className="h-5" />}
+                {!hasNextPage && items.length > 0 && (
+                    <footer className="py-4 text-center">
+                        <span className="inline-flex items-center gap-2 rounded-[999px] border border-outline-variant bg-surface-container px-4 py-1.5 text-[12px] font-medium text-on-surface-variant">
+                            <span className="material-symbols-outlined text-[16px] text-outline">sports_score</span>
+                            Showing all {items.length} {items.length === 1 ? "item" : "items"}
+                        </span>
+                    </footer>
+                )}
+            </main>
 
-                            return (
-                                <SellerCard
-                                    key={item.id}
-                                    component={Link}
-                                    href={route("seller.items.show", item.id)}
-                                    sx={{
-                                        p: 0,
-                                        overflow: "hidden",
-                                        borderRadius: 3,
-                                        bgcolor: "background.paper",
-                                        border: "1px solid rgb(var(--outline-variant) / 0.6)",
-                                        boxShadow: sellerShadow("0 2px 8px", 0.04),
-                                        transition: "transform 0.2s, box-shadow 0.2s",
-                                        "&:hover": {
-                                            transform: "translateY(-4px)",
-                                            boxShadow: sellerShadow("0 8px 24px", 0.08),
-                                        },
-                                        cursor: "pointer",
-                                        textDecoration: "none",
-                                    }}
-                                >
-                                    {/* ---------- Image Container ---------- */}
-                                    <Box
-                                        sx={{
-                                            position: "relative",
-                                            width: "100%",
-                                            aspectRatio: "1 / 1",
-                                            bgcolor: "rgb(var(--surface-container))",
-                                            overflow: "hidden",
-                                        }}
-                                    >
-                                        {!loaded[item.id] && (
-                                            <Box
-                                                sx={{
-                                                    position: "absolute",
-                                                    inset: 0,
-                                                    background:
-                                                        "linear-gradient(90deg, transparent 25%, rgb(var(--surface-bright) / 0.2) 50%, transparent 75%)",
-                                                    backgroundSize: "200% 100%",
-                                                    animation: "shimmer 1.4s infinite",
-                                                }}
-                                            />
-                                        )}
-                                        <img
-                                            src={imgSrc}
-                                            alt={item.product_name}
-                                            onLoad={() => {
-                                                console.log(`[Image] item ${item.id} loaded`);
-                                                setLoaded((prev) => ({ ...prev, [item.id]: true }));
-                                            }}
-                                            onError={(e) => {
-                                                console.error(`[Image] item ${item.id} failed to load, src:`, imgSrc);
-                                                const target = e.currentTarget;
-                                                if (target.src.includes(NO_IMAGE_PLACEHOLDER)) return;
-                                                target.src = NO_IMAGE_PLACEHOLDER;
-                                                setLoaded((prev) => ({ ...prev, [item.id]: true }));
-                                            }}
-                                            style={{
-                                                width: "100%",
-                                                height: "100%",
-                                                objectFit: "cover",
-                                                opacity: loaded[item.id] ? 1 : 0,
-                                                transition: "opacity 0.35s ease",
-                                            }}
-                                        />
-
-                                        {/* ----- 🔥 DISCOUNT OVERLAYS ----- */}
-                                        {hasDiscount && (
-                                            <>
-                                                {discountEnds && (
-                                                    <Box
-                                                        sx={{
-                                                            position: "absolute",
-                                                            top: 0,
-                                                            left: 0,
-                                                            width: "100%",
-                                                            zIndex: 3,
-                                                            bgcolor: "rgb(var(--inverse-surface) / 0.7)",
-                                                            backdropFilter: "blur(4px)",
-                                                            px: 1,
-                                                            py: 0.5,
-                                                            display: "flex",
-                                                            justifyContent: "center",
-                                                            alignItems: "center",
-                                                            borderBottom: "1px solid rgb(var(--inverse-on-surface) / 0.1)",
-                                                        }}
-                                                    >
-                                                        <DiscountCountdown endsAt={discountEnds} />
-                                                    </Box>
-                                                )}
-                                                <Chip
-                                                    label={`${discountPercent}% OFF`}
-                                                    size="small"
-                                                    sx={{
-                                                        position: "absolute",
-                                                        top: 36,
-                                                        left: 8,
-                                                        zIndex: 2,
-                                                        bgcolor: "error.main",
-                                                        color: "error.contrastText",
-                                                        fontWeight: 700,
-                                                        fontSize: "0.7rem",
-                                                        height: 26,
-                                                        borderRadius: 1,
-                                                        boxShadow: sellerShadow("0 2px 8px", 0.15),
-                                                        pointerEvents: "none",
-                                                    }}
-                                                />
-                                            </>
-                                        )}
-                                        {isSellerPrice && (
-                                            <Chip
-                                                label="Seller Price"
-                                                size="small"
-                                                sx={{
-                                                    position: "absolute",
-                                                    bottom: 8,
-                                                    left: 8,
-                                                    zIndex: 2,
-                                                    bgcolor: "rgb(var(--inverse-surface))",
-                                                    color: "rgb(var(--inverse-on-surface))",
-                                                    fontWeight: 600,
-                                                    fontSize: "0.65rem",
-                                                    height: 22,
-                                                    borderRadius: 1,
-                                                    boxShadow: sellerShadow("0 2px 4px", 0.2),
-                                                    pointerEvents: "none",
-                                                }}
-                                            />
-                                        )}
-                                    </Box>
-
-                                    {/* ---------- Product Info ---------- */}
-                                    <Box sx={{ p: 1.5 }}>
-                                        <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                            sx={{ fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}
-                                        >
-                                            {item.category?.category_name || "General"}
-                                        </Typography>
-                                        <Typography
-                                            fontWeight={600}
-                                            fontSize="0.95rem"
-                                            noWrap
-                                            sx={{ mb: 0.5 }}
-                                        >
-                                            {item.product_name}
-                                        </Typography>
-
-                                        <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mb: 0.5 }}>
-                                            <Typography
-                                                fontWeight={700}
-                                                fontSize="1.1rem"
-                                                color={hasDiscount ? "error" : "text.primary"}
-                                            >
-                                                ${displayPrice.toFixed(2)}
-                                            </Typography>
-                                            {hasDiscount && (
-                                                <Typography
-                                                    variant="caption"
-                                                    sx={{
-                                                        textDecoration: "line-through",
-                                                        color: "text.disabled",
-                                                    }}
-                                                >
-                                                    ${originalPrice.toFixed(2)}
-                                                </Typography>
-                                            )}
-                                            {has_tin_cart && (
-                                                <Typography variant="caption" color="success.main" sx={{ ml: 'auto !important', fontWeight: 600, fontSize: '0.65rem' }}>
-                                                    incl. VAT
-                                                </Typography>
-                                            )}
-                                        </Stack>
-
-                                        <StockCaption stock={item.store_stock} />
-                                    </Box>
-                                </SellerCard>
-                            );
-                        })}
-                    </Box>
-
-                    {/* Loading / End indicators */}
-                    {isLoading && (
-                        <>
-                            {console.log("[Dashboard] Rendering loading spinner")}
-                            <CircularProgress sx={{ display: "block", mx: "auto", my: 4 }} />
-                        </>
-                    )}
-                    {!hasNextPage && items.length > 0 && (
-                        <>
-                            {console.log("[Dashboard] End of catalog")}
-                            <Typography textAlign="center" color="text.secondary" sx={{ py: 4 }}>
-                                🏁 End of catalog
-                            </Typography>
-                        </>
-                    )}
-                    {items.length === 0 && !isLoading && (
-                        <>
-                            {console.log("[Dashboard] No items found")}
-                            <Box sx={{ textAlign: "center", py: 8 }}>
-                                <ImageNotSupportedIcon sx={{ fontSize: 64, color: "text.secondary", mb: 2 }} />
-                                <Typography color="text.secondary">No items found</Typography>
-                            </Box>
-                        </>
-                    )}
-                    {hasNextPage && items.length > 0 && (
-                        <>
-                            {console.log("[Dashboard] Rendering observer target")}
-                            <div ref={observerRef} style={{ height: 20 }} />
-                        </>
-                    )}
-                </Box>
-
-                {/* ========== BARCODE SCANNER MODAL ========== */}
-                <Dialog open={scannerOpen} onClose={() => {
-                    console.log("[Dialog] closing scanner");
+            <BarcodeScannerDialog
+                open={scannerOpen}
+                onClose={() => setScannerOpen(false)}
+                onScan={(text) => {
                     setScannerOpen(false);
-                }} maxWidth="sm" fullWidth>
-                    <DialogTitle>Scan Barcode</DialogTitle>
-                    <DialogContent>
-                        <div id="barcode-reader-dashboard" style={{ width: "100%", minHeight: "300px" }}></div>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => {
-                            console.log("[Dialog] Cancel button clicked");
-                            setScannerOpen(false);
-                        }}>Cancel</Button>
-                    </DialogActions>
-                </Dialog>
-            </Box>
-
-            <style>{`
-                @keyframes shimmer {
-                    0% { background-position: 100% 0; }
-                    100% { background-position: -100% 0; }
-                }
-            `}</style>
-        </SellerLayout>
+                    router.get(route("seller.items.search"), { search: text });
+                }}
+            />
+        </>
     );
 }
+
+Index.layout = (page: React.ReactNode) => <SellerLayout>{page}</SellerLayout>;
