@@ -263,9 +263,9 @@ export default function PriceDeviations({ store, deviations = [] }: Props) {
                 <Box>{filtered.map(d => <DeviationCard key={`${d.tier}-${d.id}`} d={d} />)}</Box>
             ) : (
                 <TableContainer component={Paper} elevation={0}
-                    sx={{ border: "1px solid #e0e0e0", borderRadius: 3 }}>
+                    sx={{ border: "1px solid rgb(var(--outline-variant))", borderRadius: 3 }}>
                     <Table size="small">
-                        <TableHead sx={{ bgcolor: "grey.50" }}>
+                        <TableHead sx={{ bgcolor: "rgb(var(--surface-container-low))" }}>
                             <TableRow>
                                 <TableCell sx={{ fontWeight: 700 }}>Variant</TableCell>
                                 <TableCell sx={{ fontWeight: 700 }}>SKU</TableCell>
@@ -335,7 +335,7 @@ export default function PriceDeviations({ store, deviations = [] }: Props) {
                 <Paper elevation={6} sx={{
                     position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)",
                     p: 2, borderRadius: 3, zIndex: 1300, width: { xs: "calc(100% - 32px)", sm: 420 },
-                    border: "1px solid #e0e0e0",
+                    border: "1px solid rgb(var(--outline-variant))",
                 }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
                         <Typography variant="subtitle2" fontWeight={700}>

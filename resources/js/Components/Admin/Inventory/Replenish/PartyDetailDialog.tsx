@@ -108,7 +108,7 @@ export default function PartyDetailDialog({
                                 <Stack alignItems="center" spacing={0.25}>
                                     <Stack direction="row" alignItems="center" spacing={0.5}>
                                         {PARTY_META[key].icon}
-                                        <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: agreed ? "success.main" : info.status === "rescheduled" ? "warning.main" : "grey.400" }} />
+                                        <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: agreed ? "success.main" : info.status === "rescheduled" ? "warning.main" : "rgb(var(--outline))" }} />
                                     </Stack>
                                     <Typography variant="caption" fontWeight={700} sx={{ fontSize: 10 }}>{PARTY_META[key].label}</Typography>
                                 </Stack>

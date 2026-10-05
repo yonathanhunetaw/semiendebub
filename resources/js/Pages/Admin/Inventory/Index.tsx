@@ -6,6 +6,7 @@ import {
     type Tile,
     href,
 } from "@/Components/Shared/OpsHub";
+import { Card } from "@/Components/Shared/ui";
 import { Head, Link } from "@inertiajs/react";
 import React, { useMemo, useState } from "react";
 
@@ -240,7 +241,7 @@ export default function InventoryHub({
                                     <h1 className="truncate text-[17px] font-bold tracking-tight text-on-surface">
                                         Inventory
                                     </h1>
-                                    <p className="mt-0.5 truncate text-[11px] text-gray-500">
+                                    <p className="mt-0.5 truncate text-[11px] text-on-surface-variant">
                                         {retail.length} store{retail.length === 1 ? "" : "s"} ·{" "}
                                         {facilities.length + warehouses.length} facilit
                                         {facilities.length + warehouses.length === 1 ? "y" : "ies"} ·{" "}
@@ -251,7 +252,7 @@ export default function InventoryHub({
 
                             <Link
                                 href={route("admin.inventory.stores")}
-                                className="flex shrink-0 items-center gap-1 rounded-[999px] border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-bold text-gray-700 transition-colors hover:bg-gray-50"
+                                className="flex shrink-0 items-center gap-1 rounded-[999px] border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-[11px] font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low"
                             >
                                 <span className="material-symbols-outlined text-[16px]">grid_view</span>
                                 All stock
@@ -286,159 +287,153 @@ export default function InventoryHub({
                     <OpsCard title="Warehouses & Hubs" note="Facilities" rows={facilityRows} wide />
 
                     {/* ── Item picker → per-location stock tool ── */}
-                    <section className="mb-3">
-                        <div className="rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
-                            <div className="mb-3 flex items-center justify-between gap-2">
-                                <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface">
-                                    Stock by item
-                                </h3>
-                                <span className="font-mono text-[10px] text-gray-400">
-                                    {deployedItems.length} of {catalogue.items} deployed
-                                </span>
-                            </div>
+                    <Card
+                        title="Stock by item"
+                        titleVariant="caps"
+                        note={`${deployedItems.length} of ${catalogue.items} deployed`}
+                    >
 
-                            <p className="mb-2.5 text-[11px] text-gray-500">
-                                Pick an item, then a store, to open the per-location stock tool —
-                                shelf, store room, remote hub and warehouses, tap to filter or combine.
-                            </p>
+                    <p className="mb-2.5 text-[11px] text-on-surface-variant">
+                        Pick an item, then a store, to open the per-location stock tool —
+                        shelf, store room, remote hub and warehouses, tap to filter or combine.
+                    </p>
 
-                            <label className="mb-3 flex items-center gap-2 rounded-[10px] border border-gray-200 bg-gray-50 px-2.5 py-1.5 focus-within:border-[#c2410c] focus-within:bg-white">
-                                <span className="material-symbols-outlined text-[18px] text-gray-400">
-                                    search
-                                </span>
-                                <input
-                                    type="search"
-                                    value={itemSearch}
-                                    onChange={(event) => setItemSearch(event.target.value)}
-                                    placeholder="Item or store name…"
-                                    aria-label="Search deployed items"
-                                    className="w-full border-0 bg-transparent p-0 text-[12px] font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-0"
-                                />
-                            </label>
+                    <label className="mb-3 flex items-center gap-2 rounded-[10px] border border-outline-variant bg-surface-container-low px-2.5 py-1.5 focus-within:border-primary focus-within:bg-surface-container-lowest">
+                        <span className="material-symbols-outlined text-[18px] text-outline">
+                            search
+                        </span>
+                        <input
+                            type="search"
+                            value={itemSearch}
+                            onChange={(event) => setItemSearch(event.target.value)}
+                            placeholder="Item or store name…"
+                            aria-label="Search deployed items"
+                            className="w-full border-0 bg-transparent p-0 text-[12px] font-medium text-on-surface placeholder:text-outline focus:outline-none focus:ring-0"
+                        />
+                    </label>
 
-                            <div className="grid grid-cols-1 gap-2">
-                                {shown.map((item) => (
-                                    <div
-                                        key={item.id}
-                                        className="rounded-[12px] border border-gray-200 bg-white px-3 py-2.5"
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <h4 className="truncate text-xs font-bold text-gray-900">
-                                                    {item.name}
-                                                </h4>
-                                                <p className="mt-0.5 text-[10px] text-gray-500">
-                                                    {item.variants} variant
-                                                    {item.variants === 1 ? "" : "s"} ·{" "}
-                                                    <span className="font-semibold text-gray-700">
-                                                        {item.store_stock.toLocaleString()}
+                    <div className="grid grid-cols-1 gap-2">
+                        {shown.map((item) => (
+                            <div
+                                key={item.id}
+                                className="rounded-[12px] border border-outline-variant bg-surface-container-lowest px-3 py-2.5"
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <h4 className="truncate text-xs font-bold text-on-surface">
+                                            {item.name}
+                                        </h4>
+                                        <p className="mt-0.5 text-[10px] text-on-surface-variant">
+                                            {item.variants} variant
+                                            {item.variants === 1 ? "" : "s"} ·{" "}
+                                            <span className="font-semibold text-on-surface">
+                                                {item.store_stock.toLocaleString()}
+                                            </span>{" "}
+                                            pcs in stores
+                                            {item.warehouse_stock > 0 ? (
+                                                <>
+                                                    {" · "}
+                                                    <span className="font-semibold text-on-surface">
+                                                        {item.warehouse_stock.toLocaleString()}
                                                     </span>{" "}
-                                                    pcs in stores
-                                                    {item.warehouse_stock > 0 ? (
-                                                        <>
-                                                            {" · "}
-                                                            <span className="font-semibold text-gray-700">
-                                                                {item.warehouse_stock.toLocaleString()}
-                                                            </span>{" "}
-                                                            in warehouses
-                                                        </>
-                                                    ) : null}
-                                                </p>
-                                            </div>
-                                            <span className="shrink-0 rounded-[999px] bg-gray-100 px-2 py-0.5 font-mono text-[10px] font-bold text-gray-500">
-                                                #{item.id}
-                                            </span>
-                                        </div>
+                                                    in warehouses
+                                                </>
+                                            ) : null}
+                                        </p>
+                                    </div>
+                                    <span className="shrink-0 rounded-[999px] bg-surface-container px-2 py-0.5 font-mono text-[10px] font-bold text-on-surface-variant">
+                                        #{item.id}
+                                    </span>
+                                </div>
 
-                                        {/* The variant tool is store-scoped, so the row
-                                            offers each location holding stock rather
-                                            than picking one on the admin's behalf. */}
-                                        <div className="mt-2 flex flex-wrap gap-1.5">
-                                            {item.stores.map((store) => {
-                                                const target = href("store.item.variants", {
-                                                    store: store.id,
-                                                    item: item.id,
-                                                });
+                                {/* The variant tool is store-scoped, so the row
+                                    offers each location holding stock rather
+                                    than picking one on the admin's behalf. */}
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {item.stores.map((store) => {
+                                        const target = href("store.item.variants", {
+                                            store: store.id,
+                                            item: item.id,
+                                        });
 
-                                                if (!target) return null;
+                                        if (!target) return null;
 
-                                                const isFacility = store.type !== "retail";
+                                        const isFacility = store.type !== "retail";
 
-                                                return (
-                                                    <Link
-                                                        key={store.id}
-                                                        href={target}
-                                                        className={`group flex items-center gap-1 rounded-[999px] border px-2.5 py-1 text-[10px] font-bold transition-colors ${
-                                                            isFacility
-                                                                ? "border-blue-200 bg-blue-50/70 text-blue-700 hover:border-blue-500 hover:bg-blue-50"
-                                                                : "border-gray-200 bg-gray-50 text-gray-700 hover:border-[#c2410c] hover:bg-orange-50 hover:text-[#c2410c]"
-                                                        }`}
-                                                        title={`${store.name} — ${store.stock.toLocaleString()} pcs across ${store.variants} variant${store.variants === 1 ? "" : "s"}`}
-                                                    >
-                                                        <span className="material-symbols-outlined text-[13px]">
-                                                            {STORE_TYPE_ICON[store.type] ?? "storefront"}
-                                                        </span>
-                                                        {store.name}
-                                                        <span className="font-mono font-medium opacity-60">
-                                                            {store.stock.toLocaleString()}
-                                                        </span>
-                                                        <span className="material-symbols-outlined text-[13px]">
-                                                            chevron_right
-                                                        </span>
-                                                    </Link>
-                                                );
-                                            })}
-
-                                            {/* Warehouses are a separate table from the
-                                                warehouse-typed stores above, and have no
-                                                per-item variant screen, so they report
-                                                rather than link. */}
-                                            {item.warehouses.map((warehouse) => (
-                                                <span
-                                                    key={`wh-${warehouse.id}`}
-                                                    className="flex items-center gap-1 rounded-[999px] border border-violet-200 bg-violet-50/70 px-2.5 py-1 text-[10px] font-bold text-violet-700"
-                                                    title={`${warehouse.name} — ${warehouse.stock.toLocaleString()} pcs`}
-                                                >
-                                                    <span className="material-symbols-outlined text-[13px]">
-                                                        inventory
-                                                    </span>
-                                                    {warehouse.name}
-                                                    <span className="font-mono font-medium opacity-60">
-                                                        {warehouse.stock.toLocaleString()}
-                                                    </span>
+                                        return (
+                                            <Link
+                                                key={store.id}
+                                                href={target}
+                                                className={`group flex items-center gap-1 rounded-[999px] border px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                                                    isFacility
+                                                        ? "border-info/30 bg-info-container/70 text-on-info-container hover:border-info hover:bg-info-container"
+                                                        : "border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-primary hover:bg-primary-container/60 hover:text-primary"
+                                                }`}
+                                                title={`${store.name} — ${store.stock.toLocaleString()} pcs across ${store.variants} variant${store.variants === 1 ? "" : "s"}`}
+                                            >
+                                                <span className="material-symbols-outlined text-[13px]">
+                                                    {STORE_TYPE_ICON[store.type] ?? "storefront"}
                                                 </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
+                                                {store.name}
+                                                <span className="font-mono font-medium opacity-60">
+                                                    {store.stock.toLocaleString()}
+                                                </span>
+                                                <span className="material-symbols-outlined text-[13px]">
+                                                    chevron_right
+                                                </span>
+                                            </Link>
+                                        );
+                                    })}
 
-                                {visibleItems.length > shown.length ? (
-                                    <p className="py-2 text-center text-[11px] text-slate-500">
-                                        Showing {shown.length} of {visibleItems.length}. Search to
-                                        narrow it down.
-                                    </p>
-                                ) : null}
-
-                                {visibleItems.length === 0 ? (
-                                    <div className="flex flex-col items-center px-6 py-10 text-center">
-                                        <span className="material-symbols-outlined text-[32px] text-slate-300">
-                                            inventory_2
+                                    {/* Warehouses are a separate table from the
+                                        warehouse-typed stores above, and have no
+                                        per-item variant screen, so they report
+                                        rather than link. */}
+                                    {item.warehouses.map((warehouse) => (
+                                        <span
+                                            key={`wh-${warehouse.id}`}
+                                            className="flex items-center gap-1 rounded-[999px] border border-tertiary/30 bg-tertiary-container/70 px-2.5 py-1 text-[10px] font-bold text-on-tertiary-container"
+                                            title={`${warehouse.name} — ${warehouse.stock.toLocaleString()} pcs`}
+                                        >
+                                            <span className="material-symbols-outlined text-[13px]">
+                                                inventory
+                                            </span>
+                                            {warehouse.name}
+                                            <span className="font-mono font-medium opacity-60">
+                                                {warehouse.stock.toLocaleString()}
+                                            </span>
                                         </span>
-                                        <p className="mt-2 text-[13px] font-bold text-gray-900">
-                                            {itemSearch
-                                                ? "No matching items"
-                                                : "Nothing is holding stock yet"}
-                                        </p>
-                                        <p className="mt-1 text-[11px] text-slate-500">
-                                            {itemSearch
-                                                ? "Try a different item or store name."
-                                                : "Receive stock into a store or warehouse to see it here."}
-                                        </p>
-                                    </div>
-                                ) : null}
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    </section>
+                        ))}
+
+                        {visibleItems.length > shown.length ? (
+                            <p className="py-2 text-center text-[11px] text-on-surface-variant">
+                                Showing {shown.length} of {visibleItems.length}. Search to
+                                narrow it down.
+                            </p>
+                        ) : null}
+
+                        {visibleItems.length === 0 ? (
+                            <div className="flex flex-col items-center px-6 py-10 text-center">
+                                <span className="material-symbols-outlined text-[32px] text-outline/60">
+                                    inventory_2
+                                </span>
+                                <p className="mt-2 text-[13px] font-bold text-on-surface">
+                                    {itemSearch
+                                        ? "No matching items"
+                                        : "Nothing is holding stock yet"}
+                                </p>
+                                <p className="mt-1 text-[11px] text-on-surface-variant">
+                                    {itemSearch
+                                        ? "Try a different item or store name."
+                                        : "Receive stock into a store or warehouse to see it here."}
+                                </p>
+                            </div>
+                        ) : null}
+                    </div>
+                    </Card>
                 </div>
             </div>
         </>

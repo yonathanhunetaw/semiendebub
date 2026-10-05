@@ -76,19 +76,19 @@ export default function ItemVariants({ store, item, customers, sellers }: {
                         <Stack direction="row" spacing={1.25} alignItems="flex-start">
                             <Box sx={{
                                 position: 'relative', width: 72, height: 72, borderRadius: 2,
-                                flex: '0 0 auto', bgcolor: 'grey.100',
+                                flex: '0 0 auto', bgcolor: 'rgb(var(--surface-container))',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>
-                                <Inventory2Icon sx={{ color: 'grey.400', fontSize: 32 }} />
+                                <Inventory2Icon sx={{ color: 'rgb(var(--outline))', fontSize: 32 }} />
                                 <Chip label={item.category} size="small"
                                     sx={{ position: 'absolute', bottom: 4, right: 4, height: 18, fontSize: '0.6rem',
-                                        bgcolor: 'rgba(15,23,42,0.85)', color: '#fff' }} />
+                                        bgcolor: 'rgb(var(--inverse-surface) / 0.85)', color: 'rgb(var(--inverse-on-surface))' }} />
                             </Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                                 <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
                                     <Chip label={`SKU-${item.item_id}`} size="small"
                                         sx={{ height: 20, fontSize: '0.65rem', fontFamily: 'monospace',
-                                            bgcolor: 'grey.100', color: 'text.secondary' }} />
+                                            bgcolor: 'rgb(var(--surface-container))', color: 'text.secondary' }} />
                                     <Chip size="small" variant="outlined"
                                         label={hasLow ? `${lowStockVariants} low` : 'In-Stock'}
                                         color={hasLow ? 'error' : 'success'}
@@ -110,7 +110,7 @@ export default function ItemVariants({ store, item, customers, sellers }: {
                                     </Typography>
                                     <Chip size="small"
                                         label={`${stockAggregate.cartons} Ctns • ${stockAggregate.boxes} Bx • ${stockAggregate.pieces} Pcs`}
-                                        sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600, bgcolor: 'grey.100' }} />
+                                        sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600, bgcolor: 'rgb(var(--surface-container))' }} />
                                 </Stack>
                             </Box>
                         </Stack>

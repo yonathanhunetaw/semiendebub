@@ -82,7 +82,13 @@ function Confetti() {
     const [pieces, setPieces] = useState<any[]>([]);
 
     useEffect(() => {
-        const colors = ["#004632", "#0d5f46", "#8cd5b6", "#ffdcc3", "#d5e0f8"];
+        const colors = [
+            "rgb(var(--primary))",
+            "rgb(var(--tertiary))",
+            "rgb(var(--success))",
+            "rgb(var(--warning-container))",
+            "rgb(var(--info-container))",
+        ];
         const newPieces = Array.from({ length: 40 }).map((_, i) => {
             const animDuration = (Math.random() * 1.5 + 1.2).toFixed(2);
             return {
@@ -139,7 +145,7 @@ function PhaseStepper() {
                 {["Manifest", "Review", "Dispatched"].map((label, i) => (
                     <React.Fragment key={label}>
                         <Stack direction="row" alignItems="center" spacing={0.75}>
-                            <Box sx={{ width: 26, height: 26, borderRadius: "50%", bgcolor: "primary.main", color: "primary.contrastText", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: i === 2 ? "0 0 0 3px rgba(0, 70, 50, 0.15)" : "none" }}>
+                            <Box sx={{ width: 26, height: 26, borderRadius: "50%", bgcolor: "primary.main", color: "primary.contrastText", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: i === 2 ? "0 0 0 3px rgb(var(--primary) / 0.15)" : "none" }}>
                                 {i < 2 ? <CheckCircleIcon sx={{ fontSize: 16 }} /> : <Typography variant="caption" fontWeight={800} lineHeight={1}>3</Typography>}
                             </Box>
                             <Box>
@@ -180,7 +186,7 @@ export default function ReplenishDispatched({
                 <Box sx={{ position: "absolute", top: -20, right: -20, width: 150, height: 150, bgcolor: "primary.light", opacity: 0.1, borderRadius: "50%" }} />
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                     <Stack direction="row" spacing={2} alignItems="center">
-                        <Box sx={{ width: 56, height: 56, borderRadius: "16px", bgcolor: "primary.main", color: "primary.contrastText", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,70,50,0.2)" }}>
+                        <Box sx={{ width: 56, height: 56, borderRadius: "16px", bgcolor: "primary.main", color: "primary.contrastText", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgb(var(--primary) / 0.2)" }}>
                             <CheckCircleIcon sx={{ fontSize: 32 }} />
                         </Box>
                         <Box>
@@ -244,7 +250,7 @@ export default function ReplenishDispatched({
                 <Box sx={{ position: "relative", py: 1.5, mb: 1 }}>
                     <LinearProgress variant="determinate" value={transit_pct} sx={{ height: 8, borderRadius: 4, bgcolor: "action.selected", "& .MuiLinearProgress-bar": { borderRadius: 4 } }} />
                     <Box sx={{ position: "absolute", top: "50%", left: `${transit_pct}%`, transform: "translate(-50%, -50%)", width: 28, height: 28, borderRadius: "50%", bgcolor: "primary.main", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: 2, transition: "left 1s ease" }}>
-                        <LocalShippingIcon sx={{ fontSize: 16, color: "#fff" }} />
+                        <LocalShippingIcon sx={{ fontSize: 16, color: "primary.contrastText" }} />
                     </Box>
                 </Box>
 

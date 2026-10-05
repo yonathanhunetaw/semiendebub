@@ -24,16 +24,7 @@ resources/js/Layouts/DevLayout.tsx 2
 resources/js/Layouts/GuestLayout.tsx 9
 resources/js/Pages/Admin/Canvas.tsx 10
 resources/js/Pages/Admin/Carts/Index.tsx 1
-resources/js/Pages/Admin/Inventory/Index.tsx 3
-resources/js/Pages/Admin/Inventory/Locations/index.tsx 4
-resources/js/Pages/Admin/Inventory/Replenish/Build/index.tsx 1
-resources/js/Pages/Admin/Inventory/Replenish/Dispatched/index.tsx 8
-resources/js/Pages/Admin/Inventory/Replenish/Review/index.tsx 6
-resources/js/Pages/Admin/Inventory/Stores/ItemVariants.tsx 2
-resources/js/Pages/Admin/Inventory/Stores/PriceDeviations.tsx 2
-resources/js/Pages/Admin/Inventory/Stores/Replenish.tsx 1
-resources/js/Pages/Admin/Inventory/Stores/StoreInventory.tsx 62
-resources/js/Pages/Admin/Inventory/Warehouse/index.tsx 5
+resources/js/Pages/Admin/Inventory/Stores/StoreInventory.tsx 47
 resources/js/Pages/Admin/Stock/Index.tsx 6
 resources/js/Pages/Delivery/Login/index.tsx 1
 resources/js/Pages/Delivery/Shipments/index.tsx 5

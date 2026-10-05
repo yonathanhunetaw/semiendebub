@@ -142,7 +142,7 @@ function RadialGauge({ percent, color }: { percent: number; color: string }) {
     return (
         <Box sx={{ position: "relative", width: 112, height: 112, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg viewBox="0 0 36 36" style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
-                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="3.8" />
+                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgb(var(--on-surface) / 0.08)" strokeWidth="3.8" />
                 <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke={color} strokeWidth="3.8" strokeDasharray={`${dash}, ${circumference}`} strokeLinecap="round" style={{ transition: "stroke-dasharray 0.5s ease" }} />
             </svg>
             <Box sx={{ position: "absolute", textAlign: "center" }}>
@@ -184,7 +184,11 @@ export default function ReplenishReview({
         cbmPercent > 100 ? "over" : cbmPercent > 85 ? "warning" : "healthy";
 
     const gaugeColor =
-        loadState === "over" ? "#ba1a1a" : loadState === "warning" ? "#814400" : "#004632";
+        loadState === "over"
+            ? "rgb(var(--error))"
+            : loadState === "warning"
+              ? "rgb(var(--warning))"
+              : "rgb(var(--success))";
 
     const agreements: PartyAgreementsMap = {
         creator: {
@@ -287,7 +291,7 @@ export default function ReplenishReview({
                     <Paper elevation={0} sx={{ p: 2, borderRadius: "14px", border: "1px solid", borderColor: "warning.light", bgcolor: "warning.light" }}>
                         <Stack direction="row" alignItems="flex-start" spacing={1.5}>
                             <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: "warning.main", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <WarningAmberIcon sx={{ color: "#fff", fontSize: 20 }} />
+                                <WarningAmberIcon sx={{ color: "warning.contrastText", fontSize: 20 }} />
                             </Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                                 <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -303,7 +307,7 @@ export default function ReplenishReview({
                     <Paper elevation={0} sx={{ p: 2, borderRadius: "14px", border: "1px solid", borderColor: "error.light", bgcolor: "error.light" }}>
                         <Stack direction="row" alignItems="flex-start" spacing={1.5} mb={1.5}>
                             <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: "error.main", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <ErrorIcon sx={{ color: "#fff", fontSize: 20 }} />
+                                <ErrorIcon sx={{ color: "error.contrastText", fontSize: 20 }} />
                             </Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                                 <Stack direction="row" justifyContent="space-between" alignItems="center">

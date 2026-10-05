@@ -88,8 +88,8 @@ const iconBoxSx = {
     width: 40,
     height: 40,
     borderRadius: 2,
-    bgcolor: "#0b1c30",
-    color: "#fff",
+    bgcolor: "rgb(var(--inverse-surface))",
+    color: "rgb(var(--inverse-on-surface))",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -127,7 +127,7 @@ export default function LocationsIndex({
                     and stock keepers also run its shelf, floor and Remote Hub.
                 </Typography>
 
-                <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 3, bgcolor: "#fff7ed" }}>
+                <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 3, bgcolor: "rgb(var(--primary-container) / 0.6)" }}>
                     <Stack direction="row" spacing={1.5} alignItems="center">
                         <span className="material-symbols-outlined">local_shipping</span>
                         <Box>
@@ -186,7 +186,7 @@ function LocationCard({
     const [editingStaff, setEditingStaff] = useState(false);
 
     return (
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, ...(location.kind === "store" ? { bgcolor: "#f8fafc" } : {}) }}>
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, ...(location.kind === "store" ? { bgcolor: "rgb(var(--surface-container-low))" } : {}) }}>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }} justifyContent="space-between">
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
                     <Box sx={iconBoxSx}>

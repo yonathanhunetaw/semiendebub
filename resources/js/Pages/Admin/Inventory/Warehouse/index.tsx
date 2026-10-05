@@ -169,7 +169,7 @@ export default function WarehouseIndex({
     // Build location list for selector pills
     const locationPills = useMemo(() => {
         const list: { key: string; label: string; count: number; tone: string }[] = [
-            { key: "all", label: "All Locations", count: totalUnits, tone: "grey.900" },
+            { key: "all", label: "All Locations", count: totalUnits, tone: "rgb(var(--on-surface))" },
         ];
         const tones = ["success.main", "info.main", "primary.main", "warning.main", "secondary.main"];
         warehouses.forEach((wh, idx) => {
@@ -309,7 +309,7 @@ export default function WarehouseIndex({
                                 bgcolor:
                                     card.label === "Low Stock Alerts" &&
                                     lowStockCount > 0
-                                        ? "rgba(237, 108, 2, 0.04)"
+                                        ? "rgb(var(--warning) / 0.04)"
                                         : "background.paper",
                             }}
                         >
@@ -590,17 +590,17 @@ export default function WarehouseIndex({
                                 sx={{
                                     flex: "0 0 auto", px: 1.25, py: 0.75, borderRadius: 2,
                                     cursor: "pointer", minWidth: 100,
-                                    bgcolor: active ? "grey.900" : "background.paper",
-                                    color: active ? "#fff" : "text.primary",
-                                    borderColor: active ? "grey.900" : "divider",
+                                    bgcolor: active ? "rgb(var(--inverse-surface))" : "background.paper",
+                                    color: active ? "rgb(var(--inverse-on-surface))" : "text.primary",
+                                    borderColor: active ? "rgb(var(--inverse-surface))" : "divider",
                                     transition: "all 0.15s",
                                 }}>
                                 <Stack direction="row" spacing={0.5} alignItems="center">
                                     <Box sx={{ width: 6, height: 6, borderRadius: "50%",
-                                        bgcolor: active ? "#fff" : l.tone }} />
+                                        bgcolor: active ? "rgb(var(--inverse-on-surface))" : l.tone }} />
                                     <Typography variant="caption"
                                         sx={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase",
-                                            color: active ? "rgba(255,255,255,0.75)" : "text.secondary" }}>
+                                            color: active ? "rgb(var(--inverse-on-surface) / 0.75)" : "text.secondary" }}>
                                         {l.label}
                                     </Typography>
                                 </Stack>
@@ -608,7 +608,7 @@ export default function WarehouseIndex({
                                     {l.count.toLocaleString()}
                                     <Typography component="span"
                                         sx={{ fontSize: "0.6rem", fontWeight: 400, ml: 0.5,
-                                            color: active ? "rgba(255,255,255,0.6)" : "text.secondary" }}>
+                                            color: active ? "rgb(var(--inverse-on-surface) / 0.6)" : "text.secondary" }}>
                                         units
                                     </Typography>
                                 </Typography>
