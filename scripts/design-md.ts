@@ -7,6 +7,9 @@
  *   - role palettes, light and dark                <- resources/js/theme/*
  *   - shared components and their props            <- Components/Shared/ui (TS interfaces)
  *   - the StatusPill status -> tone map            <- Components/Shared/ui/StatusPill.tsx
+ *   - MUI palette mapping and component defaults   <- resources/js/theme/muiTheme.ts (AST)
+ *   - layout shells, bottom navs, tab icons        <- resources/js/Layouts/*, Components/Navigation/*
+ *   - public welcome pages                         <- Components/Shared/RoleWelcome.tsx
  *
  * The host entry point is docs/scribts/build-design-md.sh, which runs this
  * through `docker exec`, checks the result and only then writes the file.
@@ -19,7 +22,7 @@ import { STATUS_TONES } from '../resources/js/Components/Shared/ui/StatusPill';
 import { TONES, type Tone } from '../resources/js/Components/Shared/ui/tones';
 import { buildScheme, COLOR_TOKENS, DEFAULT_THEME_SETTING, THEME_STORAGE_KEY, type ColorToken } from '../resources/js/theme/cssVars';
 import { DEFAULT_ROLE, ROLES } from '../resources/js/theme/roles';
-import { NEUTRALS, ROLE_PALETTES, STATUS } from '../resources/js/theme/tokens';
+import { FONT_SANS_STACK, MUI_RADIUS_PX, NEUTRALS, ROLE_PALETTES, STATUS } from '../resources/js/theme/tokens';
 
 const root = process.cwd();
 const UI_DIR = 'resources/js/Components/Shared/ui';
@@ -71,7 +74,7 @@ p(
     '- React 19 + Inertia.js + TypeScript (`.tsx`). **Tailwind CSS v3** (not v4) is the styling language for new screens.',
     '- Material UI 7 is still used for complex widgets (data tables, date pickers, charts). Do not design replacements for those.',
     '- Icons: **Material Symbols Outlined** (bundled), written as `<span className="material-symbols-outlined">inventory_2</span>`.',
-    `- Font: Inter only (\`font-sans\`, and every type-scale name below uses Inter).`,
+    `- Font: Inter only (\`font-sans\`, and every type-scale name below uses Inter). Full stack: ${FONT_SANS_STACK.map(code).join(', ')}.`,
     '',
     '## 2. How color works (read this first)',
     '',
@@ -143,15 +146,17 @@ p(
 p(
     '## 4. Role palettes (reference values only; write the token name, never the hex)',
     '',
-    '| Role key | Subdomain | Light `primary` / `primary-container` | Dark `primary` / `primary-container` |',
-    '|---|---|---|---|',
+    '| Role key | Subdomain | Light `primary` / `primary-container` | Dark `primary` / `primary-container` | Tab icon |',
+    '|---|---|---|---|---|',
 );
+/** Mirrors useRoleFavicon() in theme/useRole.ts: the label's first letter on `primary`. */
+const tabIcon = (label: string) => `"${label.charAt(0)}" in \`on-primary\` on \`primary\``;
 for (const role of ROLES) {
     const l = buildScheme(role.key, 'light');
     const d = buildScheme(role.key, 'dark');
     const accent = ROLE_PALETTES[role.key].accent ? ` (+ \`tertiary\` ${l.tertiary} / ${d.tertiary})` : '';
     p(
-        `| \`${role.key}\` | ${role.subdomains.map((s) => `${s}.`).join(', ')} | ${l.primary} / ${l['primary-container']} | ${d.primary} / ${d['primary-container']}${accent} |`,
+        `| \`${role.key}\` | ${role.subdomains.map((s) => `${s}.`).join(', ')} | ${l.primary} / ${l['primary-container']} | ${d.primary} / ${d['primary-container']}${accent} | ${tabIcon(role.label)} |`,
     );
 }
 p('', `Login, public and storefront pages use \`${DEFAULT_ROLE}\`. Text on \`primary\` is always \`on-primary\` (white or ink, picked for contrast).`, '');
@@ -344,33 +349,171 @@ for (const [status, tone] of Object.entries(STATUS_TONES)) byTone.set(tone, [...
 for (const [tone, statuses] of byTone) p(`- **${tone}**: ${statuses.join(', ')}`);
 p('');
 
-// ---- Modules and layouts -------------------------------------------------------------
+// ---- MUI theme -----------------------------------------------------------------------
+
+const MUI_THEME = 'resources/js/theme/muiTheme.ts';
+const muiSrc = ts.createSourceFile(MUI_THEME, readFileSync(join(root, MUI_THEME), 'utf8'), ts.ScriptTarget.Latest, true);
+
+/** Rewrites `s['outline-variant']` / `s.primary` (the scheme lookups in muiTheme.ts) as token names. */
+const tokenText = (node: ts.Node) =>
+    flat(node.getText(muiSrc))
+        .replace(/\$\{s(?:\['([^']+)'\]|\.(\w+))\}/g, (_m, a, b) => `<${a ?? b}>`)
+        .replace(/^s(?:\['([^']+)'\]|\.(\w+))$/, (_m, a, b) => `<${a ?? b}>`)
+        .replace(/^[`'"]|[`'"]$/g, '');
+
+/** Flattens an object literal to `a.b.c -> value` leaves. */
+function leaves(obj: ts.ObjectLiteralExpression, prefix = ''): [string, string][] {
+    return obj.properties.filter(ts.isPropertyAssignment).flatMap((prop) => {
+        const key = `${prefix}${prop.name.getText(muiSrc).replace(/['"]/g, '')}`;
+        return ts.isObjectLiteralExpression(prop.initializer)
+            ? leaves(prop.initializer, `${key}.`)
+            : [[key, tokenText(prop.initializer)] as [string, string]];
+    });
+}
+
+let muiLeaves: [string, string][] = [];
+const findThemeObject = (node: ts.Node): void => {
+    if (ts.isReturnStatement(node) && node.expression && ts.isObjectLiteralExpression(node.expression)) {
+        muiLeaves = leaves(node.expression);
+    }
+    ts.forEachChild(node, findThemeObject);
+};
+findThemeObject(muiSrc);
+if (!muiLeaves.length) {
+    console.error(`could not read the theme object returned in ${MUI_THEME}`);
+    process.exit(1);
+}
+const asToken = (v: string) => v.replace(/<([^>]+)>/g, '`$1`');
+const paletteLeaves = muiLeaves.filter(([k, v]) => k.startsWith('palette.') && v.startsWith('<'));
+/** MUI palette path (`primary.main`, `text.secondary`) -> token name, for reading `sx` colors. */
+const MUI_TO_TOKEN = new Map(paletteLeaves.map(([k, v]) => [k.slice('palette.'.length), v.slice(1, -1)]));
 
 p(
-    '## 8. Modules',
+    '## 8. Material UI defaults',
+    '',
+    `Material UI reads the same tokens through \`${MUI_THEME}\`, so \`sx={{ color: 'primary.main' }}\` and \`text-primary\``,
+    'are the same color. Palette names to tokens:',
+    '',
+    '| MUI palette | Token |',
+    '|---|---|',
+    ...paletteLeaves.map(([k, v]) => `| \`${k.slice('palette.'.length)}\` | ${asToken(v)} |`),
+    '',
+    `Shape: \`borderRadius\` ${MUI_RADIUS_PX}px (= \`rounded-lg\`). ${muiLeaves
+        .filter(([k]) => k.startsWith('typography.'))
+        .map(([k, v]) => `\`${k}\`: ${v.startsWith('FONT_SANS') ? 'Inter stack' : `\`${v}\``}`)
+        .join(', ')}.`,
+    '',
+    'Component defaults applied app-wide (do not restyle these per screen):',
+    '',
+    '| Component | Setting | Value |',
+    '|---|---|---|',
+    ...muiLeaves
+        .filter(([k]) => k.startsWith('components.'))
+        .map(([k, v]) => {
+            const [, comp, ...rest] = k.split('.');
+            return `| \`${comp}\` | \`${rest.join('.')}\` | ${v.includes('<') ? asToken(v) : `\`${v}\``} |`;
+        }),
+    '',
+);
+
+// ---- Modules and layouts -------------------------------------------------------------
+
+/** Intended form factor. Kept explicit: it is a product decision, not something the code can tell us. */
+const MOBILE = new Set(['seller', 'stock_keeper', 'delivery']);
+const read = (file: string) => (existsSync(join(root, file)) ? readFileSync(join(root, file), 'utf8') : '');
+const muiColor = (v: string) => (MUI_TO_TOKEN.has(v) ? code(MUI_TO_TOKEN.get(v)!) : code(v));
+
+interface Shell {
+    kind: string;
+    navFiles: string[];
+    tabs: string[];
+    bar?: string;
+    ink?: string;
+}
+
+/** Reads a layout and the navigation components it imports to describe its shell. */
+function shellOf(layoutFile: string): Shell {
+    const src = read(layoutFile);
+    const navFiles = [...src.matchAll(/from\s+["'](?:@\/|\.\.\/)(Components\/Navigation\/[^"']+)["']/g)].map(
+        (m) => `resources/js/${m[1]}.tsx`,
+    );
+    const bottomFile = [layoutFile, ...navFiles].find((f) => /<BottomNavigation\b/.test(read(f)));
+    const phoneColumn = /maxWidth:\s*\{\s*xs:\s*["']480px["']/.test(src);
+
+    if (!bottomFile) {
+        const sidebar = navFiles.some((f) => /Sidebar/.test(f));
+        return { kind: sidebar ? 'fixed app bar + left sidebar (temporary drawer on phones)' : 'custom', navFiles, tabs: [] };
+    }
+    const bottomSrc = read(bottomFile);
+    const tabs = [...bottomSrc.matchAll(/label(?:=|:\s*)["']([^"']+)["']/g)].map((m) => m[1]);
+    // Layout-level `sx` overrides win over the nav component's own styles.
+    const bar = src.match(/MuiBottomNavigation-root["']?\s*:\s*\{[^}]*?bgcolor:\s*["']([^"']+)["']/)?.[1];
+    const ink = src.match(/Mui-selected \.MuiSvgIcon-root["']?\s*:\s*\{[^}]*?color:\s*["']([^"']+)["']/)?.[1];
+    return {
+        kind: `${phoneColumn ? '480px phone column on xs, ' : ''}fixed bottom navigation`,
+        navFiles: bottomFile === layoutFile ? navFiles : [bottomFile],
+        tabs,
+        bar: bar ? muiColor(bar) : '`surface-container-lowest` (MUI default paper)',
+        ink: ink ? muiColor(ink) : '`primary` on the selected tab, `on-surface-variant` otherwise',
+    };
+}
+
+p(
+    '## 9. Modules, shells and navigation',
     '',
     'Each module page is wrapped by its layout (app bar, nav). Design the page body, not the shell.',
     '',
-    '| Module | Role key | Layout | Form factor |',
-    '|---|---|---|---|',
+    '| Module | Role key | Layout | Shell (read from the layout) | Form factor |',
+    '|---|---|---|---|---|',
 );
-const MOBILE = new Set(['stock_keeper', 'delivery']);
+const bottomNavs: string[] = [];
 for (const role of ROLES) {
     const layout = `${role.label}Layout`;
-    const has = existsSync(join(root, `resources/js/Layouts/${layout}.tsx`));
+    const file = `resources/js/Layouts/${layout}.tsx`;
+    const has = existsSync(join(root, file));
+    const shell = has ? shellOf(file) : undefined;
     p(
-        `| ${role.label} | \`${role.key}\` | ${has ? `\`${layout}\`` : '(none yet)'} | ${MOBILE.has(role.key) ? '**mobile-first** (phones on the floor)' : 'desktop-first, must work on tablets'} |`,
+        `| ${role.label} | \`${role.key}\` | ${has ? code(layout) : '(none yet)'} | ${shell?.kind ?? '-'} | ${MOBILE.has(role.key) ? '**mobile-first** (phones)' : 'desktop-first, must work on tablets'} |`,
     );
+    if (shell?.tabs.length) {
+        bottomNavs.push(
+            `- **${role.label}** (${shell.navFiles.map(code).join(', ') || code(file)}): tabs ${shell.tabs.map((t) => `"${t}"`).join(', ')}.` +
+                ` Bar ${shell.bar}; icons and labels ${shell.ink}.`,
+        );
+    }
 }
 p(
-    `| Storefront (public shop) | (\`${DEFAULT_ROLE}\` colors) | none, composes \`Components/Storefront/*\` | **mobile-first** (480px shell on phones) |`,
+    `| Storefront (public shop) | (\`${DEFAULT_ROLE}\` colors) | none, composes \`Components/Storefront/*\` | 480px shell | **mobile-first** (phones) |`,
+    '',
+    'Bottom navigation bars (icon + label always shown):',
+    '',
+    ...bottomNavs,
+    '',
+    'Browser tab icon: every page (layouts, welcome, login) gets the role favicon from `<RoleFavicon />` in `app.tsx`:',
+    'a rounded square in `primary` with the role label\'s first letter in `on-primary` (see the table in section 4).',
+    'Do not add `<link rel="icon">` in pages or layouts.',
     '',
 );
 
+// ---- Welcome pages ----------------------------------------------------------------------
+
+const WELCOME = 'resources/js/Components/Shared/RoleWelcome.tsx';
+const welcome = readComponents(WELCOME).find((c) => c.name === 'RoleWelcome');
+const welcomeUsers = ROLES.filter((r) => /RoleWelcome/.test(read(`resources/js/Pages/${r.label}/Welcome/index.tsx`))).map((r) => r.label);
+if (welcome) {
+    p('## 10. Public welcome pages', '', `Each subdomain root (\`/\`) for signed-out visitors renders \`<RoleWelcome>\` from \`${WELCOME}\`.`);
+    if (welcome.doc) p(welcome.doc);
+    p('', `Used by: ${welcomeUsers.join(', ')}. Other modules have their own page.`, '', '| Prop | Type | Notes |', '|---|---|---|');
+    for (const pr of welcome.props) p(`| \`${pr.name}${pr.optional ? '?' : ''}\` | \`${pr.type.replace(/\|/g, '\\|')}\` | ${pr.doc.replace(/\|/g, '\\|')} |`);
+    p('');
+}
+
 // ---- Rules --------------------------------------------------------------------------
 
+const mobileLabels = ROLES.filter((r) => MOBILE.has(r.key)).map((r) => r.label.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase());
+
 p(
-    '## 9. Rules for generated screens',
+    `## ${welcome ? 11 : 10}. Rules for generated screens`,
     '',
     '1. **Colors: only the names in section 3.** No hex, `rgb()`, `hsl()`, arbitrary color values (`bg-[#...]`) or',
     '   Tailwind palette colors (`slate-*`, `orange-*`, `white`, `black`). A CI-style check (`npm run check:colors`) rejects new hex/rgb literals.',
@@ -383,11 +526,11 @@ p(
     '6. **Tailwind v3 syntax only.** No v4 syntax (`@theme`, `@import "tailwindcss"`, the `bg-(--var)` shorthand).',
     '7. **Light and dark both work automatically.** Do not add `dark:` color variants; tokens already flip. Use `dark:` only',
     '   for a justified non-color tweak (e.g. hiding a decorative image), and say why.',
-    '8. **Mobile-first for stock keeper, delivery and the storefront**: design at 360-480px first, touch targets >= 44px,',
-    '   primary actions within thumb reach. Other modules are desktop-first but must not break on a tablet.',
+    `8. **Mobile-first for ${mobileLabels.join(', ')} and the storefront**: design at 360-480px first, touch targets >= 44px,`,
+    '   primary actions within thumb reach, nothing hidden behind the bottom navigation. Other modules are desktop-first but must not break on a tablet.',
     '9. Use the type scale and spacing names in section 5; keep the radius small (`rounded-[12px]` rows, `rounded-[16px]` cards).',
     '10. Keep data fields and actions from the existing screen; a redesign changes presentation, not behavior.',
-    '11. Leave data tables, date pickers and charts as placeholders: those stay Material UI components.',
+    '11. Leave data tables, date pickers and charts as placeholders: those stay Material UI components (section 8).',
     '',
 );
 

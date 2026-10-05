@@ -11,7 +11,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
-import { getDesignTokens, resolveRole, RoleContext, THEME_STORAGE_KEY, DEFAULT_THEME_SETTING } from './theme';
+import { getDesignTokens, resolveRole, RoleContext, RoleFavicon, THEME_STORAGE_KEY, DEFAULT_THEME_SETTING } from './theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -113,6 +113,7 @@ createInertiaApp({
                     <RoleContext.Provider value={role}>
                         <ThemeProvider theme={theme}>
                             <CssBaseline />
+                            <RoleFavicon />
                             <App {...props} />
                         </ThemeProvider>
                     </RoleContext.Provider>

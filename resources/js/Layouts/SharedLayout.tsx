@@ -1,24 +1,19 @@
 import React, { useState } from 'react';
 import { Box, CssBaseline, Toolbar } from '@mui/material';
 import { Head } from '@inertiajs/react';
-import { getRole, useRole, useRoleFavicon } from '@/theme';
+import { getRole, useRole } from '@/theme';
 import AdminNav from '@/Components/Navigation/Admin/AdminNav'; // Reusing AdminNav or create SharedNav
 import SharedSidebar from '@/Components/Navigation/Shared/SharedSidebar';
 
 export default function SharedLayout({ children }: { children: React.ReactNode }) {
     const [mobileOpen, setMobileOpen] = useState(false);
     const config = getRole(useRole());
-    const favicon = useRoleFavicon();
 
     return (
         <Box sx={{ display: 'flex', bgcolor: 'background.default', minHeight: '100vh' }}>
             <CssBaseline />
             <Head>
                 <title>{`${config.label} | Duka`}</title>
-                <link
-                    rel="icon"
-                    href={favicon}
-                />
             </Head>
 
             <AdminNav onMenuClick={() => setMobileOpen(!mobileOpen)} />

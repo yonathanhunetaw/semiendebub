@@ -11,7 +11,7 @@ import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import { CiDeliveryTruck } from "react-icons/ci";
 import { CgProfile } from "react-icons/cg";
 import { Link, usePage, Head } from "@inertiajs/react";
-import { getRole, useRole, useRoleFavicon } from "@/theme";
+import { getRole, useRole } from "@/theme";
 
 export default function DeliveryLayout({
     children,
@@ -20,7 +20,6 @@ export default function DeliveryLayout({
 }) {
     const { url } = usePage();
     const config = getRole(useRole());
-    const favicon = useRoleFavicon();
 
     const getActiveValue = () => {
         if (url.includes("/dashboard")) return 0;
@@ -40,13 +39,8 @@ export default function DeliveryLayout({
                 color: "text.primary",
             }}
         >
-            {/* Tab title + role-colored favicon */}
             <Head>
                 <title>{`${config.label} | Duka`}</title>
-                <link
-                    rel="icon"
-                    href={favicon}
-                />
             </Head>
 
             <Box component="main" sx={{ bgcolor: "background.default", minHeight: "100vh" }}>

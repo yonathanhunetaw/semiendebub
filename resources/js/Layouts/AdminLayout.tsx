@@ -10,7 +10,7 @@ import {
     useTheme,
 } from "@mui/material";
 import { Head } from "@inertiajs/react";
-import { FONT_SANS, getRole, roleUrl, useRole, useRoleFavicon } from "@/theme";
+import { FONT_SANS, getRole, roleUrl, useRole } from "@/theme";
 
 // Updated paths to match your new modular folder structure
 import AdminNav from "@/Components/Navigation/Admin/AdminNav";
@@ -38,7 +38,6 @@ export default function AdminLayout({ children }: Props) {
 
     // --- 1. ROLE (from the hostname, resolved once in app.tsx) ---
     const config = getRole(useRole());
-    const favicon = useRoleFavicon();
 
     const roleSwitcher = (
         <>
@@ -114,8 +113,6 @@ export default function AdminLayout({ children }: Props) {
                 {/* Tab title, e.g. "Admin | Duka" */}
                 <title>{`${config.label} | Duka`}</title>
 
-                {/* Role-colored favicon with the role's first letter. */}
-                <link rel="icon" href={favicon} />
             </Head>
 
             {/* --- 3. TOP NAVIGATION BAR --- */}

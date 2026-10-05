@@ -1,6 +1,6 @@
 import AdminNav from "@/Components/Navigation/Admin/AdminNav";
 import VendorSidebar from "@/Components/Navigation/Vendor/VendorSidebar";
-import { getRole, useRole, useRoleFavicon } from "@/theme";
+import { getRole, useRole } from "@/theme";
 import { Head } from "@inertiajs/react";
 import { Box, CssBaseline, Toolbar } from "@mui/material";
 import React, { useState } from "react";
@@ -19,7 +19,6 @@ export default function VendorLayout({
 }): React.ReactElement {
     const [mobileOpen, setMobileOpen] = useState(false);
     const config = getRole(useRole());
-    const favicon = useRoleFavicon();
 
     return (
         <Box
@@ -28,10 +27,6 @@ export default function VendorLayout({
             <CssBaseline />
             <Head>
                 <title>{`${config.label} | Vendor`}</title>
-                <link
-                    rel="icon"
-                    href={favicon}
-                />
             </Head>
 
             <AdminNav onMenuClick={() => setMobileOpen(!mobileOpen)} />

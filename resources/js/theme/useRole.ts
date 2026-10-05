@@ -48,3 +48,27 @@ export function useRoleFavicon(options: { fontFamily?: string } = {}): string {
         return `data:image/svg+xml,${encodeURIComponent(svg)}`;
     }, [role, theme.palette.primary.main, theme.palette.primary.contrastText, fontFamily]);
 }
+
+/**
+ * Keeps <link rel="icon"> in <head> pointed at the role favicon. Rendered once
+ * by app.tsx (inside ThemeProvider), so every page gets it — welcome, login and
+ * pages without a role layout included — and it follows light/dark changes.
+ * Inertia's <Head> can't be used here: it lives outside the Inertia <App>.
+ */
+export function RoleFavicon(): null {
+    const role = useRole();
+    const href = useRoleFavicon({ fontFamily: role === 'dev' ? 'monospace' : 'sans-serif' });
+
+    React.useEffect(() => {
+        let link = document.head.querySelector<HTMLLinkElement>('link[rel="icon"][data-role-favicon]');
+        if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            link.setAttribute('data-role-favicon', '');
+            document.head.appendChild(link);
+        }
+        link.href = href;
+    }, [href]);
+
+    return null;
+}

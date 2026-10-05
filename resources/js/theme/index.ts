@@ -20,4 +20,4 @@ export {
 } from './cssVars';
 export { getDesignTokens } from './muiTheme';
 export { contrastRatio } from './color';
-export { detectRole, RoleContext, useRole, useRoleFavicon } from './useRole';
+export { detectRole, RoleContext, RoleFavicon, useRole, useRoleFavicon } from './useRole';

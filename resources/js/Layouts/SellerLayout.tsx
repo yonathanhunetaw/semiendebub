@@ -2,7 +2,7 @@ import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
 import { Head, usePage } from "@inertiajs/react";
 import { Alert, Box, CssBaseline, Snackbar } from "@mui/material";
 import React from "react";
-import { FONT_SANS, useRoleFavicon } from "@/theme";
+import { FONT_SANS } from "@/theme";
 
 export default function SellerLayout({
     children,
@@ -13,7 +13,6 @@ export default function SellerLayout({
         flash?: { success?: string; error?: string };
     };
 
-    const favicon = useRoleFavicon();
 
     return (
         <Box
@@ -30,11 +29,6 @@ export default function SellerLayout({
             <CssBaseline />
             <Head>
                 <title>Seller | Duka</title>
-                {/* Role-colored favicon with the role's first letter. */}
-                <link
-                    rel="icon"
-                    href={favicon}
-                />
             </Head>
 
             <Box

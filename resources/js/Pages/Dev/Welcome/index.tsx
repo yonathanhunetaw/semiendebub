@@ -8,6 +8,9 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import LoginIcon from '@mui/icons-material/LoginRounded';
 import PersonAddIcon from '@mui/icons-material/PersonAddAltRounded';
 
+/** APP_NAME from .env, exposed to the client as VITE_APP_NAME. */
+const APP_NAME = import.meta.env.VITE_APP_NAME || 'Duka';
+
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 interface WelcomeProps {
@@ -66,7 +69,7 @@ export default function Welcome({ auth }: WelcomeProps): React.ReactElement {
                         </Stack>
 
                         <Chip
-                            label="Semien Debub · internal engineering workspace"
+                            label={`${APP_NAME} · internal engineering workspace`}
                             size="small"
                             sx={{ fontFamily: MONO, fontSize: 11 }}
                         />

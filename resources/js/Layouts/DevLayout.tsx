@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, CssBaseline, Toolbar, Typography, Breadcrumbs, Link as MuiLink } from '@mui/material';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { getRole, useRole, useRoleFavicon } from '@/theme';
+import { getRole, useRole } from '@/theme';
 // Import dedicated Dev components instead of Admin ones
 import DevNav from '@/Components/Navigation/Dev/DevNav';
 import DevSidebar from '@/Components/Navigation/Dev/DevSidebar';
@@ -13,7 +13,6 @@ export default function DevLayout({ children }: { children: React.ReactNode }) {
     const active = activeDevEntry(url);
 
     const config = getRole(useRole());
-    const favicon = useRoleFavicon({ fontFamily: 'monospace' });
 
     return (
         <Box sx={{ display: 'flex', bgcolor: 'background.default', minHeight: '100vh' }}>
@@ -21,10 +20,6 @@ export default function DevLayout({ children }: { children: React.ReactNode }) {
 
             <Head>
                 <title>{`${config.label} | Workspace`}</title>
-                <link
-                    rel="icon"
-                    href={favicon}
-                />
             </Head>
 
             {/* Use the dedicated DevNav */}
