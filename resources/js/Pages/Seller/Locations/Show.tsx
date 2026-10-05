@@ -1,6 +1,7 @@
 import SellerLayout from "@/Layouts/SellerLayout";
 import { type Place, PlaceStrip } from "@/Components/Shared/OpsHub";
 import ShelfBinMatrix from "@/Components/Seller/Locations/ShelfBinMatrix";
+import { EmptyState } from "@/Components/Shared/ui";
 import type { LocationItem, LocationTile, ShelfLine, ShelfMatrixData } from "@/types/sellerLocations";
 import { Head, Link } from "@inertiajs/react";
 import React, { useMemo, useState } from "react";
@@ -240,13 +241,12 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
             </div>
 
             {lines.length === 0 ? (
-                <div className="mt-3 rounded-[12px] bg-surface-container-low px-3 py-4 text-center">
-                    <span className="material-symbols-outlined text-[26px] text-outline">tune</span>
-                    <p className="mt-1 text-[12px] font-bold text-on-surface">No shelf bands yet</p>
-                    <p className="mt-0.5 text-[10px] text-on-surface-variant">
-                        Set a min and max for a product on this shelf and it appears in the row.
-                    </p>
-                </div>
+                <EmptyState
+                    icon="tune"
+                    title="No shelf bands yet"
+                    description="Set a min and max for a product on this shelf and it appears in the row."
+                    className="mt-3 rounded-[12px] bg-surface-container-low px-3 py-4"
+                />
             ) : selected ? (
                 <div className="mt-3 flex items-center justify-between rounded-[12px] border border-outline-variant/60 bg-surface-container-low/70 px-3 py-2.5">
                     <div className="min-w-0">
