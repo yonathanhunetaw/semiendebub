@@ -11,7 +11,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
-import { getDesignTokens, resolveRole, THEME_STORAGE_KEY, DEFAULT_THEME_SETTING } from './theme';
+import { getDesignTokens, resolveRole, RoleContext, THEME_STORAGE_KEY, DEFAULT_THEME_SETTING } from './theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -59,6 +59,7 @@ createInertiaApp({
         const Root = () => {
             // --- ROLE (module) DETECTION ---
             // Same hostname rule as the pre-paint script in app.blade.php.
+            // Provided as RoleContext; layouts read it with useRole().
             const role = React.useMemo(() => resolveRole(window.location.hostname), []);
 
             // --- THEME STATE LOGIC ---
@@ -109,10 +110,12 @@ createInertiaApp({
 
             return (
                 <ThemeContext.Provider value={{ toggleTheme: setThemeSetting, currentSetting: setting }}>
-                    <ThemeProvider theme={theme}>
-                        <CssBaseline />
-                        <App {...props} />
-                    </ThemeProvider>
+                    <RoleContext.Provider value={role}>
+                        <ThemeProvider theme={theme}>
+                            <CssBaseline />
+                            <App {...props} />
+                        </ThemeProvider>
+                    </RoleContext.Provider>
                 </ThemeContext.Provider>
             );
         };

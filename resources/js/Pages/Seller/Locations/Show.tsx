@@ -1,5 +1,5 @@
 import SellerLayout from "@/Layouts/SellerLayout";
-import { HUB_BRAND, HUB_INK, HUB_PAGE_BG, type Place, PlaceStrip } from "@/Components/Shared/OpsHub";
+import { type Place, PlaceStrip } from "@/Components/Shared/OpsHub";
 import ShelfBinMatrix from "@/Components/Seller/Locations/ShelfBinMatrix";
 import type { LocationItem, LocationTile, ShelfLine, ShelfMatrixData } from "@/types/sellerLocations";
 import { Head, Link } from "@inertiajs/react";
@@ -77,7 +77,7 @@ export default function LocationShow({
         <>
             <Head title={location.name} />
 
-            <div className="min-h-screen pb-28" style={{ backgroundColor: HUB_PAGE_BG }}>
+            <div className="min-h-screen bg-background pb-28">
                 {/* ── Header ── */}
                 <section className="flex items-center space-x-3 px-4 pb-3 pt-4">
                     <Link
@@ -88,13 +88,12 @@ export default function LocationShow({
                         <span className="material-symbols-outlined text-[20px]">arrow_back</span>
                     </Link>
                     <div
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-orange-200 text-white shadow-sm"
-                        style={{ backgroundColor: HUB_BRAND }}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-primary-container bg-primary text-on-primary shadow-sm"
                     >
                         <span className="material-symbols-outlined text-2xl">{meta.icon}</span>
                     </div>
                     <div className="min-w-0">
-                        <h1 className="truncate text-[17px] font-bold tracking-tight" style={{ color: HUB_INK }}>
+                        <h1 className="truncate text-[17px] font-bold tracking-tight text-on-surface">
                             {location.name}
                         </h1>
                         <p className="mt-0.5 truncate text-[11px] text-gray-500">
@@ -151,7 +150,7 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
         <section className="mb-3 rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                    <h2 className="text-[13px] font-bold" style={{ color: HUB_INK }}>
+                    <h2 className="text-[13px] font-bold text-on-surface">
                         Replenishment
                     </h2>
                     {needRefill > 0 ? (
@@ -262,7 +261,7 @@ function ReplenishmentRow({ lines, size }: { lines: ShelfLine[]; size: number })
                             {STATUS_STYLE[selected.status].label}
                         </span>
                         {selected.refill > 0 ? (
-                            <span className="font-mono text-[10px] font-semibold" style={{ color: HUB_BRAND }}>
+                            <span className="font-mono text-[10px] font-semibold text-primary">
                                 +{selected.refill} {selected.unit}
                             </span>
                         ) : null}
@@ -277,7 +276,7 @@ function StockList({ items, spokenIn }: { items: LocationItem[]; spokenIn: strin
     return (
         <section className="mb-3 rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: HUB_INK }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface">
                     Stock here
                 </h3>
                 <span className="font-mono text-[10px] text-gray-400">

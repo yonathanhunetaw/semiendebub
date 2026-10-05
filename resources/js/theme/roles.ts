@@ -30,7 +30,7 @@ export interface RoleDefinition {
     label: string;
     /** Hostname labels that select this role; the first one is canonical. */
     subdomains: readonly string[];
-    /** Icon name (lucide-style), kept from the old subdomainConfigs. */
+    /** Icon name (lucide-style). */
     icon: string;
 }
 
@@ -72,4 +72,16 @@ export function resolveRole(hostname: string): RoleKey {
     const parts = hostname.toLowerCase().split('.');
     if (parts.length <= 2) return DEFAULT_ROLE;
     return SUBDOMAIN_TO_ROLE[parts[0]] ?? DEFAULT_ROLE;
+}
+
+/**
+ * Absolute URL of `path` on another role's subdomain, keeping the current
+ * base domain, protocol and port (admin.duka.test:8095 -> finance.duka.test:8095).
+ */
+export function roleUrl(role: RoleKey, path = '/'): string {
+    if (typeof window === 'undefined') return '#';
+    const { protocol, hostname, port } = window.location;
+    const parts = hostname.split('.');
+    const base = parts.length > 2 ? parts.slice(1).join('.') : hostname;
+    return `${protocol}//${getRole(role).subdomains[0]}.${base}${port ? `:${port}` : ''}${path}`;
 }

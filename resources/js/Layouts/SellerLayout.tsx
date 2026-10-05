@@ -2,7 +2,7 @@ import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
 import { Head, usePage } from "@inertiajs/react";
 import { Alert, Box, CssBaseline, Snackbar, useTheme } from "@mui/material";
 import React from "react";
-import { FONT_SANS } from "@/theme";
+import { FONT_SANS, useRoleFavicon } from "@/theme";
 
 export default function SellerLayout({
     children,
@@ -14,28 +14,29 @@ export default function SellerLayout({
         flash?: { success?: string; error?: string };
     };
 
-    // This dynamically pulls '#7c3aed' (Purple) from your theme.ts!
+    // The seller role's primary (orange), from the theme tokens.
     const brandColor = theme.palette.primary.main;
+    const favicon = useRoleFavicon();
 
     return (
         <Box
             sx={{
                 minHeight: "100vh",
-                // Uses your theme's default background (#0f172a in dark mode)
+                // The `background` token for the current mode.
                 bgcolor: "background.default",
                 color: "text.primary",
                 fontFamily: FONT_SANS,
-                // Replaces the hardcoded orange glow with a dynamic brand-colored glow
+                // Soft glow in the role color at the top of the page.
                 backgroundImage: `radial-gradient(circle at top, ${brandColor}25, transparent 32%)`,
             }}
         >
             <CssBaseline />
             <Head>
                 <title>Seller | Duka</title>
-                {/* Dynamically uses the purple brand color for the favicon */}
+                {/* Role-colored favicon with the role's first letter. */}
                 <link
                     rel="icon"
-                    href={`data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22${encodeURIComponent(brandColor)}%22/><text y=%2258%22 x=%2223%22 font-size=%2250%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22900%22>S</text></svg>`}
+                    href={favicon}
                 />
             </Head>
 
@@ -102,27 +103,28 @@ export default function SellerLayout({
                     sx={{
                         pointerEvents: "auto",
                         "& .MuiBottomNavigation-root": {
-                            bgcolor: "primary.main", // This turns Orange (#c2410c)
+                            bgcolor: "primary.main",
                             borderRadius: 4,
                             height: 70,
                         },
-                        // Force ALL text/icons inside the Orange bar to be BLACK
+                        // Text and icons on the primary-colored bar use the
+                        // on-primary token (contrast-checked per role and mode).
                         "& .MuiBottomNavigationAction-label": {
-                            color: "#000000 !important",
+                            color: "primary.contrastText",
                             fontWeight: 600,
                             opacity: 0.8,
                         },
                         "& .Mui-selected .MuiBottomNavigationAction-label": {
-                            color: "#000000 !important",
+                            color: "primary.contrastText",
                             fontWeight: 900,
                             opacity: 1,
                         },
                         "& .MuiSvgIcon-root": {
-                            color: "#000000 !important",
+                            color: "primary.contrastText",
                             opacity: 0.8,
                         },
                         "& .Mui-selected .MuiSvgIcon-root": {
-                            color: "#000000 !important",
+                            color: "primary.contrastText",
                             opacity: 1,
                         },
                     }}

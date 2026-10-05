@@ -1,8 +1,5 @@
 import AdminLayout from "@/Layouts/AppLayout";
 import {
-    HUB_BRAND as BRAND,
-    HUB_INK as INK,
-    HUB_PAGE_BG as PAGE_BG,
     OpsCard,
     PipelineCard,
     type Row,
@@ -114,38 +111,38 @@ export default function InventoryHub({
     const stageCount = (stage: string): number => orderStages[stage] ?? 0;
 
     const orderTiles: Tile[] = [
-        { label: "To Pay", caption: "Awaiting payment", icon: "payments", count: stageCount("to_pay"), tone: "amber" },
-        { label: "Paid", caption: "Payment confirmed", icon: "verified", count: stageCount("paid"), tone: "violet" },
-        { label: "Pick & Pack", caption: "Being packed", icon: "inventory_2", count: stageCount("packing"), tone: "blue" },
-        { label: "To Deliver", caption: "Ready to ship", icon: "local_shipping", count: stageCount("to_deliver"), tone: "brand" },
-        { label: "Delivered", caption: "Completed", icon: "task_alt", count: stageCount("delivered"), tone: "emerald" },
-        { label: "Canceled", caption: "Voided", icon: "assignment_return", count: stageCount("canceled"), tone: "rose" },
+        { label: "To Pay", caption: "Awaiting payment", icon: "payments", count: stageCount("to_pay"), tone: "warning" },
+        { label: "Paid", caption: "Payment confirmed", icon: "verified", count: stageCount("paid"), tone: "tertiary" },
+        { label: "Pick & Pack", caption: "Being packed", icon: "inventory_2", count: stageCount("packing"), tone: "info" },
+        { label: "To Deliver", caption: "Ready to ship", icon: "local_shipping", count: stageCount("to_deliver"), tone: "primary" },
+        { label: "Delivered", caption: "Completed", icon: "task_alt", count: stageCount("delivered"), tone: "success" },
+        { label: "Canceled", caption: "Voided", icon: "assignment_return", count: stageCount("canceled"), tone: "error" },
     ];
 
     const orderFooter: Row[] = [
-        { label: "Store Orders", caption: "", icon: "receipt_long", route: "admin.carts.index", tone: "ink" },
-        { label: "Transfers", caption: "", icon: "rv_hookup", route: "admin.inventory.transfers", tone: "ink" },
+        { label: "Store Orders", caption: "", icon: "receipt_long", route: "admin.carts.index", tone: "neutral" },
+        { label: "Transfers", caption: "", icon: "rv_hookup", route: "admin.inventory.transfers", tone: "neutral" },
     ];
 
     /* ── Shipments: every tile opens the filter it counts ─────────────── */
     const shipmentTiles: Tile[] = [
-        { label: "Manifest", caption: "Awaiting agreement", icon: "fact_check", count: shipmentCounts.pending_agreement ?? 0, tone: "blue", tab: "status=pending_agreement" },
-        { label: "Scheduled", caption: "Booked & picking", icon: "schedule", count: shipmentCounts.scheduled ?? 0, tone: "amber", tab: "status=scheduled" },
-        { label: "En Route", caption: "In transit", icon: "local_shipping", count: shipmentCounts.in_transit ?? 0, tone: "brand", tab: "status=in_transit" },
-        { label: "Shipped", caption: "Arrived", icon: "check_circle", count: shipmentCounts.delivered ?? 0, tone: "emerald", tab: "status=delivered" },
+        { label: "Manifest", caption: "Awaiting agreement", icon: "fact_check", count: shipmentCounts.pending_agreement ?? 0, tone: "info", tab: "status=pending_agreement" },
+        { label: "Scheduled", caption: "Booked & picking", icon: "schedule", count: shipmentCounts.scheduled ?? 0, tone: "warning", tab: "status=scheduled" },
+        { label: "En Route", caption: "In transit", icon: "local_shipping", count: shipmentCounts.in_transit ?? 0, tone: "primary", tab: "status=in_transit" },
+        { label: "Shipped", caption: "Arrived", icon: "check_circle", count: shipmentCounts.delivered ?? 0, tone: "success", tab: "status=delivered" },
         // Past ETA and still moving. No single status matches it, so the tile
         // opens the open-runs board rather than a filter that would show a
         // different number than the badge.
-        { label: "Overdue", caption: "Past ETA", icon: "warning", count: shipmentCounts.overdue ?? 0, tone: "rose", alert: true, tab: "status=open" },
+        { label: "Overdue", caption: "Past ETA", icon: "warning", count: shipmentCounts.overdue ?? 0, tone: "error", alert: true, tab: "status=open" },
     ];
 
     /* ── Transfers ─────────────────────────────────────────────────────── */
     const transferTiles: Tile[] = [
-        { label: "Pending", caption: "Awaiting pick", icon: "pending_actions", count: transferCounts.pending ?? 0, tone: "amber" },
-        { label: "In Transit", caption: "On the move", icon: "swap_horiz", count: transferCounts.in_transit ?? 0, tone: "brand" },
-        { label: "Completed", caption: "Stock moved", icon: "task_alt", count: transferCounts.completed ?? 0, tone: "emerald" },
-        { label: "Cancelled", caption: "Voided", icon: "block", count: transferCounts.cancelled ?? 0, tone: "rose" },
-        { label: "Shipments", caption: "From Hub A/B", icon: "autorenew", count: shipmentCounts.open ?? 0, tone: "violet", routeName: "admin.inventory.shipments.index" },
+        { label: "Pending", caption: "Awaiting pick", icon: "pending_actions", count: transferCounts.pending ?? 0, tone: "warning" },
+        { label: "In Transit", caption: "On the move", icon: "swap_horiz", count: transferCounts.in_transit ?? 0, tone: "primary" },
+        { label: "Completed", caption: "Stock moved", icon: "task_alt", count: transferCounts.completed ?? 0, tone: "success" },
+        { label: "Cancelled", caption: "Voided", icon: "block", count: transferCounts.cancelled ?? 0, tone: "error" },
+        { label: "Shipments", caption: "From Hub A/B", icon: "autorenew", count: shipmentCounts.open ?? 0, tone: "tertiary", routeName: "admin.inventory.shipments.index" },
     ];
 
     /* ── Locations ─────────────────────────────────────────────────────── */
@@ -175,7 +172,7 @@ export default function InventoryHub({
         icon: STORE_TYPE_ICON[store.type] ?? "storefront",
         route: "store.show",
         routeParams: { store: store.id },
-        tone: "brand",
+        tone: "primary",
         // The trailing figure counts live items, not variants.
         count: store.live_items,
     }));
@@ -187,7 +184,7 @@ export default function InventoryHub({
             icon: STORE_TYPE_ICON[store.type] ?? "warehouse",
             route: "store.show",
             routeParams: { store: store.id },
-            tone: "blue" as const,
+            tone: "info" as const,
             count: store.live_items,
         })),
         ...warehouses.map((warehouse) => ({
@@ -196,7 +193,7 @@ export default function InventoryHub({
             icon: "inventory",
             route: "admin.inventory.warehouse.show",
             routeParams: { warehouse: warehouse.id },
-            tone: "violet" as const,
+            tone: "tertiary" as const,
         })),
     ];
 
@@ -228,23 +225,19 @@ export default function InventoryHub({
         <>
             <Head title="Inventory" />
 
-            <div className="min-h-screen" style={{ backgroundColor: PAGE_BG }}>
+            <div className="min-h-screen bg-background">
                 <div className="mx-auto w-full max-w-[1100px] px-3.5 pb-12">
                     {/* ── Identity header ── */}
                     <section className="pb-3 pt-4">
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex min-w-0 items-center space-x-3">
                                 <div
-                                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-orange-200 text-white shadow-sm"
-                                    style={{ backgroundColor: BRAND }}
+                                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-primary-container bg-primary text-on-primary shadow-sm"
                                 >
                                     <span className="material-symbols-outlined text-2xl">warehouse</span>
                                 </div>
                                 <div className="min-w-0">
-                                    <h1
-                                        className="truncate text-[17px] font-bold tracking-tight"
-                                        style={{ color: INK }}
-                                    >
+                                    <h1 className="truncate text-[17px] font-bold tracking-tight text-on-surface">
                                         Inventory
                                     </h1>
                                     <p className="mt-0.5 truncate text-[11px] text-gray-500">
@@ -296,10 +289,7 @@ export default function InventoryHub({
                     <section className="mb-3">
                         <div className="rounded-[16px] border border-gray-100 bg-white p-3.5 shadow-sm">
                             <div className="mb-3 flex items-center justify-between gap-2">
-                                <h3
-                                    className="text-xs font-bold uppercase tracking-wider"
-                                    style={{ color: INK }}
-                                >
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface">
                                     Stock by item
                                 </h3>
                                 <span className="font-mono text-[10px] text-gray-400">
