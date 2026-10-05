@@ -13,14 +13,21 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 
-/** Shared palette for the public (unauthenticated) marketing shell. */
+/**
+ * Shared palette for the public (unauthenticated) marketing shell, as theme
+ * tokens: the accent is the root domain's role color (admin) and every
+ * surface follows light/dark.
+ */
 const BRAND = {
-    accent: '#c05800',
-    accentHover: '#e06a00',
-    cream: '#fdfbd4',
-    ink: '#1a120b',
-    inkSoft: '#713600',
-    panel: '#fdfbd4',
+    accent: 'rgb(var(--primary))',
+    accentHover: 'rgb(var(--primary) / 0.85)',
+    /** Text on an accent fill. */
+    onAccent: 'rgb(var(--on-primary))',
+    /** Text on the app bar. */
+    cream: 'rgb(var(--on-surface))',
+    ink: 'rgb(var(--on-surface))',
+    inkSoft: 'rgb(var(--on-surface-variant))',
+    panel: 'rgb(var(--surface-container-lowest))',
 };
 
 interface NavItem {
@@ -93,19 +100,20 @@ export default function WelcomeNavbar() {
 
     const menuStyles = {
         width: 620, p: 3, mt: 2, borderRadius: 4, bgcolor: BRAND.panel,
-        boxShadow: '0px 25px 50px -12px rgba(0,0,0,0.5)', border: `1px solid ${BRAND.accent}`,
+        boxShadow: theme.palette.mode === 'dark' ? 'none' : '0px 25px 50px -12px rgb(var(--on-surface) / 0.25)',
+        border: `1px solid ${BRAND.accent}`,
     };
 
     return (
         <AppBar
             position="fixed"
             sx={{
-                bgcolor: 'rgba(0, 0, 0, 0.8)',
+                bgcolor: 'rgb(var(--background) / 0.8)',
                 backdropFilter: 'blur(10px)',
                 height: 72,
                 justifyContent: 'center',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.8)',
+                borderBottom: '1px solid rgb(var(--outline-variant))',
+                boxShadow: theme.palette.mode === 'dark' ? 'none' : '0 4px 20px rgb(var(--on-surface) / 0.08)',
             }}
         >
             <Container sx={{ maxWidth: '1337px !important' }}>
@@ -120,7 +128,7 @@ export default function WelcomeNavbar() {
                             sx={{
                                 width: 36, height: 36, borderRadius: '10px',
                                 display: 'grid', placeItems: 'center',
-                                bgcolor: BRAND.accent, color: BRAND.cream,
+                                bgcolor: BRAND.accent, color: BRAND.onAccent,
                                 fontWeight: 900, fontSize: 15, letterSpacing: '-0.5px',
                             }}
                         >
@@ -135,7 +143,7 @@ export default function WelcomeNavbar() {
                             </Typography>
                             <Typography
                                 component="span"
-                                sx={{ display: 'block', fontSize: '0.65rem', color: 'rgba(253,251,212,0.55)', letterSpacing: '0.18em', textTransform: 'uppercase' }}
+                                sx={{ display: 'block', fontSize: '0.65rem', color: BRAND.inkSoft, letterSpacing: '0.18em', textTransform: 'uppercase' }}
                             >
                                 Business Registry
                             </Typography>
@@ -182,7 +190,7 @@ export default function WelcomeNavbar() {
                                     variant="contained"
                                     disableElevation
                                     sx={{
-                                        bgcolor: BRAND.accent, color: BRAND.cream,
+                                        bgcolor: BRAND.accent, color: BRAND.onAccent,
                                         borderRadius: '50px', px: 3, fontWeight: 700, textTransform: 'none',
                                         '&:hover': { bgcolor: BRAND.accentHover },
                                     }}
@@ -239,7 +247,7 @@ export default function WelcomeNavbar() {
                             <CloseIcon />
                         </IconButton>
                     </Box>
-                    <Divider sx={{ borderColor: 'rgba(192,88,0,0.25)', mb: 1 }} />
+                    <Divider sx={{ borderColor: 'rgb(var(--primary) / 0.25)', mb: 1 }} />
 
                     <List sx={{ overflowY: 'auto' }}>
                         {NAV_GROUPS.map((group) => (
@@ -287,7 +295,7 @@ export default function WelcomeNavbar() {
                             fullWidth
                             disableElevation
                             sx={{
-                                bgcolor: BRAND.accent, color: BRAND.cream, borderRadius: '50px',
+                                bgcolor: BRAND.accent, color: BRAND.onAccent, borderRadius: '50px',
                                 fontWeight: 700, textTransform: 'none', py: 1.2,
                                 '&:hover': { bgcolor: BRAND.accentHover },
                             }}
@@ -302,7 +310,7 @@ export default function WelcomeNavbar() {
                             sx={{
                                 color: BRAND.accent, borderColor: BRAND.accent, borderRadius: '50px',
                                 fontWeight: 700, textTransform: 'none', py: 1.2,
-                                '&:hover': { borderColor: BRAND.accentHover, bgcolor: 'rgba(192,88,0,0.08)' },
+                                '&:hover': { borderColor: BRAND.accentHover, bgcolor: 'rgb(var(--primary) / 0.08)' },
                             }}
                         >
                             Log in
@@ -323,10 +331,10 @@ function MenuCard({ title, href, desc, onNavigate }: NavItem & { onNavigate?: ()
             sx={{
                 display: 'block', p: 2, borderRadius: 2, textDecoration: 'none',
                 transition: 'background-color 150ms ease',
-                '&:hover': { bgcolor: 'rgba(192,88,0,0.09)' },
+                '&:hover': { bgcolor: 'rgb(var(--primary) / 0.09)' },
             }}
         >
-            <Typography sx={{ fontWeight: 800, color: '#38240d' }}>{title}</Typography>
+            <Typography sx={{ fontWeight: 800, color: BRAND.ink }}>{title}</Typography>
             <Typography variant="body2" sx={{ color: BRAND.inkSoft }}>{desc}</Typography>
         </Box>
     );

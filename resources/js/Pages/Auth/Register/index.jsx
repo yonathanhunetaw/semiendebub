@@ -26,8 +26,8 @@ export default function Register() {
             <Head title="Sign up" />
 
             <div className="mb-6">
-                <h1 className="text-xl font-bold text-gray-900">Create your account</h1>
-                <p className="mt-1 text-sm text-gray-500">
+                <h1 className="text-xl font-bold text-on-surface">Create your account</h1>
+                <p className="mt-1 text-sm text-on-surface-variant">
                     Set up your company registry — stores, stock and team come next.
                 </p>
             </div>
@@ -110,17 +110,17 @@ export default function Register() {
                 </div>
 
                 <PrimaryButton
-                    className="justify-center w-full mt-6 bg-orange-600 hover:bg-orange-500 focus:bg-orange-500 active:bg-orange-700 focus:ring-orange-500"
+                    className="justify-center w-full mt-6 bg-primary hover:bg-primary/90 focus:bg-primary/90 active:bg-primary focus:ring-primary"
                     disabled={processing}
                 >
                     Sign up
                 </PrimaryButton>
 
-                <p className="mt-6 text-sm text-center text-gray-600">
+                <p className="mt-6 text-sm text-center text-on-surface-variant">
                     Already have an account?{' '}
                     <Link
                         href="/login"
-                        className="font-semibold text-orange-700 underline hover:text-orange-600"
+                        className="font-semibold text-primary underline hover:text-primary/80"
                     >
                         Log in
                     </Link>

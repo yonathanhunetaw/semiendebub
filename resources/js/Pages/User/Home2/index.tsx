@@ -18,11 +18,11 @@ function Home2({name}) {
         <>
             <h1 className="title">Home - Hello {name}</h1>
 
-            <div className="mt-6 p-4 bg-white shadow rounded-lg">
+            <div className="mt-6 p-4 bg-surface-container-lowest shadow rounded-lg">
                 <p className="text-lg">Your dice roll: <strong>{num}</strong></p>
                 <button
                     onClick={handleClick}
-                    className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    className="mt-2 px-4 py-2 bg-primary text-on-primary rounded hover:bg-primary/90"
                 >
                     Click to get a new number
                 </button>

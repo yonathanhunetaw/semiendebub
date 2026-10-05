@@ -9,11 +9,11 @@ export default function SellerWelcome({auth}: PageProps) {
         <>
             <Head title="Seller Portal"/>
             <AppNavbar auth={auth}/>
-            <div className="bg-emerald-50 text-emerald-900 min-h-screen flex flex-col">
+            <div className="bg-primary-container text-on-primary-container min-h-screen flex flex-col">
                 <main className="flex-1 flex items-center justify-center px-6">
                     <div className="max-w-xl text-center">
                         <h1 className="text-2xl font-semibold">Seller Portal</h1>
-                        <p className="mt-2 text-emerald-700">
+                        <p className="mt-2 text-primary">
                             Sign in to manage your store and orders.
                         </p>
                     </div>
