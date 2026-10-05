@@ -172,45 +172,45 @@
 }
 
 [data-role="seller"][data-mode="light"] {
-    --primary: 15 118 110;
+    --primary: 194 65 12;
     --on-primary: 255 255 255;
-    --primary-container: 221 236 235;
-    --on-primary-container: 15 71 76;
-    --inverse-primary: 45 212 191;
-    --surface-tint: 15 118 110;
-    --primary-fixed: 221 236 235;
-    --primary-fixed-dim: 45 212 191;
-    --on-primary-fixed: 15 56 66;
-    --on-primary-fixed-variant: 15 118 110;
-    --tertiary: 15 118 110;
+    --primary-container: 246 228 221;
+    --on-primary-container: 105 44 27;
+    --inverse-primary: 251 146 60;
+    --surface-tint: 194 65 12;
+    --primary-fixed: 246 228 221;
+    --primary-fixed-dim: 251 146 60;
+    --on-primary-fixed: 78 38 32;
+    --on-primary-fixed-variant: 194 65 12;
+    --tertiary: 194 65 12;
     --on-tertiary: 255 255 255;
-    --tertiary-container: 221 236 235;
-    --on-tertiary-container: 15 71 76;
-    --tertiary-fixed: 221 236 235;
-    --tertiary-fixed-dim: 45 212 191;
-    --on-tertiary-fixed: 15 56 66;
-    --on-tertiary-fixed-variant: 15 118 110;
+    --tertiary-container: 246 228 221;
+    --on-tertiary-container: 105 44 27;
+    --tertiary-fixed: 246 228 221;
+    --tertiary-fixed-dim: 251 146 60;
+    --on-tertiary-fixed: 78 38 32;
+    --on-tertiary-fixed-variant: 194 65 12;
 }
 
 [data-role="seller"][data-mode="dark"] {
-    --primary: 45 212 191;
+    --primary: 251 146 60;
     --on-primary: 15 23 42;
-    --primary-container: 13 68 67;
-    --on-primary-container: 192 242 236;
-    --inverse-primary: 15 118 110;
-    --surface-tint: 45 212 191;
-    --primary-fixed: 221 236 235;
-    --primary-fixed-dim: 45 212 191;
-    --on-primary-fixed: 15 56 66;
-    --on-primary-fixed-variant: 15 118 110;
-    --tertiary: 45 212 191;
+    --primary-container: 103 41 18;
+    --on-primary-container: 254 222 197;
+    --inverse-primary: 194 65 12;
+    --surface-tint: 251 146 60;
+    --primary-fixed: 246 228 221;
+    --primary-fixed-dim: 251 146 60;
+    --on-primary-fixed: 78 38 32;
+    --on-primary-fixed-variant: 194 65 12;
+    --tertiary: 251 146 60;
     --on-tertiary: 15 23 42;
-    --tertiary-container: 13 68 67;
-    --on-tertiary-container: 192 242 236;
-    --tertiary-fixed: 221 236 235;
-    --tertiary-fixed-dim: 45 212 191;
-    --on-tertiary-fixed: 15 56 66;
-    --on-tertiary-fixed-variant: 15 118 110;
+    --tertiary-container: 103 41 18;
+    --on-tertiary-container: 254 222 197;
+    --tertiary-fixed: 246 228 221;
+    --tertiary-fixed-dim: 251 146 60;
+    --on-tertiary-fixed: 78 38 32;
+    --on-tertiary-fixed-variant: 194 65 12;
 }
 
 [data-role="stock_keeper"][data-mode="light"] {

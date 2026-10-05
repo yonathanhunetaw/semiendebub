@@ -67,7 +67,7 @@ export interface RolePalette {
 
 export const ROLE_PALETTES: Record<RoleKey, RolePalette> = {
     admin: { primary: { light: '#4f46e5', dark: '#818cf8' } }, // indigo
-    seller: { primary: { light: '#0f766e', dark: '#2dd4bf' } }, // teal
+    seller: { primary: { light: '#c2410c', dark: '#fb923c' } }, // orange: owner keeps the original seller color (overrides the no-amber rule)
     stock_keeper: { primary: { light: '#1d4ed8', dark: '#60a5fa' } }, // blue
     delivery: { primary: { light: '#9333ea', dark: '#c084fc' } }, // purple (was violet #7c3aed: too close to admin indigo)
     vendor: { primary: { light: '#0e7490', dark: '#22d3ee' } }, // cyan
