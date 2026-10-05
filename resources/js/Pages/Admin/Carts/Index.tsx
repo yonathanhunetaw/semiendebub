@@ -19,7 +19,6 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import { useTheme } from "@mui/material";
 
 interface Cart {
     id: number;
@@ -49,11 +48,6 @@ interface Props {
 }
 
 export default function CartsIndex({ carts }: Props) {
-    const theme = useTheme();
-
-    const isDark = theme.palette.mode === 'dark';
-    const contrastText = theme.palette.primary.contrastText;
-
     const cartList = Array.isArray(carts) ? carts : carts.data || [];
 
     const handleDelete = (cartId: number) => {
@@ -194,8 +188,8 @@ export default function CartsIndex({ carts }: Props) {
                                             label={`${cart.variants?.length ?? 0} items`}
                                             size="small"
                                             sx={{
-                                                bgcolor: "rgba(0,0,0,0.1)",
-                                                color: contrastText,
+                                                bgcolor: "rgb(var(--on-surface) / 0.1)",
+                                                color: "text.primary",
                                                 fontWeight: 800,
                                                 fontSize: "0.7rem",
                                             }}

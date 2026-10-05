@@ -17,11 +17,11 @@ export default function Index({auth}: Props) {
 
             <div className="relative isolate px-6 pt-14 lg:px-8">
                 <div className="mx-auto max-auto py-32 sm:py-48 lg:py-56 text-center">
-                    <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
-                        Duka <span className="text-indigo-600">Portal</span>
+                    <h1 className="text-4xl font-bold tracking-tight text-on-surface sm:text-6xl">
+                        Duka <span className="text-primary">Portal</span>
                     </h1>
 
-                    <p className="mt-6 text-lg leading-8 text-gray-600">
+                    <p className="mt-6 text-lg leading-8 text-on-surface-variant">
                         Select an option below to manage your department's operations.
                         Please ensure you are on the correct subdomain for your role.
                     </p>
@@ -32,12 +32,12 @@ export default function Index({auth}: Props) {
                         */}
                         <Link
                             href={route('login')}
-                            className="rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                            className="rounded-md bg-primary px-3.5 py-2.5 text-sm font-semibold text-on-primary shadow-sm hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                         >
                             Log in to Dashboard
                         </Link>
 
-                        <a href="#" className="text-sm font-semibold leading-6 text-gray-900">
+                        <a href="#" className="text-sm font-semibold leading-6 text-on-surface">
                             Learn more <span aria-hidden="true">→</span>
                         </a>
                     </div>

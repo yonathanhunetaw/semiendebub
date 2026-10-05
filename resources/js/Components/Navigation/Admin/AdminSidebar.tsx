@@ -343,11 +343,11 @@ export default function AdminSidebar({
                     "&::-webkit-scrollbar, & *::-webkit-scrollbar": { width: "8px" },
                     "&::-webkit-scrollbar-track, & *::-webkit-scrollbar-track": { background: "transparent" },
                     "&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb": {
-                        background: "#717171",
+                        background: "rgb(var(--outline))",
                         borderRadius: "4px",
                     },
                     "&::-webkit-scrollbar-thumb:hover, & *::-webkit-scrollbar-thumb:hover": {
-                        background: "#a0a0a0",
+                        background: "rgb(var(--on-surface-variant))",
                     },
                     "& .MuiListItemIcon-root": {
                         color: "inherit",
