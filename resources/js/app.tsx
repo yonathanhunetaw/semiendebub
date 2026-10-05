@@ -123,6 +123,8 @@ createInertiaApp({
         createRoot(el).render(<Root />);
     },
     progress: {
-        color: '#ff9800',
+        // Injected into a <style> as plain CSS, so the theme variable resolves:
+        // the page-load bar follows the role accent.
+        color: 'rgb(var(--primary))',
     },
 });
