@@ -15,7 +15,7 @@ const MyButton = ({ text, onClick, type = 'button', disabled = false }: MyButton
             type={type}
             onClick={onClick}
             disabled={disabled}
-            className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-400"
+            className="px-4 py-2 bg-primary text-on-primary rounded disabled:bg-outline"
         >
             {text}
         </button>

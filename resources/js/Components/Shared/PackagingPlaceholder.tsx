@@ -37,13 +37,11 @@ interface TierVisual {
     /**
      * Container tone.
      *
-     * Deliberately has no `dark:` variants. Tailwind's dark variant uses the
-     * `media` strategy in this project (tailwind.config.js sets no darkMode
-     * key), so it follows the operating system — while the app's own dark mode
-     * is MUI's palette mode, which is independent and defaults to light. The
-     * two disagreed, and a light storefront card ended up holding a dark
-     * placeholder on any machine set to dark. Surfaces that really are dark
-     * pass their own override through `className`.
+     * Theme token classes, so the tile follows the app's own light/dark mode
+     * (and the module accent for box / bundle) without `dark:` variants.
+     * Tailwind's dark variant follows the operating system, not the app mode,
+     * which is why it is not used here. Surfaces that really are dark pass
+     * their own override through `className`.
      */
     tone: string;
     iconTone: string;
@@ -56,46 +54,46 @@ interface TierVisual {
 const TIER_VISUALS: Record<PackagingTier, TierVisual> = {
     piece: {
         Icon: Package,
-        tone: "bg-slate-100 border-slate-200",
-        iconTone: "text-slate-400",
+        tone: "bg-surface-container border-outline-variant",
+        iconTone: "text-outline",
     },
     doz: {
         Icon: Boxes,
         badge: "12x",
-        tone: "bg-emerald-50 border-emerald-200/70",
-        iconTone: "text-emerald-600",
+        tone: "bg-success-container border-success/30",
+        iconTone: "text-success",
     },
     packet: {
         Icon: PackageOpen,
-        tone: "bg-sky-50 border-sky-200/70",
-        iconTone: "text-sky-600",
+        tone: "bg-info-container border-info/30",
+        iconTone: "text-info",
     },
     bundle: {
         Icon: Layers,
-        tone: "bg-violet-50 border-violet-200/70",
-        iconTone: "text-violet-600",
+        tone: "bg-tertiary-container border-tertiary/30",
+        iconTone: "text-tertiary",
     },
     box: {
         Icon: Package,
-        tone: "bg-blue-50 border-blue-200/70",
-        iconTone: "text-blue-600",
+        tone: "bg-primary-container border-primary/30",
+        iconTone: "text-primary",
     },
     bag: {
         Icon: ShoppingBag,
-        tone: "bg-rose-50 border-rose-200/70",
-        iconTone: "text-rose-600",
+        tone: "bg-secondary-container border-secondary/30",
+        iconTone: "text-secondary",
     },
     cartoon: {
         Icon: Archive,
-        tone: "bg-amber-50 border-amber-200/70",
-        iconTone: "text-amber-700",
+        tone: "bg-warning-container border-warning/30",
+        iconTone: "text-warning",
     },
 };
 
 const UNKNOWN: TierVisual = {
     Icon: ImageOff,
-    tone: "bg-slate-50 border-slate-200",
-    iconTone: "text-slate-300",
+    tone: "bg-surface-container-low border-outline-variant",
+    iconTone: "text-outline/60",
 };
 
 const SIZES = {
@@ -140,12 +138,12 @@ export default function PackagingPlaceholder({
             className={`flex h-full w-full flex-col items-center justify-center border ${metrics.pad} ${metrics.gap} ${tone} ${className}`}
         >
             <div
-                className={`relative rounded-full bg-white/80 shadow-sm ring-1 ring-black/5 ${metrics.ring}`}
+                className={`relative rounded-full bg-surface-container-lowest/80 shadow-sm ring-1 ring-on-surface/5 ${metrics.ring}`}
             >
                 <Icon size={metrics.icon} strokeWidth={1.5} className={iconTone} />
 
                 {badge ? (
-                    <span className="absolute -bottom-1 -right-1 rounded-full bg-emerald-600 px-1 text-[9px] font-bold leading-4 text-white">
+                    <span className="absolute -bottom-1 -right-1 rounded-full bg-success px-1 text-[9px] font-bold leading-4 text-on-success">
                         {badge}
                     </span>
                 ) : null}

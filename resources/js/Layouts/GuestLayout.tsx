@@ -10,7 +10,9 @@ interface GuestLayoutProps {
 /**
  * Shell for the public auth screens (login, register, password reset).
  * Mirrors the Mezgebe Dirijit landing-page brand so signing in does not
- * look like a different product.
+ * look like a different product. Colors are theme tokens: the accent follows
+ * the subdomain's role (admin on the root domain) and the page follows
+ * light/dark.
  */
 export default function GuestLayout({ children }: GuestLayoutProps) {
     return (
@@ -23,9 +25,9 @@ export default function GuestLayout({ children }: GuestLayoutProps) {
                 px: 2,
                 py: 6,
                 fontFamily: FONT_SANS,
-                bgcolor: "#1a120b",
+                bgcolor: "background.default",
                 backgroundImage:
-                    "radial-gradient(circle at 50% -10%, rgba(192,88,0,0.35), transparent 55%)",
+                    "radial-gradient(circle at 50% -10%, rgb(var(--primary) / 0.25), transparent 55%)",
             }}
         >
             <Stack spacing={3} alignItems="center" sx={{ width: "100%", maxWidth: 440 }}>
@@ -47,8 +49,8 @@ export default function GuestLayout({ children }: GuestLayoutProps) {
                             borderRadius: "16px",
                             display: "grid",
                             placeItems: "center",
-                            bgcolor: "#c05800",
-                            color: "#fdfbd4",
+                            bgcolor: "primary.main",
+                            color: "primary.contrastText",
                             fontWeight: 900,
                             fontSize: 22,
                         }}
@@ -57,13 +59,13 @@ export default function GuestLayout({ children }: GuestLayoutProps) {
                     </Box>
                     <Box sx={{ textAlign: "center" }}>
                         <Typography
-                            sx={{ fontWeight: 900, color: "#fdfbd4", letterSpacing: 2, fontSize: "1.1rem" }}
+                            sx={{ fontWeight: 900, color: "text.primary", letterSpacing: 2, fontSize: "1.1rem" }}
                         >
                             MEZGEBE DIRIJIT
                         </Typography>
                         <Typography
                             sx={{
-                                color: "rgba(253,251,212,0.55)",
+                                color: "text.secondary",
                                 fontSize: "0.7rem",
                                 letterSpacing: "0.2em",
                                 textTransform: "uppercase",
@@ -80,14 +82,17 @@ export default function GuestLayout({ children }: GuestLayoutProps) {
                         width: "100%",
                         p: { xs: 3, sm: 4 },
                         borderRadius: 3,
-                        bgcolor: "#ffffff",
-                        boxShadow: "0 24px 60px rgba(0, 0, 0, 0.45)",
+                        bgcolor: "background.paper",
+                        border: "1px solid",
+                        borderColor: "divider",
+                        boxShadow: ({ palette }) =>
+                            palette.mode === "dark" ? "none" : "0 24px 60px rgb(var(--on-surface) / 0.12)",
                     }}
                 >
                     {children}
                 </Paper>
 
-                <Typography sx={{ color: "rgba(253,251,212,0.4)", fontSize: "0.7rem", fontFamily: "monospace" }}>
+                <Typography sx={{ color: "text.secondary", fontSize: "0.7rem", fontFamily: "monospace" }}>
                     © {new Date().getFullYear()} MEZGEBE DIRIJIT
                 </Typography>
             </Stack>

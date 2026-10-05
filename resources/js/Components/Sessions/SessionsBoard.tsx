@@ -202,40 +202,13 @@ export default function SessionsBoard({ sessions, lifetimes, routePrefix }: Sess
                     __html: `
         .animate-pulse-fast { animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         .glass-panel {
-            background: ${isDark ? 'rgba(31, 42, 54, 0.4)' : 'rgba(255, 255, 255, 0.6)'};
+            background: rgb(var(--surface-container-low) / 0.6);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid ${isDark ? 'rgba(126, 139, 154, 0.2)' : 'rgba(0, 0, 0, 0.1)'};
-            box-shadow: ${isDark ? '0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 3px 0px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255, 255, 255, 0.05)' : '0px 2px 1px -1px rgba(0,0,0,0.1), 0px 1px 3px 0px rgba(0,0,0,0.05)'};
+            border: 1px solid rgb(var(--outline) / 0.2);
+            box-shadow: ${isDark ? 'inset 0 1px 0 rgb(var(--on-surface) / 0.05)' : '0px 2px 1px -1px rgb(var(--on-surface) / 0.1), 0px 1px 3px 0px rgb(var(--on-surface) / 0.05)'};
         }
-        ${
-            !isDark
-                ? `
-            .text-on-surface { color: rgba(0,0,0,0.87) !important; }
-            .text-on-surface-variant { color: rgba(0,0,0,0.6) !important; }
-            .text-on-background { color: rgba(0,0,0,0.87) !important; }
-            .text-primary { color: #1976d2 !important; }
-            .text-error { color: #d32f2f !important; }
-            .bg-surface-container-high { background-color: #f3f4f6 !important; }
-            .bg-surface-container-highest { background-color: #e5e7eb !important; }
-            .bg-surface-container-low { background-color: #ffffff !important; }
-            .bg-primary\\/5 { background-color: rgba(25, 118, 210, 0.05) !important; }
-            .bg-primary\\/10 { background-color: rgba(25, 118, 210, 0.1) !important; }
-            .bg-primary\\/20 { background-color: rgba(25, 118, 210, 0.2) !important; }
-            .bg-error\\/20 { background-color: rgba(211, 47, 47, 0.1) !important; }
-            .border-outline-variant\\/30 { border-color: rgba(0,0,0,0.12) !important; }
-            .border-outline-variant\\/50 { border-color: rgba(0,0,0,0.2) !important; }
-            .border-primary\\/30 { border-color: rgba(25, 118, 210, 0.3) !important; }
-            .border-primary\\/50 { border-color: rgba(25, 118, 210, 0.5) !important; }
-            .border-error\\/50 { border-color: rgba(211, 47, 47, 0.5) !important; }
-            .hover\\:bg-surface-container-high:hover { background-color: #f3f4f6 !important; }
-            .hover\\:bg-surface-container-highest:hover { background-color: #e5e7eb !important; }
-            .hover\\:bg-surface-container-high\\/60:hover { background-color: rgba(243, 244, 246, 0.6) !important; }
-            .hover\\:text-on-surface:hover { color: rgba(0,0,0,0.87) !important; }
-            .hover\\:bg-error\\/30:hover { background-color: rgba(211, 47, 47, 0.15) !important; }
-        `
-                : ''
-        }`,
+`,
                 }}
             />
 
@@ -248,8 +221,8 @@ export default function SessionsBoard({ sessions, lifetimes, routePrefix }: Sess
                         role="status"
                         className={`p-4 mb-6 border rounded-lg glass-panel flex items-start justify-between gap-sm ${
                             toast.kind === 'success'
-                                ? 'text-green-400 border-green-500/20'
-                                : 'text-red-400 border-red-500/20'
+                                ? 'text-success border-success/20'
+                                : 'text-error border-error/20'
                         }`}
                     >
                         <span>{toast.text}</span>
@@ -470,9 +443,9 @@ export default function SessionsBoard({ sessions, lifetimes, routePrefix }: Sess
                                             Expired
                                         </div>
                                     ) : s.is_live ? (
-                                        <div className="flex items-center gap-xs bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-full">
-                                            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-fast" />
-                                            <span className="font-medium text-[12px] text-emerald-300">Active Now</span>
+                                        <div className="flex items-center gap-xs bg-success/10 border border-success/30 px-3 py-1 rounded-full">
+                                            <div className="w-2 h-2 rounded-full bg-success animate-pulse-fast" />
+                                            <span className="font-medium text-[12px] text-success">Active Now</span>
                                         </div>
                                     ) : (
                                         <div className="flex items-center gap-xs bg-surface-container-highest/50 border border-outline-variant/30 px-3 py-1 rounded-full">
@@ -499,7 +472,7 @@ export default function SessionsBoard({ sessions, lifetimes, routePrefix }: Sess
                                     <div className="text-right flex items-center md:items-end flex-row md:flex-col gap-sm md:gap-0">
                                         <div
                                             className={`font-mono-data text-mono-data font-bold flex items-center gap-xs ${
-                                                expired || critical ? 'text-error' : 'text-amber-400'
+                                                expired || critical ? 'text-error' : 'text-warning'
                                             }`}
                                         >
                                             <span className="material-symbols-outlined text-[16px]">timer</span> {timeLeft}

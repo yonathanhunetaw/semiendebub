@@ -13,14 +13,11 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
  * pages use.
  */
 /**
- * The card is dark and sets `text-white`, which cascades into the form
- * controls — whose own surface is white. Every value a user typed was
- * therefore white on white and invisible, so the inputs are pinned back to a
- * dark ink here rather than in each of the three partials.
+ * Profile card surface. Theme tokens, so it follows light/dark; the form
+ * controls (Components/UI) carry their own surface and ink tokens.
  */
 const CARD =
-    "bg-[#1e293b] text-white p-6 shadow-sm rounded-2xl border border-white/5 " +
-    "[&_input]:!text-gray-900 [&_input]:placeholder:!text-slate-400";
+    "bg-surface-container-lowest text-on-surface p-6 shadow-sm rounded-2xl border border-outline-variant";
 
 export default function Edit({ mustVerifyEmail, status }) {
     const { auth } = usePage().props;
@@ -42,7 +39,7 @@ export default function Edit({ mustVerifyEmail, status }) {
                     gap: 2,
                 }}
             >
-                <Typography variant="h4" sx={{ fontWeight: 900, color: "#ffffff" }}>
+                <Typography variant="h4" sx={{ fontWeight: 900, color: "text.primary" }}>
                     Profile
                 </Typography>
 
@@ -57,10 +54,10 @@ export default function Edit({ mustVerifyEmail, status }) {
                         href={route('storefront.index')}
                         startIcon={<ArrowBackRoundedIcon />}
                         sx={{
-                            color: "rgba(255,255,255,0.75)",
+                            color: "text.secondary",
                             textTransform: "none",
                             fontWeight: 700,
-                            "&:hover": { color: "#ffffff" },
+                            "&:hover": { color: "text.primary" },
                         }}
                     >
                         Back to shop

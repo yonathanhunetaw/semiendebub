@@ -52,7 +52,7 @@ export default function AuthenticatedLayout({
         <Box
             sx={{
                 minHeight: "100vh",
-                bgcolor: "grey.100",
+                bgcolor: "background.default",
                 fontFamily: FONT_SANS,
             }}
         >
