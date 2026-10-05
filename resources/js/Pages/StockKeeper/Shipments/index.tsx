@@ -55,7 +55,7 @@ export default function StockKeeperShipmentsIndex({
             <Head title="Shipments" />
 
             {/* ── Top Context Strip: Back button, centered Shipments, and direction toggle ── */}
-            <div className="px-4 py-3 flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-20">
+            <div className="px-4 py-3 flex items-center justify-between bg-surface-container-lowest border-b border-outline-variant sticky top-0 z-20">
                 <button
                     onClick={() => {
                         if (window.history.length > 1) {
@@ -64,26 +64,26 @@ export default function StockKeeperShipmentsIndex({
                             router.visit(route("stock_keeper.dashboard"));
                         }
                     }}
-                    className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 flex items-center justify-center active:scale-95 transition-all text-slate-600"
+                    className="w-8 h-8 rounded-xl bg-surface-container-low hover:bg-surface-container border border-outline-variant flex items-center justify-center active:scale-95 transition-all text-on-surface-variant"
                     aria-label="Back"
                 >
                     <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                 </button>
 
                 <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[#c2410c] text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
-                    <h1 className="text-[16px] font-bold text-gray-900 tracking-tight">Shipments</h1>
+                    <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
+                    <h1 className="text-[16px] font-bold text-on-surface tracking-tight">Shipments</h1>
                 </div>
 
                 {/* A keeper with no facility covers every dock, so there is
                     nothing for them to narrow by. */}
                 {store_id === null ? (
-                    <span className="flex items-center gap-1 bg-slate-50 text-slate-500 px-3 py-1.5 rounded-full border border-slate-200/80">
+                    <span className="flex items-center gap-1 bg-surface-container-low text-on-surface-variant px-3 py-1.5 rounded-full border border-outline-variant">
                         <span className="material-symbols-outlined text-[14px]">hub</span>
                         <span className="font-bold text-[11px] tracking-wide">ALL DOCKS</span>
                     </span>
                 ) : (
-                    <div className="flex items-center gap-0.5 bg-slate-50 p-0.5 rounded-full border border-slate-200/80">
+                    <div className="flex items-center gap-0.5 bg-surface-container-low p-0.5 rounded-full border border-outline-variant">
                         {([
                             { id: "all" as Direction, label: "ALL" },
                             { id: "inbound" as Direction, label: "IN" },
@@ -91,7 +91,7 @@ export default function StockKeeperShipmentsIndex({
                         ]).map(d => (
                             <button key={d.id} onClick={() => setDirection(d.id)}
                                 className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wide transition-colors ${
-                                    direction === d.id ? "bg-[#c2410c] text-white" : "text-slate-500 hover:text-[#c2410c]"
+                                    direction === d.id ? "bg-primary text-on-primary" : "text-on-surface-variant hover:text-primary"
                                 }`}>
                                 {d.label}
                             </button>
@@ -116,8 +116,8 @@ export default function StockKeeperShipmentsIndex({
                         <button key={f.id} onClick={() => setFilter(f.id)}
                             className={`px-3 py-1.5 rounded-full text-[11px] font-bold shrink-0 transition-colors border ${
                                 filter === f.id
-                                    ? "bg-[#c2410c] text-white border-[#c2410c]"
-                                    : "bg-white text-slate-600 border-slate-200"
+                                    ? "bg-primary text-on-primary border-primary"
+                                    : "bg-surface-container-lowest text-on-surface-variant border-outline-variant"
                             }`}>
                             {f.label} ({f.id === "all" ? transfers.length : transfers.filter(t => t.status === f.id).length})
                         </button>
@@ -130,10 +130,10 @@ export default function StockKeeperShipmentsIndex({
                         <TransferCard key={t.id} t={t} showRoute="stock_keeper.shipments.show" agreeRoute="stock_keeper.shipments.agree" transitionRoute="stock_keeper.shipments.transition" />
                     ))}
                     {displayedTransfers.length === 0 && (
-                        <div className="py-8 text-center bg-white rounded-2xl border border-slate-100">
-                            <span className="material-symbols-outlined text-slate-300 text-[36px] mb-2">inbox</span>
-                            <p className="text-[13px] font-bold text-gray-900">No shipments found</p>
-                            <p className="text-[11px] text-slate-400 mt-1">
+                        <div className="py-8 text-center bg-surface-container-lowest rounded-2xl border border-outline-variant">
+                            <span className="material-symbols-outlined text-outline/60 text-[36px] mb-2">inbox</span>
+                            <p className="text-[13px] font-bold text-on-surface">No shipments found</p>
+                            <p className="text-[11px] text-outline mt-1">
                                 {direction === "all"
                                     ? "Nothing is moving through your docks right now."
                                     : "Change the filter, or switch to ALL to see both directions."}
