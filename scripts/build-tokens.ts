@@ -6,7 +6,7 @@
  *   resources/views/partials/theme-prepaint.blade.php  pre-paint data-mode/data-role script
  * and prints a contrast + hue report.
  *
- * `npm run tokens -- --swatches` also writes docs/plans/swatches.html, a
+ * `npm run tokens -- --swatches` also writes storage/app/swatches.html, a
  * static page (open it directly, no build) showing every role x mode.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -212,5 +212,6 @@ input { padding: 6px 8px; border-radius: 4px; }
 </body>
 </html>
 `;
-    write('docs/plans/swatches.html', html);
+    // docs/ is a separate repo beside the app, outside the container's mount.
+    write('storage/app/swatches.html', html);
 }

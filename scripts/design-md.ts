@@ -11,7 +11,8 @@
  *   - layout shells, bottom navs, tab icons        <- resources/js/Layouts/*, Components/Navigation/*
  *   - public welcome pages                         <- Components/Shared/RoleWelcome.tsx
  *
- * The host entry point is docs/scribts/build-design-md.sh, which runs this
+ * The host entry point is ../docs/scribts/build-design-md.sh (docs/ is a separate
+ * repo beside this app in the Duka/ workspace), which runs this
  * through `docker exec`, checks the result and only then writes the file.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
