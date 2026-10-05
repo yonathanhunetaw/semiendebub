@@ -66,19 +66,19 @@ export interface RolePalette {
 }
 
 export const ROLE_PALETTES: Record<RoleKey, RolePalette> = {
+    shared: { primary: { light: '#64748b', dark: '#94a3b8' } }, // slate
     admin: { primary: { light: '#4f46e5', dark: '#818cf8' } }, // indigo
-    seller: { primary: { light: '#c2410c', dark: '#fb923c' } }, // orange: owner keeps the original seller color (overrides the no-amber rule)
-    stock_keeper: { primary: { light: '#1d4ed8', dark: '#60a5fa' } }, // blue
-    delivery: { primary: { light: '#9333ea', dark: '#c084fc' } }, // purple (was violet #7c3aed: too close to admin indigo)
-    vendor: { primary: { light: '#0e7490', dark: '#22d3ee' } }, // cyan
-    finance: { primary: { light: '#1e3a5f', dark: '#7da4d0' } }, // navy
-    procurement: { primary: { light: '#b5179e', dark: '#e76fd8' } }, // magenta (was fuchsia #a21caf: spaced from delivery)
-    marketing: { primary: { light: '#be185d', dark: '#f7709a' } }, // pink (dark was #f472b6: too close to procurement in dark mode)
+    delivery: { primary: { light: '#9333ea', dark: '#c084fc' } }, // purple
     dev: {
         primary: { light: '#374151', dark: '#9ca3af' }, // graphite
         accent: { light: '#16a34a', dark: '#4ade80' }, // terminal green
     },
-    shared: { primary: { light: '#64748b', dark: '#94a3b8' } }, // slate
+    finance: { primary: { light: '#1e3a5f', dark: '#7da4d0' } }, // navy
+    marketing: { primary: { light: '#be185d', dark: '#f7709a' } }, // pink
+    procurement: { primary: { light: '#b5179e', dark: '#e76fd8' } }, // magenta
+    seller: { primary: { light: '#c2410c', dark: '#fb923c' } }, // orange
+    stock_keeper: { primary: { light: '#1d4ed8', dark: '#60a5fa' } }, // blue
+    vendor: { primary: { light: '#0e7490', dark: '#22d3ee' } }, // cyan
 };
 
 /** Endpoints the derivation helpers tint toward. */
