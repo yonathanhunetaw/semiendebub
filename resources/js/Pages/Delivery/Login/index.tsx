@@ -101,7 +101,8 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             {canResetPassword && (
                                 <InertiaLink
                                     href="/forgot-password"
-                                    style={{ textDecoration: 'none', fontSize: '0.875rem', color: '#f57c00' }}
+                                    style={{ textDecoration: 'none', fontSize: '0.875rem' }}
+                                    className="text-primary"
                                 >
                                     Forgot your password?
                                 </InertiaLink>
