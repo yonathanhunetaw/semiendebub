@@ -69,6 +69,10 @@ class CartController extends Controller
             'variants.itemSize',
         ])
             ->visibleTo($user)
+            // Only carts that can still take items: a checked-out cart is
+            // `completed` and lives on the Orders board, and add-to-cart only
+            // ever offers open carts.
+            ->open()
             ->orderedByPriority()
             ->get();
 

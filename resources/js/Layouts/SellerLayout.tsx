@@ -1,6 +1,7 @@
+import FlashToast from "@/Components/Shared/FlashToast";
 import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
 import { Head, usePage } from "@inertiajs/react";
-import { Alert, Box, CssBaseline, Snackbar } from "@mui/material";
+import { Box, CssBaseline } from "@mui/material";
 import React from "react";
 import { FONT_SANS } from "@/theme";
 
@@ -45,27 +46,8 @@ export default function SellerLayout({
                     boxShadow: { md: 24 },
                 }}
             >
-                <Snackbar
-                    open={!!flash?.success}
-                    autoHideDuration={3000}
-                    anchorOrigin={{ vertical: "top", horizontal: "center" }}
-                    sx={{ mt: 2 }}
-                >
-                    <Alert severity="success" sx={{ borderRadius: 3, boxShadow: 3 }}>
-                        {flash?.success}
-                    </Alert>
-                </Snackbar>
+                <FlashToast />
 
-                <Snackbar
-                    open={!!flash?.error}
-                    autoHideDuration={4000}
-                    anchorOrigin={{ vertical: "top", horizontal: "center" }}
-                    sx={{ mt: 2 }}
-                >
-                    <Alert severity="error" sx={{ borderRadius: 3, boxShadow: 3 }}>
-                        {flash?.error}
-                    </Alert>
-                </Snackbar>
 
                 <Box
                     component="main"

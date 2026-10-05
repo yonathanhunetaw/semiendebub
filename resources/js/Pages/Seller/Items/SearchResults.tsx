@@ -1,143 +1,47 @@
 import { Head, Link, router } from "@inertiajs/react";
-import {
-    Box,
-    Typography,
-    CircularProgress,
-    IconButton,
-    Stack,
-    Chip,
-    useTheme,
-    Tooltip,
-    InputBase,
-    Paper,
-} from "@mui/material";
-import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
-import ExpandLessRoundedIcon from "@mui/icons-material/ExpandLessRounded";
-import ImageNotSupportedIcon from "@mui/icons-material/ImageNotSupported";
 import React from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { SellerCard, sellerShadow } from "@/Components/Seller/sellerUi";
-import StockCaption from "@/Components/Seller/StockCaption";
-
-// ======================== SVG PLACEHOLDER ========================
-const NO_IMAGE_PLACEHOLDER =
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23f5f5f5'/%3E%3Cpath d='M160 160 L240 160 M200 120 L200 200' stroke='%23999' stroke-width='8' fill='none'/%3E%3Ccircle cx='200' cy='200' r='80' fill='none' stroke='%23999' stroke-width='8'/%3E%3C/svg%3E";
-
-// ======================== TYPES ========================
-interface SearchResultItem {
-    id: number;
-    product_name: string;
-    image_urls: string[];
-    original_price: number;
-    store_price?: number | null;
-    final_price: number | null;
-    discount_ends_at: string | null;
-    store_stock: number;
-    sold_count: number;
-    category: { category_name: string } | null;
-    pricing_matrix?: Array<{
-        level: string;
-        price: number;
-        discount_price: number | null;
-        discount_ends_at: string | null;
-        final: number;
-    }>;
-}
+import { type CatalogItem } from "@/Components/Seller/catalogPricing";
+import ProductCard from "@/Components/Seller/ProductCard";
+import { EmptyState } from "@/Components/Shared/ui";
 
 interface Props {
-    query: string;
-    items: SearchResultItem[];
-    nextPageUrl: string | null;
+    query?: string;
+    items?: CatalogItem[];
+    nextPageUrl?: string | null;
+    /** Categories among every match, for the filter pills. */
     categories?: { id: number; category_name: string }[];
     selectedCategoryId?: number | null;
     has_tin_cart?: boolean;
+    top_cart_is_individual?: boolean;
 }
 
-// ======================== IMAGE RESOLVER ========================
-const resolveImageUrl = (path?: string): string => {
-    if (!path) return NO_IMAGE_PLACEHOLDER;
-    if (path.startsWith("http") || path.startsWith("data:")) return path;
-    const baseUrl = import.meta.env.VITE_AWS_URL || "http://duka.test:9000/duka-images";
-    return `${baseUrl}/${path.replace(/^\//, "")}`;
-};
-
-// ======================== DISCOUNT COUNTDOWN (full‑width version) ========================
-function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
-    const [timeLeft, setTimeLeft] = React.useState<{
-        days: number;
-        hours: number;
-        minutes: number;
-        seconds: number;
-    } | null>(null);
-    const [isExpired, setIsExpired] = React.useState(false);
-
-    React.useEffect(() => {
-        if (!endsAt) return;
-        const calculate = () => {
-            const diff = new Date(endsAt).getTime() - Date.now();
-            if (diff <= 0) {
-                setIsExpired(true);
-                return null;
-            }
-            return {
-                days: Math.floor(diff / (1000 * 60 * 60 * 24)),
-                hours: Math.floor((diff % 86400000) / 3600000),
-                minutes: Math.floor((diff % 3600000) / 60000),
-                seconds: Math.floor((diff % 60000) / 1000),
-            };
-        };
-        const update = () => setTimeLeft(calculate());
-        update();
-        const interval = setInterval(update, 1000);
-        return () => clearInterval(interval);
-    }, [endsAt]);
-
-    if (isExpired || !endsAt || !timeLeft) return null;
-    const { days, hours, minutes, seconds } = timeLeft;
-    let label = "";
-    if (days > 0) label = `${days}d ${hours}h`;
-    else if (hours > 0) label = `${hours}h ${minutes}m`;
-    else if (minutes > 0) label = `${minutes}m ${seconds}s`;
-    else label = `${seconds}s`;
-
-    return (
-        <Tooltip title={`Discount ends on ${new Date(endsAt).toLocaleString()}`}>
-            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
-                <AccessTimeIcon sx={{ fontSize: 16, color: "rgb(var(--inverse-on-surface))" }} />
-                <Typography variant="caption" sx={{ fontWeight: 700, color: "rgb(var(--inverse-on-surface))", fontSize: "0.75rem" }}>
-                    {label}
-                </Typography>
-            </Stack>
-        </Tooltip>
-    );
-}
-
-// ======================== MAIN SEARCH RESULTS ========================
+/**
+ * Seller search results: the Store page's cards and pricing (the same cart
+ * decides individual vs business, so VAT reads the same), filtered by the
+ * query and an optional category. Pages in with infinite scroll.
+ */
 export default function SearchResults({
-    query,
-    items: initialItems,
-    nextPageUrl,
+    query = "",
+    items: initialItems = [],
+    nextPageUrl = null,
     categories = [],
     selectedCategoryId = null,
     has_tin_cart = false,
+    top_cart_is_individual = false,
 }: Props) {
-    const theme = useTheme();
     const [items, setItems] = React.useState(initialItems);
     const [hasNextPage, setHasNextPage] = React.useState(!!nextPageUrl);
-    const [isLoading, setIsLoading] = React.useState(false);
     const [page, setPage] = React.useState(2);
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [search, setSearch] = React.useState(query);
     const observerRef = React.useRef<HTMLDivElement | null>(null);
-    const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
-    const [searchInput, setSearchInput] = React.useState(query || "");
-    const [categoriesExpanded, setCategoriesExpanded] = React.useState(false);
-    const isScrollingRef = React.useRef(false);
+    const appendingRef = React.useRef(false);
 
+    // A fresh search or category replaces the list; load-more appends below.
     React.useEffect(() => {
-        if (isScrollingRef.current) {
-            isScrollingRef.current = false;
+        if (appendingRef.current) {
+            appendingRef.current = false;
             return;
         }
         setItems(initialItems);
@@ -145,412 +49,154 @@ export default function SearchResults({
         setPage(2);
     }, [initialItems, nextPageUrl]);
 
-    // ========== INFINITE SCROLL ==========
-    const loadMore = () => {
+    React.useEffect(() => setSearch(query), [query]);
+
+    const visit = (next: { search?: string; category_id?: number | null }) =>
+        router.get(route("seller.items.search"), {
+            search: (next.search ?? query) || undefined,
+            category_id: (next.category_id === undefined ? selectedCategoryId : next.category_id) ?? undefined,
+        });
+
+    const loadMore = React.useCallback(() => {
         if (isLoading || !hasNextPage) return;
         setIsLoading(true);
-        isScrollingRef.current = true;
+        appendingRef.current = true;
         router.get(
             route("seller.items.search"),
-            { search: searchInput, category_id: selectedCategoryId || undefined, page },
+            { search: query || undefined, category_id: selectedCategoryId ?? undefined, page },
             {
                 preserveState: true,
                 preserveScroll: true,
                 only: ["items", "nextPageUrl"],
-                onSuccess: (resp: any) => {
-                    setItems((prev) => [...prev, ...(resp.props.items || [])]);
+                onSuccess: (resp) => {
+                    const more = (resp.props.items as CatalogItem[] | undefined) ?? [];
+                    setItems((prev) => [...prev, ...more]);
                     setHasNextPage(!!resp.props.nextPageUrl);
                     setPage((p) => p + 1);
-                    setIsLoading(false);
                 },
-                onError: () => {
-                    isScrollingRef.current = false;
-                    setIsLoading(false);
-                },
-            }
+                onFinish: () => setIsLoading(false),
+            },
         );
-    };
+    }, [isLoading, hasNextPage, page, query, selectedCategoryId]);
 
     React.useEffect(() => {
-        if (!observerRef.current) return;
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting && hasNextPage && !isLoading) loadMore();
-            },
-            { threshold: 0.1, rootMargin: "100px" }
-        );
+        if (!observerRef.current || !hasNextPage) return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) loadMore();
+        }, { rootMargin: "100px" });
         observer.observe(observerRef.current);
         return () => observer.disconnect();
-    }, [hasNextPage, isLoading]);
+    }, [hasNextPage, loadMore]);
 
-    // ========== SEARCH & CATEGORY HANDLERS ==========
-    const handleCategorySelect = (categoryId: number | null) => {
-        router.get(route("seller.items.search"), {
-            search: searchInput,
-            category_id: categoryId || undefined,
-        });
-    };
+    const pillClass = (active: boolean) =>
+        `flex-shrink-0 whitespace-nowrap rounded-[999px] px-3 py-1 text-[12px] transition-colors ${
+            active
+                ? "bg-primary font-semibold tracking-wide text-on-primary shadow-sm"
+                : "border border-outline-variant bg-surface-container-lowest font-medium text-on-surface-variant hover:bg-surface-container"
+        }`;
 
-    const handleSearchSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        router.get(route("seller.items.search"), {
-            search: searchInput,
-            category_id: selectedCategoryId || undefined,
-        });
-    };
-
-    // ========== RENDER ==========
     return (
-        <SellerLayout>
-            <Head title={`Search: ${query || "All Items"}`} />
-            <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pb: 10 }}>
-                {/* ========== SEARCH HEADER (matches Index) ========== */}
-                <Box sx={{ px: { xs: 2, md: 4 }, pt: 2, pb: 2, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }}>
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%" }}>
-                        <IconButton component={Link} href={route("seller.dashboard")} sx={{ color: "text.secondary" }}>
-                            <ArrowBackRoundedIcon />
-                        </IconButton>
-                        <Box
-                            component="form"
-                            onSubmit={handleSearchSubmit}
-                            sx={{
-                                flex: 1,
-                                display: "flex",
-                                alignItems: "center",
-                                px: 2,
-                                py: 1,
-                                borderRadius: 999,
-                                bgcolor: "rgb(var(--surface-container))",
-                                border: "1px solid",
-                                borderColor: "divider",
-                                transition: "border-color 0.2s, background 0.2s",
-                                "&:focus-within": { borderColor: "primary.main", bgcolor: "background.paper" },
-                            }}
-                        >
-                            <SearchRoundedIcon sx={{ color: "text.secondary", mr: 1 }} />
-                            <InputBase
-                                fullWidth
-                                autoFocus
-                                placeholder="Search items..."
-                                value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
-                                sx={{ fontSize: "0.95rem" }}
-                            />
-                        </Box>
-                        <IconButton
-                            type="submit"
-                            onClick={handleSearchSubmit}
-                            sx={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 999,
-                                bgcolor: "primary.main",
-                                color: "primary.contrastText",
-                                "&:hover": { bgcolor: "rgb(var(--primary) / 0.9)" },
-                            }}
-                        >
-                            <SearchRoundedIcon />
-                        </IconButton>
-                    </Stack>
-                </Box>
+        <>
+            <Head title={query ? `Search: ${query}` : "Search"} />
 
-                {/* ========== MAIN CONTENT ========== */}
-                <Box sx={{ px: { xs: 2, md: 4 }, pt: 3 }}>
-                    {/* ========== CATEGORY FILTER ========== */}
-                    {categories.length > 0 && (
-                        <Box sx={{ mb: 3 }}>
-                            <Stack
-                                direction="row"
-                                alignItems="center"
-                                justifyContent="space-between"
-                                onClick={() => setCategoriesExpanded(!categoriesExpanded)}
-                                sx={{ cursor: "pointer", py: 1, borderBottom: "1px solid", borderColor: "divider", mb: 1 }}
-                            >
-                                <Stack direction="row" alignItems="center" spacing={1}>
-                                    <Typography variant="body2" fontWeight="bold" color="text.secondary">
-                                        Filter by Category
-                                    </Typography>
-                                    {selectedCategoryId !== null && !categoriesExpanded && (
-                                        <Chip
-                                            size="small"
-                                            color="primary"
-                                            label={categories.find((c) => c.id === selectedCategoryId)?.category_name || "Filtered"}
-                                        />
-                                    )}
-                                </Stack>
-                                <IconButton size="small">
-                                    {categoriesExpanded ? <ExpandLessRoundedIcon /> : <ExpandMoreRoundedIcon />}
-                                </IconButton>
-                            </Stack>
-
-                            {categoriesExpanded && (
-                                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", pt: 1 }}>
-                                    <Chip
-                                        label="All"
-                                        clickable
-                                        color={selectedCategoryId === null ? "primary" : "default"}
-                                        onClick={() => handleCategorySelect(null)}
-                                        sx={{ fontWeight: "bold" }}
-                                    />
-                                    {categories.map((cat) => (
-                                        <Chip
-                                            key={cat.id}
-                                            label={cat.category_name}
-                                            clickable
-                                            color={selectedCategoryId === cat.id ? "primary" : "default"}
-                                            onClick={() => handleCategorySelect(cat.id)}
-                                            sx={{ fontWeight: "bold" }}
-                                        />
-                                    ))}
-                                </Box>
-                            )}
-                        </Box>
-                    )}
-
-                    {/* ========== PRODUCT GRID (matching Index) ========== */}
-                    <Box
-                        sx={{
-                            display: "grid",
-                            gap: 3,
-                            gridTemplateColumns: {
-                                xs: "repeat(2, 1fr)",
-                                sm: "repeat(3, 1fr)",
-                                md: "repeat(4, 1fr)",
-                            },
-                            width: "100%",
-                        }}
+            <header className="sticky top-0 z-40 border-b border-outline-variant bg-surface-container-lowest/95 px-3.5 py-2.5 backdrop-blur-md">
+                <div className="flex items-center gap-2">
+                    <Link
+                        href={route("seller.dashboard")}
+                        aria-label="Back to store"
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[999px] text-on-surface-variant hover:bg-surface-container"
                     >
-                        {items.map((item) => {
-                            // The backend (search controller) already resolved everything:
-                            // Individual carts, Business VAT, Customer prices, and Seller prices.
-                            const originalPrice = item.store_price ?? item.original_price ?? 0;
-                            const displayPrice = item.final_price ?? originalPrice;
-                            
-                            const deepestTier = item.pricing_matrix?.[item.pricing_matrix.length - 1];
-                            const discountEnds = deepestTier?.discount_ends_at ?? item.discount_ends_at ?? null;
-                            const isSellerPrice = deepestTier?.level === "seller";
-                            
-                            const hasDiscount = displayPrice < originalPrice;
-                            const discountPercent =
-                                hasDiscount && originalPrice > 0
-                                    ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100)
-                                    : 0;
+                        <span className="material-symbols-outlined text-[22px]">arrow_back</span>
+                    </Link>
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            if (search.trim()) visit({ search: search.trim(), category_id: null });
+                        }}
+                        className="flex flex-1 items-center rounded-[999px] border border-outline-variant bg-surface-container-low py-1.5 pl-3.5 pr-1.5 shadow-inner transition-all focus-within:border-primary focus-within:bg-surface-container-lowest focus-within:ring-2 focus-within:ring-primary/20"
+                    >
+                        <span className="material-symbols-outlined mr-2 flex-shrink-0 text-[20px] text-outline">search</span>
+                        <input
+                            aria-label="Search catalogue"
+                            type="search"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search products…"
+                            className="h-[22px] w-full border-0 bg-transparent p-0 text-[13px] font-medium text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-0"
+                        />
+                        <button
+                            type="submit"
+                            aria-label="Search"
+                            className="ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[999px] bg-primary text-on-primary shadow-sm transition-all hover:bg-primary/90 active:scale-90"
+                        >
+                            <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                        </button>
+                    </form>
+                </div>
 
-                            const imgSrc = item.image_urls?.[0]
-                                ? resolveImageUrl(item.image_urls[0])
-                                : NO_IMAGE_PLACEHOLDER;
+                {categories.length > 0 && (
+                    <nav
+                        aria-label="Filter by category"
+                        className="-mx-3.5 flex items-center gap-1.5 overflow-x-auto px-3.5 pb-0.5 pt-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    >
+                        <button type="button" onClick={() => visit({ category_id: null })} className={pillClass(selectedCategoryId === null)}>
+                            All categories
+                        </button>
+                        {categories.map((c) => (
+                            <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => visit({ category_id: c.id })}
+                                className={pillClass(selectedCategoryId === c.id)}
+                            >
+                                {c.category_name}
+                            </button>
+                        ))}
+                    </nav>
+                )}
+            </header>
 
-                            return (
-                                <SellerCard
-                                    key={item.id}
-                                    component={Link}
-                                    href={route("seller.items.show", item.id)}
-                                    sx={{
-                                        p: 0,
-                                        overflow: "hidden",
-                                        borderRadius: 3,
-                                        bgcolor: "background.paper",
-                                        border: "1px solid rgb(var(--outline-variant) / 0.6)",
-                                        boxShadow: sellerShadow("0 2px 8px", 0.04),
-                                        transition: "transform 0.2s, box-shadow 0.2s",
-                                        "&:hover": {
-                                            transform: "translateY(-4px)",
-                                            boxShadow: sellerShadow("0 8px 24px", 0.08),
-                                        },
-                                        cursor: "pointer",
-                                        textDecoration: "none",
-                                    }}
-                                >
-                                    {/* ---------- Image Container ---------- */}
-                                    <Box
-                                        sx={{
-                                            position: "relative",
-                                            width: "100%",
-                                            aspectRatio: "1 / 1",
-                                            bgcolor: "rgb(var(--surface-container))",
-                                            overflow: "hidden",
-                                        }}
-                                    >
-                                        {!loaded[item.id] && (
-                                            <Box
-                                                sx={{
-                                                    position: "absolute",
-                                                    inset: 0,
-                                                    background:
-                                                        "linear-gradient(90deg, transparent 25%, rgb(var(--surface-bright) / 0.2) 50%, transparent 75%)",
-                                                    backgroundSize: "200% 100%",
-                                                    animation: "shimmer 1.4s infinite",
-                                                }}
-                                            />
-                                        )}
-                                        <img
-                                            src={imgSrc}
-                                            alt={item.product_name}
-                                            onLoad={() =>
-                                                setLoaded((prev) => ({ ...prev, [item.id]: true }))
-                                            }
-                                            onError={(e) => {
-                                                const target = e.currentTarget;
-                                                if (target.src.includes(NO_IMAGE_PLACEHOLDER)) return;
-                                                target.src = NO_IMAGE_PLACEHOLDER;
-                                                setLoaded((prev) => ({ ...prev, [item.id]: true }));
-                                            }}
-                                            style={{
-                                                width: "100%",
-                                                height: "100%",
-                                                objectFit: "cover",
-                                                opacity: loaded[item.id] ? 1 : 0,
-                                                transition: "opacity 0.35s ease",
-                                            }}
-                                        />
+            <main className="space-y-3.5 px-3 pt-3">
+                {query && (
+                    <p className="px-0.5 text-[12px] font-medium text-on-surface-variant">
+                        Results for <span className="font-semibold text-on-surface">“{query}”</span>
+                    </p>
+                )}
 
-                                        {/* ----- Discount overlays (identical to Index) ----- */}
-                                        {hasDiscount && (
-                                            <>
-                                                {/* Full-width countdown bar at the very top */}
-                                                {discountEnds && (
-                                                    <Box
-                                                        sx={{
-                                                            position: "absolute",
-                                                            top: 0,
-                                                            left: 0,
-                                                            width: "100%",
-                                                            zIndex: 3,
-                                                            bgcolor: "rgb(var(--inverse-surface) / 0.7)",
-                                                            backdropFilter: "blur(4px)",
-                                                            px: 1,
-                                                            py: 0.5,
-                                                            display: "flex",
-                                                            justifyContent: "center",
-                                                            alignItems: "center",
-                                                            borderBottom: "1px solid rgb(var(--inverse-on-surface) / 0.1)",
-                                                        }}
-                                                    >
-                                                        <DiscountCountdown endsAt={discountEnds} />
-                                                    </Box>
-                                                )}
+                {items.length > 0 ? (
+                    <section aria-label="Search results" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
+                        {items.map((item) => (
+                            <ProductCard key={item.id} item={item} hasTinCart={has_tin_cart} topCartIsIndividual={top_cart_is_individual} />
+                        ))}
+                    </section>
+                ) : (
+                    !isLoading && (
+                        <EmptyState
+                            framed
+                            icon="search_off"
+                            title="No matching items"
+                            description="Try a different name, or clear the category filter."
+                        />
+                    )
+                )}
 
-                                                {/* Discount percentage chip placed just below the bar */}
-                                                <Chip
-                                                    label={`${discountPercent}% OFF`}
-                                                    size="small"
-                                                    sx={{
-                                                        position: "absolute",
-                                                        top: 36,
-                                                        left: 8,
-                                                        zIndex: 2,
-                                                        bgcolor: "error.main",
-                                                        color: "error.contrastText",
-                                                        fontWeight: 700,
-                                                        fontSize: "0.7rem",
-                                                        height: 26,
-                                                        borderRadius: 1,
-                                                        boxShadow: sellerShadow("0 2px 8px", 0.15),
-                                                        pointerEvents: "none",
-                                                    }}
-                                                />
-                                            </>
-                                        )}
-                                        {isSellerPrice && (
-                                            <Chip
-                                                label="Seller Price"
-                                                size="small"
-                                                sx={{
-                                                    position: "absolute",
-                                                    bottom: 8,
-                                                    left: 8,
-                                                    zIndex: 2,
-                                                    bgcolor: "rgb(var(--inverse-surface))",
-                                                    color: "rgb(var(--inverse-on-surface))",
-                                                    fontWeight: 600,
-                                                    fontSize: "0.65rem",
-                                                    height: 22,
-                                                    borderRadius: 1,
-                                                    boxShadow: sellerShadow("0 2px 4px", 0.2),
-                                                    pointerEvents: "none",
-                                                }}
-                                            />
-                                        )}
-                                    </Box>
-
-                                    {/* ---------- Product Info ---------- */}
-                                    <Box sx={{ p: 1.5 }}>
-                                        <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                            sx={{ fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}
-                                        >
-                                            {item.category?.category_name || "General"}
-                                        </Typography>
-                                        <Typography
-                                            fontWeight={600}
-                                            fontSize="0.95rem"
-                                            noWrap
-                                            sx={{ mb: 0.5 }}
-                                        >
-                                            {item.product_name}
-                                        </Typography>
-
-                                        <Stack direction="row" alignItems="baseline" spacing={0.5}>
-                                            <Typography
-                                                fontWeight={700}
-                                                fontSize="1.1rem"
-                                                color={hasDiscount ? "error" : "text.primary"}
-                                            >
-                                                ${displayPrice.toFixed(2)}
-                                            </Typography>
-                                            {hasDiscount && (
-                                                <Typography
-                                                    variant="caption"
-                                                    sx={{
-                                                        textDecoration: "line-through",
-                                                        color: "text.disabled",
-                                                    }}
-                                                >
-                                                    ${originalPrice.toFixed(2)}
-                                                </Typography>
-                                            )}
-                                            {has_tin_cart && (
-                                                <Typography variant="caption" color="success.main" sx={{ ml: 'auto !important', fontWeight: 600, fontSize: '0.65rem' }}>
-                                                    Individual pricing
-                                                </Typography>
-                                            )}
-                                        </Stack>
-
-                                        <StockCaption stock={item.store_stock} />
-                                    </Box>
-                                </SellerCard>
-                            );
-                        })}
-                    </Box>
-
-                    {/* Loading / End indicators */}
-                    {isLoading && (
-                        <CircularProgress sx={{ display: "block", mx: "auto", my: 4 }} />
-                    )}
-                    {!hasNextPage && items.length > 0 && (
-                        <Typography textAlign="center" color="text.secondary" sx={{ py: 4 }}>
-                            🏁 End of catalog
-                        </Typography>
-                    )}
-                    {items.length === 0 && !isLoading && (
-                        <Box sx={{ textAlign: "center", py: 8 }}>
-                            <ImageNotSupportedIcon sx={{ fontSize: 64, color: "text.secondary", mb: 2 }} />
-                            <Typography color="text.secondary">No results found</Typography>
-                        </Box>
-                    )}
-                    {hasNextPage && items.length > 0 && (
-                        <div ref={observerRef} style={{ height: 20 }} />
-                    )}
-                </Box>
-            </Box>
-
-            <style>{`
-                @keyframes shimmer {
-                    0% { background-position: 100% 0; }
-                    100% { background-position: -100% 0; }
-                }
-            `}</style>
-        </SellerLayout>
+                {isLoading && (
+                    <div className="flex justify-center py-4">
+                        <span className="h-6 w-6 animate-spin rounded-[999px] border-2 border-primary/30 border-t-primary" />
+                    </div>
+                )}
+                {hasNextPage && items.length > 0 && <div ref={observerRef} className="h-5" />}
+                {!hasNextPage && items.length > 0 && (
+                    <footer className="py-4 text-center">
+                        <span className="inline-flex items-center gap-2 rounded-[999px] border border-outline-variant bg-surface-container px-4 py-1.5 text-[12px] font-medium text-on-surface-variant">
+                            <span className="material-symbols-outlined text-[16px] text-outline">sports_score</span>
+                            {items.length} {items.length === 1 ? "match" : "matches"}
+                        </span>
+                    </footer>
+                )}
+            </main>
+        </>
     );
 }
+
+SearchResults.layout = (page: React.ReactNode) => <SellerLayout>{page}</SellerLayout>;

@@ -1,6 +1,7 @@
+import FlashToast from '@/Components/Shared/FlashToast';
 // resources/js/Components/Admin/AdminLayout.tsx
 import React, { useState } from 'react';
-import { Alert, Box, Breadcrumbs, CssBaseline, Link as MuiLink, Snackbar, Toolbar, Typography } from '@mui/material';
+import { Box, Breadcrumbs, CssBaseline, Link as MuiLink, Toolbar, Typography } from '@mui/material';
 import { Link, usePage } from '@inertiajs/react';
 import AdminNav from '../Components/Navigation/Admin/AdminNav';
 import AdminSidebar from '../Components/Navigation/Admin/AdminSidebar';
@@ -82,24 +83,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     minWidth: 0,
                 }}
             >
-                <Snackbar
-                    open={Boolean(flash?.success)}
-                    autoHideDuration={3000}
-                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-                >
-                    <Alert severity="success" sx={{ borderRadius: 2, boxShadow: 3 }}>
-                        {flash?.success}
-                    </Alert>
-                </Snackbar>
-                <Snackbar
-                    open={Boolean(flash?.error)}
-                    autoHideDuration={4000}
-                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-                >
-                    <Alert severity="error" sx={{ borderRadius: 2, boxShadow: 3 }}>
-                        {flash?.error}
-                    </Alert>
-                </Snackbar>
+                <FlashToast bottomClass="bottom-6" />
                 <Toolbar /> {/* This offsets the fixed AppBar */}
                 {/*
                  * One gutter, and a narrow one on a phone. Pages add their own

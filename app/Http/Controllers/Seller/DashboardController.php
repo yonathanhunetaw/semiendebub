@@ -39,19 +39,12 @@ class DashboardController extends Controller
         $perPage = 20;
         $search = $request->filled('search') ? trim($request->search) : null;
 
-        // Fetch top open cart for the seller to check TIN logic
-        $topCart = Cart::with('customer')
-            ->where('seller_id', $user->id)
-            ->where('status', 'open')
-            ->orderBy('priority', 'asc')
-            ->first();
-
-        $hasTinCart = $topCart && ($topCart->customer_id === null || !empty($topCart->customer?->tin_number));
-        $topCartIsIndividual = $topCart && ($topCart->customer_id === null || !empty($topCart->customer?->tin_number));
-        $topCartIsGuest      = $topCart && is_null($topCart->customer_id);
-
         $catalog = app(SellerCatalog::class);
         $categoryId = $request->integer('category_id') ?: null;
+
+        // The cart prices are quoted for (?cart_id=, else the top open cart).
+        $context = $catalog->cartContext($user, $request->integer('cart_id') ?: null);
+        $customer = $context['customer'];
 
         // 🔹 1. Active items this store carries (shared with ItemController)
         $query = $catalog->query($storeId);
@@ -63,10 +56,6 @@ class DashboardController extends Controller
         if ($categoryId) {
             $query->where('item_category_id', $categoryId);
         }
-
-        $cartId = $request->integer('cart_id') ?: null;
-        $cart = $cartId ? \App\Models\Seller\Cart::with('customer')->find($cartId) : $topCart;
-        $customer = $cart ? $cart->customer : null;
 
         $paginator = $query->orderBy('product_name')->paginate($perPage);
         $items = collect($paginator->items())->map(function ($item) use ($catalog, $storeId, $customer) {
@@ -86,8 +75,8 @@ class DashboardController extends Controller
             // Every category the store carries, not just this page's, so the
             // filter pills stay put while the grid is filtered or paged.
             'categories'           => $catalog->categories($storeId),
-            'has_tin_cart'         => $hasTinCart,
-            'top_cart_is_individual' => $topCartIsIndividual,
+            'has_tin_cart'         => $context['has_tin_cart'],
+            'top_cart_is_individual' => $context['top_cart_is_individual'],
         ];
 
         \Log::info('Seller Dashboard Props', $props);

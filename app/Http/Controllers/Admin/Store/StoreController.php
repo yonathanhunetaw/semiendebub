@@ -332,12 +332,12 @@ class StoreController extends Controller
 
         if (isset($pricingMatrix[0]) && is_array($pricingMatrix[0])) {
             $pricingMatrix[0]['price'] = (float) $validated['price'];
-            $pricingMatrix[0]['discount_price'] = $validated['discount_price'] ? (float) $validated['discount_price'] : null;
-            $pricingMatrix[0]['discount_ends_at'] = $validated['discount_ends_at'];
+            $pricingMatrix[0]['discount_price'] = ($validated['discount_price'] ?? null) ? (float) $validated['discount_price'] : null;
+            $pricingMatrix[0]['discount_ends_at'] = $validated['discount_ends_at'] ?? null;
         } else {
             $pricingMatrix['price'] = (float) $validated['price'];
-            $pricingMatrix['discount_price'] = $validated['discount_price'] ? (float) $validated['discount_price'] : null;
-            $pricingMatrix['discount_ends_at'] = $validated['discount_ends_at'];
+            $pricingMatrix['discount_price'] = ($validated['discount_price'] ?? null) ? (float) $validated['discount_price'] : null;
+            $pricingMatrix['discount_ends_at'] = $validated['discount_ends_at'] ?? null;
         }
 
         $storeVariant->update([
@@ -1136,42 +1136,42 @@ class StoreController extends Controller
             $sv = StoreVariant::findOrFail($id);
             $m = $sv->pricing_matrix ?? [];
             if (isset($m[0]) && is_array($m[0])) {
-                $m[0]['discount_price'] = $validated['discount_price'];
-                $m[0]['discount_ends_at'] = $validated['discount_ends_at'];
+                $m[0]['discount_price'] = $validated['discount_price'] ?? null;
+                $m[0]['discount_ends_at'] = $validated['discount_ends_at'] ?? null;
             } else {
-                $m['discount_price'] = $validated['discount_price'];
-                $m['discount_ends_at'] = $validated['discount_ends_at'];
+                $m['discount_price'] = $validated['discount_price'] ?? null;
+                $m['discount_ends_at'] = $validated['discount_ends_at'] ?? null;
             }
             $sv->update(['pricing_matrix' => $m]);
 
         } elseif ($source === 'individual') {
             $rec = StoreVariantIndividualPrice::findOrFail($id);
             $m = $rec->pricing_matrix ?? [];
-            $m['discount_price'] = $validated['discount_price'];
-            $m['discount_ends_at'] = $validated['discount_ends_at'];
+            $m['discount_price'] = $validated['discount_price'] ?? null;
+            $m['discount_ends_at'] = $validated['discount_ends_at'] ?? null;
             $rec->update(['pricing_matrix' => $m]);
 
         } elseif ($source === 'customer') {
             $rec = StoreVariantCustomerPrice::findOrFail($id);
             $m = $rec->pricing_matrix ?? [];
-            $m['discount_price'] = $validated['discount_price'];
-            $m['discount_ends_at'] = $validated['discount_ends_at'];
+            $m['discount_price'] = $validated['discount_price'] ?? null;
+            $m['discount_ends_at'] = $validated['discount_ends_at'] ?? null;
             $rec->update(['pricing_matrix' => $m]);
 
         } elseif ($source === 'seller') {
             $rec = StoreVariantSellerPrice::findOrFail($id);
             $m = $rec->pricing_matrix ?? [];
             if (isset($m['business'])) {
-                $m['business']['discount_price'] = $validated['discount_price'];
-                $m['business']['discount_ends_at'] = $validated['discount_ends_at'];
+                $m['business']['discount_price'] = $validated['discount_price'] ?? null;
+                $m['business']['discount_ends_at'] = $validated['discount_ends_at'] ?? null;
             }
             if (isset($m['individual'])) {
-                $m['individual']['discount_price'] = $validated['discount_price'];
-                $m['individual']['discount_ends_at'] = $validated['discount_ends_at'];
+                $m['individual']['discount_price'] = $validated['discount_price'] ?? null;
+                $m['individual']['discount_ends_at'] = $validated['discount_ends_at'] ?? null;
             }
             if (!isset($m['business']) && !isset($m['individual'])) {
-                $m['discount_price'] = $validated['discount_price'];
-                $m['discount_ends_at'] = $validated['discount_ends_at'];
+                $m['discount_price'] = $validated['discount_price'] ?? null;
+                $m['discount_ends_at'] = $validated['discount_ends_at'] ?? null;
             }
             $rec->update(['pricing_matrix' => $m]);
         } else {

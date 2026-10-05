@@ -55,14 +55,8 @@ class ItemController extends Controller
         $paginator = $query->orderBy('product_name')->paginate($perPage);
         $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
-        $topCart = \App\Models\Seller\Cart::with('customer')
-            ->where('seller_id', $user->id)
-            ->where('status', 'open')
-            ->orderBy('priority', 'asc')
-            ->first();
-
-        $cart = $cartId ? \App\Models\Seller\Cart::with('customer')->find($cartId) : $topCart;
-        $customer = $cart ? $cart->customer : null;
+        $context = app(SellerCatalog::class)->cartContext($user, $cartId);
+        $customer = $context['customer'];
 
         $items = collect($paginator->items())->map(function ($item) use ($storeId, $customer) {
             return $this->enrichItemForIndex($item, $storeId, $customer);
@@ -77,16 +71,14 @@ class ItemController extends Controller
         ]);
 
 
-        $hasTinCart = $cart && ($cart->customer_id === null || !empty($cart->customer?->tin_number));
-        $topCartIsIndividual = $cart && ($cart->customer_id === null || !empty($cart->customer?->tin_number));
 
         return Inertia::render('Seller/Items/Index', [
             'items' => $items,
             'nextPageUrl' => $paginator->nextPageUrl(),
             'filters' => ['search' => $search ?? '', 'cart_id' => $cartId],
             'categories' => app(SellerCatalog::class)->categories((int) $storeId),
-            'has_tin_cart' => $hasTinCart,
-            'top_cart_is_individual' => $topCartIsIndividual,
+            'has_tin_cart' => $context['has_tin_cart'],
+            'top_cart_is_individual' => $context['top_cart_is_individual'],
         ]);
     }
 
@@ -102,149 +94,49 @@ class ItemController extends Controller
 
     public function search(Request $request)
     {
-        $query = $request->input('search');
-        $storeId = Auth::user()->store?->id;
-        $page = $request->integer('page', 1);
-        $perPage = 20;
+        $user = Auth::user();
+        $storeId = $user->store?->id;
 
-        if (!$storeId) {
+        if (! $storeId) {
             return redirect()->route('seller.dashboard');
         }
 
-        $selectedCategoryId = $request->input('category_id');
+        $catalog = app(SellerCatalog::class);
+        $query = trim((string) $request->input('search', ''));
+        $selectedCategoryId = $request->integer('category_id') ?: null;
 
-        $queryBuilder = Item::where('status', 'active')
-            ->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId)->where('active', true))
-            ->with([
-                'category',
-                'variants' => function ($q) use ($storeId) {
-                    $q->with([
-                        'storeVariants' => function ($sq) use ($storeId) {
-                            $sq->where('store_id', $storeId)
-                                ->where('active', true)
-                                ->with([
-                                    'stocks' => function ($stockQuery) use ($storeId) {
-                                        // Shelf + floor (STOCK_PLAN.md phase 4).
-                                        $stockQuery->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId));
-                                    }
-                                ]);
-                        }
-                    ]);
-                },
-            ]);
+        // Same cart-based pricing as the Store page, so an individual cart
+        // sees VAT-inclusive prices here too.
+        $context = $catalog->cartContext($user, $request->integer('cart_id') ?: null);
 
-        if ($query) {
-            $queryBuilder->where('product_name', 'LIKE', "%{$query}%");
-        }
+        $matching = fn () => $catalog->query((int) $storeId)
+            ->when($query !== '', fn ($q) => $q->where('product_name', 'LIKE', "%{$query}%"));
 
-        if ($selectedCategoryId) {
-            $queryBuilder->where('item_category_id', $selectedCategoryId);
-        }
+        $paginator = $matching()
+            ->when($selectedCategoryId, fn ($q) => $q->where('item_category_id', $selectedCategoryId))
+            ->orderBy('product_name')
+            ->paginate(20, ['*'], 'page', $request->integer('page', 1));
 
-        $paginator = $queryBuilder->orderBy('product_name')
-            ->paginate($perPage, ['*'], 'page', $page);
+        $items = collect($paginator->items())
+            ->map(fn (Item $item) => $catalog->present($item, (int) $storeId, $context['customer']));
 
-        $itemsCollection = collect($paginator->items());
-
-        // 2️⃣ Load stock levels
-        $storeVariantIds = $itemsCollection->flatMap(fn($item) => $item->variants->pluck('storeVariants.*.id'))
-            ->flatten()
-            ->unique();
-
-        // Shelf + floor, summed per variant (two leaves, so keyBy would drop one).
-        $stocks = \App\Models\StockKeeper\ItemStock::query()
-            ->whereIn('stock_location_id', app(\App\Services\Inventory\StockScope::class)->storeLeafIds((int) $storeId))
-            ->whereIn('item_variant_id', $storeVariantIds)
-            ->groupBy('item_variant_id')
-            ->selectRaw('item_variant_id, SUM(quantity) as quantity')
-            ->get()
-            ->keyBy('item_variant_id');
-
-        $sellerId = Auth::user()->id;
-        $customerId = $request->input('customer_id');
-        if ($customerId === 'null' || $customerId === 'undefined' || !$customerId) {
-            $customerId = null;
-        }
-
-        $items = $itemsCollection->map(function ($item) use ($storeId, $sellerId, $customerId, $stocks) {
-            // Process images
-            $generalImages = $item->general_images ?? [];
-            if (is_string($generalImages)) {
-                $generalImages = json_decode($generalImages, true) ?: [];
-            }
-            $item->image_urls = collect($generalImages)
-                ->map(fn($path) => $this->resolveImageUrl($path))
-                ->merge($item->variants->map(fn($v) => $this->resolveImageUrl($v->images[0] ?? null)))
-                ->filter()
-                ->unique()
-                ->values()
-                ->toArray();
-
-            $priceInfo = \App\Services\PriceProvider::getItemPriceRange($item, $storeId, $sellerId, $customerId);
-
-            $totalStock = 0;
-            foreach ($item->variants as $variant) {
-                $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
-                if ($storeVariant) {
-                    $pieces = $variant->calculateTotalPieces();
-                    $multiplier = $pieces > 0 ? $pieces : 1;
-                    $totalStock += ($stocks[$storeVariant->id]->quantity ?? 0) * $multiplier;
-                }
-            }
-
-            $item->original_price = $priceInfo['store_price'];
-            $item->store_price = $priceInfo['store_price'];
-            $item->final_price = $priceInfo['final_price'];
-            $item->discount_ends_at = $priceInfo['discount_ends_at'];
-            $item->pricing_matrix = $priceInfo['pricing_matrix'];
-            $item->individual_price = collect($priceInfo['pricing_matrix'])->firstWhere('level', 'individual');
-            $item->store_stock = $totalStock;
-
-            return [
-                'id' => $item->id,
-                'product_name' => $item->product_name,
-                'sold_count' => $item->sold_count ?? 0,
-                'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
-                'image_urls' => $item->image_urls,
-                'original_price' => $item->original_price,
-                'final_price' => $item->final_price,
-                'discount_ends_at' => $item->discount_ends_at,
-                'store_stock' => $item->store_stock,
-                'pricing_matrix' => $item->pricing_matrix,
-                'individual_price' => $item->individual_price,
-            ];
-        });
-
-        // Get categories of items matching search query or matching active items
-        $categoryQuery = Item::where('status', 'active')
-            ->whereHas('variants.storeVariants', fn($q) => $q->where('store_id', $storeId)->where('active', true))
-            ->whereNotNull('item_category_id');
-
-        if ($query) {
-            $categoryQuery->where('product_name', 'LIKE', "%{$query}%");
-        }
-
-        $categoryIds = $categoryQuery->distinct()->pluck('item_category_id');
-
+        // Categories among every match (not just this page), for the filter pills.
+        $categoryIds = $matching()->setEagerLoads([])->whereNotNull('item_category_id')->distinct()->pluck('item_category_id');
         $categories = \App\Models\Item\ItemCategory::whereIn('id', $categoryIds)
-            ->select('id', 'category_name')
             ->orderBy('category_name')
-            ->get();
+            ->get(['id', 'category_name']);
 
         return Inertia::render('Seller/Items/SearchResults', [
-            'query' => $query ?? '',
+            'query' => $query,
             'items' => $items,
             'nextPageUrl' => $paginator->nextPageUrl(),
             'categories' => $categories,
-            'selectedCategoryId' => $selectedCategoryId ? (int) $selectedCategoryId : null,
+            'selectedCategoryId' => $selectedCategoryId,
+            'has_tin_cart' => $context['has_tin_cart'],
+            'top_cart_is_individual' => $context['top_cart_is_individual'],
         ]);
     }
 
-
-    /**
-     * JSON-only endpoint for infinite scroll pagination.
-     * Called directly via fetch() — does NOT go through Inertia.
-     */
     public function pageItems(Request $request)
     {
         $user = Auth::user();

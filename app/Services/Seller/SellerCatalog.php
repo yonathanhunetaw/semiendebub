@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Services\Seller;
 
 use App\Models\Item\Item;
+use App\Models\Auth\User;
 use App\Models\Item\ItemCategory;
+use App\Models\Seller\Cart;
 use App\Services\ImageResolver;
 use App\Services\Inventory\StockScope;
 use App\Services\PriceProvider;
@@ -53,6 +55,32 @@ class SellerCatalog
             ->whereHas('variants.storeVariants', function ($q) use ($storeId) {
                 $q->where('store_id', $storeId)->where('active', true);
             });
+    }
+
+    /**
+     * The cart prices are quoted for, and what it means for VAT. That is the
+     * requested cart when the seller can see it and it is still open,
+     * otherwise their highest-priority open cart. A cart with no customer
+     * (walk-in) or a customer with a TIN prices as individual, so its cards
+     * show VAT-inclusive prices (the rule CheckoutService charges by).
+     *
+     * @return array{cart: ?Cart, customer: mixed, has_tin_cart: bool, top_cart_is_individual: bool}
+     */
+    public function cartContext(User $seller, ?int $cartId = null): array
+    {
+        $open = Cart::with('customer')->visibleTo($seller)->where('status', 'open');
+
+        $cart = ($cartId ? (clone $open)->find($cartId) : null)
+            ?? (clone $open)->where('seller_id', $seller->id)->orderBy('priority')->first();
+
+        $individual = $cart !== null && ($cart->customer_id === null || ! empty($cart->customer?->tin_number));
+
+        return [
+            'cart' => $cart,
+            'customer' => $cart?->customer,
+            'has_tin_cart' => $individual,
+            'top_cart_is_individual' => $individual,
+        ];
     }
 
     /**
