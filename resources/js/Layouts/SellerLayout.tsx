@@ -1,6 +1,6 @@
 import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
 import { Head, usePage } from "@inertiajs/react";
-import { Alert, Box, CssBaseline, Snackbar, useTheme } from "@mui/material";
+import { Alert, Box, CssBaseline, Snackbar } from "@mui/material";
 import React from "react";
 import { FONT_SANS, useRoleFavicon } from "@/theme";
 
@@ -9,13 +9,10 @@ export default function SellerLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const theme = useTheme();
     const { flash } = usePage().props as {
         flash?: { success?: string; error?: string };
     };
 
-    // The seller role's primary (orange), from the theme tokens.
-    const brandColor = theme.palette.primary.main;
     const favicon = useRoleFavicon();
 
     return (
@@ -27,7 +24,7 @@ export default function SellerLayout({
                 color: "text.primary",
                 fontFamily: FONT_SANS,
                 // Soft glow in the role color at the top of the page.
-                backgroundImage: `radial-gradient(circle at top, ${brandColor}25, transparent 32%)`,
+                backgroundImage: "radial-gradient(circle at top, rgb(var(--primary) / 0.15), transparent 32%)",
             }}
         >
             <CssBaseline />
@@ -50,9 +47,8 @@ export default function SellerLayout({
                     pb: "calc(96px + env(safe-area-inset-bottom))",
                     // Removed the hardcoded light rgba background here
                     bgcolor: "transparent",
-                    boxShadow: {
-                        md: "0 28px 80px rgba(0, 0, 0, 0.4)",
-                    },
+                    // Theme elevation instead of a hand-written black shadow.
+                    boxShadow: { md: 24 },
                 }}
             >
                 <Snackbar

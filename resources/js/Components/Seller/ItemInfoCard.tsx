@@ -1,6 +1,5 @@
-import { SELLER_BRAND_DARK, SellerCard, sellerPrice } from "@/Components/Seller/sellerUi";
+import { SellerCard, sellerPrice } from "@/Components/Seller/sellerUi";
 import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import { PACKAGING_TIER_LABEL, type PricingMode, type SellerItem, type SellerVariantData } from "./itemShowHelpers";
 import type { PackagingTierOption } from "./PackagingSelector";
 
@@ -26,8 +25,6 @@ export default function ItemInfoCard({
     packagingOptions = [],
     hasTinCart = false,
 }: ItemInfoCardProps) {
-    const theme = useTheme();
-    const isDark = theme.palette.mode === "dark";
 
     const activePrice = selectedPrice ?? displayPrice ?? null;
     const basePrice = variant?.price ?? null;
@@ -87,8 +84,8 @@ export default function ItemInfoCard({
                             )}%`}
                             size="small"
                             sx={{
-                                bgcolor: "#EAB308",
-                                color: "#fff",
+                                bgcolor: "warning.main",
+                                color: "warning.contrastText",
                                 fontWeight: 700,
                                 fontSize: "0.7rem",
                             }}
@@ -99,8 +96,8 @@ export default function ItemInfoCard({
                             label="Seller Mode"
                             size="small"
                             sx={{
-                                bgcolor: SELLER_BRAND_DARK,
-                                color: "#fff",
+                                bgcolor: "primary.main",
+                                color: "primary.contrastText",
                                 fontWeight: 700,
                                 fontSize: "0.7rem",
                             }}
@@ -121,9 +118,9 @@ export default function ItemInfoCard({
                 {variant && (
                     <Box
                         sx={{
-                            bgcolor: isDark ? "#1a1a1a" : "#f9f7f4",
+                            bgcolor: "rgb(var(--surface-container-low))",
                             border: "1px solid",
-                            borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)",
+                            borderColor: "divider",
                             borderRadius: 3,
                             p: 1.5,
                             mt: 0.5,
@@ -160,7 +157,7 @@ export default function ItemInfoCard({
                                                     : variant.price)}
                                             </Typography>
                                             {isActive && (
-                                                <Chip label="Active" size="small" sx={{ bgcolor: "#22c55e", color: "#fff", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
+                                                <Chip label="Active" size="small" sx={{ bgcolor: "success.main", color: "success.contrastText", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
                                             )}
                                         </Stack>
                                     </Stack>
@@ -192,9 +189,9 @@ export default function ItemInfoCard({
                                                         : variant.seller_price
                                                 )}
                                             </Typography>
-                                            <Chip label="Seller" size="small" sx={{ bgcolor: SELLER_BRAND_DARK, color: "#fff", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
+                                            <Chip label="Seller" size="small" sx={{ bgcolor: "primary.main", color: "primary.contrastText", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
                                             {isActive && (
-                                                <Chip label="Active" size="small" sx={{ bgcolor: "#22c55e", color: "#fff", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
+                                                <Chip label="Active" size="small" sx={{ bgcolor: "success.main", color: "success.contrastText", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
                                             )}
                                         </Stack>
                                     </Stack>
@@ -226,7 +223,7 @@ export default function ItemInfoCard({
                                                         : variant.customer_price
                                                 )}
                                             </Typography>
-                                            <Chip label="Customer" size="small" sx={{ bgcolor: "#6366f1", color: "#fff", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
+                                            <Chip label="Customer" size="small" sx={{ bgcolor: "info.main", color: "info.contrastText", fontWeight: 700, fontSize: "0.6rem", height: 18 }} />
                                         </Stack>
                                     </Stack>
                                 );
@@ -239,9 +236,9 @@ export default function ItemInfoCard({
                 {packagingOptions.length > 0 && (
                     <Box
                         sx={{
-                            bgcolor: isDark ? "#1a1a1a" : "#f9f7f4",
+                            bgcolor: "rgb(var(--surface-container-low))",
                             border: "1px solid",
-                            borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)",
+                            borderColor: "divider",
                             borderRadius: 3,
                             p: 1.5,
                             mt: 0.5,
@@ -274,7 +271,7 @@ export default function ItemInfoCard({
                                             <Box>
                                                 <Typography
                                                     variant="body2"
-                                                    sx={{ fontWeight: 700, color: isDark ? "#fff" : "text.primary" }}
+                                                    sx={{ fontWeight: 700, color: "text.primary" }}
                                                 >
                                                     {label}
                                                     {qty != null && qty > 1 && (
@@ -299,13 +296,13 @@ export default function ItemInfoCard({
                                             <Box sx={{ textAlign: "right" }}>
                                                 <Typography
                                                     variant="body2"
-                                                    sx={{ fontWeight: 800, color: SELLER_BRAND_DARK }}
+                                                    sx={{ fontWeight: 800, color: "primary.main" }}
                                                 >
                                                     {unitPrice != null ? sellerPrice(unitPrice) : "—"}
                                                 </Typography>
                                                 {/* Customer / Seller discount badges */}
                                                 {pricingMode === "seller" && variant?.seller_price != null && opt.tier === packagingOptions.find((o) => o.unitPrice === variant?.seller_price)?.tier && (
-                                                    <Chip label="Seller" size="small" sx={{ bgcolor: SELLER_BRAND_DARK, color: "#fff", fontSize: "0.6rem", height: 16 }} />
+                                                    <Chip label="Seller" size="small" sx={{ bgcolor: "primary.main", color: "primary.contrastText", fontSize: "0.6rem", height: 16 }} />
                                                 )}
                                             </Box>
                                         </Stack>
@@ -342,8 +339,8 @@ export default function ItemInfoCard({
                                                 label={levelName}
                                                 size="small"
                                                 sx={{
-                                                    bgcolor: tier.level === "customer" ? "#7c3aed" : tier.level === "seller" ? SELLER_BRAND_DARK : "#0ea5e9",
-                                                    color: "#fff",
+                                                    bgcolor: tier.level === "customer" ? "info.main" : tier.level === "seller" ? "primary.main" : "secondary.main",
+                                                    color: tier.level === "customer" ? "info.contrastText" : tier.level === "seller" ? "primary.contrastText" : "secondary.contrastText",
                                                     fontSize: "0.6rem",
                                                     height: 18,
                                                     fontWeight: 700,

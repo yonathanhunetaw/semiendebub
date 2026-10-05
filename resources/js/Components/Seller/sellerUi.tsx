@@ -45,20 +45,17 @@ export function SellerHeader({
     subtitle,
     children,
 }: SellerHeaderProps) {
-    const theme = useTheme();
-    const brandColor = theme.palette.primary.main;
-
     return (
         <Box
             sx={{
                 px: 2,
                 pt: 0, // Changed from "calc(16px + env(safe-area-inset-top))" to 0
                 pb: children ? 2 : 1.5,
-                color: "#fff",
-                background: `linear-gradient(180deg, ${brandColor} 0%, ${brandColor}dd 100%)`,
+                color: "primary.contrastText",
+                background: "linear-gradient(180deg, rgb(var(--primary)) 0%, rgb(var(--primary) / 0.87) 100%)",
                 borderBottomLeftRadius: 24,
                 borderBottomRightRadius: 24,
-                boxShadow: `0 18px 40px ${brandColor}33`,
+                boxShadow: "0 18px 40px rgb(var(--primary) / 0.2)",
             }}
         >
             <Stack spacing={children || subtitle ? 2 : 0}>
@@ -96,7 +93,7 @@ export function SellerHeader({
                                 variant="body2"
                                 sx={{
                                     mt: 0.5,
-                                    color: "rgba(255,255,255,0.86)",
+                                    color: "rgb(var(--on-primary) / 0.86)",
                                     fontFamily: FONT_SANS,
                                 }}
                             >
@@ -140,15 +137,12 @@ export function SellerCard({ children, sx, ...props }: SellerCardProps) {
                 p: 2,
                 borderRadius: 3,
                 border: "1px solid",
-                borderColor:
-                    theme.palette.mode === "dark"
-                        ? "rgba(255, 255, 255, 0.05)"
-                        : "rgba(148, 163, 184, 0.18)",
+                borderColor: "divider",
                 backgroundColor: "background.paper",
                 boxShadow:
                     theme.palette.mode === "dark"
                         ? "none"
-                        : "0 10px 30px rgba(15, 23, 42, 0.05)",
+                        : "0 10px 30px rgb(var(--on-surface) / 0.05)",
                 backgroundImage: "none",
                 ...sx,
             }}
@@ -233,11 +227,11 @@ export const sellerHeaderButtonSx = {
     width: 40,
     height: 40,
     flexShrink: 0,
-    color: "#fff",
-    border: "1px solid rgba(255,255,255,0.44)",
-    backgroundColor: "rgba(255,255,255,0.14)",
+    color: "primary.contrastText",
+    border: "1px solid rgb(var(--on-primary) / 0.44)",
+    backgroundColor: "rgb(var(--on-primary) / 0.14)",
     backdropFilter: "blur(8px)",
     "&:hover": {
-        backgroundColor: "rgba(255,255,255,0.22)",
+        backgroundColor: "rgb(var(--on-primary) / 0.22)",
     },
 };

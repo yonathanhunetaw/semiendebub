@@ -1,8 +1,7 @@
-import { SELLER_BRAND_DARK, sellerPrice } from "@/Components/Seller/sellerUi";
+import { sellerPrice } from "@/Components/Seller/sellerUi";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import RemoveRoundedIcon from "@mui/icons-material/RemoveRounded";
 import { Box, IconButton, Stack, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import {
     PACKAGING_TIER_LABEL,
     type PackagingTier,
@@ -47,8 +46,6 @@ export default function PackagingSelector({
     piecePrice,
     boxPrice = null,
 }: PackagingSelectorProps) {
-    const theme = useTheme();
-    const isDark = theme.palette.mode === "dark";
 
     const selectedOption = options.find((o) => o.tier === selectedTier);
     const showExtraPieces = selectedTier && selectedTier !== "piece";
@@ -56,7 +53,7 @@ export default function PackagingSelector({
     return (
         <Box>
             <Typography
-                sx={{ fontWeight: 700, fontSize: 18, mb: 1.25, color: isDark ? "#fff" : "inherit" }}
+                sx={{ fontWeight: 700, fontSize: 18, mb: 1.25, color: "text.primary" }}
             >
                 Packaging
             </Typography>
@@ -76,19 +73,15 @@ export default function PackagingSelector({
                                 py: 1,
                                 borderRadius: 2,
                                 border: active
-                                    ? `1px solid ${SELLER_BRAND_DARK}`
+                                    ? "1px solid rgb(var(--primary))"
                                     : "1px solid",
                                 borderColor: active
-                                    ? SELLER_BRAND_DARK
-                                    : isDark
-                                      ? "rgba(255,255,255,0.12)"
-                                      : "rgba(0,0,0,0.12)",
+                                    ? "primary.main"
+                                    : "rgb(var(--on-surface) / 0.12)",
                                 bgcolor: active
-                                    ? SELLER_BRAND_DARK
-                                    : isDark
-                                      ? "#1e1e1e"
-                                      : "#f5f5f5",
-                                color: active ? "#fff" : isDark ? "#aaa" : "text.secondary",
+                                    ? "primary.main"
+                                    : "rgb(var(--surface-container))",
+                                color: active ? "primary.contrastText" : "text.secondary",
                                 fontWeight: 700,
                                 fontSize: 14,
                                 cursor: "pointer",
@@ -105,8 +98,8 @@ export default function PackagingSelector({
             {selectedOption && (
                 <Box
                     sx={{
-                        bgcolor: isDark ? "#1e1e1e" : "#f5f2ed",
-                        border: `1px solid ${SELLER_BRAND_DARK}4d`,
+                        bgcolor: "rgb(var(--surface-container))",
+                        border: "1px solid rgb(var(--primary) / 0.3)",
                         borderRadius: 4,
                         p: 1.5,
                     }}
@@ -121,7 +114,7 @@ export default function PackagingSelector({
                             <Typography
                                 sx={{
                                     fontWeight: 700,
-                                    color: isDark ? "#fff" : "inherit",
+                                    color: "text.primary",
                                 }}
                             >
                                 {PACKAGING_TIER_LABEL[selectedOption.tier]}
@@ -140,7 +133,7 @@ export default function PackagingSelector({
                             {selectedOption.unitPrice != null && (
                                 <Typography
                                     variant="caption"
-                                    sx={{ color: SELLER_BRAND_DARK, fontWeight: 700 }}
+                                    sx={{ color: "primary.main", fontWeight: 700 }}
                                 >
                                     {selectedOption.unitPrice} Birr /{" "}
                                     {PACKAGING_TIER_LABEL[selectedOption.tier].toLowerCase()}
@@ -164,9 +157,7 @@ export default function PackagingSelector({
                                 pl: 1.5,
                                 pt: 1.5,
                                 borderLeft: "2px solid",
-                                borderColor: isDark
-                                    ? "rgba(255,255,255,0.1)"
-                                    : "rgba(0,0,0,0.08)",
+                                borderColor: "rgb(var(--on-surface) / 0.08)",
                             }}
                         >
                             <Stack
@@ -179,7 +170,7 @@ export default function PackagingSelector({
                                         variant="body2"
                                         sx={{
                                             fontWeight: 600,
-                                            color: isDark ? "#ccc" : "text.secondary",
+                                            color: "text.secondary",
                                         }}
                                     >
                                         + Boxes
@@ -187,7 +178,7 @@ export default function PackagingSelector({
                                     {boxPrice != null && (
                                         <Typography
                                             variant="caption"
-                                            sx={{ color: SELLER_BRAND_DARK, fontWeight: 700 }}
+                                            sx={{ color: "primary.main", fontWeight: 700 }}
                                         >
                                             {sellerPrice(boxPrice)} Birr ea.
                                         </Typography>
@@ -211,9 +202,7 @@ export default function PackagingSelector({
                                 pl: 1.5,
                                 pt: 1.5,
                                 borderLeft: "2px solid",
-                                borderColor: isDark
-                                    ? "rgba(255,255,255,0.1)"
-                                    : "rgba(0,0,0,0.08)",
+                                borderColor: "rgb(var(--on-surface) / 0.08)",
                             }}
                         >
                             <Stack
@@ -226,7 +215,7 @@ export default function PackagingSelector({
                                         variant="body2"
                                         sx={{
                                             fontWeight: 600,
-                                            color: isDark ? "#ccc" : "text.secondary",
+                                            color: "text.secondary",
                                         }}
                                     >
                                         + Pieces
@@ -234,7 +223,7 @@ export default function PackagingSelector({
                                     {piecePrice != null && (
                                         <Typography
                                             variant="caption"
-                                            sx={{ color: SELLER_BRAND_DARK, fontWeight: 700 }}
+                                            sx={{ color: "primary.main", fontWeight: 700 }}
                                         >
                                             {sellerPrice(piecePrice)} Birr ea.
                                         </Typography>
@@ -268,8 +257,6 @@ function Stepper({
     max?: number;
     size?: "lg" | "sm";
 }) {
-    const theme = useTheme();
-    const isDark = theme.palette.mode === "dark";
     const dims = size === "lg" ? 36 : 28;
 
     const clamp = (n: number) => {
@@ -285,8 +272,8 @@ function Stepper({
             alignItems="center"
             spacing={0.5}
             sx={{
-                bgcolor: isDark ? "#2a2a2a" : "#fff",
-                border: isDark ? "none" : "1px solid rgba(0,0,0,0.08)",
+                bgcolor: "rgb(var(--surface-bright))",
+                border: "1px solid rgb(var(--on-surface) / 0.08)",
                 borderRadius: 99,
                 p: 0.5,
             }}
@@ -297,7 +284,7 @@ function Stepper({
                 sx={{
                     width: dims,
                     height: dims,
-                    color: isDark ? "#fff" : "inherit",
+                    color: "text.primary",
                 }}
             >
                 <RemoveRoundedIcon fontSize="small" />
@@ -307,7 +294,7 @@ function Stepper({
                     minWidth: size === "lg" ? 28 : 22,
                     textAlign: "center",
                     fontWeight: 700,
-                    color: isDark ? "#fff" : "inherit",
+                    color: "text.primary",
                 }}
             >
                 {value}
@@ -318,10 +305,10 @@ function Stepper({
                 sx={{
                     width: dims,
                     height: dims,
-                    bgcolor: size === "lg" ? SELLER_BRAND_DARK : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
-                    color: size === "lg" ? "#fff" : isDark ? "#fff" : "inherit",
+                    bgcolor: size === "lg" ? "primary.main" : "rgb(var(--on-surface) / 0.08)",
+                    color: size === "lg" ? "primary.contrastText" : "text.primary",
                     "&:hover": {
-                        bgcolor: size === "lg" ? SELLER_BRAND_DARK : isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.1)",
+                        bgcolor: size === "lg" ? "primary.main" : "rgb(var(--on-surface) / 0.14)",
                     },
                 }}
             >

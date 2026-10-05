@@ -1,5 +1,4 @@
 import { Box, Stack, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 
 export interface InventoryLocationBreakdown {
     location: string;
@@ -27,15 +26,12 @@ export default function InventoryDetailList({
     stockCount,
     locations = [],
 }: InventoryDetailListProps) {
-    const theme = useTheme();
-    const isDark = theme.palette.mode === "dark";
-
     return (
         <Box
             sx={{
-                bgcolor: isDark ? "#1e1e1e" : "#f5f2ed",
+                bgcolor: "rgb(var(--surface-container))",
                 border: "1px solid",
-                borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.06)",
+                borderColor: "divider",
                 borderRadius: 4,
                 p: 1.5,
             }}
@@ -48,14 +44,14 @@ export default function InventoryDetailList({
             >
                 <Typography
                     variant="caption"
-                    sx={{ color: isDark ? "#999" : "text.secondary", fontWeight: 600 }}
+                    sx={{ color: "text.secondary", fontWeight: 600 }}
                 >
                     Stock Details
                 </Typography>
                 <Typography
                     variant="caption"
                     sx={{
-                        color: inStock ? "#22c55e" : "error.main",
+                        color: inStock ? "success.main" : "error.main",
                         fontWeight: 700,
                     }}
                 >
@@ -74,7 +70,7 @@ export default function InventoryDetailList({
                         >
                             <Typography
                                 variant="body2"
-                                sx={{ color: isDark ? "rgba(255,255,255,0.7)" : "text.secondary" }}
+                                sx={{ color: "text.secondary" }}
                             >
                                 {loc.location}
                             </Typography>
@@ -82,7 +78,7 @@ export default function InventoryDetailList({
                                 variant="body2"
                                 sx={{
                                     fontWeight: 700,
-                                    color: isDark ? "#fff" : "text.primary",
+                                    color: "text.primary",
                                     textAlign: "right",
                                 }}
                             >
@@ -98,7 +94,7 @@ export default function InventoryDetailList({
                     >
                         <Typography
                             variant="body2"
-                            sx={{ color: isDark ? "rgba(255,255,255,0.7)" : "text.secondary" }}
+                            sx={{ color: "text.secondary" }}
                         >
                             Store Inventory
                         </Typography>
@@ -106,7 +102,7 @@ export default function InventoryDetailList({
                             variant="body2"
                             sx={{
                                 fontWeight: 700,
-                                color: isDark ? "#fff" : "text.primary",
+                                color: "text.primary",
                                 textAlign: "right",
                             }}
                         >

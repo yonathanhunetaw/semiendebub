@@ -64,7 +64,7 @@ export default function SellerBottomNav() {
                 overflow: "hidden",
                 border: "1px solid",
                 borderColor: "divider",
-                boxShadow: theme.palette.mode === 'dark' ? "none" : "0 20px 48px rgba(15, 23, 42, 0.18)",
+                boxShadow: theme.palette.mode === "dark" ? "none" : "0 20px 48px rgb(var(--on-surface) / 0.18)",
                 backdropFilter: "blur(16px)",
                 bgcolor: "background.paper",
             }}
