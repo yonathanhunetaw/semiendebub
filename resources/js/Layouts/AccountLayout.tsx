@@ -37,7 +37,7 @@ export default function AccountLayout({
     children: React.ReactNode;
 }): React.ReactElement {
     const theme = useTheme();
-    const { auth, flash } = usePage().props as SharedProps;
+    const { auth } = usePage().props as SharedProps;
 
     const roleKey = auth?.user?.role_key ?? null;
     const isSellerWorkspace = roleKey !== null && SELLER_WORKSPACE_ROLES.has(roleKey);

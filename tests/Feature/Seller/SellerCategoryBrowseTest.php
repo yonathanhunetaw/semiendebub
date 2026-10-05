@@ -149,4 +149,31 @@ class SellerCategoryBrowseTest extends TestCase
         $this->get(route('seller.dashboard'))
             ->assertInertia(fn (Assert $page) => $page->where('seller.open_carts', 2));
     }
+
+    #[Test]
+    public function search_prices_for_the_same_cart_as_the_store_page(): void
+    {
+        $this->carriedItem('Blue Pen', ItemCategory::factory()->create());
+        // A walk-in cart (no customer) prices as individual: VAT-inclusive.
+        Cart::create(['seller_id' => $this->seller->id, 'store_id' => $this->store->id, 'status' => 'open']);
+
+        foreach ([route('seller.dashboard'), route('seller.items.search', ['search' => 'Blue'])] as $url) {
+            $this->get($url)->assertInertia(fn (Assert $page) => $page
+                ->where('has_tin_cart', true)
+                ->where('top_cart_is_individual', true)
+                ->where('items.0.product_name', 'Blue Pen'));
+        }
+    }
+
+    #[Test]
+    public function cart_console_lists_only_carts_that_can_still_take_items(): void
+    {
+        $open = Cart::create(['seller_id' => $this->seller->id, 'store_id' => $this->store->id, 'status' => 'open']);
+        Cart::create(['seller_id' => $this->seller->id, 'store_id' => $this->store->id, 'status' => 'completed']);
+
+        $this->get(route('seller.carts.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('carts', 1)
+                ->where('carts.0.id', $open->id));
+    }
 }

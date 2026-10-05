@@ -1,6 +1,6 @@
 import FlashToast from "@/Components/Shared/FlashToast";
 import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
-import { Head, usePage } from "@inertiajs/react";
+import { Head } from "@inertiajs/react";
 import { Box, CssBaseline } from "@mui/material";
 import React from "react";
 import { FONT_SANS } from "@/theme";
@@ -10,9 +10,6 @@ export default function SellerLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { flash } = usePage().props as {
-        flash?: { success?: string; error?: string };
-    };
 
 
     return (

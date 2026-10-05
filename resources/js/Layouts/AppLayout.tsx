@@ -2,7 +2,7 @@ import FlashToast from '@/Components/Shared/FlashToast';
 // resources/js/Components/Admin/AdminLayout.tsx
 import React, { useState } from 'react';
 import { Box, Breadcrumbs, CssBaseline, Link as MuiLink, Toolbar, Typography } from '@mui/material';
-import { Link, usePage } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import AdminNav from '../Components/Navigation/Admin/AdminNav';
 import AdminSidebar from '../Components/Navigation/Admin/AdminSidebar';
 
@@ -20,9 +20,6 @@ const breadcrumbLabelMap: Record<string, string> = {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const [mobileOpen, setMobileOpen] = useState(false);
-    const { flash } = usePage().props as {
-        flash?: { success?: string; error?: string };
-    };
     const pathSegments =
         typeof window !== 'undefined'
             ? window.location.pathname.split('/').filter(Boolean)
