@@ -93,9 +93,11 @@ class StoreVariantSeeder extends Seeder
 
             }
 
-            // Batch insert store variants (ignore duplicates)
+            // Add the listings a store is missing. Existing rows are left alone,
+            // so re-running this on a live database never re-rolls prices an
+            // admin set (a fresh database seeds exactly as before).
             foreach (array_chunk($storeVariantsData, 500) as $chunk) {
-                DB::table('store_variants')->upsert($chunk, ['store_id', 'item_variant_id'], ['pricing_matrix', 'active', 'manual_status', 'updated_at']);
+                DB::table('store_variants')->insertOrIgnore($chunk);
             }
 
             // Optional seller/customer prices – run only for small subsets to avoid explosion
@@ -162,8 +164,8 @@ class StoreVariantSeeder extends Seeder
                     ];
                 }
                 foreach (array_chunk($individualPriceData, 200) as $chunk) {
-                    DB::table('store_variants_individual_prices')
-                        ->upsert($chunk, ['store_variant_id'], ['pricing_matrix', 'active', 'updated_at']);
+                    // Same rule: only listings without an individual price get one.
+                    DB::table('store_variants_individual_prices')->insertOrIgnore($chunk);
                 }
                 $this->command->info("  └─ Individual prices seeded: " . count($individualPriceData));
             }
