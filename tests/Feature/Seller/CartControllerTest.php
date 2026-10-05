@@ -193,10 +193,15 @@ class CartControllerTest extends TestCase
             'store_id' => $this->store->id,
         ]);
 
+        // There is one cart page: show() opens the cart in the console.
         $this->get(route('seller.carts.show', $cart))
+            ->assertRedirect(route('seller.carts.index', ['cart' => $cart->id]));
+
+        $this->get(route('seller.carts.index', ['cart' => $cart->id]))
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Seller/Carts/Show')
-                ->where('cart.items.0.price', 1900)
+                ->component('Seller/Carts/Index')
+                ->where('focus_cart', $cart->id)
+                ->where('carts.0.lines.0.price', 1900)
             );
     }
 }

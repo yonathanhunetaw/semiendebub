@@ -68,7 +68,7 @@ class Lesson6Controller extends Controller
 
         // Logic: Color::create([...$validated, 'rating' => 0]);
 
-        return redirect()->route('lessons6.store')
+        return redirect()->route('dev.lesson6.index')
             ->with('success', 'Color added successfully!');
     }
 

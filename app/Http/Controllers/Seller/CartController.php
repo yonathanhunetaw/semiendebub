@@ -52,8 +52,11 @@ class CartController extends Controller
      *
      * Lines are grouped by their `cart_items.store_id`: the seller's own store
      * is local stock, anything else is consolidated through the hub.
+     *
+     * `?cart={id}` opens that cart on screen without changing its saved
+     * priority; it is how every "show this cart" link lands here.
      */
-    public function index()
+    public function index(Request $request)
     {
         $user = auth()->user();
         $homeStoreId = (int) ($user->store_id ?? 0);
@@ -69,9 +72,13 @@ class CartController extends Controller
             ->orderedByPriority()
             ->get();
 
+        $focusId = $request->integer('cart') ?: null;
+
         return Inertia::render('Seller/Carts/Index', [
             'carts' => $carts->map(fn (Cart $cart) => $this->presentCart($cart, $homeStoreId))->values()->all(),
             'home_store' => $user->store?->name,
+            // Ignored unless it is one of the carts this seller can see.
+            'focus_cart' => $focusId && $carts->contains('id', $focusId) ? $focusId : null,
         ]);
     }
 
@@ -173,32 +180,14 @@ class CartController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * A single cart opens in the cart console, on screen. There is one cart
+     * page; this route stays because redirects and links name it.
      */
     public function show(Cart $cart)
     {
         $this->authorize('view', $cart);
-        $cart->load(['customer', 'variants.item']);
 
-        $cartData = [
-            'id' => $cart->id,
-            'status' => $cart->status,
-            'customer' => $cart->customer,
-            'items' => $cart->variants->map(function ($variant) {
-                return [
-                    'id' => $variant->id,
-                    'product_name' => $variant->item?->product_name ?? 'Unknown',
-                    'packaging' => $variant->itemPackagingType?->name ?? null,
-                    'pieces_per_unit' => $variant->calculateTotalPieces(),
-                    'price' => (float) $variant->pivot->price,
-                    'quantity' => $variant->pivot->quantity,
-                    'extra_pieces' => $variant->pivot->extra_pieces ?? 0,
-                    'extra_piece_price' => $variant->pivot->extra_piece_price,
-                ];
-            }),
-        ];
-
-        return Inertia::render('Seller/Carts/Show', ['cart' => $cartData]);
+        return redirect()->route('seller.carts.index', ['cart' => $cart->id]);
     }
 
     /**

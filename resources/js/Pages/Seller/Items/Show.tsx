@@ -350,7 +350,7 @@ export default function Show({
                 title={item.product_name}
                 backHref={
                     selectedCart
-                        ? route("seller.carts.show", selectedCart)
+                        ? route("seller.carts.index", { cart: selectedCart })
                         : route("seller.dashboard")
                 }
                 subtitle={

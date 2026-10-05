@@ -1,7 +1,7 @@
 import SellerLayout from "@/Layouts/SellerLayout";
 import { ABOVE_NAV } from "@/Data/sellerOrderFlow";
 import { Head, Link, router } from "@inertiajs/react";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 /**
  * Seller cart console.
@@ -47,7 +47,15 @@ interface CartSummary {
 interface Props {
     carts: CartSummary[];
     home_store?: string | null;
+    /** `?cart={id}`: open this cart on screen without saving a new priority. */
+    focus_cart?: number | null;
 }
+
+/** Saved priority order, with the focused cart (if any) moved to the front. */
+const initialOrder = (carts: CartSummary[], focus: number | null | undefined): number[] => {
+    const ids = carts.map((cart) => cart.id);
+    return focus && ids.includes(focus) ? [focus, ...ids.filter((id) => id !== focus)] : ids;
+};
 
 const FULFILLMENT = {
     local: {
@@ -91,9 +99,14 @@ function SelectDot({ checked, onClick, className = "" }: {
     );
 }
 
-export default function CartsIndex({ carts = [], home_store }: Props): React.ReactElement {
+export default function CartsIndex({ carts = [], home_store, focus_cart = null }: Props): React.ReactElement {
     // Local ordering so promoting a cart is instant; the server is told after.
-    const [order, setOrder] = useState<number[]>(() => carts.map((cart) => cart.id));
+    const [order, setOrder] = useState<number[]>(() => initialOrder(carts, focus_cart));
+
+    // New server data (a line removed, a visit with ?cart=) replaces the local order.
+    useEffect(() => {
+        setOrder(initialOrder(carts, focus_cart));
+    }, [carts, focus_cart]);
     const [panelOpen, setPanelOpen] = useState(false);
     const [selected, setSelected] = useState<number[]>([]);
     const [sortMode, setSortMode] = useState<"manual" | "value" | "lines">("manual");
@@ -129,6 +142,15 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
         persist([id, ...order.filter((entry) => entry !== id)]);
         setSelected([]);
         setPanelOpen(false);
+    };
+
+    /** Takes a line out of the cart on screen (the old single-cart page's remove). */
+    const removeLine = (line: CartLine) => {
+        if (!active || !window.confirm(`Remove ${line.name} from this cart?`)) return;
+        router.delete(route("seller.carts.items.destroy", [active.id, line.id]), {
+            preserveScroll: true,
+            onSuccess: () => setSelected((ids) => ids.filter((id) => id !== line.id)),
+        });
     };
 
     /** Manual reordering inside the panel. Disabled while a sort is applied. */
@@ -398,13 +420,6 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                     {active.customer?.type === "business" ? " · Business" : ""}
                                 </p>
                             </div>
-                            <Link
-                                href={route("seller.carts.show", active.id)}
-                                className="flex shrink-0 items-center text-[11px] font-medium text-on-surface-variant hover:text-on-surface"
-                            >
-                                Open
-                                <span className="material-symbols-outlined ml-0.5 text-xs">chevron_right</span>
-                            </Link>
                         </div>
 
                         {groups.map(([key, lines], groupIndex) => {
@@ -510,10 +525,20 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
                                                                 {birr(line.price)}
                                                             </span>
                                                         </div>
-                                                        <div className="flex h-6 items-center rounded-[999px] border border-outline-variant bg-surface-container-lowest px-2">
-                                                            <span className="px-1 text-xs font-semibold text-on-surface">
-                                                                ×{line.quantity}
-                                                            </span>
+                                                        <div className="flex items-center gap-1">
+                                                            <div className="flex h-6 items-center rounded-[999px] border border-outline-variant bg-surface-container-lowest px-2">
+                                                                <span className="px-1 text-xs font-semibold text-on-surface">
+                                                                    ×{line.quantity}
+                                                                </span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                aria-label={`Remove ${line.name}`}
+                                                                onClick={() => removeLine(line)}
+                                                                className="flex h-6 w-6 items-center justify-center rounded-[999px] text-outline transition-colors hover:bg-error-container hover:text-on-error-container"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[16px]">delete</span>
+                                                            </button>
                                                         </div>
                                                     </div>
 
