@@ -7,6 +7,8 @@
         "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build",
         "dev": "vite",
         "domain-map": "php artisan dev:generate-domain-map",
+        "check:colors": "node scripts/check-colors.mjs",
+        "design-md": "esbuild scripts/design-md.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=node_modules/.cache/duka/design-md.mjs && node node_modules/.cache/duka/design-md.mjs",
         "tokens": "esbuild scripts/build-tokens.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=node_modules/.cache/duka/build-tokens.mjs && node node_modules/.cache/duka/build-tokens.mjs"
     },
     "devDependencies": {
