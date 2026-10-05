@@ -79,7 +79,7 @@ export default function ItemIndex({ items, filters }: Props) {
                         sx={{
                             width: 42,
                             height: 42,
-                            bgcolor: "#272727", 
+                            bgcolor: "rgb(var(--surface-container-high))",
                             border: "1px solid",
                             borderColor: "divider",
                             opacity: image ? 1 : 0.3,
@@ -206,11 +206,11 @@ export default function ItemIndex({ items, filters }: Props) {
                                         alignSelf: "flex-start",
                                         textTransform: "none",
                                         fontWeight: 700,
-                                        color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
-                                        borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.5)' : undefined,
+                                        color: "text.primary",
+                                        borderColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.5)' : undefined,
                                         '&:hover': {
-                                            borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.8)' : undefined,
-                                            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : undefined,
+                                            borderColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.8)' : undefined,
+                                            backgroundColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.08)' : undefined,
                                         }
                                     }}
                                 >
@@ -302,11 +302,11 @@ export default function ItemIndex({ items, filters }: Props) {
                                             sx={{ 
                                                 textTransform: "none", 
                                                 fontWeight: 700,
-                                                color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
-                                                borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.5)' : undefined,
+                                                color: "text.primary",
+                                                borderColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.5)' : undefined,
                                                 '&:hover': {
-                                                    borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.8)' : undefined,
-                                                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : undefined,
+                                                    borderColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.8)' : undefined,
+                                                    backgroundColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.08)' : undefined,
                                                 }
                                             }}
                                         >

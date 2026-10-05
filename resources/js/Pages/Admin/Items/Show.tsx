@@ -279,7 +279,8 @@ export default function Show({
         </Paper>
     );
 
-    // Mobile fullscreen image viewer modal
+    // Mobile fullscreen image viewer modal. A photo lightbox: the black
+    // backdrop and white controls stay fixed in both modes on purpose.
     const MobileImageViewerModal = () => (
         <Dialog
             open={mobileImageViewerOpen}
@@ -362,11 +363,11 @@ export default function Show({
                             borderRadius: 2,
                             fontWeight: "bold",
                             textTransform: "none",
-                            color: theme.palette.mode === 'dark' ? '#fff' : 'inherit',
-                            borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.3)' : undefined,
+                            color: "text.primary",
+                            borderColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.3)' : undefined,
                             '&:hover': {
-                                borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.5)' : undefined,
-                                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : undefined,
+                                borderColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.5)' : undefined,
+                                backgroundColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.08)' : undefined,
                             }
                         }}
                     >
@@ -578,7 +579,7 @@ export default function Show({
                                                                 display: "flex",
                                                                 alignItems: "center",
                                                                 justifyContent: "center",
-                                                                bgcolor: isRequiredSlot ? "rgba(237,108,2,0.04)" : "background.default",
+                                                                bgcolor: isRequiredSlot ? "rgb(var(--warning) / 0.04)" : "background.default",
                                                                 flexDirection: "column",
                                                                 gap: 0.5,
                                                             }}
@@ -637,7 +638,7 @@ export default function Show({
                                         mb: 0.5,
                                         border: "1px solid",
                                         borderColor: store.already_deployed ? "success.main" : "divider",
-                                        bgcolor: store.already_deployed ? "rgba(46,125,50,0.06)" : "background.paper",
+                                        bgcolor: store.already_deployed ? "rgb(var(--success) / 0.06)" : "background.paper",
                                     }}
                                 >
                                     <ListItemText
