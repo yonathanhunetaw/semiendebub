@@ -5,6 +5,7 @@ import StorefrontRoundedIcon from "@mui/icons-material/StorefrontRounded";
 import ShoppingCartRoundedIcon from "@mui/icons-material/ShoppingCartRounded";
 import { BottomNavigation, BottomNavigationAction, Paper, useTheme } from "@mui/material";
 import React from "react";
+import { FONT_SANS } from "@/theme";
 
 const navItems = [
     {
@@ -77,7 +78,7 @@ export default function SellerBottomNav() {
                     "& .MuiBottomNavigationAction-root": {
                         minWidth: 0,
                         color: "text.secondary",
-                        fontFamily: "Figtree, sans-serif",
+                        fontFamily: FONT_SANS,
                     },
                     "& .Mui-selected": {
                         color: "primary.main",

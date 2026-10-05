@@ -2,6 +2,7 @@ import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
 import { Head, usePage } from "@inertiajs/react";
 import { Alert, Box, CssBaseline, Snackbar, useTheme } from "@mui/material";
 import React from "react";
+import { FONT_SANS } from "@/theme";
 
 export default function SellerLayout({
     children,
@@ -23,7 +24,7 @@ export default function SellerLayout({
                 // Uses your theme's default background (#0f172a in dark mode)
                 bgcolor: "background.default",
                 color: "text.primary",
-                fontFamily: "Figtree, sans-serif",
+                fontFamily: FONT_SANS,
                 // Replaces the hardcoded orange glow with a dynamic brand-colored glow
                 backgroundImage: `radial-gradient(circle at top, ${brandColor}25, transparent 32%)`,
             }}

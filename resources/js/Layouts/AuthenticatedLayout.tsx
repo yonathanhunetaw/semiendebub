@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 import { Link, router, usePage } from "@inertiajs/react";
 import React, { useState } from "react";
+import { FONT_SANS } from "@/theme";
 
 interface AuthUser {
     name?: string;
@@ -52,7 +53,7 @@ export default function AuthenticatedLayout({
             sx={{
                 minHeight: "100vh",
                 bgcolor: "grey.100",
-                fontFamily: "Figtree, sans-serif",
+                fontFamily: FONT_SANS,
             }}
         >
             <AppBar

@@ -19,6 +19,7 @@ import {
     SELLER_SURFACE, 
     SELLER_CITY_OPTIONS 
 } from "./sellerConstants";
+import { FONT_SANS } from "@/theme";
 
 // Re-export them
 export { 
@@ -85,7 +86,7 @@ export function SellerHeader({
                             sx={{
                                 fontWeight: 800,
                                 lineHeight: 1.2,
-                                fontFamily: "Figtree, sans-serif",
+                                fontFamily: FONT_SANS,
                             }}
                         >
                             {title}
@@ -96,7 +97,7 @@ export function SellerHeader({
                                 sx={{
                                     mt: 0.5,
                                     color: "rgba(255,255,255,0.86)",
-                                    fontFamily: "Figtree, sans-serif",
+                                    fontFamily: FONT_SANS,
                                 }}
                             >
                                 {subtitle}

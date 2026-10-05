@@ -1,6 +1,7 @@
 import { Link } from "@inertiajs/react";
 import { Box, Paper, Stack, Typography } from "@mui/material";
 import React from "react";
+import { FONT_SANS } from "@/theme";
 
 interface GuestLayoutProps {
     children: React.ReactNode;
@@ -21,7 +22,7 @@ export default function GuestLayout({ children }: GuestLayoutProps) {
                 justifyContent: "center",
                 px: 2,
                 py: 6,
-                fontFamily: "Figtree, sans-serif",
+                fontFamily: FONT_SANS,
                 bgcolor: "#1a120b",
                 backgroundImage:
                     "radial-gradient(circle at 50% -10%, rgba(192,88,0,0.35), transparent 55%)",

@@ -10,7 +10,7 @@ import {
     useTheme,
 } from "@mui/material";
 import { Head } from "@inertiajs/react";
-import { subdomainConfigs, SubdomainType } from "@/theme";
+import { subdomainConfigs, SubdomainType, FONT_SANS } from "@/theme";
 
 // Updated paths to match your new modular folder structure
 import AdminNav from "@/Components/Navigation/Admin/AdminNav";
@@ -76,7 +76,7 @@ export default function AdminLayout({ children }: Props) {
                     borderRadius: 3,
                     textTransform: "none",
                     fontWeight: 700,
-                    fontFamily: "Figtree, sans-serif",
+                    fontFamily: FONT_SANS,
                     display: { xs: "none", sm: "inline-flex" },
                 }}
             >

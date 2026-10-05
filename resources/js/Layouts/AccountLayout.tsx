@@ -3,6 +3,7 @@ import UserBottomNav from "@/Components/Navigation/User/UserBottomNav";
 import { Head, usePage } from "@inertiajs/react";
 import { Alert, Box, CssBaseline, Snackbar, useTheme } from "@mui/material";
 import React from "react";
+import { FONT_SANS } from "@/theme";
 
 /**
  * Roles that work *inside* the business and therefore keep the seller
@@ -56,7 +57,7 @@ export default function AccountLayout({
                 // headings on a near-white page.
                 bgcolor: ACCOUNT_SURFACE,
                 color: "#e2e8f0",
-                fontFamily: "Figtree, sans-serif",
+                fontFamily: FONT_SANS,
                 backgroundImage: `radial-gradient(circle at top, ${brandColor}25, transparent 32%)`,
             }}
         >
