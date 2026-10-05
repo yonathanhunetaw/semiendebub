@@ -242,11 +242,11 @@ export default function StorefrontDashboard({
 
                 <main className={`${STOREFRONT_SHELL} py-5 pb-28 md:pb-10`}>
                     {error ? (
-                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-center">
-                            <span className="material-symbols-outlined text-[32px] text-amber-400">
+                        <div className="rounded-2xl border border-warning/30 bg-warning-container px-4 py-6 text-center">
+                            <span className="material-symbols-outlined text-[32px] text-warning">
                                 storefront
                             </span>
-                            <p className="mt-1 text-[13px] font-bold text-amber-800">
+                            <p className="mt-1 text-[13px] font-bold text-on-warning-container">
                                 {error}
                             </p>
                         </div>
@@ -255,14 +255,14 @@ export default function StorefrontDashboard({
                     {!error && hasItems ? (
                         <>
                             <div className="mb-3 flex items-baseline justify-between">
-                                <h1 className="text-[15px] font-bold tracking-tight text-gray-900">
+                                <h1 className="text-[15px] font-bold tracking-tight text-on-surface">
                                     {filters.category_id === null
                                         ? "All Stationery"
                                         : activeCategoryName}
                                     {filters.on_sale ? " · On sale" : ""}
                                     {filters.in_stock ? " · In stock" : ""}
                                 </h1>
-                                <span className="text-[11px] font-semibold text-slate-400">
+                                <span className="text-[11px] font-semibold text-outline">
                                     {pagination.total} product
                                     {pagination.total === 1 ? "" : "s"}
                                 </span>
@@ -287,11 +287,11 @@ export default function StorefrontDashboard({
                                         type="button"
                                         onClick={() => goToPage(pagination.current_page - 1)}
                                         disabled={pagination.current_page <= 1}
-                                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40"
+                                        className="rounded-xl border border-outline-variant bg-surface-container-lowest px-3 py-2 text-[12px] font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low disabled:opacity-40"
                                     >
                                         Previous
                                     </button>
-                                    <span className="text-[12px] font-semibold text-slate-500">
+                                    <span className="text-[12px] font-semibold text-on-surface-variant">
                                         Page {pagination.current_page} of{" "}
                                         {pagination.last_page}
                                     </span>
@@ -301,7 +301,7 @@ export default function StorefrontDashboard({
                                         disabled={
                                             pagination.current_page >= pagination.last_page
                                         }
-                                        className="rounded-xl px-3 py-2 text-[12px] font-bold text-white shadow-sm transition-transform active:scale-95 disabled:bg-slate-300 disabled:shadow-none"
+                                        className="rounded-xl px-3 py-2 text-[12px] font-bold text-on-primary shadow-sm transition-transform active:scale-95 disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:shadow-none"
                                         style={
                                             pagination.current_page >= pagination.last_page
                                                 ? undefined
@@ -316,17 +316,17 @@ export default function StorefrontDashboard({
                     ) : null}
 
                     {!error && !hasItems ? (
-                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center">
-                            <span className="material-symbols-outlined text-[36px] text-slate-300">
+                        <div className="rounded-2xl border border-outline-variant bg-surface-container-lowest px-4 py-10 text-center">
+                            <span className="material-symbols-outlined text-[36px] text-outline/60">
                                 search_off
                             </span>
-                            <p className="mt-2 text-[13px] font-bold text-gray-900">
+                            <p className="mt-2 text-[13px] font-bold text-on-surface">
                                 No products found
                             </p>
                             {/* Name the switch that emptied the grid. "Try a
                                 different search term" is unhelpful advice when it
                                 was the in-stock filter that hid everything. */}
-                            <p className="mt-1 text-[11px] text-slate-400">
+                            <p className="mt-1 text-[11px] text-outline">
                                 {filters.in_stock || filters.on_sale
                                     ? `Nothing matches ${
                                           filters.in_stock && filters.on_sale
@@ -341,7 +341,7 @@ export default function StorefrontDashboard({
                                 <button
                                     type="button"
                                     onClick={handleResetFilters}
-                                    className="mt-3 rounded-xl px-4 py-2 text-[12px] font-bold text-white shadow-sm transition-transform active:scale-95"
+                                    className="mt-3 rounded-xl px-4 py-2 text-[12px] font-bold text-on-primary shadow-sm transition-transform active:scale-95"
                                     style={{ backgroundColor: STOREFRONT_BRAND }}
                                 >
                                     Clear filters

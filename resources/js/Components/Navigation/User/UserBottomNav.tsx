@@ -48,7 +48,7 @@ export default function UserBottomNav({
     return (
         <nav
             aria-label="Main"
-            className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white md:hidden"
+            className="fixed bottom-0 left-0 right-0 z-40 border-t border-outline-variant bg-surface-container-lowest md:hidden"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
             <div className="mx-auto flex max-w-2xl items-stretch">
@@ -141,7 +141,7 @@ function NavTab({
 
                 {badge > 0 ? (
                     <span
-                        className="absolute -right-2 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-bold text-white"
+                        className="absolute -right-2 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-bold text-on-primary"
                         style={{ backgroundColor: STOREFRONT_BRAND }}
                     >
                         {badge > 99 ? "99+" : badge}
@@ -166,7 +166,7 @@ function NavTab({
             <span
                 aria-disabled="true"
                 title={`${label} — coming soon`}
-                className={`${shared} cursor-default text-slate-300`}
+                className={`${shared} cursor-default text-outline/60`}
             >
                 {body}
             </span>
@@ -179,7 +179,7 @@ function NavTab({
                 type="button"
                 onClick={onClick}
                 aria-label={label}
-                className={`${shared} text-slate-500 active:scale-95`}
+                className={`${shared} text-on-surface-variant active:scale-95`}
             >
                 {body}
             </button>
@@ -190,7 +190,7 @@ function NavTab({
         <Link
             href={href ?? "#"}
             aria-current={active ? "page" : undefined}
-            className={`${shared} text-slate-500 active:scale-95`}
+            className={`${shared} text-on-surface-variant active:scale-95`}
         >
             {body}
         </Link>

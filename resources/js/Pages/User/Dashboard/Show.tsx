@@ -193,12 +193,12 @@ export default function StorefrontItemShow({
                         flex child, because flex items default to
                         `min-width: auto` and refuse to shrink below their text. */}
                     <nav
-                        className="mb-3 flex min-w-0 items-center gap-1 text-[11px] font-semibold text-slate-400"
+                        className="mb-3 flex min-w-0 items-center gap-1 text-[11px] font-semibold text-outline"
                         aria-label="Breadcrumb"
                     >
                         <Link
                             href={route("storefront.index")}
-                            className="shrink-0 transition-colors hover:text-slate-600"
+                            className="shrink-0 transition-colors hover:text-on-surface-variant"
                         >
                             Shop
                         </Link>
@@ -211,7 +211,7 @@ export default function StorefrontItemShow({
                                     href={route("storefront.index", {
                                         category_id: item.category.id,
                                     })}
-                                    className="max-w-[40%] shrink-0 truncate transition-colors hover:text-slate-600"
+                                    className="max-w-[40%] shrink-0 truncate transition-colors hover:text-on-surface-variant"
                                 >
                                     {item.category.name}
                                 </Link>
@@ -220,7 +220,7 @@ export default function StorefrontItemShow({
                         <span className="material-symbols-outlined shrink-0 text-[14px]">
                             chevron_right
                         </span>
-                        <span className="min-w-0 truncate text-slate-600">{item.title}</span>
+                        <span className="min-w-0 truncate text-on-surface-variant">{item.title}</span>
                     </nav>
 
                     {/*
@@ -237,7 +237,7 @@ export default function StorefrontItemShow({
                     <div className="grid gap-4 md:grid-cols-2">
                         {/* ── Gallery ── */}
                         <section className="min-w-0" aria-label="Product images">
-                            <div className="aspect-square overflow-hidden rounded-2xl border border-slate-200/80 bg-white">
+                            <div className="aspect-square overflow-hidden rounded-2xl border border-outline-variant/80 bg-surface-container-lowest">
                                 {/* Falls back to the packaging of whichever
                                     pack is currently selected, so the hero
                                     changes with the picker instead of sitting
@@ -268,8 +268,8 @@ export default function StorefrontItemShow({
                                             aria-label="Show this image"
                                             className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 transition-colors ${
                                                 image === activeImage
-                                                    ? "border-[#c2410c]"
-                                                    : "border-slate-200 hover:border-slate-300"
+                                                    ? "border-primary"
+                                                    : "border-outline-variant hover:border-outline"
                                             }`}
                                         >
                                             <img
@@ -285,16 +285,16 @@ export default function StorefrontItemShow({
 
                         {/* ── Buy box ── */}
                         <section
-                            className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4"
+                            className="min-w-0 rounded-2xl border border-outline-variant/80 bg-surface-container-lowest p-4"
                             aria-label="Product options"
                         >
                             {item.category ? (
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-outline">
                                     {item.category.name}
                                 </p>
                             ) : null}
 
-                            <h1 className="mt-1 text-[19px] font-extrabold leading-tight tracking-tight text-gray-900">
+                            <h1 className="mt-1 text-[19px] font-extrabold leading-tight tracking-tight text-on-surface">
                                 {item.title}
                             </h1>
 
@@ -308,7 +308,7 @@ export default function StorefrontItemShow({
                                     {tone.label}
                                 </span>
                                 {variant?.sku ? (
-                                    <span className="font-mono text-[10px] text-slate-400">
+                                    <span className="font-mono text-[10px] text-outline">
                                         {variant.sku}
                                     </span>
                                 ) : null}
@@ -324,24 +324,24 @@ export default function StorefrontItemShow({
                                     {formatPrice(variant?.final_price ?? null)}
                                 </span>
                                 {variant?.is_discounted && variant.price !== null ? (
-                                    <span className="text-[13px] font-semibold text-slate-400 line-through">
+                                    <span className="text-[13px] font-semibold text-outline line-through">
                                         {formatPrice(variant.price)}
                                     </span>
                                 ) : null}
                                 {breakdown !== "Nothing selected" ? (
-                                    <span className="text-[12px] font-semibold text-slate-500">
+                                    <span className="text-[12px] font-semibold text-on-surface-variant">
                                         ({breakdown})
                                     </span>
                                 ) : null}
                             </div>
 
                             {item.description ? (
-                                <p className="mt-2.5 text-[12px] leading-relaxed text-slate-500">
+                                <p className="mt-2.5 text-[12px] leading-relaxed text-on-surface-variant">
                                     {item.description}
                                 </p>
                             ) : null}
 
-                            <div className="my-3.5 h-px bg-slate-100" />
+                            <div className="my-3.5 h-px bg-surface-container" />
 
                             {/* ── Variant pickers ── */}
                             <VariantSelector
@@ -363,7 +363,7 @@ export default function StorefrontItemShow({
                     {related.length > 0 ? (
                         <section className="mt-6" aria-label="Related products">
                             <div className="mb-3 flex items-baseline justify-between gap-2">
-                                <h2 className="min-w-0 truncate text-[15px] font-bold tracking-tight text-gray-900">
+                                <h2 className="min-w-0 truncate text-[15px] font-bold tracking-tight text-on-surface">
                                     {item.category
                                         ? `More in ${item.category.name}`
                                         : "More from this store"}
@@ -373,7 +373,7 @@ export default function StorefrontItemShow({
                                         href={route("storefront.index", {
                                             category_id: item.category.id,
                                         })}
-                                        className="shrink-0 text-[11px] font-bold text-[#c2410c] transition-colors hover:text-[#9a3412]"
+                                        className="shrink-0 text-[11px] font-bold text-primary transition-colors hover:text-primary/80"
                                     >
                                         See all
                                     </Link>
@@ -404,14 +404,14 @@ export default function StorefrontItemShow({
                   the foot of the window.
                 */}
                 <div
-                    className="fixed inset-x-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur md:!bottom-0"
+                    className="fixed inset-x-0 z-30 border-t border-outline-variant bg-surface-container-lowest/95 backdrop-blur md:!bottom-0"
                     style={{ bottom: ABOVE_USER_BOTTOM_NAV }}
                 >
                     <div
                         className={`${STOREFRONT_SHELL} flex items-center justify-between gap-3 py-3`}
                     >
                         <div className="min-w-0">
-                            <p className="truncate text-[11px] font-semibold text-slate-500">
+                            <p className="truncate text-[11px] font-semibold text-on-surface-variant">
                                 {breakdown}
                             </p>
                             <p
@@ -431,7 +431,7 @@ export default function StorefrontItemShow({
                                 !hasSelection ||
                                 pendingVariantId === variant.id
                             }
-                            className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-full px-6 text-[15px] font-bold text-white shadow-lg transition-transform active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                            className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-full px-6 text-[15px] font-bold text-on-primary shadow-lg transition-transform active:scale-95 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:shadow-none"
                             style={
                                 isOutOfStock || !variant || !hasSelection
                                     ? undefined
@@ -439,7 +439,7 @@ export default function StorefrontItemShow({
                             }
                         >
                             {variant && pendingVariantId === variant.id ? (
-                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
+                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-on-primary/60 border-t-transparent" />
                             ) : (
                                 <span className="material-symbols-outlined text-[20px]">
                                     shopping_cart

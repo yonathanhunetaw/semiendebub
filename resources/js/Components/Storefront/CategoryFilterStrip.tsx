@@ -77,12 +77,12 @@ export default function CategoryFilterStrip({
 
     return (
         // 64px masthead on phones; 112px once the category row appears at `md`.
-        <div className="sticky top-16 z-20 border-b border-slate-200/70 bg-white/95 backdrop-blur md:top-28">
+        <div className="sticky top-16 z-20 border-b border-outline-variant/70 bg-surface-container-lowest/95 backdrop-blur md:top-28">
             <div className={`${STOREFRONT_SHELL} py-3`}>
                 {/* ── Search ── */}
                 <form onSubmit={handleSubmit} role="search" className="md:hidden">
-                    <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 transition-colors focus-within:border-orange-300 focus-within:bg-white">
-                        <span className="material-symbols-outlined text-[20px] text-slate-400">
+                    <div className="flex items-center gap-2 rounded-2xl border border-outline-variant bg-surface-container-low px-3 py-2 transition-colors focus-within:border-primary/50 focus-within:bg-surface-container-lowest">
+                        <span className="material-symbols-outlined text-[20px] text-outline">
                             search
                         </span>
                         <input
@@ -91,14 +91,14 @@ export default function CategoryFilterStrip({
                             onChange={(event) => onSearchChange(event.target.value)}
                             placeholder="Search notebooks, pens, art supplies…"
                             aria-label="Search products"
-                            className="w-full border-0 bg-transparent p-0 text-[13px] font-medium text-gray-900 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+                            className="w-full border-0 bg-transparent p-0 text-[13px] font-medium text-on-surface placeholder:text-outline focus:outline-none focus:ring-0"
                         />
                         {search.length > 0 ? (
                             <button
                                 type="button"
                                 onClick={onSearchClear}
                                 aria-label="Clear search"
-                                className="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600"
+                                className="flex h-6 w-6 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface-variant"
                             >
                                 <span className="material-symbols-outlined text-[16px]">
                                     close
@@ -106,7 +106,7 @@ export default function CategoryFilterStrip({
                             </button>
                         ) : null}
                         {isSearching ? (
-                            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-orange-200 border-t-transparent" />
+                            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
                         ) : null}
                     </div>
                 </form>
@@ -143,7 +143,7 @@ export default function CategoryFilterStrip({
                             onChange={(event) =>
                                 onSelectSort(event.target.value as StorefrontSort)
                             }
-                            className="appearance-none rounded-full border border-slate-200 bg-white py-1.5 pl-7 pr-7 text-[11px] font-bold text-slate-600 focus:border-orange-300 focus:outline-none"
+                            className="appearance-none rounded-full border border-outline-variant bg-surface-container-lowest py-1.5 pl-7 pr-7 text-[11px] font-bold text-on-surface-variant focus:border-primary/50 focus:outline-none"
                         >
                             {sorts.map((option) => (
                                 <option key={option.value} value={option.value}>
@@ -151,10 +151,10 @@ export default function CategoryFilterStrip({
                                 </option>
                             ))}
                         </select>
-                        <span className="material-symbols-outlined pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[14px] text-slate-400">
+                        <span className="material-symbols-outlined pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[14px] text-outline">
                             swap_vert
                         </span>
-                        <span className="material-symbols-outlined pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[14px] text-slate-400">
+                        <span className="material-symbols-outlined pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[14px] text-outline">
                             expand_more
                         </span>
                     </label>
@@ -176,7 +176,7 @@ export default function CategoryFilterStrip({
                         <button
                             type="button"
                             onClick={onResetFilters}
-                            className="shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-bold text-slate-400 transition-colors hover:text-slate-600"
+                            className="shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-bold text-outline transition-colors hover:text-on-surface-variant"
                         >
                             Reset
                         </button>
@@ -207,8 +207,8 @@ function TogglePill({
             aria-pressed={active}
             className={`flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
                 active
-                    ? "border-transparent text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    ? "border-transparent text-on-primary"
+                    : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-low"
             }`}
             style={
                 active
@@ -242,8 +242,8 @@ function FilterPill({
             aria-pressed={active}
             className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors ${
                 active
-                    ? "border-transparent text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    ? "border-transparent text-on-primary"
+                    : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-low"
             }`}
             style={
                 active
