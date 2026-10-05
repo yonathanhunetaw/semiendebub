@@ -177,7 +177,7 @@ export default function ReplenishIndex({ scheduled_transfers = [], locations }: 
                         onClick={() => setAddOpen(true)}
                         aria-label="New shipment"
                         title="New shipment"
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[999px] bg-[#c2410c] text-white shadow-sm transition-transform active:scale-90"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[999px] bg-primary text-on-primary shadow-sm transition-transform active:scale-90"
                     >
                         <span className="material-symbols-outlined text-[19px]">add</span>
                     </button>
@@ -187,7 +187,7 @@ export default function ReplenishIndex({ scheduled_transfers = [], locations }: 
             <div className="px-3.5 pt-3 pb-36 space-y-3">
 
                 {!sortNewest && (
-                    <p className="text-[11px] text-slate-500">Sorted oldest first</p>
+                    <p className="text-[11px] text-on-surface-variant">Sorted oldest first</p>
                 )}
 
                 {/* ── Transfer List ── */}
@@ -208,7 +208,7 @@ export default function ReplenishIndex({ scheduled_transfers = [], locations }: 
                                         : [...current, t.id]
                                 ))}
                                 className={`relative cursor-pointer rounded-2xl ring-2 ring-offset-2 transition-colors ${
-                                    checked ? "ring-[#c2410c]" : "ring-transparent"
+                                    checked ? "ring-primary" : "ring-transparent"
                                 }`}
                             >
                                 {/* Swallow card clicks so ticking never navigates. */}
@@ -219,8 +219,8 @@ export default function ReplenishIndex({ scheduled_transfers = [], locations }: 
                                     aria-hidden="true"
                                     className={`absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-[999px] border shadow-sm ${
                                         checked
-                                            ? "border-[#c2410c] bg-[#c2410c] text-white"
-                                            : "border-slate-300 bg-white"
+                                            ? "border-primary bg-primary text-on-primary"
+                                            : "border-outline/50 bg-surface-container-lowest"
                                     }`}
                                 >
                                     {checked && (
@@ -232,15 +232,15 @@ export default function ReplenishIndex({ scheduled_transfers = [], locations }: 
                     })}
                     {displayedTransfers.length === 0 && (
                         <div className="flex flex-col items-center px-6 py-16 text-center">
-                            <div className="flex h-20 w-20 items-center justify-center rounded-[999px] bg-[#FDF0ED]">
-                                <span className="material-symbols-outlined text-[40px] text-[#c2410c]">
+                            <div className="flex h-20 w-20 items-center justify-center rounded-[999px] bg-primary-container">
+                                <span className="material-symbols-outlined text-[40px] text-primary">
                                     local_shipping
                                 </span>
                             </div>
-                            <p className="mt-4 text-[16px] font-bold text-gray-900">
+                            <p className="mt-4 text-[16px] font-bold text-on-surface">
                                 {search ? "No matching shipments" : "No shipments in this tab"}
                             </p>
-                            <p className="mt-1 text-[12px] text-slate-500">
+                            <p className="mt-1 text-[12px] text-on-surface-variant">
                                 {search
                                     ? "Try a different reference, route or plate."
                                     : "Runs at this stage will show up here."}
@@ -249,7 +249,7 @@ export default function ReplenishIndex({ scheduled_transfers = [], locations }: 
                                 <button
                                     type="button"
                                     onClick={() => setSearch("")}
-                                    className="mt-4 rounded-[999px] bg-[#c2410c] px-5 py-2 text-[13px] font-bold text-white active:scale-95"
+                                    className="mt-4 rounded-[999px] bg-primary px-5 py-2 text-[13px] font-bold text-on-primary active:scale-95"
                                 >
                                     Clear search
                                 </button>
@@ -263,15 +263,15 @@ export default function ReplenishIndex({ scheduled_transfers = [], locations }: 
             {/* Selection bar. Clears rows from the view only — see `hidden`. */}
             {selectMode && (
                 <div className="fixed inset-x-0 bottom-[96px] z-40 mx-auto max-w-[480px] px-4">
-                    <div className="flex items-center justify-between rounded-[999px] border border-slate-200 bg-white px-4 py-2.5 shadow-lg">
-                        <span className="text-[12px] font-semibold text-slate-600">
+                    <div className="flex items-center justify-between rounded-[999px] border border-outline-variant bg-surface-container-lowest px-4 py-2.5 shadow-lg">
+                        <span className="text-[12px] font-semibold text-on-surface-variant">
                             {selected.length} selected
                         </span>
                         <button
                             type="button"
                             onClick={hideSelected}
                             disabled={selected.length === 0}
-                            className="rounded-[999px] bg-rose-600 px-4 py-1.5 text-[12px] font-bold text-white disabled:opacity-40"
+                            className="rounded-[999px] bg-error px-4 py-1.5 text-[12px] font-bold text-on-error disabled:opacity-40"
                         >
                             Clear from view
                         </button>

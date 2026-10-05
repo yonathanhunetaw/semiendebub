@@ -57,10 +57,6 @@ resources/js/Pages/Seller/Locations/Show.tsx 3
 resources/js/Pages/Seller/Refills/Index.tsx 12
 resources/js/Pages/Seller/Refills/Permissions.tsx 2
 resources/js/Pages/Seller/Settings/Index.tsx 5
-resources/js/Pages/Seller/Shipments/Build/index.tsx 43
-resources/js/Pages/Seller/Shipments/Dispatched/index.tsx 24
-resources/js/Pages/Seller/Shipments/index.tsx 7
-resources/js/Pages/Seller/Shipments/Review/index.tsx 20
 resources/js/Pages/Shared/Profile/Edit.jsx 4
 resources/js/Pages/StockKeeper/Shipments/index.tsx 5
 resources/js/Pages/User/Contact/index.tsx 1
