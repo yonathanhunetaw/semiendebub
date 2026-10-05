@@ -8,9 +8,7 @@
  * Replace this module with server props when the domain lands.
  */
 
-export const BRAND = "#c2410c";
-export const INK = "#0b1c30";
-export const DANGER = "#e11d48";
+import { statusTone, type Tone } from "@/Components/Shared/ui";
 
 /**
  * Bottom offset for a page's own sticky action bar.
@@ -28,12 +26,12 @@ export const FULFILLMENT_LABELS: Record<Fulfillment, { title: string; badge: str
     local: {
         title: "Store & Remote Hub",
         badge: "Local + Remote",
-        badgeClass: "bg-blue-600 text-white",
+        badgeClass: "bg-info text-on-info",
     },
     hub: {
         title: "Warehouse",
         badge: "Hub Consolidation",
-        badgeClass: "bg-amber-200 text-amber-900",
+        badgeClass: "bg-warning-container text-on-warning-container",
     },
 };
 
@@ -73,13 +71,30 @@ export interface SellerOrder {
     shippingFee: number;
 }
 
+/**
+ * Bordered soft chip per tone (literal strings so the JIT compiler keeps them).
+ * Stage colors come from the shared status map, so an order stage reads the
+ * same as the matching status elsewhere.
+ */
+const STAGE_CHIP: Record<Tone, string> = {
+    primary: "bg-primary-container/60 text-on-primary-container border-primary/30",
+    tertiary: "bg-tertiary-container/60 text-on-tertiary-container border-tertiary/30",
+    info: "bg-info-container/60 text-on-info-container border-info/30",
+    success: "bg-success-container/60 text-on-success-container border-success/30",
+    warning: "bg-warning-container/60 text-on-warning-container border-warning/30",
+    error: "bg-error-container/60 text-on-error-container border-error/30",
+    neutral: "bg-surface-container text-on-surface-variant border-outline-variant",
+};
+
+const stageChip = (stage: OrderStage) => STAGE_CHIP[statusTone(stage)];
+
 export const STAGE_META: Record<OrderStage, { label: string; chip: string }> = {
-    to_pay: { label: "To pay", chip: "bg-amber-50 text-amber-700 border-amber-200" },
-    paid: { label: "Paid", chip: "bg-violet-50 text-violet-700 border-violet-200" },
-    packing: { label: "Pick & pack", chip: "bg-blue-50 text-blue-700 border-blue-200" },
-    to_deliver: { label: "To deliver", chip: "bg-orange-50 text-[#c2410c] border-orange-200" },
-    delivered: { label: "Delivered", chip: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-    canceled: { label: "Canceled", chip: "bg-rose-50 text-rose-700 border-rose-200" },
+    to_pay: { label: "To pay", chip: stageChip("to_pay") },
+    paid: { label: "Paid", chip: stageChip("paid") },
+    packing: { label: "Pick & pack", chip: stageChip("packing") },
+    to_deliver: { label: "To deliver", chip: stageChip("to_deliver") },
+    delivered: { label: "Delivered", chip: stageChip("delivered") },
+    canceled: { label: "Canceled", chip: stageChip("canceled") },
 };
 
 const DEFAULT_DESTINATION = {
@@ -336,7 +351,11 @@ export interface Provider {
     name: string;
     note?: string;
     initials: string;
-    /** Tailwind classes for the avatar chip. */
+    /**
+     * Tailwind classes for the avatar chip. These approximate each bank's or
+     * wallet's own brand color, so they stay fixed palette colors on purpose
+     * (a bank is not a status or the module accent; see docs/DESIGN.md).
+     */
     tone: string;
     /** Wallets are settled by phone number, banks by account number. */
     settleBy: "account" | "phone";

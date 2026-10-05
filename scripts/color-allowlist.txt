@@ -20,7 +20,6 @@ resources/js/Components/Storefront/storefrontConstants.ts 6
 resources/js/Components/Storefront/StorefrontHeader.tsx 4
 resources/js/Components/Storefront/VariantSelector.tsx 4
 resources/js/Components/WelcomeFooter.tsx 13
-resources/js/Data/sellerOrderFlow.ts 4
 resources/js/Layouts/AccountLayout.tsx 8
 resources/js/Layouts/DevLayout.tsx 2
 resources/js/Layouts/GuestLayout.tsx 9
@@ -55,12 +54,6 @@ resources/js/Pages/Seller/Dashboard/index.tsx 29
 resources/js/Pages/Seller/Items/Index.tsx 24
 resources/js/Pages/Seller/Items/SearchResults.tsx 23
 resources/js/Pages/Seller/Locations/Show.tsx 3
-resources/js/Pages/Seller/Orders/Confirmation.tsx 14
-resources/js/Pages/Seller/Orders/Custody.tsx 74
-resources/js/Pages/Seller/Orders/index.tsx 5
-resources/js/Pages/Seller/Orders/PickPack.tsx 4
-resources/js/Pages/Seller/Orders/PickPackQueue.tsx 2
-resources/js/Pages/Seller/Orders/ToPay.tsx 5
 resources/js/Pages/Seller/Refills/Index.tsx 12
 resources/js/Pages/Seller/Refills/Permissions.tsx 2
 resources/js/Pages/Seller/Settings/Index.tsx 5

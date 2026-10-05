@@ -7,7 +7,7 @@ type StatusKey = ShelfBin["status"] | "unassigned";
 /** Literal class strings so the JIT compiler keeps them. */
 const STATUS: Record<StatusKey, { bar: string; text: string; cell: string; badge: string; label: string }> = {
     ok: { bar: "bg-success", text: "text-on-success-container", cell: "border-success/30 bg-surface-container-lowest", badge: "bg-success-container text-on-success-container", label: "Normal" },
-    refill: { bar: "bg-primary", text: "text-on-primary-container", cell: "border-primary/40 bg-primary-container/25", badge: "bg-primary-container text-on-primary-container", label: "Refill soon" },
+    refill: { bar: "bg-primary", text: "text-primary", cell: "border-primary/40 bg-primary-container/25", badge: "bg-primary-container text-on-primary-container", label: "Refill soon" },
     critical: { bar: "bg-error", text: "text-on-error-container", cell: "border-error/60 bg-error-container/25", badge: "bg-error-container text-on-error-container", label: "Crit low" },
     empty: { bar: "bg-surface-container-highest", text: "text-outline", cell: "border-dashed border-outline/50 bg-surface-container/50", badge: "bg-surface-container text-on-surface-variant", label: "Empty" },
     unassigned: { bar: "bg-warning", text: "text-on-warning-container", cell: "border-dashed border-warning/60 bg-warning-container/35", badge: "bg-warning-container text-on-warning-container", label: "Unassigned" },
