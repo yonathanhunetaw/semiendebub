@@ -47,7 +47,7 @@ export default function Edit({
         <>
             <Head title={`Edit Cart #${cart.id}`} />
 
-            <SellerHeader title={`Edit Cart #${cart.id}`} backHref={route("seller.carts.show", cart.id)} />
+            <SellerHeader title={`Edit Cart #${cart.id}`} backHref={route("seller.carts.index", { cart: cart.id })} />
 
             <Box component="form" onSubmit={submit} sx={{ px: 2, pt: 2 }}>
                 <SellerCard>
