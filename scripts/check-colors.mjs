@@ -14,7 +14,7 @@
  *   - a file not listed, or over its count            -> FAIL (new colors)
  *   - a listed file now under its count, or gone      -> FAIL (stale entry; lower it)
  * so the allowlist can only shrink. Use a token class instead of a new color
- * (see docs/DESIGN.md).
+ * (see docs/md/DESIGN.md).
  *
  *   npm run check:colors                 check
  *   npm run check:colors -- --update     lower/remove stale entries (never raises or adds)
@@ -99,7 +99,7 @@ function writeAllowlist(entries) {
         '# Grandfathered hard-coded colors, checked by `npm run check:colors` (scripts/check-colors.mjs).',
         '# One "<path> <count>" per file. Counts may only go DOWN: when you clean a file, lower or delete its',
         '# line (`npm run check:colors -- --update` does it for you). Never raise a count or add a file;',
-        '# use a token class instead (docs/DESIGN.md, section 3).',
+        '# use a token class instead (docs/md/DESIGN.md, section 3).',
         '',
     ];
     const body = [...entries].sort(([a], [b]) => a.localeCompare(b)).map(([p, n]) => `${p} ${n}`);
@@ -167,7 +167,7 @@ if (args.has('--update')) {
 const allowedTotal = [...allowed.values()].reduce((a, b) => a + b, 0);
 
 if (over.length) {
-    console.log(`\nNEW hard-coded colors (use a token class from docs/DESIGN.md instead):\n`);
+    console.log(`\nNEW hard-coded colors (use a token class from docs/md/DESIGN.md instead):\n`);
     for (const [path, limit, hits] of over) {
         console.log(`  ${path}: ${hits.length} found, ${limit} allowed (+${hits.length - limit})`);
         for (const h of hits) console.log(`    ${path}:${h.line}  ${h.match}`);
