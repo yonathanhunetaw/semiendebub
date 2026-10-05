@@ -19,7 +19,17 @@
  *   npm run check:colors                 check
  *   npm run check:colors -- --update     lower/remove stale entries (never raises or adds)
  *   npm run check:colors -- --seed       write the allowlist from scratch (only if it does not exist)
+ *   npm run check:colors -- --reseed     rewrite the whole allowlist from the current scan (raises too).
+ *                                        Only for when the CHECK itself got stricter and surfaced colors
+ *                                        that were always there; refuses unless the allowlist is committed,
+ *                                        so the raise shows up as its own reviewable diff. Say why in the commit.
+ *
+ * Matching boundaries: a literal counts when it is not glued to a letter or digit, so it is also caught
+ * inside Tailwind arbitrary values, where `_` stands for a space and `[` `,` `:` `(` start a value:
+ * `shadow-[0_4px_rgba(0,0,0,.1)]`, `bg-[#fff]`, `ring-[0_0_0_1px_#e2e8f0]`. (`\b` does not match
+ * between `_` and a letter, which used to hide those.)
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
@@ -29,8 +39,9 @@ const EXCLUDE_DIRS = ['resources/js/theme'];
 const EXTENSIONS = ['.ts', '.tsx', '.jsx'];
 const ALLOWLIST = 'scripts/color-allowlist.txt';
 
-const HEX = /(?<![\w&#])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![\w-])/g;
-const COLOR_FN = /\b(?:rgba?|hsla?)\(\s*(?!var\()/gi;
+// Not preceded by a letter/digit (`_` is allowed: it is a space in Tailwind arbitrary values).
+const HEX = /(?<![A-Za-z0-9$&#])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![\w-])/g;
+const COLOR_FN = /(?<![A-Za-z0-9$])(?:rgba?|hsla?)\((?!\s*var\()/gi;
 
 const args = new Set(process.argv.slice(2));
 const toPosix = (p) => p.split(sep).join('/');
@@ -105,6 +116,26 @@ if (args.has('--seed')) {
     }
     writeAllowlist(new Map([...found].map(([p, h]) => [p, h.length])));
     console.log(`Seeded ${ALLOWLIST}: ${found.size} files, ${totalFound} colors.`);
+    process.exit(0);
+}
+
+if (args.has('--reseed')) {
+    let dirty;
+    try {
+        dirty = execFileSync('git', ['status', '--porcelain', '--', ALLOWLIST], { cwd: root, encoding: 'utf8' }).trim();
+    } catch (e) {
+        console.error(`--reseed needs git to confirm ${ALLOWLIST} is committed: ${e.message}`);
+        process.exit(2);
+    }
+    if (dirty) {
+        console.error(`${ALLOWLIST} has uncommitted changes; commit or discard them before --reseed.`);
+        process.exit(2);
+    }
+    const before = readAllowlist();
+    const beforeTotal = [...before.values()].reduce((a, b) => a + b, 0);
+    writeAllowlist(new Map([...found].map(([p, h]) => [p, h.length])));
+    console.log(`Reseeded ${ALLOWLIST}: ${beforeTotal} in ${before.size} files -> ${totalFound} in ${found.size} files.`);
+    console.log('Review the diff; a reseed is only for a stricter check, never to admit new colors.');
     process.exit(0);
 }
 
