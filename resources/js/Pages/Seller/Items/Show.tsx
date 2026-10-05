@@ -1,5 +1,4 @@
 import {
-    SELLER_BRAND_DARK,
     SellerHeader,
     sellerImage,
 } from "@/Components/Seller/sellerUi";
@@ -398,8 +397,8 @@ export default function Show({
                             sx={{
                                 borderRadius: 3,
                                 textTransform: "none",
-                                bgcolor: SELLER_BRAND_DARK,
-                                "&:hover": { bgcolor: SELLER_BRAND_DARK },
+                                bgcolor: "primary.main",
+                                "&:hover": { bgcolor: "primary.main" },
                             }}
                         >
                             Add to Cart

@@ -559,7 +559,7 @@ export default function CartsIndex({ carts = [], home_store }: Props): React.Rea
             {/* ── Sticky checkout bar ── */}
             {active && active.lines.length > 0 ? (
                 <section
-                    className="fixed inset-x-0 z-40 mx-auto flex max-w-[480px] items-center justify-between rounded-t-[16px] border-t border-outline-variant/80 bg-surface-container-lowest px-4 py-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
+                    className="fixed inset-x-0 z-40 mx-auto flex max-w-[480px] items-center justify-between rounded-t-[16px] border-t border-outline-variant/80 bg-surface-container-lowest px-4 py-2 shadow-[0_-4px_16px_rgb(var(--on-surface)/0.08)] dark:shadow-none"
                     style={{ bottom: ABOVE_NAV }}
                 >
                     <div className="flex items-center space-x-2">

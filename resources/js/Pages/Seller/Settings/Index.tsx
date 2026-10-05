@@ -2,6 +2,7 @@ import {
     SellerHeader,
     sellerAvatarText,
     sellerName,
+    sellerShadow,
 } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link, useForm, usePage } from "@inertiajs/react";
@@ -79,7 +80,7 @@ export default function Index() {
         borderRadius: "16px",
         border: "1px solid",
         borderColor: "divider",
-        boxShadow: isLight ? "0 1px 4px rgba(0,0,0,0.06)" : "0 1px 4px rgba(0,0,0,0.3)",
+        boxShadow: sellerShadow("0 1px 4px", 0.06),
         p: "20px",
     };
 
@@ -110,7 +111,7 @@ export default function Index() {
                             <Avatar sx={{
                                 width: 56, height: 56,
                                 bgcolor: accentColor,
-                                color: isLight ? "#fff" : "#000",
+                                color: "primary.contrastText",
                                 fontWeight: 800, fontSize: 22,
                                 border: `2px solid ${theme.palette.background.paper}`,
                             }}>
@@ -153,7 +154,7 @@ export default function Index() {
                                     "&.Mui-selected": {
                                         bgcolor: "background.paper",
                                         color: "primary.main",
-                                        boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+                                        boxShadow: sellerShadow("0 1px 3px", 0.12),
                                         "&:hover": { bgcolor: "background.paper" },
                                     },
                                     "&:hover:not(.Mui-selected)": {

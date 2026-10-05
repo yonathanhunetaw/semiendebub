@@ -221,7 +221,7 @@ export default function PickPack({ reference, plan = null }: Props): React.React
 
             {/* ── Sticky CTA ── */}
             <nav
-                className="fixed inset-x-0 z-50 mx-auto max-w-[480px] rounded-t-[16px] border-t border-outline-variant bg-surface-container-lowest px-4 py-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
+                className="fixed inset-x-0 z-50 mx-auto max-w-[480px] rounded-t-[16px] border-t border-outline-variant bg-surface-container-lowest px-4 py-2.5 shadow-[0_-4px_16px_rgb(var(--on-surface)/0.08)] dark:shadow-none"
                 style={{ bottom: ABOVE_NAV }}
             >
                 <div className="mx-auto flex max-w-md items-center justify-between gap-3">

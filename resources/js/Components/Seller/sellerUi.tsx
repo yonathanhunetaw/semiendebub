@@ -6,29 +6,17 @@ import {
     Paper,
     type PaperProps,
     Stack,
+    type Theme,
     Typography,
     useTheme,
 } from "@mui/material";
 import React from "react";
 
-// At the top of sellerUi.tsx
-import { 
-    SELLER_BRAND, 
-    SELLER_BRAND_DARK, 
-    SELLER_BG, 
-    SELLER_SURFACE, 
-    SELLER_CITY_OPTIONS 
-} from "./sellerConstants";
+import { SELLER_CITY_OPTIONS } from "./sellerConstants";
 import { FONT_SANS } from "@/theme";
 
-// Re-export them
-export { 
-    SELLER_BRAND, 
-    SELLER_BRAND_DARK, 
-    SELLER_BG, 
-    SELLER_SURFACE, 
-    SELLER_CITY_OPTIONS 
-};
+// Colors come from the theme tokens (MUI palette / rgb(var(--token))), not constants.
+export { SELLER_CITY_OPTIONS };
 
 export interface SellerHeaderProps {
     title: string;
@@ -222,6 +210,16 @@ export function sellerImage(src?: string | string[] | null) {
     // 4. Default fallback for everything else
     return `/storage/${cleanPath.replace(/^\/+/, "")}`;
 }
+
+/**
+ * A soft drop shadow for an MUI `sx` boxShadow: ink-tinted (the on-surface
+ * token) in light mode, none in dark mode, where surfaces separate by tone.
+ *   boxShadow: sellerShadow("0 2px 8px", 0.04)
+ */
+export const sellerShadow =
+    (offsets: string, alpha: number) =>
+    ({ palette }: Theme): string =>
+        palette.mode === "dark" ? "none" : `${offsets} rgb(var(--on-surface) / ${alpha})`;
 
 export const sellerHeaderButtonSx = {
     width: 40,

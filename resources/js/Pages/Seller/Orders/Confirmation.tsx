@@ -866,7 +866,7 @@ function ConfirmationForm({ cartId, order }: { cartId: number; order: SellerOrde
 
             {/* ── Sticky action bar ── */}
             <aside
-                className="fixed inset-x-0 z-40 mx-auto max-w-[480px] rounded-t-[16px] border-t border-outline-variant bg-surface-container-lowest p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
+                className="fixed inset-x-0 z-40 mx-auto max-w-[480px] rounded-t-[16px] border-t border-outline-variant bg-surface-container-lowest p-3 shadow-[0_-4px_16px_rgb(var(--on-surface)/0.08)] dark:shadow-none"
                 style={{ bottom: ABOVE_NAV }}
             >
                 <div className="mx-auto flex max-w-md items-center justify-between gap-3">
