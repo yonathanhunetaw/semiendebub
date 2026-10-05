@@ -181,7 +181,7 @@
 [data-role="seller"][data-mode="light"] {
     --primary: 194 65 12;
     --on-primary: 255 255 255;
-    --primary-container: 246 228 221;
+    --primary-container: 255 237 213;
     --on-primary-container: 105 44 27;
     --inverse-primary: 251 146 60;
     --surface-tint: 194 65 12;

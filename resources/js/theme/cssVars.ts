@@ -83,6 +83,8 @@ function deriveFixed(pair: ModePair) {
 export function buildRoleScheme(role: RoleKey, mode: Mode): Record<RoleToken, string> {
     const palette = ROLE_PALETTES[role] ?? ROLE_PALETTES[DEFAULT_ROLE];
     const p = deriveFamily(palette.primary, mode);
+    const container = palette.container?.[mode];
+    if (container) p.container = container;
     const pf = deriveFixed(palette.primary);
     const accent = palette.accent ?? palette.primary;
     const t = deriveFamily(accent, mode);

@@ -63,6 +63,11 @@ export interface RolePalette {
     primary: ModePair;
     /** Optional second accent, exposed as `tertiary`. Defaults to `primary`. */
     accent?: ModePair;
+    /**
+     * Optional `primary-container` per mode, for a role whose soft fill was
+     * picked by eye rather than derived. A mode left out keeps the derived tint.
+     */
+    container?: Partial<ModePair>;
 }
 
 export const ROLE_PALETTES: Record<RoleKey, RolePalette> = {
@@ -76,7 +81,10 @@ export const ROLE_PALETTES: Record<RoleKey, RolePalette> = {
     finance: { primary: { light: '#1e3a5f', dark: '#7da4d0' } }, // navy
     marketing: { primary: { light: '#be185d', dark: '#f7709a' } }, // pink
     procurement: { primary: { light: '#b5179e', dark: '#e76fd8' } }, // magenta
-    seller: { primary: { light: '#c2410c', dark: '#fb923c' } }, // orange
+    seller: {
+        primary: { light: '#c2410c', dark: '#fb923c' }, // orange
+        container: { light: '#ffedd5' }, // the Stitch seller screens' orange-100 (derived: #f6e4dd)
+    },
     stock_keeper: { primary: { light: '#1d4ed8', dark: '#60a5fa' } }, // blue
     vendor: { primary: { light: '#0e7490', dark: '#22d3ee' } }, // cyan
 };
