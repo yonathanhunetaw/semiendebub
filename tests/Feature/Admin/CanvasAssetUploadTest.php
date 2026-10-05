@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 use App\Models\Auth\User;
 use Illuminate\Http\UploadedFile;
@@ -12,7 +13,7 @@ class CanvasAssetUploadTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @test */
+    #[Test]
     public function it_resolves_uploaded_canvas_images_with_proper_url_structures()
     {
         // 1. Fake the object store the controller actually writes to.

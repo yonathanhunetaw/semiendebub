@@ -131,7 +131,7 @@ class TransferWorkflowService
             throw new MovementDomainException('Only a delivery courier can carry a transfer.', MovementDomainService::DOMAIN_TRANSFER);
         }
 
-        return DB::transaction(function () use ($transfer, $courier): bool {
+        return DB::transaction(function () use ($transfer, $courier, $override): bool {
             $locked = Transfer::query()->whereKey($transfer->id)->lockForUpdate()->first(['id', 'status', 'courier_id']);
 
             if ($locked === null

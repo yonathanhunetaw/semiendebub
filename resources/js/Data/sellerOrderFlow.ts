@@ -354,7 +354,7 @@ export interface Provider {
     /**
      * Tailwind classes for the avatar chip. These approximate each bank's or
      * wallet's own brand color, so they stay fixed palette colors on purpose
-     * (a bank is not a status or the module accent; see docs/DESIGN.md).
+     * (a bank is not a status or the module accent; see docs/md/DESIGN.md).
      */
     tone: string;
     /** Wallets are settled by phone number, banks by account number. */
