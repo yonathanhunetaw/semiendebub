@@ -451,31 +451,94 @@ class PartyAgreementGateTest extends TestCase
     }
 
     #[Test]
-    public function handover_walks_the_intermediate_stages_rather_than_failing_silently(): void
+    public function the_whole_handoff_moves_stock_only_at_the_two_signatures(): void
     {
         $shipment = $this->reachConsensus($this->proposeShipment(30));
         $this->assertSame(ShipmentWorkflowService::SCHEDULED, $shipment->status);
 
-        // scheduled -> dispatched is not a single legal hop; advanceTo walks it.
-        $this->withServerVariables(['HTTP_HOST' => 'stockkeeper.localhost'])
-            ->actingAs($this->originKeeper, 'web')
-            ->post(route('stock_keeper.shipments.handover', $shipment))
-            ->assertSessionHasNoErrors();
+        // Origin keeper: pick, then prepare in the bay.
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'start_picking');
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'pick_line', ['variant_id' => $this->variant->id, 'picked' => true]);
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'prepared', ['bay' => 'Dock 2']);
+        $this->assertSame(ShipmentWorkflowService::READY, $shipment->fresh()->status);
+        $this->assertSame('Dock 2', $shipment->fresh()->slot);
+        $this->assertSame(100, $this->stockAt($this->origin), 'Preparing moves nothing.');
 
-        $this->assertSame(ShipmentWorkflowService::DISPATCHED, $shipment->fresh()->status);
-        $this->assertSame(70, $this->stockAt($this->origin), 'And the ledger actually moved.');
+        // Driver: start, check, sign — the signature is the handover.
+        $this->step('delivery', $this->courier, $shipment, 'courier_start');
+        $this->step('delivery', $this->courier, $shipment, 'courier_check');
+        $this->step('delivery', $this->courier, $shipment, 'courier_sign', ['signature' => $this->signature()]);
+        $this->assertSame(ShipmentWorkflowService::IN_TRANSIT, $shipment->fresh()->status);
+        $this->assertSame(70, $this->stockAt($this->origin), 'Signing took the load out of the origin.');
+        $this->assertNotNull($shipment->fresh()->courier_signature);
+
+        $this->step('delivery', $this->courier, $shipment, 'courier_arrive');
+        $this->assertSame(ShipmentWorkflowService::DELIVERED, $shipment->fresh()->status);
+
+        // Receiver: check, then sign — finished.
+        $this->step('stockkeeper', $this->destinationKeeper, $shipment, 'receiver_check');
+        $this->assertSame(0, $this->stockAt($this->destination), 'Checking lands nothing.');
+        $this->step('stockkeeper', $this->destinationKeeper, $shipment, 'receiver_sign', ['signature' => $this->signature()]);
+
+        $shipment = $shipment->fresh();
+        $this->assertSame(ShipmentWorkflowService::RECEIVED, $shipment->status);
+        $this->assertSame(30, $this->stockAt($this->destination));
+        $this->assertSame($this->destinationKeeper->id, (int) $shipment->received_by);
     }
 
     #[Test]
-    public function dispatch_reports_why_it_cannot_run_while_the_gate_is_open(): void
+    public function a_step_out_of_order_is_refused_and_moves_nothing(): void
     {
-        $shipment = $this->proposeShipment();
+        $shipment = $this->reachConsensus($this->proposeShipment(30));
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'start_picking');
 
-        $this->withServerVariables(['HTTP_HOST' => 'seller.localhost'])
-            ->actingAs($this->destinationKeeper, 'web')
-            ->post(route('seller.shipments.dispatch', $shipment))
+        // Not every line picked yet.
+        $this->withServerVariables(['HTTP_HOST' => 'stockkeeper.localhost'])
+            ->actingAs($this->originKeeper, 'web')
+            ->post(route('stock_keeper.shipments.step', [$shipment, 'prepared']))
+            ->assertSessionHas('error');
+        $this->assertSame(ShipmentWorkflowService::PICKING, $shipment->fresh()->status);
+
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'pick_line', ['variant_id' => $this->variant->id, 'picked' => true]);
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'prepared');
+        $this->step('delivery', $this->courier, $shipment, 'courier_start');
+
+        // Signing before checking the load is refused.
+        $this->withServerVariables(['HTTP_HOST' => 'delivery.localhost'])
+            ->actingAs($this->courier, 'web')
+            ->post(route('delivery.shipments.step', [$shipment, 'courier_sign']), ['signature' => $this->signature()])
             ->assertSessionHas('error');
 
+        $this->assertSame(ShipmentWorkflowService::READY, $shipment->fresh()->status);
+        $this->assertSame(100, $this->stockAt($this->origin));
+    }
+
+    #[Test]
+    public function signing_needs_an_actual_signature(): void
+    {
+        $shipment = $this->reachConsensus($this->proposeShipment(30));
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'start_picking');
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'pick_line', ['variant_id' => $this->variant->id, 'picked' => true]);
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'prepared');
+        $this->step('delivery', $this->courier, $shipment, 'courier_start');
+        $this->step('delivery', $this->courier, $shipment, 'courier_check');
+
+        $this->withServerVariables(['HTTP_HOST' => 'delivery.localhost'])
+            ->actingAs($this->courier, 'web')
+            ->post(route('delivery.shipments.step', [$shipment, 'courier_sign']), ['signature' => 'not-a-signature'])
+            ->assertSessionHasErrors('step');
+
+        $this->assertSame(ShipmentWorkflowService::READY, $shipment->fresh()->status);
+    }
+
+    #[Test]
+    public function a_seller_has_no_dispatch_step_of_their_own(): void
+    {
+        // Dispatch is the origin's handover to the driver, nothing else: once
+        // the gate clears the run is scheduled and the seller has no button.
+        $this->assertFalse(\Illuminate\Support\Facades\Route::has('seller.shipments.dispatch'));
+
+        $shipment = $this->proposeShipment();
         $this->assertSame(ShipmentWorkflowService::PENDING_AGREEMENT, $shipment->fresh()->status);
         $this->assertSame(100, $this->stockAt($this->origin));
     }
@@ -675,63 +738,76 @@ class PartyAgreementGateTest extends TestCase
     }
 
     /* =====================================================================
-     | Handover / receive endpoints
+     | Who may take each step
      |====================================================================*/
 
     #[Test]
-    public function the_origin_keeper_can_hand_over_and_that_debits_the_origin(): void
+    public function only_the_destination_dock_signs_the_goods_in(): void
     {
         $shipment = $this->reachConsensus($this->proposeShipment(30));
-        $shipment = $this->workflow->transition($shipment, ShipmentWorkflowService::PICKING);
-        $shipment = $this->workflow->transition($shipment, ShipmentWorkflowService::READY);
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'start_picking');
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'pick_line', ['variant_id' => $this->variant->id, 'picked' => true]);
+        $this->step('stockkeeper', $this->originKeeper, $shipment, 'prepared');
+        $this->step('delivery', $this->courier, $shipment, 'courier_start');
+        $this->step('delivery', $this->courier, $shipment, 'courier_check');
+        $this->step('delivery', $this->courier, $shipment, 'courier_sign', ['signature' => $this->signature()]);
+        $this->step('delivery', $this->courier, $shipment, 'courier_arrive');
 
         $this->withServerVariables(['HTTP_HOST' => 'stockkeeper.localhost'])
             ->actingAs($this->originKeeper, 'web')
-            ->post(route('stock_keeper.shipments.handover', $shipment))
-            ->assertSessionHasNoErrors();
+            ->post(route('stock_keeper.shipments.step', [$shipment, 'receiver_check']))
+            ->assertForbidden();
 
-        $this->assertSame(ShipmentWorkflowService::DISPATCHED, $shipment->fresh()->status);
-        $this->assertSame(70, $this->stockAt($this->origin));
+        $this->assertNull($shipment->fresh()->receiver_checked_at);
     }
 
     #[Test]
-    public function the_destination_keeper_can_receive_and_that_credits_the_destination(): void
+    public function another_driver_cannot_sign_for_the_load(): void
     {
         $shipment = $this->reachConsensus($this->proposeShipment(30));
+        $other = $this->user('delivery', null);
 
-        foreach ([
-            ShipmentWorkflowService::PICKING,
-            ShipmentWorkflowService::READY,
-            ShipmentWorkflowService::DISPATCHED,
-            ShipmentWorkflowService::IN_TRANSIT,
-            ShipmentWorkflowService::DELIVERED,
-        ] as $stage) {
-            $shipment = $this->workflow->transition($shipment, $stage);
-        }
+        $this->withServerVariables(['HTTP_HOST' => 'delivery.localhost'])
+            ->actingAs($other, 'web')
+            ->post(route('delivery.shipments.step', [$shipment, 'courier_start']))
+            ->assertForbidden();
 
-        $this->withServerVariables(['HTTP_HOST' => 'stockkeeper.localhost'])
-            ->actingAs($this->destinationKeeper, 'web')
-            ->post(route('stock_keeper.shipments.receive', $shipment))
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame(ShipmentWorkflowService::RECEIVED, $shipment->fresh()->status);
-        $this->assertSame(30, $this->stockAt($this->destination));
+        $this->assertNull($shipment->fresh()->courier_started_at);
     }
 
     #[Test]
-    public function an_unrelated_keeper_cannot_hand_over_someone_elses_shipment(): void
+    public function an_unrelated_keeper_cannot_pick_someone_elses_shipment(): void
     {
         $shipment = $this->reachConsensus($this->proposeShipment(30));
-        $shipment = $this->workflow->transition($shipment, ShipmentWorkflowService::PICKING);
-        $shipment = $this->workflow->transition($shipment, ShipmentWorkflowService::READY);
-
         $outsider = $this->user('stock_keeper', Store::factory()->create()->id);
 
         $this->withServerVariables(['HTTP_HOST' => 'stockkeeper.localhost'])
             ->actingAs($outsider, 'web')
-            ->post(route('stock_keeper.shipments.handover', $shipment))
+            ->post(route('stock_keeper.shipments.step', [$shipment, 'start_picking']))
             ->assertForbidden();
 
-        $this->assertSame(100, $this->stockAt($this->origin), 'No stock moved.');
+        $this->assertSame(ShipmentWorkflowService::SCHEDULED, $shipment->fresh()->status);
+    }
+
+    /* ---------------------------------------------------------------------
+     | Step helpers
+     |--------------------------------------------------------------------*/
+
+    /** @param array<string, mixed> $payload */
+    private function step(string $subdomain, User $user, Shipment $shipment, string $step, array $payload = []): void
+    {
+        $prefix = $subdomain === 'stockkeeper' ? 'stock_keeper' : $subdomain;
+
+        $this->withServerVariables(['HTTP_HOST' => "{$subdomain}.localhost"])
+            ->actingAs($user, 'web')
+            ->post(route("{$prefix}.shipments.step", [$shipment, $step]), $payload)
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('error');
+    }
+
+    /** A PNG data URL long enough to pass as a drawn signature. */
+    private function signature(): string
+    {
+        return 'data:image/png;base64,'.base64_encode(str_repeat("\x89PNG\r\n", 40));
     }
 }

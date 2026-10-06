@@ -86,9 +86,21 @@ export default function ShelfBinMatrix({
 
     const occupancy = matrix.totals.items > 0 ? (matrix.totals.occupied / matrix.totals.items) * 100 : 0;
 
+    const capacity = matrix.columns.length * matrix.rows * matrix.tiers;
+    const legs = matrix.bins.flatMap((bin) => bin.refills.map((leg) => ({ leg, bin })));
+
     return (
         <>
-            <section className="mb-3 rounded-[24px] bg-surface-container-lowest px-4 pb-4 pt-4 shadow-sm">
+            <div className="mb-3 hidden grid-cols-4 gap-3.5 lg:grid">
+                <Kpi icon="view_compact_alt" label="Bins in use" value={`${matrix.totals.items} / ${capacity}`} note={`${occupancy.toFixed(1)}% have stock`} bar={capacity ? matrix.totals.items / capacity : 0} />
+                <Kpi icon="priority_high" tone="primary" label="Refill queue" value={`${matrix.totals.refill_queue} item${matrix.totals.refill_queue === 1 ? "" : "s"}`} note={`${matrix.totals.critical} critical · ${matrix.totals.refill_pending} on its way`} />
+                <Kpi icon="inventory_2" label="On the shelf" value={`${matrix.totals.pieces.toLocaleString()} pieces`} note={`${matrix.totals.occupied} bin${matrix.totals.occupied === 1 ? "" : "s"} stocked`} />
+                <Kpi icon="help" tone={matrix.totals.unassigned > 0 ? "warning" : undefined} label="Unassigned" value={String(matrix.totals.unassigned)} note="Stock with no bin" />
+            </div>
+
+            <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-5">
+            <div className="lg:col-span-8">
+            <section className="mb-3 rounded-[24px] bg-surface-container-lowest px-4 pb-4 pt-4 shadow-sm lg:p-5">
                 <div className="mb-3 flex items-center justify-between">
                     <div>
                         <h2 className="text-[20px] font-bold tracking-tight text-on-surface">Replenishment</h2>
@@ -124,35 +136,37 @@ export default function ShelfBinMatrix({
                     <span className="flex items-center space-x-1.5"><span className="material-symbols-outlined text-[13px] text-info">local_shipping</span><span className="font-medium text-on-surface-variant">Refill on its way</span></span>
                 </div>
 
-                <div className="mx-auto w-full max-w-[360px] pb-1">
-                    <div className="mb-1 flex items-center pl-5 pr-1 font-mono text-[11px] font-bold text-outline">
+                <div className="mx-auto w-full max-w-[360px] pb-1 lg:max-w-none">
+                    <div className="mb-1 grid grid-cols-[16px_repeat(5,minmax(0,1fr))] gap-x-1.5 font-mono text-[11px] font-bold text-outline lg:gap-x-2.5">
+                        <div />
                         {matrix.columns.map((column) => (
-                            <div key={column} className="flex-1 text-center">{column}</div>
+                            <div key={column} className="text-center lg:rounded-[6px] lg:border lg:border-outline-variant/60 lg:bg-surface-container lg:py-1">{column}</div>
                         ))}
                     </div>
-                    <div className="flex space-x-1">
-                        <div className="flex w-4 select-none flex-col justify-between py-1 text-center font-mono text-[11px] font-bold text-outline">
-                            {Array.from({ length: matrix.rows }, (_, r) => (
-                                <div key={r} className="flex h-8 items-center justify-center">{r + 1}</div>
-                            ))}
-                        </div>
-                        <div className="grid flex-1 grid-cols-5 gap-1.5 rounded-[16px] border border-outline-variant bg-surface-container-low p-1.5">
-                            {cells.map((bin, index) => (bin ? (
-                                <Bin key={bin.item_id} bin={bin} selected={!assigning && bin.item_id === activeId} onSelect={() => select(bin.item_id)} />
-                            ) : canEdit ? (
-                                <button
-                                    key={`open-${index}`}
-                                    type="button"
-                                    aria-label="Assign an item to an open bin"
-                                    onClick={() => setAssigning(true)}
-                                    className="flex aspect-square items-center justify-center rounded-[6px] border border-dashed border-outline/50 bg-surface-container-lowest/40 text-outline hover:border-primary hover:text-primary active:scale-95"
-                                >
-                                    <span className="material-symbols-outlined text-[16px]">add</span>
-                                </button>
-                            ) : (
-                                <div key={`open-${index}`} className="aspect-square rounded-[6px] border border-dashed border-outline-variant bg-surface-container-lowest/40" />
-                            )))}
-                        </div>
+                    <div className="grid grid-cols-[16px_repeat(5,minmax(0,1fr))] gap-1.5 rounded-[16px] border border-outline-variant bg-surface-container-low p-1.5 lg:gap-2.5 lg:p-2.5">
+                        {cells.map((bin, index) => (
+                            <React.Fragment key={bin ? bin.item_id : `open-${index}`}>
+                                {index % matrix.columns.length === 0 ? (
+                                    <div className="flex select-none items-center justify-center font-mono text-[11px] font-bold text-outline">
+                                        {Math.floor(index / matrix.columns.length) + 1}
+                                    </div>
+                                ) : null}
+                                {bin ? (
+                                    <Bin bin={bin} selected={!assigning && bin.item_id === activeId} onSelect={() => select(bin.item_id)} />
+                                ) : canEdit ? (
+                                    <button
+                                        type="button"
+                                        aria-label="Assign an item to an open bin"
+                                        onClick={() => setAssigning(true)}
+                                        className="flex aspect-square items-center justify-center rounded-[6px] border border-dashed border-outline/50 bg-surface-container-lowest/40 text-outline hover:border-primary hover:text-primary active:scale-95 lg:aspect-auto lg:h-20"
+                                    >
+                                        <span className="material-symbols-outlined text-[16px] lg:text-[20px]">add</span>
+                                    </button>
+                                ) : (
+                                    <div className="aspect-square rounded-[6px] border border-dashed border-outline-variant bg-surface-container-lowest/40 lg:aspect-auto lg:h-20" />
+                                )}
+                            </React.Fragment>
+                        ))}
                     </div>
                 </div>
 
@@ -184,6 +198,10 @@ export default function ShelfBinMatrix({
                 </div>
             </section>
 
+            {legs.length ? <RestockOrders legs={legs} /> : null}
+            </div>
+
+            <div className="lg:sticky lg:top-4 lg:col-span-4">
             {assigning && canEdit ? (
                 <AssignPanel locationId={locationId} onClose={() => setAssigning(false)} />
             ) : active ? (
@@ -208,7 +226,7 @@ export default function ShelfBinMatrix({
                 </section>
             )}
 
-            <section className="mb-3 rounded-[24px] bg-surface-container-lowest px-4 py-4 shadow-sm">
+            <section className="mb-3 rounded-[24px] bg-surface-container-lowest px-4 py-4 shadow-sm lg:hidden">
                 <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-[15px] font-bold uppercase text-on-surface">Shelf summary</h3>
                     <span className="font-mono text-[12px] text-on-surface-variant">
@@ -244,7 +262,65 @@ export default function ShelfBinMatrix({
                     </p>
                 ) : null}
             </section>
+            </div>
+            </div>
         </>
+    );
+}
+
+const KPI_TONE = {
+    default: "border-primary/20 bg-primary-container/40 text-primary",
+    primary: "border-primary/20 bg-primary-container/40 text-primary",
+    warning: "border-warning/30 bg-warning-container/60 text-on-warning-container",
+} as const;
+
+function Kpi({ icon, label, value, note, bar, tone = "default" }: { icon: string; label: string; value: string; note: string; bar?: number; tone?: keyof typeof KPI_TONE }): React.ReactElement {
+    return (
+        <div className="flex items-center justify-between rounded-[16px] border border-outline-variant/60 bg-surface-container-lowest p-4 shadow-sm">
+            <div className="min-w-0 flex-1 pr-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p>
+                <p className="mt-1 text-base font-bold text-on-surface">{value}</p>
+                {bar !== undefined ? (
+                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-[999px] bg-surface-container-high">
+                        <div className="h-1.5 rounded-[999px] bg-primary" style={{ width: pct(bar) }} />
+                    </div>
+                ) : null}
+                <p className="mt-1 truncate font-mono text-[11px] text-outline">{note}</p>
+            </div>
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border ${KPI_TONE[tone]}`}>
+                <span className="material-symbols-outlined text-[22px]">{icon}</span>
+            </div>
+        </div>
+    );
+}
+
+/** Every open refill leg on the shelf, one row each, urgent first. */
+function RestockOrders({ legs }: { legs: Array<{ leg: ShelfBin["refills"][number]; bin: ShelfBin }> }): React.ReactElement {
+    return (
+        <section className="mb-3 rounded-[24px] bg-surface-container-lowest p-4 shadow-sm lg:p-5">
+            <div className="mb-3 flex items-center space-x-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary-container/60 text-primary">
+                    <span className="material-symbols-outlined text-[16px]">alt_route</span>
+                </div>
+                <h3 className="text-[12px] font-bold uppercase tracking-wider text-on-surface">Open refills</h3>
+            </div>
+            <ul className="space-y-2">
+                {legs.map(({ leg, bin }) => (
+                    <li key={leg.id} className="flex items-center justify-between gap-3 rounded-[12px] border border-outline-variant/60 bg-surface-container-low p-3">
+                        <div className="flex min-w-0 items-center space-x-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-warning/30 bg-warning-container font-mono text-[12px] font-bold text-on-warning-container">{bin.coord}</div>
+                            <div className="min-w-0">
+                                <p className="truncate text-[12px] font-bold text-on-surface">{bin.name} · {leg.display}</p>
+                                <p className="truncate text-[11px] text-on-surface-variant">From {SOURCE_LABEL[leg.source]} · {leg.reference}</p>
+                            </div>
+                        </div>
+                        <span className={`shrink-0 rounded-[999px] px-2.5 py-1 text-[11px] font-bold ${leg.awaits_hub ? "bg-info-container text-on-info-container" : LEG_STATUS[leg.status].chip}`}>
+                            {leg.awaits_hub ? "Hub to accept" : LEG_STATUS[leg.status].label}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+        </section>
     );
 }
 
@@ -259,11 +335,11 @@ function Bin({ bin, selected, onSelect }: { bin: ShelfBin; selected: boolean; on
             onClick={onSelect}
             aria-label={`${bin.coord}: ${bin.name}, ${bin.display}${bin.assigned ? "" : ", unassigned"}${bin.refills.length ? ", refill on its way" : ""}`}
             aria-pressed={selected}
-            className={`relative flex aspect-square flex-col justify-between overflow-hidden rounded-[6px] border p-1 text-left transition-all active:scale-95 ${style.cell} ${
+            className={`relative flex aspect-square flex-col justify-between overflow-hidden rounded-[6px] border p-1 text-left transition-all active:scale-95 lg:aspect-auto lg:h-24 lg:rounded-[10px] lg:p-2 ${style.cell} ${
                 selected ? "z-20 scale-[1.04] border-primary shadow-[0_0_0_2px_rgb(var(--primary))] bg-primary-container/60" : ""
             }`}
         >
-            <div className="absolute inset-y-0 left-0 w-1 bg-surface-container-high">
+            <div className="absolute inset-y-0 left-0 w-1 bg-surface-container-high lg:w-1.5">
                 <div className={`absolute bottom-0 w-full ${style.bar}`} style={{ height: pct(bin.fill) }} />
                 {bin.band && bin.band.max > 0 ? (
                     <>
@@ -278,13 +354,16 @@ function Bin({ bin, selected, onSelect }: { bin: ShelfBin; selected: boolean; on
                 ) : !bin.assigned ? (
                     <span className="material-symbols-outlined text-[9px] leading-none text-warning">help</span>
                 ) : <span />}
-                <span className="font-mono text-[7px] font-semibold leading-none text-outline">{unitMax ?? "--"}</span>
+                <span className="font-mono text-[7px] font-semibold leading-none text-outline lg:rounded-[4px] lg:border lg:border-outline-variant lg:bg-surface-container-lowest lg:px-1 lg:py-0.5 lg:text-[10px]">{unitMax !== null ? <><span className="hidden lg:inline">Cap: </span>{unitMax}</> : "--"}</span>
             </div>
             <div className="my-auto flex flex-col items-center justify-center pl-1">
-                <span className={`font-mono text-[13px] font-bold leading-none ${style.text}`}>{bin.in_unit}</span>
-                <span className={`mt-0.5 truncate font-mono text-[7px] leading-none ${style.text}`}>{bin.unit.name.slice(0, 4).toLowerCase()}</span>
+                <span className={`font-mono text-[13px] font-bold leading-none lg:text-xl ${style.text}`}>{bin.in_unit}</span>
+                <span className={`mt-0.5 truncate font-mono text-[7px] leading-none lg:text-[10px] lg:uppercase ${style.text}`}>{bin.unit.name.slice(0, 4).toLowerCase()}</span>
             </div>
-            <span className="truncate pl-1 text-center font-mono text-[7.5px] font-semibold leading-none text-on-surface">{bin.short}</span>
+            <div className="flex items-center justify-between pl-1 lg:border-t lg:border-outline-variant/50 lg:pt-1">
+                <span className="min-w-0 flex-1 truncate text-center font-mono text-[7.5px] font-semibold leading-none text-on-surface lg:text-left lg:font-sans lg:text-[11px]">{bin.short}</span>
+                <span className={`hidden pl-1 text-[9px] font-bold uppercase lg:block ${style.text}`}>{style.label}</span>
+            </div>
         </button>
     );
 }

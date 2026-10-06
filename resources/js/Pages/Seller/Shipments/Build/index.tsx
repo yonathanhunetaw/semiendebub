@@ -3,9 +3,14 @@ import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, router } from "@inertiajs/react";
 import PartyDetailModal from "@/Components/Seller/PartyDetailModal";
 import RefillSuggestionsPanel from "@/Components/Seller/Shipments/RefillSuggestionsPanel";
+import HandoffPanel from "@/Components/Shipment/HandoffPanel";
+import type { ShipmentHandoff } from "@/types/shipment";
 import type { ReplenishmentPanel } from "@/types/refills";
 import type {
     CourierInfo,
+    CourierOption,
+    FleetChoice,
+    FleetVehicle,
     Location,
     LocationOption,
     ManifestItem,
@@ -55,6 +60,44 @@ interface Props extends PartyGateProps {
     can_edit_manifest: boolean;
     /** Refill requests this run could take (RefillBoard::manifestPanel). */
     replenishment?: ReplenishmentPanel;
+    /** The car and the drivers the run is offered to. */
+    fleet?: FleetChoice;
+    /** Cars from the admin Fleet list. */
+    vehicle_options?: FleetVehicle[];
+    /** The pick → prepare → driver → receiver process once scheduled. */
+    handoff?: ShipmentHandoff;
+    /** Drivers the run can be offered to. */
+    courier_options?: CourierOption[];
+}
+
+/** The four steps of building a run, each its own screen. */
+type BuildStep = "corridor" | "fleet" | "load" | "manifest";
+
+const BUILD_STEPS: { key: BuildStep; label: string; icon: string }[] = [
+    { key: "corridor", label: "Corridor", icon: "route" },
+    { key: "fleet",    label: "Fleet",    icon: "local_shipping" },
+    { key: "load",     label: "Load",     icon: "view_in_ar" },
+    { key: "manifest", label: "Manifest", icon: "inventory_2" },
+];
+
+/** The step a seller was on survives the page reloading after each save. */
+const stepKey = (id: number) => `shipment-build-step-${id}`;
+
+function readStep(id: number): BuildStep {
+    try {
+        const saved = window.sessionStorage.getItem(stepKey(id));
+        return BUILD_STEPS.some(s => s.key === saved) ? (saved as BuildStep) : "corridor";
+    } catch {
+        return "corridor";
+    }
+}
+
+function writeStep(id: number, step: BuildStep): void {
+    try {
+        window.sessionStorage.setItem(stepKey(id), step);
+    } catch {
+        // Storage blocked: the step just resets on reload.
+    }
 }
 
 /** Packaging units the Add Items sheet offers. */
@@ -417,12 +460,23 @@ export default function SellerShipmentsIndex({
     distance_km, scheduled_run, cutoff_label, vehicles, manifest_items: items,
     variants, move_targets, courier, can_edit_manifest,
     replenishment = { suggestions: [], can_add: false, manifest_open: false },
+    fleet = { vehicle_id: null, eligible_courier_ids: [], eligible_couriers: [] },
+    vehicle_options = [], courier_options = [], handoff,
     agreements, schedule_options, agreed_scheduled_for,
     outstanding_parties, actionable_parties, workflow_status,
 }: Props) {
-    const [selectedVehicle, setSelectedVehicle] = useState(
-        vehicles.find(v => v.is_primary)?.id ?? vehicles[0]?.id
-    );
+    const [step, setStepState] = useState<BuildStep>(() => readStep(transfer_id));
+    const setStep = (next: BuildStep) => {
+        setStepState(next);
+        writeStep(transfer_id, next);
+    };
+    const stepIndex = BUILD_STEPS.findIndex(s => s.key === step);
+
+    // The car from the Fleet list, and the drivers the run is offered to.
+    const [vehicleId, setVehicleId] = useState<number | null>(fleet.vehicle_id);
+    const [courierIds, setCourierIds] = useState<number[]>(fleet.eligible_courier_ids);
+    const toggleCourier = (id: number) =>
+        setCourierIds(ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]));
     const [scheduleInput, setScheduleInput] = useState(scheduled_run);
 
     /**
@@ -442,9 +496,10 @@ export default function SellerShipmentsIndex({
     const [activePartyModal, setActivePartyModal] = useState<PartyKey | null>(null);
     const [busy, setBusy] = useState<null | "route" | "items" | "move" | "remove" | "agree" | "save">(null);
 
-    const activeVehicle  = vehicles.find(v => v.id === selectedVehicle);
-    const maxCbm         = activeVehicle?.max_cbm  ?? 14.5;
-    const maxKg          = activeVehicle?.payload_kg ?? 4200;
+    // The picked car's capacity; before one is picked, whatever the run carries.
+    const activeVehicle  = vehicle_options.find(v => v.id === vehicleId) ?? null;
+    const maxCbm         = activeVehicle?.max_cbm || vehicles[0]?.max_cbm || 14.5;
+    const maxKg          = activeVehicle?.payload_kg || vehicles[0]?.payload_kg || 4200;
     const totalCbm       = items.reduce((s, i) => s + i.cbm       * ((quantities[i.id] ?? 0) / i.quantity), 0);
     const totalKg        = items.reduce((s, i) => s + (i.weight_kg ?? 0) * ((quantities[i.id] ?? 0) / i.quantity), 0);
     const cbmPercent     = Math.min(Math.round((totalCbm / maxCbm) * 100), 100);
@@ -519,19 +574,22 @@ export default function SellerShipmentsIndex({
         );
     };
 
+    /**
+     * Save everything the creator decides: times, car, drivers and quantities.
+     * There is no review step after this — once the driver and both docks
+     * accept the same window the run is scheduled on its own.
+     */
     const handleSaveManifest = () => {
-        const vehicle = vehicles.find(v => v.id === selectedVehicle);
         setBusy("save");
         router.post(
             route("seller.shipments.manifest.save", transfer_id),
             {
                 quantities,
-                vehicle_name: vehicle?.name,
-                vehicle_plate: vehicle?.plate,
-                vehicle_max_cbm: vehicle?.max_cbm,
                 scheduled_run: scheduleInput,
+                vehicle_id: vehicleId,
+                courier_ids: courierIds,
             },
-            { onFinish: done },
+            { preserveScroll: true, onFinish: done },
         );
     };
 
@@ -567,7 +625,7 @@ export default function SellerShipmentsIndex({
                     <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
                     <div className="min-w-0">
                         <p className="text-[10px] font-bold text-outline uppercase tracking-wider truncate">{reference}</p>
-                        <p className="text-[15px] font-bold text-on-surface leading-tight">Phase 1 of 3 — Manifest</p>
+                        <p className="text-[15px] font-bold text-on-surface leading-tight">Build shipment</p>
                     </div>
                 </div>
                 <span className={`text-[9px] font-bold uppercase tracking-wide px-2 py-1 rounded-full shrink-0 ${
@@ -580,178 +638,102 @@ export default function SellerShipmentsIndex({
             {/* Content Container (lots of bottom padding to clear the double action bars) */}
             <div className="px-3.5 pt-3 pb-52 space-y-3">
 
-                {/* ── Phase Stepper ── */}
-                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-3">
-                    <div className="flex items-center">
-                        {[
-                            { n: 1, label: "Manifest", sub: "Active"  },
-                            { n: 2, label: "Review",   sub: "Pending" },
-                            { n: 3, label: "Dispatch", sub: "Pending" },
-                        ].map((step, i) => (
-                            <React.Fragment key={step.n}>
-                                <div className="flex items-center gap-1.5">
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${step.n === 1 ? "bg-primary text-on-primary" : "bg-surface-container text-outline"}`}>
-                                        {step.n}
-                                    </div>
-                                    <div>
-                                        <p className={`text-[11px] font-bold leading-none ${step.n === 1 ? "text-primary" : "text-outline"}`}>{step.label}</p>
-                                        <p className={`text-[9px] leading-none mt-0.5 ${step.n === 1 ? "text-primary/70" : "text-outline"}`}>{step.sub}</p>
-                                    </div>
-                                </div>
-                                {i < 2 && <div className="flex-1 h-0.5 mx-2 bg-surface-container" />}
-                            </React.Fragment>
-                        ))}
-                    </div>
-                </div>
+                {/* ── Hand-off: once all four agree, everything after happens here ── */}
+                {handoff && !["draft", "pending_agreement", "cancelled"].includes(workflow_status) && (
+                    <HandoffPanel
+                        shipmentId={transfer_id}
+                        reference={reference}
+                        handoff={handoff}
+                        lines={items.map(i => ({
+                            variant_id: i.id,
+                            name: i.name,
+                            sku: i.sku,
+                            quantity: i.quantity,
+                            picked_quantity: i.picked_quantity ?? 0,
+                            unit: i.unit,
+                        }))}
+                        stepRoute="seller.shipments.step"
+                        originName={origin.name}
+                        destinationName={destination.name}
+                    />
+                )}
 
-                {/* ── Route Matrix Card ── */}
-                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider">Replenishment Corridor</p>
-                        <div className="flex items-center gap-1.5">
-                            <span className="px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container text-[10px] font-bold">WH → Retail</span>
-                            <button onClick={() => setEditRouteOpen(true)}
-                                className="w-7 h-7 rounded-lg bg-surface-container-low border border-outline-variant/60 flex items-center justify-center">
-                                <span className="material-symbols-outlined text-[14px] text-on-surface-variant">edit</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 bg-surface-container-low rounded-xl p-3 mb-3">
-                        <div className="flex-1 min-w-0">
-                            <p className="text-[9px] font-bold text-outline uppercase flex items-center gap-1 mb-0.5">
-                                <span className="material-symbols-outlined text-[11px]">warehouse</span> Origin
-                            </p>
-                            <p className="text-[13px] font-bold text-on-surface truncate">{origin.name}</p>
-                            <p className="text-[10px] text-outline truncate">{origin.detail}</p>
-                        </div>
-                        <div className="flex flex-col items-center shrink-0">
-                            <span className="material-symbols-outlined text-primary text-[18px]">arrow_forward</span>
-                            <span className="text-[9px] text-outline">{distance_km} km</span>
-                        </div>
-                        <div className="flex-1 min-w-0 text-right">
-                            <p className="text-[9px] font-bold text-outline uppercase flex items-center justify-end gap-1 mb-0.5">
-                                Target <span className="material-symbols-outlined text-[11px]">storefront</span>
-                            </p>
-                            <p className="text-[13px] font-bold text-on-surface truncate">{destination.name}</p>
-                            <p className="text-[10px] text-outline truncate">{destination.detail}</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center justify-between bg-surface-container-low rounded-xl p-3 mb-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-                                <span className="material-symbols-outlined text-on-primary text-[16px]">schedule</span>
-                            </div>
+                {/* ── 4-Party Agreement Gate: centre stage ── */}
+                <div className="bg-surface-container-lowest rounded-3xl border border-outline-variant/60 shadow-md overflow-hidden">
+                    <div className={`px-4 pt-4 pb-3 ${outstanding_parties.length === 0 ? "bg-success-container/40" : "bg-primary-container/30"}`}>
+                        <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
-                                <p className="text-[9px] text-outline mb-0.5">Scheduled Time</p>
-                                <input type="datetime-local" value={scheduleInput}
-                                    onChange={e => setScheduleInput(e.target.value)}
-                                    className="text-[13px] font-bold text-on-surface bg-transparent border-none outline-none w-full" />
+                                <p className="text-[10px] font-bold text-outline uppercase tracking-wider">Agreement Gate</p>
+                                <p className="text-[17px] font-bold text-on-surface leading-tight">
+                                    {outstanding_parties.length === 0
+                                        ? "Everyone agreed — scheduled"
+                                        : `Waiting on ${outstanding_parties.length} of 4`}
+                                </p>
+                                <p className="text-[11px] text-on-surface-variant mt-0.5">
+                                    {agreed_scheduled_for
+                                        ? `Agreed window ${agreed_scheduled_for.replace("T", " • ")}`
+                                        : "Driver, origin and destination each pick one of your windows."}
+                                </p>
+                            </div>
+                            {/* Progress ring */}
+                            <div className="relative w-14 h-14 shrink-0">
+                                <svg viewBox="0 0 36 36" className="w-14 h-14 -rotate-90">
+                                    <circle cx="18" cy="18" r="15.5" fill="none" strokeWidth="4" className="stroke-surface-container-high" />
+                                    <circle cx="18" cy="18" r="15.5" fill="none" strokeWidth="4" strokeLinecap="round"
+                                        className={outstanding_parties.length === 0 ? "stroke-success" : "stroke-primary"}
+                                        strokeDasharray={`${((4 - outstanding_parties.length) / 4) * 97.4} 97.4`} />
+                                </svg>
+                                <span className="absolute inset-0 flex items-center justify-center text-[13px] font-bold text-on-surface">
+                                    {4 - outstanding_parties.length}/4
+                                </span>
                             </div>
                         </div>
-                        <span className="px-2 py-0.5 rounded-full bg-warning-container text-on-warning-container text-[10px] font-bold shrink-0">{cutoff_label}</span>
                     </div>
 
-                    {/* The windows actually on the table. These are the slots the
-                        other three parties are choosing from, so they come from
-                        the record rather than from four fixed October dates. */}
-                    {schedule_options.length > 0 && (
-                        <div className="p-2.5 rounded-xl bg-surface-container-low border border-outline-variant/60 mb-3 space-y-1.5">
-                            <div className="flex items-center justify-between">
-                                <p className="text-[10px] font-bold text-on-surface-variant">Proposed Time Windows:</p>
-                                <span className="text-[9px] text-primary font-semibold">Multi-Party Agreement</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1.5">
-                                {schedule_options.map((slotOpt, idx) => {
-                                    const isCurrent = slotOpt === scheduleInput;
-                                    return (
-                                        <button
-                                            key={slotOpt}
-                                            type="button"
-                                            onClick={() => setScheduleInput(slotOpt)}
-                                            className={`p-1.5 rounded-lg text-left text-[10px] font-mono active:scale-95 transition-all border ${
-                                                isCurrent
-                                                    ? "bg-primary-container/60 border-primary text-primary"
-                                                    : "bg-surface-container-lowest border-outline-variant/80 text-on-surface-variant hover:border-primary hover:text-primary"
-                                            }`}
-                                        >
-                                            <span className="text-[8px] font-bold uppercase text-outline block">
-                                                {slotOpt === agreed_scheduled_for ? "Agreed" : `Window ${idx + 1}`}
-                                            </span>
-                                            {slotOpt.replace("T", " • ")}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="p-2.5 rounded-xl bg-info-container/35 flex items-start gap-1.5">
-                        <span className="material-symbols-outlined text-[15px] text-info shrink-0 mt-0.5">info</span>
-                        <p className="text-[11px] text-on-surface-variant leading-snug">
-                            <strong className="text-on-surface-variant">Agreement Protocol:</strong> Picking cannot start until the
-                            fleet, the origin dock and the receiving dock all accept the same window.
-                        </p>
-                    </div>
-                </div>
-
-                {/* ── 4-Party Inbound Agreement Gate ── */}
-                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <div>
-                            <p className="text-[13px] font-bold text-on-surface">4-Party Inbound Agreement Gate</p>
-                            <p className="text-[10px] text-outline">
-                                {outstanding_parties.length === 0
-                                    ? "All parties agreed"
-                                    : `Awaiting ${outstanding_parties.length} of 4 — tap a party for detail`}
-                            </p>
-                        </div>
-                        <span className="text-[10px] font-bold text-primary bg-primary-container/60 px-2 py-0.5 rounded-full border border-primary/15">
-                            {4 - outstanding_parties.length}/4 AGREED
-                        </span>
-                    </div>
-                    {/* Each tile reflects a stance recorded by whichever role owns
-                        it — delivery for fleet, the stock keepers for the two
-                        docks — rather than a guess from this screen's own state. */}
-                    <div className="grid grid-cols-4 gap-1.5 text-center">
+                    {/* Each party: its stance, and who works that end. Origin and
+                        destination keepers are set per location on the admin
+                        Locations page; the drivers come from the Fleet step. */}
+                    <div className="divide-y divide-outline-variant/50">
                         {([
-                            { key: "creator" as PartyKey,     label: "1. Creator", icon: "person" },
-                            { key: "fleet" as PartyKey,       label: "2. Fleet",   icon: "local_shipping" },
-                            { key: "origin" as PartyKey,      label: "3. Origin",  icon: "warehouse" },
-                            { key: "destination" as PartyKey, label: "4. Dest.",   icon: "storefront" },
-                        ]).map(({ key, label, icon }) => ({
-                            key, label, icon,
-                            sub: agreements[key].role,
-                            agreed: hasAgreed(key),
-                        })).map((p, idx) => {
-                            const color = p.agreed ? "bg-success-container text-on-success-container border-success/30" : "bg-surface-container-low text-outline border-outline-variant";
+                            { key: "creator" as PartyKey,     icon: "person",         title: "Creator" },
+                            { key: "fleet" as PartyKey,       icon: "local_shipping", title: "Driver" },
+                            { key: "origin" as PartyKey,      icon: "warehouse",      title: "Origin dock" },
+                            { key: "destination" as PartyKey, icon: "storefront",     title: "Destination dock" },
+                        ]).map(({ key, icon, title }) => {
+                            const a = agreements[key];
+                            const agreed = hasAgreed(key);
+                            const people = a.people ?? [];
                             return (
-                            <button
-                                key={idx}
-                                type="button"
-                                onClick={() => setActivePartyModal(p.key)}
-                                className={`flex flex-col items-center p-1.5 rounded-xl border text-center transition-all cursor-pointer hover:shadow-xs active:scale-95 ${
-                                    p.agreed ? 'border-success/20 bg-success-container/30 hover:bg-success-container/60' : 'border-outline-variant/60 bg-surface-container-low hover:bg-surface-container'
-                                }`}
-                            >
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center mb-1 border ${color}`}>
-                                    <span className="material-symbols-outlined text-[12px]">{p.icon}</span>
-                                </div>
-                                <span className={`text-[8px] font-bold leading-tight w-full truncate ${p.agreed ? 'text-on-success-container' : 'text-on-surface-variant'}`}>{p.label}</span>
-                                <span className="text-[7px] text-outline leading-tight w-full truncate">{p.sub}</span>
-                                <div className="mt-1 flex items-center justify-center w-full">
-                                    {p.agreed 
-                                        ? <span className="material-symbols-outlined text-[12px] text-success">check_circle</span> 
-                                        : <span className="material-symbols-outlined text-[12px] text-outline">hourglass_empty</span>
-                                    }
-                                </div>
-                            </button>
-                        )})}
+                                <button key={key} type="button" onClick={() => setActivePartyModal(key)}
+                                    className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-surface-container-low transition-colors">
+                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${agreed ? "bg-success text-on-success" : "bg-surface-container text-on-surface-variant"}`}>
+                                        <span className="material-symbols-outlined text-[20px]">{agreed ? "check" : icon}</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <p className="text-[13px] font-bold text-on-surface truncate">{title} · <span className="font-semibold text-on-surface-variant">{a.party}</span></p>
+                                            <span className={`text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0 ${agreed ? "bg-success-container text-on-success-container" : "bg-warning-container text-on-warning-container"}`}>
+                                                {a.status_label}
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] text-outline truncate">{a.detail}</p>
+                                        {key !== "creator" && (
+                                            <p className="text-[10px] text-on-surface-variant mt-1 truncate">
+                                                <span className="material-symbols-outlined text-[11px] align-[-2px] mr-0.5">group</span>
+                                                {people.length > 0
+                                                    ? people.map(p => `${p.name} (${p.as})`).join(", ")
+                                                    : key === "fleet"
+                                                        ? "Open to every driver — pick drivers on the Fleet step"
+                                                        : "No one assigned — any stock keeper for this store can act. Assign on Inventory → Locations."}
+                                            </p>
+                                        )}
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* ── Party Detail Modal Window (Opens on click for each party) ── */}
                 <PartyDetailModal
                     open={activePartyModal !== null}
                     activeParty={activePartyModal ?? "creator"}
@@ -768,285 +750,436 @@ export default function SellerShipmentsIndex({
                     agreements={agreements}
                 />
 
-                {/* ── Vehicle & Driver Selection ── */}
-                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-primary text-[18px]">local_shipping</span>
-                            <p className="text-[13px] font-bold text-on-surface">Dedicated Fleet Carrier</p>
-                        </div>
-                        <span className="text-[10px] font-semibold text-outline">{vehicles.length} Available</span>
-                    </div>
-                    
-                    <div className="space-y-2 mb-3">
-                        {vehicles.map(v => {
-                            const sel = selectedVehicle === v.id;
-                            return (
-                                <div key={v.id} onClick={() => setSelectedVehicle(v.id)}
-                                    className={`relative p-3 rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${sel ? "border-primary bg-primary-container/20" : "border-outline-variant/60 bg-surface-container-low opacity-70"}`}>
-                                    {sel && <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />}
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${sel ? "bg-primary" : "bg-surface-container-high"}`}>
-                                                <span className={`material-symbols-outlined text-[20px] ${sel ? "text-on-primary" : "text-on-surface-variant"}`}>
-                                                    {v.icon === "directions_car" ? "directions_car" : "local_shipping"}
-                                                </span>
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className="text-[13px] font-bold text-on-surface truncate">{v.name}</p>
-                                                <p className="text-[10px] font-mono text-outline">Plate: {v.plate}</p>
-                                                <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                                                    <span className="px-1.5 py-0.5 rounded border border-outline-variant text-[9px] text-on-surface-variant">{v.max_cbm} CBM</span>
-                                                    <span className="px-1.5 py-0.5 rounded border border-outline-variant text-[9px] text-on-surface-variant">{v.payload_kg.toLocaleString()} kg</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${sel ? "bg-primary" : "bg-surface-container-high"}`}>
-                                            <span className={`material-symbols-outlined text-[13px] ${sel ? "text-on-primary" : "text-outline"}`}>
-                                                {sel ? "check" : "add"}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    {sel && v.bay && (
-                                        <div className="mt-2 px-3 py-1.5 bg-surface-container-lowest rounded-lg flex items-center justify-between border border-outline-variant/60">
-                                            <span className="text-[10px] text-outline">Bay Status</span>
-                                            <div className="flex items-center gap-1">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                                                <span className="text-[10px] font-mono font-bold text-primary">{v.bay} RESERVED</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
+                {/* ── Build steps: each part of the run is its own screen ── */}
+                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-1.5 grid grid-cols-4 gap-1">
+                    {BUILD_STEPS.map((st, i) => {
+                        const active = st.key === step;
+                        return (
+                            <button
+                                key={st.key}
+                                type="button"
+                                onClick={() => setStep(st.key)}
+                                className={`flex flex-col items-center gap-0.5 py-2 rounded-xl transition-colors ${
+                                    active ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-low"
+                                }`}
+                            >
+                                <span className="material-symbols-outlined text-[16px]">{st.icon}</span>
+                                <span className="text-[10px] font-bold leading-none">{i + 1}. {st.label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
 
-                    {/*
-                      Driver assignment is the delivery role's to make, not the
-                      seller's: a run goes on the courier board and the driver who
-                      accepts a window takes it. This used to be a picker over two
-                      invented drivers that wrote to nothing.
-                    */}
-                    <div className="mt-4 pt-3 border-t border-outline-variant/60">
-                        <label className="text-[10px] font-bold text-outline uppercase tracking-wide mb-2 block">Driver</label>
-                        {courier ? (
-                            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-success-container/35 border border-success/20">
-                                <div className="w-9 h-9 rounded-xl bg-success flex items-center justify-center shrink-0">
-                                    <span className="material-symbols-outlined text-on-success text-[18px]">person</span>
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-[12px] font-bold text-on-surface truncate">{courier.name}</p>
-                                    <p className="text-[10px] font-mono text-on-surface-variant">{courier.phone || "No number on file"}</p>
-                                </div>
-                                <span className="text-[9px] font-bold uppercase tracking-wide text-success shrink-0">
-                                    {agreements.fleet.status_label}
-                                </span>
+                {step === "corridor" && (
+                    <>
+                    {/* ── Route Matrix Card ── */}
+                    <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="text-[10px] font-bold text-outline uppercase tracking-wider">Replenishment Corridor</p>
+                            <div className="flex items-center gap-1.5">
+                                <span className="px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container text-[10px] font-bold">WH → Retail</span>
+                                <button onClick={() => setEditRouteOpen(true)}
+                                    className="w-7 h-7 rounded-lg bg-surface-container-low border border-outline-variant/60 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-[14px] text-on-surface-variant">edit</span>
+                                </button>
                             </div>
-                        ) : (
-                            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-surface-container-low border border-outline-variant/60">
-                                <div className="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center shrink-0">
-                                    <span className="material-symbols-outlined text-on-surface-variant text-[18px]">person_search</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-surface-container-low rounded-xl p-3 mb-3">
+                            <div className="flex-1 min-w-0">
+                                <p className="text-[9px] font-bold text-outline uppercase flex items-center gap-1 mb-0.5">
+                                    <span className="material-symbols-outlined text-[11px]">warehouse</span> Origin
+                                </p>
+                                <p className="text-[13px] font-bold text-on-surface truncate">{origin.name}</p>
+                                <p className="text-[10px] text-outline truncate">{origin.detail}</p>
+                            </div>
+                            <div className="flex flex-col items-center shrink-0">
+                                <span className="material-symbols-outlined text-primary text-[18px]">arrow_forward</span>
+                                <span className="text-[9px] text-outline">{distance_km} km</span>
+                            </div>
+                            <div className="flex-1 min-w-0 text-right">
+                                <p className="text-[9px] font-bold text-outline uppercase flex items-center justify-end gap-1 mb-0.5">
+                                    Target <span className="material-symbols-outlined text-[11px]">storefront</span>
+                                </p>
+                                <p className="text-[13px] font-bold text-on-surface truncate">{destination.name}</p>
+                                <p className="text-[10px] text-outline truncate">{destination.detail}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between bg-surface-container-low rounded-xl p-3 mb-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
+                                    <span className="material-symbols-outlined text-on-primary text-[16px]">schedule</span>
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="text-[12px] font-bold text-on-surface-variant">On the courier board</p>
-                                    <p className="text-[10px] text-outline">The driver who accepts a window takes the run.</p>
+                                    <p className="text-[9px] text-outline mb-0.5">Scheduled Time</p>
+                                    <input type="datetime-local" value={scheduleInput}
+                                        onChange={e => setScheduleInput(e.target.value)}
+                                        className="text-[13px] font-bold text-on-surface bg-transparent border-none outline-none w-full" />
+                                </div>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full bg-warning-container text-on-warning-container text-[10px] font-bold shrink-0">{cutoff_label}</span>
+                        </div>
+
+                        {/* The windows actually on the table. These are the slots the
+                            other three parties are choosing from, so they come from
+                            the record rather than from four fixed October dates. */}
+                        {schedule_options.length > 0 && (
+                            <div className="p-2.5 rounded-xl bg-surface-container-low border border-outline-variant/60 mb-3 space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-[10px] font-bold text-on-surface-variant">Proposed Time Windows:</p>
+                                    <span className="text-[9px] text-primary font-semibold">Multi-Party Agreement</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                    {schedule_options.map((slotOpt, idx) => {
+                                        const isCurrent = slotOpt === scheduleInput;
+                                        return (
+                                            <button
+                                                key={slotOpt}
+                                                type="button"
+                                                onClick={() => setScheduleInput(slotOpt)}
+                                                className={`p-1.5 rounded-lg text-left text-[10px] font-mono active:scale-95 transition-all border ${
+                                                    isCurrent
+                                                        ? "bg-primary-container/60 border-primary text-primary"
+                                                        : "bg-surface-container-lowest border-outline-variant/80 text-on-surface-variant hover:border-primary hover:text-primary"
+                                                }`}
+                                            >
+                                                <span className="text-[8px] font-bold uppercase text-outline block">
+                                                    {slotOpt === agreed_scheduled_for ? "Agreed" : `Window ${idx + 1}`}
+                                                </span>
+                                                {slotOpt.replace("T", " • ")}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
-                    </div>
-                </div>
 
-                {/* ── Volumetric Load Telemetry ── */}
-                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-primary text-[18px]">view_in_ar</span>
-                            <p className="text-[13px] font-bold text-on-surface">Volumetric Load Telemetry</p>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${loadCls}`}>{loadLabel} ({cbmPercent}%)</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <CbmGauge percent={cbmPercent} />
-                        <div className="flex-1 min-w-0 space-y-3">
-                            <div>
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[11px] font-semibold text-on-surface-variant">Volume</span>
-                                    <span className="text-[11px] font-bold font-mono text-on-surface">{totalCbm.toFixed(1)} / {maxCbm} m³</span>
-                                </div>
-                                <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full transition-all ${cbmPercent > 85 ? "bg-error" : "bg-primary"}`}
-                                        style={{ width: `${cbmPercent}%` }} />
-                                </div>
-                                <p className="text-[10px] font-bold text-primary mt-0.5">{(maxCbm - totalCbm).toFixed(1)} CBM Remaining</p>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[11px] font-semibold text-on-surface-variant">Mass</span>
-                                    <span className="text-[11px] font-bold font-mono text-on-surface">{Math.round(totalKg).toLocaleString()} / {maxKg.toLocaleString()} kg</span>
-                                </div>
-                                <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full transition-all ${kgPercent > 90 ? "bg-error" : "bg-outline"}`}
-                                        style={{ width: `${kgPercent}%` }} />
-                                </div>
-                            </div>
+                        <div className="p-2.5 rounded-xl bg-info-container/35 flex items-start gap-1.5">
+                            <span className="material-symbols-outlined text-[15px] text-info shrink-0 mt-0.5">info</span>
+                            <p className="text-[11px] text-on-surface-variant leading-snug">
+                                <strong className="text-on-surface-variant">Agreement Protocol:</strong> Once the driver, the origin dock
+                                and the receiving dock accept the same window, the run is scheduled — there is no review step.
+                                The origin hands the load to the driver at that time.
+                            </p>
                         </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-outline-variant/60 grid grid-cols-3 text-center gap-2">
-                        {[
-                            { label: "SKUs",      value: items.length },
-                            { label: "Cartons",   value: totalCartons },
-                            { label: "Pallet Eq", value: (totalCbm / 2.07).toFixed(1) },
-                        ].map(s => (
-                            <div key={s.label}>
-                                <p className="text-[9px] font-bold text-outline uppercase tracking-wide">{s.label}</p>
-                                <p className="text-[17px] font-bold text-on-surface">{s.value}</p>
+
+
+
+                    </>
+                )}
+
+                {step === "fleet" && (
+                    <>
+                    {/* ── Dedicated Fleet: the car, and the drivers it is offered to ── */}
+                    <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-primary text-[18px]">local_shipping</span>
+                                <p className="text-[13px] font-bold text-on-surface">Dedicated Fleet Carrier</p>
                             </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* ── Requested refills: picked onto the manifest below ── */}
-                <RefillSuggestionsPanel shipmentId={transfer_id} panel={replenishment} />
-
-                {/* ── Replenishment Manifest ── */}
-                <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
-                    <div className="flex items-center justify-between mb-2">
-                        <div>
-                            <p className="text-[13px] font-bold text-on-surface">Replenishment Manifest</p>
-                            <p className="text-[10px] text-outline">Calculated from inventory velocity</p>
+                            <span className="text-[10px] font-semibold text-outline">{vehicle_options.length} in fleet</span>
                         </div>
-                        <button onClick={() => setAddItemsOpen(true)} disabled={!can_edit_manifest}
-                            title={can_edit_manifest ? undefined : "The manifest is locked once picking has started"}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-[12px] font-bold active:scale-95 transition-transform shrink-0 disabled:opacity-40">
-                            <span className="material-symbols-outlined text-[14px]">add</span>
-                            Add Items
-                        </button>
-                    </div>
 
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-1">
-                            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-error/30 text-on-error-container text-[11px] font-semibold bg-error-container/60">
-                                <span className="material-symbols-outlined text-[13px]">priority_high</span>
-                                Priority: OOS First
-                            </div>
-                            <button onClick={() => alert("OOS (Out of Stock) items are given highest priority for replenishment runs to prevent lost sales.")} 
-                                className="w-6 h-6 rounded-full flex items-center justify-center bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors">
-                                <span className="material-symbols-outlined text-[13px]">info</span>
-                            </button>
-                        </div>
-                        <button onClick={() => setQuantities(Object.fromEntries(items.map(i => [i.id, i.quantity])))}
-                            className="flex items-center gap-1 text-error text-[11px] font-medium">
-                            <span className="material-symbols-outlined text-[13px]">delete_sweep</span>
-                            Reset
-                        </button>
-                    </div>
-
-                    <div className="space-y-2.5">
-                        {items.length === 0 && (
-                            <div className="py-8 text-center bg-surface-container-low rounded-xl border border-outline-variant/60">
-                                <span className="material-symbols-outlined text-outline text-[32px]">inventory_2</span>
-                                <p className="text-[13px] font-bold text-on-surface mt-1">Manifest is empty</p>
-                                <p className="text-[11px] text-outline mt-0.5">Add at least one line before this run can be scheduled.</p>
-                            </div>
-                        )}
-                        {items.map(item => (
-                            <div key={item.id} className="p-3 rounded-xl border border-outline-variant/60 bg-surface-container-low/50">
-                                <div className="flex items-start justify-between gap-3 mb-2">
-                                    <div className="flex items-start gap-2 min-w-0">
-                                        <div className={`w-9 h-9 mt-0.5 rounded-xl flex items-center justify-center shrink-0 ${item.status === "oos" ? "bg-error-container" : item.status === "low" ? "bg-warning-container" : item.status === "sold" ? "bg-info-container" : "bg-surface-container"}`}>
-                                            <ItemIcon icon={item.icon} />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="text-[12px] font-bold text-on-surface truncate">{item.name}</p>
-                                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                                <span className="text-[10px] font-mono text-outline">{item.sku}</span>
-                                                <StatusBadge status={item.status}
-                                                    label={item.status === "oos"
-                                                        ? `${item.status_label} (0)`
-                                                        : item.status === "sold" 
-                                                        ? item.status_label
-                                                        : `${item.status_label} (${item.stock_qty})`
-                                                    }
-                                                />
-                                                {/*
-                                                  A run has one destination, so a line
-                                                  cannot be sent somewhere else on it.
-                                                  Splitting a load across two facilities
-                                                  means two runs — the swap button below
-                                                  moves a line onto the other one.
-                                                */}
-                                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-info-container/60 text-on-info-container border-info/30 flex items-center gap-0.5">
-                                                    <span className="material-symbols-outlined text-[10px]">storefront</span>
-                                                    To: {destination.name}
+                        <div className="space-y-2 mb-3">
+                            {vehicle_options.length === 0 && (
+                                <div className="p-3 rounded-xl bg-surface-container-low border border-outline-variant/60 text-[11px] text-outline">
+                                    No cars in the fleet yet. An admin adds them under Inventory → Fleet.
+                                </div>
+                            )}
+                            {vehicle_options.map(v => {
+                                const sel = vehicleId === v.id;
+                                return (
+                                    <button key={v.id} type="button" disabled={!can_edit_manifest}
+                                        onClick={() => setVehicleId(sel ? null : v.id)}
+                                        className={`relative w-full text-left p-3 rounded-xl border-2 transition-all overflow-hidden disabled:cursor-not-allowed ${sel ? "border-primary bg-primary-container/20" : "border-outline-variant/60 bg-surface-container-low"}`}>
+                                        {sel && <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />}
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${sel ? "bg-primary" : "bg-surface-container-high"}`}>
+                                                    <span className={`material-symbols-outlined text-[20px] ${sel ? "text-on-primary" : "text-on-surface-variant"}`}>local_shipping</span>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-[13px] font-bold text-on-surface truncate">{v.name}</p>
+                                                    <p className="text-[10px] font-mono text-outline">Plate: {v.plate}</p>
+                                                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                                        <span className="px-1.5 py-0.5 rounded border border-outline-variant text-[9px] text-on-surface-variant">{v.max_cbm} CBM</span>
+                                                        {v.payload_kg > 0 && (
+                                                            <span className="px-1.5 py-0.5 rounded border border-outline-variant text-[9px] text-on-surface-variant">{v.payload_kg.toLocaleString()} kg</span>
+                                                        )}
+                                                        {v.status !== "active" && (
+                                                            <span className="px-1.5 py-0.5 rounded border border-outline-variant text-[9px] text-outline">Retired</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${sel ? "bg-primary" : "bg-surface-container-high"}`}>
+                                                <span className={`material-symbols-outlined text-[13px] ${sel ? "text-on-primary" : "text-outline"}`}>
+                                                    {sel ? "check" : "add"}
                                                 </span>
                                             </div>
-                                            {/* Who added it / reason row */}
-                                            {item.added_by && (
-                                                <div className="flex items-center gap-1 bg-surface-container/80 px-2 py-1 rounded mt-1.5 w-fit border border-outline-variant/50">
-                                                    <span className={`material-symbols-outlined text-[11px] ${item.added_by.type === 'auto' ? 'text-info' : 'text-success'}`}>
-                                                        {item.added_by.type === 'auto' ? 'smart_toy' : 'person'}
-                                                    </span>
-                                                    <span className="text-[9px] text-on-surface-variant font-medium">
-                                                        {item.added_by.type === 'auto' ? 'Auto-added:' : `Added by ${item.added_by.name}:`} <span className="text-on-surface-variant">{item.added_by.reason}</span>
-                                                    </span>
-                                                </div>
-                                            )}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* The drivers this run is offered to. Only they see it in
+                            Delivery and may agree to a window; the first to accept
+                            takes the run. None picked offers it to every driver. */}
+                        <div className="mt-4 pt-3 border-t border-outline-variant/60">
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-[10px] font-bold text-outline uppercase tracking-wide">Drivers offered</label>
+                                <span className="text-[10px] text-outline">
+                                    {courierIds.length === 0 ? "Open to every driver" : `${courierIds.length} picked`}
+                                </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {courier_options.map(d => {
+                                    const on = courierIds.includes(d.id);
+                                    return (
+                                        <button key={d.id} type="button" disabled={!can_edit_manifest}
+                                            onClick={() => toggleCourier(d.id)}
+                                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition-colors disabled:opacity-50 ${
+                                                on ? "bg-primary text-on-primary border-primary" : "bg-surface-container-low text-on-surface-variant border-outline-variant"
+                                            }`}>
+                                            <span className="material-symbols-outlined text-[13px]">{on ? "check" : "person"}</span>
+                                            {d.name}
+                                        </button>
+                                    );
+                                })}
+                                {courier_options.length === 0 && (
+                                    <p className="text-[11px] text-outline">No delivery drivers on the system yet.</p>
+                                )}
+                            </div>
+
+                            <div className="mt-3">
+                                {courier ? (
+                                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-success-container/35 border border-success/20">
+                                        <div className="w-9 h-9 rounded-xl bg-success flex items-center justify-center shrink-0">
+                                            <span className="material-symbols-outlined text-on-success text-[18px]">person</span>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-[12px] font-bold text-on-surface truncate">{courier.name}</p>
+                                            <p className="text-[10px] font-mono text-on-surface-variant">{courier.phone || "No number on file"}</p>
+                                        </div>
+                                        <span className="text-[9px] font-bold uppercase tracking-wide text-success shrink-0">
+                                            {agreements.fleet.status_label}
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-surface-container-low border border-outline-variant/60">
+                                        <div className="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center shrink-0">
+                                            <span className="material-symbols-outlined text-on-surface-variant text-[18px]">person_search</span>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-[12px] font-bold text-on-surface-variant">Waiting for a driver</p>
+                                            <p className="text-[10px] text-outline">The first offered driver to accept a window takes the run.</p>
                                         </div>
                                     </div>
-                                    <div className="text-right shrink-0">
-                                        <p className="text-[13px] font-bold text-primary">{quantities[item.id]} {item.unit}</p>
-                                        <p className="text-[10px] font-mono text-outline">
-                                            {(item.cbm * (quantities[item.id] ?? 0) / item.quantity).toFixed(1)} CBM
-                                        </p>
-                                    </div>
-                                </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
 
-                                <div className="flex items-center justify-between bg-surface-container-lowest rounded-lg px-2.5 py-1.5 border border-outline-variant/60 mt-2">
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="material-symbols-outlined text-[13px] text-outline shrink-0">warehouse</span>
-                                        <span className="text-[11px] text-on-surface-variant truncate">{item.location}</span>
+                    </>
+                )}
+
+                {step === "load" && (
+                    <>
+                    {/* ── Volumetric Load Telemetry ── */}
+                    <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-primary text-[18px]">view_in_ar</span>
+                                <p className="text-[13px] font-bold text-on-surface">Volumetric Load Telemetry</p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${loadCls}`}>{loadLabel} ({cbmPercent}%)</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <CbmGauge percent={cbmPercent} />
+                            <div className="flex-1 min-w-0 space-y-3">
+                                <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-[11px] font-semibold text-on-surface-variant">Volume</span>
+                                        <span className="text-[11px] font-bold font-mono text-on-surface">{totalCbm.toFixed(1)} / {maxCbm} m³</span>
                                     </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        <button onClick={() => setMoveItem(item)} disabled={!can_edit_manifest}
-                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-surface-container disabled:opacity-30" title="Move line to another run">
-                                            <span className="material-symbols-outlined text-[13px] text-outline">swap_horiz</span>
-                                        </button>
-                                        <button onClick={() => handleRemoveItem(item.id)}
-                                            disabled={!can_edit_manifest || busy === "remove"}
-                                            className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-error-container/60 disabled:opacity-30" title="Remove line">
-                                            <span className="material-symbols-outlined text-[13px] text-error">delete_outline</span>
-                                        </button>
-                                        <button onClick={() => handleQty(item.id, -1)}
-                                            className="w-6 h-6 rounded-lg border border-outline-variant bg-surface-container-lowest flex items-center justify-center active:bg-surface-container">
-                                            <span className="material-symbols-outlined text-[13px] text-on-surface-variant">remove</span>
-                                        </button>
-                                        <span className="text-[13px] font-bold font-mono text-on-surface min-w-[22px] text-center">
-                                            {quantities[item.id]}
-                                        </span>
-                                        <button onClick={() => handleQty(item.id, 1)}
-                                            className="w-6 h-6 rounded-lg border border-outline-variant bg-surface-container-lowest flex items-center justify-center active:bg-surface-container">
-                                            <span className="material-symbols-outlined text-[13px] text-on-surface-variant">add</span>
-                                        </button>
+                                    <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full transition-all ${cbmPercent > 85 ? "bg-error" : "bg-primary"}`}
+                                            style={{ width: `${cbmPercent}%` }} />
+                                    </div>
+                                    <p className="text-[10px] font-bold text-primary mt-0.5">{(maxCbm - totalCbm).toFixed(1)} CBM Remaining</p>
+                                </div>
+                                <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-[11px] font-semibold text-on-surface-variant">Mass</span>
+                                        <span className="text-[11px] font-bold font-mono text-on-surface">{Math.round(totalKg).toLocaleString()} / {maxKg.toLocaleString()} kg</span>
+                                    </div>
+                                    <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full transition-all ${kgPercent > 90 ? "bg-error" : "bg-outline"}`}
+                                            style={{ width: `${kgPercent}%` }} />
                                     </div>
                                 </div>
                             </div>
-                        ))}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-outline-variant/60 grid grid-cols-3 text-center gap-2">
+                            {[
+                                { label: "SKUs",      value: items.length },
+                                { label: "Cartons",   value: totalCartons },
+                                { label: "Pallet Eq", value: (totalCbm / 2.07).toFixed(1) },
+                            ].map(s => (
+                                <div key={s.label}>
+                                    <p className="text-[9px] font-bold text-outline uppercase tracking-wide">{s.label}</p>
+                                    <p className="text-[17px] font-bold text-on-surface">{s.value}</p>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                </div>
+
+
+                    </>
+                )}
+
+                {step === "manifest" && (
+                    <>
+                    {/* ── Requested refills: picked onto the manifest below ── */}
+                    <RefillSuggestionsPanel shipmentId={transfer_id} panel={replenishment} />
+
+                    {/* ── Replenishment Manifest ── */}
+                    <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <div>
+                                <p className="text-[13px] font-bold text-on-surface">Replenishment Manifest</p>
+                                <p className="text-[10px] text-outline">Calculated from inventory velocity</p>
+                            </div>
+                            <button onClick={() => setAddItemsOpen(true)} disabled={!can_edit_manifest}
+                                title={can_edit_manifest ? undefined : "The manifest is locked once picking has started"}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-[12px] font-bold active:scale-95 transition-transform shrink-0 disabled:opacity-40">
+                                <span className="material-symbols-outlined text-[14px]">add</span>
+                                Add Items
+                            </button>
+                        </div>
+
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-error/30 text-on-error-container text-[11px] font-semibold bg-error-container/60">
+                                    <span className="material-symbols-outlined text-[13px]">priority_high</span>
+                                    Priority: OOS First
+                                </div>
+                                <button onClick={() => alert("OOS (Out of Stock) items are given highest priority for replenishment runs to prevent lost sales.")} 
+                                    className="w-6 h-6 rounded-full flex items-center justify-center bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors">
+                                    <span className="material-symbols-outlined text-[13px]">info</span>
+                                </button>
+                            </div>
+                            <button onClick={() => setQuantities(Object.fromEntries(items.map(i => [i.id, i.quantity])))}
+                                className="flex items-center gap-1 text-error text-[11px] font-medium">
+                                <span className="material-symbols-outlined text-[13px]">delete_sweep</span>
+                                Reset
+                            </button>
+                        </div>
+
+                        <div className="space-y-2.5">
+                            {items.length === 0 && (
+                                <div className="py-8 text-center bg-surface-container-low rounded-xl border border-outline-variant/60">
+                                    <span className="material-symbols-outlined text-outline text-[32px]">inventory_2</span>
+                                    <p className="text-[13px] font-bold text-on-surface mt-1">Manifest is empty</p>
+                                    <p className="text-[11px] text-outline mt-0.5">Add at least one line before this run can be scheduled.</p>
+                                </div>
+                            )}
+                            {items.map(item => (
+                                <div key={item.id} className="p-3 rounded-xl border border-outline-variant/60 bg-surface-container-low/50">
+                                    <div className="flex items-start justify-between gap-3 mb-2">
+                                        <div className="flex items-start gap-2 min-w-0">
+                                            <div className={`w-9 h-9 mt-0.5 rounded-xl flex items-center justify-center shrink-0 ${item.status === "oos" ? "bg-error-container" : item.status === "low" ? "bg-warning-container" : item.status === "sold" ? "bg-info-container" : "bg-surface-container"}`}>
+                                                <ItemIcon icon={item.icon} />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-[12px] font-bold text-on-surface truncate">{item.name}</p>
+                                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                    <span className="text-[10px] font-mono text-outline">{item.sku}</span>
+                                                    <StatusBadge status={item.status}
+                                                        label={item.status === "oos"
+                                                            ? `${item.status_label} (0)`
+                                                            : item.status === "sold" 
+                                                            ? item.status_label
+                                                            : `${item.status_label} (${item.stock_qty})`
+                                                        }
+                                                    />
+                                                    {/*
+                                                      A run has one destination, so a line
+                                                      cannot be sent somewhere else on it.
+                                                      Splitting a load across two facilities
+                                                      means two runs — the swap button below
+                                                      moves a line onto the other one.
+                                                    */}
+                                                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-info-container/60 text-on-info-container border-info/30 flex items-center gap-0.5">
+                                                        <span className="material-symbols-outlined text-[10px]">storefront</span>
+                                                        To: {destination.name}
+                                                    </span>
+                                                </div>
+                                                {/* Who added it / reason row */}
+                                                {item.added_by && (
+                                                    <div className="flex items-center gap-1 bg-surface-container/80 px-2 py-1 rounded mt-1.5 w-fit border border-outline-variant/50">
+                                                        <span className={`material-symbols-outlined text-[11px] ${item.added_by.type === 'auto' ? 'text-info' : 'text-success'}`}>
+                                                            {item.added_by.type === 'auto' ? 'smart_toy' : 'person'}
+                                                        </span>
+                                                        <span className="text-[9px] text-on-surface-variant font-medium">
+                                                            {item.added_by.type === 'auto' ? 'Auto-added:' : `Added by ${item.added_by.name}:`} <span className="text-on-surface-variant">{item.added_by.reason}</span>
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <p className="text-[13px] font-bold text-primary">{quantities[item.id]} {item.unit}</p>
+                                            <p className="text-[10px] font-mono text-outline">
+                                                {(item.cbm * (quantities[item.id] ?? 0) / item.quantity).toFixed(1)} CBM
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between bg-surface-container-lowest rounded-lg px-2.5 py-1.5 border border-outline-variant/60 mt-2">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className="material-symbols-outlined text-[13px] text-outline shrink-0">warehouse</span>
+                                            <span className="text-[11px] text-on-surface-variant truncate">{item.location}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <button onClick={() => setMoveItem(item)} disabled={!can_edit_manifest}
+                                                className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-surface-container disabled:opacity-30" title="Move line to another run">
+                                                <span className="material-symbols-outlined text-[13px] text-outline">swap_horiz</span>
+                                            </button>
+                                            <button onClick={() => handleRemoveItem(item.id)}
+                                                disabled={!can_edit_manifest || busy === "remove"}
+                                                className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-error-container/60 disabled:opacity-30" title="Remove line">
+                                                <span className="material-symbols-outlined text-[13px] text-error">delete_outline</span>
+                                            </button>
+                                            <button onClick={() => handleQty(item.id, -1)}
+                                                className="w-6 h-6 rounded-lg border border-outline-variant bg-surface-container-lowest flex items-center justify-center active:bg-surface-container">
+                                                <span className="material-symbols-outlined text-[13px] text-on-surface-variant">remove</span>
+                                            </button>
+                                            <span className="text-[13px] font-bold font-mono text-on-surface min-w-[22px] text-center">
+                                                {quantities[item.id]}
+                                            </span>
+                                            <button onClick={() => handleQty(item.id, 1)}
+                                                className="w-6 h-6 rounded-lg border border-outline-variant bg-surface-container-lowest flex items-center justify-center active:bg-surface-container">
+                                                <span className="material-symbols-outlined text-[13px] text-on-surface-variant">add</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    </>
+                )}
 
             </div>
 
             {/* ── Fixed Bottom Actions Layer (Positioned ABOVE the SellerLayout Bottom Nav) ── */}
             <div className="fixed left-0 right-0 z-40 bg-gradient-to-t from-surface-container-lowest via-surface-container-lowest/95 to-transparent pt-8 pb-3 px-4 pointer-events-none" style={{ bottom: "calc(85px + env(safe-area-inset-bottom, 0px))" }}>
                 <div className="max-w-[425px] mx-auto flex items-center justify-between gap-3 pointer-events-auto">
-                    <div className="flex items-center gap-1.5 bg-inverse-surface text-inverse-on-surface px-3 py-2 rounded-2xl shadow-lg shrink-0">
-                        <span className="material-symbols-outlined text-[18px] text-success">speed</span>
-                        <div className="flex flex-col">
-                            <span className="text-[8px] font-bold text-outline uppercase tracking-wide leading-none mb-0.5">Volumetric Load</span>
-                            <span className="text-[10px] font-bold tracking-wide leading-none">Telemetry</span>
-                        </div>
-                    </div>
-
                     <div className="flex-1 bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-xl px-3 py-2 flex items-center justify-between gap-2 min-w-0 pointer-events-auto">
                         <div className="min-w-0">
                             <div className="flex items-baseline gap-1 truncate">
@@ -1056,13 +1189,25 @@ export default function SellerShipmentsIndex({
                             </div>
                             <p className="text-[10px] text-outline truncate">{Math.round(totalKg).toLocaleString()} kg • {activeVehicle?.name ?? "No vehicle"}</p>
                         </div>
-                        <button
-                            onClick={handleSaveManifest}
-                            disabled={busy === "save"}
-                            className="flex items-center gap-1 px-3 py-2 rounded-xl bg-primary text-on-primary font-bold text-[12px] shadow-md shrink-0 active:scale-95 transition-transform disabled:opacity-50">
-                            {busy === "save" ? "Saving…" : "Review"}
-                            <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            {stepIndex < BUILD_STEPS.length - 1 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setStep(BUILD_STEPS[stepIndex + 1].key)}
+                                    className="w-9 h-9 rounded-xl border border-outline-variant bg-surface-container-low flex items-center justify-center active:scale-95 transition-transform"
+                                    aria-label="Next step"
+                                >
+                                    <span className="material-symbols-outlined text-[16px] text-on-surface-variant">arrow_forward</span>
+                                </button>
+                            )}
+                            <button
+                                onClick={handleSaveManifest}
+                                disabled={busy === "save" || !can_edit_manifest}
+                                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-primary text-on-primary font-bold text-[12px] shadow-md active:scale-95 transition-transform disabled:opacity-50">
+                                <span className="material-symbols-outlined text-[14px]">save</span>
+                                {busy === "save" ? "Saving…" : "Save"}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

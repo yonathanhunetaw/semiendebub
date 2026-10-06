@@ -676,33 +676,49 @@ class SeededCrossRoleBoardTest extends TestCase
             'Four aligned ticks must schedule the run.'
         );
 
-        // ── The floor picks and hands over ──
-        foreach ([ShipmentWorkflowService::PICKING, ShipmentWorkflowService::READY, ShipmentWorkflowService::DISPATCHED] as $stage) {
-            $this->asUser($keeper, 'stock-keeper')
-                ->patch(route('stock_keeper.shipments.transition', $shipment), ['status' => $stage])
-                ->assertSessionHasNoErrors();
+        // ── The floor picks every line, then prepares the load ──
+        $this->asUser($keeper, 'stock-keeper')
+            ->post(route('stock_keeper.shipments.step', [$shipment, 'start_picking']))
+            ->assertSessionHasNoErrors();
 
-            $this->assertSame($stage, $shipment->fresh()->status);
+        foreach ($shipment->fresh()->items as $line) {
+            $this->asUser($keeper, 'stock-keeper')
+                ->post(route('stock_keeper.shipments.step', [$shipment, 'pick_line']), ['variant_id' => $line->item_variant_id, 'picked' => true])
+                ->assertSessionHasNoErrors();
         }
 
+        $this->asUser($keeper, 'stock-keeper')
+            ->post(route('stock_keeper.shipments.step', [$shipment, 'prepared']))
+            ->assertSessionHasNoErrors();
+        $this->assertSame(ShipmentWorkflowService::READY, $shipment->fresh()->status);
+
+        // ── The courier checks the load and signs for it ──
+        $signature = 'data:image/png;base64,'.base64_encode(str_repeat("\x89PNG\r\n", 40));
+
+        foreach (['courier_start' => [], 'courier_check' => [], 'courier_sign' => ['signature' => $signature]] as $step => $payload) {
+            $this->asUser($courier, 'delivery')
+                ->post(route('delivery.shipments.step', [$shipment, $step]), $payload)
+                ->assertSessionHasNoErrors();
+        }
+
+        $this->assertSame(ShipmentWorkflowService::IN_TRANSIT, $shipment->fresh()->status);
         $this->assertSame(
             $before - 10,
             $this->stockAt($origin->id, (int) $stock->item_variant_id),
-            'Dispatch is the moment the units leave the origin ledger.'
+            'The driver signing is the moment the units leave the origin ledger.'
         );
 
-        // ── The courier drives it ──
-        foreach ([ShipmentWorkflowService::IN_TRANSIT, ShipmentWorkflowService::DELIVERED] as $stage) {
-            $this->asUser($courier, 'delivery')
-                ->patch(route('delivery.shipments.transition', $shipment), ['status' => $stage])
-                ->assertSessionHasNoErrors();
+        $this->asUser($courier, 'delivery')
+            ->post(route('delivery.shipments.step', [$shipment, 'courier_arrive']))
+            ->assertSessionHasNoErrors();
+        $this->assertSame(ShipmentWorkflowService::DELIVERED, $shipment->fresh()->status);
 
-            $this->assertSame($stage, $shipment->fresh()->status);
-        }
-
-        // ── The seller confirms receipt ──
+        // ── The seller checks the goods and signs them in ──
         $this->asUser($seller, 'seller')
-            ->patch(route('seller.shipments.transition', $shipment), ['status' => ShipmentWorkflowService::RECEIVED])
+            ->post(route('seller.shipments.step', [$shipment, 'receiver_check']))
+            ->assertSessionHasNoErrors();
+        $this->asUser($seller, 'seller')
+            ->post(route('seller.shipments.step', [$shipment, 'receiver_sign']), ['signature' => $signature])
             ->assertSessionHasNoErrors();
 
         $this->assertSame(ShipmentWorkflowService::RECEIVED, $shipment->fresh()->status);

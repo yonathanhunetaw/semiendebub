@@ -101,7 +101,6 @@ Route::domain("seller.$baseDomain")
             Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');
             Route::post('/shipments/{shipment}/manifest', [ShipmentController::class, 'saveManifest'])->name('shipments.manifest.save');
             Route::get('/shipments/{shipment}/review', [ShipmentController::class, 'review'])->name('shipments.review');
-            Route::post('/shipments/{shipment}/dispatch', [ShipmentController::class, 'dispatchShipment'])->name('shipments.dispatch');
             Route::get('/shipments/{shipment}/dispatched', [ShipmentController::class, 'dispatched'])->name('shipments.dispatched');
             Route::post('/shipments/{shipment}/items', [ShipmentController::class, 'addItem'])->name('shipments.items.store');
             Route::post('/shipments/{shipment}/items/bulk', [ShipmentController::class, 'addItems'])->name('shipments.items.bulk');
@@ -109,8 +108,8 @@ Route::domain("seller.$baseDomain")
             Route::post('/shipments/{shipment}/items/{variant}/move', [ShipmentController::class, 'moveItem'])->name('shipments.items.move');
             Route::patch('/shipments/{shipment}/route', [ShipmentController::class, 'updateRoute'])->name('shipments.route.update');
             Route::post('/shipments/{shipment}/agree', [ShipmentController::class, 'agree'])->name('shipments.agree');
-            Route::post('/shipments/{shipment}/handover', [ShipmentController::class, 'handover'])->name('shipments.handover');
-            Route::post('/shipments/{shipment}/receive', [ShipmentController::class, 'receive'])->name('shipments.receive');
+            // The hand-off steps after scheduling: pick, prepare, check, sign.
+            Route::post('/shipments/{shipment}/steps/{step}', [ShipmentController::class, 'step'])->name('shipments.step');
             Route::patch('/shipments/{shipment}/status', [ShipmentController::class, 'transition'])->name('shipments.transition');
         });
     });

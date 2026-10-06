@@ -50,7 +50,7 @@ class StockLedgerLocationMappingTest extends TestCase
         $leaf = $stock->stockLocation;
 
         $this->assertSame(StockLocation::KIND_BACKROOM, $leaf->kind);
-        $this->assertSame('Store', $leaf->name);
+        $this->assertSame('Store Floor', $leaf->name);
         $this->assertSame($this->store->id, $leaf->store_id);
     }
 

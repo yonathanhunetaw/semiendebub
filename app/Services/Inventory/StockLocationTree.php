@@ -254,7 +254,7 @@ class StockLocationTree
         return StockLocation::query()->create([
             'parent_id' => $node->id,
             'kind' => StockLocation::KIND_REMOTE_HUB,
-            'name' => $name ?? $store->name.' Remote Hub',
+            'name' => $name ?? 'Remote Hub',
             'code' => $this->freeCode('STORE-'.$store->id.'-REMOTE'),
             'status' => 'active',
             'store_id' => $store->id,

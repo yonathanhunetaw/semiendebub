@@ -50,6 +50,8 @@ Route::domain("delivery.{$baseDomain}")
             Route::get('/shipments/{shipment}', [FreightController::class, 'show'])->name('shipments.show');
             Route::post('/shipments/{shipment}/claim', [FreightController::class, 'claim'])->name('shipments.claim');
             Route::post('/shipments/{shipment}/agree', [FreightController::class, 'agree'])->name('shipments.agree');
+            // The hand-off steps after scheduling: pick, prepare, check, sign.
+            Route::post('/shipments/{shipment}/steps/{step}', [FreightController::class, 'step'])->name('shipments.step');
             Route::patch('/shipments/{shipment}/status', [FreightController::class, 'transition'])->name('shipments.transition');
 
             // Transfers between two sites: claim, collect at the origin (the

@@ -76,6 +76,19 @@ const STEP_ICONS: Record<string, string> = {
 /* ----------------------------------------------------------
  | Transfer Selection Card
  |----------------------------------------------------------*/
+/** Short copy for each hand-off stage (ShipmentHandoffService::stage). */
+const HANDOFF_STAGE: Record<string, string> = {
+    awaiting_picking: "Waiting for picking",
+    picking: "Origin picking",
+    prepared: "Ready for pickup",
+    driver_on_way: "Driver on the way",
+    driver_checked: "Driver checked load",
+    en_route: "En route",
+    arrived: "Arrived",
+    receiver_checked: "Being signed in",
+    finished: "Finished",
+};
+
 export default function TransferCard({
     t,
     showRoute = "seller.shipments.show",
@@ -90,9 +103,6 @@ export default function TransferCard({
     const createdAt = t.created_at ? formatDateTime(t.created_at) : "Today • 06:14 AM";
     const loadPercent = t.load_percentage ?? (t.vehicle_max_cbm && t.total_cbm ? Math.round((t.total_cbm / t.vehicle_max_cbm) * 100) : 60);
 
-    // Only when the manifest has been reviewed and dispatched should Creator be ticked off as created
-    const isDispatched = t.status === "dispatched";
-
     /**
      * 4-party agreement state, exactly as the server recorded it.
      *
@@ -104,6 +114,14 @@ export default function TransferCard({
      * touched.
      */
     const agreements: PartyAgreementsMap = t.agreements;
+
+    // Proposing the schedule is the creator's agreement; the server records it
+    // as "created" (or "accepted" when ticked by hand). It used to wait for
+    // dispatch, so the card said "Pending" while Build showed the creator ticked.
+    // Past the gate: the card shows the hand-off instead.
+    const underway = !["draft", "pending_agreement", "cancelled", undefined].includes(t.workflow_status);
+
+    const creatorAgreed = agreements.creator.status === "created" || agreements.creator.status === "accepted";
 
     /*
      * Lifecycle steps come from the server (`allowed_transitions`), already
@@ -194,60 +212,45 @@ export default function TransferCard({
                 </div>
             </div>
 
-            {/* ── Conditional Bottom Section: Transit Status vs 4-Party Gate ── */}
-            {(t.status === "en_route" || t.status === "shipped") ? (
+            {/* ── Conditional Bottom Section: hand-off progress vs 4-Party Gate ── */}
+            {underway && t.handoff ? (
                 <div className="border-t border-outline-variant/60 pt-4 mt-2">
-                    <p className="text-[10px] font-bold text-outline uppercase tracking-wider mb-3">Transit Status</p>
-
-                    {t.status === "en_route" && (
-                        <div className="space-y-2.5">
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[16px] text-success">check_circle</span>
-                                <span className="text-[12px] font-bold text-on-surface">Origin → Driver Done</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[16px] text-primary">sync</span>
-                                <span className="text-[12px] font-bold text-on-surface">Driver → Destination Pending</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {t.status === "shipped" && (
-                        <div className="space-y-2.5">
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[16px] text-success">check_circle</span>
-                                <span className="text-[12px] font-bold text-on-surface">Shipment Created ({creator})</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[16px] text-success">check_circle</span>
-                                <span className="text-[12px] font-bold text-on-surface">Driver Accepted</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[16px] text-success">check_circle</span>
-                                <span className="text-[12px] font-bold text-on-surface">Origin Completed</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {t.workflow_status === "received" ? (
-                                    <>
-                                        <span className="material-symbols-outlined text-[16px] text-success">check_circle</span>
-                                        <span className="text-[12px] font-bold text-on-surface">Destination Received</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="material-symbols-outlined text-[16px] text-primary">sync</span>
-                                        <span className="text-[12px] font-bold text-on-surface">At the dock — waiting for the destination to receive</span>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* The run is on the road or at the dock: the courier's
-                        "Mark Delivered" and the destination's "Confirm
-                        Receipt" live here, or nobody could finish it. */}
-                    <div className="mt-3 space-y-1.5">
-                        <StepButtons />
+                    <div className="flex items-center justify-between mb-2.5">
+                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider">Hand-off</p>
+                        <span className="text-[10px] font-bold text-primary">{HANDOFF_STAGE[t.handoff.stage] ?? t.handoff.stage}</span>
                     </div>
+                    {/* Pick → driver → road → receive */}
+                    <div className="grid grid-cols-4 gap-1.5 mb-3">
+                        {([
+                            { label: "Prepared", done: !!t.handoff.times.prepared, icon: "inventory_2" },
+                            { label: "Driver signed", done: !!t.handoff.times.courier_signed, icon: "draw" },
+                            { label: "Arrived", done: !!t.handoff.times.arrived, icon: "flag" },
+                            { label: "Received", done: !!t.handoff.times.received, icon: "move_to_inbox" },
+                        ]).map(s => (
+                            <div key={s.label} className={`flex flex-col items-center gap-1 p-1.5 rounded-xl border ${s.done ? "bg-success-container/40 border-success/25" : "bg-surface-container-low border-outline-variant/60"}`}>
+                                <span className={`material-symbols-outlined text-[16px] ${s.done ? "text-success" : "text-outline"}`}>{s.done ? "check_circle" : s.icon}</span>
+                                <span className={`text-[9px] font-bold leading-tight text-center ${s.done ? "text-on-success-container" : "text-on-surface-variant"}`}>{s.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                    {!t.handoff.times.prepared && (
+                        <div>
+                            <div className="flex justify-between text-[10px] font-bold text-on-surface-variant mb-1">
+                                <span>Origin preparation</span>
+                                <span>{t.handoff.preparation.lines_picked}/{t.handoff.preparation.lines} lines · {t.handoff.preparation.percent}%</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-surface-container overflow-hidden">
+                                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${t.handoff.preparation.percent}%` }} />
+                            </div>
+                        </div>
+                    )}
+                    {showRoute && (
+                        <button type="button" onClick={() => router.visit(route(showRoute, t.id))}
+                            className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary text-on-primary text-[12px] font-bold active:scale-95 transition-transform">
+                            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                            {t.handoff.available_steps.length > 0 ? "Open — your step is ready" : "Open hand-off"}
+                        </button>
+                    )}
                 </div>
             ) : (
                 <>
@@ -264,7 +267,7 @@ export default function TransferCard({
                         {/* 4 Party Status Clickable Buttons */}
                         <div className="grid grid-cols-4 gap-1.5 text-center">
                             {[
-                                { key: "creator" as PartyKey,     label: "1. Creator", sub: isDispatched ? "Created" : "Pending", icon: "person",         agreed: isDispatched },
+                                { key: "creator" as PartyKey,     label: "1. Creator", sub: creatorAgreed ? "Created" : "Pending", icon: "person",         agreed: creatorAgreed },
                                 { key: "fleet" as PartyKey,       label: "2. Fleet",   sub: "Carrier", icon: "local_shipping", agreed: agreements.fleet.status === "accepted" },
                                 { key: "origin" as PartyKey,      label: "3. Origin",  sub: "Depot",   icon: "warehouse",      agreed: agreements.origin.status === "accepted" },
                                 { key: "destination" as PartyKey, label: "4. Dest.",   sub: agreements.destination.stock_keepers ? "2 SKs" : "Store", icon: "storefront", agreed: agreements.destination.status === "accepted" },

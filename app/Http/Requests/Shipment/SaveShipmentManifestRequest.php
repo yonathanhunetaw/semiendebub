@@ -29,6 +29,10 @@ class SaveShipmentManifestRequest extends FormRequest
             'vehicle_plate' => ['nullable', 'string', 'max:64'],
             'vehicle_max_cbm' => ['nullable', 'numeric', 'min:0', 'max:9999'],
             'scheduled_run' => ['nullable', 'date'],
+            // The fleet car and the drivers the run is offered to.
+            'vehicle_id' => ['sometimes', 'nullable', 'integer', 'exists:vehicles,id'],
+            'courier_ids' => ['sometimes', 'nullable', 'array', 'max:50'],
+            'courier_ids.*' => ['integer', 'exists:users,id'],
         ];
     }
 }

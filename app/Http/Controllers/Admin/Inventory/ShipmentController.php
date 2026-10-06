@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Shipment\StoreShipmentItemRequest;
 use App\Http\Requests\Shipment\StoreShipmentRequest;
 use App\Http\Requests\Shipment\AgreeShipmentRequest;
+use App\Http\Requests\Shipment\AssignShipmentFleetRequest;
 use App\Http\Requests\Shipment\TransitionShipmentRequest;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Item\ItemVariant;
@@ -90,7 +91,24 @@ class ShipmentController extends Controller
         return Inertia::render('Admin/Inventory/Shipments/Show', [
             'shipment' => $this->workflow->present($shipment, 'admin'),
             'variants' => $this->stock->variantOptions()->all(),
+            'vehicle_options' => $this->workflow->vehicleOptions($shipment),
+            'courier_options' => $this->workflow->courierOptions(),
         ]);
+    }
+
+    /**
+     * The car the run goes in and the drivers it is offered to. Only those
+     * drivers see it in Delivery and may agree to a time.
+     */
+    public function fleet(AssignShipmentFleetRequest $request, Shipment $shipment): RedirectResponse
+    {
+        try {
+            $this->workflow->assignFleet($shipment, $request->vehicleId(), $request->courierIds());
+        } catch (\RuntimeException | \InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Fleet for {$shipment->reference} saved.");
     }
 
     public function store(StoreShipmentRequest $request): RedirectResponse
@@ -100,8 +118,9 @@ class ShipmentController extends Controller
                 $request->originLocation(),
                 $request->destinationLocation(),
                 collect($request->validated())
-                    ->only(['scheduled_for', 'schedule_options', 'vehicle_name', 'vehicle_plate', 'vehicle_max_cbm', 'distance_km', 'slot', 'notes'])
+                    ->only(['scheduled_for', 'schedule_options', 'vehicle_name', 'vehicle_plate', 'vehicle_max_cbm', 'vehicle_id', 'distance_km', 'slot', 'notes'])
                     ->filter(fn ($v) => $v !== null)
+                    ->when($request->filled('courier_ids'), fn ($c) => $c->put('eligible_courier_ids', $request->validated('courier_ids')))
                     ->all(),
                 Auth::id(),
             );

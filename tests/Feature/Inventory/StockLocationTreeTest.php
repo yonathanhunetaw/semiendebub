@@ -80,7 +80,7 @@ class StockLocationTreeTest extends TestCase
         $second = $tree->addRemoteHub($store);
 
         $this->assertTrue($first->is($second));
-        $this->assertSame('Main Store Remote Hub', $first->name);
+        $this->assertSame('Remote Hub', $first->name);
         $this->assertSame(
             StockLocation::query()->legacy(Store::class, $store->id)->value('id'),
             $first->parent_id,

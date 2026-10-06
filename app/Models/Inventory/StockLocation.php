@@ -83,7 +83,7 @@ class StockLocation extends Model
     {
         return [
             self::KIND_SHELF => 'Store Shelf',
-            self::KIND_BACKROOM => 'Store',
+            self::KIND_BACKROOM => 'Store Floor',
             self::KIND_REMOTE_HUB => 'Remote Hub',
             self::KIND_MAIN_HUB => 'Main Hub',
             self::KIND_TRANSIT => 'In Delivery',

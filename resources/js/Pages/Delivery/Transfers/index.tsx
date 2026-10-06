@@ -1,5 +1,6 @@
 import React from "react";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
+import { DeliveryHero } from "@/Components/Delivery/deliveryUi";
 import { Head, router, usePage } from "@inertiajs/react";
 
 type Tab = "all" | "available" | "mine";
@@ -58,32 +59,28 @@ export default function DeliveryTransfersIndex({ transfers = [], tab = "all", co
         <>
             <Head title="Transfers" />
 
-            <div className="sticky top-0 z-20 flex items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-4 py-3">
-                <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[20px] text-primary">swap_horiz</span>
-                    <h1 className="text-[16px] font-bold tracking-tight text-on-surface">Transfers</h1>
-                </div>
-                <div className="flex items-center gap-0.5 rounded-[999px] border border-outline-variant bg-surface-container-low p-0.5">
+            <DeliveryHero eyebrow="Site to site" title="Transfers" subtitle="Collect at one site, hand over at the next.">
+                <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white/15 p-1">
                     {([
-                        { id: "all" as Tab, label: "ALL" },
-                        { id: "available" as Tab, label: `POOL (${counts.available})` },
-                        { id: "mine" as Tab, label: `MINE (${counts.mine})` },
+                        { id: "all" as Tab, label: "All" },
+                        { id: "available" as Tab, label: `Pool (${counts.available})` },
+                        { id: "mine" as Tab, label: `Mine (${counts.mine})` },
                     ]).map((t) => (
                         <button
                             key={t.id}
                             type="button"
                             onClick={() => setTab(t.id)}
-                            className={`rounded-[999px] px-2 py-1 text-[10px] font-bold tracking-wide transition-colors ${
-                                tab === t.id ? "bg-primary text-on-primary" : "text-on-surface-variant hover:text-primary"
+                            className={`rounded-xl py-2 text-[12px] font-bold transition-colors ${
+                                tab === t.id ? "bg-white text-primary shadow-sm" : "text-white/85 hover:text-white"
                             }`}
                         >
                             {t.label}
                         </button>
                     ))}
                 </div>
-            </div>
+            </DeliveryHero>
 
-            <div className="space-y-3 px-3.5 pb-36 pt-3">
+            <div className="mx-auto max-w-xl space-y-3 px-3.5 pb-6 pt-4">
                 {transfers.map((t) => {
                     const mine = t.courier_id === auth.user.id;
                     const status = STATUS[t.status];

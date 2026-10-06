@@ -13,6 +13,7 @@ import Warehouse from "@mui/icons-material/Warehouse";
 import PointOfSale from "@mui/icons-material/PointOfSale";
 import Payments from "@mui/icons-material/Payments";
 import LocalShipping from "@mui/icons-material/LocalShipping";
+import AirportShuttle from "@mui/icons-material/AirportShuttle";
 import ReceiptLong from "@mui/icons-material/ReceiptLong";
 import TaskAlt from "@mui/icons-material/TaskAlt";
 import Settings from "@mui/icons-material/Settings";
@@ -55,6 +56,8 @@ export default function AdminSidebar({
             "/inventory/replenish",
             "/inventory/capacity",
             "/inventory/locations",
+            "/inventory/shipments",
+            "/inventory/fleet",
         ].some((path) => url.includes(path))
     );
 
@@ -246,6 +249,17 @@ export default function AdminSidebar({
                                     <LocalShipping fontSize="small" />
                                 </ListItemIcon>
                                 <ListItemText primary="Shipments" />
+                            </ListItemButton>
+                            <ListItemButton
+                                component={Link}
+                                href="/inventory/fleet"
+                                selected={url.includes("/inventory/fleet")}
+                                sx={indentedItemStyle}
+                            >
+                                <ListItemIcon sx={{ minWidth: 36 }}>
+                                    <AirportShuttle fontSize="small" />
+                                </ListItemIcon>
+                                <ListItemText primary="Fleet" />
                             </ListItemButton>
                         </List>
                     </Collapse>

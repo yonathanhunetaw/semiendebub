@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Auth\User;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Fulfillment\ShipmentItem;
+use App\Models\Fulfillment\Vehicle;
 use App\Models\Inventory\StockLocation;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemStock;
@@ -85,6 +86,7 @@ class ShipmentWorkflowService
     /** Timestamp stamped on entering each status. */
     private const STAMPS = [
         self::PICKING => 'picked_at',
+        self::READY => 'prepared_at',
         self::DISPATCHED => 'dispatched_at',
         self::IN_TRANSIT => 'in_transit_at',
         self::DELIVERED => 'delivered_at',
@@ -104,9 +106,13 @@ class ShipmentWorkflowService
             self::DISPATCHED, self::IN_TRANSIT, self::DELIVERED, self::RECEIVED,
             self::CANCELLED,
         ],
-        'seller' => [self::PENDING_AGREEMENT, self::SCHEDULED, self::RECEIVED, self::CANCELLED],
-        'stock_keeper' => [self::PICKING, self::READY, self::DISPATCHED, self::RECEIVED],
-        'delivery' => [self::IN_TRANSIT, self::DELIVERED],
+        // After scheduling, every role works the hand-off steps instead
+        // (ShipmentHandoffService): the keeper picks and prepares, the driver
+        // checks and signs for the load, the receiver checks and signs it in.
+        // Only admin may still push a status directly, as an override.
+        'seller' => [self::PENDING_AGREEMENT, self::SCHEDULED, self::CANCELLED],
+        'stock_keeper' => [],
+        'delivery' => [],
     ];
 
     public function __construct(
@@ -171,6 +177,21 @@ class ShipmentWorkflowService
         }
 
         unset($attributes['schedule_options']);
+
+        // A car from the fleet: its details become the shipment's copy.
+        if (! empty($attributes['vehicle_id'])) {
+            $vehicle = Vehicle::query()->findOrFail((int) $attributes['vehicle_id']);
+            $attributes += [
+                'vehicle_name' => $vehicle->name,
+                'vehicle_plate' => $vehicle->plate,
+                'vehicle_max_cbm' => $vehicle->max_cbm,
+            ];
+        }
+
+        if (array_key_exists('eligible_courier_ids', $attributes)) {
+            $ids = array_values(array_unique(array_map('intval', (array) $attributes['eligible_courier_ids'])));
+            $attributes['eligible_courier_ids'] = $ids === [] ? null : $ids;
+        }
 
         $shipment = Shipment::create(array_merge([
             'reference' => $this->nextReference(),
@@ -333,6 +354,144 @@ class ShipmentWorkflowService
         ], fn ($v) => $v !== null));
 
         return $shipment->refresh();
+    }
+
+    /**
+     * The creator's fleet choice: the car the run goes in and the drivers it is
+     * offered to. Only those drivers see the run and may agree to a time.
+     *
+     * A driver who agreed but is no longer on the list, or a car swapped from
+     * under an agreed driver, withdraws the fleet tick: the run goes back to
+     * waiting on a driver rather than staying scheduled on consent nobody gave.
+     *
+     * @param  array<int, int>  $courierIds  empty offers the run to every driver
+     *
+     * @throws \RuntimeException when the manifest is already locked
+     * @throws \InvalidArgumentException when a picked user is not a driver
+     */
+    public function assignFleet(Shipment $shipment, ?int $vehicleId, array $courierIds): Shipment
+    {
+        if (! in_array($shipment->status, self::MANIFEST_OPEN_STATES, true)) {
+            throw new \RuntimeException('The fleet is fixed once picking has started.');
+        }
+
+        $courierIds = array_values(array_unique(array_map('intval', $courierIds)));
+
+        if ($courierIds !== []) {
+            $drivers = User::query()->whereIn('id', $courierIds)->get()
+                ->filter(fn (User $u): bool => $u->roleKey() === 'delivery');
+
+            if ($drivers->count() !== count($courierIds)) {
+                throw new \InvalidArgumentException('Only delivery drivers can be offered a run.');
+            }
+        }
+
+        $vehicle = $vehicleId !== null ? Vehicle::query()->findOrFail($vehicleId) : null;
+
+        $payload = [
+            'vehicle_id' => $vehicle?->id,
+            'eligible_courier_ids' => $courierIds === [] ? null : $courierIds,
+        ];
+
+        // The copy every screen reads; kept in step with the picked car.
+        if ($vehicle !== null) {
+            $payload += [
+                'vehicle_name' => $vehicle->name,
+                'vehicle_plate' => $vehicle->plate,
+                'vehicle_max_cbm' => $vehicle->max_cbm,
+            ];
+        }
+
+        $agreements = $this->agreements($shipment);
+        $fleetDriver = $agreements[self::PARTY_FLEET]['courier_id'] ?? $shipment->courier_id;
+        $carChanged = (int) ($shipment->vehicle_id ?? 0) !== (int) ($vehicle?->id ?? 0);
+        $driverDropped = $fleetDriver !== null && $courierIds !== [] && ! in_array((int) $fleetDriver, $courierIds, true);
+
+        if ($agreements[self::PARTY_FLEET]['status'] !== self::AGREEMENT_PENDING && ($carChanged || $driverDropped)) {
+            $agreements[self::PARTY_FLEET] = [
+                'status' => self::AGREEMENT_PENDING,
+                'slot' => null,
+                'at' => null,
+                'courier_id' => null,
+            ];
+
+            $payload['party_agreements'] = $agreements;
+            $payload['courier_id'] = null;
+            $payload['agreed_scheduled_for'] = null;
+
+            if ($shipment->status === self::SCHEDULED) {
+                $payload['status'] = self::PENDING_AGREEMENT;
+            }
+        } elseif ($driverDropped) {
+            $payload['courier_id'] = null;
+        }
+
+        $shipment->update($payload);
+
+        return $shipment->refresh();
+    }
+
+    /**
+     * Cars the creator can pick: every active one, plus the shipment's own if
+     * it has since been retired.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function vehicleOptions(?Shipment $shipment = null): array
+    {
+        return Vehicle::query()
+            ->where(fn (Builder $q) => $q->active()
+                ->when($shipment?->vehicle_id, fn (Builder $own) => $own->orWhere('id', $shipment->vehicle_id)))
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Vehicle $v): array => [
+                'id' => (int) $v->id,
+                'name' => $v->name,
+                'plate' => $v->plate,
+                'max_cbm' => (float) $v->max_cbm,
+                'payload_kg' => (int) $v->payload_kg,
+                'status' => $v->status,
+            ])->values()->all();
+    }
+
+    /**
+     * Drivers the creator can offer a run to.
+     *
+     * @return array<int, array{id: int, name: string, phone: string|null}>
+     */
+    public function courierOptions(): array
+    {
+        return User::query()
+            ->where('role', 'delivery')
+            ->orderBy('first_name')
+            ->get(['id', 'first_name', 'last_name', 'email', 'phone_number', 'role'])
+            ->filter(fn (User $u): bool => $u->roleKey() === 'delivery')
+            ->map(fn (User $u): array => [
+                'id' => (int) $u->id,
+                'name' => trim($u->first_name.' '.$u->last_name) ?: (string) $u->email,
+                'phone' => $u->phone_number,
+            ])->values()->all();
+    }
+
+    /**
+     * The fleet choice as the screens show it.
+     *
+     * @return array<string, mixed>
+     */
+    public function presentFleet(Shipment $shipment): array
+    {
+        $ids = $shipment->eligibleCourierIds();
+        $names = $ids === [] ? collect() : User::query()->whereIn('id', $ids)->get()
+            ->map(fn (User $u): array => [
+                'id' => (int) $u->id,
+                'name' => trim($u->first_name.' '.$u->last_name) ?: (string) $u->email,
+            ]);
+
+        return [
+            'vehicle_id' => $shipment->vehicle_id !== null ? (int) $shipment->vehicle_id : null,
+            'eligible_courier_ids' => $ids,
+            'eligible_couriers' => $names->values()->all(),
+        ];
     }
 
     /**
@@ -644,7 +803,9 @@ class ShipmentWorkflowService
             // not mark the hub's load as picked or dispatched.
             $this->assertActsForEnd($shipment, $to);
 
-            if ($to === self::DISPATCHED) {
+            // The driver's signature is the handover: the courier taking the
+            // load is as good as the dock handing it out.
+            if ($to === self::DISPATCHED && ! $this->actorIsCourier($shipment)) {
                 $this->assertMayOperate($this->originLeaf($shipment), 'hand stock out of');
             }
 
@@ -764,6 +925,10 @@ class ShipmentWorkflowService
             return false;
         }
 
+        if (! $shipment->courierIsEligible((int) $courier->id)) {
+            return false;
+        }
+
         $shipment->update([
             'courier_id' => $courier->id,
             'vehicle_name' => $shipment->vehicle_name
@@ -841,6 +1006,7 @@ class ShipmentWorkflowService
             'vehicle_name' => $shipment->vehicle_name,
             'vehicle_plate' => $shipment->vehicle_plate,
             'vehicle_max_cbm' => $shipment->vehicle_max_cbm !== null ? (float) $shipment->vehicle_max_cbm : null,
+            'fleet' => $this->presentFleet($shipment),
             'load_percentage' => $shipment->load_percentage,
             'courier' => $shipment->courier ? [
                 'id' => (int) $shipment->courier->id,
@@ -874,6 +1040,7 @@ class ShipmentWorkflowService
             // screens had no way to know whether to offer the agreement action,
             // so none of them offered it at all.
             'actionable_parties' => $this->partiesFor($shipment, auth()->user()),
+            'handoff' => app(\App\Services\Fulfillment\ShipmentHandoffService::class)->present($shipment, auth()->user()),
             'items' => $shipment->items->map(fn (ShipmentItem $item) => $this->presentItem($item, $shipment))->values()->all(),
             'allowed_transitions' => $role !== null
                 ? $this->allowedFor($shipment, $role)
@@ -969,9 +1136,13 @@ class ShipmentWorkflowService
         if ($role === 'delivery') {
             return $query->where(function (Builder $q) use ($user): void {
                 $q->where('courier_id', $user->id)
-                    ->orWhere(function (Builder $open): void {
+                    ->orWhere(function (Builder $open) use ($user): void {
                         $open->whereNull('courier_id')
-                            ->whereNotIn('status', [self::RECEIVED, self::CANCELLED]);
+                            ->whereNotIn('status', [self::RECEIVED, self::CANCELLED])
+                            // Offered to every driver, or to this one.
+                            ->where(fn (Builder $offered) => $offered
+                                ->whereNull('eligible_courier_ids')
+                                ->orWhereJsonContains('eligible_courier_ids', (int) $user->id));
                     });
             });
         }
@@ -1014,18 +1185,23 @@ class ShipmentWorkflowService
     }
 
     /**
-     * Stock location ids this user manages — including the floor, shelf and
-     * Remote Hub of a store they manage as a whole.
+     * Stock location ids this user manages or is staff of — including the
+     * floor, shelf and Remote Hub of a store they run as a whole.
      *
      * @return array<int>
      */
-    private function managedLocationIds(User $user): array
+    public function managedLocationIds(User $user): array
     {
+        // Managers and stock keepers alike: both are set per location on the
+        // Locations page, and both work that location's dock.
         $direct = \App\Models\Inventory\FacilityManager::query()
             ->where('user_id', $user->id)
             ->where('facility_type', StockLocation::class)
             ->pluck('facility_id')
-            ->map(fn ($id): int => (int) $id);
+            ->merge(\App\Models\Inventory\LocationStaff::query()->where('user_id', $user->id)->pluck('stock_location_id'))
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values();
 
         $children = $direct->isEmpty() ? collect() : StockLocation::query()
             ->whereIn('parent_id', $direct)
@@ -1277,7 +1453,10 @@ class ShipmentWorkflowService
 
         if ($role === 'delivery') {
             // The assigned courier, or any courier while the run is unclaimed.
-            if ($shipment->courier_id === null || (int) $shipment->courier_id === (int) $user->id) {
+            // Only a driver the creator offered the run to.
+            if ((int) $shipment->courier_id === (int) $user->id
+                || ($shipment->courier_id === null && $shipment->courierIsEligible((int) $user->id))
+            ) {
                 $parties[] = self::PARTY_FLEET;
             }
         }
@@ -1372,7 +1551,7 @@ class ShipmentWorkflowService
      */
     public function presentAgreements(Shipment $shipment): array
     {
-        $shipment->loadMissing(['origin', 'destination', 'courier', 'creator']);
+        $shipment->loadMissing(['origin', 'destination', 'originLocation.store', 'destinationLocation.store', 'courier', 'creator']);
         $agreements = $this->agreements($shipment);
 
         $label = function (string $party, string $status): string {
@@ -1449,6 +1628,7 @@ class ShipmentWorkflowService
         $actors = $actorIds->isEmpty() ? collect() : User::query()->whereIn('id', $actorIds)->get()->keyBy('id');
 
         $out = [];
+        $handoffs = app(\App\Services\Fulfillment\ShipmentHandoffService::class);
 
         foreach (self::PARTIES as $party) {
             $agreement = $agreements[$party];
@@ -1461,6 +1641,14 @@ class ShipmentWorkflowService
                 : $status;
 
             $out[$party] = [
+                // Who works this end: set per location on the Locations page.
+                'people' => match ($party) {
+                    self::PARTY_ORIGIN => $handoffs->dockPeople($shipment->originLocation),
+                    self::PARTY_DESTINATION => $handoffs->dockPeople($shipment->destinationLocation),
+                    self::PARTY_FLEET => collect($this->presentFleet($shipment)['eligible_couriers'])
+                        ->map(fn (array $c) => ['name' => $c['name'], 'as' => 'Driver'])->all(),
+                    default => [],
+                },
                 'title' => $meta[$party]['title'],
                 'role' => $meta[$party]['role'],
                 'party' => $meta[$party]['party'],
@@ -1514,6 +1702,8 @@ class ShipmentWorkflowService
             'created_at' => $shipment->created_at?->toIso8601String(),
             'schedule_options' => $this->scheduleOptions($shipment),
             'agreements' => $this->presentAgreements($shipment),
+            'fleet' => $this->presentFleet($shipment),
+            'handoff' => app(\App\Services\Fulfillment\ShipmentHandoffService::class)->present($shipment, auth()->user()),
             'agreed_scheduled_for' => $shipment->agreed_scheduled_for?->format('Y-m-d\TH:i'),
             'outstanding_parties' => $this->outstandingParties($shipment),
             'can_schedule' => $this->canSchedule($shipment),
@@ -1558,6 +1748,7 @@ class ShipmentWorkflowService
                 },
                 'stock_qty' => $line['stock_qty'],
                 'quantity' => $line['quantity'],
+                'picked_quantity' => $line['picked_quantity'],
                 // The variant's real packaging, not a hardcoded "Ctns".
                 'unit' => (string) ($line['unit'] ?? 'Unit'),
                 'pieces' => $line['pieces'],
@@ -1710,6 +1901,16 @@ class ShipmentWorkflowService
                 \App\Services\Fulfillment\MovementDomainService::DOMAIN_SHIPMENT,
             );
         }
+    }
+
+    /** Is the signed-in user the driver carrying this run? */
+    private function actorIsCourier(Shipment $shipment): bool
+    {
+        $user = auth()->user();
+
+        return $user instanceof User
+            && $shipment->courier_id !== null
+            && (int) $shipment->courier_id === (int) $user->id;
     }
 
     /** @throws \App\Exceptions\MovementDomainException */

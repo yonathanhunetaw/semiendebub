@@ -99,6 +99,12 @@ class CrossRoleShipmentTest extends TestCase
     }
 
     /** Each role lives on its own subdomain. */
+    /** A PNG data URL long enough to pass as a drawn signature. */
+    private function signature(): string
+    {
+        return 'data:image/png;base64,'.base64_encode(str_repeat("\x89PNG\r\n", 40));
+    }
+
     private function asRole(User $user, string $subdomain): self
     {
         $this->withServerVariables(['HTTP_HOST' => "{$subdomain}.localhost"]);
@@ -274,39 +280,46 @@ class CrossRoleShipmentTest extends TestCase
         $this->assertSame(ShipmentWorkflowService::PICKING, $shipment->fresh()->status);
         $this->assertSame(30, (int) $shipment->fresh()->items()->first()->picked_quantity);
 
-        foreach ([ShipmentWorkflowService::READY, ShipmentWorkflowService::DISPATCHED] as $next) {
-            $this->asRole($this->stockKeeper, 'stockkeeper')
-                ->patch(route('stock_keeper.shipments.transition', $shipment), ['status' => $next])
-                ->assertSessionHasNoErrors();
-        }
-
-        $this->assertSame(ShipmentWorkflowService::DISPATCHED, $shipment->fresh()->status);
-
-        // Stock has LEFT the origin and has NOT yet arrived.
-        $this->assertSame(70, $this->stockAt($this->origin), 'Origin must be debited at dispatch.');
-        $this->assertSame(0, $this->stockAt($this->destination), 'Destination must not be credited yet.');
-
-        // ── DELIVERY: claim, carry, hand over ──
-        $this->asRole($this->courier, 'delivery')
-            ->post(route('delivery.shipments.claim', $shipment))
+        // Step 2 at the origin: the load is prepared in the pickup bay.
+        $this->asRole($this->stockKeeper, 'stockkeeper')
+            ->post(route('stock_keeper.shipments.step', [$shipment, 'prepared']), ['bay' => 'Dock 1'])
             ->assertSessionHasNoErrors();
 
-        $this->assertSame($this->courier->id, $shipment->fresh()->courier_id);
+        $this->assertSame(ShipmentWorkflowService::READY, $shipment->fresh()->status);
+        $this->assertSame(100, $this->stockAt($this->origin), 'Preparing must not move stock.');
 
-        foreach ([ShipmentWorkflowService::IN_TRANSIT, ShipmentWorkflowService::DELIVERED] as $next) {
+        // ── DELIVERY: start the trip, check the load, sign for it, arrive ──
+        foreach (['courier_start', 'courier_check'] as $step) {
             $this->asRole($this->courier, 'delivery')
-                ->patch(route('delivery.shipments.transition', $shipment), ['status' => $next])
+                ->post(route('delivery.shipments.step', [$shipment, $step]))
                 ->assertSessionHasNoErrors();
         }
 
-        $this->assertSame(ShipmentWorkflowService::DELIVERED, $shipment->fresh()->status);
-        $this->assertSame(0, $this->stockAt($this->destination), 'Delivery alone must not credit stock.');
+        $this->asRole($this->courier, 'delivery')
+            ->post(route('delivery.shipments.step', [$shipment, 'courier_sign']), ['signature' => $this->signature()])
+            ->assertSessionHasNoErrors();
 
-        // ── SELLER: confirm receipt ──
+        $this->assertSame(ShipmentWorkflowService::IN_TRANSIT, $shipment->fresh()->status);
+
+        // Stock has LEFT the origin and has NOT yet arrived.
+        $this->assertSame(70, $this->stockAt($this->origin), 'Origin must be debited when the driver signs.');
+        $this->assertSame(0, $this->stockAt($this->destination), 'Destination must not be credited yet.');
+
+        $this->asRole($this->courier, 'delivery')
+            ->post(route('delivery.shipments.step', [$shipment, 'courier_arrive']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(ShipmentWorkflowService::DELIVERED, $shipment->fresh()->status);
+        $this->assertSame(0, $this->stockAt($this->destination), 'Arriving alone must not credit stock.');
+
+        // ── SELLER (destination dock): check the goods, then sign them in ──
         $this->asRole($this->seller, 'seller')
-            ->patch(route('seller.shipments.transition', $shipment), [
-                'status' => ShipmentWorkflowService::RECEIVED,
-            ])->assertSessionHasNoErrors();
+            ->post(route('seller.shipments.step', [$shipment, 'receiver_check']))
+            ->assertSessionHasNoErrors();
+
+        $this->asRole($this->seller, 'seller')
+            ->post(route('seller.shipments.step', [$shipment, 'receiver_sign']), ['signature' => $this->signature()])
+            ->assertSessionHasNoErrors();
 
         $shipment = $shipment->fresh();
         $this->assertSame(ShipmentWorkflowService::RECEIVED, $shipment->status);

@@ -35,12 +35,23 @@ class Shipment extends Model
         'vehicle_name',
         'vehicle_plate',
         'vehicle_max_cbm',
+        'vehicle_id',
         'courier_id',
+        'eligible_courier_ids',
         'scheduled_for',
         'schedule_options',
         'agreed_scheduled_for',
         'party_agreements',
         'picked_at',
+        'prepared_at',
+        'prepared_by',
+        'courier_started_at',
+        'courier_checked_at',
+        'courier_signature',
+        'courier_signed_at',
+        'receiver_checked_at',
+        'receiver_signature',
+        'received_by',
         'dispatched_at',
         'in_transit_at',
         'delivered_at',
@@ -55,12 +66,21 @@ class Shipment extends Model
         'created_by',
     ];
 
+    /** Signatures are large; screens ask for them explicitly. */
+    protected $hidden = ['courier_signature', 'receiver_signature'];
+
     protected $casts = [
         'scheduled_for' => 'datetime',
         'agreed_scheduled_for' => 'datetime',
         'schedule_options' => 'array',
         'party_agreements' => 'array',
+        'eligible_courier_ids' => 'array',
         'picked_at' => 'datetime',
+        'prepared_at' => 'datetime',
+        'courier_started_at' => 'datetime',
+        'courier_checked_at' => 'datetime',
+        'courier_signed_at' => 'datetime',
+        'receiver_checked_at' => 'datetime',
         'dispatched_at' => 'datetime',
         'in_transit_at' => 'datetime',
         'delivered_at' => 'datetime',
@@ -107,6 +127,30 @@ class Shipment extends Model
     public function courier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'courier_id');
+    }
+
+    /** The fleet car the creator picked to carry this run. */
+    public function vehicle(): BelongsTo
+    {
+        return $this->belongsTo(Vehicle::class);
+    }
+
+    /**
+     * The drivers the creator offered this run to. Empty means any driver.
+     *
+     * @return array<int, int>
+     */
+    public function eligibleCourierIds(): array
+    {
+        return array_values(array_map('intval', $this->eligible_courier_ids ?? []));
+    }
+
+    /** May this driver take the run? Open to all when no drivers were picked. */
+    public function courierIsEligible(int $userId): bool
+    {
+        $ids = $this->eligibleCourierIds();
+
+        return $ids === [] || in_array($userId, $ids, true);
     }
 
     public function creator(): BelongsTo

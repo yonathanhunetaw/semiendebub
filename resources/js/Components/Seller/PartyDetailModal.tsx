@@ -22,6 +22,8 @@ export interface PartyAgreementInfo {
     agreed_time?: string;
     /** The person who ticked this party, when someone has. */
     actor?: string | null;
+    /** Who works this end (set per location on the Locations page), or the offered drivers. */
+    people?: { name: string; as: string }[];
     stock_keepers?: SubStockKeeper[];
     extra?: {
         label: string;

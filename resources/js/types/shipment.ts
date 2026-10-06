@@ -1,3 +1,5 @@
+import type { CourierOption, FleetChoice, FleetVehicle } from "@/types/shipments";
+
 /**
  * Shared TypeScript contracts for the cross-role shipment domain
  * (Admin, Seller, StockKeeper and Delivery all render these same shapes).
@@ -49,6 +51,8 @@ export interface PartyAgreement {
     agreed_time: string | null;
     /** The person who ticked this party, when someone has. */
     actor?: string | null;
+    /** Who works this end, or the drivers offered the run. */
+    people?: { name: string; as: string }[];
 }
 
 export type PartyAgreements = Record<PartyKey, PartyAgreement>;
@@ -82,7 +86,73 @@ export interface ShipmentLine {
     coverage: LineCoverage;
 }
 
+/** A hand-off step after scheduling (ShipmentHandoffService::STEPS). */
+export type HandoffStep =
+    | "start_picking"
+    | "pick_line"
+    | "prepared"
+    | "courier_start"
+    | "courier_check"
+    | "courier_sign"
+    | "courier_arrive"
+    | "receiver_check"
+    | "receiver_sign";
+
+/** Where the hand-off stands (ShipmentHandoffService::stage). */
+export type HandoffStage =
+    | "awaiting_picking"
+    | "picking"
+    | "prepared"
+    | "driver_on_way"
+    | "driver_checked"
+    | "en_route"
+    | "arrived"
+    | "receiver_checked"
+    | "finished"
+    | string;
+
+/** The pick → prepare → driver → receiver process, as the server sees it. */
+export interface ShipmentHandoff {
+    stage: HandoffStage;
+    preparation: {
+        units_asked: number;
+        units_picked: number;
+        lines: number;
+        lines_picked: number;
+        percent: number;
+        /** The pickup bay the load was prepared in. */
+        bay: string | null;
+    };
+    times: {
+        scheduled_for: string | null;
+        picking_started: string | null;
+        prepared: string | null;
+        courier_started: string | null;
+        courier_checked: string | null;
+        courier_signed: string | null;
+        arrived: string | null;
+        receiver_checked: string | null;
+        received: string | null;
+    };
+    people: { prepared_by: string | null; courier: string | null; received_by: string | null };
+    signatures: { courier: string | null; receiver: string | null };
+    /** Steps the viewer can take right now. */
+    available_steps: HandoffStep[];
+    labels: Record<HandoffStep, string>;
+}
+
+/** A manifest line as the hand-off panel needs it. */
+export interface HandoffLine {
+    variant_id: number;
+    name: string;
+    sku: string | null;
+    quantity: number;
+    picked_quantity: number;
+    unit: string | null;
+}
+
 export interface Shipment {
+    handoff?: ShipmentHandoff;
     id: number;
     reference: string;
     status: ShipmentStatus;
@@ -91,6 +161,8 @@ export interface Shipment {
     vehicle_name: string | null;
     vehicle_plate: string | null;
     vehicle_max_cbm: number | null;
+    /** The car from the fleet and the drivers the run is offered to. */
+    fleet?: FleetChoice;
     load_percentage: number;
     courier: ShipmentCourier | null;
     created_by: string | null;
@@ -178,6 +250,8 @@ export interface AdminShipmentIndexProps extends SharedProps {
 export interface AdminShipmentShowProps extends SharedProps {
     shipment: Shipment;
     variants: VariantOption[];
+    vehicle_options?: FleetVehicle[];
+    courier_options?: CourierOption[];
 }
 
 export interface StockKeeperShipmentIndexProps extends SharedProps {

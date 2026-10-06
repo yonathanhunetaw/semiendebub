@@ -198,24 +198,17 @@ class SellerManifestBuilderTest extends TestCase
     }
 
     #[Test]
-    public function the_review_screen_refuses_to_claim_agreement_that_has_not_happened(): void
+    public function the_old_review_address_lands_on_the_build_screen(): void
     {
         $shipment = $this->inboundRun();
 
-        $props = $this->asSeller()
+        $this->asSeller()
             ->get(route('seller.shipments.review', $shipment))
-            ->viewData('page')['props'];
-
-        $this->assertFalse(
-            $props['can_dispatch'],
-            'Review must not offer dispatch while the gate is still open.'
-        );
-        $this->assertSame('pending', $props['agreements']['fleet']['status']);
-        $this->assertSame(['fleet', 'origin', 'destination'], $props['outstanding_parties']);
+            ->assertRedirect(route('seller.shipments.show', $shipment));
     }
 
     #[Test]
-    public function review_opens_dispatch_once_all_four_parties_align(): void
+    public function the_run_is_scheduled_the_moment_all_four_align_with_no_review_step(): void
     {
         $shipment = $this->othersAgree($this->inboundRun());
 
@@ -224,12 +217,6 @@ class SellerManifestBuilderTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame(ShipmentWorkflowService::SCHEDULED, $shipment->fresh()->status);
-
-        $props = $this->asSeller()
-            ->get(route('seller.shipments.review', $shipment))
-            ->viewData('page')['props'];
-
-        $this->assertTrue($props['can_dispatch']);
     }
 
     /* =====================================================================
@@ -404,7 +391,8 @@ class SellerManifestBuilderTest extends TestCase
                 'vehicle_max_cbm' => 14.5,
                 'scheduled_run' => self::OTHER_SLOT,
             ])
-            ->assertRedirect(route('seller.shipments.review', $shipment));
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
 
         $shipment = $shipment->fresh();
 

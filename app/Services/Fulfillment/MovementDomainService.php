@@ -111,7 +111,7 @@ class MovementDomainService
     /** Human labels, for UI and for exception messages. */
     public const LABELS = [
         self::NODE_SHELF => 'Store Shelf',
-        self::NODE_BACKROOM => 'Store',
+        self::NODE_BACKROOM => 'Store Floor',
         self::NODE_STORE => 'Store',
         self::NODE_REMOTE_WAREHOUSE => 'Remote Hub',
         self::NODE_MAIN_WAREHOUSE => 'Main Hub',

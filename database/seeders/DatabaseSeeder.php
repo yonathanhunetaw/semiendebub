@@ -18,6 +18,7 @@ use Database\Seeders\Seller\CartSeeder;
 use Database\Seeders\User\UserSeeder;
 use Database\Seeders\Inventory\StockLedgerSeeder;
 use Database\Seeders\Inventory\StockLocationSeeder;
+use Database\Seeders\Inventory\FleetSeeder;
 use Database\Seeders\Inventory\WarehouseSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -91,6 +92,9 @@ class DatabaseSeeder extends Seeder
              * quantity, and none of them ever stocked a shop floor.
              */
             StockLedgerSeeder::class,
+
+            // The cars a shipment can be carried in.
+            FleetSeeder::class,
 
             // Inter-store freight. Needs stores, users (for the creator, courier
             // and keeper on each agreement ledger) and stock at the origins, so

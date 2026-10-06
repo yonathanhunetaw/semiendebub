@@ -1,8 +1,10 @@
-import { SellerCard, SellerHeader, sellerImage, sellerPrice } from "@/Components/Seller/sellerUi";
+import { type CatalogItem } from "@/Components/Seller/catalogPricing";
+import ProductCard from "@/Components/Seller/ProductCard";
+import { SellerCard, SellerHeader } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link } from "@inertiajs/react";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
-import { Box, Chip, Stack, Typography, useTheme } from "@mui/material";
+import { Box, Stack, Typography } from "@mui/material";
 import React from "react";
 
 interface Category {
@@ -10,50 +12,16 @@ interface Category {
     category_name: string;
 }
 
-interface StoreVariant {
-    price?: number | null;
-    discount_price?: number | null;
+interface Props {
+    category: Category;
+    subcategories?: Category[];
+    /** What this store carries in the category (SellerCatalog::present cards). */
+    items?: CatalogItem[];
+    has_tin_cart?: boolean;
+    top_cart_is_individual?: boolean;
 }
 
-interface ItemVariant {
-    store_variants?: StoreVariant[];
-}
-
-interface Item {
-    id: number;
-    product_name: string;
-    general_images?: string[] | string | null;
-    sold_count?: number | null;
-    category?: {
-        category_name?: string;
-    } | null;
-    variants?: ItemVariant[];
-}
-
-function itemImage(item: Item) {
-    if (Array.isArray(item.general_images)) {
-        return sellerImage(item.general_images[0] ?? null);
-    }
-
-    return sellerImage(item.general_images ?? null);
-}
-
-function itemPrice(item: Item) {
-    const prices = (item.variants ?? [])
-        .flatMap((variant) => {
-            const storePrices = (variant.store_variants ?? [])
-                .map((storeVariant) => storeVariant.discount_price ?? storeVariant.price)
-                .filter((price): price is number => price != null);
-
-            return storePrices;
-        })
-        .filter((price): price is number => price != null);
-
-    return prices.length ? Math.min(...prices) : null;
-}
-
-
-export default function Show({ category, subcategories = [], items = [] }: { category: Category; subcategories?: Category[]; items?: Item[]; }) {
+export default function Show({ category, subcategories = [], items = [], has_tin_cart = false, top_cart_is_individual = false }: Props) {
     const cardStyle = {
         bgcolor: "background.paper",
         color: "text.primary",
@@ -92,35 +60,11 @@ export default function Show({ category, subcategories = [], items = [] }: { cat
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mt: subcategories.length ? 2 : 0, mb: 1, color: "text.primary" }}>
                             Items
                         </Typography>
-                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1.5 }}>
+                        <section aria-label="Products" className="grid grid-cols-2 gap-2.5 pb-28 sm:grid-cols-3 md:grid-cols-4">
                             {items.map((item) => (
-                                <SellerCard key={item.id} component={Link} href={route("seller.items.show", item.id)} sx={{ ...cardStyle, p: 0, overflow: "hidden" }}>
-                                    <Box sx={{ height: 132, bgcolor: "rgb(var(--surface-container-low))", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                                        {itemImage(item) ? (
-                                            <Box component="img" src={itemImage(item)!} alt={item.product_name} sx={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                                        ) : (
-                                            <Typography variant="body2" sx={{ color: "text.secondary !important" }}>No image</Typography>
-                                        )}
-                                    </Box>
-                                    <Box sx={{ p: 1.5 }}>
-                                        <Typography sx={{ fontWeight: 700, mb: 0.5 }} noWrap>{item.product_name}</Typography>
-                                        <Typography sx={{ fontWeight: 900, color: "primary.main !important" }}>
-                                            {sellerPrice(itemPrice(item))}
-                                        </Typography>
-                                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
-                                            <Typography variant="caption" sx={{ color: "text.secondary !important" }}>{item.sold_count ?? 0} sold</Typography>
-                                            {item.category?.category_name && (
-                                                <Chip
-                                                    label={item.category.category_name}
-                                                    size="small"
-                                                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: 'rgb(var(--on-surface) / 0.08)', color: 'text.primary', border: 'none' }}
-                                                />
-                                            )}
-                                        </Stack>
-                                    </Box>
-                                </SellerCard>
+                                <ProductCard key={item.id} item={item} hasTinCart={has_tin_cart} topCartIsIndividual={top_cart_is_individual} />
                             ))}
-                        </Box>
+                        </section>
                     </>
                 )}
             </Box>

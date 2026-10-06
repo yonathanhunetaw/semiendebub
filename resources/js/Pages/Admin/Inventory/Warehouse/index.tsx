@@ -82,8 +82,21 @@ interface StockLine {
     min_stock_level: number | null;
 }
 
+/** A store's Remote Hub: a warehouse that hangs off a store, managed from Locations. */
+interface RemoteHub {
+    id: number;
+    name: string;
+    code: string;
+    address: string | null;
+    store_id: number | null;
+    store_name: string | null;
+    stocks_count: number;
+    total_units: number;
+}
+
 interface Props {
     warehouses: Warehouse[];
+    remoteHubs?: RemoteHub[];
     stockLines: StockLine[];
     totalWarehouses: number;
     totalUnits: number;
@@ -97,6 +110,7 @@ interface Props {
 
 export default function WarehouseIndex({
     warehouses = [],
+    remoteHubs = [],
     stockLines = [],
     totalWarehouses = 0,
     totalUnits = 0,
@@ -554,6 +568,48 @@ export default function WarehouseIndex({
                     </TableBody>
                 </Table>
             </TableContainer>
+
+            {/* ── Remote Hubs: warehouses that belong to a store ── */}
+            {remoteHubs.length > 0 && (
+                <>
+                    <Typography variant="h6" fontWeight={700} mb={1.5}>
+                        Remote Hubs
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ mb: 4 }}>
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell sx={{ fontWeight: 800 }}>Hub</TableCell>
+                                    <TableCell sx={{ fontWeight: 800 }}>Store</TableCell>
+                                    <TableCell sx={{ fontWeight: 800 }}>Code</TableCell>
+                                    <TableCell sx={{ fontWeight: 800 }}>Stock Lines</TableCell>
+                                    <TableCell sx={{ fontWeight: 800 }}>Total Units</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 800 }}>Managers</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {remoteHubs.map((hub) => (
+                                    <TableRow key={hub.id} hover>
+                                        <TableCell sx={{ fontWeight: 700 }}>{hub.name}</TableCell>
+                                        <TableCell>{hub.store_name ?? "—"}</TableCell>
+                                        <TableCell>{hub.code}</TableCell>
+                                        <TableCell>{hub.stocks_count} lines</TableCell>
+                                        <TableCell>{hub.total_units.toLocaleString()}</TableCell>
+                                        <TableCell align="right">
+                                            <Button
+                                                size="small"
+                                                href={route("admin.inventory.stock-locations.index")}
+                                            >
+                                                Manage in Locations
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </>
+            )}
 
             {/* ── Stock Level Lines Section ── */}
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>

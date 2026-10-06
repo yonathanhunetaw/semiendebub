@@ -142,7 +142,7 @@ class StoreLocationStockService
             ],
             [
                 'key' => 'store_room',
-                'label' => 'Store',
+                'label' => 'Store Floor',
                 'stock' => max(0, $storeTotalPieces - $shelf),
                 'derived' => true,
                 'kind' => MovementDomainService::NODE_BACKROOM,

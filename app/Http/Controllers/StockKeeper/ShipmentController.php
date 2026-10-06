@@ -162,42 +162,4 @@ class ShipmentController extends Controller
     {
         return $this->agreeAsParty($request, $shipment, $this->workflow);
     }
-
-    /**
-     * Origin handover: the keeper hands the load to the driver.
-     *
-     * This is the moment stock leaves the origin ledger.
-     */
-    public function handover(Shipment $shipment): RedirectResponse
-    {
-        abort_unless($this->shipmentIsInScope($shipment), 403);
-
-        // advanceTo(), not transition(): `scheduled` cannot jump straight to
-        // `dispatched`, so a bare transition here failed silently.
-        try {
-            $shipment = $this->workflow->advanceTo($shipment, ShipmentWorkflowService::DISPATCHED);
-        } catch (\RuntimeException $e) {
-            return back()->with('error', $e->getMessage());
-        }
-
-        return back()->with('success', "Handed to the courier — stock left {$shipment->originLocation?->name}.");
-    }
-
-    /**
-     * Destination receipt: the receiver inspects and accepts the goods.
-     *
-     * This is the moment stock is credited to the destination ledger.
-     */
-    public function receive(Shipment $shipment): RedirectResponse
-    {
-        abort_unless($this->shipmentIsInScope($shipment), 403);
-
-        try {
-            $shipment = $this->workflow->advanceTo($shipment, ShipmentWorkflowService::RECEIVED);
-        } catch (\RuntimeException $e) {
-            return back()->with('error', $e->getMessage());
-        }
-
-        return back()->with('success', "Received — stock credited to {$shipment->destinationLocation?->name}.");
-    }
 }

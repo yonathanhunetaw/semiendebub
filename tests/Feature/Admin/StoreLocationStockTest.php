@@ -307,7 +307,7 @@ class StoreLocationStockTest extends TestCase
                 array_column($first['locations'], 'key'),
             );
             $this->assertSame(
-                ['Store Shelf', 'Store', 'Remote Hub'],
+                ['Store Shelf', 'Store Floor', 'Remote Hub'],
                 array_column($first['locations'], 'label'),
             );
         });

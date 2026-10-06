@@ -6,6 +6,8 @@ import {
     Autocomplete,
     Box,
     Button,
+    Chip,
+    MenuItem,
     Grid,
     IconButton,
     Snackbar,
@@ -17,6 +19,7 @@ import {
 import React from "react";
 
 import { CancelDialog } from "@/Pages/Admin/Inventory/Shipments/index";
+import HandoffPanel from "@/Components/Shipment/HandoffPanel";
 import {
     AgreementPanel,
     LoadBar,
@@ -35,6 +38,8 @@ import type { AdminShipmentShowProps, Shipment } from "@/types/shipment";
 export default function AdminShipmentShow({
     shipment,
     variants,
+    vehicle_options = [],
+    courier_options = [],
     flash,
 }: AdminShipmentShowProps): React.ReactElement {
     const [cancelling, setCancelling] = React.useState<Shipment | null>(null);
@@ -45,7 +50,8 @@ export default function AdminShipmentShow({
         if (message) setNotice(message);
     }, [flash?.success, flash?.error]);
 
-    const manifestOpen = shipment.status === "draft" || shipment.status === "scheduled";
+    // Matches ShipmentWorkflowService::MANIFEST_OPEN_STATES.
+    const manifestOpen = ["draft", "pending_agreement", "scheduled"].includes(shipment.status);
 
     return (
         <>
@@ -75,6 +81,39 @@ export default function AdminShipmentShow({
                                 {shipment.cancel_reason}
                             </Alert>
                         ) : null}
+                    </ShipmentCard>
+
+                    {/* After the four agree: pick → prepare → driver signs →
+                        arrives → receiver signs. Admin can take any step. */}
+                    {shipment.handoff && !["draft", "pending_agreement", "cancelled"].includes(shipment.status) ? (
+                        <Box sx={{ mb: 2.5 }}>
+                            <HandoffPanel
+                                shipmentId={shipment.id}
+                                reference={shipment.reference}
+                                handoff={shipment.handoff}
+                                lines={shipment.items}
+                                stepRoute="admin.inventory.shipments.step"
+                                originName={shipment.origin.name}
+                                destinationName={shipment.destination.name}
+                            />
+                        </Box>
+                    ) : null}
+
+                    <ShipmentCard sx={{ mb: 2.5 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 0.5 }}>
+                            Fleet
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            The car the run goes in and the drivers it is offered to. Only those drivers see it in
+                            Delivery and may agree to a window. Once the driver and both docks agree, the run is
+                            scheduled; the origin's handover to the driver dispatches it.
+                        </Typography>
+                        <FleetForm
+                            shipment={shipment}
+                            vehicles={vehicle_options}
+                            couriers={courier_options}
+                            disabled={!manifestOpen}
+                        />
                     </ShipmentCard>
 
                     {manifestOpen ? (
@@ -164,6 +203,82 @@ export default function AdminShipmentShow({
                 </Alert>
             </Snackbar>
         </>
+    );
+}
+
+function FleetForm({
+    shipment,
+    vehicles,
+    couriers,
+    disabled,
+}: {
+    shipment: Shipment;
+    vehicles: NonNullable<AdminShipmentShowProps["vehicle_options"]>;
+    couriers: NonNullable<AdminShipmentShowProps["courier_options"]>;
+    disabled: boolean;
+}): React.ReactElement {
+    const { data, setData, patch, processing, errors } = useForm({
+        vehicle_id: (shipment.fleet?.vehicle_id ?? "") as number | "",
+        courier_ids: shipment.fleet?.eligible_courier_ids ?? [],
+    });
+
+    const submit = (event: React.FormEvent): void => {
+        event.preventDefault();
+        patch(route("admin.inventory.shipments.fleet", shipment.id), { preserveScroll: true });
+    };
+
+    return (
+        <form onSubmit={submit}>
+            <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 5 }}>
+                    <TextField
+                        select fullWidth size="small" label="Car"
+                        value={data.vehicle_id}
+                        disabled={disabled}
+                        onChange={(e) => setData("vehicle_id", e.target.value === "" ? "" : Number(e.target.value))}
+                        error={Boolean(errors.vehicle_id)}
+                        helperText={errors.vehicle_id ?? (vehicles.length === 0 ? "Add cars under Inventory → Fleet." : undefined)}
+                    >
+                        <MenuItem value="">No car yet</MenuItem>
+                        {vehicles.map((v) => (
+                            <MenuItem key={v.id} value={v.id}>
+                                {v.name} · {v.plate} · {v.max_cbm} CBM{v.status !== "active" ? " (retired)" : ""}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                </Grid>
+                <Grid size={{ xs: 12, md: 5 }}>
+                    <Autocomplete
+                        multiple
+                        size="small"
+                        disabled={disabled}
+                        options={couriers}
+                        getOptionLabel={(o) => o.name}
+                        value={couriers.filter((c) => data.courier_ids.includes(c.id))}
+                        onChange={(_e, value) => setData("courier_ids", value.map((c) => c.id))}
+                        renderTags={(value, getTagProps) =>
+                            value.map((c, index) => (
+                                <Chip size="small" label={c.name} {...getTagProps({ index })} key={c.id} />
+                            ))
+                        }
+                        renderInput={(params) => (
+                            <TextField
+                                {...params}
+                                label="Drivers offered"
+                                placeholder={data.courier_ids.length === 0 ? "Open to every driver" : undefined}
+                                error={Boolean(errors.courier_ids)}
+                                helperText={errors.courier_ids}
+                            />
+                        )}
+                    />
+                </Grid>
+                <Grid size={{ xs: 12, md: 2 }}>
+                    <Button type="submit" variant="contained" fullWidth disabled={processing || disabled}>
+                        Save
+                    </Button>
+                </Grid>
+            </Grid>
+        </form>
     );
 }
 

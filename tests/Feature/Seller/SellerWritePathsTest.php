@@ -341,34 +341,37 @@ class SellerWritePathsTest extends TestCase
         // $this->seller works at an unrelated store.
 
         $this->post(route('seller.shipments.items.store', $shipment), ['item_variant_id' => $variant->id, 'quantity' => 1])->assertForbidden();
-        $this->post(route('seller.shipments.handover', $shipment))->assertForbidden();
+        $this->post(route('seller.shipments.step', [$shipment, 'start_picking']))->assertForbidden();
         $this->get(route('seller.shipments.dispatched', $shipment))->assertForbidden();
 
         $this->assertSame(ShipmentWorkflowService::SCHEDULED, $shipment->fresh()->status);
     }
 
     #[Test]
-    public function only_the_origin_dock_can_hand_over_so_the_destination_seller_is_refused(): void
+    public function only_the_origin_dock_picks_so_the_destination_seller_is_refused(): void
     {
         [$shipment, $destination, $variant, $origin] = $this->shipmentToMyStore('scheduled');
         $this->actingAs($this->user('seller', $destination->id));
 
-        $this->post(route('seller.shipments.handover', $shipment))->assertSessionHas('error');
+        $this->post(route('seller.shipments.step', [$shipment, 'start_picking']))->assertForbidden();
 
         $this->assertSame(ShipmentWorkflowService::SCHEDULED, $shipment->fresh()->status);
         $this->assertSame(100, $this->stockAt($variant, $origin));
     }
 
     #[Test]
-    public function a_seller_at_the_origin_hands_over_and_stock_leaves_the_origin(): void
+    public function a_seller_at_the_origin_picks_and_prepares_but_stock_waits_for_the_driver(): void
     {
         [$shipment, , $variant, $origin] = $this->shipmentToMyStore('scheduled');
         $this->actingAs($this->user('seller', $origin->id));
 
-        $this->post(route('seller.shipments.handover', $shipment))->assertSessionHas('success');
+        $this->post(route('seller.shipments.step', [$shipment, 'start_picking']))->assertSessionHas('success');
+        $this->post(route('seller.shipments.step', [$shipment, 'pick_line']), ['variant_id' => $variant->id, 'picked' => true]);
+        $this->post(route('seller.shipments.step', [$shipment, 'prepared']))->assertSessionHas('success');
 
-        $this->assertSame(ShipmentWorkflowService::DISPATCHED, $shipment->fresh()->status);
-        $this->assertSame(70, $this->stockAt($variant, $origin));
+        // Prepared, not dispatched: the load leaves only when the driver signs.
+        $this->assertSame(ShipmentWorkflowService::READY, $shipment->fresh()->status);
+        $this->assertSame(100, $this->stockAt($variant, $origin));
     }
 
     private function stockAt(ItemVariant $variant, Store $store): int

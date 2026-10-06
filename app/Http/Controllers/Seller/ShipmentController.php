@@ -131,6 +131,13 @@ class ShipmentController extends Controller
                 // Other open runs from the same dock, for the Move Item sheet.
                 'move_targets' => $this->workflow->moveTargets($shipment, Auth::user()),
                 'courier' => $this->courierProp($shipment),
+                // The car the run goes in and the drivers it is offered to.
+                'fleet' => $this->workflow->presentFleet($shipment),
+                'vehicle_options' => $this->workflow->vehicleOptions($shipment),
+                'courier_options' => $this->workflow->courierOptions(),
+                'workflow_status' => (string) $shipment->status,
+                // Pick → prepare → driver → receiver, once scheduled.
+                'handoff' => $transfer['handoff'],
                 'can_edit_manifest' => $this->workflow->manifestIsOpen($shipment),
                 // The Replenishment Manifest panel: refill suggestions from stock
                 // keepers and the auto trigger this shipment could take.
@@ -181,9 +188,23 @@ class ShipmentController extends Controller
             ]);
         }
 
-        return redirect()
-            ->route('seller.shipments.review', $shipment)
-            ->with('success', $changed > 0 ? "Manifest saved ({$changed} line(s) updated)." : 'Manifest saved.');
+        // The fleet car and the drivers the run is offered to.
+        if (array_key_exists('vehicle_id', $validated) || array_key_exists('courier_ids', $validated)) {
+            try {
+                $this->workflow->assignFleet(
+                    $shipment->refresh(),
+                    array_key_exists('vehicle_id', $validated) ? ($validated['vehicle_id'] !== null ? (int) $validated['vehicle_id'] : null) : $shipment->vehicle_id,
+                    array_key_exists('courier_ids', $validated) ? (array) ($validated['courier_ids'] ?? []) : $shipment->eligibleCourierIds(),
+                );
+            } catch (\RuntimeException | \InvalidArgumentException $e) {
+                return back()->with('error', $e->getMessage());
+            }
+        }
+
+        // No review step: once the driver and both docks agree on one of the
+        // creator's times the run is scheduled, and the origin's handover to
+        // the driver is what dispatches it.
+        return back()->with('success', $changed > 0 ? "Manifest saved ({$changed} line(s) updated)." : 'Manifest saved.');
     }
 
     /**
@@ -223,86 +244,18 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Phase 2 — review before dispatch.
+     * The old review step. The Build screen now holds everything the creator
+     * decides, so an old link lands there.
      */
-    public function review(Shipment $shipment): Response
+    public function review(Shipment $shipment): RedirectResponse
     {
         abort_unless($this->shipmentIsInScope($shipment), 403);
 
-        $transfer = $this->workflow->presentAsScheduledTransfer($shipment);
-        $items = $this->workflow->presentAsManifestItems($shipment);
-
-        return Inertia::render('Seller/Shipments/Review/index', array_merge(
-            $this->partyProps($transfer),
-            [
-                'transfer_id' => (int) $shipment->id,
-                'reference' => $transfer['reference'],
-                'origin' => $transfer['origin'],
-                'destination' => $transfer['destination'],
-                'distance_km' => $transfer['distance_km'],
-                'scheduled_run' => $transfer['scheduled_run'],
-                'cutoff_label' => $transfer['cutoff_label'],
-                'slot' => $transfer['slot'],
-                'vehicle' => $this->workflow->presentAsVehicle($shipment),
-                'manifest_items' => $items,
-                'total_cbm' => (float) array_sum(array_column($items, 'cbm')),
-                'total_kg' => (float) array_sum(array_column($items, 'weight_kg')),
-                'total_cartons' => (int) array_sum(array_column($items, 'quantity')),
-                'courier' => $this->courierProp($shipment),
-                // Review used to claim all four parties had signed off the
-                // moment the screen loaded. Dispatch is only actually open once
-                // the gate really is clear.
-                'can_dispatch' => ! in_array($shipment->status, [
-                    ShipmentWorkflowService::DRAFT,
-                    ShipmentWorkflowService::PENDING_AGREEMENT,
-                ], true) && $items !== [],
-            ],
-        ));
+        return redirect()->route('seller.shipments.show', $shipment);
     }
 
     /**
-     * Phase 2 → 3 — dispatch for real.
-     *
-     * The old implementation was a bare redirect with a `// TODO: Mark Transfer
-     * as dispatched` comment. It now drives the actual lifecycle, which is what
-     * moves stock out of the origin.
-     */
-    public function dispatchShipment(Shipment $shipment): RedirectResponse
-    {
-        abort_unless($this->shipmentIsInScope($shipment), 403);
-
-        // The agreement gate comes first. Reporting this plainly matters: the
-        // old code walked into transition(), caught the exception and redirected
-        // back, so pressing Dispatch appeared to do nothing at all.
-        if (in_array($shipment->status, [
-            ShipmentWorkflowService::DRAFT,
-            ShipmentWorkflowService::PENDING_AGREEMENT,
-        ], true)) {
-            $missing = $this->workflow->outstandingParties($shipment);
-
-            return back()->with('error', $missing === []
-                ? 'All four parties must agree on the same time slot before dispatch.'
-                : 'Cannot dispatch yet — awaiting agreement from: ' . implode(', ', $missing) . '.');
-        }
-
-        if ($shipment->items()->count() === 0) {
-            return back()->with('error', 'Add at least one line to the manifest before dispatching.');
-        }
-
-        // Walk the remaining stages in one go.
-        try {
-            $shipment = $this->workflow->advanceTo($shipment, ShipmentWorkflowService::DISPATCHED);
-        } catch (\RuntimeException $e) {
-            return back()->with('error', $e->getMessage());
-        }
-
-        return redirect()
-            ->route('seller.shipments.dispatched', $shipment)
-            ->with('success', "Shipment {$shipment->reference} dispatched.");
-    }
-
-    /**
-     * Phase 3 — dispatched confirmation.
+     * After handover — the run on the road.
      */
     public function dispatched(Shipment $shipment): Response
     {
@@ -579,43 +532,5 @@ class ShipmentController extends Controller
     public function agree(AgreeShipmentRequest $request, Shipment $shipment): RedirectResponse
     {
         return $this->agreeAsParty($request, $shipment, $this->workflow);
-    }
-
-    /**
-     * Origin handover: the keeper hands the load to the driver.
-     *
-     * This is the moment stock leaves the origin ledger.
-     */
-    public function handover(Shipment $shipment): RedirectResponse
-    {
-        abort_unless($this->shipmentIsInScope($shipment), 403);
-
-        // advanceTo(), not transition(): `scheduled` cannot jump straight to
-        // `dispatched`, so a bare transition here failed silently.
-        try {
-            $shipment = $this->workflow->advanceTo($shipment, ShipmentWorkflowService::DISPATCHED);
-        } catch (\RuntimeException $e) {
-            return back()->with('error', $e->getMessage());
-        }
-
-        return back()->with('success', "Handed to the courier — stock left {$shipment->originLocation?->name}.");
-    }
-
-    /**
-     * Destination receipt: the receiver inspects and accepts the goods.
-     *
-     * This is the moment stock is credited to the destination ledger.
-     */
-    public function receive(Shipment $shipment): RedirectResponse
-    {
-        abort_unless($this->shipmentIsInScope($shipment), 403);
-
-        try {
-            $shipment = $this->workflow->advanceTo($shipment, ShipmentWorkflowService::RECEIVED);
-        } catch (\RuntimeException $e) {
-            return back()->with('error', $e->getMessage());
-        }
-
-        return back()->with('success', "Received — stock credited to {$shipment->destinationLocation?->name}.");
     }
 }

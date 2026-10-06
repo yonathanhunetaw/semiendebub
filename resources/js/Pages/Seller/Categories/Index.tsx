@@ -2,7 +2,8 @@ import { Head, Link, router } from "@inertiajs/react";
 import React from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import BarcodeScannerDialog from "@/Components/Seller/BarcodeScannerDialog";
-import { type CatalogItem, cardPricing, money } from "@/Components/Seller/catalogPricing";
+import { type CatalogItem } from "@/Components/Seller/catalogPricing";
+import ProductCard from "@/Components/Seller/ProductCard";
 import { categoryIcon } from "@/Components/Seller/categoryIcon";
 import { TONES, type Tone } from "@/Components/Shared/ui";
 
@@ -32,6 +33,8 @@ interface Props {
     subcategoryCount?: number;
     /** The selected department's best seller at this store; null until something sells. */
     featuredItem?: FeaturedItem | null;
+    has_tin_cart?: boolean;
+    top_cart_is_individual?: boolean;
 }
 
 /** Subcategory tiles cycle through the tones so neighbours read apart. */
@@ -50,6 +53,8 @@ export default function Index({
     subcategories = [],
     subcategoryCount = 0,
     featuredItem = null,
+    has_tin_cart = false,
+    top_cart_is_individual = false,
 }: Props) {
     const [query, setQuery] = React.useState("");
     const [scannerOpen, setScannerOpen] = React.useState(false);
@@ -62,47 +67,6 @@ export default function Index({
     return (
         <div className="flex h-[100dvh] flex-col">
             <Head title="Categories" />
-
-            {/* ========== HEADER ========== */}
-            <header className="z-20 shrink-0 border-b border-outline-variant bg-surface-container-lowest px-4 pb-3 pt-3 shadow-sm">
-                <div className="mb-2.5">
-                    <h1 className="text-xl font-bold leading-none tracking-tight text-on-surface">Categories</h1>
-                    <p className="mt-1 text-[11px] font-medium text-on-surface-variant">
-                        {plural(mainCategories.length, "Department")} • {subcategoryCount.toLocaleString()} {subcategoryCount === 1 ? "Subcategory" : "Subcategories"}
-                    </p>
-                </div>
-
-                <div className="flex items-center">
-                    <div className="relative flex-1">
-                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-outline">search</span>
-                        <input
-                            type="search"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search category or subcategory…"
-                            className="h-10 w-full rounded-[12px] border border-transparent bg-surface-container py-2 pl-9 pr-9 text-xs font-medium text-on-surface outline-none transition-all placeholder:text-outline focus:border-primary focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary"
-                        />
-                        {query && (
-                            <button
-                                type="button"
-                                aria-label="Clear search"
-                                onClick={() => setQuery("")}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface-variant"
-                            >
-                                <span className="material-symbols-outlined text-[18px]">cancel</span>
-                            </button>
-                        )}
-                    </div>
-                    <button
-                        type="button"
-                        aria-label="Scan barcode"
-                        onClick={() => setScannerOpen(true)}
-                        className="ml-2 flex h-10 w-10 items-center justify-center rounded-[12px] border border-primary/30 bg-primary-container text-primary transition-all hover:bg-primary-container/70 active:scale-95"
-                    >
-                        <span className="material-symbols-outlined text-[20px]">barcode_scanner</span>
-                    </button>
-                </div>
-            </header>
 
             {/* ========== MASTER / DETAIL ========== */}
             <div className="relative flex min-h-0 flex-1 overflow-hidden bg-background">
@@ -143,6 +107,46 @@ export default function Index({
 
                 {/* Selected department */}
                 <main className="flex-1 overflow-y-auto bg-surface-container-lowest p-3 [scrollbar-width:none] sm:p-4 [&::-webkit-scrollbar]:hidden">
+                    {/* Fixed at the top of the pane; the lists scroll beneath it. */}
+                    <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-3 border-b border-outline-variant bg-surface-container-lowest px-3 pb-3 pt-3 sm:-mx-4 sm:-mt-4 sm:px-4 sm:pt-4">
+                        <div className="mb-2.5">
+                            <h1 className="text-xl font-bold leading-none tracking-tight text-on-surface">Categories</h1>
+                            <p className="mt-1 text-[11px] font-medium text-on-surface-variant">
+                                {plural(mainCategories.length, "Department")} • {subcategoryCount.toLocaleString()} {subcategoryCount === 1 ? "Subcategory" : "Subcategories"}
+                            </p>
+                        </div>
+                        <div className="flex items-center">
+                        <div className="relative flex-1">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-outline">search</span>
+                            <input
+                                type="search"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Search category or subcategory…"
+                                className="h-10 w-full rounded-[12px] border border-transparent bg-surface-container py-2 pl-9 pr-9 text-xs font-medium text-on-surface outline-none transition-all placeholder:text-outline focus:border-primary focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary"
+                            />
+                            {query && (
+                                <button
+                                    type="button"
+                                    aria-label="Clear search"
+                                    onClick={() => setQuery("")}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface-variant"
+                                >
+                                    <span className="material-symbols-outlined text-[18px]">cancel</span>
+                                </button>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            aria-label="Scan barcode"
+                            onClick={() => setScannerOpen(true)}
+                            className="ml-2 flex h-10 w-10 items-center justify-center rounded-[12px] border border-primary/30 bg-primary-container text-primary transition-all hover:bg-primary-container/70 active:scale-95"
+                        >
+                            <span className="material-symbols-outlined text-[20px]">barcode_scanner</span>
+                        </button>
+                    </div>
+                    </div>
+
                     {selectedCategory ? (
                         <>
                             <div className="flex items-center justify-between border-b border-outline-variant pb-3">
@@ -201,7 +205,14 @@ export default function Index({
                                 </p>
                             )}
 
-                            {featuredItem && <FastMoving item={featuredItem} department={selectedCategory.category_name} />}
+                            {featuredItem && (
+                                <FastMoving
+                                    item={featuredItem}
+                                    department={selectedCategory.category_name}
+                                    hasTinCart={has_tin_cart}
+                                    topCartIsIndividual={top_cart_is_individual}
+                                />
+                            )}
                         </>
                     ) : (
                         <p className="pt-8 text-center text-sm text-on-surface-variant">Select a department</p>
@@ -224,13 +235,8 @@ export default function Index({
     );
 }
 
-/** The department's best seller, as a compact link card. */
-function FastMoving({ item, department }: { item: FeaturedItem; department: string }) {
-    const pricing = cardPricing(item, false);
-    const src = item.image_urls?.[0];
-    const [broken, setBroken] = React.useState(!src);
-    const stock = item.store_stock;
-
+/** The department's best seller, on the same card as the Store page. */
+function FastMoving({ item, department, hasTinCart, topCartIsIndividual }: { item: FeaturedItem; department: string; hasTinCart: boolean; topCartIsIndividual: boolean }) {
     return (
         <section className="mt-4 border-t border-outline-variant pt-3">
             <div className="mb-2 flex items-center justify-between">
@@ -242,36 +248,9 @@ function FastMoving({ item, department }: { item: FeaturedItem; department: stri
                     {item.units_sold.toLocaleString()} sold
                 </span>
             </div>
-            <Link
-                href={route("seller.items.show", item.id)}
-                className="flex items-center gap-3 rounded-[12px] border border-primary/30 bg-gradient-to-r from-primary-container/80 to-primary-container/30 p-2.5"
-            >
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-primary/30 bg-surface-container-lowest shadow-sm">
-                    {broken ? (
-                        <span className="material-symbols-outlined text-2xl text-primary">{categoryIcon(department)}</span>
-                    ) : (
-                        <img src={src} alt={item.product_name} onError={() => setBroken(true)} className="h-full w-full object-cover" />
-                    )}
-                </div>
-                <div className="min-w-0 flex-1">
-                    <h4 className="truncate text-xs font-semibold text-on-surface">{item.product_name}</h4>
-                    <p className="text-[10px] font-medium text-on-surface-variant">
-                        {stock === undefined || stock === null ? "" : stock > 0 ? `Stock: ${stock.toLocaleString()}` : "Out of stock"}
-                    </p>
-                    <div className="mt-1 flex items-center justify-between">
-                        <span className="text-xs font-bold text-on-surface">
-                            {money(pricing.price)}
-                            {pricing.hasDiscount && (
-                                <span className="ml-1 text-[9px] font-normal text-outline line-through">{money(pricing.original)}</span>
-                            )}
-                        </span>
-                        <span className="inline-flex items-center rounded-[4px] bg-primary px-2 py-0.5 text-[10px] font-semibold text-on-primary">
-                            View
-                            <span className="material-symbols-outlined text-[12px]">chevron_right</span>
-                        </span>
-                    </div>
-                </div>
-            </Link>
+            <div className="w-1/2 min-w-[150px] max-w-[220px]">
+                <ProductCard item={item} hasTinCart={hasTinCart} topCartIsIndividual={topCartIsIndividual} />
+            </div>
         </section>
     );
 }

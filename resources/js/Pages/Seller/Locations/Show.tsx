@@ -78,7 +78,7 @@ export default function LocationShow({
         <>
             <Head title={location.name} />
 
-            <div className="min-h-screen bg-background pb-28">
+            <div className="mx-auto min-h-screen max-w-[1440px] bg-background pb-28 lg:px-4">
                 {/* ── Header ── */}
                 <section className="flex items-center space-x-3 px-4 pb-3 pt-4">
                     <Link
@@ -104,7 +104,7 @@ export default function LocationShow({
                     </div>
                 </section>
 
-                <div className="px-3.5">
+                <div className="px-3.5 lg:px-0">
                     {places.length ? (
                         <section className="mb-3 rounded-[16px] border border-outline-variant/60 bg-surface-container-lowest px-3.5 py-1 shadow-sm">
                             <PlaceStrip places={places} activeKey={activeKey} bordered={false} />

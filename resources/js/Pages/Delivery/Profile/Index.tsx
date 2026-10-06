@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import React from "react";
 
-import { StatTile } from "@/Components/Delivery/deliveryUi";
+import { DeliveryHero, StatTile } from "@/Components/Delivery/deliveryUi";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
 import type { DeliveryProfileProps } from "@/types/delivery";
 
@@ -57,50 +57,30 @@ export default function Profile({
         <>
             <Head title="Profile" />
 
-            <Container sx={{ pt: 3, pb: 10 }}>
-                <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-                    <Avatar
-                        sx={{
-                            width: 56,
-                            height: 56,
-                            bgcolor: "primary.main",
-                            fontWeight: 800,
-                        }}
-                    >
+            <DeliveryHero
+                eyebrow="Profile"
+                title={`${courier.first_name ?? ""} ${courier.last_name ?? ""}`.trim() || "Courier"}
+                subtitle={courier.email ?? undefined}
+                action={
+                    <Avatar sx={{ width: 56, height: 56, bgcolor: "rgba(255,255,255,0.2)", color: "inherit", fontWeight: 800 }}>
                         {initials || "?"}
                     </Avatar>
-                    <div>
-                        <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                            {`${courier.first_name ?? ""} ${courier.last_name ?? ""}`.trim() ||
-                                "Courier"}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            {courier.email}
-                        </Typography>
-                    </div>
-                </Stack>
-
-                {/* ── Lifetime totals ── */}
-                <Grid container spacing={1.5} sx={{ mb: 3 }}>
+                }
+            >
+                <Grid container spacing={1}>
                     <Grid size={4}>
-                        <StatTile
-                            label="Delivered"
-                            value={metrics.delivered_total}
-                            tone="success"
-                        />
+                        <StatTile onHero label="Delivered" value={metrics.delivered_total} />
                     </Grid>
                     <Grid size={4}>
-                        <StatTile label="Open" value={metrics.open} tone="warning" />
+                        <StatTile onHero label="Open" value={metrics.open} />
                     </Grid>
                     <Grid size={4}>
-                        <StatTile
-                            label="Failed"
-                            value={metrics.failed}
-                            tone={metrics.failed > 0 ? "danger" : "default"}
-                        />
+                        <StatTile onHero label="Failed" value={metrics.failed} />
                     </Grid>
                 </Grid>
+            </DeliveryHero>
 
+            <Container maxWidth="sm" sx={{ pt: 2.5, pb: 4 }}>
                 {/* ── Editable details ── */}
                 <Paper
                     elevation={0}

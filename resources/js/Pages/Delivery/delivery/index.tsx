@@ -1,5 +1,8 @@
 import { Head, router, useForm } from "@inertiajs/react";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
+import PendingActionsRoundedIcon from "@mui/icons-material/PendingActionsRounded";
 import {
     Alert,
     Button,
@@ -19,8 +22,10 @@ import {
 import React from "react";
 
 import {
+    DeliveryHero,
     EmptyRuns,
     RunCard,
+    SectionTitle,
     StatTile,
     TRANSITION_LABELS,
 } from "@/Components/Delivery/deliveryUi";
@@ -118,34 +123,40 @@ export default function Runs({
         <>
             <Head title="My Deliveries" />
 
-            <Container sx={{ pt: 3, pb: 10 }}>
-                <Typography variant="h5" sx={{ fontWeight: 800, mb: 2 }}>
-                    My Deliveries
-                </Typography>
-
-                <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
+            <DeliveryHero
+                eyebrow="Last mile"
+                title="My deliveries"
+                subtitle={
+                    metrics.open > 0
+                        ? `${metrics.open} open run${metrics.open === 1 ? "" : "s"} — keep it moving.`
+                        : "All caught up."
+                }
+            >
+                <Grid container spacing={1}>
                     <Grid size={4}>
-                        <StatTile label="Open" value={metrics.open} tone="warning" />
+                        <StatTile onHero label="Open" value={metrics.open} icon={<PendingActionsRoundedIcon />} />
                     </Grid>
                     <Grid size={4}>
-                        <StatTile
-                            label="Done today"
-                            value={metrics.delivered_today}
-                            tone="success"
-                        />
+                        <StatTile onHero label="Done today" value={metrics.delivered_today} icon={<CheckCircleRoundedIcon />} />
                     </Grid>
                     <Grid size={4}>
-                        <StatTile label="In pool" value={metrics.unassigned} />
+                        <StatTile onHero label="In pool" value={metrics.unassigned} icon={<InboxRoundedIcon />} />
                     </Grid>
                 </Grid>
-
                 <TextField
                     fullWidth
                     size="small"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search name, phone, address or tracking…"
-                    sx={{ mb: 1.5 }}
+                    sx={{
+                        mt: 1.5,
+                        "& .MuiOutlinedInput-root": {
+                            bgcolor: "background.paper",
+                            borderRadius: 3,
+                            "& fieldset": { border: "none" },
+                        },
+                    }}
                     slotProps={{
                         input: {
                             startAdornment: (
@@ -156,11 +167,13 @@ export default function Runs({
                         },
                     }}
                 />
+            </DeliveryHero>
 
+            <Container maxWidth="sm" sx={{ pt: 2, pb: 4 }}>
                 <Stack
                     direction="row"
                     spacing={1}
-                    sx={{ mb: 2.5, overflowX: "auto", pb: 0.5 }}
+                    sx={{ mb: 2, overflowX: "auto", pb: 0.5, mx: -2, px: 2, "&::-webkit-scrollbar": { display: "none" } }}
                 >
                     {STATUS_TABS.map((tab) => {
                         const active = filters.status === tab.value;
@@ -171,11 +184,13 @@ export default function Runs({
                                 onClick={() => applyFilters({ status: tab.value })}
                                 color={active ? "primary" : "default"}
                                 variant={active ? "filled" : "outlined"}
-                                sx={{ fontWeight: 700, flexShrink: 0 }}
+                                sx={{ fontWeight: 700, flexShrink: 0, borderRadius: 2.5, height: 34, px: 0.5 }}
                             />
                         );
                     })}
                 </Stack>
+
+                <SectionTitle title="Your runs" count={deliveries.length} />
 
                 {/* ── Assigned runs ── */}
                 <Stack spacing={1.5} sx={{ mb: 3 }}>
@@ -197,7 +212,8 @@ export default function Runs({
                                                 .map((status) => (
                                                     <Button
                                                         key={status}
-                                                        size="small"
+                                                        size="medium"
+                                                        sx={{ borderRadius: 2.5, fontWeight: 800, flex: 1 }}
                                                         variant={
                                                             status === "failed"
                                                                 ? "outlined"
@@ -264,9 +280,7 @@ export default function Runs({
                 {/* ── Pool ── */}
                 {availableRuns.length > 0 ? (
                     <>
-                        <Typography variant="h6" sx={{ fontWeight: 800, mb: 1.5 }}>
-                            Available to claim
-                        </Typography>
+                        <SectionTitle title="Available to claim" count={availableRuns.length} />
                         <Stack spacing={1.5}>
                             {availableRuns.map((run) => (
                                 <RunCard
@@ -275,8 +289,9 @@ export default function Runs({
                                     actions={
                                         <Button
                                             variant="contained"
-                                            size="small"
+                                            size="large"
                                             fullWidth
+                                            sx={{ borderRadius: 2.5, fontWeight: 800 }}
                                             onClick={() => claim(run)}
                                         >
                                             Claim this run
@@ -296,7 +311,7 @@ export default function Runs({
                 autoHideDuration={4000}
                 onClose={() => setNotice(null)}
                 anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-                sx={{ bottom: { xs: 72 } }}
+                sx={{ bottom: { xs: 88 } }}
             >
                 <Alert
                     severity={flash?.error ? "error" : "success"}

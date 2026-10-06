@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
 import { Head, router } from "@inertiajs/react";
 import TransferCard from "@/Components/Seller/Shipments/TransferCard";
+import { DeliveryHero } from "@/Components/Delivery/deliveryUi";
 import type { ScheduledTransfer } from "@/types/shipments";
 
 type Tab = "all" | "available" | "mine";
@@ -53,49 +54,40 @@ export default function DeliveryShipmentsIndex({
         <>
             <Head title="Shipments" />
 
-            {/* ── Top Context Strip: Back button, centered Shipments, and pool toggle ── */}
-            <div className="px-4 py-3 flex items-center justify-between bg-surface-container-lowest border-b border-outline-variant sticky top-0 z-20">
-                <button
-                    onClick={() => {
-                        if (window.history.length > 1) {
-                            window.history.back();
-                        } else {
-                            router.visit(route("delivery.dashboard"));
-                        }
-                    }}
-                    className="w-8 h-8 rounded-xl bg-surface-container-low hover:bg-surface-container border border-outline-variant flex items-center justify-center active:scale-95 transition-all text-on-surface-variant"
-                    aria-label="Back"
-                >
-                    <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                </button>
-
-                <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>local_shipping</span>
-                    <h1 className="text-[16px] font-bold text-on-surface tracking-tight">Shipments</h1>
-                </div>
-
-                <div className="flex items-center gap-0.5 bg-surface-container-low p-0.5 rounded-full border border-outline-variant">
+            <DeliveryHero
+                eyebrow="Freight"
+                title="Shipments"
+                subtitle={
+                    transfers.length > 0
+                        ? `${transfers.length} run${transfers.length === 1 ? "" : "s"} on your board.`
+                        : "No freight on your board."
+                }
+            >
+                {/* Which list the courier is on, shown as the state it is in. */}
+                <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-white/15">
                     {([
-                        { id: "all" as Tab, label: "ALL" },
-                        { id: "available" as Tab, label: `POOL (${available_count})` },
-                        { id: "mine" as Tab, label: "MINE" },
+                        { id: "all" as Tab, label: "All" },
+                        { id: "available" as Tab, label: `Pool (${available_count})` },
+                        { id: "mine" as Tab, label: "Mine" },
                     ]).map(t => (
                         <button key={t.id} onClick={() => setTab(t.id)}
-                            className={`px-2 py-1 rounded-full text-[10px] font-bold tracking-wide transition-colors ${
-                                tab === t.id ? "bg-primary text-on-primary" : "text-on-surface-variant hover:text-primary"
+                            className={`py-2 rounded-xl text-[12px] font-bold transition-colors ${
+                                tab === t.id ? "bg-white text-primary shadow-sm" : "text-white/85 hover:text-white"
                             }`}>
                             {t.label}
                         </button>
                     ))}
                 </div>
-            </div>
+            </DeliveryHero>
 
-            <div className="px-3.5 pt-3 pb-36 space-y-3">
+            <div className="max-w-xl mx-auto px-3.5 pt-4 pb-6 space-y-3">
 
                 {/* ── Status Filter Chips ── */}
                 <div className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
                     {[
                         { id: "all",        label: "All" },
+                        // Runs still waiting on a driver to accept a window.
+                        { id: "pending",    label: "To Agree" },
                         { id: "dispatched", label: "To Collect" },
                         { id: "en_route",   label: "En Route" },
                         { id: "shipped",    label: "Shipped" },

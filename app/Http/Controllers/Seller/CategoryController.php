@@ -49,12 +49,17 @@ class CategoryController extends Controller
             ? $catalog->bestSeller((int) $storeId, $subcategories->pluck('id')->push($selectedCategory['id']))
             : null;
 
+        // Same cart flags the Store page hands its ProductCards.
+        $context = $catalog->cartContext($request->user(), $request->integer('cart_id') ?: null);
+
         return Inertia::render('Seller/Categories/Index', [
             'mainCategories' => $mainCategories,
             'selectedCategory' => $selectedCategory,
             'subcategories' => $subcategories,
             'subcategoryCount' => $all->whereNotNull('parent_id')->count(),
             'featuredItem' => $featuredItem,
+            'has_tin_cart' => $context['has_tin_cart'],
+            'top_cart_is_individual' => $context['top_cart_is_individual'],
         ]);
     }
 
@@ -62,22 +67,33 @@ class CategoryController extends Controller
      * Display the specified category, showing its subcategories (children).
      * Corresponds to the route: seller.categories.show
      */
-    public function show(ItemCategory $category)
+    public function show(Request $request, ItemCategory $category, SellerCatalog $catalog)
     {
-        // Get immediate subcategories and count only active items per subcategory
-        // (the items() relationship already scopes to status='active')
         $subcategories = $category->children()
             ->withCount('items as active_items_count')
             ->orderBy('category_name')
             ->get();
 
-        // Get only active items in this category (relationship already scopes to active)
-        $items = $category->items()
-            ->with(['category', 'variants.storeVariants'])
-            ->orderBy('product_name')
-            ->get();
+        // Only what this store carries, as the same cards the Store page shows.
+        $storeId = $request->user()->store?->id;
+        $context = $catalog->cartContext($request->user(), $request->integer('cart_id') ?: null);
 
-        return Inertia::render('Seller/Categories/Show', compact('category', 'subcategories', 'items'));
+        $items = $storeId
+            ? $catalog->query((int) $storeId)
+                ->where('items.item_category_id', $category->id)
+                ->orderBy('product_name')
+                ->get()
+                ->map(fn ($item) => $catalog->present($item, (int) $storeId, $context['customer']))
+                ->values()
+            : collect();
+
+        return Inertia::render('Seller/Categories/Show', [
+            'category' => $category,
+            'subcategories' => $subcategories,
+            'items' => $items,
+            'has_tin_cart' => $context['has_tin_cart'],
+            'top_cart_is_individual' => $context['top_cart_is_individual'],
+        ]);
     }
 
     // The remaining resource methods (create, store, edit, update, destroy)

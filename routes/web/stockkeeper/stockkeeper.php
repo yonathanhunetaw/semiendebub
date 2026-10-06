@@ -60,8 +60,8 @@ Route::domain("stockkeeper.{$baseDomain}")
             Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');
             Route::post('/shipments/{shipment}/pick', [ShipmentController::class, 'pick'])->name('shipments.pick');
             Route::post('/shipments/{shipment}/agree', [ShipmentController::class, 'agree'])->name('shipments.agree');
-            Route::post('/shipments/{shipment}/handover', [ShipmentController::class, 'handover'])->name('shipments.handover');
-            Route::post('/shipments/{shipment}/receive', [ShipmentController::class, 'receive'])->name('shipments.receive');
+            // The hand-off steps after scheduling: pick, prepare, check, sign.
+            Route::post('/shipments/{shipment}/steps/{step}', [ShipmentController::class, 'step'])->name('shipments.step');
             Route::patch('/shipments/{shipment}/status', [ShipmentController::class, 'transition'])->name('shipments.transition');
 
             Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');

@@ -356,10 +356,17 @@ class SellerOrderJourneyTest extends TestCase
         $this->assertSame('scheduled', $shipment->fresh()->status);
         $this->assertSame($this->courier->id, (int) $shipment->fresh()->courier_id);
 
-        // ── Hub picks and hands to the courier ──
-        foreach (['picking', 'ready', 'dispatched'] as $status) {
-            $this->as($keeper, 'stockkeeper')
-                ->patch(route('stock_keeper.shipments.transition', $shipment), ['status' => $status])
+        // ── Hub picks and prepares the load ──
+        $this->as($keeper, 'stockkeeper')->post(route('stock_keeper.shipments.step', [$shipment, 'start_picking']))->assertSessionMissing('error');
+        $this->as($keeper, 'stockkeeper')->post(route('stock_keeper.shipments.step', [$shipment, 'pick_line']), ['variant_id' => $this->variant->id, 'picked' => true])->assertSessionMissing('error');
+        $this->as($keeper, 'stockkeeper')->post(route('stock_keeper.shipments.step', [$shipment, 'prepared']))->assertSessionMissing('error');
+
+        // ── Courier checks the load and signs for it: that is the handover ──
+        $signature = 'data:image/png;base64,'.base64_encode(str_repeat("\x89PNG\r\n", 40));
+
+        foreach (['courier_start' => [], 'courier_check' => [], 'courier_sign' => ['signature' => $signature]] as $step => $payload) {
+            $this->as($this->courier, 'delivery')
+                ->post(route('delivery.shipments.step', [$shipment, $step]), $payload)
                 ->assertSessionMissing('error');
         }
 
@@ -368,15 +375,11 @@ class SellerOrderJourneyTest extends TestCase
             app(StockService::class)->inCustody($this->variant->id),
         ]);
 
-        // ── Courier carries it ──
-        foreach (['in_transit', 'delivered'] as $status) {
-            $this->as($this->courier, 'delivery')
-                ->patch(route('delivery.shipments.transition', $shipment), ['status' => $status])
-                ->assertSessionMissing('error');
-        }
+        $this->as($this->courier, 'delivery')->post(route('delivery.shipments.step', [$shipment, 'courier_arrive']))->assertSessionMissing('error');
 
-        // ── The seller takes it in ──
-        $this->asSeller()->post(route('seller.shipments.receive', $shipment))->assertSessionMissing('error');
+        // ── The seller checks the goods and signs them in ──
+        $this->asSeller()->post(route('seller.shipments.step', [$shipment, 'receiver_check']))->assertSessionMissing('error');
+        $this->asSeller()->post(route('seller.shipments.step', [$shipment, 'receiver_sign']), ['signature' => $signature])->assertSessionMissing('error');
 
         $this->assertSame('received', $shipment->fresh()->status);
         $this->assertSame(0, app(StockService::class)->inCustody($this->variant->id));

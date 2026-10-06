@@ -54,7 +54,7 @@ class SellerLocationBoard
 
         $tiles = [
             $this->tile('shelf', 'Store Shelf', 'Active display', 'shelves', $shelf, $shelf ? $this->belowFloorCount($shelf) : 0),
-            $this->tile('store', 'Store', 'Store floor', 'storefront', $own->get(StockLocation::KIND_BACKROOM)),
+            $this->tile('store', 'Store Floor', 'Store floor', 'storefront', $own->get(StockLocation::KIND_BACKROOM)),
             $this->tile('remote_hub', 'Remote Hub', 'Overflow depot', 'warehouse', $own->get(StockLocation::KIND_REMOTE_HUB)),
         ];
 

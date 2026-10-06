@@ -1,38 +1,30 @@
-import { Head, Link, useForm } from "@inertiajs/react";
+import { Head, Link } from "@inertiajs/react";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
-import {
-    Alert,
-    Box,
-    Button,
-    Grid,
-    Snackbar,
-    Stack,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableRow,
-    TextField,
-    Typography,
-} from "@mui/material";
+import { Alert, Box, Button, Grid, Snackbar, Typography } from "@mui/material";
 import React from "react";
 
+import HandoffPanel from "@/Components/Shipment/HandoffPanel";
 import {
     AgreementPanel,
     LoadBar,
+    ManifestTable,
     ShipmentCard,
     ShipmentRouteHeader,
     ShipmentTimeline,
-    TransitionBar,
 } from "@/Components/Shipment/shipmentUi";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import type { StockKeeperShipmentShowProps } from "@/types/shipment";
 
+/** Statuses after the four parties agreed, when the hand-off is under way. */
+const HANDOFF_STATUSES = ["scheduled", "picking", "ready", "dispatched", "in_transit", "delivered", "received"];
+
 /**
- * The pick list.
+ * One shipment at the keeper's dock.
  *
- * The picker enters what they actually found; a shortfall is recorded rather
- * than hidden, and only the picked quantity is what physically moves.
+ * Before scheduling: agree to a window. After: the origin keeper picks and
+ * prepares the load in the pickup bay; the destination keeper checks what the
+ * driver brought and signs it in. Both are on the hand-off panel, which only
+ * offers the steps this keeper can take.
  */
 export default function StockKeeperShipmentShow({
     shipment,
@@ -45,24 +37,11 @@ export default function StockKeeperShipmentShow({
         if (message) setNotice(message);
     }, [flash?.success, flash?.error]);
 
-    const pickable = shipment.status === "scheduled" || shipment.status === "picking";
-
-    const { data, setData, post, processing } = useForm<{ picked: Record<number, number> }>({
-        picked: shipment.items.reduce<Record<number, number>>((acc, line) => {
-            // Default to the full ask, or whatever was already recorded.
-            acc[line.variant_id] = line.picked_quantity || line.quantity;
-            return acc;
-        }, {}),
-    });
-
-    const submit = (event: React.FormEvent): void => {
-        event.preventDefault();
-        post(route("stock_keeper.shipments.pick", shipment.id), { preserveScroll: true });
-    };
+    const underway = HANDOFF_STATUSES.includes(shipment.status) && shipment.handoff;
 
     return (
         <>
-            <Head title={`Pick ${shipment.reference}`} />
+            <Head title={`Shipment ${shipment.reference}`} />
 
             <Button
                 component={Link}
@@ -73,109 +52,41 @@ export default function StockKeeperShipmentShow({
                 Back to queue
             </Button>
 
+            <ShipmentCard sx={{ mb: 2.5 }}>
+                <ShipmentRouteHeader shipment={shipment} />
+                <LoadBar shipment={shipment} />
+            </ShipmentCard>
+
             <Grid container spacing={2.5}>
-                <Grid size={{ xs: 12, lg: 8 }}>
-                    <ShipmentCard sx={{ mb: 2.5 }}>
-                        <ShipmentRouteHeader shipment={shipment} />
-                        <LoadBar shipment={shipment} />
-                        <TransitionBar
-                            shipment={shipment}
-                            transitionRoute="stock_keeper.shipments.transition"
+                <Grid size={{ xs: 12, lg: 7 }}>
+                    {underway && shipment.handoff ? (
+                        <HandoffPanel
+                            shipmentId={shipment.id}
+                            reference={shipment.reference}
+                            handoff={shipment.handoff}
+                            lines={shipment.items}
+                            stepRoute="stock_keeper.shipments.step"
+                            originName={shipment.origin.name}
+                            destinationName={shipment.destination.name}
                         />
-                    </ShipmentCard>
-
-                    <ShipmentCard sx={{ p: 0, overflow: "hidden" }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, p: 2.5, pb: 1 }}>
-                            Pick list
-                        </Typography>
-
-                        <form onSubmit={submit}>
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Product</TableCell>
-                                        <TableCell>Location</TableCell>
-                                        <TableCell align="right">Asked</TableCell>
-                                        <TableCell align="right">At origin</TableCell>
-                                        <TableCell align="right">Picked</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {shipment.items.map((line) => (
-                                        <TableRow key={line.id} hover>
-                                            <TableCell>
-                                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                                    {line.name}
-                                                </Typography>
-                                                <Typography
-                                                    variant="caption"
-                                                    sx={{ fontFamily: "monospace" }}
-                                                    color="text.secondary"
-                                                >
-                                                    {line.sku ?? "—"}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>{line.location ?? "—"}</TableCell>
-                                            <TableCell align="right">{line.quantity}</TableCell>
-                                            <TableCell align="right">
-                                                <Typography
-                                                    variant="body2"
-                                                    sx={{
-                                                        fontWeight: 700,
-                                                        color:
-                                                            line.coverage === "ok"
-                                                                ? "success.main"
-                                                                : line.coverage === "low"
-                                                                  ? "warning.main"
-                                                                  : "error.main",
-                                                    }}
-                                                >
-                                                    {line.stock_qty}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell align="right" sx={{ width: 110 }}>
-                                                <TextField
-                                                    size="small"
-                                                    type="number"
-                                                    disabled={!pickable}
-                                                    value={data.picked[line.variant_id] ?? 0}
-                                                    onChange={(e) =>
-                                                        setData("picked", {
-                                                            ...data.picked,
-                                                            [line.variant_id]: Number(e.target.value),
-                                                        })
-                                                    }
-                                                    slotProps={{
-                                                        htmlInput: { min: 0, max: line.quantity },
-                                                    }}
-                                                />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-
-                            {pickable ? (
-                                <Stack sx={{ p: 2.5 }} direction="row" justifyContent="flex-end">
-                                    <Button type="submit" variant="contained" disabled={processing}>
-                                        Record pick
-                                    </Button>
-                                </Stack>
-                            ) : null}
-                        </form>
-                    </ShipmentCard>
+                    ) : (
+                        <AgreementPanel shipment={shipment} agreeRoute="stock_keeper.shipments.agree" />
+                    )}
                 </Grid>
 
-                <Grid size={{ xs: 12, lg: 4 }}>
-                    {/* The dock cannot start picking until all four parties land
-                        on the same window, so the keeper needs to accept one
-                        here rather than hunt for the tile on the index card. */}
-                    <Box sx={{ mb: 2.5 }}>
-                        <AgreementPanel
-                            shipment={shipment}
-                            agreeRoute="stock_keeper.shipments.agree"
-                        />
-                    </Box>
+                <Grid size={{ xs: 12, lg: 5 }}>
+                    {underway ? (
+                        <Box sx={{ mb: 2.5 }}>
+                            <AgreementPanel shipment={shipment} agreeRoute="stock_keeper.shipments.agree" />
+                        </Box>
+                    ) : null}
+
+                    <ShipmentCard sx={{ p: 0, overflow: "hidden", mb: 2.5 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, p: 2.5, pb: 1 }}>
+                            Manifest
+                        </Typography>
+                        <ManifestTable shipment={shipment} showPicked showCoverage />
+                    </ShipmentCard>
 
                     <ShipmentCard>
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>

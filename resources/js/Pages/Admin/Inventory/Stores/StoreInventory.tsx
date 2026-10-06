@@ -169,8 +169,18 @@ interface PaginatedData<T> {
     meta: PaginationMeta;
 }
 
+/** A place under the store: its shelf, floor or Remote Hub. */
+interface StoreSite {
+    id: number;
+    name: string;
+    code: string;
+    kind: string;
+    units: number;
+}
+
 interface Props {
     store: { id: number; name: string; location?: string; manager?: string; status: string };
+    locations?: StoreSite[];
     inventory: PaginatedData<InventoryItem> | InventoryItem[];
     customers: Person[];
     sellers: Person[];
@@ -1926,7 +1936,7 @@ function CatalogTopBar({ store, items, onSearch, search }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
-export default function StoreInventory({ store, inventory, customers = [], sellers = [] }: Props) {
+export default function StoreInventory({ store, locations = [], inventory, customers = [], sellers = [] }: Props) {
     const [search, setSearch] = useState("");
 
     let items: InventoryItem[] = [];
@@ -1981,6 +1991,25 @@ export default function StoreInventory({ store, inventory, customers = [], selle
                 <Chip label={store?.status} color={store?.status === "active" ? "success" : "default"}
                     variant="outlined" size="small" />
             </Stack>
+
+            {locations.length > 0 && (
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: `repeat(${Math.min(locations.length, 3)}, minmax(0, 1fr))` }, gap: 1.5, mb: 2 }}>
+                    {locations.map(site => (
+                        <Paper key={site.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+                            <Typography variant="caption" color="text.secondary"
+                                sx={{ textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
+                                {site.name}
+                            </Typography>
+                            <Typography sx={{ fontWeight: 800, fontSize: "1.1rem", lineHeight: 1.2 }}>
+                                {site.units.toLocaleString()} units
+                            </Typography>
+                            <Typography sx={{ fontFamily: "monospace", fontSize: "0.65rem", color: "text.secondary" }}>
+                                {site.code}
+                            </Typography>
+                        </Paper>
+                    ))}
+                </Box>
+            )}
 
             <CatalogTopBar store={store} items={items} search={search} onSearch={setSearch} />
 

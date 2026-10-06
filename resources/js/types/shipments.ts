@@ -44,6 +44,31 @@ export interface Vehicle {
     is_primary?: boolean;
 }
 
+/** A car from the fleet (App\Models\Fulfillment\Vehicle). */
+export interface FleetVehicle {
+    id: number;
+    name: string;
+    plate: string;
+    max_cbm: number;
+    payload_kg: number;
+    status: "active" | "inactive";
+}
+
+/** A driver a run can be offered to. */
+export interface CourierOption {
+    id: number;
+    name: string;
+    phone?: string | null;
+}
+
+/** The creator's fleet choice for one run. */
+export interface FleetChoice {
+    vehicle_id: number | null;
+    /** Empty means the run is open to every driver. */
+    eligible_courier_ids: number[];
+    eligible_couriers: { id: number; name: string }[];
+}
+
 /* ----------------------------------------------------------
  | Manifest items
  |----------------------------------------------------------*/
@@ -58,7 +83,9 @@ export interface ManifestItemAddedBy {
 }
 
 export interface ManifestItem {
+    /** The variant id. */
     id: number;
+    picked_quantity?: number;
     name: string;
     sku: string;
     pack_label?: string;
@@ -116,6 +143,9 @@ export interface ScheduledTransfer {
     can_schedule?: boolean;
     /** The real backend status, e.g. `pending_agreement`. */
     workflow_status?: WorkflowStatus;
+    /** The pick → prepare → driver → receiver process once scheduled. */
+    handoff?: import("@/types/shipment").ShipmentHandoff;
+    fleet?: FleetChoice;
     /** Parties the signed-in user may tick on this shipment. */
     actionable_parties?: PartyKey[];
     /** Lifecycle steps the signed-in user's role may drive next. */

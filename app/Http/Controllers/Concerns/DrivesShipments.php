@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Concerns;
 
 use App\Http\Requests\Shipment\AgreeShipmentRequest;
+use App\Http\Requests\Shipment\ShipmentStepRequest;
+use App\Services\Fulfillment\ShipmentHandoffService;
 use App\Http\Requests\Shipment\TransitionShipmentRequest;
 use App\Models\Fulfillment\Shipment;
 use App\Services\ShipmentWorkflowService;
@@ -85,6 +87,47 @@ trait DrivesShipments
                 ? "All parties agreed — {$shipment->reference} is scheduled."
                 : 'Agreement recorded. Still awaiting: ' . implode(', ', $outstanding) . '.'
         );
+    }
+
+    /**
+     * One hand-off step after scheduling — pick, prepare, check, sign.
+     *
+     * Every role posts here; ShipmentHandoffService decides whether this user
+     * may take the step and whether it applies right now.
+     */
+    public function step(ShipmentStepRequest $request, Shipment $shipment): RedirectResponse
+    {
+        if (! $this->shipmentIsInScope($shipment)) {
+            abort(403, 'That shipment does not involve you.');
+        }
+
+        $step = (string) $request->validated('step');
+
+        try {
+            $shipment = app(ShipmentHandoffService::class)->perform($shipment, $step, Auth::user(), $request->payload());
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            abort(403, $e->getMessage());
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['step' => $e->getMessage()])->with('error', $e->getMessage());
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($step === ShipmentHandoffService::PICK_LINE) {
+            return back();
+        }
+
+        return back()->with('success', match ($step) {
+            ShipmentHandoffService::START_PICKING => "Picking started for {$shipment->reference}.",
+            ShipmentHandoffService::PREPARED => "{$shipment->reference} is prepared for pickup.",
+            ShipmentHandoffService::COURIER_START => 'Trip started — the origin can see you are on the way.',
+            ShipmentHandoffService::COURIER_CHECK => 'Load checked. Sign to take it.',
+            ShipmentHandoffService::COURIER_SIGN => "Signed — {$shipment->reference} is en route.",
+            ShipmentHandoffService::COURIER_ARRIVE => 'Arrival recorded. The receiving dock checks and signs it in.',
+            ShipmentHandoffService::RECEIVER_CHECK => 'Goods checked. Sign to receive them.',
+            ShipmentHandoffService::RECEIVER_SIGN => "Received — {$shipment->reference} is finished.",
+            default => 'Done.',
+        });
     }
 
     /**

@@ -1,5 +1,7 @@
 import { Head, router } from "@inertiajs/react";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import ErrorRoundedIcon from "@mui/icons-material/ErrorRounded";
 import {
     Button,
     Container,
@@ -12,6 +14,7 @@ import {
 import React from "react";
 
 import {
+    DeliveryHero,
     EmptyRuns,
     RunCard,
     StatTile,
@@ -57,35 +60,25 @@ export default function DeliveryHistory({
         <>
             <Head title="Delivery History" />
 
-            <Container sx={{ pt: 3, pb: 10 }}>
-                <Typography variant="h5" sx={{ fontWeight: 800, mb: 2 }}>
-                    Shipment History
-                </Typography>
-
-                <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
+            <DeliveryHero eyebrow="Your record" title="History" subtitle="Runs you finished — and the ones that did not land.">
+                <Grid container spacing={1}>
                     <Grid size={6}>
-                        <StatTile
-                            label="Delivered"
-                            value={metrics.delivered_total}
-                            tone="success"
-                        />
+                        <StatTile onHero label="Delivered" value={metrics.delivered_total} icon={<CheckCircleRoundedIcon />} />
                     </Grid>
                     <Grid size={6}>
-                        <StatTile
-                            label="Failed"
-                            value={metrics.failed}
-                            tone={metrics.failed > 0 ? "danger" : "default"}
-                        />
+                        <StatTile onHero label="Failed" value={metrics.failed} icon={<ErrorRoundedIcon />} />
                     </Grid>
                 </Grid>
-
                 <TextField
                     fullWidth
                     size="small"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search past runs…"
-                    sx={{ mb: 2 }}
+                    sx={{
+                        mt: 1.5,
+                        "& .MuiOutlinedInput-root": { bgcolor: "background.paper", borderRadius: 3, "& fieldset": { border: "none" } },
+                    }}
                     slotProps={{
                         input: {
                             startAdornment: (
@@ -96,7 +89,9 @@ export default function DeliveryHistory({
                         },
                     }}
                 />
+            </DeliveryHero>
 
+            <Container maxWidth="sm" sx={{ pt: 2.5, pb: 4 }}>
                 <Stack spacing={1.5}>
                     {shipments.length === 0 ? (
                         <EmptyRuns

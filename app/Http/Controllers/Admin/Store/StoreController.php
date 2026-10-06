@@ -265,8 +265,36 @@ class StoreController extends Controller
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name']);
 
+        // The places under this store — Store Shelf, Store Floor, Remote Hub —
+        // with what the ledger holds at each. Prices stay on the store.
+        $siteUnits = ItemStock::query()
+            ->whereNotNull('stock_location_id')
+            ->selectRaw('stock_location_id, SUM(quantity) as units')
+            ->groupBy('stock_location_id')
+            ->pluck('units', 'stock_location_id');
+
+        $siteOrder = [
+            \App\Models\Inventory\StockLocation::KIND_SHELF => 0,
+            \App\Models\Inventory\StockLocation::KIND_BACKROOM => 1,
+            \App\Models\Inventory\StockLocation::KIND_REMOTE_HUB => 2,
+        ];
+
+        $locations = \App\Models\Inventory\StockLocation::query()
+            ->where('store_id', $store->id)
+            ->where('is_stockable', true)
+            ->get()
+            ->sortBy(fn ($loc) => $siteOrder[$loc->kind] ?? 9)
+            ->map(fn ($loc) => [
+                'id' => (int) $loc->id,
+                'name' => $loc->name,
+                'code' => $loc->code,
+                'kind' => $loc->kind,
+                'units' => (int) ($siteUnits[$loc->id] ?? 0),
+            ])->values();
+
         return Inertia::render('Admin/Inventory/Stores/StoreInventory', [
             'store' => $store,
+            'locations' => $locations,
             'inventory' => $inventory,
             'customers' => $customers,
             'sellers' => $sellers,

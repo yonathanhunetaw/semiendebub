@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventory\AssignFacilityManagersRequest;
 use App\Models\Auth\User;
 use App\Models\Inventory\FacilityManager;
+use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\Warehouse;
 use App\Models\Inventory\ItemStock;
 use App\Models\Store\Store;
@@ -71,8 +72,34 @@ class WarehouseController extends Controller
         $totalUnits = $stockLines->sum('quantity');
         $lowStockCount = $stockLines->where('is_low', true)->count();
 
+        // A Remote Hub is a warehouse too, but it hangs off a store in the
+        // location tree and has no warehouses row, so it is listed apart.
+        $hubUnits = ItemStock::query()
+            ->whereNotNull('stock_location_id')
+            ->selectRaw('stock_location_id, SUM(quantity) as units, COUNT(*) as line_count')
+            ->groupBy('stock_location_id')
+            ->get()
+            ->keyBy('stock_location_id');
+
+        $remoteHubs = StockLocation::query()
+            ->with('store:id,name')
+            ->where('kind', StockLocation::KIND_REMOTE_HUB)
+            ->orderBy('store_id')
+            ->get()
+            ->map(fn (StockLocation $hub): array => [
+                'id' => (int) $hub->id,
+                'name' => $hub->name,
+                'code' => $hub->code,
+                'address' => $hub->address,
+                'store_id' => $hub->store_id,
+                'store_name' => $hub->store?->name,
+                'stocks_count' => (int) ($hubUnits[$hub->id]->line_count ?? 0),
+                'total_units' => (int) ($hubUnits[$hub->id]->units ?? 0),
+            ])->values();
+
         return Inertia::render('Admin/Inventory/Warehouse/index', [
             'warehouses' => $warehouses,
+            'remoteHubs' => $remoteHubs,
             // Candidates for manager. Any number may be appointed.
             'assignable_managers' => $this->assignableManagers(),
             'max_managers' => null,

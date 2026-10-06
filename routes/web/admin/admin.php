@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\Inventory\ReplenishController;
 use App\Http\Controllers\Admin\Inventory\ReplenishmentController;
 use App\Http\Controllers\Admin\Inventory\VariantCapacityController;
 use App\Http\Controllers\Admin\Inventory\ShipmentController;
+use App\Http\Controllers\Admin\Inventory\FleetController;
 use App\Http\Controllers\Admin\CanvasController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -131,12 +132,19 @@ Route::domain("admin.{$baseDomain}")
                 Route::patch('/transfers/{transfer}/courier', [TransferController::class, 'assignCourier'])->name('transfers.courier');
 
                 // Shipments (shared cross-role domain)
+                Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
+                Route::post('/fleet', [FleetController::class, 'store'])->name('fleet.store');
+                Route::put('/fleet/{vehicle}', [FleetController::class, 'update'])->name('fleet.update');
+                Route::delete('/fleet/{vehicle}', [FleetController::class, 'destroy'])->name('fleet.destroy');
                 Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
                 Route::post('/shipments', [ShipmentController::class, 'store'])->name('shipments.store');
                 Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');
                 Route::post('/shipments/{shipment}/items', [ShipmentController::class, 'addItem'])->name('shipments.items.store');
                 Route::delete('/shipments/{shipment}/items/{variant}', [ShipmentController::class, 'removeItem'])->name('shipments.items.destroy');
                 Route::post('/shipments/{shipment}/agree', [ShipmentController::class, 'agree'])->name('shipments.agree');
+                // The hand-off steps after scheduling: pick, prepare, check, sign.
+                Route::post('/shipments/{shipment}/steps/{step}', [ShipmentController::class, 'step'])->name('shipments.step');
+                Route::patch('/shipments/{shipment}/fleet', [ShipmentController::class, 'fleet'])->name('shipments.fleet');
                 Route::post('/shipments/{shipment}/handover', [ShipmentController::class, 'handover'])->name('shipments.handover');
                 Route::post('/shipments/{shipment}/receive', [ShipmentController::class, 'receive'])->name('shipments.receive');
                 Route::patch('/shipments/{shipment}/status', [ShipmentController::class, 'transition'])->name('shipments.transition');

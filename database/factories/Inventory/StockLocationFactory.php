@@ -61,7 +61,7 @@ class StockLocationFactory extends Factory
 
             return [
                 'kind' => StockLocation::KIND_REMOTE_HUB,
-                'name' => $store->name.' Remote Hub',
+                'name' => 'Remote Hub',
                 'parent_id' => $node->id,
                 'store_id' => $store->id,
                 'is_stockable' => true,
