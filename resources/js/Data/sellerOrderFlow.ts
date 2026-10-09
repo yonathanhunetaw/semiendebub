@@ -8,6 +8,7 @@
  * Replace this module with server props when the domain lands.
  */
 
+import type { OrderPayment, PaymentAccountOption } from "@/types/payments";
 import { statusTone, type Tone } from "@/Components/Shared/ui";
 
 /**
@@ -69,6 +70,12 @@ export interface SellerOrder {
     };
     additionalCharges: number;
     shippingFee: number;
+    /** The payment split; absent on a cart that is not an order yet. */
+    payments?: OrderPayment[];
+    /** Pick & Pack progress: lines with their pick location confirmed. */
+    sourced?: { done: number; total: number };
+    /** The buyer accepted the wait on lines coming from a hub. */
+    delayAgreed?: boolean;
 }
 
 /**
@@ -359,46 +366,37 @@ export interface Provider {
     tone: string;
     /** Wallets are settled by phone number, banks by account number. */
     settleBy: "account" | "phone";
-    /**
-     * The store's own receiving account on this rail. Prefilled into a split
-     * leg — these are the shop's details, not something the seller types per
-     * order. Sample values; replace with the store's real payout settings.
-     */
-    account: string;
 }
 
-/** Account holder for every receiving account above. */
-export const ACCOUNT_HOLDER = "Semien Debub Trading PLC";
-
 export const BANKS: Provider[] = [
-    { id: "cbe", name: "Commercial Bank of Ethiopia (CBE)", note: "State commercial bank", initials: "CBE", tone: "bg-purple-100 text-purple-800", settleBy: "account", account: "1000 2145 88721" },
-    { id: "awash", name: "Awash Bank", note: "Private commercial bank", initials: "AB", tone: "bg-blue-100 text-blue-800", settleBy: "account", account: "0130 4412 09883" },
-    { id: "boa", name: "Bank of Abyssinia", note: "Private commercial bank", initials: "BOA", tone: "bg-amber-100 text-amber-800", settleBy: "account", account: "1234 5667 09112" },
-    { id: "dashen", name: "Dashen Bank", note: "Private commercial bank", initials: "DB", tone: "bg-sky-100 text-sky-800", settleBy: "account", account: "5041 2288 31007" },
-    { id: "coop", name: "Coopbank of Oromia", note: "Cooperative bank", initials: "COOP", tone: "bg-emerald-100 text-emerald-800", settleBy: "account", account: "1015 6620 04473" },
-    { id: "abay", name: "Abay Bank", initials: "AYB", tone: "bg-blue-50 text-blue-700", settleBy: "account", account: "0451 7723 90118" },
-    { id: "amhara", name: "Amhara Bank", initials: "AMB", tone: "bg-orange-100 text-orange-800", settleBy: "account", account: "9900 3317 22045" },
-    { id: "berhan", name: "Berhan Bank", initials: "BRB", tone: "bg-yellow-100 text-yellow-800", settleBy: "account", account: "0620 1145 77390" },
-    { id: "bunna", name: "Bunna Bank", initials: "BNB", tone: "bg-stone-100 text-stone-800", settleBy: "account", account: "1102 9983 41260" },
-    { id: "enat", name: "Enat Bank", initials: "EB", tone: "bg-pink-100 text-pink-800", settleBy: "account", account: "0810 4432 19775" },
-    { id: "hibret", name: "Hibret Bank", note: "formerly United Bank", initials: "HB", tone: "bg-orange-100 text-orange-900", settleBy: "account", account: "1340 7765 20391" },
-    { id: "hijra", name: "Hijra Bank", initials: "HJB", tone: "bg-green-100 text-green-800", settleBy: "account", account: "2201 5590 66104" },
-    { id: "lion", name: "Lion International Bank", initials: "LIB", tone: "bg-amber-100 text-amber-900", settleBy: "account", account: "3009 8871 45220" },
-    { id: "nib", name: "Nib International Bank", initials: "NIB", tone: "bg-blue-100 text-blue-700", settleBy: "account", account: "5001 2234 77860" },
-    { id: "oromia", name: "Oromia Bank", initials: "OB", tone: "bg-red-100 text-red-700", settleBy: "account", account: "0170 6648 23915" },
-    { id: "siinqee", name: "Siinqee Bank", initials: "SQB", tone: "bg-emerald-100 text-emerald-900", settleBy: "account", account: "4400 1129 88537" },
-    { id: "tsehay", name: "Tsehay Bank", initials: "TSB", tone: "bg-yellow-100 text-yellow-900", settleBy: "account", account: "7720 3341 05628" },
-    { id: "wegagen", name: "Wegagen Bank", initials: "WB", tone: "bg-red-100 text-red-900", settleBy: "account", account: "0960 5583 71442" },
-    { id: "zamzam", name: "ZamZam Bank", initials: "ZZB", tone: "bg-emerald-100 text-emerald-800", settleBy: "account", account: "6610 2274 39085" },
-    { id: "zemen", name: "Zemen Bank", initials: "ZB", tone: "bg-purple-100 text-purple-900", settleBy: "account", account: "1290 4417 66203" },
+    { id: "cbe", name: "Commercial Bank of Ethiopia (CBE)", note: "State commercial bank", initials: "CBE", tone: "bg-purple-100 text-purple-800", settleBy: "account" },
+    { id: "awash", name: "Awash Bank", note: "Private commercial bank", initials: "AB", tone: "bg-blue-100 text-blue-800", settleBy: "account" },
+    { id: "boa", name: "Bank of Abyssinia", note: "Private commercial bank", initials: "BOA", tone: "bg-amber-100 text-amber-800", settleBy: "account" },
+    { id: "dashen", name: "Dashen Bank", note: "Private commercial bank", initials: "DB", tone: "bg-sky-100 text-sky-800", settleBy: "account" },
+    { id: "coop", name: "Coopbank of Oromia", note: "Cooperative bank", initials: "COOP", tone: "bg-emerald-100 text-emerald-800", settleBy: "account" },
+    { id: "abay", name: "Abay Bank", initials: "AYB", tone: "bg-blue-50 text-blue-700", settleBy: "account" },
+    { id: "amhara", name: "Amhara Bank", initials: "AMB", tone: "bg-orange-100 text-orange-800", settleBy: "account" },
+    { id: "berhan", name: "Berhan Bank", initials: "BRB", tone: "bg-yellow-100 text-yellow-800", settleBy: "account" },
+    { id: "bunna", name: "Bunna Bank", initials: "BNB", tone: "bg-stone-100 text-stone-800", settleBy: "account" },
+    { id: "enat", name: "Enat Bank", initials: "EB", tone: "bg-pink-100 text-pink-800", settleBy: "account" },
+    { id: "hibret", name: "Hibret Bank", note: "formerly United Bank", initials: "HB", tone: "bg-orange-100 text-orange-900", settleBy: "account" },
+    { id: "hijra", name: "Hijra Bank", initials: "HJB", tone: "bg-green-100 text-green-800", settleBy: "account" },
+    { id: "lion", name: "Lion International Bank", initials: "LIB", tone: "bg-amber-100 text-amber-900", settleBy: "account" },
+    { id: "nib", name: "Nib International Bank", initials: "NIB", tone: "bg-blue-100 text-blue-700", settleBy: "account" },
+    { id: "oromia", name: "Oromia Bank", initials: "OB", tone: "bg-red-100 text-red-700", settleBy: "account" },
+    { id: "siinqee", name: "Siinqee Bank", initials: "SQB", tone: "bg-emerald-100 text-emerald-900", settleBy: "account" },
+    { id: "tsehay", name: "Tsehay Bank", initials: "TSB", tone: "bg-yellow-100 text-yellow-900", settleBy: "account" },
+    { id: "wegagen", name: "Wegagen Bank", initials: "WB", tone: "bg-red-100 text-red-900", settleBy: "account" },
+    { id: "zamzam", name: "ZamZam Bank", initials: "ZZB", tone: "bg-emerald-100 text-emerald-800", settleBy: "account" },
+    { id: "zemen", name: "Zemen Bank", initials: "ZB", tone: "bg-purple-100 text-purple-900", settleBy: "account" },
 ];
 
 export const WALLETS: Provider[] = [
-    { id: "telebirr", name: "Telebirr", note: "Ethio Telecom wallet", initials: "tb", tone: "bg-sky-500 text-white", settleBy: "phone", account: "0912 445 780" },
-    { id: "mpesa", name: "M-Pesa Ethiopia", note: "Safaricom mobile money", initials: "M", tone: "bg-red-600 text-white", settleBy: "phone", account: "0700 331 902" },
-    { id: "cbebirr", name: "CBE Birr", note: "Commercial Bank of Ethiopia", initials: "CBE", tone: "bg-purple-700 text-white", settleBy: "phone", account: "0911 268 344" },
-    { id: "amole", name: "Amole (Dashen Bank)", note: "Dashen digital wallet", initials: "A", tone: "bg-blue-600 text-white", settleBy: "phone", account: "0913 870 215" },
-    { id: "ebirr", name: "E-Birr", note: "E-Birr mobile wallet", initials: "EB", tone: "bg-emerald-600 text-white", settleBy: "phone", account: "0918 552 617" },
+    { id: "telebirr", name: "Telebirr", note: "Ethio Telecom wallet", initials: "tb", tone: "bg-sky-500 text-white", settleBy: "phone" },
+    { id: "mpesa", name: "M-Pesa Ethiopia", note: "Safaricom mobile money", initials: "M", tone: "bg-red-600 text-white", settleBy: "phone" },
+    { id: "cbebirr", name: "CBE Birr", note: "Commercial Bank of Ethiopia", initials: "CBE", tone: "bg-purple-700 text-white", settleBy: "phone" },
+    { id: "amole", name: "Amole (Dashen Bank)", note: "Dashen digital wallet", initials: "A", tone: "bg-blue-600 text-white", settleBy: "phone" },
+    { id: "ebirr", name: "E-Birr", note: "E-Birr mobile wallet", initials: "EB", tone: "bg-emerald-600 text-white", settleBy: "phone" },
 ];
 
 export const ALL_PROVIDERS: Provider[] = [...BANKS, ...WALLETS];
@@ -410,15 +408,19 @@ export const findProvider = (id: string): Provider | undefined =>
  | Split payments
  |----------------------------------------------------------*/
 
-/** One leg of a split payment the seller is collecting. */
+/**
+ * One leg of a split payment the seller is collecting: an amount sent to one
+ * of the store's accounts, or cash when `accountId` is null.
+ */
 export interface PaymentLeg {
     /** Local id, stable for React keys. */
     key: string;
-    providerId: string;
-    /** Account number for a bank, phone number for a wallet. */
-    reference: string;
-    accountName: string;
+    accountId: number | null;
+    /** On the customer's credit rather than paid now. */
+    credit?: boolean;
     amount: number;
+    /** Optional transaction reference the customer gives. */
+    reference: string;
 }
 
 /**
@@ -429,6 +431,7 @@ export interface PaymentLeg {
  */
 export function formatLegsForCopy(
     legs: PaymentLeg[],
+    accounts: PaymentAccountOption[],
     order: { reference: string; customer: string },
 ): string {
     const lines: string[] = [
@@ -438,12 +441,17 @@ export function formatLegsForCopy(
     ];
 
     legs.forEach((leg, index) => {
-        const provider = findProvider(leg.providerId);
-        const label = provider?.settleBy === "phone" ? "Phone" : "Account";
+        const account = accounts.find((entry) => entry.id === leg.accountId);
 
-        lines.push(`${index + 1}. ${provider?.name ?? leg.providerId}`);
-        lines.push(`   ${label}: ${leg.reference || "—"}`);
-        lines.push(`   Name: ${leg.accountName || ACCOUNT_HOLDER}`);
+        if (leg.credit) {
+            lines.push(`${index + 1}. On credit`);
+        } else if (!account) {
+            lines.push(`${index + 1}. Cash`);
+        } else {
+            lines.push(`${index + 1}. ${account.provider_name}`);
+            lines.push(`   ${account.type === "wallet" ? "Phone" : "Account"}: ${account.account_number}`);
+            lines.push(`   Name: ${account.account_name}`);
+        }
         lines.push(`   Amount: ${birr(leg.amount)}`);
         lines.push("");
     });

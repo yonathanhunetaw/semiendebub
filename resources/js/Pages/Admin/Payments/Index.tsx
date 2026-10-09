@@ -20,6 +20,11 @@ interface PaymentRow {
     order: string | null;
     store: string | null;
     method: string;
+    /** "CBE · 1000…" when paid into an account. */
+    account: string | null;
+    /** Who confirms deposits into that account. */
+    owner: string | null;
+    status: "pending" | "claimed" | "confirmed" | "void" | string;
     amount: number;
     currency: string;
     reference: string | null;
@@ -40,7 +45,14 @@ const money = (amount: number, currency = "ETB"): string =>
 
 const label = (method: string): string => method.replace(/_/g, " ");
 
-/** Every payment taken, with today's takings by method. */
+const STATUS: Record<string, { label: string; color: "default" | "info" | "success" | "warning" }> = {
+    pending: { label: "Waiting for customer", color: "default" },
+    claimed: { label: "Owner checking", color: "info" },
+    confirmed: { label: "Received", color: "success" },
+    void: { label: "Void", color: "default" },
+};
+
+/** Every payment part, with today's confirmed takings by method. */
 export default function PaymentsIndex({ payments = [], today = [], methods = [], filters, pagination }: Props): React.ReactElement {
     const go = (patch: Record<string, string | number | null>): void =>
         router.get(route("admin.payments.index"), { ...filters, ...patch }, { preserveState: true, replace: true });
@@ -55,7 +67,7 @@ export default function PaymentsIndex({ payments = [], today = [], methods = [],
                     Payments
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Today: {money(todayTotal)}
+                    Received today: {money(todayTotal)}
                     {today.length > 0 ? ` — ${today.map((row) => `${label(row.method)} ${money(row.total)} (${row.count})`).join(" · ")}` : ""}
                 </Typography>
 
@@ -79,6 +91,7 @@ export default function PaymentsIndex({ payments = [], today = [], methods = [],
                                 <TableCell>When</TableCell>
                                 <TableCell>Order</TableCell>
                                 <TableCell>Method</TableCell>
+                                <TableCell>Status</TableCell>
                                 <TableCell>Reference</TableCell>
                                 <TableCell>Taken by</TableCell>
                                 <TableCell align="right">Amount</TableCell>
@@ -100,7 +113,23 @@ export default function PaymentsIndex({ payments = [], today = [], methods = [],
                                             {p.store ?? ""}
                                         </Typography>
                                     </TableCell>
-                                    <TableCell sx={{ textTransform: "capitalize" }}>{label(p.method)}</TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" sx={{ textTransform: "capitalize" }}>{label(p.method)}</Typography>
+                                        {p.account ? (
+                                            <Typography variant="caption" color="text.secondary" component="div">
+                                                {p.account}
+                                                {p.owner ? ` · ${p.owner}` : ""}
+                                            </Typography>
+                                        ) : null}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            size="small"
+                                            variant="outlined"
+                                            label={(STATUS[p.status] ?? { label: p.status }).label}
+                                            color={STATUS[p.status]?.color ?? "default"}
+                                        />
+                                    </TableCell>
                                     <TableCell sx={{ fontFamily: "monospace" }}>{p.reference ?? "—"}</TableCell>
                                     <TableCell>{p.taken_by ?? "—"}</TableCell>
                                     <TableCell align="right" sx={{ fontWeight: 700 }}>
@@ -110,7 +139,7 @@ export default function PaymentsIndex({ payments = [], today = [], methods = [],
                             ))}
                             {payments.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                                    <TableCell colSpan={7} align="center" sx={{ py: 4, color: "text.secondary" }}>
                                         No payments yet.
                                     </TableCell>
                                 </TableRow>

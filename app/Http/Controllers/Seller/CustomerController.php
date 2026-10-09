@@ -2,28 +2,21 @@
 
 namespace App\Http\Controllers\Seller;
 
+use App\Exceptions\PaymentException;
 use App\Http\Controllers\Admin\Controller;
+use App\Http\Requests\Customer\SellerCustomerRequest;
+use App\Http\Requests\Seller\SetPaymentPartsRequest;
 use App\Models\Auth\Customer;
+use App\Models\Finance\Payment;
+use App\Services\Finance\CustomerCreditService;
+use App\Services\Finance\PaymentBoard;
+use App\Services\Finance\PaymentService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class CustomerController extends Controller
 {
-    /**
-     * A blank TIN is a business, so it is stored as null rather than "".
-     *
-     * Every customer-type check in the application is `->tin_number ?` or
-     * `! empty(...)`, and an empty string reads false to those but still
-     * collides with the unique index on the second business created.
-     */
-    private function normaliseTin(?string $tin): ?string
-    {
-        $tin = trim((string) $tin);
-
-        return $tin === '' ? null : $tin;
-    }
-
     /**
      * Display a listing of the resource.
      */
@@ -48,33 +41,11 @@ class CustomerController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(SellerCustomerRequest $request)
     {
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'email' => 'required|email|unique:customers,email',
-            'phone_number' => 'required|string|max:20|unique:customers,phone_number',
-            'city' => 'nullable|string|max:255',
-            // Customer type, as the rest of the application reads it: a TIN
-            // means "individual" and VAT-inclusive pricing, no TIN means
-            // "business". Admin\CustomerController has always accepted this;
-            // omitting it here meant every customer a seller created was a
-            // business, whatever the seller intended.
-            'tin_number' => 'nullable|string|max:10|unique:customers,tin_number',
-        ]);
-
-        $validated['created_by'] = auth()->id();
-
-        // An empty string is a business, not a TIN of "". Stored as null so
-        // the unique rule and every `->tin_number ?` check agree.
-        $validated['tin_number'] = $this->normaliseTin($validated['tin_number'] ?? null);
-
-        if (! empty($validated['city'])) {
-            $validated['city'] = Str::title($validated['city']);
-        }
-
-        Customer::create($validated);
+        // A TIN means "individual" and VAT-inclusive pricing, no TIN means
+        // "business". Credit is never set here: only an admin gives it.
+        Customer::create([...$request->customerData(), 'created_by' => auth()->id()]);
 
         return redirect()->route('seller.customers.index')
             ->with('success', 'Customer created successfully.');
@@ -83,11 +54,68 @@ class CustomerController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Customer $customer)
+    public function show(Request $request, Customer $customer, CustomerCreditService $credit, PaymentBoard $board)
     {
         $customer->load(['creator', 'carts']);
 
-        return Inertia::render('Seller/Customers/Show', compact('customer'));
+        return Inertia::render('Seller/Customers/Show', [
+            'customer' => $customer,
+            // What they owe and may still buy on credit. The seller sees it
+            // and takes repayments; only an admin sets the limit.
+            'credit' => $credit->summary($customer),
+            'invoices' => $credit->invoices((int) $customer->id),
+            'repayments' => Payment::query()
+                ->where('kind', Payment::KIND_REPAYMENT)
+                ->where('customer_id', $customer->id)
+                ->where('status', '!=', Payment::STATUS_VOID)
+                ->with('account.owner')
+                ->latest('id')
+                ->limit(20)
+                ->get()
+                ->map(fn (Payment $payment): array => $board->part($payment))
+                ->values(),
+            'accounts' => $board->accountsFor($request->user()?->store_id !== null ? (int) $request->user()->store_id : null),
+        ]);
+    }
+
+    /** The customer pays back credit, split across accounts and cash. */
+    public function repay(SetPaymentPartsRequest $request, Customer $customer, PaymentService $payments): RedirectResponse
+    {
+        try {
+            $payments->setRepayment($customer, $request->parts(), $request->user());
+        } catch (PaymentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Repayment recorded. Account parts wait for their owner to confirm them.');
+    }
+
+    /** The customer says they paid a repayment part into an account. */
+    public function claimRepayment(Request $request, Customer $customer, int $payment, PaymentService $payments): RedirectResponse
+    {
+        $part = Payment::query()->where('kind', Payment::KIND_REPAYMENT)->where('customer_id', $customer->id)->findOrFail($payment);
+
+        try {
+            $payments->claim($part, $request->user());
+        } catch (PaymentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'The account owner will check it and confirm.');
+    }
+
+    /** Drop a repayment part the customer never paid. */
+    public function voidRepayment(Customer $customer, int $payment, PaymentService $payments): RedirectResponse
+    {
+        $part = Payment::query()->where('kind', Payment::KIND_REPAYMENT)->where('customer_id', $customer->id)->findOrFail($payment);
+
+        try {
+            $payments->voidRepayment($part);
+        } catch (PaymentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Repayment part removed.');
     }
 
     /**
@@ -103,29 +131,10 @@ class CustomerController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(SellerCustomerRequest $request, string $id)
     {
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'email' => 'required|email|max:255|unique:customers,email,'.$id,
-            'phone_number' => 'required|string|max:20|unique:customers,phone_number,'.$id,
-            'city' => 'nullable|string|max:255',
-            'tin_number' => 'nullable|string|max:10|unique:customers,tin_number,'.$id,
-        ]);
-
-        if (! empty($validated['city'])) {
-            $validated['city'] = Str::title($validated['city']);
-        }
-
-        // Only when the form sent the field, so a caller that omits it does
-        // not silently turn an individual into a business.
-        if ($request->has('tin_number')) {
-            $validated['tin_number'] = $this->normaliseTin($validated['tin_number'] ?? null);
-        }
-
         $customer = Customer::findOrFail($id);
-        $customer->update($validated);
+        $customer->update($request->customerData());
 
         return redirect()->route('seller.customers.show', $customer->id)
             ->with('success', 'Customer updated successfully.');

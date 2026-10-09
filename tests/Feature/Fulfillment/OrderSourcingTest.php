@@ -392,7 +392,7 @@ class OrderSourcingTest extends TestCase
     }
 
     #[Test]
-    public function the_queue_only_lists_the_sellers_own_orders_awaiting_sourcing(): void
+    public function the_board_lists_only_the_sellers_own_orders_to_pick_and_the_old_queue_link_lands_there(): void
     {
         $this->paidOrder(2);
 
@@ -406,15 +406,17 @@ class OrderSourcingTest extends TestCase
             'fulfillment_stage' => Sale::STAGE_PICK_PACK,
         ]);
 
-        $response = $this->actingAs($this->staff, 'web')
-            ->withServerVariables(['HTTP_HOST' => 'seller.' . config('app.system_domain')])
-            ->get(route('seller.orders.queue'));
+        $seller = $this->actingAs($this->staff, 'web')
+            ->withServerVariables(['HTTP_HOST' => 'seller.' . config('app.system_domain')]);
 
-        $response->assertOk();
+        $seller->get(route('seller.orders.queue'))
+            ->assertRedirect(route('seller.orders.index').'?tab=paid');
 
-        $references = array_column($response->viewData('page')['props']['orders'], 'reference');
+        $orders = $seller->get(route('seller.orders.index'))->viewData('page')['props']['orders'];
 
-        $this->assertSame(['SALE-TEST-1'], $references);
+        $this->assertSame(['SALE-TEST-1'], array_column($orders, 'reference'));
+        $this->assertSame('paid', $orders[0]['stage']);
+        $this->assertSame(['done' => 0, 'total' => 1], $orders[0]['sourced']);
     }
 
     #[Test]
@@ -435,7 +437,7 @@ class OrderSourcingTest extends TestCase
                 ]],
             ])
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('seller.orders.queue'));
+            ->assertRedirect(route('seller.orders.index').'?tab=paid');
 
         $this->assertSame(Sale::STAGE_TO_DELIVER, $sale->fresh()->fulfillment_stage);
     }

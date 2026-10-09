@@ -1,3 +1,4 @@
+import CustomerCreditCard from "@/Components/Seller/CustomerCreditCard";
 import { SellerCard, SellerHeader, sellerHeaderButtonSx, sellerName } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link, router } from "@inertiajs/react";
@@ -5,6 +6,8 @@ import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import { Box, Button, IconButton, Stack, Typography } from "@mui/material";
 import React from "react";
+
+import type { CreditInvoice, CreditSummary, OrderPayment, PaymentAccountOption } from "@/types/payments";
 
 interface Customer {
     id: number;
@@ -22,7 +25,17 @@ interface Customer {
     updated_at?: string;
 }
 
-export default function Show({ customer }: { customer: Customer }) {
+interface Props {
+    customer: Customer;
+    /** Null when the customer has no credit and owes nothing. */
+    credit?: CreditSummary | null;
+    invoices?: CreditInvoice[];
+    repayments?: OrderPayment[];
+    /** The seller's store's accounts, for taking a repayment. */
+    accounts?: PaymentAccountOption[];
+}
+
+export default function Show({ customer, credit = null, invoices = [], repayments = [], accounts = [] }: Props) {
     const fullName = sellerName([customer.first_name, customer.last_name]);
 
     const removeCustomer = () => {
@@ -72,6 +85,17 @@ export default function Show({ customer }: { customer: Customer }) {
                             <Typography>{customer.city || "Not set"}</Typography>
                         </Stack>
                     </SellerCard>
+
+                    {credit ? (
+                        <CustomerCreditCard
+                            customerId={customer.id}
+                            customerName={fullName || "Customer"}
+                            credit={credit}
+                            invoices={invoices}
+                            repayments={repayments}
+                            accounts={accounts}
+                        />
+                    ) : null}
 
                     <SellerCard>
                         <Typography sx={{ fontWeight: 800, mb: 1 }}>Activity</Typography>

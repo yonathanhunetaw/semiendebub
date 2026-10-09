@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Seller\BalanceController;
 use App\Http\Controllers\Seller\CartController;
 use App\Http\Controllers\Seller\CategoryController;
 use App\Http\Controllers\Seller\CustomerController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Seller\LocationController;
 use App\Http\Controllers\Seller\MenuController;
 use App\Http\Controllers\Seller\OrderBoardController;
 use App\Http\Controllers\Seller\OrderController;
+use App\Http\Controllers\Seller\PaymentInboxController;
 use App\Http\Controllers\Seller\RefillRequestController;
 use App\Http\Controllers\Seller\SellerSettingsController;
 use App\Http\Controllers\Seller\ShipmentController;
@@ -38,18 +40,29 @@ Route::domain("seller.$baseDomain")
             /*
              * The seller order pipeline (to pay → paid → pick & pack → to
              * deliver → delivered), read from real sales by SellerOrderBoard.
-             * Confirmation is still a UI-only preview over sample data from
-             * resources/js/Data/sellerOrderFlow.ts: there is no payment capture
-             * behind it yet.
+             * An order's total is split into payment parts across the store's
+             * collection accounts and cash; it leaves To pay once every part's
+             * account owner has confirmed the money arrived (PaymentService).
              */
             Route::get('/orders', [OrderBoardController::class, 'index'])->name('orders.index');
             Route::get('/orders/confirmation', [OrderBoardController::class, 'confirmation'])->name('orders.confirmation');
-            // Cart → order, payment (To pay → Paid) and cancellation.
+            // Cart → order, the payment split, "customer says paid", and cancellation.
             Route::post('/orders', [OrderBoardController::class, 'store'])->name('orders.store');
-            Route::post('/orders/{reference}/payment', [OrderBoardController::class, 'payment'])->name('orders.payment');
+            Route::put('/orders/{reference}/payments', [OrderBoardController::class, 'parts'])->name('orders.payments.update');
+            Route::post('/orders/{reference}/payments/{payment}/claim', [OrderBoardController::class, 'claim'])
+                ->whereNumber('payment')->name('orders.payments.claim');
             Route::post('/orders/{reference}/cancel', [OrderBoardController::class, 'cancel'])->name('orders.cancel');
             Route::patch('/orders/{reference}/address', [OrderBoardController::class, 'address'])->name('orders.address');
             Route::get('/orders/{reference}/pay', [OrderBoardController::class, 'pay'])->name('orders.pay');
+            // The account owner's inbox: confirm a deposit, or "not received yet".
+            Route::get('/payments/inbox', [PaymentInboxController::class, 'index'])->name('payments.inbox');
+            Route::post('/payments/{payment}/confirm', [PaymentInboxController::class, 'confirm'])->name('payments.confirm');
+            Route::post('/payments/{payment}/reject', [PaymentInboxController::class, 'reject'])->name('payments.reject');
+            Route::post('/handovers/{remittance}/confirm', [PaymentInboxController::class, 'confirmHandover'])->name('handovers.confirm');
+            Route::post('/handovers/{remittance}/reject', [PaymentInboxController::class, 'rejectHandover'])->name('handovers.reject');
+            // The seller's balance: money held per account and cash, and handing it over.
+            Route::get('/balance', [BalanceController::class, 'index'])->name('balance.index');
+            Route::post('/balance/handovers', [BalanceController::class, 'remit'])->name('balance.remit');
             // Chain of custody: who held the order's goods, where, and when.
             Route::get('/orders/{reference}/custody', [OrderBoardController::class, 'custody'])->name('orders.custody');
             // Store Shelf, Store, Remote Hub and the main hubs, from stock_locations.
@@ -76,7 +89,9 @@ Route::domain("seller.$baseDomain")
              * are sourced from an exact shelf, back room or warehouse before the
              * order can become a delivery.
              */
-            Route::get('/orders/pick-pack', [OrderController::class, 'queue'])->name('orders.queue');
+            // The old Pick & Pack queue is the board's Paid tab now: orders
+            // waiting to be picked. Kept so existing links still land.
+            Route::get('/orders/pick-pack', fn () => redirect()->to(route('seller.orders.index').'?tab=paid'))->name('orders.queue');
             Route::get('/orders/{reference}/pick-pack', [OrderController::class, 'pickPack'])->name('orders.pickpack');
             Route::post('/orders/{sale}/sourcing', [OrderController::class, 'confirmSourcing'])
                 ->name('orders.sourcing.confirm');
@@ -88,6 +103,12 @@ Route::domain("seller.$baseDomain")
             })->name('items.index');
             Route::get('/items/{item}', [ItemController::class, 'show'])->name('items.show');
             Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
+            // Credit repayments: only an admin sets credit; a seller takes the money.
+            Route::post('/customers/{customer}/repayments', [CustomerController::class, 'repay'])->name('customers.repay');
+            Route::post('/customers/{customer}/repayments/{payment}/claim', [CustomerController::class, 'claimRepayment'])
+                ->whereNumber('payment')->name('customers.repayments.claim');
+            Route::post('/customers/{customer}/repayments/{payment}/void', [CustomerController::class, 'voidRepayment'])
+                ->whereNumber('payment')->name('customers.repayments.void');
             Route::resource('categories', CategoryController::class)->only(['index', 'show']);
             Route::post('/carts/reorder', [CartController::class, 'reorder'])->name('carts.reorder');
             Route::resource('carts', CartController::class)->only(['create', 'store', 'show', 'edit', 'update', 'destroy']);

@@ -47,8 +47,10 @@ interface Props {
         order_stages?: Partial<Record<OrderStage, number>>;
         shipments?: ShipmentStats;
         catalogue?: { customers?: number; items?: number; carts?: number };
-        /** Live order counters. Unlike the pipeline tiles these are server-side. */
-        orders?: { awaiting_sourcing?: number };
+        /** Deposits and handovers waiting on this seller to check an account. */
+        payments_to_confirm?: number;
+        /** Money this seller holds and has not handed over. */
+        balance?: { held?: number; overdue_cash?: number } | null;
     };
     seller?: { name: string | null; email: string | null; store: string | null };
 }
@@ -64,8 +66,6 @@ function compact(value: number): string {
 export default function Index({ locations = [], stats, seller }: Props): React.ReactElement {
     const shipments = stats?.shipments ?? {};
     const catalogue = stats?.catalogue ?? {};
-    /** Real count: paid orders whose lines still have to be sourced. */
-    const ordersAwaitingSourcing = stats?.orders?.awaiting_sourcing ?? 0;
 
     /* Same stage mapping the order list uses, so a badge matches its tab. */
     const stageCount = (stage: OrderStage) => stats?.order_stages?.[stage] ?? 0;
@@ -81,20 +81,13 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
     ];
 
     /*
-     * The live Pick & Pack queue is where batch work happens: a paid order's
-     * lines are sourced from a real shelf, floor or hub there. Batch waybills
-     * and manifests across several orders are shown but not built yet.
+     * Pick & Pack work is the Paid and Pick & Pack tiles above: a paid order's
+     * lines are sourced from a real shelf, floor or hub from there. Batch
+     * waybills and manifests across several orders are shown but not built yet.
      */
     const orderFooter: Row[] = [
         { label: "Store Orders", caption: "", icon: "receipt_long", route: "seller.carts.index", tone: "neutral" },
         { label: "Transfers", caption: "", icon: "rv_hookup", route: null, tone: "neutral" },
-        {
-            label: ordersAwaitingSourcing > 0 ? `Pick & Pack queue (${ordersAwaitingSourcing})` : "Pick & Pack queue",
-            caption: "",
-            icon: "where_to_vote",
-            route: "seller.orders.queue",
-            tone: "neutral",
-        },
         { label: "Bulk waybills", caption: "", icon: "library_add_check", route: null, tone: "neutral" },
     ];
 
@@ -151,12 +144,27 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
         { label: "Multi-Tier Directory", caption: "", icon: "account_tree", route: null, tone: "neutral" },
     ];
 
+    const paymentsToConfirm = stats?.payments_to_confirm ?? 0;
+
     const opsRows: Row[] = [
         {
+            label: "Payments to confirm",
+            caption: paymentsToConfirm > 0 ? "Check your accounts" : "Deposits into your accounts",
+            icon: "price_check",
+            route: "seller.payments.inbox",
+            tone: paymentsToConfirm > 0 ? "warning" : "neutral",
+            count: paymentsToConfirm,
+        },
+        {
             label: "Balance",
-            caption: "Payouts & ledger",
+            caption:
+                (stats?.balance?.overdue_cash ?? 0) > 0
+                    ? "Cash held too long"
+                    : (stats?.balance?.held ?? 0) > 0
+                      ? `ETB ${(stats?.balance?.held ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} held`
+                      : "Payouts & ledger",
             icon: "account_balance_wallet",
-            route: null,
+            route: "seller.balance.index",
             tone: "success",
             surface: "border-success/30 bg-gradient-to-br from-success-container/60 to-surface-container-lowest",
         },

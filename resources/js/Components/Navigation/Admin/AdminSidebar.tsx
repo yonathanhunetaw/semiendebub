@@ -12,6 +12,9 @@ import Tune from "@mui/icons-material/Tune";
 import Warehouse from "@mui/icons-material/Warehouse";
 import PointOfSale from "@mui/icons-material/PointOfSale";
 import Payments from "@mui/icons-material/Payments";
+import AccountBalance from "@mui/icons-material/AccountBalance";
+import AccountBalanceWallet from "@mui/icons-material/AccountBalanceWallet";
+import CreditScore from "@mui/icons-material/CreditScore";
 import LocalShipping from "@mui/icons-material/LocalShipping";
 import AirportShuttle from "@mui/icons-material/AirportShuttle";
 import ReceiptLong from "@mui/icons-material/ReceiptLong";
@@ -284,6 +287,36 @@ export default function AdminSidebar({
                 >
                     <ListItemIcon><Payments /></ListItemIcon>
                     <ListItemText primary="Payments" />
+                </ListItemButton>
+
+                <ListItemButton
+                    component={Link}
+                    href={route("admin.payment-accounts.index")}
+                    selected={url.startsWith("/payment-accounts")}
+                    sx={mainItemStyle}
+                >
+                    <ListItemIcon><AccountBalance /></ListItemIcon>
+                    <ListItemText primary="Payment accounts" />
+                </ListItemButton>
+
+                <ListItemButton
+                    component={Link}
+                    href={route("admin.balances.index")}
+                    selected={url.startsWith("/balances")}
+                    sx={mainItemStyle}
+                >
+                    <ListItemIcon><AccountBalanceWallet /></ListItemIcon>
+                    <ListItemText primary="Seller balances" />
+                </ListItemButton>
+
+                <ListItemButton
+                    component={Link}
+                    href={route("admin.credit.index")}
+                    selected={url.startsWith("/credit")}
+                    sx={mainItemStyle}
+                >
+                    <ListItemIcon><CreditScore /></ListItemIcon>
+                    <ListItemText primary="Customer credit" />
                 </ListItemButton>
 
                 <ListItemButton

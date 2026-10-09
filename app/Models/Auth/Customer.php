@@ -24,6 +24,16 @@ class Customer extends Model
         'created_by',
         'store_id',
         'tin_number',
+        // Admin only: no seller request accepts these (they are `prohibited`).
+        'credit_limit',
+        'credit_days',
+        'credit_override',
+    ];
+
+    protected $casts = [
+        'credit_limit' => 'decimal:2',
+        'credit_days' => 'integer',
+        'credit_override' => 'boolean',
     ];
 
     /**
@@ -79,5 +89,11 @@ class Customer extends Model
     public function carts()
     {
         return $this->hasMany(Cart::class);
+    }
+
+    /** An admin gave this customer a credit limit and days to pay. */
+    public function hasCredit(): bool
+    {
+        return (float) $this->credit_limit > 0 && (int) $this->credit_days > 0;
     }
 }

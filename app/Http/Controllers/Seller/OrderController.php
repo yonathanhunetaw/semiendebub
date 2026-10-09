@@ -26,9 +26,9 @@ use RuntimeException;
  * fully sourced order moves on to "To Deliver". The delivery that results
  * originates from that location rather than from "the store".
  *
- * The screens at /orders, /orders/{ref}/pay and /orders/confirmation are still
- * the sample-data layout preview; this controller is the real half of the
- * pipeline.
+ * Orders waiting here are listed on the order board (OrderBoardController,
+ * the Paid and Pick & pack tabs); this controller is the single-order screen
+ * and the sourcing confirmation.
  *
  * @see \App\Services\Fulfillment\OrderSourcingService
  */
@@ -39,37 +39,6 @@ class OrderController extends Controller
     }
 
     /**
-     * Paid orders waiting to be sourced, for the seller's own store.
-     */
-    public function queue(Request $request): Response
-    {
-        $storeId = $request->user()?->store_id;
-
-        $orders = Sale::query()
-            ->when($storeId !== null, fn ($query) => $query->forStore((int) $storeId))
-            ->awaitingSourcing()
-            ->with(['customer', 'items'])
-            ->orderByDesc('id')
-            ->limit(50)
-            ->get()
-            ->map(fn (Sale $sale): array => [
-                'id' => (int) $sale->id,
-                'reference' => (string) $sale->reference_number,
-                'customer' => $sale->customer?->name ?? 'Walk-in',
-                'line_count' => $sale->items->count(),
-                'sourced_count' => $sale->items->filter(fn ($item): bool => $item->isSourced())->count(),
-                'total_amount' => (float) $sale->total_amount,
-                'delay_agreed' => $sale->delayAgreed(),
-                'placed_at' => $sale->created_at?->toIso8601String(),
-            ])
-            ->all();
-
-        return Inertia::render('Seller/Orders/PickPackQueue', [
-            'orders' => $orders,
-        ]);
-    }
-
-    /**
      * One paid order, with every location that holds each of its lines.
      *
      * Resolved by reference rather than id because that is what the pipeline
@@ -77,7 +46,7 @@ class OrderController extends Controller
      */
     public function pickPack(Request $request, string $reference): Response
     {
-        // Only the seller's own store's orders, like the queue.
+        // Only the seller's own store's orders, like the board.
         $sale = Sale::query()
             ->where('reference_number', $reference)
             ->when($request->user()?->store_id !== null, fn ($query) => $query->forStore((int) $request->user()->store_id))
@@ -126,7 +95,7 @@ class OrderController extends Controller
         }
 
         return redirect()
-            ->route('seller.orders.queue')
+            ->to(route('seller.orders.index').'?tab=paid')
             ->with('success', "Order {$sale->reference_number} sourced and moved to delivery.");
     }
 }

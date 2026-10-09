@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\Fulfillment;
 
+use App\Models\Finance\Payment;
 use App\Models\Finance\Sale;
 use App\Models\Finance\SaleItem;
+use App\Services\Finance\PaymentBoard;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -18,6 +20,9 @@ use Illuminate\Database\Eloquent\Builder;
  *   to_pay      fulfillment_stage = awaiting_payment
  *   paid        pick_pack, and no line has been picked yet
  *   packing     pick_pack, and at least one line has been picked
+ *
+ * Paid and packing together are the Pick & Pack work list; there is no
+ * separate queue screen (/orders/pick-pack redirects to the Paid tab).
  *   to_deliver  to_deliver
  *   delivered   delivered
  *   canceled    cancelled
@@ -111,6 +116,7 @@ class SellerOrderBoard
             'customer',
             'store',
             'delivery',
+            'payments.account.owner',
             'items.storeVariant.item',
             'items.storeVariant.itemVariant.item',
             'items.storeVariant.itemVariant.itemColor',
@@ -161,6 +167,19 @@ class SellerOrderBoard
             'reference' => (string) $sale->reference_number,
             'customer' => $this->customerName($sale),
             'stage' => $this->stageFor($sale->fulfillment_stage, $sale->payment_status, $anyPicked),
+            // The payment split; voided parts of a cancelled order are left out.
+            'payments' => $sale->payments
+                ->where('status', '!=', Payment::STATUS_VOID)
+                ->sortBy('id')
+                ->map(fn (Payment $payment): array => app(PaymentBoard::class)->part($payment))
+                ->values()
+                ->all(),
+            // Pick & Pack progress: lines with their pick location confirmed.
+            'sourced' => [
+                'done' => $sale->items->filter(fn (SaleItem $line): bool => $line->isSourced())->count(),
+                'total' => $sale->items->count(),
+            ],
+            'delayAgreed' => $sale->delayAgreed(),
             // How long an unpaid order's stock stays held.
             'expiresInMinutes' => $sale->fulfillment_stage === Sale::STAGE_AWAITING_PAYMENT
                 ? app(SellerOrderService::class)->minutesLeft($sale)

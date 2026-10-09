@@ -6,9 +6,11 @@ namespace App\Http\Requests\Seller;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/** Recording the payment for an order waiting in To pay. */
-class PayOrderRequest extends FormRequest
+/** Splitting (or re-splitting) an order waiting in To pay. */
+class SetPaymentPartsRequest extends FormRequest
 {
+    use ValidatesPaymentParts;
+
     public function authorize(): bool
     {
         return $this->user() !== null;
@@ -20,8 +22,8 @@ class PayOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'payment_method' => ['required', 'string', 'max:64'],
-            'transaction_reference' => ['nullable', 'string', 'max:128'],
+            ...$this->partRules(),
+            'parts' => ['required', 'array', 'min:1', 'max:20'],
         ];
     }
 }

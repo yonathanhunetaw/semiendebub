@@ -31,6 +31,8 @@ import {
     Chip,
     Avatar,
     Divider,
+    FormControlLabel,
+    Switch,
     Tooltip
 } from "@mui/material";
 import Delete from "@mui/icons-material/Delete";
@@ -81,6 +83,10 @@ export default function Customers({ customers }: { customers: any[] }) {
         phone_number: "",
         city: "",
         tin_number: "",
+        // Credit is set here and nowhere else: sellers cannot give it.
+        credit_limit: "",
+        credit_days: "",
+        credit_override: false,
     });
 
     const handleOpen = () => {
@@ -101,6 +107,9 @@ export default function Customers({ customers }: { customers: any[] }) {
             phone_number: customer.phone_number || "",
             city: customer.city || "",
             tin_number: customer.tin_number || "",
+            credit_limit: customer.credit_limit ? String(Number(customer.credit_limit)) : "",
+            credit_days: customer.credit_days ? String(customer.credit_days) : "",
+            credit_override: Boolean(customer.credit_override),
         });
         clearErrors();
         setOpenModal(true);
@@ -473,6 +482,41 @@ export default function Customers({ customers }: { customers: any[] }) {
                             error={!!errors.city}
                             helperText={errors.city}
                         />
+
+                        <Divider textAlign="left" sx={{ fontSize: 12, color: "text.secondary" }}>Credit</Divider>
+                        <Box sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: 2 }}>
+                            <TextField
+                                fullWidth
+                                label="Credit limit (ETB)"
+                                type="number"
+                                value={data.credit_limit}
+                                onChange={(e) => setData("credit_limit", e.target.value)}
+                                error={!!errors.credit_limit}
+                                helperText={errors.credit_limit ?? "Leave empty for no credit."}
+                                inputProps={{ min: 0, step: "0.01" }}
+                            />
+                            <TextField
+                                fullWidth
+                                label="Days to pay"
+                                type="number"
+                                value={data.credit_days}
+                                onChange={(e) => setData("credit_days", e.target.value)}
+                                error={!!errors.credit_days}
+                                helperText={errors.credit_days ?? "Each credit order is due this many days later."}
+                                inputProps={{ min: 1, max: 365 }}
+                            />
+                        </Box>
+                        {Number(data.credit_limit) > 0 ? (
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={data.credit_override}
+                                        onChange={(e) => setData("credit_override", e.target.checked)}
+                                    />
+                                }
+                                label="Allow credit even while an invoice is overdue"
+                            />
+                        ) : null}
                     </DialogContent>
                     <DialogActions sx={{ p: { xs: 2, sm: 1.5 } }}>
                         <Button onClick={handleClose} color="inherit" sx={{ textTransform: "none" }}>Cancel</Button>

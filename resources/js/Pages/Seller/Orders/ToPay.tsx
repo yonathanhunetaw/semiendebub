@@ -1,7 +1,9 @@
+import PaymentSplitEditor, { creditWithinLimit, legsBalanced, legsToParts } from "@/Components/Seller/PaymentSplitEditor";
 import SellerLayout from "@/Layouts/SellerLayout";
 import {
     ABOVE_NAV,
     FULFILLMENT_LABELS,
+    type PaymentLeg,
     type SellerOrder,
     birr,
     countdownParts,
@@ -10,29 +12,40 @@ import {
     orderTotal,
     subtotal,
 } from "@/Data/sellerOrderFlow";
+import type { CreditSummary, OrderPayment, PaymentAccountOption } from "@/types/payments";
 import { Head, Link, router } from "@inertiajs/react";
 import React, { useEffect, useMemo, useState } from "react";
 
 /**
  * A single unpaid order.
  *
- * The order is the real sale, served by OrderBoardController. Its stock is
- * held while it waits; the countdown is when that hold lapses. Confirming the
- * payment records it and moves the order into Pick & Pack; cancelling gives
- * the stock back.
+ * The order is the real sale, served by OrderBoardController, with its
+ * payment split. For each part the seller taps "Customer says paid"; the
+ * account's owner then checks their account and confirms it (or answers "not
+ * received yet"). Once every part is confirmed the order moves to Pick &
+ * Pack. Until a part is claimed the stock is held for 48 hours; the countdown
+ * is when that hold lapses. Cancelling gives the stock back.
  */
-
-/** How a payment can be taken at the counter. */
-const PAY_METHODS = [
-    { id: "cash", label: "Cash" },
-    { id: "telebirr", label: "Telebirr" },
-    { id: "cbe_birr", label: "CBE Birr" },
-    { id: "bank_transfer", label: "Bank transfer" },
-] as const;
 
 interface Props {
     reference?: string;
     order?: SellerOrder | null;
+    /** The store's active collection accounts, for (re-)splitting. */
+    accounts?: PaymentAccountOption[];
+    /** The customer's credit, when an admin gave them some. */
+    credit?: CreditSummary | null;
+}
+
+const STATUS_CHIP: Record<string, { label: string; className: string }> = {
+    pending: { label: "Waiting for customer", className: "border-outline/40 bg-surface-container text-on-surface-variant" },
+    claimed: { label: "Owner checking", className: "border-info/30 bg-info-container/60 text-on-info-container" },
+    confirmed: { label: "Received", className: "border-success/30 bg-success-container/60 text-on-success-container" },
+};
+
+function partTitle(part: OrderPayment): string {
+    if (part.method === "credit") return "On credit";
+
+    return part.account ? `${part.account.provider_name} · ${part.account.account_number}` : "Cash";
 }
 
 /** Ticking countdown from a minute budget. */
@@ -56,19 +69,41 @@ function useCountdown(minutes: number | undefined): string | null {
     return minutes ? countdownParts(seconds) : null;
 }
 
-export default function ToPay({ reference, order: served = null }: Props): React.ReactElement {
+export default function ToPay({ reference, order: served = null, accounts = [], credit = null }: Props): React.ReactElement {
     const order: SellerOrder | undefined = useMemo(() => served ?? undefined, [served]);
-    const [method, setMethod] = useState<string>("cash");
-    const [txRef, setTxRef] = useState("");
     const [busy, setBusy] = useState(false);
+    const parts = order?.payments ?? [];
+    const [editing, setEditing] = useState(parts.length === 0);
+    const [legs, setLegs] = useState<PaymentLeg[]>([]);
 
-    const confirmPayment = (): void => {
+    // Claimed and confirmed parts stay; a new split covers what they leave.
+    const locked = parts.filter((part) => part.status === "claimed" || part.status === "confirmed");
+    const lockedTotal = locked.reduce((sum, part) => sum + part.amount, 0);
+
+    const saveSplit = (): void => {
+        if (!order) return;
+        setBusy(true);
+        router.put(
+            route("seller.orders.payments.update", { reference: order.reference }),
+            { parts: legsToParts(legs) },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setEditing(false);
+                    setLegs([]);
+                },
+                onFinish: () => setBusy(false),
+            },
+        );
+    };
+
+    const claim = (part: OrderPayment): void => {
         if (!order) return;
         setBusy(true);
         router.post(
-            route("seller.orders.payment", { reference: order.reference }),
-            { payment_method: method, transaction_reference: txRef || null },
-            { onFinish: () => setBusy(false) },
+            route("seller.orders.payments.claim", { reference: order.reference, payment: part.id }),
+            {},
+            { preserveScroll: true, onFinish: () => setBusy(false) },
         );
     };
 
@@ -106,6 +141,7 @@ export default function ToPay({ reference, order: served = null }: Props): React
 
     const groups = groupByFulfillment(order.lines);
     const total = orderTotal(order);
+    const splitTotal = Math.round((total - lockedTotal) * 100) / 100;
     const refNumber = `${order.reference.replace("-", "")}${order.id}0083`;
 
     const copyRef = async () => {
@@ -144,15 +180,11 @@ export default function ToPay({ reference, order: served = null }: Props): React
                     <span className="font-mono text-[11px] text-outline">{order.reference}</span>
                 </header>
 
-                <p className="bg-surface-container-lowest px-4 pt-2 text-[10px] font-medium uppercase tracking-wide text-outline">
-                    Sample data · layout preview
-                </p>
-
                 {/* ── Countdown ── */}
                 {countdown ? (
                     <section className="mb-2.5 bg-surface-container-lowest px-4 pb-4 pt-3.5 shadow-sm">
                         <p className="text-[13px] font-normal leading-snug text-on-surface-variant">
-                            Without payment, this order will close automatically in
+                            Until the customer says they paid, this order&apos;s stock is held for
                         </p>
                         <div className="mt-1 flex items-center">
                             <span className="font-mono text-[19px] font-bold tracking-tight text-on-surface">
@@ -301,30 +333,119 @@ export default function ToPay({ reference, order: served = null }: Props): React
 
                 {/* ── Payment ── */}
                 <section className="mb-3 bg-surface-container-lowest px-4 py-3.5 shadow-sm">
-                    <h2 className="mb-2 text-sm font-bold text-on-surface">Payment received by</h2>
-                    <div className="grid grid-cols-2 gap-1.5">
-                        {PAY_METHODS.map((option) => (
+                    <div className="mb-2 flex items-center justify-between">
+                        <h2 className="text-sm font-bold text-on-surface">Payment</h2>
+                        {!editing && parts.some((part) => part.status === "pending") ? (
                             <button
-                                key={option.id}
                                 type="button"
-                                onClick={() => setMethod(option.id)}
-                                className={`rounded-[10px] border px-3 py-2 text-xs font-semibold ${
-                                    method === option.id
-                                        ? "border-primary bg-primary-container/60 text-primary"
-                                        : "border-outline-variant text-on-surface-variant"
-                                }`}
+                                onClick={() => setEditing(true)}
+                                className="rounded-[999px] border border-outline/50 px-3 py-1 text-[11px] font-semibold text-on-surface hover:bg-surface-container-low"
                             >
-                                {option.label}
+                                Change split
                             </button>
-                        ))}
+                        ) : null}
                     </div>
-                    {method !== "cash" ? (
-                        <input
-                            value={txRef}
-                            onChange={(event) => setTxRef(event.target.value)}
-                            placeholder="Transaction reference"
-                            className="mt-2 w-full rounded-[10px] border border-outline-variant bg-surface-container-low px-3 py-2 font-mono text-xs"
-                        />
+
+                    {parts.length > 0 ? (
+                        <div className="space-y-2">
+                            {parts.map((part) => {
+                                const chip =
+                                    part.method === "credit"
+                                        ? { label: "On credit", className: STATUS_CHIP.claimed.className }
+                                        : (STATUS_CHIP[part.status] ?? STATUS_CHIP.pending);
+
+                                return (
+                                    <div
+                                        key={part.id}
+                                        className="rounded-[10px] border border-outline-variant p-2.5"
+                                    >
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-xs font-bold text-on-surface">{partTitle(part)}</p>
+                                                {part.account ? (
+                                                    <p className="truncate text-[10px] text-on-surface-variant">
+                                                        {part.account.account_name}
+                                                        {part.account.owner ? ` · confirmed by ${part.account.owner}` : ""}
+                                                    </p>
+                                                ) : null}
+                                                {part.reference ? (
+                                                    <p className="font-mono text-[10px] text-outline">Ref. {part.reference}</p>
+                                                ) : null}
+                                            </div>
+                                            <div className="shrink-0 text-right">
+                                                <p className="text-sm font-bold text-on-surface">{birr(part.amount)}</p>
+                                                <span className={`mt-0.5 inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold ${chip.className}`}>
+                                                    {chip.label}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {part.not_received_at ? (
+                                            <p className="mt-2 flex items-start gap-1.5 rounded-[8px] border border-warning/30 bg-warning-container/60 px-2 py-1.5 text-[11px] text-on-warning-container">
+                                                <span className="material-symbols-outlined text-[14px]">warning</span>
+                                                Not received yet: {part.account?.owner ?? "the owner"} found no deposit. Check with
+                                                the customer, then mark it again.
+                                            </p>
+                                        ) : null}
+
+                                        {part.status === "pending" && part.account ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => claim(part)}
+                                                disabled={busy}
+                                                className="mt-2 w-full rounded-[999px] bg-primary py-2 text-xs font-bold text-on-primary active:scale-[0.98] disabled:opacity-40"
+                                            >
+                                                Customer says paid
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <p className="text-[11px] text-on-surface-variant">
+                            No payment split yet. Choose how the customer pays below.
+                        </p>
+                    )}
+
+                    {editing ? (
+                        <div className="mt-3 space-y-3 border-t border-outline-variant/60 pt-3">
+                            <p className="text-[11px] text-on-surface-variant">
+                                {locked.length > 0
+                                    ? `Split the ${birr(splitTotal)} not yet claimed. This replaces the parts still waiting for the customer.`
+                                    : `Split the ${birr(splitTotal)} total.`}
+                            </p>
+                            <PaymentSplitEditor
+                                accounts={accounts}
+                                total={splitTotal}
+                                legs={legs}
+                                onChange={setLegs}
+                                order={{ reference: order.reference, customer: order.customer }}
+                                credit={credit}
+                            />
+                            <div className="flex justify-end gap-2">
+                                {parts.length > 0 ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditing(false);
+                                            setLegs([]);
+                                        }}
+                                        className="rounded-[999px] border border-outline/50 px-4 py-2 text-xs font-semibold text-on-surface"
+                                    >
+                                        Keep current split
+                                    </button>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    onClick={saveSplit}
+                                    disabled={busy || !legsBalanced(legs, splitTotal) || !creditWithinLimit(legs, credit)}
+                                    className="rounded-[999px] bg-primary px-5 py-2 text-xs font-bold text-on-primary disabled:opacity-40"
+                                >
+                                    Save split
+                                </button>
+                            </div>
+                        </div>
                     ) : null}
                 </section>
 
@@ -364,14 +485,12 @@ export default function ToPay({ reference, order: served = null }: Props): React
                 >
                     Cancel order
                 </button>
-                <button
-                    type="button"
-                    onClick={confirmPayment}
-                    disabled={busy}
-                    className="rounded-[999px] bg-primary px-7 py-2.5 text-xs font-bold text-on-primary shadow-sm active:scale-95 disabled:opacity-40"
+                <Link
+                    href={`${route("seller.orders.index")}?tab=to_pay`}
+                    className="rounded-[999px] bg-primary px-7 py-2.5 text-xs font-bold text-on-primary shadow-sm active:scale-95"
                 >
-                    Confirm payment
-                </button>
+                    Done
+                </Link>
             </nav>
         </>
     );

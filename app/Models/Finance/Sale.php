@@ -67,6 +67,7 @@ class Sale extends Model
         'total_amount',
         'status',
         'payment_status',
+        'due_date',
         'fulfillment_stage',
         'delay_agreed_at',
         'sourcing_confirmed_at',
@@ -80,6 +81,7 @@ class Sale extends Model
         'discount_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'delay_agreed_at' => 'datetime',
+        'due_date' => 'date',
         'sourcing_confirmed_at' => 'datetime',
     ];
 

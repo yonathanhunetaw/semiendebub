@@ -17,7 +17,8 @@ import React, { useEffect, useMemo, useState } from "react";
  *
  * Real sales, shaped by SellerOrderBoard into the card format the sample data
  * in `@/Data/sellerOrderFlow` defined. Unpaid orders carry the pay actions;
- * paid ones open straight into pick & pack.
+ * paid ones open straight into pick & pack. The Paid and Pick & pack tabs are
+ * the pick list: there is no separate queue screen.
  */
 
 interface Props {
@@ -314,6 +315,18 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                                                     </div>
                                                 ) : null}
                                             </>
+                                        ) : null}
+
+                                        {(order.stage === "paid" || order.stage === "packing") && order.sourced ? (
+                                            <span className="mr-auto flex items-center gap-1 text-[11px] font-semibold text-on-surface-variant">
+                                                <span className="material-symbols-outlined text-[15px] text-outline">where_to_vote</span>
+                                                {order.sourced.done}/{order.sourced.total} lines sourced
+                                                {order.delayAgreed ? (
+                                                    <span className="ml-1 rounded-[999px] border border-warning/30 bg-warning-container/60 px-2 py-0.5 text-[9px] font-bold uppercase text-on-warning-container">
+                                                        Delay agreed
+                                                    </span>
+                                                ) : null}
+                                            </span>
                                         ) : null}
 
                                         {order.stage === "paid" ? (

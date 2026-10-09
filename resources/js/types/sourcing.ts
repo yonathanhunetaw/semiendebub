@@ -68,15 +68,3 @@ export interface PickPackPlan {
     sale: PickPackSale;
     lines: PickPackLine[];
 }
-
-/** A paid order waiting to be sourced. */
-export interface PickPackQueueOrder {
-    id: number;
-    reference: string;
-    customer: string;
-    line_count: number;
-    sourced_count: number;
-    total_amount: number;
-    delay_agreed: boolean;
-    placed_at: string | null;
-}

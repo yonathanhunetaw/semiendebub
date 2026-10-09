@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature\Seller;
 
 use App\Models\Auth\User;
+use App\Models\Finance\Payment;
+use App\Models\Finance\PaymentAccount;
 use App\Models\Finance\Sale;
 use App\Models\Fulfillment\Delivery;
 use App\Models\Inventory\StockLocation;
@@ -24,7 +26,8 @@ use Tests\TestCase;
 /**
  * The seller's whole order, driven through the real routes as the real roles:
  *
- *   cart → confirmation → place (To pay) → payment (Paid) → Pick & Pack
+ *   cart → confirmation → place (To pay) → split into a payment part →
+ *   "customer says paid" → the account owner confirms (Paid) → Pick & Pack
  *   (To deliver) → courier claims, collects, delivers (Delivered)
  *
  * with the stock following it: held at checkout, into Delivery's custody at
@@ -43,6 +46,11 @@ class SellerOrderJourneyTest extends TestCase
     private ItemVariant $variant;
 
     private StockLocation $shelf;
+
+    /** The seller who owns the store's Telebirr account and confirms what lands in it. */
+    private User $owner;
+
+    private PaymentAccount $account;
 
     protected function setUp(): void
     {
@@ -68,6 +76,18 @@ class SellerOrderJourneyTest extends TestCase
 
         $this->shelf = StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_SHELF)->sole();
         app(StockService::class)->receive($this->variant->id, $this->shelf, 10);
+
+        $this->owner = $this->user('seller', $this->store->id);
+        $this->account = PaymentAccount::create([
+            'store_id' => $this->store->id,
+            'type' => PaymentAccount::TYPE_WALLET,
+            'provider' => 'telebirr',
+            'account_number' => '0912445780',
+            'account_name' => 'Semien Debub Trading',
+            'owner_user_id' => $this->owner->id,
+            'purpose' => PaymentAccount::PURPOSE_COLLECTION,
+            'is_active' => true,
+        ]);
     }
 
     #[Test]
@@ -96,7 +116,6 @@ class SellerOrderJourneyTest extends TestCase
         $this->asSeller()
             ->post(route('seller.orders.store'), [
                 'cart_id' => $cart->id,
-                'pay_now' => false,
                 'delivery_address' => 'Bole, Woreda 03, House 412',
                 'recipient_name' => 'Abebe Tadesse',
                 'recipient_phone' => '0911223344',
@@ -114,24 +133,40 @@ class SellerOrderJourneyTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->where('order.stage', 'to_pay')
-                ->where('order.expiresInMinutes', fn ($minutes) => $minutes > 0));
+                ->where('order.expiresInMinutes', fn ($minutes) => $minutes > 47 * 60)
+                ->where('accounts.0.id', $this->account->id));
 
-        // ── Payment → Paid (Pick & Pack) ──
+        // ── The customer will pay by Telebirr ──
         $this->asSeller()
-            ->post(route('seller.orders.payment', ['reference' => $sale->reference_number]), [
-                'payment_method' => 'telebirr',
-                'transaction_reference' => 'TB-998877',
+            ->put(route('seller.orders.payments.update', ['reference' => $sale->reference_number]), [
+                'parts' => [['payment_account_id' => $this->account->id, 'amount' => 600, 'transaction_reference' => 'TB-998877']],
             ])
-            ->assertSessionHasNoErrors()
-            ->assertRedirectContains('/pick-pack');
+            ->assertSessionHas('success');
+
+        $part = $sale->payments()->sole();
+        $this->assertSame([Payment::STATUS_PENDING, Sale::STAGE_AWAITING_PAYMENT], [$part->status, $sale->fresh()->fulfillment_stage]);
+
+        // ── "Customer says paid" → the owner's inbox ──
+        $this->asSeller()
+            ->post(route('seller.orders.payments.claim', ['reference' => $sale->reference_number, 'payment' => $part->id]))
+            ->assertSessionHas('success');
+        $this->assertNull(StockReservation::query()->open()->sole()->expires_at, 'A claimed payment stops the hold lapsing.');
+
+        $this->as($this->owner, 'seller')
+            ->get(route('seller.payments.inbox'))
+            ->assertInertia(fn ($page) => $page->component('Seller/Payments/Inbox')->where('payments.0.order', $sale->reference_number));
+
+        // ── The owner sees the deposit → Paid (Pick & Pack) ──
+        $this->as($this->owner, 'seller')
+            ->post(route('seller.payments.confirm', $part))
+            ->assertSessionHas('success');
 
         $sale->refresh();
         $this->assertSame([Sale::STAGE_PICK_PACK, 'paid'], [$sale->fulfillment_stage, $sale->payment_status]);
-        $this->assertNull(StockReservation::query()->open()->sole()->expires_at, 'A paid hold no longer lapses.');
 
-        // Paying twice is refused.
+        // Paying again is refused.
         $this->asSeller()
-            ->post(route('seller.orders.payment', ['reference' => $sale->reference_number]), ['payment_method' => 'cash'])
+            ->put(route('seller.orders.payments.update', ['reference' => $sale->reference_number]), ['parts' => [['amount' => 600]]])
             ->assertSessionHas('error');
 
         // ── Pick & Pack → To deliver ──
@@ -178,24 +213,24 @@ class SellerOrderJourneyTest extends TestCase
     }
 
     #[Test]
-    public function paying_on_the_spot_goes_straight_to_pick_and_pack(): void
+    public function paying_cash_on_the_spot_goes_straight_to_pick_and_pack(): void
     {
         $cart = $this->cart(2);
 
         $this->asSeller()
-            ->post(route('seller.orders.store'), ['cart_id' => $cart->id, 'pay_now' => true, 'payment_method' => 'cbe'])
+            ->post(route('seller.orders.store'), ['cart_id' => $cart->id, ...$this->cash(400)])
             ->assertSessionHasNoErrors()
             ->assertRedirectContains('/pick-pack');
 
         $sale = Sale::query()->sole();
         $this->assertSame([Sale::STAGE_PICK_PACK, 'paid'], [$sale->fulfillment_stage, $sale->payment_status]);
-        $this->assertSame(1, $sale->payments()->count());
+        $this->assertSame(Payment::STATUS_CONFIRMED, $sale->payments()->sole()->status, 'Cash in hand is confirmed by the seller taking it.');
     }
 
     #[Test]
     public function cancelling_an_unpaid_order_gives_its_stock_back(): void
     {
-        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(4)->id, 'pay_now' => false]);
+        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(4)->id]);
         $sale = Sale::query()->sole();
         $this->assertSame(6, app(StockService::class)->availableAtStore($this->variant->id, $this->store->id));
 
@@ -208,23 +243,27 @@ class SellerOrderJourneyTest extends TestCase
     }
 
     #[Test]
-    public function paying_after_the_hold_lapsed_reserves_again_or_refuses_if_the_stock_is_gone(): void
+    public function claiming_after_the_hold_lapsed_reserves_again_or_refuses_if_the_stock_is_gone(): void
     {
-        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(4)->id, 'pay_now' => false]);
+        $this->asSeller()->post(route('seller.orders.store'), [
+            'cart_id' => $this->cart(4)->id,
+            'parts' => [['payment_account_id' => $this->account->id, 'amount' => 800]],
+        ]);
         $sale = Sale::query()->sole();
+        $part = $sale->payments()->sole();
 
         StockReservation::query()->update(['expires_at' => now()->subMinute()]);
         $this->artisan('stock:release-stale-reservations');
 
         // Someone else buys 8 of the 10 meanwhile.
-        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(8)->id, 'pay_now' => true, 'payment_method' => 'cash']);
+        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(8)->id, ...$this->cash(1600)]);
 
         $this->asSeller()
-            ->post(route('seller.orders.payment', ['reference' => $sale->reference_number]), ['payment_method' => 'cash'])
+            ->post(route('seller.orders.payments.claim', ['reference' => $sale->reference_number, 'payment' => $part->id]))
             ->assertSessionHas('error');
 
         $this->assertSame(Sale::STAGE_AWAITING_PAYMENT, $sale->fresh()->fulfillment_stage);
-        $this->assertSame(0, $sale->payments()->count(), 'A refused payment records nothing.');
+        $this->assertSame(Payment::STATUS_PENDING, $part->fresh()->status, 'A refused claim changes nothing.');
     }
 
     #[Test]
@@ -252,7 +291,7 @@ class SellerOrderJourneyTest extends TestCase
         $cart->variants()->updateExistingPivot($this->variant->id, ['extra_pieces' => 7, 'extra_piece_price' => 4]);
 
         $this->asSeller()
-            ->post(route('seller.orders.store'), ['cart_id' => $cart->id, 'pay_now' => true, 'payment_method' => 'cash'])
+            ->post(route('seller.orders.store'), ['cart_id' => $cart->id, ...$this->cash(2 * 200 + 7 * 4)])
             ->assertSessionHasNoErrors();
 
         $sale = Sale::query()->with('items.storeVariant')->sole();
@@ -267,7 +306,7 @@ class SellerOrderJourneyTest extends TestCase
     public function the_address_can_change_until_the_courier_has_the_goods(): void
     {
         $this->asSeller()->post(route('seller.orders.store'), [
-            'cart_id' => $this->cart(1)->id, 'pay_now' => true, 'payment_method' => 'cash', 'delivery_address' => 'Bole',
+            'cart_id' => $this->cart(1)->id, ...$this->cash(200), 'delivery_address' => 'Bole',
         ]);
         $sale = Sale::query()->sole();
 
@@ -287,7 +326,7 @@ class SellerOrderJourneyTest extends TestCase
     #[Test]
     public function a_seller_cannot_pick_and_pack_another_stores_order(): void
     {
-        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(1)->id, 'pay_now' => true, 'payment_method' => 'cash']);
+        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(1)->id, ...$this->cash(200)]);
         $sale = Sale::query()->with('items')->sole();
         $outsider = $this->user('seller', Store::factory()->create(['type' => Store::TYPE_RETAIL])->id);
 
@@ -313,7 +352,7 @@ class SellerOrderJourneyTest extends TestCase
 
         $this->actingAs($other)
             ->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')])
-            ->post(route('seller.orders.store'), ['cart_id' => $cart->id, 'pay_now' => true, 'payment_method' => 'cash'])
+            ->post(route('seller.orders.store'), ['cart_id' => $cart->id, ...$this->cash(200)])
             ->assertNotFound();
 
         $this->assertSame(0, Sale::query()->count());
@@ -384,6 +423,12 @@ class SellerOrderJourneyTest extends TestCase
         $this->assertSame('received', $shipment->fresh()->status);
         $this->assertSame(0, app(StockService::class)->inCustody($this->variant->id));
         $this->assertSame(30, (int) ItemStock::query()->where('stock_location_id', $floor->id)->where('item_variant_id', $this->variant->id)->value('quantity'));
+    }
+
+    /** @return array{parts: array<int, array{amount: float|int}>} */
+    private function cash(float|int $amount): array
+    {
+        return ['parts' => [['amount' => $amount]]];
     }
 
     private function as(User $user, string $subdomain): self

@@ -60,12 +60,13 @@ return [
     | Reservations
     |--------------------------------------------------------------------------
     |
-    | Checkout reserves stock at the store. A paid order holds it until Pick &
-    | Pack; an unpaid one only this long, after which
+    | Checkout reserves stock at the store. An order with a payment the
+    | customer says they made holds it until Pick & Pack; one nobody has paid
+    | towards only this long (48 hours), after which
     | `stock:release-stale-reservations` gives it back to the sellable pool.
     |
     */
 
-    'unpaid_reservation_minutes' => (int) env('INVENTORY_UNPAID_RESERVATION_MINUTES', 120),
+    'unpaid_reservation_minutes' => (int) env('INVENTORY_UNPAID_RESERVATION_MINUTES', 2880),
 
 ];

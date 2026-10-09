@@ -82,7 +82,7 @@ export default function PickPack({ reference, plan = null }: Props): React.React
                             : "No reference supplied."}
                     </p>
                     <Link
-                        href={route("seller.orders.queue")}
+                        href={`${route("seller.orders.index")}?tab=paid`}
                         className="mt-4 rounded-[999px] px-5 py-2 text-[13px] font-bold text-on-primary active:scale-95 bg-primary"
                     >
                         Orders to pick
@@ -131,7 +131,7 @@ export default function PickPack({ reference, plan = null }: Props): React.React
                                 onClick={() =>
                                     window.history.length > 1
                                         ? window.history.back()
-                                        : router.visit(route("seller.orders.queue"))
+                                        : router.visit(`${route("seller.orders.index")}?tab=paid`)
                                 }
                                 aria-label="Back"
                                 className="-ml-1 p-1 text-on-surface"

@@ -74,6 +74,16 @@ Route::domain("admin.{$baseDomain}")
             Route::get('/deliveries', [\App\Http\Controllers\Admin\DeliveryController::class, 'index'])->name('deliveries.index');
             Route::patch('/deliveries/{delivery}/courier', [\App\Http\Controllers\Admin\DeliveryController::class, 'assign'])->name('deliveries.assign');
             Route::get('/payments', [\App\Http\Controllers\Admin\PaymentController::class, 'index'])->name('payments.index');
+            // The accounts customers pay into, per store, and who confirms each.
+            Route::get('/payment-accounts', [\App\Http\Controllers\Admin\PaymentAccountController::class, 'index'])->name('payment-accounts.index');
+            Route::post('/payment-accounts', [\App\Http\Controllers\Admin\PaymentAccountController::class, 'store'])->name('payment-accounts.store');
+            Route::put('/payment-accounts/{paymentAccount}', [\App\Http\Controllers\Admin\PaymentAccountController::class, 'update'])->name('payment-accounts.update');
+            Route::delete('/payment-accounts/{paymentAccount}', [\App\Http\Controllers\Admin\PaymentAccountController::class, 'destroy'])->name('payment-accounts.destroy');
+            // What every seller holds, and their handovers to settlement accounts.
+            Route::get('/balances', [\App\Http\Controllers\Admin\BalanceController::class, 'index'])->name('balances.index');
+            // Customer credit: who owes what, who is overdue, and letting one off.
+            Route::get('/credit', [\App\Http\Controllers\Admin\CreditController::class, 'index'])->name('credit.index');
+            Route::patch('/credit/{customer}/override', [\App\Http\Controllers\Admin\CreditController::class, 'override'])->name('credit.override');
 
             Route::resource('customers', \App\Http\Controllers\Admin\CustomerController::class)
                 ->only(['index', 'store', 'update', 'destroy']);

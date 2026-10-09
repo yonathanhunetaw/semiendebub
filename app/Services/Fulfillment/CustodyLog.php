@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Fulfillment;
 
 use App\Models\Auth\User;
+use App\Models\Finance\Payment;
 use App\Models\Finance\Sale;
 use App\Models\Finance\SaleItem;
 use App\Models\Inventory\InventoryMovement;
@@ -190,7 +191,9 @@ class CustodyLog
             "Order {$sale->reference_number} placed at ".($sale->store?->name ?? 'the store').'.',
             $this->name($sale->seller ?? $sale->user), $sale->store?->name, null));
 
-        foreach ($sale->payments as $payment) {
+        // Only money that arrived: parts still waiting on their account's
+        // owner are not custody events.
+        foreach ($sale->payments->where('status', Payment::STATUS_CONFIRMED) as $payment) {
             $events->push($this->event('payment', $payment->paid_at ?? $payment->created_at, 'Payment received', 'paid', 'emerald',
                 number_format((float) $payment->amount, 2).' '.($payment->currency ?? 'ETB').' by '.str_replace('_', ' ', (string) $payment->payment_method).'.',
                 $this->name($payment->user), null, $payment->transaction_reference));

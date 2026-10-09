@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Requests\Customer\AdminCustomerRequest;
 use App\Models\Auth\Customer;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 //         GET /customers – index (list all customers)
@@ -32,24 +32,9 @@ class CustomerController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(AdminCustomerRequest $request)
     {
-        $validatedCustomer = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'email' => 'required|email|unique:customers',
-            'phone_number' => 'required|string|max:20|unique:customers,phone_number',
-            'city' => 'nullable|string',
-            'tin_number' => 'nullable|string|max:10|unique:customers',
-        ]);
-
-        $validatedCustomer['created_by'] = auth()->id();
-
-        if (! empty($validatedCustomer['city'])) {
-            $validatedCustomer['city'] = Str::title($validatedCustomer['city']);
-        }
-
-        Customer::create($validatedCustomer);
+        Customer::create([...$request->customerData(), 'created_by' => auth()->id()]);
 
         return redirect()->back()->with('success', 'Customer created successfully.');
     }
@@ -57,23 +42,10 @@ class CustomerController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(AdminCustomerRequest $request, string $id)
     {
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'email' => 'required|email|max:255|unique:customers,email,' . $id,
-            'phone_number' => 'required|string|max:20|unique:customers,phone_number,' . $id,
-            'city' => 'nullable|string|max:255',
-            'tin_number' => 'nullable|string|max:10|unique:customers,tin_number,' . $id,
-        ]);
-
-        if (! empty($validated['city'])) {
-            $validated['city'] = Str::title($validated['city']);
-        }
-
         $customer = Customer::findOrFail($id);
-        $customer->update($validated);
+        $customer->update($request->customerData());
 
         return redirect()->back()->with('success', 'Customer updated successfully.');
     }

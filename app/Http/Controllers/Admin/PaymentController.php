@@ -11,7 +11,11 @@ use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** Every payment taken, newest first, with today's takings by method. */
+/**
+ * Every payment part, newest first, with today's confirmed takings by method.
+ * Parts still waiting on their account's owner are listed with their status
+ * but not counted as taken.
+ */
 class PaymentController extends Controller
 {
     public function index(Request $request): Response
@@ -19,7 +23,7 @@ class PaymentController extends Controller
         $method = $request->string('method')->toString() ?: null;
 
         $paginator = Payment::query()
-            ->with(['sale.store', 'user'])
+            ->with(['sale.store', 'user', 'account.owner'])
             ->when($method, fn ($q, string $m) => $q->where('payment_method', $m))
             ->latest('id')
             ->paginate(25)
@@ -31,6 +35,9 @@ class PaymentController extends Controller
                 'order' => $p->sale?->reference_number,
                 'store' => $p->sale?->store?->name,
                 'method' => (string) $p->payment_method,
+                'account' => $p->account?->label(),
+                'owner' => $p->account?->owner ? trim($p->account->owner->first_name.' '.$p->account->owner->last_name) : null,
+                'status' => (string) $p->status,
                 'amount' => (float) $p->amount,
                 'currency' => (string) ($p->currency ?? 'ETB'),
                 'reference' => $p->transaction_reference,
@@ -38,6 +45,7 @@ class PaymentController extends Controller
                 'paid_at' => ($p->paid_at ?? $p->created_at)?->toIso8601String(),
             ])->values(),
             'today' => Payment::query()
+                ->confirmed()
                 ->whereDate('paid_at', Carbon::today())
                 ->selectRaw('payment_method, SUM(amount) as total, COUNT(*) as n')
                 ->groupBy('payment_method')

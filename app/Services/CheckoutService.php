@@ -95,10 +95,7 @@ class CheckoutService
             }
 
             $customer = $cart->customer;
-            // Customer with TIN = individual; without TIN = business; no customer = retail individual
-            $customerType = ($customer && !empty($customer->tin_number))
-                ? 'individual'
-                : ($customer ? 'business' : 'individual');
+            $customerType = $this->customerType($cart);
 
             $itemsData = [];
             $subtotal = 0.00;
@@ -142,18 +139,7 @@ class CheckoutService
                     );
                 }
 
-                // Calculate price using PriceProvider
-                $priceLadder = PriceProvider::getPriceLadder(
-                    storeVariantId: $storeVariant->id,
-                    storeId: $cart->store_id,
-                    sellerId: $cart->seller_id,
-                    customerId: $cart->customer_id
-                );
-
-                $calculatedPrice = PriceProvider::getFinalPriceWithTax($priceLadder, $customerType);
-
-                // Fallback to pivot price if calculation engine yields 0 and pivot is set
-                $unitPrice = ($calculatedPrice > 0) ? $calculatedPrice : (float) ($variant->pivot->price ?? 0);
+                $unitPrice = $this->unitPrice($cart, $storeVariant, (float) ($variant->pivot->price ?? 0));
                 $lineTotal = round($unitPrice * $requestedQuantity, 2);
 
                 // Calculate tax portion (e.g. 15% standard rate included for individual customers)
@@ -257,7 +243,9 @@ class CheckoutService
                 }
             }
 
-            // 5. Record Payment if provided
+            // 5. Record a payment already in hand. The seller app never
+            // passes one: its parts go through PaymentService, which waits
+            // for each account's owner to confirm the money arrived.
             if (!empty($paymentData)) {
                 Payment::create([
                     'sale_id' => $sale->id,
@@ -265,9 +253,11 @@ class CheckoutService
                     'amount' => $paymentData['amount'] ?? $sale->total_amount,
                     'currency' => $paymentData['currency'] ?? 'ETB',
                     'transaction_reference' => $paymentData['transaction_reference'] ?? null,
-                    'status' => $paymentData['status'] ?? 'completed',
+                    'status' => Payment::STATUS_CONFIRMED,
                     'user_id' => $userId ?? auth()->id(),
                     'paid_at' => now(),
+                    'confirmed_at' => now(),
+                    'confirmed_by' => $userId ?? auth()->id(),
                     'notes' => $paymentData['notes'] ?? null,
                 ]);
             }
@@ -291,6 +281,37 @@ class CheckoutService
 
             return $sale->load(['items.storeVariant', 'payments', 'delivery', 'customer', 'store']);
         });
+    }
+
+    /**
+     * What one unit of a cart line sells for: the customer's price ladder,
+     * falling back to the cart's own price when the ladder yields nothing.
+     *
+     * Public so the order confirmation can show the total the sale will
+     * actually carry; payment parts are checked against that total.
+     */
+    public function unitPrice(Cart $cart, StoreVariant $storeVariant, float $cartPrice): float
+    {
+        $priceLadder = PriceProvider::getPriceLadder(
+            storeVariantId: $storeVariant->id,
+            storeId: $cart->store_id,
+            sellerId: $cart->seller_id,
+            customerId: $cart->customer_id
+        );
+
+        $calculatedPrice = PriceProvider::getFinalPriceWithTax($priceLadder, $this->customerType($cart));
+
+        return $calculatedPrice > 0 ? $calculatedPrice : $cartPrice;
+    }
+
+    /** Customer with TIN = individual; without TIN = business; no customer = retail individual. */
+    private function customerType(Cart $cart): string
+    {
+        $customer = $cart->customer;
+
+        return ($customer && ! empty($customer->tin_number))
+            ? 'individual'
+            : ($customer ? 'business' : 'individual');
     }
 
     /**

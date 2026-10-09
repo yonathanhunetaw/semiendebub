@@ -48,19 +48,13 @@ class MenuController extends Controller
             'stats' => [
                 'order_stages' => $orderBoard->counts($storeId > 0 ? $storeId : null),
                 'shipments' => $this->shipmentPipeline($storeId),
-                /*
-                 * The one order counter that is real.
-                 *
-                 * The pipeline tiles above still count sample orders, but Pick &
-                 * Pack is backed: these are paid sales whose lines have yet to be
-                 * sourced from a location, which is what the queue screen lists.
-                 */
-                'orders' => [
-                    'awaiting_sourcing' => \App\Models\Finance\Sale::query()
-                        ->when($storeId > 0, fn ($query) => $query->forStore($storeId))
-                        ->awaitingSourcing()
-                        ->count(),
-                ],
+                // Deposits and handovers waiting on this seller to check an account.
+                'payments_to_confirm' => $user ? app(\App\Services\Finance\PaymentBoard::class)->inboxCount((int) $user->id) : 0,
+                // Money this seller holds and has not handed over yet.
+                'balance' => $user ? [
+                    'held' => app(\App\Services\Finance\BalanceLedger::class)->heldCents((int) $user->id) / 100,
+                    'overdue_cash' => app(\App\Services\Finance\BalanceLedger::class)->overdueCash((int) $user->id)['amount'],
+                ] : null,
                 'catalogue' => [
                     'customers' => Customer::count(),
                     'items' => Item::where('status', 'active')->count(),
