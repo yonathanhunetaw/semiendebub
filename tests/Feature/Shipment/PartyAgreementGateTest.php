@@ -549,8 +549,10 @@ class PartyAgreementGateTest extends TestCase
         $shipment = $this->proposeShipment(30);
         $variantId = $this->variant->id;
 
+        // The manifest is edited in the seller app, so by the receiving
+        // store's seller; the subdomain gate keeps stock keepers out of it.
         $this->withServerVariables(['HTTP_HOST' => 'seller.localhost'])
-            ->actingAs($this->destinationKeeper, 'web')
+            ->actingAs($this->user('seller', $this->destination->id), 'web')
             ->post(route('seller.shipments.manifest.save', $shipment), [
                 'quantities' => [$variantId => 44],
             ])
@@ -564,8 +566,10 @@ class PartyAgreementGateTest extends TestCase
     {
         $shipment = $this->proposeShipment(30);
 
+        // The manifest is edited in the seller app, so by the receiving
+        // store's seller; the subdomain gate keeps stock keepers out of it.
         $this->withServerVariables(['HTTP_HOST' => 'seller.localhost'])
-            ->actingAs($this->destinationKeeper, 'web')
+            ->actingAs($this->user('seller', $this->destination->id), 'web')
             ->post(route('seller.shipments.manifest.save', $shipment), [
                 'quantities' => [$this->variant->id => 0],
             ])

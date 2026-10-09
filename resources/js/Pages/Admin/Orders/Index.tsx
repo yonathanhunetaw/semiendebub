@@ -37,6 +37,8 @@ interface Props {
     counts?: Partial<Record<Stage, number>>;
     filters: { stage: string; store: number | null; search: string };
     stores?: Array<{ id: number; name: string }>;
+    /** A global admin may look at every store at once. */
+    can_pick_all?: boolean;
     pagination: { current_page: number; last_page: number; total: number };
 }
 
@@ -56,12 +58,22 @@ const birr = (amount: number): string =>
  * Every order across every store. Stages match the seller's board; opening an
  * order shows who has held its goods, where and when.
  */
-export default function OrdersIndex({ orders = [], counts = {}, filters, stores = [], pagination }: Props): React.ReactElement {
+export default function OrdersIndex({ orders = [], counts = {}, filters, stores = [], can_pick_all = false, pagination }: Props): React.ReactElement {
     const [search, setSearch] = useState(filters.search ?? "");
 
+    /*
+     * The store is the admin app's active store (session-backed, shared with
+     * the sidebar dropdown), so it is only sent when this picker changes it,
+     * and "All stores" is sent as `all` rather than dropped.
+     */
     const go = (patch: Record<string, string | number | null>): void => {
-        const next = { ...filters, ...patch } as Record<string, string | number | null>;
-        const query = Object.fromEntries(Object.entries(next).filter(([, value]) => value !== null && value !== "" && value !== "all"));
+        const { store: _store, ...rest } = { ...filters, ...patch } as Record<string, string | number | null>;
+        const query: Record<string, string | number> = Object.fromEntries(
+            Object.entries(rest).filter(([, value]) => value !== null && value !== "" && value !== "all"),
+        ) as Record<string, string | number>;
+        if ("store" in patch) {
+            query.store = patch.store ?? "all";
+        }
         router.get(route("admin.orders.index"), query, { preserveState: true, preserveScroll: true, replace: true });
     };
 
@@ -95,7 +107,7 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, stores 
                         })}
                     </Stack>
                     <Box sx={{ flex: 1 }} />
-                    <TextField
+                    {(can_pick_all || stores.length > 1) && <TextField
                         select
                         size="small"
                         label="Store"
@@ -103,13 +115,13 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, stores 
                         onChange={(event) => go({ store: event.target.value === "" ? null : Number(event.target.value), page: null })}
                         sx={{ minWidth: 180 }}
                     >
-                        <MenuItem value="">All stores</MenuItem>
+                        {can_pick_all && <MenuItem value="">All stores</MenuItem>}
                         {stores.map((store) => (
                             <MenuItem key={store.id} value={store.id}>
                                 {store.name}
                             </MenuItem>
                         ))}
-                    </TextField>
+                    </TextField>}
                     <TextField
                         size="small"
                         label="Reference"

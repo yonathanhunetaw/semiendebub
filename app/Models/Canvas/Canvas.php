@@ -16,9 +16,20 @@ class Canvas extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'user_id', 
+        'user_id',
+        'store_id',
         'title'
     ];
+
+    protected $casts = [
+        'store_id' => 'integer',
+    ];
+
+    /** The store this canvas belongs to; null for a global admin's own. */
+    public function store(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Store\Store::class);
+    }
 
     /**
      * Get the user that owns the canvas.

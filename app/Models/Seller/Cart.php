@@ -108,12 +108,13 @@ class Cart extends Model
 
     public function scopeVisibleTo($query, User $user)
     {
-        // Use strtolower to make sure "Admin" or "admin" both work
-        if (strtolower($user->role) === 'admin') {
+        // roleKey(), not `role`: the latter is the display form. A global
+        // admin (no store) sees every cart; a store admin and everyone else,
+        // their own store's. Admin screens scope through ActiveStore instead.
+        if ($user->isRole('admin') && $user->store_id === null) {
             return $query;
         }
 
-        // Sellers and other staff only see their specific store's carts
         return $query->where('store_id', $user->store_id);
     }
 

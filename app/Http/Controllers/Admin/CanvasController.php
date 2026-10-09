@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Canvas\Canvas;
 use App\Models\Canvas\CanvasVersion;
+use App\Models\Auth\User;
+use App\Services\Admin\ActiveStore;
+use Illuminate\Database\Eloquent\Builder;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,26 +17,32 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Throwable;
 
+/**
+ * The white board. Canvases belong to a store: a store admin sees only their
+ * stores' canvases (their own and those shared with them) and can share only
+ * with that store's people and the global admins. A global admin's own
+ * canvases have no store and are global.
+ */
 class CanvasController extends Controller
 {
+    public function __construct(private readonly ActiveStore $activeStore)
+    {
+    }
+
     public function index(Request $request)
     {
         $user = Auth::user();
 
-        // Fetch user's personal and shared canvases
-        $canvases = Canvas::with('user:id,first_name,last_name')
-            ->where('user_id', $user->id)
-            ->orWhereHas('shares', function ($query) use ($user) {
-                $query->where('user_id', $user->id);
-            })
-            ->get();
+        // Personal and shared canvases, limited to the stores the user reaches,
+        // so a share made across stores before canvases had a store stays shut.
+        $canvases = $this->visibleCanvases()->with('user:id,first_name,last_name')->get();
 
         $selectedCanvasId = $request->input('canvas_id');
         $canvas = $canvases->firstWhere('id', $selectedCanvasId) ?? $canvases->first();
 
         // If no canvas exists, create a default one
         if (!$canvas) {
-            $canvas = Canvas::create(['user_id' => $user->id, 'title' => 'My Canvas']);
+            $canvas = Canvas::create(['user_id' => $user->id, 'store_id' => $this->storeForNewCanvas(), 'title' => 'My Canvas']);
             $canvases->push($canvas);
         }
 
@@ -49,7 +58,7 @@ class CanvasController extends Controller
             ->orderByDesc('id')
             ->get(['id', 'user_id', 'comment', 'created_at']);
 
-        $allUsers = \App\Models\Auth\User::where('id', '!=', $user->id)->get(['id', 'first_name', 'last_name']);
+        $allUsers = $this->shareCandidates($canvas)->get(['users.id', 'first_name', 'last_name']);
         $sharedUsers = $canvas->shares()->get(['users.id', 'users.first_name', 'users.last_name']);
 
         return Inertia::render('Admin/Canvas', [
@@ -74,7 +83,7 @@ class CanvasController extends Controller
             'title' => 'required|string|max:255',
         ]);
 
-        $canvas = Canvas::create(['user_id' => Auth::id(), 'title' => $request->title]);
+        $canvas = Canvas::create(['user_id' => Auth::id(), 'store_id' => $this->storeForNewCanvas(), 'title' => $request->title]);
         return redirect('/canvas?canvas_id=' . $canvas->id)->with('success', 'Canvas created successfully!');
     }
 
@@ -86,7 +95,13 @@ class CanvasController extends Controller
             'permission' => 'required|in:view,edit',
         ]);
 
-        $canvas = Canvas::where('user_id', Auth::id())->findOrFail($request->canvas_id);
+        $canvas = $this->visibleCanvases()->where('canvases.user_id', Auth::id())->findOrFail($request->canvas_id);
+
+        // Checked here, not only in the picker: the candidate list is the rule.
+        if (! $this->shareCandidates($canvas)->whereKey($request->user_id)->exists()) {
+            return back()->withErrors(['user_id' => 'You can only share with people of this canvas\'s store.']);
+        }
+
         $canvas->shares()->syncWithoutDetaching([$request->user_id => ['permission' => $request->permission]]);
 
         return back()->with('success', 'Canvas shared successfully!');
@@ -99,7 +114,7 @@ class CanvasController extends Controller
             'user_id' => 'required|exists:users,id',
         ]);
 
-        $canvas = Canvas::where('user_id', Auth::id())->findOrFail($request->canvas_id);
+        $canvas = $this->visibleCanvases()->where('canvases.user_id', Auth::id())->findOrFail($request->canvas_id);
         $canvas->shares()->detach($request->user_id);
 
         return back()->with('success', 'User removed from canvas successfully!');
@@ -108,6 +123,8 @@ class CanvasController extends Controller
     public function getVersion($id)
     {
         $version = CanvasVersion::findOrFail($id);
+        abort_unless($this->visibleCanvases()->whereKey($version->canvas_id)->exists(), 404);
+
         return response()->json($version->snapshot_json);
     }
 
@@ -118,6 +135,8 @@ class CanvasController extends Controller
             'snapshot_json' => 'required|array',
             'comment' => 'nullable|string|max:255',
         ]);
+
+        abort_unless($this->visibleCanvases()->whereKey($request->canvas_id)->exists(), 404);
 
         $version = CanvasVersion::create([
             'canvas_id' => $request->canvas_id,
@@ -131,6 +150,41 @@ class CanvasController extends Controller
             'message' => 'Canvas saved for review!',
             'version_id' => $version->id
         ]);
+    }
+
+    /** The user's own and shared canvases, inside the stores they reach. */
+    private function visibleCanvases(): Builder
+    {
+        $userId = (int) Auth::id();
+        $storeIds = $this->activeStore->accessibleIds();
+
+        return Canvas::query()
+            ->where(fn (Builder $q) => $q
+                ->where('canvases.user_id', $userId)
+                ->orWhereHas('shares', fn (Builder $share) => $share->where('users.id', $userId)))
+            ->when($storeIds !== null, fn (Builder $q) => $q->whereIn('canvases.store_id', $storeIds ?: [0]));
+    }
+
+    /**
+     * Who a canvas may be shared with: its store's people plus the global
+     * admins. A global canvas follows the active store, or everyone on "All
+     * stores".
+     */
+    private function shareCandidates(Canvas $canvas): Builder
+    {
+        $storeId = $canvas->store_id ?? $this->activeStore->id();
+
+        return User::query()
+            ->whereKeyNot(Auth::id())
+            ->when($storeId !== null, fn (Builder $q) => $q->where(fn (Builder $inner) => $inner
+                ->where('store_id', $storeId)
+                ->orWhere(fn (Builder $global) => $global->whereNull('store_id')->role('admin'))));
+    }
+
+    /** A store admin's canvas is their active store's; a global admin's is global. */
+    private function storeForNewCanvas(): ?int
+    {
+        return $this->activeStore->isGlobal() ? null : $this->activeStore->id();
     }
 
     public function uploadAsset(Request $request)

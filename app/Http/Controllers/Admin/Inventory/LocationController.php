@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventory\AssignLocationManagersRequest;
 use App\Http\Requests\Inventory\AssignLocationStaffRequest;
 use App\Models\Auth\User;
+use App\Services\Admin\ActiveStore;
 use App\Models\Inventory\FacilityManager;
 use App\Models\Inventory\LocationStaff;
 use App\Models\Inventory\StockLocation;
@@ -32,8 +33,17 @@ class LocationController extends Controller
     /** Roles that can be put in charge of a location. */
     private const MANAGER_ROLES = ['admin', 'store_manager', 'stock_keeper', 'seller'];
 
+    public function __construct(private readonly ActiveStore $activeStore)
+    {
+    }
+
     public function index(): Response
     {
+        // The active store's own nodes; the main hubs (no store) and the goods
+        // in couriers' hands are network-wide, so only a global admin on "All
+        // stores" sees them.
+        $scopeIds = $this->activeStore->scopeIds();
+
         $units = ItemStock::query()
             ->whereNotNull('stock_location_id')
             ->selectRaw('stock_location_id, SUM(quantity) as units')
@@ -43,6 +53,7 @@ class LocationController extends Controller
         $nodes = StockLocation::query()
             ->with(['store', 'managerAssignments.user', 'staffAssignments.user'])
             ->where('kind', '!=', StockLocation::KIND_TRANSIT)
+            ->when($scopeIds !== null, fn ($q) => $q->whereIn('store_id', $scopeIds ?: [0]))
             ->get();
 
         $name = fn (?User $user): string => $user === null ? 'Unknown' : (trim($user->first_name.' '.$user->last_name) ?: (string) $user->email);
@@ -85,7 +96,7 @@ class LocationController extends Controller
                     ->map($present)->values(),
             ])->values(),
             // Goods in couriers' hands right now: handed out, not yet handed over.
-            'in_delivery' => (int) ItemStock::query()
+            'in_delivery' => $scopeIds !== null ? 0 : (int) ItemStock::query()
                 ->whereIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'))
                 ->sum('quantity'),
             'candidates' => $this->people(self::MANAGER_ROLES),
@@ -100,6 +111,7 @@ class LocationController extends Controller
     public function assignManagers(AssignLocationManagersRequest $request, StockLocation $stockLocation): RedirectResponse
     {
         abort_if($stockLocation->kind === StockLocation::KIND_TRANSIT, 404);
+        $this->authorizeLocation($stockLocation, $request->managerIds());
 
         try {
             $stockLocation->syncManagers($request->managerIds(), $request->user()?->id, $request->abilities());
@@ -113,6 +125,7 @@ class LocationController extends Controller
     public function assignStaff(AssignLocationStaffRequest $request, StockLocation $stockLocation): RedirectResponse
     {
         abort_if(in_array($stockLocation->kind, [StockLocation::KIND_TRANSIT], true), 404);
+        $this->authorizeLocation($stockLocation, $request->staffIds());
 
         $stockLocation->syncStaff($request->staffIds(), $request->user()?->id);
 
@@ -125,7 +138,7 @@ class LocationController extends Controller
      */
     private function people(array $roles): array
     {
-        return User::query()
+        return $this->activeStore->apply(User::query())
             ->whereIn('role', $roles)
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name', 'email', 'role'])
@@ -134,5 +147,23 @@ class LocationController extends Controller
                 'name' => trim($user->first_name.' '.$user->last_name) ?: (string) $user->email,
                 'role' => $user->roleKey(),
             ])->values()->all();
+    }
+
+    /**
+     * A store admin manages their own stores' locations, with their own
+     * stores' people; a main hub (no store) is a global admin's.
+     *
+     * @param  array<int, int>  $userIds
+     */
+    private function authorizeLocation(StockLocation $location, array $userIds): void
+    {
+        abort_unless($this->activeStore->allows($location->store_id !== null ? (int) $location->store_id : null), 404);
+
+        if (! $this->activeStore->isGlobal()) {
+            $outsiders = User::query()->whereKey($userIds)->get(['id', 'store_id'])
+                ->reject(fn (User $user): bool => $this->activeStore->allows($user->store_id !== null ? (int) $user->store_id : null));
+
+            abort_if($outsiders->isNotEmpty(), 403, 'You can only assign your own stores\' people.');
+        }
     }
 }

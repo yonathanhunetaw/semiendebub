@@ -29,10 +29,35 @@ Route::domain("admin.{$baseDomain}")
             Route::get('/login', fn() => Inertia::render('Admin/Login/index'))->name('login');
         });
 
-        // Authenticated Admin routes
-        Route::middleware(['auth', 'verified', 'role.subdomain:admin'])->group(function () {
+        // The replenishment approvals queue is also the store manager's: it is
+        // where a manager rules on the transfers their store's capacity bands
+        // propose (TransferPolicy decides which). Locked to their store by
+        // ActiveStore like a store admin.
+        Route::middleware(['auth', 'verified', 'role.subdomain:admin,store_manager', 'admin.store'])
+            ->prefix('inventory')->name('inventory.')->group(function () {
+                Route::get('/replenishment', [ReplenishmentController::class, 'index'])->name('replenishment.index');
+                Route::post('/replenishment/{transfer}/approve', [ReplenishmentController::class, 'approve'])
+                    ->name('replenishment.approve');
+                Route::post('/replenishment/{transfer}/reject', [ReplenishmentController::class, 'reject'])
+                    ->name('replenishment.reject');
+            });
+
+        // Authenticated Admin routes. `admin.store` settles the active store
+        // (ActiveStore): store-zone screens follow it; `admin.global` routes
+        // are the global zone, closed to store admins.
+        Route::middleware(['auth', 'verified', 'role.subdomain:admin', 'admin.store'])->group(function () {
 
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+            // The top bar's quick search (orders, customers, items), JSON.
+            Route::get('/search', \App\Http\Controllers\Admin\QuickSearchController::class)->name('search');
+            // "How Duka works": the flow, the roles and the places, illustrated.
+            // The guide (every way of working, step by step); /how-it-works was its first home.
+            Route::get('/guide', fn (\Illuminate\Http\Request $request) => \Inertia\Inertia::render('Guide/Index', [
+                'app' => 'admin',
+                'chapter' => $request->query('chapter'),
+                'step' => $request->query('step'),
+            ]))->name('guide');
+            Route::redirect('/how-it-works', '/guide')->name('flow');
             Route::get('/settings', fn() => Inertia::render('Admin/Settings/Index'))->name('settings');
 
             // ── Canvas ──
@@ -46,11 +71,15 @@ Route::domain("admin.{$baseDomain}")
                 Route::post('/upload-asset', [CanvasController::class, 'uploadAsset'])->name('upload-asset');
             });
 
+            // ── Global zone: the catalogue, stores, warehouses, fleet, sessions ──
+            Route::middleware('admin.global')->group(function () {
             // ── Items ──
             Route::post('items/inline-options', [ItemController::class, 'storeInlineOption'])->name('items.inline-options');
             // ItemController::updateStatus() had no route at all, so the only
             // way an item's status could change was a full resource update.
             Route::patch('items/{item}/status', [ItemController::class, 'updateStatus'])->name('items.updateStatus');
+            // Before the resource, or PATCH items/{item} would claim it.
+            Route::patch('items/bulk-status', [ItemController::class, 'bulkUpdateStatus'])->name('items.bulkStatus');
             /*
              * `items/{item}/variants/{variant}/status` used to live here,
              * pointing at ItemController::updateVariantStatus(). That method was
@@ -64,8 +93,41 @@ Route::domain("admin.{$baseDomain}")
             Route::post('items/{item}/deploy', [ItemDeployController::class, 'deploy'])->name('items.deploy');
             Route::resource('items', ItemController::class);
 
-            // ── Users, Sessions & Customers ──
+            // Users and sessions live under Settings, for global admins only.
             Route::resource('users', UserController::class);
+            $sessionController = SessionController::class;
+            require __DIR__ . '/../sessions.php';
+
+            // ── Stores ──
+            Route::resource('stores', StoreController::class);
+
+            Route::prefix('inventory')->name('inventory.')->group(function () {
+                Route::get('/stores', [StoreController::class, 'index'])->name('stores');
+
+                // Warehouse CRUD
+                Route::get('/warehouse', [WarehouseController::class, 'index'])->name('warehouse');
+                Route::get('/warehouse/locations/create', [WarehouseController::class, 'create'])->name('locations.create');
+                Route::post('/warehouse/locations', [WarehouseController::class, 'store'])->name('locations.store');
+                Route::get('/warehouse/locations/{location}/edit', [WarehouseController::class, 'edit'])->name('locations.edit');
+                Route::patch('/warehouse/locations/{location}', [WarehouseController::class, 'update'])->name('locations.update');
+                Route::delete('/warehouse/locations/{location}', [WarehouseController::class, 'destroy'])->name('locations.destroy');
+
+                // The one or two users who may oversee a warehouse. Admin-only;
+                // see App\Policies\Inventory\WarehousePolicy.
+                Route::post('/warehouse/{warehouse}/managers', [WarehouseController::class, 'assignManagers'])
+                    ->name('warehouse.managers.assign');
+
+                // Vehicles are shared by every store.
+                Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
+                Route::post('/fleet', [FleetController::class, 'store'])->name('fleet.store');
+                Route::put('/fleet/{vehicle}', [FleetController::class, 'update'])->name('fleet.update');
+                Route::delete('/fleet/{vehicle}', [FleetController::class, 'destroy'])->name('fleet.destroy');
+            });
+            });
+
+            // ── Store zone: everything below follows the active store ──
+
+            // ── Users, Sessions & Customers ──
             // The customers screen creates and edits in dialogs; there are no
             // create/show/edit pages, so those routes only ever 500'd.
             // Every order across every store, and each one's custody log.
@@ -85,32 +147,14 @@ Route::domain("admin.{$baseDomain}")
             Route::get('/credit', [\App\Http\Controllers\Admin\CreditController::class, 'index'])->name('credit.index');
             Route::patch('/credit/{customer}/override', [\App\Http\Controllers\Admin\CreditController::class, 'override'])->name('credit.override');
 
+            // Customer-specific prices and discounts (set on a store's item
+            // page under "Edit price & rule"), with when each discount ends.
+            Route::get('/customers/discounts', [\App\Http\Controllers\Admin\CustomerController::class, 'discounts'])->name('customers.discounts');
             Route::resource('customers', \App\Http\Controllers\Admin\CustomerController::class)
                 ->only(['index', 'store', 'update', 'destroy']);
-            $sessionController = SessionController::class;
-            require __DIR__ . '/../sessions.php';
 
-            // ── Stores ──
-            Route::resource('stores', StoreController::class);
-
-            // ── Unified Inventory & Warehouse ──
+            // ── Store inventory: locations, capacity, transfers, shipments ──
             Route::prefix('inventory')->name('inventory.')->group(function () {
-                // Stores view
-                Route::get('/stores', [StoreController::class, 'index'])->name('stores');
-
-                // Warehouse CRUD
-                Route::get('/warehouse', [WarehouseController::class, 'index'])->name('warehouse');
-                Route::get('/warehouse/locations/create', [WarehouseController::class, 'create'])->name('locations.create');
-                Route::post('/warehouse/locations', [WarehouseController::class, 'store'])->name('locations.store');
-                Route::get('/warehouse/locations/{location}/edit', [WarehouseController::class, 'edit'])->name('locations.edit');
-                Route::patch('/warehouse/locations/{location}', [WarehouseController::class, 'update'])->name('locations.update');
-                Route::delete('/warehouse/locations/{location}', [WarehouseController::class, 'destroy'])->name('locations.destroy');
-
-                // The one or two users who may oversee a warehouse. Admin-only;
-                // see App\Policies\Inventory\WarehousePolicy.
-                Route::post('/warehouse/{warehouse}/managers', [WarehouseController::class, 'assignManagers'])
-                    ->name('warehouse.managers.assign');
-
                 // ── Locations: the one tree, and each location's managers ──
                 Route::get('/locations', [\App\Http\Controllers\Admin\Inventory\LocationController::class, 'index'])
                     ->name('stock-locations.index');
@@ -124,12 +168,8 @@ Route::domain("admin.{$baseDomain}")
                 Route::get('/capacity/{storeVariant}', [VariantCapacityController::class, 'edit'])->name('capacity.edit');
                 Route::patch('/capacity/{storeVariant}', [VariantCapacityController::class, 'update'])->name('capacity.update');
 
-                // ── Replenishment proposals: the store manager's approval gate ──
-                Route::get('/replenishment', [ReplenishmentController::class, 'index'])->name('replenishment.index');
-                Route::post('/replenishment/{transfer}/approve', [ReplenishmentController::class, 'approve'])
-                    ->name('replenishment.approve');
-                Route::post('/replenishment/{transfer}/reject', [ReplenishmentController::class, 'reject'])
-                    ->name('replenishment.reject');
+                // Replenishment proposals (the approvals queue) are registered
+                // above, in the group store managers may enter too.
 
                 // Transfers
                 Route::get('/transfers', [TransferController::class, 'index'])->name('transfers');
@@ -142,10 +182,6 @@ Route::domain("admin.{$baseDomain}")
                 Route::patch('/transfers/{transfer}/courier', [TransferController::class, 'assignCourier'])->name('transfers.courier');
 
                 // Shipments (shared cross-role domain)
-                Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
-                Route::post('/fleet', [FleetController::class, 'store'])->name('fleet.store');
-                Route::put('/fleet/{vehicle}', [FleetController::class, 'update'])->name('fleet.update');
-                Route::delete('/fleet/{vehicle}', [FleetController::class, 'destroy'])->name('fleet.destroy');
                 Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
                 Route::post('/shipments', [ShipmentController::class, 'store'])->name('shipments.store');
                 Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');

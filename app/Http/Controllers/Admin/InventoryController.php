@@ -9,6 +9,7 @@ use App\Models\Item\Item;
 use App\Models\StockKeeper\Transfer;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
+use App\Services\Admin\ActiveStore;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -41,7 +42,10 @@ class InventoryController extends Controller
             ->get()
             ->keyBy('store_id');
 
-        $stores = Store::query()
+        $activeStore = app(ActiveStore::class);
+        $scopeIds = $activeStore->scopeIds();
+
+        $stores = $activeStore->apply(Store::query(), 'id')
             ->orderBy('name')
             ->get()
             ->map(function (Store $store) use ($liveByStore): array {
@@ -76,9 +80,9 @@ class InventoryController extends Controller
                 ->all(),
             // Real orders per stage across every store — the same mapping
             // the seller's board uses, so a tile matches the list it opens.
-            'orderStages' => app(\App\Services\Fulfillment\SellerOrderBoard::class)->counts(null),
-            'shipmentCounts' => $this->shipmentCounts(),
-            'transferCounts' => $this->transferCounts(),
+            'orderStages' => app(\App\Services\Fulfillment\SellerOrderBoard::class)->counts($activeStore->id()),
+            'shipmentCounts' => $this->shipmentCounts($scopeIds),
+            'transferCounts' => $this->transferCounts($scopeIds),
             'catalogue' => [
                 'items' => Item::query()->count(),
                 'deployed_variants' => StoreVariant::query()->count(),
@@ -101,9 +105,13 @@ class InventoryController extends Controller
      *
      * @return array<string, int>
      */
-    private function shipmentCounts(): array
+    private function shipmentCounts(?array $scopeIds): array
     {
-        $byStatus = Shipment::query()
+        $scoped = fn () => Shipment::query()->when($scopeIds !== null, fn ($q) => $q->where(fn ($ends) => $ends
+            ->whereIn('origin_store_id', $scopeIds ?: [0])
+            ->orWhereIn('destination_store_id', $scopeIds ?: [0])));
+
+        $byStatus = $scoped()
             ->selectRaw('status, COUNT(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');
@@ -126,7 +134,7 @@ class InventoryController extends Controller
             // Past its ETA and still moving. Computed rather than carried over
             // from the seller hub, which read `overdue` from a stats array
             // nothing populated.
-            'overdue' => Shipment::query()
+            'overdue' => $scoped()
                 ->whereNotNull('eta')
                 ->where('eta', '<', now())
                 ->whereNotIn('status', ['received', 'cancelled', 'delivered'])
@@ -135,9 +143,12 @@ class InventoryController extends Controller
     }
 
     /** @return array<string, int> */
-    private function transferCounts(): array
+    private function transferCounts(?array $scopeIds): array
     {
         $byStatus = Transfer::query()
+            ->when($scopeIds !== null, fn ($q) => $q->where(fn ($ends) => $ends
+                ->whereIn('from_store_id', $scopeIds ?: [0])
+                ->orWhereIn('to_store_id', $scopeIds ?: [0])))
             ->selectRaw('status, COUNT(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');

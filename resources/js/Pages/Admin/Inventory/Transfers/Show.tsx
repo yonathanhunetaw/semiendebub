@@ -16,6 +16,7 @@ import {
     TextField,
     Typography,
 } from "@mui/material";
+import TransferJourney from "@/Components/Visual/TransferJourney";
 import React, { useState } from "react";
 
 interface JournalRow {
@@ -75,6 +76,17 @@ export default function TransferShow({ transfer, journal = [], couriers = [] }: 
                         </Button>
                     </Stack>
                 </Stack>
+
+                <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderRadius: 3, mb: 2 }}>
+                    <TransferJourney
+                        from={transfer.source_label ?? transfer.from_store ?? null}
+                        to={transfer.destination_label ?? transfer.to_store ?? null}
+                        status={transfer.status}
+                        quantity={transfer.quantity}
+                        needsCourier={Boolean(transfer.needs_courier)}
+                        courier={transfer.courier ?? null}
+                    />
+                </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 2 }}>
                     <Typography sx={{ fontWeight: 700 }}>

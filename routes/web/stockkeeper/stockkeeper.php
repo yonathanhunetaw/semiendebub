@@ -30,6 +30,12 @@ Route::domain("stockkeeper.{$baseDomain}")
 
         Route::middleware(['auth', 'verified', 'role.subdomain:stock_keeper'])->group(function () {
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+            // How Duka works, step by step (shared with the other apps).
+            Route::get('/guide', fn (\Illuminate\Http\Request $request) => \Inertia\Inertia::render('Guide/Index', [
+                'app' => 'stock_keeper',
+                'chapter' => $request->query('chapter'),
+                'step' => $request->query('step'),
+            ]))->name('guide');
 
             // --- INVENTORY LEDGER ---
             Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory.index');

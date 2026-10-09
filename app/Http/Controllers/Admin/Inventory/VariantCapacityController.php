@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin\Inventory;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventory\UpdateVariantCapacityRequest;
 use App\Models\Store\Store;
+use App\Services\Admin\ActiveStore;
 use App\Models\Store\StoreVariant;
 use App\Services\Inventory\LocationCapacityService;
 use App\Services\Inventory\ReplenishmentProposalService;
@@ -38,9 +39,14 @@ class VariantCapacityController extends Controller
      * Variants in a store, with how many of their levels are monitored and how
      * many are currently short.
      */
-    public function index(Request $request): Response
+    public function index(Request $request, ActiveStore $activeStore): Response
     {
-        $storeId = $request->integer('store_id') ?: (int) (Store::query()->retail()->value('id') ?? 0);
+        // Capacity is set one facility at a time: this page's own pick when the
+        // user may have it, else the active store, else their first retail one.
+        $requested = $request->integer('store_id');
+        $storeId = $requested !== 0 && $activeStore->allows($requested)
+            ? $requested
+            : ($activeStore->id() ?? (int) ($activeStore->accessibleStores()->firstWhere('type', Store::TYPE_RETAIL)?->id ?? 0));
         $search = trim((string) $request->string('search'));
 
         $store = $storeId !== 0 ? Store::find($storeId) : null;
@@ -64,7 +70,7 @@ class VariantCapacityController extends Controller
                 'name' => (string) $store->name,
                 'type_label' => $store->type_label,
             ],
-            'stores' => Store::query()->orderBy('name')->get()->map(fn (Store $facility): array => [
+            'stores' => $activeStore->accessibleStores()->map(fn (Store $facility): array => [
                 'id' => (int) $facility->id,
                 'name' => (string) $facility->name,
                 'type_label' => $facility->type_label,
@@ -96,8 +102,10 @@ class VariantCapacityController extends Controller
     /**
      * One variant's bands, one row per level of the hierarchy.
      */
-    public function edit(StoreVariant $storeVariant): Response
+    public function edit(StoreVariant $storeVariant, ActiveStore $activeStore): Response
     {
+        abort_unless($activeStore->allows((int) $storeVariant->store_id), 404);
+
         $storeVariant->loadMissing(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize', 'store']);
 
         $itemVariant = $storeVariant->itemVariant;
@@ -128,6 +136,8 @@ class VariantCapacityController extends Controller
      */
     public function update(UpdateVariantCapacityRequest $request, StoreVariant $storeVariant): RedirectResponse
     {
+        abort_unless(app(ActiveStore::class)->allows((int) $storeVariant->store_id), 404);
+
         foreach ($request->bands() as $band) {
             $this->capacity->setBand(
                 $storeVariant,

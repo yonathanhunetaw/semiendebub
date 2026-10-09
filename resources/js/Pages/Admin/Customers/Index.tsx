@@ -1,5 +1,6 @@
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm, usePage } from "@inertiajs/react";
+import { useAdminScope } from "@/Components/Navigation/Admin/useAdminScope";
 import {
     Box,
     Paper,
@@ -52,7 +53,9 @@ const getInitials = (first: string, last: string) => {
     return (a + b).toUpperCase() || "?";
 };
 
-export default function Customers({ customers }: { customers: any[] }) {
+export default function Customers({ customers = [], stores = [] }: { customers?: any[]; stores?: Array<{ id: number; name: string }> }) {
+    const { activeStore, isGlobalAdmin } = useAdminScope();
+    const activeStoreId = typeof activeStore.id === "number" ? activeStore.id : "";
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
     const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
@@ -87,12 +90,16 @@ export default function Customers({ customers }: { customers: any[] }) {
         credit_limit: "",
         credit_days: "",
         credit_override: false,
+        // A store admin's customers always land in their store (forced on the
+        // server); the picker is for a global admin or a multi-store admin.
+        store_id: activeStoreId as number | "",
     });
 
     const handleOpen = () => {
         setEditingId(null);
         setCustomerType("individual");
         reset();
+        setData("store_id", activeStoreId);
         clearErrors();
         setOpenModal(true);
     };
@@ -110,6 +117,7 @@ export default function Customers({ customers }: { customers: any[] }) {
             credit_limit: customer.credit_limit ? String(Number(customer.credit_limit)) : "",
             credit_days: customer.credit_days ? String(customer.credit_days) : "",
             credit_override: Boolean(customer.credit_override),
+            store_id: customer.store_id ?? "",
         });
         clearErrors();
         setOpenModal(true);
@@ -473,6 +481,25 @@ export default function Customers({ customers }: { customers: any[] }) {
                             error={!!errors.phone_number}
                             helperText={errors.phone_number}
                         />
+
+                        {/* Only a global admin may move a customer; on create a
+                            multi-store admin picks which of their stores. */}
+                        {stores.length > 1 && (isGlobalAdmin || !editingId) && (
+                            <TextField
+                                select
+                                fullWidth
+                                label="Store"
+                                value={data.store_id}
+                                onChange={(e) => setData("store_id", e.target.value === "" ? "" : Number(e.target.value))}
+                                error={!!errors.store_id}
+                                helperText={errors.store_id ?? "A customer belongs to one store."}
+                            >
+                                {isGlobalAdmin && <MenuItem value="">No store</MenuItem>}
+                                {stores.map((store) => (
+                                    <MenuItem key={store.id} value={store.id}>{store.name}</MenuItem>
+                                ))}
+                            </TextField>
+                        )}
 
                         <TextField
                             fullWidth

@@ -20,7 +20,7 @@ class WarehouseController extends Controller
     {
         Log::info('Viewing warehouse index page.');
 
-        $warehouses = Warehouse::with(['store', 'managerAssignments.user'])
+        $warehouses = Warehouse::with(['stores:id,name', 'managerAssignments.user'])
             ->withCount('stocks')
             ->withSum('stocks as total_units', 'quantity')
             ->orderBy('name')
@@ -31,7 +31,9 @@ class WarehouseController extends Controller
                     'name' => $wh->name,
                     'address' => $wh->address,
                     'code' => $wh->code,
-                    'store_name' => $wh->store?->name,
+                    // A warehouse may serve several stores.
+                    'store_name' => $wh->stores->pluck('name')->join(', ') ?: null,
+                    'store_names' => $wh->stores->pluck('name')->values(),
                     'stocks_count' => $wh->stocks_count,
                     'total_units' => (int) $wh->total_units,
                     // The one or two users who may oversee this warehouse.
@@ -138,12 +140,16 @@ class WarehouseController extends Controller
             'name' => 'required|string|max:255',
             'code' => 'nullable|string|max:255|unique:warehouses,code',
             'address' => 'nullable|string|max:500',
+            // `store_id` (one store) is still accepted from older callers.
             'store_id' => 'nullable|exists:stores,id',
+            'store_ids' => 'nullable|array',
+            'store_ids.*' => 'integer|distinct|exists:stores,id',
             'manager' => 'nullable|string|max:255',
             'status' => 'required|in:active,inactive',
         ]);
 
-        $warehouse = Warehouse::create($validated);
+        $warehouse = Warehouse::create($this->attributes($validated));
+        $warehouse->stores()->sync($this->storeIds($validated));
 
         Log::info('Warehouse created successfully', ['warehouse_id' => $warehouse->id]);
 
@@ -157,7 +163,9 @@ class WarehouseController extends Controller
         $stores = Store::select('id', 'name')->orderBy('name')->get();
 
         return Inertia::render('Admin/Inventory/Warehouse/Edit', [
-            'warehouse' => $warehouse,
+            'warehouse' => $warehouse->toArray() + [
+                'store_ids' => $warehouse->stores()->pluck('stores.id')->map(fn ($id): int => (int) $id)->values(),
+            ],
             'stores' => $stores
         ]);
     }
@@ -170,12 +178,16 @@ class WarehouseController extends Controller
             'name' => 'required|string|max:255',
             'code' => 'nullable|string|max:255|unique:warehouses,code,' . $warehouse->id,
             'address' => 'nullable|string|max:500',
+            // `store_id` (one store) is still accepted from older callers.
             'store_id' => 'nullable|exists:stores,id',
+            'store_ids' => 'nullable|array',
+            'store_ids.*' => 'integer|distinct|exists:stores,id',
             'manager' => 'nullable|string|max:255',
             'status' => 'required|in:active,inactive',
         ]);
 
-        $warehouse->update($validated);
+        $warehouse->update($this->attributes($validated));
+        $warehouse->stores()->sync($this->storeIds($validated));
 
         Log::info('Warehouse updated successfully', ['warehouse_id' => $warehouse->id]);
 
@@ -251,5 +263,31 @@ class WarehouseController extends Controller
         Log::info('Warehouse deleted successfully', ['warehouse_id' => $warehouse->id]);
 
         return redirect()->route('admin.inventory.warehouse.index')->with('success', 'Warehouse deleted successfully.');
+    }
+
+    /**
+     * The warehouse's own columns. The legacy `store_id` keeps the first
+     * served store while the column is still around.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function attributes(array $validated): array
+    {
+        $storeIds = $this->storeIds($validated);
+        unset($validated['store_ids']);
+
+        return ['store_id' => $storeIds[0] ?? null] + $validated;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<int, int>
+     */
+    private function storeIds(array $validated): array
+    {
+        $ids = $validated['store_ids'] ?? (isset($validated['store_id']) ? [$validated['store_id']] : []);
+
+        return array_values(array_unique(array_map('intval', $ids)));
     }
 }

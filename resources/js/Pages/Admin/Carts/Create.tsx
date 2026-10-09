@@ -19,12 +19,14 @@ import SaveIcon from "@mui/icons-material/Save";
 interface Customer {
     id: number;
     name: string;
+    store_id?: number | null;
 }
 
 interface Seller {
     id: number;
     first_name: string;
     last_name: string | null;
+    store_id?: number | null;
 }
 
 interface Store {
@@ -36,6 +38,8 @@ interface Props {
     customers: Customer[];
     sellers: Seller[];
     stores: Store[];
+    /** The active store, preselected. */
+    defaultStoreId?: number | null;
     // Include auth in the props interface to satisfy TypeScript
     auth: {
         user: {
@@ -46,25 +50,24 @@ interface Props {
     };
 }
 
-export default function Create({ customers, sellers, stores, auth }: Props) {
+export default function Create({ customers = [], sellers = [], stores = [], defaultStoreId = null, auth }: Props) {
     // 2. Determine context based on the user's role instead of the URL path
     // This will match "Admin", "admin", "ADMIN", etc.
     const isAdmin = auth.user.role?.toLowerCase() === "admin";
-
-    // --- ADD THE LOGS HERE ---
-    console.log("Current User Role:", auth.user.role);
-    console.log("Is Admin?:", isAdmin);
-    // -------------------------
 
     // 3. Initialize form with proper logic
     const { data, setData, post, processing, errors } = useForm({
         customer_id: "" as string | number,
         // If admin, they must pick a store. If seller, it defaults to their store.
-        store_id: isAdmin ? "" : auth.user.store_id || "",
+        store_id: isAdmin ? defaultStoreId ?? "" : auth.user.store_id || "",
         // If admin, they pick a seller. If seller, they are the seller.
         seller_id: isAdmin ? "" : auth.user.id,
         status: "open",
     });
+
+    // Only the chosen store's customers and sellers belong on its cart.
+    const inStore = <T extends { store_id?: number | null }>(rows: T[]): T[] =>
+        data.store_id === "" ? rows : rows.filter((row) => row.store_id === undefined || Number(row.store_id) === Number(data.store_id));
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -145,7 +148,7 @@ export default function Create({ customers, sellers, stores, auth }: Props) {
                                 <MenuItem value="">
                                     <em>None (Guest Cart)</em>
                                 </MenuItem>
-                                {customers.map((customer) => (
+                                {inStore(customers).map((customer) => (
                                     <MenuItem
                                         key={customer.id}
                                         value={customer.id}
@@ -175,7 +178,7 @@ export default function Create({ customers, sellers, stores, auth }: Props) {
                                     <MenuItem value="">
                                         <em>Unassigned</em>
                                     </MenuItem>
-                                    {sellers.map((seller) => (
+                                    {inStore(sellers).map((seller) => (
                                         <MenuItem
                                             key={seller.id}
                                             value={seller.id}

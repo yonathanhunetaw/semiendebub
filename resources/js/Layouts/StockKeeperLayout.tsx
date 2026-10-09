@@ -1,4 +1,5 @@
 import StockKeeperSidebar from "@/Components/Navigation/StockKeeper/StockKeeperSidebar";
+import GuideButton from "@/Components/Guide/GuideButton";
 import AdminNav from "@/Components/Navigation/Admin/AdminNav";
 import { getRole, useRole } from "@/theme";
 import { Head } from "@inertiajs/react";
@@ -40,6 +41,8 @@ export default function StockKeeperLayout({
             <Box component="main" sx={{ flexGrow: 1, p: 3, width: { xl: `calc(100% - 260px)` } }}>
                 <Toolbar />
                 {children}
+                {/* The page's step in the guide (Components/Guide). */}
+                <GuideButton app="stock_keeper" variant="fab" />
             </Box>
         </Box>
     );

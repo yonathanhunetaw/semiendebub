@@ -14,8 +14,12 @@ export interface SellerVariantData {
     seller_discount_price?: number | null;
     customer_price?: number | null;
     customer_discount_price?: number | null;
+    /** Store Shelf + Store Floor, in this variant's own packaging unit. */
     stock?: number | null;
-    remote_stock?: number | null;
+    shelf_stock?: number | null;
+    floor_stock?: number | null;
+    /** The store's Remote Hub holds some: reaching it is a transfer, so no figure. */
+    in_remote_hub?: boolean;
     status?: string | null;
     images?: string[];
     quantity?: number | null;

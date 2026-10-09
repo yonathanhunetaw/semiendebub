@@ -1,4 +1,5 @@
 import FlashToast from "@/Components/Shared/FlashToast";
+import GuideButton from "@/Components/Guide/GuideButton";
 import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
 import { Head } from "@inertiajs/react";
 import { Box, CssBaseline } from "@mui/material";
@@ -51,6 +52,8 @@ export default function SellerLayout({
                     sx={{ minHeight: "100vh", width: "100%" }}
                 >
                     {children}
+                {/* The page's step in the guide (Components/Guide). */}
+                <GuideButton app="seller" variant="fab" />
                 </Box>
             </Box>
 

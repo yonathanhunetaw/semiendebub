@@ -67,6 +67,30 @@ class AdminWarehouseStoreTest extends TestCase
     }
 
     #[Test]
+    public function a_warehouse_can_serve_several_stores(): void
+    {
+        [$a, $b, $c] = Store::factory()->count(3)->create()->all();
+
+        $this->post(route('admin.inventory.warehouse.store'), [
+            'name' => 'Shared Depot', 'status' => 'active', 'store_ids' => [$a->id, $b->id],
+        ])->assertSessionHasNoErrors();
+
+        $warehouse = Warehouse::query()->where('name', 'Shared Depot')->sole();
+        $this->assertEqualsCanonicalizing([$a->id, $b->id], $warehouse->stores()->pluck('stores.id')->all());
+        $this->assertSame($a->id, (int) $warehouse->store_id, 'The legacy column keeps the first store.');
+        $this->assertSame([$warehouse->id], $b->warehouses()->pluck('warehouses.id')->all());
+
+        $this->put(route('admin.inventory.warehouse.update', $warehouse), [
+            'name' => 'Shared Depot', 'status' => 'active', 'store_ids' => [$c->id],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame([$c->id], $warehouse->stores()->pluck('stores.id')->all());
+
+        $this->get(route('admin.inventory.warehouse.index'))->assertInertia(fn ($page) => $page
+            ->where('warehouses.0.store_names', [$c->name]));
+    }
+
+    #[Test]
     public function a_warehouse_needs_a_name_a_valid_status_and_a_unique_code(): void
     {
         Warehouse::query()->create(['name' => 'First', 'code' => 'DUP', 'status' => 'active']);

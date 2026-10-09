@@ -83,24 +83,21 @@ class ShipmentBoardsAreReachableTest extends TestCase
     #[Test]
     public function the_admin_sidebar_shipments_link_is_the_real_board_not_the_demo_screen(): void
     {
+        // Shipments is a tab of the Store section (adminSections.ts).
         $source = (string) file_get_contents(
-            base_path('resources/js/Components/Navigation/Admin/AdminSidebar.tsx')
+            base_path('resources/js/Components/Navigation/Admin/adminSections.ts')
         );
 
         // The label and the destination have to describe the same screen.
-        $this->assertStringContainsString(
-            '"/inventory/shipments"',
+        $this->assertMatchesRegularExpression(
+            '#label: "Shipments"[^}]*route: "admin\.inventory\.shipments\.index"#',
             $source,
             'The admin sidebar must link "Shipments" to the shared shipment board.'
         );
 
-        $replenishIsLabelledShipments = (bool) preg_match(
-            '#href="/inventory/replenish".*?primary="Shipments"#s',
+        $this->assertDoesNotMatchRegularExpression(
+            '#label: "Shipments"[^}]*route: "admin\.inventory\.replenish"#',
             $source,
-        );
-
-        $this->assertFalse(
-            $replenishIsLabelledShipments,
             'Admin\\Inventory\\ReplenishController serves five hardcoded demo rows, so labelling it '
                 . '"Shipments" makes the admin board disagree with every other role for no visible reason.'
         );

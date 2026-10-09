@@ -82,9 +82,12 @@ class ItemController extends Controller
         ]);
     }
 
+    private ?SellerCatalog $catalog = null;
+
     private function enrichItemForIndex(Item $item, int $storeId, $customer = null): array
     {
-        return app(SellerCatalog::class)->present($item, $storeId, $customer);
+        // One instance per request, so its location lookups are made once.
+        return ($this->catalog ??= app(SellerCatalog::class))->present($item, $storeId, $customer);
     }
 
     private function resolveImageUrl(?string $path): ?string
@@ -293,7 +296,10 @@ class ItemController extends Controller
         $storeVariantIds = $item->variants->flatMap(fn($v) => $v->storeVariants->where('store_id', $storeId))->pluck('id')->toArray();
         $stocks = app(\App\Services\StockService::class)->getBatchStock($storeVariantIds);
 
-        $variantData = $item->variants->map(function ($variant) use ($store, $storeId, $sellerId, $customerId, $customerType, $stocks) {
+        $catalog = app(SellerCatalog::class);
+        $leaves = $storeId ? $catalog->storeLeaves((int) $storeId) : ['shelf' => [], 'floor' => [], 'remote' => null];
+
+        $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId, $customerType, $stocks, $catalog, $leaves) {
             // Get the store variant for the current store
             $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
             if (app()->environment('testing') && is_null($storeVariant)) {
@@ -307,14 +313,12 @@ class ItemController extends Controller
             // 🛑 FIX: Use StockService SSOT ledger for stock
             $store_stock = $storeVariant ? ($stocks[$storeVariant->id] ?? 0) : 0;
 
-            // The store's own Remote Hub (never a shared main hub).
-            $remoteHubId = $store ? \App\Models\Inventory\StockLocation::query()
-                ->where('store_id', $store->id)
-                ->ofKind(\App\Models\Inventory\StockLocation::KIND_REMOTE_HUB)
-                ->value('id') : null;
-            $remote_stock = $remoteHubId === null ? 0 : (int) \App\Models\StockKeeper\ItemStock::where('stock_location_id', $remoteHubId)
-                ->where('item_variant_id', $variant->id)
-                ->sum('quantity');
+            // Sellers see the Store Shelf and Store Floor; the store's own
+            // Remote Hub only as "stocked there", since reaching it is a transfer.
+            $variantStocks = $storeVariant?->stocks ?? collect();
+            $shelf_stock = (int) $variantStocks->whereIn('stock_location_id', $leaves['shelf'])->sum('quantity');
+            $floor_stock = (int) $variantStocks->whereIn('stock_location_id', $leaves['floor'])->sum('quantity');
+            $in_remote_hub = $storeId !== null && $catalog->inRemoteHub((int) $storeId, [(int) $variant->id]);
 
             $status = $storeVariant?->computed_status ?? 'inactive';
             $store_active = $status === 'active';
@@ -377,7 +381,9 @@ class ItemController extends Controller
                 'price' => $price,
                 'discount_price' => $discount_price,
                 'stock' => $store_stock,
-                'remote_stock' => $remote_stock,
+                'shelf_stock' => $shelf_stock,
+                'floor_stock' => $floor_stock,
+                'in_remote_hub' => $in_remote_hub,
                 'status' => $status,
                 'store_active' => $store_active,
                 'quantity' => $variant->calculateTotalPieces(),

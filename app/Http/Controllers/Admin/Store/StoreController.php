@@ -87,11 +87,15 @@ class StoreController extends Controller
     /**
      * Show a single store with its full inventory.
      */
-    public function show(Store $store)
+    public function show(Request $request, Store $store)
     {
+        $filter = in_array($request->query('filter'), ['active', 'low', 'out'], true) ? (string) $request->query('filter') : 'all';
+        $health = $this->storeHealth($store);
+
         $paginatedItems = \App\Models\Item\Item::whereHas('variants.storeVariants', function ($q) use ($store) {
             $q->where('store_id', $store->id);
         })
+            ->when($filter !== 'all', fn ($q) => $q->whereKey($health['items'][$filter] ?: [0]))
             ->with([
                 'category',
                 'variants' => function ($q) use ($store) {
@@ -119,7 +123,8 @@ class StoreController extends Controller
                         ]);
                 },
             ])
-            ->paginate(25);
+            ->paginate(25)
+            ->withQueryString();
 
         $remoteHubId = $this->remoteHubId($store);
 
@@ -168,6 +173,10 @@ class StoreController extends Controller
                     'discount_ends_at' => $discountEndsAt,
                     'final_price' => $finalPrice,
                     'active' => (bool) $sv->active,
+                    // The label's parts, for the phone view's colour / size / pack pickers.
+                    'color' => $sv->itemVariant->itemColor?->name,
+                    'size' => $sv->itemVariant->itemSize?->name,
+                    'pack' => $sv->itemVariant->itemPackagingType?->name ?? $sv->itemVariant->packagingQuantities->first()?->name,
                     'stock' => $store_stock,
                     'remote_stock' => $remote_stock,
                     'multiplier' => $multiplier,
@@ -234,9 +243,18 @@ class StoreController extends Controller
                 0
             );
 
+            // The first picture of the item, as the seller catalogue resolves it,
+            // for the phone view's cards.
+            $general = is_string($item->general_images) ? json_decode($item->general_images, true) : ($item->general_images ?? []);
+            $firstImage = collect((array) $general)
+                ->merge($item->variants->flatMap(fn ($v) => (array) (is_string($v->images) ? json_decode($v->images, true) : ($v->images ?? []))))
+                ->filter()
+                ->first();
+
             return [
                 'item_id' => $item->id,
                 'item_name' => $item->product_name ?? 'Unknown Item',
+                'image_url' => $firstImage ? \App\Services\ImageResolver::resolve((string) $firstImage) : null,
                 'warehouse_stocks' => $warehouseStocks,
                 'category' => $item->category->category_name ?? 'N/A',
                 'starting_price' => $mappedVariants->min('final_price'),
@@ -260,8 +278,10 @@ class StoreController extends Controller
             ];
         });
 
-        $customers = Customer::orderBy('first_name')->get(['id', 'first_name', 'last_name', 'tin_number']);
+        // A customer or seller price is set for this store's own people.
+        $customers = Customer::where('store_id', $store->id)->orderBy('first_name')->get(['id', 'first_name', 'last_name', 'tin_number']);
         $sellers = User::where('role', 'seller')
+            ->where('store_id', $store->id)
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name']);
 
@@ -294,11 +314,73 @@ class StoreController extends Controller
 
         return Inertia::render('Admin/Inventory/Stores/StoreInventory', [
             'store' => $store,
+            'filter' => $filter,
+            // Whole-store figures for the filter chips and tiles (not just
+            // this page of items).
+            'summary' => [
+                'items' => $health['total_items'],
+                'active' => count($health['items']['active']),
+                'low' => count($health['items']['low']),
+                'out' => count($health['items']['out']),
+                'in_stock_rate' => $health['total_items'] > 0
+                    ? round(100 * ($health['total_items'] - count($health['items']['out'])) / $health['total_items'], 1)
+                    : null,
+                'active_variants' => $health['active_variants'],
+                'total_variants' => $health['total_variants'],
+                'monitored_variants' => $health['monitored_variants'],
+            ],
             'locations' => $locations,
             'inventory' => $inventory,
             'customers' => $customers,
             'sellers' => $sellers,
         ]);
+    }
+
+    /**
+     * Which of the store's items are active, below a min level, or out of
+     * stock, across the whole store.
+     *
+     *   active  at least one of its variants is switched on here;
+     *   out     nothing on the store's shelf or floor (the item_stocks ledger);
+     *   low     a variant has fallen to or below a min level set for this store
+     *           (Capacity), so only monitored variants can be low.
+     *
+     * @return array{items: array{active: array<int,int>, low: array<int,int>, out: array<int,int>}, total_items: int, active_variants: int, total_variants: int, monitored_variants: int}
+     */
+    private function storeHealth(Store $store): array
+    {
+        $variants = StoreVariant::query()
+            ->where('store_variants.store_id', $store->id)
+            ->join('item_variants', 'item_variants.id', '=', 'store_variants.item_variant_id')
+            ->whereNull('item_variants.deleted_at')
+            ->get(['store_variants.id', 'store_variants.item_variant_id', 'store_variants.active', 'item_variants.item_id']);
+
+        $onHand = ItemStock::query()
+            ->whereIn('stock_location_id', app(StockScope::class)->storeLeafIds((int) $store->id) ?: [0])
+            ->whereIn('item_variant_id', $variants->pluck('item_variant_id')->all() ?: [0])
+            ->groupBy('item_variant_id')
+            ->selectRaw('item_variant_id, SUM(quantity) as units')
+            ->pluck('units', 'item_variant_id');
+
+        $variantIds = $variants->pluck('id')->map(fn ($id): int => (int) $id)->all();
+        $breached = $variantIds === [] ? collect() : app(\App\Services\Inventory\LocationCapacityService::class)
+            ->breaches($variantIds)
+            ->map(fn (array $breach): int => (int) $breach['capacity']->store_variant_id)
+            ->unique();
+
+        $byItem = $variants->groupBy('item_id');
+
+        return [
+            'items' => [
+                'active' => $byItem->filter(fn ($rows) => $rows->contains(fn ($row) => (bool) $row->active))->keys()->map(fn ($id): int => (int) $id)->values()->all(),
+                'low' => $byItem->filter(fn ($rows) => $rows->contains(fn ($row) => $breached->contains((int) $row->id)))->keys()->map(fn ($id): int => (int) $id)->values()->all(),
+                'out' => $byItem->filter(fn ($rows) => $rows->sum(fn ($row) => (int) ($onHand[$row->item_variant_id] ?? 0)) <= 0)->keys()->map(fn ($id): int => (int) $id)->values()->all(),
+            ],
+            'total_items' => $byItem->count(),
+            'active_variants' => $variants->where('active', true)->count(),
+            'total_variants' => $variants->count(),
+            'monitored_variants' => \App\Models\Store\StoreVariantCapacity::query()->monitored()->whereIn('store_variant_id', $variantIds ?: [0])->distinct()->count('store_variant_id'),
+        ];
     }
 
     public function store(Request $request)
@@ -816,6 +898,10 @@ class StoreController extends Controller
                 'discount_ends_at' => $discountEndsAt,
                 'final_price' => $finalPrice,
                 'active' => (bool) $sv->active,
+                // Split out for the variant picture (VariantFan).
+                'color' => $sv->itemVariant->itemColor?->name,
+                'size' => $sv->itemVariant->itemSize?->name,
+                'pack' => $sv->itemVariant->itemPackagingType?->name,
                 'stock' => $store_stock,
                 'remote_stock' => $remote_stock,
                 'multiplier' => $multiplier,

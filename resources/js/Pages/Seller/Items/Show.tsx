@@ -381,8 +381,10 @@ export default function Show({
                     />
 
                     <ItemStockCard
-                        stock={variant?.stock ?? 0}
-                        remoteStock={variant?.remote_stock ?? 0}
+                        shelfStock={variant?.shelf_stock ?? 0}
+                        floorStock={variant?.floor_stock ?? 0}
+                        inRemoteHub={variant?.in_remote_hub ?? false}
+                        unitName={variant?.packaging || "Piece"}
                         unitsInPack={variant?.quantity ?? 1}
                         perPiece={perPiece}
                         perPacket={perPacket}

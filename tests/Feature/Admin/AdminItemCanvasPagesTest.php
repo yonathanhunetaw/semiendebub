@@ -245,15 +245,12 @@ class AdminItemCanvasPagesTest extends TestCase
     #[Test]
     public function the_admin_app_is_closed_to_other_roles(): void
     {
-        $this->markTestSkipped(
-            'EnsureCorrectSubdomainRole::handle() starts with `return $next($request);`, so the role gate is switched off '
-            .'and any signed-in user can open any role\'s app. Remove that line and this test should pass.'
-        );
-
         $this->actingAs($this->user('seller'));
 
-        $this->get(route('admin.settings'))->assertRedirect();
-        $this->get(route('admin.users.index'))->assertRedirect();
+        // Tests run with one session per host, so the gate refuses rather
+        // than redirecting to the seller app.
+        $this->get(route('admin.settings'))->assertForbidden();
+        $this->get(route('admin.users.index'))->assertForbidden();
     }
 
     #[Test]

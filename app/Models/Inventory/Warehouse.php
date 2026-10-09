@@ -72,6 +72,18 @@ class Warehouse extends Model
         return $this->morphMany(\App\Models\Store\StoreVariantCapacity::class, 'location');
     }
 
+    /**
+     * The stores this warehouse serves (one or several).
+     */
+    public function stores(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\Store\Store::class, 'store_warehouse')->withTimestamps();
+    }
+
+    /**
+     * Legacy single store (`warehouses.store_id`), kept during the move to
+     * stores(). Read stores() instead.
+     */
     public function store()
     {
         // If a warehouse belongs to a specific store

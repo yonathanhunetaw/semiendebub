@@ -21,7 +21,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // One answer per request (or queued job) to "which store is the admin
+        // app looking at"; see ActiveStore.
+        $this->app->scoped(\App\Services\Admin\ActiveStore::class);
     }
 
     /**

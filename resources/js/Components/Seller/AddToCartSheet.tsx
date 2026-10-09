@@ -396,7 +396,8 @@ export default function AddToCartSheet({
     );
 }
 
-function ChipGroup({
+/** The seller's option picker (colour, size): also used by the admin variant sheet. */
+export function ChipGroup({
     label,
     options,
     selected,

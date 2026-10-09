@@ -14,9 +14,12 @@ use App\Http\Requests\Shipment\TransitionShipmentRequest;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Item\ItemVariant;
 use App\Models\Store\Store;
+use App\Services\Admin\ActiveStore;
 use App\Services\ShipmentWorkflowService;
 use App\Services\StockKeeperService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -26,9 +29,33 @@ use Inertia\Response;
  * Admin owns the whole shipment board: raise a run, build its manifest,
  * schedule it, and override any stage.
  */
-class ShipmentController extends Controller
+class ShipmentController extends Controller implements HasMiddleware
 {
     use DrivesShipments;
+
+    /**
+     * Every action on one shipment: a store admin only reaches runs with one
+     * of their stores at either end. A global admin reaches them all.
+     */
+    public static function middleware(): array
+    {
+        return [
+            new Middleware(function (Request $request, \Closure $next) {
+                $shipment = $request->route('shipment');
+
+                if ($shipment instanceof Shipment) {
+                    $activeStore = app(ActiveStore::class);
+                    abort_unless(
+                        $activeStore->allows($shipment->origin_store_id !== null ? (int) $shipment->origin_store_id : null)
+                            || $activeStore->allows($shipment->destination_store_id !== null ? (int) $shipment->destination_store_id : null),
+                        404,
+                    );
+                }
+
+                return $next($request);
+            }),
+        ];
+    }
 
     public function __construct(
         private readonly ShipmentWorkflowService $workflow,
@@ -41,17 +68,27 @@ class ShipmentController extends Controller
         return 'admin';
     }
 
-    /** Admin is unrestricted. */
+    /** A global admin is unrestricted; a store admin, their stores. */
     protected function shipmentStoreScope(): ?array
     {
-        return null;
+        return app(ActiveStore::class)->scopeIds();
+    }
+
+    /** Runs with one of the scoped stores at either end. */
+    private function scopedShipments(): \Illuminate\Database\Eloquent\Builder
+    {
+        $ids = $this->shipmentStoreScope();
+
+        return Shipment::query()->when($ids !== null, fn ($q) => $q->where(fn ($ends) => $ends
+            ->whereIn('origin_store_id', $ids ?: [0])
+            ->orWhereIn('destination_store_id', $ids ?: [0])));
     }
 
     public function index(Request $request): Response
     {
         $status = $request->string('status')->toString() ?: 'all';
 
-        $query = Shipment::query()->with(['origin', 'destination', 'courier', 'creator', 'items']);
+        $query = $this->scopedShipments()->with(['origin', 'destination', 'courier', 'creator', 'items']);
 
         if ($status === 'open') {
             $query->open();
@@ -114,6 +151,15 @@ class ShipmentController extends Controller
     public function store(StoreShipmentRequest $request): RedirectResponse
     {
         try {
+            // A store admin opens runs into or out of their own stores only.
+            $activeStore = app(ActiveStore::class);
+            $ends = [$request->originLocation()?->store_id ?? $request->validated('origin_store_id'), $request->destinationLocation()?->store_id ?? $request->validated('destination_store_id')];
+            abort_unless(
+                $activeStore->isGlobal() || collect($ends)->filter()->contains(fn ($id) => $activeStore->allows((int) $id)),
+                403,
+                'A shipment must start or end at one of your stores.',
+            );
+
             $shipment = $this->workflow->createBetween(
                 $request->originLocation(),
                 $request->destinationLocation(),
@@ -175,7 +221,7 @@ class ShipmentController extends Controller
      */
     private function statusCounts(): array
     {
-        $counts = Shipment::query()
+        $counts = $this->scopedShipments()
             ->selectRaw('status, COUNT(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');

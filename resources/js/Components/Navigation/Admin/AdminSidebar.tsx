@@ -1,42 +1,106 @@
-import React, { useState } from "react";
-import Dashboard from "@mui/icons-material/Dashboard";
-import ShoppingCart from "@mui/icons-material/ShoppingCart";
-import People from "@mui/icons-material/People";
-import Layers from "@mui/icons-material/Layers";
-import Inventory from "@mui/icons-material/Inventory";
-import MultipleStop from "@mui/icons-material/MultipleStop";
-import AccountTree from "@mui/icons-material/AccountTree";
-import PendingActions from "@mui/icons-material/PendingActions";
-import Storefront from "@mui/icons-material/Storefront";
-import Tune from "@mui/icons-material/Tune";
-import Warehouse from "@mui/icons-material/Warehouse";
-import PointOfSale from "@mui/icons-material/PointOfSale";
-import Payments from "@mui/icons-material/Payments";
-import AccountBalance from "@mui/icons-material/AccountBalance";
-import AccountBalanceWallet from "@mui/icons-material/AccountBalanceWallet";
-import CreditScore from "@mui/icons-material/CreditScore";
-import LocalShipping from "@mui/icons-material/LocalShipping";
-import AirportShuttle from "@mui/icons-material/AirportShuttle";
-import ReceiptLong from "@mui/icons-material/ReceiptLong";
-import TaskAlt from "@mui/icons-material/TaskAlt";
-import Settings from "@mui/icons-material/Settings";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import CloseRounded from "@mui/icons-material/CloseRounded";
+import Hub from "@mui/icons-material/Hub";
 import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
-import Draw from "@mui/icons-material/Draw";
+import OpenInNew from "@mui/icons-material/OpenInNew";
 import { Link, usePage } from "@inertiajs/react";
 import {
     Box,
+    Chip,
     Collapse,
+    Divider,
     Drawer,
+    IconButton,
     List,
     ListItemButton,
     ListItemIcon,
     ListItemText,
+    ListSubheader,
     Toolbar,
 } from "@mui/material";
+import {
+    ADMIN_NAV,
+    navItemActive,
+    navItemHref,
+    navItemVisible,
+    type AdminNavItem,
+} from "./adminNavConfig";
+import { useAdminScope } from "./useAdminScope";
 
-const drawerWidth = 260;
+export const ADMIN_SIDEBAR_WIDTH = 256;
 
+const itemSx = {
+    borderRadius: 2,
+    mx: 1.5,
+    mb: 0.25,
+    py: 0.75,
+    color: "text.secondary",
+    "& .MuiListItemIcon-root": { minWidth: 36, color: "inherit" },
+    "& .MuiListItemText-primary": { fontSize: "0.875rem", fontWeight: 500 },
+    position: "relative",
+    "&.Mui-selected, &.Mui-selected:hover": {
+        bgcolor: "primary.main",
+        color: "primary.contrastText",
+        boxShadow: 2,
+        "& .MuiListItemText-primary": { fontWeight: 800 },
+        // A bar at the sidebar's edge, so the current entry reads at a glance.
+        "&::before": {
+            content: '""',
+            position: "absolute",
+            left: -12,
+            top: 6,
+            bottom: 6,
+            width: 4,
+            borderRadius: 2,
+            bgcolor: "primary.main",
+        },
+    },
+} as const;
+
+/** Where the sidebar list was scrolled, so a page change does not jump it to the top. */
+const SCROLL_KEY = "admin.sidebar.scroll";
+
+function readScroll(): number {
+    try {
+        return Number(window.sessionStorage.getItem(SCROLL_KEY) ?? 0) || 0;
+    } catch {
+        return 0;
+    }
+}
+
+function writeScroll(top: number): void {
+    try {
+        window.sessionStorage.setItem(SCROLL_KEY, String(Math.round(top)));
+    } catch {
+        // Storage blocked (private window): the selected entry is still scrolled into view.
+    }
+}
+
+const childSx = {
+    ...itemSx,
+    ml: 4.5,
+    py: 0.5,
+    "& .MuiListItemIcon-root": { minWidth: 30, color: "inherit" },
+    "& .MuiListItemText-primary": { fontSize: "0.8125rem", fontWeight: 500 },
+} as const;
+
+const zoneHeaderSx = {
+    bgcolor: "transparent",
+    color: "text.secondary",
+    fontSize: "0.6875rem",
+    fontWeight: 700,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    lineHeight: "32px",
+    px: 3,
+} as const;
+
+/**
+ * The admin sidebar: store dropdown -> store zone -> global zone (global
+ * admins only). Driven by adminNavConfig.ts; see that file for the zones. Settings
+ * and the light/dark switch live in the account menu of the top bar.
+ */
 export default function AdminSidebar({
     open,
     onClose,
@@ -49,326 +113,116 @@ export default function AdminSidebar({
     sx?: Record<string, unknown>;
 }) {
     const { url } = usePage();
+    const path = url.split("?")[0];
+    const { isGlobalAdmin, roleKey, counts, activeStore } = useAdminScope();
+    const listRef = useRef<HTMLDivElement | null>(null);
 
-    // Only one dropdown state now: Inventory
-    const [inventoryOpen, setInventoryOpen] = useState(
-        [
-            "/inventory/transfers",
-            "/inventory/stores",
-            "/inventory/warehouse",
-            "/inventory/replenish",
-            "/inventory/capacity",
-            "/inventory/locations",
-            "/inventory/shipments",
-            "/inventory/fleet",
-        ].some((path) => url.includes(path))
+    // Admin pages use two layouts, so moving between them rebuilds the
+    // sidebar. Put the list back where it was before the first paint...
+    useLayoutEffect(() => {
+        if (listRef.current) listRef.current.scrollTop = readScroll();
+    }, []);
+
+    // ...and make sure the page just opened is visible in it.
+    useEffect(() => {
+        const selected = listRef.current?.querySelector<HTMLElement>(".Mui-selected");
+        selected?.scrollIntoView({ block: "nearest" });
+    }, [path, activeStore.id]);
+
+    const visible = (item: AdminNavItem) => navItemVisible(item, roleKey, isGlobalAdmin, activeStore.id);
+    const storeZone = ADMIN_NAV.filter((item) => item.scope === "store" && visible(item));
+    const globalZone = ADMIN_NAV.filter((item) => item.scope === "global" && visible(item));
+
+    // Groups start open when one of their children is the current page.
+    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+        Object.fromEntries(
+            ADMIN_NAV.filter((item) => item.children).map((item) => [
+                item.key,
+                (item.children ?? []).some((child) => navItemActive(child, path)),
+            ]),
+        ),
     );
 
-    const mainItemStyle = {
-        borderRadius: 1,
-        mx: 1,
-        mb: 0.5,
-        "&.Mui-selected": {
-            backgroundColor: "action.selected",
-        },
+    const closeIfTemporary = variant === "temporary" ? onClose : undefined;
+
+    const renderItem = (item: AdminNavItem, child = false): React.ReactNode => {
+        const Icon = item.icon;
+        const selected = navItemActive(item, path, activeStore.id);
+        const badge = item.badge && counts ? counts[item.badge] : 0;
+        const linkProps = item.external
+            ? { component: "a" as const, href: navItemHref(item, activeStore.id, roleKey), ...(item.newTab ? { target: "_blank", rel: "noopener" } : {}) }
+            : { component: Link, href: navItemHref(item, activeStore.id, roleKey) };
+
+        return (
+            <ListItemButton key={item.key} {...linkProps} selected={selected} sx={child ? childSx : itemSx} onClick={closeIfTemporary}>
+                <ListItemIcon>
+                    <Icon fontSize={child ? "small" : "medium"} />
+                </ListItemIcon>
+                <ListItemText primary={item.label} secondary={item.storeSection && roleKey === "admin" ? activeStore.name : undefined} secondaryTypographyProps={{ noWrap: true, sx: { color: "inherit", opacity: 0.75, fontSize: "0.75rem" } }} />
+                {badge > 0 && (
+                    <Chip
+                        label={badge > 999 ? "999+" : badge}
+                        size="small"
+                        color={selected ? "default" : "primary"}
+                        variant={selected ? "filled" : "outlined"}
+                        sx={{ height: 20, fontSize: "0.6875rem", fontWeight: 700, ...(selected ? { bgcolor: "background.paper" } : {}) }}
+                    />
+                )}
+                {item.external && item.newTab && <OpenInNew sx={{ fontSize: 14, opacity: 0.6 }} />}
+            </ListItemButton>
+        );
     };
 
-    const indentedItemStyle = {
-        borderRadius: 1,
-        ml: 6,
-        mr: 1,
-        mb: 0.5,
-    };
+    const renderGroup = (item: AdminNavItem): React.ReactNode => {
+        const children = (item.children ?? []).filter(visible);
 
-    const menuItems = (
-        <Box
-            sx={{
-                pt: { xs: 0, sm: 2 },
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-            }}
-            onClick={variant === "temporary" ? onClose : undefined}
-        >
-            <List sx={{ flexGrow: 1, overflowY: "scroll" }}>
-                {/* 1. Dashboard */}
+        if (children.length === 0) {
+            return null;
+        }
+
+        const Icon = item.icon;
+        const isOpen = openGroups[item.key] ?? false;
+        const active = children.some((child) => navItemActive(child, path));
+
+        return (
+            <React.Fragment key={item.key}>
                 <ListItemButton
-                    component={Link}
-                    href="/dashboard"
-                    selected={url === "/dashboard"}
-                    sx={mainItemStyle}
+                    sx={{ ...itemSx, ...(active ? { color: "primary.main" } : {}) }}
+                    onClick={() => setOpenGroups((groups) => ({ ...groups, [item.key]: !isOpen }))}
+                    aria-expanded={isOpen}
                 >
-                    <ListItemIcon><Dashboard /></ListItemIcon>
-                    <ListItemText primary="Dashboard" />
-                </ListItemButton>
-
-                {/* 2. Carts */}
-                <ListItemButton
-                    component={Link}
-                    href="/carts"
-                    selected={url.includes("/carts")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><ShoppingCart /></ListItemIcon>
-                    <ListItemText primary="Carts" />
-                </ListItemButton>
-
-                {/* 3. Customers */}
-                <ListItemButton
-                    component={Link}
-                    href="/customers"
-                    selected={url.includes("/customers")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><People /></ListItemIcon>
-                    <ListItemText primary="Customers" />
-                </ListItemButton>
-
-                {/* 4. Items (The Global Catalog) */}
-                <ListItemButton
-                    component={Link}
-                    href="/items"
-                    selected={url.includes("/items") && !url.includes("/inventory")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><Layers /></ListItemIcon>
-                    <ListItemText primary="Items" />
-                </ListItemButton>
-
-                {/* 5. Inventory (The Hub + Shortcuts) */}
-                <Box sx={{ position: "relative" }}>
-                    <ListItemButton
-                        component={Link}
-                        href="/inventory"
-                        selected={url.startsWith("/inventory") && !url.includes("/inventory/")}
-                        sx={mainItemStyle}
-                    >
-                        <ListItemIcon><Inventory /></ListItemIcon>
-                        <ListItemText primary="Inventory" />
-                        <Box
-                            component="div"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setInventoryOpen(!inventoryOpen);
-                            }}
-                            sx={{ display: "flex", alignItems: "center" }}
-                        >
-                            {inventoryOpen ? <ExpandLess /> : <ExpandMore />}
-                        </Box>
-                    </ListItemButton>
-
-                    <Collapse in={inventoryOpen} timeout="auto" unmountOnExit>
-                        <List component="div" disablePadding>
-                            <ListItemButton
-                                component={Link}
-                                href="/inventory/stores"
-                                selected={url.includes("/inventory/stores")}
-                                sx={indentedItemStyle}
-                            >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                    <Storefront fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText primary="Stores" />
-                            </ListItemButton>
-                            {/* The location tree and each location's managers. */}
-                            <ListItemButton
-                                component={Link}
-                                href={route("admin.inventory.stock-locations.index")}
-                                selected={url.includes("/inventory/locations")}
-                                sx={indentedItemStyle}
-                            >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                    <AccountTree fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText primary="Locations" />
-                            </ListItemButton>
-                            <ListItemButton
-                                component={Link}
-                                href="/inventory/warehouse"
-                                selected={url.includes("/inventory/warehouse")}
-                                sx={indentedItemStyle}
-                            >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                    <Warehouse fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText primary="Warehouse" />
-                            </ListItemButton>
-                            <ListItemButton
-                                component={Link}
-                                href="/inventory/transfers"
-                                selected={url.includes("/inventory/transfers")}
-                                sx={indentedItemStyle}
-                            >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                    <MultipleStop fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText primary="Transfers" />
-                            </ListItemButton>
-                            {/*
-                              Variant capacity and the approvals it generates.
-                              Capacity is where a location's min/max is set, and
-                              Approvals is where the transfers that breaching it
-                              proposes wait for a store manager — they are two
-                              halves of one loop, so they sit together.
-                            */}
-                            <ListItemButton
-                                component={Link}
-                                href="/inventory/capacity"
-                                selected={url.includes("/inventory/capacity")}
-                                sx={indentedItemStyle}
-                            >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                    <Tune fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText primary="Capacity" />
-                            </ListItemButton>
-                            <ListItemButton
-                                component={Link}
-                                href="/inventory/replenishment"
-                                selected={url.includes("/inventory/replenishment")}
-                                sx={indentedItemStyle}
-                            >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                    <PendingActions fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText primary="Approvals" />
-                            </ListItemButton>
-                            {/*
-                              Points at the real shipment board.
-                              This linked to /inventory/replenish, whose controller
-                              serves five hardcoded demo rows — so "Shipments" on
-                              the admin sidebar showed a fixed 5 while the seller's
-                              board showed the actual records. Two screens, two
-                              data sources, one label.
-                            */}
-                            <ListItemButton
-                                component={Link}
-                                href="/inventory/shipments"
-                                selected={url.includes("/inventory/shipments")}
-                                sx={indentedItemStyle}
-                            >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                    <LocalShipping fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText primary="Shipments" />
-                            </ListItemButton>
-                            <ListItemButton
-                                component={Link}
-                                href="/inventory/fleet"
-                                selected={url.includes("/inventory/fleet")}
-                                sx={indentedItemStyle}
-                            >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                    <AirportShuttle fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText primary="Fleet" />
-                            </ListItemButton>
-                        </List>
-                    </Collapse>
-                </Box>
-
-                {/* 6. Operations */}
-                <ListItemButton
-                    component={Link}
-                    href={route("admin.orders.index")}
-                    selected={url.startsWith("/orders")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><PointOfSale /></ListItemIcon>
-                    <ListItemText primary="Orders" />
-                </ListItemButton>
-
-                <ListItemButton
-                    component={Link}
-                    href={route("admin.payments.index")}
-                    selected={url.startsWith("/payments")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><Payments /></ListItemIcon>
-                    <ListItemText primary="Payments" />
-                </ListItemButton>
-
-                <ListItemButton
-                    component={Link}
-                    href={route("admin.payment-accounts.index")}
-                    selected={url.startsWith("/payment-accounts")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><AccountBalance /></ListItemIcon>
-                    <ListItemText primary="Payment accounts" />
-                </ListItemButton>
-
-                <ListItemButton
-                    component={Link}
-                    href={route("admin.balances.index")}
-                    selected={url.startsWith("/balances")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><AccountBalanceWallet /></ListItemIcon>
-                    <ListItemText primary="Seller balances" />
-                </ListItemButton>
-
-                <ListItemButton
-                    component={Link}
-                    href={route("admin.credit.index")}
-                    selected={url.startsWith("/credit")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><CreditScore /></ListItemIcon>
-                    <ListItemText primary="Customer credit" />
-                </ListItemButton>
-
-                <ListItemButton
-                    component={Link}
-                    href={route("admin.deliveries.index")}
-                    selected={url.startsWith("/deliveries")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><LocalShipping /></ListItemIcon>
-                    <ListItemText primary="Delivery" />
-                </ListItemButton>
-
-                {/* Purchase orders live in the Procurement app. */}
-                <ListItemButton
-                    component="a"
-                    href={route("procurement.purchase_orders.index")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><ReceiptLong /></ListItemIcon>
-                    <ListItemText primary="Purchase Orders" />
-                </ListItemButton>
-
-                {/* White Board / Canvas */}
-                <ListItemButton
-                    component="a"
-                    href="/canvas"
-                    target="_blank"
-                    selected={url.includes("/canvas")}
-                    sx={mainItemStyle}
-                >
-                    <ListItemIcon><Draw /></ListItemIcon>
-                    <ListItemText primary="White Board" />
-                </ListItemButton>
-            </List>
-
-            {/* Bottom: Settings */}
-            <Box sx={{ pb: 2 }}>
-                <ListItemButton
-                    component={Link}
-                    href="/settings"
-                    selected={url.includes("/settings")}
-                    sx={{
-                        ...mainItemStyle,
-                        mt: 1,
-                    }}
-                >
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                        <Settings fontSize="small" />
+                    <ListItemIcon>
+                        <Icon />
                     </ListItemIcon>
-                    <ListItemText primary="Settings" />
+                    <ListItemText primary={item.label} />
+                    {isOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
                 </ListItemButton>
+                <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                    <List component="div" disablePadding>
+                        {children.map((child) => renderItem(child, true))}
+                    </List>
+                </Collapse>
+            </React.Fragment>
+        );
+    };
+
+    const content = (
+        <Box sx={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <Box ref={listRef} onScroll={(event) => writeScroll(event.currentTarget.scrollTop)} sx={{ flexGrow: 1, overflowY: "auto", pb: 2 }}>
+                <List dense disablePadding subheader={<ListSubheader disableSticky sx={zoneHeaderSx}>Store operations</ListSubheader>}>
+                    {storeZone.map((item) => (item.children ? renderGroup(item) : renderItem(item)))}
+                </List>
+
+                {globalZone.length > 0 && (
+                    <>
+                        <Divider sx={{ my: 1.5, mx: 2 }} />
+                        <List dense disablePadding subheader={<ListSubheader disableSticky sx={zoneHeaderSx}>Global zone (HQ only)</ListSubheader>}>
+                            {globalZone.map((item) => renderItem(item))}
+                        </List>
+                    </>
+                )}
             </Box>
+
         </Box>
     );
 
@@ -377,36 +231,41 @@ export default function AdminSidebar({
             variant={variant}
             open={open}
             onClose={onClose}
+            ModalProps={{ keepMounted: true }}
             sx={{
-                width: drawerWidth,
+                width: ADMIN_SIDEBAR_WIDTH,
                 flexShrink: 0,
                 "& .MuiDrawer-paper": {
-                    width: drawerWidth,
+                    width: ADMIN_SIDEBAR_WIDTH,
+                    // Never the whole of a narrow phone: leave a strip to tap away.
+                    maxWidth: "85vw",
                     boxSizing: "border-box",
                     bgcolor: "background.paper",
                     color: "text.primary",
                     borderRight: "1px solid",
                     borderColor: "divider",
-                    "&::-webkit-scrollbar, & *::-webkit-scrollbar": { width: "8px" },
-                    "&::-webkit-scrollbar-track, & *::-webkit-scrollbar-track": { background: "transparent" },
-                    "&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb": {
-                        background: "rgb(var(--outline))",
-                        borderRadius: "4px",
-                    },
-                    "&::-webkit-scrollbar-thumb:hover, & *::-webkit-scrollbar-thumb:hover": {
-                        background: "rgb(var(--on-surface-variant))",
-                    },
-                    "& .MuiListItemIcon-root": {
-                        color: "inherit",
-                        opacity: 0.8,
-                    },
-                    "& .Mui-selected .MuiListItemIcon-root": { opacity: 1 },
+                    "& *::-webkit-scrollbar": { width: "8px" },
+                    "& *::-webkit-scrollbar-track": { background: "transparent" },
+                    "& *::-webkit-scrollbar-thumb": { background: "rgb(var(--outline))", borderRadius: "4px" },
                 },
                 ...sx,
             }}
         >
-            {variant === "permanent" && <Toolbar />}
-            {menuItems}
+            {/* The top bar spans the full width; this keeps the list below it. */}
+            {variant === "permanent" && <Toolbar sx={{ minHeight: { xs: 64 } }} />}
+            {/* The drawer covers the top bar on a phone or tablet, so it carries its own header. */}
+            {variant === "temporary" && (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, minHeight: 64, borderBottom: "1px solid", borderColor: "divider" }}>
+                    <Box sx={{ width: 32, height: 32, borderRadius: 2, bgcolor: "primary.main", color: "primary.contrastText", display: "grid", placeItems: "center" }}>
+                        <Hub fontSize="small" />
+                    </Box>
+                    <Box component="span" sx={{ fontWeight: 800, fontSize: "1rem", flexGrow: 1 }}>Mezgebe Dirijit</Box>
+                    <IconButton onClick={onClose} aria-label="Close navigation" edge="end">
+                        <CloseRounded />
+                    </IconButton>
+                </Box>
+            )}
+            {content}
         </Drawer>
     );
 }

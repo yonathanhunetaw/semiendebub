@@ -49,9 +49,73 @@ class ItemControllerTest extends TestCase
         $response->assertInertia(
             fn(Assert $page) => $page
                 ->component('Admin/Items/Index')
-                ->has('items')
-                ->has('stores')
+                ->has('items.data', 3)
+                ->has('categories')
+                ->where('counts.all', 3)
+                ->where('filters.status', 'all')
         );
+    }
+
+    #[Test]
+    public function it_searches_items_by_name_and_variant_sku()
+    {
+        Item::factory()->create(['product_name' => 'Blue Kettle']);
+        $mug = Item::factory()->create(['product_name' => 'Tea Mug']);
+        $mug->variants()->create(['sku' => 'MUG-RED-01']);
+        Item::factory()->create(['product_name' => 'Spoon']);
+
+        $this->get(route('admin.items.index', ['q' => 'kettle']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('items.data', 1)
+                ->where('items.data.0.product_name', 'Blue Kettle')
+                ->where('counts.all', 1));
+
+        $this->get(route('admin.items.index', ['q' => 'MUG-RED']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('items.data', 1)
+                ->where('items.data.0.id', $mug->id)
+                ->where('items.data.0.variants_count', 1));
+    }
+
+    #[Test]
+    public function it_filters_by_status_and_counts_every_status_tab()
+    {
+        Item::factory()->count(2)->create(['status' => 'active']);
+        Item::factory()->create(['status' => 'draft', 'is_incomplete' => true]);
+
+        $this->get(route('admin.items.index', ['status' => 'draft']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('items.data', 1)
+                ->where('items.data.0.is_incomplete', true)
+                ->where('counts.all', 3)
+                ->where('counts.active', 2)
+                ->where('counts.draft', 1)
+                ->where('counts.needs_photos', 1));
+
+        // The old `filter` key and junk sort values still load the page.
+        $this->get(route('admin.items.index', ['filter' => 'active', 'sort' => 'nope', 'per_page' => 7]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('items.data', 2)
+                ->where('filters.sort', 'name')
+                ->where('filters.per_page', 25));
+    }
+
+    #[Test]
+    public function it_sets_one_status_on_several_items()
+    {
+        $items = Item::factory()->count(3)->create(['status' => 'draft']);
+        $untouched = Item::factory()->create(['status' => 'draft']);
+
+        $this->patch(route('admin.items.bulkStatus'), [
+            'ids' => $items->pluck('id')->all(),
+            'status' => 'archived',
+        ])->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $items->each(fn (Item $item) => $this->assertSame('archived', $item->fresh()->status));
+        $this->assertSame('draft', $untouched->fresh()->status);
+
+        $this->patch(route('admin.items.bulkStatus'), ['ids' => [], 'status' => 'active'])
+            ->assertSessionHasErrors('ids');
     }
 
     #[Test]

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Seller\Cart;
+use App\Services\Admin\ActiveStore;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -21,6 +22,17 @@ class HandleInertiaRequests extends Middleware
     public function version(Request $request): ?string
     {
         return parent::version($request);
+    }
+
+    /** @var array<string, mixed>|null */
+    private ?array $adminScope = null;
+
+    /** @return array<string, mixed> */
+    private function adminScope(): array
+    {
+        $activeStore = app(ActiveStore::class);
+
+        return $this->adminScope ??= $activeStore->isResolved() ? $activeStore->toShared() : [];
     }
 
     /**
@@ -76,6 +88,17 @@ class HandleInertiaRequests extends Middleware
             // Lazy, and null for every other role, so nobody else pays the query.
             'seller' => fn () => $request->user()?->roleKey() === 'seller'
                 ? ['open_carts' => Cart::where('seller_id', $request->user()->id)->where('status', 'open')->count()]
+                : null,
+            // The admin app's store scope (sidebar dropdown, zones). Lazy:
+            // share() runs before the route's ResolveActiveStore middleware,
+            // so these are read at render time, and stay null off the admin app.
+            'activeStore' => fn () => $this->adminScope()['activeStore'] ?? null,
+            'accessibleStores' => fn () => $this->adminScope()['accessibleStores'] ?? [],
+            'isGlobalAdmin' => fn () => $this->adminScope()['isGlobalAdmin'] ?? false,
+            // Sidebar count badges, for admins only (a store manager on the
+            // approvals screen sees none of those links).
+            'adminNav' => fn () => app(ActiveStore::class)->isResolved() && $request->user()?->isRole('admin')
+                ? ['counts' => app(\App\Services\Admin\AdminNavCounts::class)->counts()]
                 : null,
             'flash' => [
                 'success' => $request->session()->get('success'),

@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\SetCreditOverrideRequest;
 use App\Models\Auth\Customer;
 use App\Models\Finance\Payment;
+use App\Services\Admin\ActiveStore;
 use App\Services\Finance\CustomerCreditService;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -20,7 +21,7 @@ use Inertia\Response;
  */
 class CreditController extends Controller
 {
-    public function index(CustomerCreditService $credit): Response
+    public function index(CustomerCreditService $credit, ActiveStore $activeStore): Response
     {
         $owing = Payment::query()
             ->where('payment_method', Payment::METHOD_CREDIT)
@@ -28,7 +29,7 @@ class CreditController extends Controller
             ->distinct()
             ->pluck('sales.customer_id');
 
-        $customers = Customer::query()
+        $customers = $activeStore->apply(Customer::query())
             ->where(fn ($q) => $q->where('credit_limit', '>', 0)->orWhereIn('id', $owing))
             ->get()
             ->map(function (Customer $customer) use ($credit): ?array {
@@ -49,8 +50,10 @@ class CreditController extends Controller
         ]);
     }
 
-    public function override(SetCreditOverrideRequest $request, Customer $customer): RedirectResponse
+    public function override(SetCreditOverrideRequest $request, Customer $customer, ActiveStore $activeStore): RedirectResponse
     {
+        abort_unless($activeStore->allows($customer->store_id !== null ? (int) $customer->store_id : null), 404);
+
         $customer->update(['credit_override' => (bool) $request->validated('credit_override')]);
 
         return back()->with('success', $customer->credit_override

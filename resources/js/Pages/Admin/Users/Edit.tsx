@@ -20,9 +20,13 @@ interface Props {
     user: User;
     roles?: string[];
     stores?: Array<{ id: number; name: string }>;
+    /** A global admin may leave a user without a store; a store admin may not. */
+    can_assign_any_store?: boolean;
+    /** The active store, preselected for a new user. */
+    default_store_id?: number | null;
 }
 
-export default function EditUser({ user, roles = [], stores = [] }: Props) {
+export default function EditUser({ user, roles = [], stores = [], can_assign_any_store = true }: Props) {
     const { data, setData, put, processing, errors } = useForm({
         first_name: user.first_name,
         last_name: user.last_name || '',
@@ -91,7 +95,7 @@ export default function EditUser({ user, roles = [], stores = [] }: Props) {
                                 onChange={e => setData('store_id', e.target.value === '' ? '' : Number(e.target.value))}
                                 error={!!errors.store_id} helperText={errors.store_id}
                             >
-                                <MenuItem value="">No store</MenuItem>
+                                {can_assign_any_store && <MenuItem value="">No store</MenuItem>}
                                 {stores.map(store => (
                                     <MenuItem key={store.id} value={store.id}>{store.name}</MenuItem>
                                 ))}

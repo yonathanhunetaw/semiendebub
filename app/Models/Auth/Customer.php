@@ -91,6 +91,12 @@ class Customer extends Model
         return $this->hasMany(Cart::class);
     }
 
+    /** The one store this customer belongs to. */
+    public function store(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Store\Store::class);
+    }
+
     /** An admin gave this customer a credit limit and days to pay. */
     public function hasCredit(): bool
     {

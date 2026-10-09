@@ -10,6 +10,7 @@ use App\Models\Auth\User;
 use App\Models\Finance\Payment;
 use App\Models\Finance\PaymentAccount;
 use App\Models\Store\Store;
+use App\Services\Admin\ActiveStore;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,10 +24,14 @@ use Inertia\Response;
  */
 class PaymentAccountController extends Controller
 {
+    public function __construct(private readonly ActiveStore $activeStore)
+    {
+    }
+
     public function index(): Response
     {
         return Inertia::render('Admin/Payments/Accounts', [
-            'accounts' => PaymentAccount::query()
+            'accounts' => $this->activeStore->apply(PaymentAccount::query())
                 ->with(['store', 'owner', 'remitters:id'])
                 ->withCount(['payments as waiting' => fn ($q) => $q->where('status', Payment::STATUS_CLAIMED)])
                 ->orderBy('store_id')
@@ -49,9 +54,10 @@ class PaymentAccountController extends Controller
                     'waiting' => (int) $account->waiting,
                     'remitter_ids' => $account->remitters->pluck('id')->map(fn ($id): int => (int) $id)->values(),
                 ])->values(),
-            'stores' => Store::query()->orderBy('name')->get(['id', 'name'])
+            'stores' => $this->activeStore->accessibleStores()
                 ->map(fn (Store $store): array => ['id' => (int) $store->id, 'name' => (string) $store->name])->values(),
-            'owners' => User::role('seller')->orderBy('first_name')->get(['id', 'first_name', 'last_name', 'store_id'])
+            'default_store_id' => $this->activeStore->id(),
+            'owners' => $this->activeStore->apply(User::role('seller'), 'users.store_id')->orderBy('first_name')->get(['id', 'first_name', 'last_name', 'store_id'])
                 ->map(fn (User $user): array => [
                     'id' => (int) $user->id,
                     'name' => trim($user->first_name.' '.$user->last_name),
@@ -65,6 +71,8 @@ class PaymentAccountController extends Controller
 
     public function store(SavePaymentAccountRequest $request): RedirectResponse
     {
+        $this->authorizeWrite($request);
+
         $account = PaymentAccount::query()->create($request->accountData());
         $account->remitters()->sync($request->remitterIds());
 
@@ -73,6 +81,9 @@ class PaymentAccountController extends Controller
 
     public function update(SavePaymentAccountRequest $request, PaymentAccount $paymentAccount): RedirectResponse
     {
+        abort_unless($this->activeStore->allows((int) $paymentAccount->store_id), 404);
+        $this->authorizeWrite($request);
+
         $paymentAccount->update($request->accountData());
         $paymentAccount->remitters()->sync($request->remitterIds());
 
@@ -81,6 +92,8 @@ class PaymentAccountController extends Controller
 
     public function destroy(PaymentAccount $paymentAccount): RedirectResponse
     {
+        abort_unless($this->activeStore->allows((int) $paymentAccount->store_id), 404);
+
         if ($paymentAccount->payments()->whereIn('status', [Payment::STATUS_PENDING, Payment::STATUS_CLAIMED])->exists()) {
             return back()->with('error', "{$paymentAccount->label()} has payments still waiting. Turn it off instead.");
         }
@@ -88,5 +101,15 @@ class PaymentAccountController extends Controller
         $paymentAccount->delete();
 
         return back()->with('success', "{$paymentAccount->label()} removed.");
+    }
+
+    /** A store admin writes accounts, and picks owners, of their own stores only. */
+    private function authorizeWrite(SavePaymentAccountRequest $request): void
+    {
+        $data = $request->accountData();
+        $ownerStore = User::query()->whereKey($data['owner_user_id'] ?? 0)->value('store_id');
+
+        abort_unless($this->activeStore->allows((int) $data['store_id']), 403);
+        abort_unless($this->activeStore->isGlobal() || $this->activeStore->allows($ownerStore !== null ? (int) $ownerStore : null), 403);
     }
 }

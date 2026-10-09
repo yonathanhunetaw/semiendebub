@@ -32,7 +32,7 @@ export default function CreateWarehouse({ stores = [] }: Props) {
         name: '',
         code: '',
         address: '',
-        store_id: '',
+        store_ids: [] as number[],
         manager: '',
         status: 'active',
     });
@@ -116,23 +116,23 @@ export default function CreateWarehouse({ stores = [] }: Props) {
                             </Grid>
 
                             <Grid size={{ xs: 12, md: 4 }}>
-                                <FormControl fullWidth error={!!errors.store_id}>
-                                    <InputLabel>Linked Store (Optional)</InputLabel>
-                                    <Select
-                                        value={data.store_id}
-                                        label="Linked Store (Optional)"
-                                        onChange={(e) => setData('store_id', e.target.value as string)}
+                                {/* A warehouse can serve one store, several, or none. */}
+                                <FormControl fullWidth error={!!errors.store_ids}>
+                                    <InputLabel>Stores served (optional)</InputLabel>
+                                    <Select<number[]>
+                                        multiple
+                                        value={data.store_ids}
+                                        label="Stores served (optional)"
+                                        onChange={(e) => setData('store_ids', typeof e.target.value === 'string' ? [] : e.target.value)}
+                                        renderValue={(ids) => stores.filter((store) => ids.includes(store.id)).map((store) => store.name).join(', ') || 'None (independent hub)'}
                                     >
-                                        <MenuItem value="">
-                                            <em>None (Independent Hub)</em>
-                                        </MenuItem>
                                         {stores.map((store) => (
-                                            <MenuItem key={store.id} value={store.id.toString()}>
+                                            <MenuItem key={store.id} value={store.id}>
                                                 {store.name}
                                             </MenuItem>
                                         ))}
                                     </Select>
-                                    {errors.store_id && <Typography color="error" variant="caption">{errors.store_id}</Typography>}
+                                    {errors.store_ids && <Typography color="error" variant="caption">{errors.store_ids}</Typography>}
                                 </FormControl>
                             </Grid>
 

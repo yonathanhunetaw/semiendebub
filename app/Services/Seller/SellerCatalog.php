@@ -8,7 +8,10 @@ use App\Models\Item\Item;
 use App\Models\Auth\User;
 use App\Models\Item\ItemCategory;
 use App\Models\Seller\Cart;
+use App\Models\Inventory\StockLocation;
+use App\Models\StockKeeper\ItemStock;
 use App\Services\ImageResolver;
+use App\Services\Inventory\PackagingLadder;
 use App\Services\Inventory\StockScope;
 use App\Services\PriceProvider;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,8 +27,50 @@ use Illuminate\Support\Facades\DB;
  */
 class SellerCatalog
 {
-    public function __construct(private readonly StockScope $stockScope)
+    /** @var array<int, array{shelf: array<int>, floor: array<int>, remote: ?int}> */
+    private array $leaves = [];
+
+    public function __construct(
+        private readonly StockScope $stockScope,
+        private readonly PackagingLadder $ladder,
+    ) {
+    }
+
+    /**
+     * The places a seller's figures come from: the Store Shelf and the Store
+     * Floor, which they can sell from, and the store's Remote Hub, which they
+     * can only ask a transfer from (so they are told it is there, not how much).
+     *
+     * @return array{shelf: array<int>, floor: array<int>, remote: ?int}
+     */
+    public function storeLeaves(int $storeId): array
     {
+        if (isset($this->leaves[$storeId])) {
+            return $this->leaves[$storeId];
+        }
+
+        $rows = StockLocation::query()
+            ->where('store_id', $storeId)
+            ->whereIn('kind', [StockLocation::KIND_SHELF, StockLocation::KIND_BACKROOM, StockLocation::KIND_REMOTE_HUB])
+            ->get(['id', 'kind']);
+
+        return $this->leaves[$storeId] = [
+            'shelf' => $rows->where('kind', StockLocation::KIND_SHELF)->pluck('id')->map(fn ($id): int => (int) $id)->values()->all(),
+            'floor' => $rows->where('kind', StockLocation::KIND_BACKROOM)->pluck('id')->map(fn ($id): int => (int) $id)->values()->all(),
+            'remote' => ($id = $rows->firstWhere('kind', StockLocation::KIND_REMOTE_HUB)?->id) === null ? null : (int) $id,
+        ];
+    }
+
+    /** Whether any of these variants has stock in the store's Remote Hub. */
+    public function inRemoteHub(int $storeId, array $variantIds): bool
+    {
+        $remote = $this->storeLeaves($storeId)['remote'];
+
+        return $remote !== null && $variantIds !== [] && ItemStock::query()
+            ->where('stock_location_id', $remote)
+            ->whereIn('item_variant_id', $variantIds)
+            ->where('quantity', '>', 0)
+            ->exists();
     }
 
     /**
@@ -41,9 +86,12 @@ class SellerCatalog
 
         return Item::where('items.status', 'active')
             ->with([
-                'category',
+                'category.parent',
                 'variants' => function ($q) use ($storeId, $leafIds) {
                     $q->with([
+                        'itemColor',
+                        'itemSize',
+                        'itemPackagingType',
                         'storeVariants' => function ($sq) use ($storeId, $leafIds) {
                             $sq->where('store_id', $storeId)
                                 ->where('active', true)
@@ -137,7 +185,8 @@ class SellerCatalog
 
     /**
      * One catalogue card: images, the price tiers PriceProvider resolves for
-     * this seller (and customer, when a cart is open), and store stock in pieces.
+     * this seller (and customer, when a cart is open), what variants it comes in,
+     * and its Store Shelf and Store Floor stock (Remote Hub only as a yes/no).
      *
      * @return array<string, mixed>
      */
@@ -165,23 +214,54 @@ class SellerCatalog
 
         $priceInfo = PriceProvider::getItemPriceRange($item, $storeId, Auth::id(), $customer);
 
-        $totalStock = 0;
+        // Pieces on the Store Shelf and the Store Floor, kept apart because
+        // they are spoken differently (shelf in the smallest unit, floor
+        // biggest unit first). Only variants the store sells are counted.
+        $leaves = $this->storeLeaves($storeId);
+        $shelfPieces = 0;
+        $floorPieces = 0;
+        $carried = collect();
         foreach ($item->variants as $variant) {
-            foreach ($variant->storeVariants->where('store_id', $storeId) as $sv) {
-                if (! $sv->active) {
-                    continue;
+            $storeVariants = $variant->storeVariants->where('store_id', $storeId)->where('active', true);
+            if ($storeVariants->isEmpty()) {
+                continue;
+            }
+            $carried->push($variant);
+            $pieces = max(1, $variant->calculateTotalPieces());
+            foreach ($storeVariants as $sv) {
+                foreach ($sv->stocks as $stock) {
+                    $quantity = (int) $stock->quantity * $pieces;
+                    if (in_array((int) $stock->stock_location_id, $leaves['shelf'], true)) {
+                        $shelfPieces += $quantity;
+                    } elseif (in_array((int) $stock->stock_location_id, $leaves['floor'], true)) {
+                        $floorPieces += $quantity;
+                    }
                 }
-                $pieces = $variant->calculateTotalPieces();
-                $multiplier = $pieces > 0 ? $pieces : 1;
-                $totalStock += ((int) $sv->stocks->sum('quantity')) * $multiplier;
             }
         }
+
+        $names = fn (string $relation) => $carried
+            ->map(fn ($variant) => $variant->{$relation}?->name)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
 
         return [
             'id' => $item->id,
             'product_name' => $item->product_name,
             'sold_count' => $item->sold_count ?? 0,
-            'category' => $item->category ? ['category_name' => $item->category->category_name] : null,
+            'category' => $item->category ? [
+                'category_name' => $item->category->category_name,
+                'parent_name' => $item->category->parent?->category_name,
+            ] : null,
+            // What the item comes in, for cards with no photo to show it.
+            'variant_summary' => [
+                'count' => $carried->count(),
+                'colors' => $names('itemColor'),
+                'sizes' => $names('itemSize'),
+                'packaging' => $names('itemPackagingType'),
+            ],
             'image_urls' => $imageUrls,
             'original_price' => $priceInfo['store_price'],
             'store_price' => $priceInfo['store_price'],
@@ -189,7 +269,14 @@ class SellerCatalog
             'discount_ends_at' => $priceInfo['discount_ends_at'],
             'pricing_matrix' => $priceInfo['pricing_matrix'],
             'individual_price' => collect($priceInfo['pricing_matrix'])->firstWhere('level', 'individual'),
-            'store_stock' => $totalStock,
+            // Pieces the seller can sell from: Store Shelf + Store Floor.
+            'store_stock' => $shelfPieces + $floorPieces,
+            'stock' => [
+                'shelf' => $this->ladder->present($shelfPieces, (int) $item->id, PackagingLadder::DISPLAY_SMALLEST),
+                'floor' => $this->ladder->present($floorPieces, (int) $item->id, PackagingLadder::DISPLAY_BREAKDOWN),
+                // Reaching it means a transfer, so only whether it is there.
+                'in_remote_hub' => $this->inRemoteHub($storeId, $carried->pluck('id')->map(fn ($id): int => (int) $id)->all()),
+            ],
         ];
     }
 

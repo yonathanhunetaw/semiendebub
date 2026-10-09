@@ -41,6 +41,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'guest.subdomain' => EnsureGuestSubdomainRole::class,
             'guest.subdomain.login' => AllowSubdomainLogin::class,
             'notify.public.visit' => NotifyPublicVisit::class,
+            'admin.store' => \App\Http\Middleware\ResolveActiveStore::class,
+            'admin.global' => \App\Http\Middleware\EnsureGlobalAdmin::class,
+            'admin.store.record' => \App\Http\Middleware\EnsureStoreRecordInScope::class,
         ]);
 
         $middleware->web(append: [

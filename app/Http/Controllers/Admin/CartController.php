@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use App\Models\Auth\User;
+use App\Services\Admin\ActiveStore;
 
 
 
@@ -35,11 +36,11 @@ class CartController extends Controller
     /**
      * Display all carts globally for the admin index.
      */
-    public function index()
+    public function index(ActiveStore $activeStore)
     {
-        $carts = Cart::with(['customer', 'seller', 'store'])
+        $carts = $activeStore->apply(Cart::query())
+            ->with(['customer', 'seller', 'store'])
             ->withCount('variants')
-            ->visibleTo(auth()->user()) // Uses updated scope below
             ->latest()
             ->paginate(15)
             ->withQueryString();
@@ -52,31 +53,52 @@ class CartController extends Controller
     /**
      * Provide the necessary data for the React Create component.
      */
-    public function create()
+    public function create(ActiveStore $activeStore)
     {
         return Inertia::render('Admin/Carts/Create', [
-            'customers' => Customer::all()->map(fn($c) => [
+            'customers' => $activeStore->apply(Customer::query())->get()->map(fn($c) => [
                 'id' => $c->id,
-                'name' => $c->name // Uses 'name' accessor from Customer model
+                'name' => $c->name, // Uses 'name' accessor from Customer model
+                'store_id' => $c->store_id,
             ]),
-            'sellers' => User::where('role', 'seller')->get(['id', 'first_name', 'last_name']),
-            'stores' => Store::all(['id', 'name']), // Critical for the "Select Store" dropdown
+            'sellers' => $activeStore->apply(User::where('role', 'seller'))->get(['id', 'first_name', 'last_name', 'store_id']),
+            // A store admin's stores only; every store for a global admin.
+            'stores' => $activeStore->accessibleStores()->map(fn ($s) => ['id' => $s->id, 'name' => $s->name])->values(),
+            'defaultStoreId' => $activeStore->id(),
         ]);
     }
 
     /**
      * Handle global cart creation by admin.
      */
-    public function store(Request $request)
+    public function store(Request $request, ActiveStore $activeStore)
     {
         $request->validate([
             'customer_id' => 'nullable|exists:customers,id',
             'seller_id' => 'nullable|exists:users,id,role,seller',
-            'store_id' => 'required|exists:stores,id',
+            'store_id' => $activeStore->isGlobal() ? 'required|exists:stores,id' : 'nullable|exists:stores,id',
         ]);
 
+        // A store admin's cart is always for their store, whatever was sent,
+        // and its customer and seller must belong to their stores too.
+        $storeId = $activeStore->storeIdForWrite($request->store_id);
+
+        if ($storeId === null) {
+            return back()->withErrors(['store_id' => 'Pick a store for the cart.']);
+        }
+
+        if (! $activeStore->isGlobal()) {
+            foreach ([[Customer::class, 'customer_id'], [User::class, 'seller_id']] as [$model, $field]) {
+                $owner = $request->filled($field) ? $model::query()->whereKey($request->input($field))->value('store_id') : null;
+
+                if ($request->filled($field) && ! $activeStore->allows($owner !== null ? (int) $owner : null)) {
+                    return back()->withErrors([$field => 'That one belongs to another store.']);
+                }
+            }
+        }
+
         $cart = Cart::create([
-            'store_id' => $request->store_id,
+            'store_id' => $storeId,
             'user_id' => auth()->id(),
             'customer_id' => $request->customer_id,
             'seller_id' => $request->seller_id,
@@ -92,8 +114,10 @@ class CartController extends Controller
      */
 
 
-    public function show(Cart $cart)
+    public function show(Cart $cart, ActiveStore $activeStore)
     {
+        abort_unless($activeStore->allows($cart->store_id !== null ? (int) $cart->store_id : null), 404);
+
         $cart->load(['customer', 'store', 'seller', 'variants.item', 'variants.itemPackagingType']);
 
         $lines = $cart->variants->map(fn ($variant): array => [
@@ -172,8 +196,11 @@ class CartController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy($id)
+    public function destroy($id, ActiveStore $activeStore)
     {
+        $existing = Cart::find($id);
+        abort_if($existing !== null && ! $activeStore->allows($existing->store_id !== null ? (int) $existing->store_id : null), 404);
+
         try {
             DB::transaction(function () use ($id) {
                 $cart = Cart::findOrFail($id);

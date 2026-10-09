@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventory\ApproveReplenishmentRequest;
 use App\Http\Requests\Inventory\RejectReplenishmentRequest;
 use App\Models\StockKeeper\Transfer;
+use App\Services\Admin\ActiveStore;
 use App\Services\Inventory\ReplenishmentProposalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,14 +29,13 @@ class ReplenishmentController extends Controller
     {
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request, ActiveStore $activeStore): Response
     {
         $user = $request->user();
 
-        // A manager sees their own store's queue; an admin sees the network.
-        $storeId = $user !== null && ! $user->isRole('admin') && $user->store_id !== null
-            ? (int) $user->store_id
-            : ($request->integer('store_id') ?: null);
+        // The active store: a manager or store admin is locked to theirs, a
+        // global admin follows the dropdown (null = the whole network).
+        $storeId = $activeStore->id();
 
         $proposals = $this->planner->pendingProposals($storeId);
 
@@ -45,12 +45,12 @@ class ReplenishmentController extends Controller
             'can_approve' => $user?->canApproveReplenishment() ?? false,
             'counts' => [
                 'awaiting_approval' => count($proposals),
-                'approved_today' => Transfer::query()
+                'approved_today' => $activeStore->apply(Transfer::query(), 'to_store_id')
                     ->autoProposed()
                     ->where('approval_state', Transfer::APPROVAL_APPROVED)
                     ->whereDate('approved_at', now()->toDateString())
                     ->count(),
-                'rejected_today' => Transfer::query()
+                'rejected_today' => $activeStore->apply(Transfer::query(), 'to_store_id')
                     ->autoProposed()
                     ->where('approval_state', Transfer::APPROVAL_REJECTED)
                     ->whereDate('rejected_at', now()->toDateString())
@@ -58,7 +58,8 @@ class ReplenishmentController extends Controller
             ],
             // Breaches the Transfer domain cannot express: warehouse to
             // warehouse is freight, and belongs to the Shipment builder.
-            'shipment_candidates' => $this->shipmentCandidates(),
+            // Hub-to-hub freight is network-wide: a global admin's concern.
+            'shipment_candidates' => $activeStore->isGlobal() ? $this->shipmentCandidates() : [],
         ]);
     }
 

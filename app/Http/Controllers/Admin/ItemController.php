@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Item\BulkItemStatusRequest;
+use App\Http\Requests\Item\ItemIndexRequest;
 use App\Models\Item\Item;
 use App\Models\Item\ItemCategory;
 use App\Models\Item\ItemColor;
@@ -12,6 +14,7 @@ use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemInventoryLocation;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
+use App\Services\Admin\ItemCatalogue;
 use App\Services\ImageResolver;
 use App\Services\ItemVariantGenerationService;
 use Illuminate\Http\Request;
@@ -44,111 +47,16 @@ class ItemController extends Controller
 
 
 
-    public function index()
+    public function index(ItemIndexRequest $request, ItemCatalogue $catalogue)
     {
-        //####################################################################################################
-        // 🪵 LOG 1: Track start of the admin request
-        Log::info("Admin Items Index: Fetching raw dataset");
-
-        $startTime = microtime(true);
-
-        $query = Item::with(['variants.storeVariants']);
-
-        // Apply Status Filter
-        if (request('filter') && request('filter') !== 'all') {
-            $query->where('status', request('filter'));
-        }
-
-        // Apply Sorting
-        $sort = request('sort', 'name');
-        $direction = request('direction', 'asc');
-        
-        $sortColumn = $sort === 'name' ? 'product_name' : $sort;
-        $query->orderBy($sortColumn, $direction);
-
-        $items = $query->paginate(25)->withQueryString();
-        $stores = Store::all();
-
-        // 🪵 LOG 2: Benchmark initial database pull
-        Log::info("Admin Items Index: DB queries complete", [
-            'items_raw_count' => $items->count(),
-            'stores_count' => $stores->count(),
-            'db_time_ms' => round((microtime(true) - $startTime) * 1000, 2)
-        ]);
-        //####################################################################################################
-
-        $mappingStartTime = microtime(true);
-
-        $processedItems = tap(clone $items)->setCollection(
-            $items->getCollection()->map(function ($item) {
-                // Fallback to empty array if general_images is null
-                $generalImages = $item->general_images ?? [];
-
-                // Safety check if the JSON/cast failed and returned a string instead of an array
-                if (is_string($generalImages)) {
-                    Log::warning("Item ID {$item->id} has 'general_images' stored as a string instead of array.", [
-                        'raw_value' => $generalImages
-                    ]);
-                    $generalImages = json_decode($generalImages, true) ?? [];
-                }
-
-                $previewImages = collect($generalImages)
-                    ->map(fn($path) => ImageResolver::resolve($path))
-                    ->merge($item->variants->map(fn($v) => ImageResolver::resolve($v->images[0] ?? null)))
-                    ->filter()
-                    ->unique()
-                    ->take(5)
-                    ->values()
-                    ->toArray();
-
-                $variantsCount = $item->variants->count();
-
-                $activeVariantsCount = $item->variants->filter(function ($v) {
-                    return $v->status === 'active' &&
-                        $v->storeVariants->where('active', true)->isNotEmpty();
-                })->count();
-
-                return [
-                    'id' => $item->id,
-                    'product_name' => $item->product_name,
-                    'status' => $item->status,
-                    'variants_count' => $variantsCount,
-                    'active_variants_count' => $activeVariantsCount,
-                    'processed_images' => $previewImages,
-                ];
-            })
-        );
-
-        $totalTimeMs = round((microtime(true) - $startTime) * 1000, 2);
-        $mappingTimeMs = round((microtime(true) - $mappingStartTime) * 1000, 2);
-
-        //####################################################################################################
-        // 🪵 LOG 3: Performance breakdown + payload review
-        Log::info(
-            "Admin Items Index: Data mapping complete\n" .
-            json_encode([
-                'processed_count' => $processedItems->count(),
-                'mapping_time_ms' => $mappingTimeMs,
-                'total_time_ms' => $totalTimeMs,
-                'items' => $processedItems->getCollection()->map(fn($item) => [
-                    'id' => $item['id'],
-                    'name' => $item['product_name'],
-                    'status' => $item['status'],
-                    'total_variants' => $item['variants_count'],
-                    'active_v' => $item['active_variants_count']
-                ])->values()->all()
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
-        );
-        //####################################################################################################
+        $filters = $request->filters();
 
         return Inertia::render('Admin/Items/Index', [
-            'items' => $processedItems,
-            'stores' => $stores,
-            'filters' => [
-                'filter' => request('filter', 'all'),
-                'sort' => $sort,
-                'direction' => $direction,
-            ],
+            'items' => $catalogue->page($filters),
+            'counts' => $catalogue->counts($filters),
+            // Only read on the first visit; partial reloads leave it out.
+            'categories' => fn () => $catalogue->categories(),
+            'filters' => $filters,
         ]);
     }
 
@@ -484,20 +392,43 @@ class ItemController extends Controller
 
         $newStatus = $request->status;
 
+        $this->applyStatus($item, $newStatus);
+
+        return back()->with('success', 'Item status updated to ' . ucfirst($newStatus) . '.');
+    }
+
+    /** One status for every item ticked on the list page. */
+    public function bulkUpdateStatus(BulkItemStatusRequest $request)
+    {
+        $status = $request->validated('status');
+
+        $items = Item::with('variants.itemPackagingType')
+            ->whereIn('id', $request->validated('ids'))
+            ->get();
+
+        DB::transaction(function () use ($items, $status) {
+            $items->each(fn (Item $item) => $this->applyStatus($item, $status));
+        });
+
+        $count = $items->count();
+
+        return back()->with('success', "{$count} " . Str::plural('item', $count) . ' set to ' . ucfirst($status) . '.');
+    }
+
+    private function applyStatus(Item $item, string $status): void
+    {
         // Activation is no longer gated on imagery. A variant with no
         // photograph renders PackagingPlaceholder, which is a truthful thing
         // to show, and refusing activation instead hid the item from every
         // seller's catalogue. The thin-imagery hint lives on `is_incomplete`.
-        $item->load('variants.itemPackagingType');
+        $item->loadMissing('variants.itemPackagingType');
 
         $item->update([
-            'status' => $newStatus,
+            'status' => $status,
             'is_incomplete' => ! $item->variants->every(
                 fn (ItemVariant $variant): bool => $variant->hasImageProof(),
             ),
         ]);
-
-        return back()->with('success', 'Item status updated to ' . ucfirst($newStatus) . '.');
     }
 
     // Variant status is now a store-level concern — removed updateVariantStatus

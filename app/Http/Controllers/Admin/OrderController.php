@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Finance\Sale;
+use App\Services\Admin\ActiveStore;
 use App\Services\Fulfillment\CustodyLog;
 use App\Services\Fulfillment\SellerOrderBoard;
 use Illuminate\Http\Request;
@@ -29,16 +30,17 @@ class OrderController extends Controller
         'canceled' => [Sale::STAGE_CANCELLED],
     ];
 
-    public function index(Request $request, SellerOrderBoard $board): Response
+    public function index(Request $request, SellerOrderBoard $board, ActiveStore $activeStore): Response
     {
         $stage = $request->string('stage')->toString() ?: 'all';
-        $storeId = $request->integer('store') ?: null;
+        // The active store (sidebar dropdown, or this page's own `?store=`,
+        // which goes through the same ActiveStore resolution).
+        $storeId = $activeStore->id();
         $search = trim($request->string('search')->toString());
 
-        $paginator = Sale::query()
+        $paginator = $activeStore->apply(Sale::query())
             ->with(['store', 'customer', 'delivery'])
             ->when(isset(self::STAGE_FILTER[$stage]), fn ($q) => $q->whereIn('fulfillment_stage', self::STAGE_FILTER[$stage]))
-            ->when($storeId, fn ($q, int $id) => $q->where('store_id', $id))
             ->when($search !== '', fn ($q) => $q->where('reference_number', 'like', "%{$search}%"))
             ->latest('id')
             ->paginate(25)
@@ -59,7 +61,9 @@ class OrderController extends Controller
             ])->values(),
             'counts' => $board->counts($storeId),
             'filters' => ['stage' => $stage, 'store' => $storeId, 'search' => $search],
-            'stores' => \App\Models\Store\Store::query()->retail()->orderBy('name')->get(['id', 'name']),
+            'stores' => $activeStore->accessibleStores()->where('type', \App\Models\Store\Store::TYPE_RETAIL)
+                ->map(fn ($store): array => ['id' => (int) $store->id, 'name' => (string) $store->name])->values(),
+            'can_pick_all' => $activeStore->isGlobal(),
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
@@ -68,9 +72,11 @@ class OrderController extends Controller
         ]);
     }
 
-    public function custody(string $reference, CustodyLog $log): Response
+    public function custody(string $reference, CustodyLog $log, ActiveStore $activeStore): Response
     {
         $sale = Sale::query()->where('reference_number', $reference)->firstOrFail();
+
+        abort_unless($activeStore->allows($sale->store_id !== null ? (int) $sale->store_id : null), 404);
 
         return Inertia::render('Admin/Orders/Custody', ['log' => $log->forSale($sale)]);
     }

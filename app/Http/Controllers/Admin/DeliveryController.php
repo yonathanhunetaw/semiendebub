@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Auth\User;
 use App\Models\Fulfillment\Delivery;
+use App\Services\Admin\ActiveStore;
 use App\Services\DeliveryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,15 +20,20 @@ use Inertia\Response;
  */
 class DeliveryController extends Controller
 {
-    public function __construct(private readonly DeliveryService $deliveries)
-    {
+    public function __construct(
+        private readonly DeliveryService $deliveries,
+        private readonly ActiveStore $activeStore,
+    ) {
     }
 
     public function index(Request $request): Response
     {
         $status = $request->string('status')->toString() ?: 'open';
 
-        $paginator = Delivery::query()
+        // A delivery has no store of its own: it is its order's.
+        $scoped = fn () => $this->activeStore->applyThrough(Delivery::query(), 'sale');
+
+        $paginator = $scoped()
             ->with(['sale.store', 'courier'])
             ->when($status === 'open', fn ($q) => $q->open())
             ->when($status === 'unassigned', fn ($q) => $q->unassigned()->readyToCollect()->where('status', DeliveryService::STATUS_PENDING))
@@ -52,12 +58,12 @@ class DeliveryController extends Controller
             ])->values(),
             'filters' => ['status' => $status],
             'counts' => [
-                'open' => Delivery::query()->open()->count(),
-                'unassigned' => Delivery::query()->unassigned()->readyToCollect()->where('status', DeliveryService::STATUS_PENDING)->count(),
-                'failed' => Delivery::query()->where('status', DeliveryService::STATUS_FAILED)->count(),
-                'delivered' => Delivery::query()->where('status', DeliveryService::STATUS_DELIVERED)->count(),
+                'open' => $scoped()->open()->count(),
+                'unassigned' => $scoped()->unassigned()->readyToCollect()->where('status', DeliveryService::STATUS_PENDING)->count(),
+                'failed' => $scoped()->where('status', DeliveryService::STATUS_FAILED)->count(),
+                'delivered' => $scoped()->where('status', DeliveryService::STATUS_DELIVERED)->count(),
             ],
-            'couriers' => User::role('delivery')->orderBy('first_name')->get(['users.id', 'first_name', 'last_name'])
+            'couriers' => $this->couriers()->orderBy('first_name')->get(['users.id', 'first_name', 'last_name'])
                 ->map(fn (User $u): array => ['id' => (int) $u->id, 'name' => trim($u->first_name.' '.$u->last_name)])->values(),
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
@@ -70,9 +76,18 @@ class DeliveryController extends Controller
     /** Put a courier on a picked order nobody has claimed yet. */
     public function assign(Request $request, Delivery $delivery): RedirectResponse
     {
-        $courier = User::query()->findOrFail((int) $request->validate([
+        $storeId = $delivery->sale?->store_id;
+        abort_unless($this->activeStore->allows($storeId !== null ? (int) $storeId : null), 404);
+
+        $courierId = (int) $request->validate([
             'courier_id' => ['required', 'integer', 'exists:users,id'],
-        ])['courier_id']);
+        ])['courier_id'];
+
+        $courier = User::query()->findOrFail($courierId);
+
+        if (! $this->couriers()->whereKey($courierId)->exists() && $courier->roleKey() === 'delivery') {
+            return back()->with('error', 'That courier works for another store.');
+        }
 
         if ($courier->roleKey() !== 'delivery') {
             return back()->with('error', 'Only a delivery courier can carry a run.');
@@ -83,5 +98,18 @@ class DeliveryController extends Controller
         }
 
         return back()->with('success', "{$courier->first_name} is carrying {$delivery->tracking_number}.");
+    }
+
+    /**
+     * Couriers the user may put on a run: the scoped stores' own couriers plus
+     * the shared pool (couriers attached to no store). A global admin on "All
+     * stores" sees every courier.
+     */
+    private function couriers(): \Illuminate\Database\Eloquent\Builder
+    {
+        $ids = $this->activeStore->scopeIds();
+
+        return User::role('delivery')
+            ->when($ids !== null, fn ($q) => $q->where(fn ($inner) => $inner->whereIn('users.store_id', $ids ?: [0])->orWhereNull('users.store_id')));
     }
 }

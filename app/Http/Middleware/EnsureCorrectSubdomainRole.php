@@ -7,77 +7,63 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * The gate in front of every role subdomain's authenticated routes.
+ *
+ * An admin may enter any subdomain; anyone else needs one of the roles the
+ * route group names (`role.subdomain:seller,store_manager`). What happens to a
+ * user in the wrong place depends on how sessions are shared: with one session
+ * per host (local multi-account testing) they get a 403, so the tab is not
+ * yanked to another account's app; with a shared session they are sent to
+ * their own app's dashboard.
+ *
+ * This used to open with `return $next($request);`, which made every check
+ * below dead code: any verified user could reach any subdomain's routes.
+ */
 class EnsureCorrectSubdomainRole
 {
     /**
-     * Handle an incoming request.
-     *
      * @param  Closure(Request): (Response)  $next
      */
-    public function handle(Request $request, Closure $next, $subdomainRole)
+    public function handle(Request $request, Closure $next, string ...$subdomainRoles)
     {
-        return $next($request);
         $user = Auth::user();
 
-        // 1. If not logged in, just let them pass (to login page or public routes)
-        if (!$user) {
+        // Not signed in: `auth` (which runs first) owns that case.
+        if (! $user) {
             return $next($request);
         }
 
-        // --- LOGGING (For your Dev visibility) ---
-        \Log::info('Subdomain Middleware Check', [
-            'user_id' => $user->id,
-            'roles' => $user->roles->pluck('name')->toArray(),
-            'host' => $request->getHost(),
-            'required' => $subdomainRole,
-            'separated_session_hosts' => $this->separatedSessionHosts(),
-        ]);
-
-        // 2. THE ADMIN BYPASS
-        // If the user is an admin, they are allowed on ANY subdomain.
+        // An admin may enter any subdomain.
         if ($user->hasRole('admin')) {
             return $next($request);
         }
 
-        // 3. THE DIRECT ROLE MATCH
-        // If the user has the specific role for this subdomain, let them in.
-        if ($user->hasRole($subdomainRole)) {
+        if ($user->hasAnyRole($subdomainRoles)) {
             return $next($request);
         }
 
-        // 4. THE DEV MODE BYPASS
-        // If you are in local dev and have SESSION_DOMAIN=null, STOP the redirects.
-        // This allows you to stay logged into different accounts in different tabs.
+        // One session per host: refuse rather than redirect, so another tab's
+        // account is never bounced around.
         if ($this->separatedSessionHosts()) {
-            abort(403, "Dev Mode: User #{$user->id} lacks '{$subdomainRole}' role. Redirect disabled to allow multi-account testing.");
+            abort(403, "User #{$user->id} lacks the '".implode("' or '", $subdomainRoles)."' role for this app.");
         }
 
-        // 5. PRODUCTION REDIRECT LOGIC
-        // If we reach this point, the user is in the wrong place.
-        // We find their "home" and send them there.
-        $primaryRole = $user->roles->pluck('name')->first();
-        $targetHost = $this->hostForRole($primaryRole);
+        // Shared session: send the user to their own app's dashboard.
+        $targetHost = $this->hostForRole($user->roles->pluck('name')->first());
 
         if ($targetHost) {
-            $protocol = $request->isSecure() ? 'https://' : 'http://';
             $port = $request->getPort();
-            $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
+            $portSuffix = ($port && ! in_array($port, [80, 443])) ? ":{$port}" : '';
+            $url = ($request->isSecure() ? 'https://' : 'http://').$targetHost.$portSuffix.'/dashboard';
 
-            $url = $protocol . $targetHost . $portSuffix . '/dashboard';
-
-            // Prevent infinite redirect loops
+            // Never redirect onto the very page being refused.
             if ($request->fullUrl() !== $url) {
-                \Log::warning('Middleware: Redirecting user to their primary home', ['target' => $url]);
                 return redirect()->to($url);
             }
         }
 
-        // Final fallback if no roles found
         abort(403, 'Unauthorized subdomain access.');
-    }
-    private function homeUrl(Request $request): string
-    {
-        return $request->getSchemeAndHttpHost() . '/';
     }
 
     private function separatedSessionHosts(): bool

@@ -6,6 +6,7 @@ namespace App\Policies\Store;
 
 use App\Models\Auth\User;
 use App\Models\Store\Store;
+use App\Services\Admin\ActiveStore;
 
 /**
  * Who may oversee a facility.
@@ -28,8 +29,12 @@ class StorePolicy
 
     public function oversee(User $user, Store $store): bool
     {
+        // A global admin oversees every facility; a store admin, their own
+        // stores (and the ones they manage, through ActiveStore's rule).
         if ($user->isRole('admin')) {
-            return true;
+            $reach = ActiveStore::accessibleIdsFor($user);
+
+            return $reach === null || in_array((int) $store->id, $reach, true);
         }
 
         if ($store->isManagedBy($user)) {

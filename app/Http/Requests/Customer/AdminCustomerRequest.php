@@ -34,6 +34,9 @@ class AdminCustomerRequest extends FormRequest
             'credit_limit' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
             'credit_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'credit_override' => ['nullable', 'boolean'],
+            // Which store the customer belongs to. Only a global admin's pick
+            // is honoured; CustomerController forces a store admin's own.
+            'store_id' => ['nullable', 'integer', 'exists:stores,id'],
         ];
     }
 

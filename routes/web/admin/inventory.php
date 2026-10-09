@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Route;
 $baseDomain = config('app.system_domain', 'duka.local');
 
 Route::domain("admin.{$baseDomain}")
-    ->middleware(['auth', 'verified', 'role.subdomain:admin'])
+    ->middleware(['auth', 'verified', 'role.subdomain:admin', 'admin.store'])
     ->prefix('inventory')
     ->group(function () {
 
@@ -15,8 +15,8 @@ Route::domain("admin.{$baseDomain}")
     Route::get('/', [InventoryController::class, 'index'])->name('inventory.index');
     Route::get('/show/{store}', [InventoryController::class, 'show'])->name('inventory.show');
 
-    // --- Warehouse Management ---
-    Route::prefix('warehouse')->group(function () {
+    // --- Warehouse Management (global zone) ---
+    Route::prefix('warehouse')->middleware('admin.global')->group(function () {
         Route::get('/', [WarehouseController::class, 'index'])->name('admin.inventory.warehouse.index');
         Route::get('/create', [WarehouseController::class, 'create'])->name('admin.inventory.warehouse.create');
         Route::post('/', [WarehouseController::class, 'store'])->name('admin.inventory.warehouse.store');

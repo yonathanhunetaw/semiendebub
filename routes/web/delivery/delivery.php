@@ -31,6 +31,18 @@ Route::domain("delivery.{$baseDomain}")
 
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
+            // How Duka works, step by step (shared with the other apps).
+
+            Route::get('/guide', fn (\Illuminate\Http\Request $request) => \Inertia\Inertia::render('Guide/Index', [
+
+                'app' => 'delivery',
+
+                'chapter' => $request->query('chapter'),
+
+                'step' => $request->query('step'),
+
+            ]))->name('guide');
+
             // --- SESSION ROUTES ---
             Route::prefix('sessions')->group(function () {
                 Route::get('/', [SessionController::class, 'index'])->name('sessions.index');

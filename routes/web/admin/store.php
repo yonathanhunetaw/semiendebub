@@ -6,15 +6,26 @@ use Illuminate\Support\Facades\Route;
 $baseDomain = config('app.system_domain', 'duka.local');
 
 Route::domain("admin.{$baseDomain}")
-    ->middleware(['auth', 'verified', 'role.subdomain:admin'])
+    ->middleware(['auth', 'verified', 'role.subdomain:admin', 'admin.store'])
     ->group(function () {
+        /*
+         * Creating, renaming and deleting stores is the global zone. A store's
+         * own pages (inventory, prices, replenishment, transfers) are open to
+         * that store's admin too: `admin.store.record` 404s any other store.
+         */
 
         // ── Stores CRUD ───────────────────────────────────────────────────────
-        Route::prefix('stores')->name('store.')->group(function () {
-
+        Route::prefix('stores')->name('store.')->middleware('admin.global')->group(function () {
             Route::get('/',             [StoreController::class, 'index'])->name('index');
             Route::get('/create',       [StoreController::class, 'create'])->name('create');
             Route::post('/',            [StoreController::class, 'store'])->name('store');
+            Route::get('/{store}/edit', [StoreController::class, 'edit'])->name('edit');
+            Route::patch('/{store}',    [StoreController::class, 'update'])->name('update');
+            Route::delete('/{store}',   [StoreController::class, 'destroy'])->name('destroy');
+        });
+
+        Route::middleware('admin.store.record')->group(function () {
+        Route::prefix('stores')->name('store.')->group(function () {
 
             // ── Inventory sub-pages (must come BEFORE /{store} wildcard) ──────
             Route::get('/{store}/inventory/replenish',  [StoreController::class, 'replenish'])->name('replenish');
@@ -24,9 +35,6 @@ Route::domain("admin.{$baseDomain}")
             Route::post('/{store}/transfers', [StoreController::class, 'storeTransfer'])->name('transfer.create');
             // ── Store show/edit/update/delete ─────────────────────────────────
             Route::get('/{store}',      [StoreController::class, 'show'])->name('show');
-            Route::get('/{store}/edit', [StoreController::class, 'edit'])->name('edit');
-            Route::patch('/{store}',    [StoreController::class, 'update'])->name('update');
-            Route::delete('/{store}',   [StoreController::class, 'destroy'])->name('destroy');
         });
 
         // ── Store variant & Price Management ──────────────────────────────────
@@ -63,4 +71,5 @@ Route::domain("admin.{$baseDomain}")
         // {source} = b2b | individual | customer | seller
         Route::patch('store-price-overrides/{source}/{id}',  [StoreController::class, 'updateOverride'])->name('store-price-override.update');
         Route::delete('store-price-overrides/{source}/{id}', [StoreController::class, 'destroyOverride'])->name('store-price-override.destroy');
+        });
     });

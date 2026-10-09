@@ -9,10 +9,12 @@ use App\Http\Requests\StockKeeper\StoreTransferRequest;
 use App\Models\Auth\User;
 use App\Models\Inventory\InventoryMovement;
 use App\Models\StockKeeper\Transfer;
+use App\Services\Admin\ActiveStore;
 use App\Services\StockKeeperService;
 use App\Services\Fulfillment\MovementDomainService;
 use App\Services\TransferWorkflowService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,12 +30,29 @@ class TransferController extends Controller
     public function __construct(
         private readonly TransferWorkflowService $workflow,
         private readonly MovementDomainService $domain,
+        private readonly ActiveStore $activeStore,
     ) {
+    }
+
+    /** Transfers with one of the active store(s) at either end. */
+    private function scoped(): \Illuminate\Database\Eloquent\Builder
+    {
+        $ids = $this->activeStore->scopeIds();
+
+        return Transfer::query()->when($ids !== null, fn ($q) => $q->where(fn ($ends) => $ends
+            ->whereIn('from_store_id', $ids ?: [0])
+            ->orWhereIn('to_store_id', $ids ?: [0])));
+    }
+
+    /** Another store's transfer is a 404 to a store admin. */
+    private function authorizeTransfer(Transfer $transfer): void
+    {
+        abort_unless(Gate::allows('view', $transfer), 404);
     }
 
     public function index(): Response
     {
-        $transfers = Transfer::query()
+        $transfers = $this->scoped()
             ->active()
             ->with([
                 'itemVariant.item',
@@ -85,7 +104,7 @@ class TransferController extends Controller
             'inTransitCount' => $transfers->where('status', 'in_transit')->count(),
             'completedCount' => $transfers->where('status', 'completed')->count(),
             // Suggestions waiting on a manager, so the board can link to them.
-            'awaitingApprovalCount' => Transfer::query()->awaitingApproval()->count(),
+            'awaitingApprovalCount' => $this->activeStore->apply(Transfer::query()->awaitingApproval(), 'to_store_id')->count(),
         ]);
     }
 
@@ -101,6 +120,17 @@ class TransferController extends Controller
 
     public function store(StoreTransferRequest $request): RedirectResponse
     {
+        // A store admin moves stock into or out of their own stores only.
+        $from = $request->validated('from_store_id');
+        $to = $request->validated('to_store_id');
+        abort_unless(
+            $this->activeStore->isGlobal()
+                || ($from !== null && $this->activeStore->allows((int) $from))
+                || ($to !== null && $this->activeStore->allows((int) $to)),
+            403,
+            'A transfer must start or end at one of your stores.',
+        );
+
         $transfer = $this->workflow->create(
             variantId: (int) $request->validated('item_variant_id'),
             fromStoreId: $request->validated('from_store_id') !== null ? (int) $request->validated('from_store_id') : null,
@@ -125,6 +155,8 @@ class TransferController extends Controller
      */
     public function show(Transfer $transfer): Response
     {
+        $this->authorizeTransfer($transfer);
+
         $transfer->load(['itemVariant.item', 'fromStore', 'toStore', 'initiator', 'courier']);
 
         $journal = InventoryMovement::query()
@@ -154,6 +186,8 @@ class TransferController extends Controller
 
     public function dispatchTransfer(Transfer $transfer): RedirectResponse
     {
+        $this->authorizeTransfer($transfer);
+
         if (! $this->workflow->markDispatched($transfer, request()->user())) {
             return back()->with('error', 'Only a pending, approved transfer can be dispatched.');
         }
@@ -163,6 +197,8 @@ class TransferController extends Controller
 
     public function assignCourier(\Illuminate\Http\Request $request, Transfer $transfer): RedirectResponse
     {
+        $this->authorizeTransfer($transfer);
+
         $courier = User::query()->findOrFail((int) $request->validate([
             'courier_id' => ['required', 'integer', 'exists:users,id'],
         ])['courier_id']);
@@ -198,6 +234,8 @@ class TransferController extends Controller
      */
     public function complete(Transfer $transfer): RedirectResponse
     {
+        $this->authorizeTransfer($transfer);
+
         if ($transfer->status === TransferWorkflowService::STATUS_PENDING) {
             // A transfer that never left cannot land. Dispatch it first so the
             // origin is debited before the destination is credited.
@@ -217,6 +255,8 @@ class TransferController extends Controller
 
     public function cancel(Transfer $transfer): RedirectResponse
     {
+        $this->authorizeTransfer($transfer);
+
         if (! $this->workflow->cancel($transfer, request()->user()?->id)) {
             return back()->with('error', 'A completed transfer cannot be cancelled.');
         }

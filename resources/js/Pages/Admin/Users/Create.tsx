@@ -11,16 +11,20 @@ interface Props {
     /** Every role that exists (spatie roles table). */
     roles?: string[];
     stores?: Array<{ id: number; name: string }>;
+    /** A global admin may leave a user without a store; a store admin may not. */
+    can_assign_any_store?: boolean;
+    /** The active store, preselected for a new user. */
+    default_store_id?: number | null;
 }
 
-export default function CreateUser({ roles = [], stores = [] }: Props) {
+export default function CreateUser({ roles = [], stores = [], can_assign_any_store = true, default_store_id = null }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         first_name: '',
         last_name: '',
         email: '',
         phone_number: '',
         role: 'user',
-        store_id: '' as number | '',
+        store_id: (default_store_id ?? '') as number | '',
         password: '',
         password_confirmation: '',
     });
@@ -92,7 +96,7 @@ export default function CreateUser({ roles = [], stores = [] }: Props) {
                                 error={!!errors.store_id}
                                 helperText={errors.store_id ?? 'Sellers and stock keepers work at one store; leave empty for roles that cover all of them.'}
                             >
-                                <MenuItem value="">No store</MenuItem>
+                                {can_assign_any_store && <MenuItem value="">No store</MenuItem>}
                                 {stores.map(store => (
                                     <MenuItem key={store.id} value={store.id}>{store.name}</MenuItem>
                                 ))}

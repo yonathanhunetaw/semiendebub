@@ -34,8 +34,16 @@ Route::domain("seller.$baseDomain")
             })->name('login'); // CRITICAL: Laravel's 'auth' middleware needs this name
         });
 
-        Route::middleware(['auth', 'verified', 'role.subdomain:seller'])->group(function () {
+        // Store managers work in the seller app too: refill suggestions, refill
+        // routes and the Remote Hub list are theirs (SHELF_REFILL_V2).
+        Route::middleware(['auth', 'verified', 'role.subdomain:seller,store_manager'])->group(function () {
             Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+            // How Duka works, step by step (shared with the other apps).
+            Route::get('/guide', fn (\Illuminate\Http\Request $request) => \Inertia\Inertia::render('Guide/Index', [
+                'app' => 'seller',
+                'chapter' => $request->query('chapter'),
+                'step' => $request->query('step'),
+            ]))->name('guide');
             Route::get('/menu', [MenuController::class, 'index'])->name('menu.index');
             /*
              * The seller order pipeline (to pay → paid → pick & pack → to

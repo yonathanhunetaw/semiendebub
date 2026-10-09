@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Auth\User;
 use App\Models\Finance\BalanceEntry;
 use App\Models\Finance\Remittance;
+use App\Services\Admin\ActiveStore;
 use App\Services\Finance\BalanceLedger;
 use App\Services\Finance\PaymentBoard;
 use Inertia\Inertia;
@@ -22,13 +23,14 @@ use Inertia\Response;
  */
 class BalanceController extends Controller
 {
-    public function index(BalanceLedger $ledger, PaymentBoard $board): Response
+    public function index(BalanceLedger $ledger, PaymentBoard $board, ActiveStore $activeStore): Response
     {
         $holderIds = BalanceEntry::query()->distinct()->pluck('user_id')
             ->merge(Remittance::query()->distinct()->pluck('user_id'))
             ->unique();
 
-        $sellers = User::query()->whereKey($holderIds)->with('store')->get()
+        // Balances are keyed by seller, so the store is the seller's.
+        $sellers = $activeStore->apply(User::query())->whereKey($holderIds)->with('store')->get()
             ->map(function (User $user) use ($ledger): array {
                 $buckets = collect($ledger->buckets((int) $user->id));
                 $cash = $buckets->firstWhere('account', null);
@@ -49,7 +51,7 @@ class BalanceController extends Controller
 
         return Inertia::render('Admin/Payments/Balances', [
             'sellers' => $sellers,
-            'remittances' => Remittance::query()
+            'remittances' => $activeStore->applyThrough(Remittance::query(), 'user')
                 ->with(['user', 'from', 'to.owner'])
                 ->latest('id')
                 ->limit(100)

@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Finance\Payment;
+use App\Services\Admin\ActiveStore;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -18,11 +19,19 @@ use Inertia\Response;
  */
 class PaymentController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, ActiveStore $activeStore): Response
     {
         $method = $request->string('method')->toString() ?: null;
 
-        $paginator = Payment::query()
+        // A payment's store is its order's; a credit repayment has no order,
+        // so it is its customer's.
+        $scoped = fn () => $activeStore->scopeIds() === null
+            ? Payment::query()
+            : Payment::query()->where(fn ($q) => $q
+                ->where(fn ($sale) => $activeStore->applyThrough($sale->whereNotNull('sale_id'), 'sale'))
+                ->orWhere(fn ($repayment) => $activeStore->applyThrough($repayment->whereNull('sale_id'), 'customer')));
+
+        $paginator = $scoped()
             ->with(['sale.store', 'user', 'account.owner'])
             ->when($method, fn ($q, string $m) => $q->where('payment_method', $m))
             ->latest('id')
@@ -44,7 +53,7 @@ class PaymentController extends Controller
                 'taken_by' => $p->user ? trim($p->user->first_name.' '.$p->user->last_name) : null,
                 'paid_at' => ($p->paid_at ?? $p->created_at)?->toIso8601String(),
             ])->values(),
-            'today' => Payment::query()
+            'today' => $scoped()
                 ->confirmed()
                 ->whereDate('paid_at', Carbon::today())
                 ->selectRaw('payment_method, SUM(amount) as total, COUNT(*) as n')

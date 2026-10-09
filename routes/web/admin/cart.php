@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Route;
 $baseDomain = config('app.system_domain', 'duka.local');
 
 Route::domain("admin.{$baseDomain}")
-    ->middleware(['auth', 'verified', 'role.subdomain:admin'])
+    ->middleware(['auth', 'verified', 'role.subdomain:admin', 'admin.store'])
     ->prefix('carts') // Everything inside this group starts with /carts
     ->group(function () {
         Route::get('/', [CartController::class, 'index'])->name('admin.carts.index');

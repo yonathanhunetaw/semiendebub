@@ -8,6 +8,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import AdminLayout from '@/Layouts/AdminLayout';
 import StitchProductDetails from './StitchProductDetails';
+import VariantFan from '@/Components/Visual/VariantFan';
 import { InventoryItem, Variant, Person, EditDrawer, decomposeStock } from './StoreInventory';
 
 export default function ItemVariants({ store, item, customers, sellers }: {
@@ -114,6 +115,16 @@ export default function ItemVariants({ store, item, customers, sellers }: {
                                 </Stack>
                             </Box>
                         </Stack>
+                    </CardContent>
+                </Card>
+
+                {/* ── The item and its variants, drawn ───────────────────── */}
+                <Card sx={{ borderRadius: 3, mb: 2 }}>
+                    <CardContent>
+                        <VariantFan
+                            item={item.item_name}
+                            variants={variants.map((v) => ({ key: v.id, label: v.label, color: v.color, size: v.size, pack: v.pack, sku: v.sku, active: v.active }))}
+                        />
                     </CardContent>
                 </Card>
 

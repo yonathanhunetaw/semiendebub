@@ -12,6 +12,7 @@ use App\Models\Seller\Cart;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
+use App\Services\Admin\ActiveStore;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -48,12 +49,16 @@ class DashboardController extends Controller
     /** Pieces at or below this are "low". */
     private const LOW_STOCK_THRESHOLD = 5;
 
-    public function index(Request $request): Response
+    public function index(Request $request, ActiveStore $activeStore): Response
     {
-        $store = $this->selectedStore($request);
+        // The sidebar dropdown and the chips on this page both go through
+        // ActiveStore (`?store=` -> session), so they can never disagree.
+        $store = $activeStore->store();
+
+        $scopeIds = $activeStore->scopeIds();
 
         return Inertia::render('Admin/Dashboard/index', array_merge(
-            $this->sessionFigures(),
+            $this->sessionFigures($scopeIds),
             $this->cartFigures($store),
             [
                 'customersCount' => $this->customersCount($store),
@@ -61,50 +66,38 @@ class DashboardController extends Controller
                 'activeVariantsCount' => $this->activeVariantsCount($store),
                 'lowStockItems' => $this->lowStockItems($store),
                 'groupedProducts' => $this->groupedProducts($store),
-                'stores' => $this->storeOptions(),
+                'stores' => $this->storeOptions($activeStore),
                 // The id as a string, or 'all'. The switcher compares it
                 // against each option's id to decide which chip is lit.
                 'currentStore' => $store ? (string) $store->id : 'all',
                 'currentStoreName' => $store?->name,
+                // The redesigned dashboard: five KPI cards, the 7-day trend,
+                // open deliveries and a feed, all from real rows in scope.
+                'trend' => $this->trend($activeStore),
+                'activeDeliveries' => $this->activeDeliveries($activeStore),
+                'activity' => $this->activity($activeStore),
+                // Orders at each stop of the road, for the journey strip:
+                // open carts, the board's stages, and delivered in 7 days.
+                'pipeline' => $this->pipeline($activeStore),
+                // Every area of the app as a card: figure, facts, what needs
+                // attention, and links into each list.
+                'areas' => app(\App\Services\Admin\DashboardAreas::class)->all(),
             ],
         ));
     }
 
     /**
-     * The store the switcher is pointing at, or null for "all stores".
+     * Who is signed in right now: everyone for a global admin on "All
+     * stores", else the scoped stores' staff.
      *
-     * An id that does not resolve falls back to all stores rather than
-     * aborting: the switcher is a view preference, and a stale bookmark
-     * pointing at a deleted store should show the dashboard, not a 404.
-     */
-    private function selectedStore(Request $request): ?Store
-    {
-        $selected = $request->query('store', 'all');
-
-        if (! is_string($selected) || $selected === '' || $selected === 'all') {
-            return null;
-        }
-
-        return Store::query()
-            ->when(
-                ctype_digit($selected),
-                fn (Builder $query) => $query->whereKey((int) $selected),
-                // Names are still accepted so links and bookmarks written
-                // while the switcher sent names keep working.
-                fn (Builder $query) => $query->where('name', $selected),
-            )
-            ->first();
-    }
-
-    /**
-     * Who is signed in right now. Company-wide: a session is not a store.
-     *
+     * @param  array<int, int>|null  $scopeIds
      * @return array<string, mixed>
      */
-    private function sessionFigures(): array
+    private function sessionFigures(?array $scopeIds): array
     {
         $activeSessions = DB::table('sessions')
             ->where('last_activity', '>', now()->timestamp - (config('session.lifetime') * 60))
+            ->when($scopeIds !== null, fn ($q) => $q->whereIn('user_id', User::query()->whereIn('store_id', $scopeIds ?: [0])->select('id')))
             ->get();
 
         $userIds = $activeSessions->whereNotNull('user_id')->pluck('user_id')->unique();
@@ -137,13 +130,11 @@ class DashboardController extends Controller
      */
     private function cartFigures(?Store $store): array
     {
+        // Scoped by the cart's own store: the active store's carts, or every
+        // store's on "All stores" (a store admin always has a store).
         $carts = Cart::query()
             ->with('customer')
-            ->visibleTo(Auth::user())
-            ->when($store, fn (Builder $query) => $query->whereHas(
-                'seller',
-                fn (Builder $seller) => $seller->where('store_id', $store->id),
-            ))
+            ->when($store, fn (Builder $query) => $query->where('store_id', $store->id))
             ->get();
 
         $breakdown = $carts
@@ -255,6 +246,7 @@ class DashboardController extends Controller
             return [
                 'item_id' => (int) $sv->id,
                 'product_name' => $sv->item?->product_name ?? 'Unknown Product',
+                'store_id' => $sv->store_id !== null ? (int) $sv->store_id : null,
                 'store_name' => $sv->store?->name ?? 'Unknown Store',
                 'total_stock' => $quantity,
                 'low_stock_total' => $quantity,
@@ -308,7 +300,7 @@ class DashboardController extends Controller
      *
      * @return array<int, array<string, mixed>>
      */
-    private function storeOptions(): array
+    private function storeOptions(ActiveStore $activeStore): array
     {
         // Shelf + floor per retail store; a warehouse-type facility's hub.
         $unitsByStore = DB::table('item_stocks as s')
@@ -326,9 +318,7 @@ class DashboardController extends Controller
             ->selectRaw('store_id, COUNT(DISTINCT item_variant_id) as variants')
             ->pluck('variants', 'store_id');
 
-        return Store::query()
-            ->orderBy('name')
-            ->get(['id', 'name'])
+        return $activeStore->accessibleStores()
             ->map(fn (Store $store): array => [
                 'id' => (int) $store->id,
                 'name' => (string) $store->name,
@@ -337,5 +327,167 @@ class DashboardController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    /** Window for the KPI cards and the trend chart. */
+    private const TREND_DAYS = 7;
+
+    /** Payment methods that are not money in hand. */
+    private const NON_CASH_METHODS = [\App\Models\Finance\Payment::METHOD_CREDIT];
+
+    /** Payments in scope: by the order's store, or a repayment's customer's. */
+    private function scopedPayments(ActiveStore $activeStore): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = \App\Models\Finance\Payment::query();
+
+        if ($activeStore->scopeIds() === null) {
+            return $query;
+        }
+
+        return $query->where(fn ($q) => $q
+            ->where(fn ($sale) => $activeStore->applyThrough($sale->whereNotNull('sale_id'), 'sale'))
+            ->orWhere(fn ($repayment) => $activeStore->applyThrough($repayment->whereNull('sale_id'), 'customer')));
+    }
+
+    /**
+     * Orders per day and confirmed takings per day for the last TREND_DAYS
+     * days, plus the two tiles the same rows can answer.
+     *
+     * @return array<string, mixed>
+     */
+    private function trend(ActiveStore $activeStore): array
+    {
+        $since = now()->subDays(self::TREND_DAYS - 1)->startOfDay();
+
+        $orders = $activeStore->apply(\App\Models\Finance\Sale::query())
+            ->where('created_at', '>=', $since)
+            ->get(['created_at', 'total_amount']);
+
+        $payments = $this->scopedPayments($activeStore)
+            ->confirmed()
+            ->where('paid_at', '>=', $since)
+            ->whereNotIn('payment_method', self::NON_CASH_METHODS)
+            ->get(['paid_at', 'amount']);
+
+        $days = collect(range(self::TREND_DAYS - 1, 0))->map(function (int $back) use ($orders, $payments): array {
+            $day = now()->subDays($back)->toDateString();
+
+            return [
+                'date' => $day,
+                'orders' => $orders->filter(fn ($sale) => $sale->created_at?->toDateString() === $day)->count(),
+                'revenue' => round((float) $payments->filter(fn ($payment) => \Illuminate\Support\Carbon::parse($payment->paid_at)->toDateString() === $day)->sum('amount'), 2),
+            ];
+        })->values();
+
+        $peak = $days->sortByDesc('orders')->first();
+
+        return [
+            'days' => $days,
+            'peak_day' => $peak !== null && $peak['orders'] > 0 ? $peak : null,
+            'avg_order_value' => $orders->isEmpty() ? null : round((float) $orders->avg('total_amount'), 2),
+        ];
+    }
+
+    /**
+     * Open deliveries, most recently touched first.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function activeDeliveries(ActiveStore $activeStore): array
+    {
+        return $activeStore->applyThrough(\App\Models\Fulfillment\Delivery::query(), 'sale')
+            ->open()
+            ->with(['sale.store:id,name', 'courier:id,first_name,last_name'])
+            ->latest('updated_at')
+            ->limit(6)
+            ->get()
+            ->map(fn (\App\Models\Fulfillment\Delivery $delivery): array => [
+                'id' => (int) $delivery->id,
+                'tracking_number' => $delivery->tracking_number,
+                'status' => (string) $delivery->status,
+                'courier' => $delivery->courier ? trim($delivery->courier->first_name.' '.$delivery->courier->last_name) : null,
+                'store' => $delivery->sale?->store?->name,
+                'order' => $delivery->sale?->reference_number,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Recent activity from records that exist: confirmed payments, delivery
+     * status changes and stock journal entries, newest first.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function activity(ActiveStore $activeStore): array
+    {
+        $payments = $this->scopedPayments($activeStore)
+            ->confirmed()
+            ->with('sale:id,reference_number')
+            ->latest('paid_at')
+            ->limit(5)
+            ->get()
+            ->map(fn (\App\Models\Finance\Payment $payment): array => [
+                'kind' => 'payment',
+                'title' => 'Payment confirmed',
+                'detail' => trim(ucfirst(str_replace('_', ' ', (string) $payment->payment_method)).' · '.($payment->sale?->reference_number ?? 'credit repayment')),
+                'amount' => (float) $payment->amount,
+                'at' => ($payment->paid_at ?? $payment->updated_at)?->toIso8601String(),
+            ]);
+
+        $deliveries = $activeStore->applyThrough(\App\Models\Fulfillment\Delivery::query(), 'sale')
+            ->with('sale:id,reference_number')
+            ->latest('updated_at')
+            ->limit(5)
+            ->get()
+            ->map(fn (\App\Models\Fulfillment\Delivery $delivery): array => [
+                'kind' => 'delivery',
+                'title' => 'Delivery '.str_replace('_', ' ', (string) $delivery->status),
+                'detail' => trim(($delivery->tracking_number ?? '').($delivery->sale ? ' · '.$delivery->sale->reference_number : '')),
+                'amount' => null,
+                'at' => $delivery->updated_at?->toIso8601String(),
+            ]);
+
+        $scopeIds = $activeStore->scopeIds();
+        $movements = \App\Models\Inventory\InventoryMovement::query()
+            ->with(['itemVariant.item:id,product_name', 'stockLocation:id,name,store_id'])
+            ->when($scopeIds !== null, fn ($q) => $q->whereHas('stockLocation', fn ($location) => $location->whereIn('store_id', $scopeIds ?: [0])))
+            ->latest('id')
+            ->limit(5)
+            ->get()
+            ->map(fn (\App\Models\Inventory\InventoryMovement $movement): array => [
+                'kind' => 'stock',
+                'title' => 'Stock '.str_replace('_', ' ', (string) $movement->type),
+                'detail' => trim(($movement->itemVariant?->item?->product_name ?? 'Item').' · '.sprintf('%+d', (int) $movement->quantity).($movement->stockLocation ? ' at '.$movement->stockLocation->name : '')),
+                'amount' => null,
+                'at' => $movement->created_at?->toIso8601String(),
+            ]);
+
+        return $payments->concat($deliveries)->concat($movements)
+            ->filter(fn (array $row): bool => $row['at'] !== null)
+            ->sortByDesc('at')
+            ->take(10)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function pipeline(ActiveStore $activeStore): array
+    {
+        $board = app(\App\Services\Fulfillment\SellerOrderBoard::class)->counts($activeStore->id());
+
+        return [
+            'cart' => $activeStore->apply(Cart::query())->where('status', 'open')->count(),
+            'to_pay' => (int) ($board['to_pay'] ?? 0),
+            'paid' => (int) ($board['paid'] ?? 0),
+            'packing' => (int) ($board['packing'] ?? 0),
+            'to_deliver' => (int) ($board['to_deliver'] ?? 0),
+            'delivered' => $activeStore->apply(\App\Models\Finance\Sale::query())
+                ->where('fulfillment_stage', \App\Models\Finance\Sale::STAGE_DELIVERED)
+                ->where('updated_at', '>=', now()->subDays(self::TREND_DAYS - 1)->startOfDay())
+                ->count(),
+        ];
     }
 }

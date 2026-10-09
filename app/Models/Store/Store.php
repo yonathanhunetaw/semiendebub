@@ -192,7 +192,18 @@ class Store extends Model
         return $this->morphMany(StoreVariantCapacity::class, 'location');
     }
 
-    // Remote warehouse for this store
+    /**
+     * The warehouses that serve this store; a warehouse may serve several.
+     */
+    public function warehouses(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\Inventory\Warehouse::class, 'store_warehouse')->withTimestamps();
+    }
+
+    /**
+     * Legacy: the one warehouse whose `warehouses.store_id` points here.
+     * Nothing reads it any more; use warehouses().
+     */
     public function warehouse()
     {
         return $this->hasOne(\App\Models\Inventory\Warehouse::class, 'store_id');
