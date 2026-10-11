@@ -150,6 +150,9 @@ Route::domain("admin.{$baseDomain}")
             // Customer-specific prices and discounts (set on a store's item
             // page under "Edit price & rule"), with when each discount ends.
             Route::get('/customers/discounts', [\App\Http\Controllers\Admin\CustomerController::class, 'discounts'])->name('customers.discounts');
+            // One customer's own prices across many items.
+            Route::get('/customers/{customer}/prices', [\App\Http\Controllers\Admin\CustomerPriceController::class, 'index'])->name('customers.prices');
+            Route::put('/customers/{customer}/prices', [\App\Http\Controllers\Admin\CustomerPriceController::class, 'update'])->name('customers.prices.update');
             Route::resource('customers', \App\Http\Controllers\Admin\CustomerController::class)
                 ->only(['index', 'store', 'update', 'destroy']);
 

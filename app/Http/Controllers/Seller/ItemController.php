@@ -170,7 +170,8 @@ class ItemController extends Controller
 
         $cart = $cartId ? \App\Models\Seller\Cart::with('customer')->find($cartId) : $topCart;
         $customer = $cart ? $cart->customer : null;
-        $hasTinCart = $cart && $cart->customer && !empty($cart->customer->tin_number);
+        // No cart or a walk-in prices as individual, VAT included (SellerCatalog::cartContext).
+        $hasTinCart = $customer === null || ! empty($customer->tin_number);
 
         $items = collect($paginator->items())->map(function ($item) use ($storeId, $customer) {
             return $this->enrichItemForIndex($item, $storeId, $customer);
@@ -381,6 +382,12 @@ class ItemController extends Controller
                 'price' => $price,
                 'discount_price' => $discount_price,
                 'stock' => $store_stock,
+                // Business / Individual pools, when stock is set aside for Business.
+                'pools' => $storeId === null ? null : app(\App\Services\Inventory\StockPools::class)->present(
+                    (int) $variant->id,
+                    (int) $storeId,
+                    app(\App\Services\StockService::class)->availableAtStore((int) $variant->id, (int) $storeId),
+                ),
                 'shelf_stock' => $shelf_stock,
                 'floor_stock' => $floor_stock,
                 'in_remote_hub' => $in_remote_hub,

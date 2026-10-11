@@ -50,7 +50,9 @@ class CartControllerTest extends TestCase
             'seller_id'   => $this->seller->id,
         ]);
 
-        $response->assertRedirect(route('seller.carts.index'));
+        // Opens the new cart on the cart console.
+        $cart = \App\Models\Seller\Cart::query()->latest('id')->firstOrFail();
+        $response->assertRedirect(route('seller.carts.index', ['cart' => $cart->id]));
         $this->assertDatabaseHas('carts', [
             'seller_id'   => $this->seller->id,
             'customer_id' => $customer->id,
@@ -60,7 +62,7 @@ class CartControllerTest extends TestCase
     }
 
     #[Test]
-    public function seller_can_select_all_customers_when_creating_a_cart()
+    public function seller_only_offers_their_own_stores_customers_when_creating_a_cart()
     {
         $storeCustomer = Customer::factory()->create([
             'store_id' => $this->store->id,
@@ -76,9 +78,9 @@ class CartControllerTest extends TestCase
         $this->get(route('seller.carts.create'))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Seller/Carts/Create')
-                ->has('customers', 2)
-                ->where('customers.0.id', $otherCustomer->id)
-                ->where('customers.1.id', $storeCustomer->id)
+                // A customer belongs to one store: another store's is not offered.
+                ->has('customers', 1)
+                ->where('customers.0.id', $storeCustomer->id)
             );
     }
 

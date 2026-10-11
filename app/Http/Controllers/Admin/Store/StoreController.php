@@ -561,6 +561,12 @@ class StoreController extends Controller
         $customer = Customer::findOrFail($validated['customer_id']);
         $customerType = $customer->tin_number ? 'individual' : 'business';
 
+        // A price is for one of this store's own customers (one saved
+        // before customers had a store may take any store's).
+        if ($customer->store_id !== null && (int) $customer->store_id !== (int) $storeVariant->store_id) {
+            return response()->json(['message' => 'This customer belongs to another store.'], 422);
+        }
+
         if ($validated['customer_type'] !== $customerType) {
             return response()->json([
                 'message' => "Select an {$validated['customer_type']} customer for this price.",
@@ -933,6 +939,13 @@ class StoreController extends Controller
                 ]),
                 'min_reorder' => $sv->min_reorder_level,
                 'max_stock' => $sv->max_stock_level,
+                // Stock kept for Business customers, and the two pools now.
+                'business_pool' => $sv->business_pool,
+                'pools' => app(\App\Services\Inventory\StockPools::class)->present(
+                    (int) $sv->item_variant_id,
+                    (int) $store->id,
+                    app(\App\Services\StockService::class)->availableAtStore((int) $sv->item_variant_id, (int) $store->id),
+                ),
             ];
         });
 
@@ -965,7 +978,8 @@ class StoreController extends Controller
         ];
 
         // Also fetch customers and sellers for the UI
-        $customers = \App\Models\Auth\Customer::select('id', 'first_name', 'last_name')->get();
+        // This store's customers only: a price is set for one of its own.
+        $customers = \App\Models\Auth\Customer::where('store_id', $store->id)->select('id', 'first_name', 'last_name', 'tin_number')->get();
         $sellers = \App\Models\Auth\User::role('seller')->select('id', 'first_name', 'last_name')->get();
 
         return \Inertia\Inertia::render('Admin/Inventory/Stores/ItemVariants', [

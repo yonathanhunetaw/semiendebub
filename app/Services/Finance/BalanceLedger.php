@@ -30,8 +30,14 @@ class BalanceLedger
             return;
         }
 
+        // Cash sits with the seller who took it, not the manager who
+        // confirmed it; account money is the confirming owner's.
+        $holder = $payment->payment_account_id === null
+            ? ($payment->claimed_by ?? $payment->confirmed_by)
+            : $payment->confirmed_by;
+
         BalanceEntry::query()->firstOrCreate(['payment_id' => $payment->id], [
-            'user_id' => $payment->confirmed_by,
+            'user_id' => $holder,
             'payment_account_id' => $payment->payment_account_id,
             'amount' => $payment->amount,
         ]);

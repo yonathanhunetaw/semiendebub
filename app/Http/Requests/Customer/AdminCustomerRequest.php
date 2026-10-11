@@ -40,6 +40,12 @@ class AdminCustomerRequest extends FormRequest
         ];
     }
 
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return ['tin_number.required_if' => 'An individual customer needs a TIN.'];
+    }
+
     /** A limit needs days to pay. */
     public function after(): array
     {

@@ -165,6 +165,8 @@ class OrderSourcingService
             'items.storeVariant.itemVariant.itemSize',
             'store',
             'customer',
+            'delivery',
+            'pickingStartedBy',
         ]);
 
         $store = $sale->store;
@@ -233,6 +235,8 @@ class OrderSourcingService
                 ],
                 'options' => $options,
                 'is_sourced' => $item->isSourced(),
+                // In the picker's hand (saved, so every role sees it).
+                'ticked_at' => $item->ticked_at?->toIso8601String(),
             ];
         })->values()->all();
 
@@ -248,9 +252,108 @@ class OrderSourcingService
                 'stage_label' => $sale->stageLabel(),
                 'delay_agreed' => $sale->delayAgreed(),
                 'sourcing_confirmed_at' => $sale->sourcing_confirmed_at?->toIso8601String(),
+                // The gate before delivery: every payment part confirmed.
+                'paid' => $sale->isFullyPaid(),
+                'picking_started_at' => $sale->picking_started_at?->toIso8601String(),
+                'picking_started_by' => $sale->pickingStartedBy
+                    ? trim($sale->pickingStartedBy->first_name.' '.$sale->pickingStartedBy->last_name)
+                    : null,
+                'packed_at' => $sale->packed_at?->toIso8601String(),
+            ],
+            'delivery' => $sale->delivery === null ? null : [
+                'method' => (string) ($sale->delivery->method ?: Delivery::METHOD_COURIER),
+                'address' => $sale->delivery->delivery_address,
+                'recipient' => $sale->delivery->recipient_name,
+                'courier' => $sale->delivery->courier_name,
+                'plate' => $sale->delivery->vehicle_plate,
+                'driver_phone' => $sale->delivery->driver_phone,
             ],
             'lines' => $lines,
         ];
+    }
+
+    /**
+     * Someone starts picking the order. Recorded once, by whoever started,
+     * so the courier and the other roles see it moving.
+     *
+     * @throws RuntimeException when the order is not in Pick & pack
+     */
+    public function startPicking(Sale $sale, User $by): Sale
+    {
+        return DB::transaction(function () use ($sale, $by): Sale {
+            $locked = $this->lockPicking($sale);
+
+            if ($locked->picking_started_at === null) {
+                $locked->update(['picking_started_at' => now(), 'picking_started_by' => $by->id]);
+            }
+
+            return $locked;
+        });
+    }
+
+    /**
+     * A line is in the picker's hand, or put back. Ticking the first line
+     * also starts picking; changing a line unpacks the parcel.
+     *
+     * @throws RuntimeException
+     */
+    public function tickLine(Sale $sale, SaleItem $item, bool $inHand, User $by): Sale
+    {
+        if ((int) $item->sale_id !== (int) $sale->id) {
+            throw new RuntimeException('That line is not on this order.');
+        }
+
+        return DB::transaction(function () use ($sale, $item, $inHand, $by): Sale {
+            $locked = $this->lockPicking($sale);
+
+            $item->update($inHand
+                ? ['ticked_at' => now(), 'ticked_by' => $by->id]
+                : ['ticked_at' => null, 'ticked_by' => null]);
+
+            $locked->update(array_filter([
+                'picking_started_at' => $locked->picking_started_at ?? now(),
+                'picking_started_by' => $locked->picking_started_by ?? $by->id,
+            ]) + ['packed_at' => null]);
+
+            return $locked;
+        });
+    }
+
+    /**
+     * The parcel is packed and labelled (every line in hand), or opened
+     * again.
+     *
+     * @throws RuntimeException when a line is not in hand yet
+     */
+    public function markPacked(Sale $sale, bool $packed, User $by): Sale
+    {
+        return DB::transaction(function () use ($sale, $packed, $by): Sale {
+            $locked = $this->lockPicking($sale);
+
+            if ($packed && $locked->items()->whereNull('ticked_at')->exists()) {
+                throw new RuntimeException('Tick every line once it is in hand before packing.');
+            }
+
+            $locked->update([
+                'packed_at' => $packed ? now() : null,
+                'picking_started_at' => $locked->picking_started_at ?? now(),
+                'picking_started_by' => $locked->picking_started_by ?? $by->id,
+            ]);
+
+            return $locked;
+        });
+    }
+
+    /** @throws RuntimeException */
+    private function lockPicking(Sale $sale): Sale
+    {
+        $locked = Sale::query()->whereKey($sale->id)->lockForUpdate()->first();
+
+        if ($locked === null || $locked->fulfillment_stage !== Sale::STAGE_PICK_PACK) {
+            throw new RuntimeException("Order {$sale->reference_number} is not in Pick & pack.");
+        }
+
+        return $locked;
     }
 
     /**
@@ -277,6 +380,15 @@ class OrderSourcingService
 
             if ($current !== Sale::STAGE_PICK_PACK) {
                 throw new RuntimeException("Order {$sale->reference_number} is no longer waiting in Pick & Pack.");
+            }
+
+            // The hard gate: goods only leave once the money is in. The
+            // payment can change while the order is being picked (a credit
+            // part swapped for cash, say), so it is checked again here.
+            if (! $sale->refresh()->isFullyPaid()) {
+                throw new RuntimeException(
+                    "Order {$sale->reference_number} is not fully paid. Every payment part must be confirmed before it goes to delivery."
+                );
             }
 
             foreach ($sale->items as $item) {

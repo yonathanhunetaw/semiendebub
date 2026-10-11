@@ -20,6 +20,7 @@ import React from "react";
 import AdminLayout from "@/Layouts/AdminLayout";
 import type { SharedProps } from "@/types/shipment";
 import type { CreditInvoice, CreditSummary } from "@/types/payments";
+import { dayDate } from "@/utils/dates";
 
 interface CreditRow extends CreditSummary {
     name: string;
@@ -35,7 +36,7 @@ interface Props extends SharedProps {
 const money = (amount: number): string =>
     `${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ETB`;
 
-const date = (iso: string | null): string => (iso ? new Date(iso).toLocaleDateString() : "—");
+const date = (iso: string | null): string => dayDate(iso);
 
 /**
  * Customer credit: who has credit, what they owe, and who is overdue.

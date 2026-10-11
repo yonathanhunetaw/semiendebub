@@ -83,7 +83,7 @@ class DeliveryService
      */
     public function metrics(User $courier): array
     {
-        $mine = fn (): Builder => Delivery::query()->forCourier((int) $courier->id);
+        $mine = fn (): Builder => Delivery::query()->forCourier((int) $courier->id)->visibleToCourier();
 
         return [
             // Claimed but not yet collected.
@@ -113,8 +113,9 @@ class DeliveryService
         ?int $perPage = null
     ): LengthAwarePaginator {
         $query = Delivery::query()
-            ->with(['sale', 'courier'])
-            ->forCourier((int) $courier->id);
+            ->with(['sale', 'courier', 'vehicle'])
+            ->forCourier((int) $courier->id)
+            ->visibleToCourier();
 
         if ($status === 'open') {
             $query->open();
@@ -234,8 +235,9 @@ class DeliveryService
 
             // A courier collects goods Pick & Pack has put into Delivery's
             // custody; an order nobody has picked has nothing to collect.
-            if ($sale !== null && $sale->sourcing_confirmed_at === null
-                && in_array($to, [self::STATUS_DISPATCHED, self::STATUS_IN_TRANSIT, self::STATUS_DELIVERED], true)) {
+            // Nor can a run be failed or returned before then: the order may
+            // not even be paid yet.
+            if ($sale !== null && $sale->sourcing_confirmed_at === null) {
                 throw new MovementDomainException(
                     "Order {$sale->reference_number} has not been through Pick & Pack yet, so there is nothing to collect.",
                     MovementDomainService::DOMAIN_DELIVERY,
@@ -340,6 +342,13 @@ class DeliveryService
             'delivery_address' => $delivery->delivery_address,
             'courier_name' => $delivery->courier_name,
             'courier_id' => $delivery->courier_id ? (int) $delivery->courier_id : null,
+            // The vehicle the run goes out on: a fleet vehicle or a typed plate.
+            'vehicle' => $delivery->vehicle?->name,
+            'vehicle_plate' => $delivery->vehicle_plate ?? $delivery->vehicle?->plate,
+            // courier: carried to the address; vehicle: a vehicle collects it
+            // at the store and carries it to its destination.
+            'method' => (string) ($delivery->method ?: Delivery::METHOD_COURIER),
+            'driver_phone' => $delivery->driver_phone,
             'sale_reference' => $delivery->sale?->reference_number,
             'sale_total' => $delivery->sale?->total_amount !== null
                 ? (float) $delivery->sale->total_amount

@@ -56,6 +56,23 @@ class AuthenticationTest extends TestCase
         $response = $this->actingAs($user)->post("http://delivery.{$baseDomain}/logout");
 
         $this->assertGuest();
-        $response->assertRedirect("http://{$baseDomain}/"); // Redirects back to main landing
+        $response->assertRedirect("http://delivery.{$baseDomain}/login"); // That app's login page
+    }
+
+    public function test_signing_out_from_an_inertia_page_is_a_full_page_visit(): void
+    {
+        $baseDomain = config('app.system_domain', 'duka.local');
+        $user = User::factory()->create();
+        $user->assignRole('seller');
+
+        // An Inertia request cannot follow a plain redirect to another page
+        // set, so sign-out answers 409 + X-Inertia-Location instead.
+        $this->actingAs($user)
+            ->withHeaders(['X-Inertia' => 'true'])
+            ->post("http://seller.{$baseDomain}/logout")
+            ->assertStatus(409)
+            ->assertHeader('X-Inertia-Location', "http://seller.{$baseDomain}/login");
+
+        $this->assertGuest();
     }
 }

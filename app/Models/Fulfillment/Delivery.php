@@ -27,6 +27,12 @@ class Delivery extends Model
 
     protected $table = 'deliveries';
 
+    /** A courier carries it to the address. */
+    public const METHOD_COURIER = 'courier';
+
+    /** A vehicle (the customer's or a hired one) collects it at the store. */
+    public const METHOD_VEHICLE = 'vehicle';
+
     protected $fillable = [
         'sale_id',
         'source_location_type',
@@ -39,6 +45,11 @@ class Delivery extends Model
         'recipient_phone',
         'courier_name',
         'courier_id',
+        'vehicle_id',
+        'vehicle_plate',
+        'driver_phone',
+        'method',
+        'customer_address_id',
         'scheduled_for',
         'picked_up_at',
         'shipped_at',
@@ -67,6 +78,12 @@ class Delivery extends Model
     public function sourceLocation(): MorphTo
     {
         return $this->morphTo('sourceLocation', 'source_location_type', 'source_location_id');
+    }
+
+    /** The fleet vehicle, when one was chosen; vehicle_plate covers any other. */
+    public function vehicle(): BelongsTo
+    {
+        return $this->belongsTo(Vehicle::class);
     }
 
     public function sourceStore(): BelongsTo
@@ -110,6 +127,18 @@ class Delivery extends Model
         return $query->where(fn (Builder $q) => $q
             ->whereNull('sale_id')
             ->orWhereHas('sale', fn (Builder $sale) => $sale->whereNotNull('sourcing_confirmed_at')));
+    }
+
+    /**
+     * What a courier may see of their own runs: anything already moving, and
+     * a waiting run only once Pick & Pack has handed it over. A courier named
+     * at checkout does not see the order while it is still unpaid or unpicked.
+     */
+    public function scopeVisibleToCourier(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->where('status', '!=', 'pending')
+            ->orWhere(fn (Builder $ready) => $ready->readyToCollect()));
     }
 
     public function scopeUnassigned(Builder $query): Builder

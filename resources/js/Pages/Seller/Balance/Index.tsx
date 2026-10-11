@@ -9,6 +9,7 @@ import type {
 } from "@/types/payments";
 import { Head, router } from "@inertiajs/react";
 import React, { useState } from "react";
+import { dayDateTime } from "@/utils/dates";
 
 /**
  * The seller's balance.
@@ -38,7 +39,7 @@ const HANDOVER_CHIP: Record<RemittanceRow["status"], { label: string; className:
 const bucketLabel = (bucket: BalanceBucket): string =>
     bucket.account ? `${bucket.account.provider_name} · ${bucket.account.account_number}` : "Cash";
 
-const when = (iso: string | null): string => (iso ? new Date(iso).toLocaleString() : "");
+const when = (iso: string | null): string => dayDateTime(iso, "");
 
 export default function BalanceIndex({
     held = 0,

@@ -7,6 +7,7 @@ import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import { Box, Button, IconButton, Stack, Typography } from "@mui/material";
 import React from "react";
 
+import type { SavedAddress } from "@/types/delivery-plan";
 import type { CreditInvoice, CreditSummary, OrderPayment, PaymentAccountOption } from "@/types/payments";
 
 interface Customer {
@@ -33,9 +34,11 @@ interface Props {
     repayments?: OrderPayment[];
     /** The seller's store's accounts, for taking a repayment. */
     accounts?: PaymentAccountOption[];
+    /** Where their orders have gone, saved at checkout. */
+    addresses?: SavedAddress[];
 }
 
-export default function Show({ customer, credit = null, invoices = [], repayments = [], accounts = [] }: Props) {
+export default function Show({ customer, credit = null, invoices = [], repayments = [], accounts = [], addresses = [] }: Props) {
     const fullName = sellerName([customer.first_name, customer.last_name]);
 
     const removeCustomer = () => {
@@ -84,6 +87,26 @@ export default function Show({ customer, credit = null, invoices = [], repayment
                             </Typography>
                             <Typography>{customer.city || "Not set"}</Typography>
                         </Stack>
+                    </SellerCard>
+
+                    <SellerCard>
+                        <Typography sx={{ fontWeight: 800, mb: 1 }}>Delivery locations</Typography>
+                        {addresses.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">
+                                Saved here when an order is placed with a delivery address.
+                            </Typography>
+                        ) : (
+                            <Stack spacing={1.25}>
+                                {addresses.map((address) => (
+                                    <Box key={address.id}>
+                                        <Typography sx={{ fontWeight: 600 }}>{address.address}</Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {[address.recipient_name, address.recipient_phone].filter(Boolean).join(" · ") || "No recipient"} · used {address.times_used}×
+                                        </Typography>
+                                    </Box>
+                                ))}
+                            </Stack>
+                        )}
                     </SellerCard>
 
                     {credit ? (

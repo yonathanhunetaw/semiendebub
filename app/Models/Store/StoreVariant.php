@@ -26,6 +26,8 @@ class StoreVariant extends Model
         'forced_status',
         'status',
         'active',
+        // Units of this store's stock kept for Business customers; null = no split.
+        'business_pool',
     ];
 
     /**
@@ -35,6 +37,7 @@ class StoreVariant extends Model
      */
     protected $casts = [
         'pricing_matrix' => 'array',
+        'business_pool' => 'integer',
     ];
 
     /**

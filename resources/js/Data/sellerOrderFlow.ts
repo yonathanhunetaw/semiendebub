@@ -47,6 +47,8 @@ export interface OrderLine {
     supplier: string;
     /** Set when the line cannot be picked from the shop floor. */
     inStore: boolean;
+    /** In Pick & pack: the picker has it in hand. */
+    ticked?: boolean;
 }
 
 export type OrderStage = "to_pay" | "paid" | "packing" | "to_deliver" | "delivered" | "canceled";
@@ -67,7 +69,20 @@ export interface SellerOrder {
         vehicle: string;
         driver: string;
         address: string;
+        phone?: string | null;
+        courierId?: number | null;
+        vehicleId?: number | null;
+        plate?: string | null;
+        /** Courier to an address, a vehicle collecting at the store, or not decided yet. */
+        method?: "courier" | "vehicle" | "later";
+        driverPhone?: string | null;
     };
+    /** standard / express / later / custom, chosen at checkout. */
+    deliveryOption?: string | null;
+    /** Every payment part confirmed: the gate before it may go to delivery. */
+    paid?: boolean;
+    /** Someone started picking it; how many lines are already in hand. */
+    picking?: { startedAt: string | null; ticked: number; packed?: boolean };
     additionalCharges: number;
     shippingFee: number;
     /** The payment split; absent on a cart that is not an order yet. */

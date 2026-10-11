@@ -20,7 +20,7 @@ function currentTab(url: string): Tab {
 
 interface SellerNavProps {
     /** Shared by HandleInertiaRequests for sellers; null for other roles. */
-    seller?: { open_carts: number } | null;
+    seller?: { open_carts: number; cart_items?: number } | null;
     [key: string]: unknown;
 }
 
@@ -28,13 +28,14 @@ interface SellerNavProps {
  * The seller's floating bottom bar: a white (`surface-container-lowest`)
  * card with a hairline border. The active tab is `primary` with a filled
  * icon, bold label and an underline; the rest are `on-surface-variant`.
- * Carts carries a `primary` badge with the seller's open carts. Positions
+ * Carts carries a `primary` badge with how many items are in the seller's
+ * open carts (quantities added up, not the number of carts). Positions
  * itself (fixed, centred on the 480px shell), so layouts just render it.
  */
 export default function SellerBottomNav(): React.ReactElement {
     const { url, props } = usePage<SellerNavProps>();
     const active = currentTab(url);
-    const openCarts = props.seller?.open_carts ?? 0;
+    const cartItems = props.seller?.cart_items ?? 0;
 
     return (
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[480px] px-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:max-w-full md:max-w-[1200px]">
@@ -61,9 +62,12 @@ export default function SellerBottomNav(): React.ReactElement {
                                 >
                                     {item.icon}
                                 </span>
-                                {item.value === "carts" && openCarts > 0 && (
-                                    <span className="absolute -right-2 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-[999px] bg-primary px-1 text-[10px] font-bold text-on-primary ring-2 ring-surface-container-lowest">
-                                        {openCarts > 99 ? "99+" : openCarts}
+                                {item.value === "carts" && cartItems > 0 && (
+                                    <span
+                                        aria-label={`${cartItems} item${cartItems === 1 ? "" : "s"} in your carts`}
+                                        className="absolute -right-2 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-[999px] bg-primary px-1 text-[10px] font-bold text-on-primary ring-2 ring-surface-container-lowest"
+                                    >
+                                        {cartItems > 99 ? "99+" : cartItems}
                                     </span>
                                 )}
                             </span>

@@ -92,7 +92,7 @@ class CrossRoleShipmentTest extends TestCase
 
     private function userWithRole(string $role, ?int $storeId): User
     {
-        $user = User::factory()->create(['role' => $role, 'store_id' => $storeId]);
+        $user = User::factory()->create(['role' => $role, 'store_id' => $storeId, 'is_driver' => $role === 'delivery']);
         $user->assignRole($role);
 
         return $user;

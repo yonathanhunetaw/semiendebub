@@ -71,7 +71,7 @@ class ShipmentFleetTest extends TestCase
 
     private function user(string $role, ?int $storeId): User
     {
-        $user = User::factory()->create(['role' => $role, 'store_id' => $storeId]);
+        $user = User::factory()->create(['role' => $role, 'store_id' => $storeId, 'is_driver' => $role === 'delivery']);
         $user->assignRole($role);
 
         return $user;
@@ -128,6 +128,21 @@ class ShipmentFleetTest extends TestCase
 
         $this->assertTrue($this->workflow->isVisibleTo($shipment, $this->offered));
         $this->assertTrue($this->workflow->isVisibleTo($shipment, $this->other));
+    }
+
+    #[Test]
+    public function a_courier_who_is_not_a_driver_never_gets_freight(): void
+    {
+        $walker = $this->user('delivery', null);
+        $walker->forceFill(['is_driver' => false])->save();
+        $shipment = $this->openRun();
+
+        $this->assertFalse($this->workflow->isVisibleTo($shipment, $walker));
+        $this->assertNotContains('fleet', $this->workflow->partiesFor($shipment, $walker));
+        $this->assertFalse($this->workflow->claim($shipment->forceFill(['status' => ShipmentWorkflowService::DISPATCHED]), $walker));
+        $this->assertNotContains($walker->id, array_column($this->workflow->courierOptions(driversOnly: true), 'id'));
+        // Still offered for customer deliveries.
+        $this->assertContains($walker->id, array_column($this->workflow->courierOptions(), 'id'));
     }
 
     #[Test]

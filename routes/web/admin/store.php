@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\Store\StockPoolController;
 use App\Http\Controllers\Admin\Store\StoreController;
 use Illuminate\Support\Facades\Route;
 
@@ -41,9 +42,17 @@ Route::domain("admin.{$baseDomain}")
         Route::patch('store-variants/{storeVariant}', [StoreController::class, 'updateVariant'])
             ->name('store-variant.update');
 
+        // Units kept for Business customers; the rest is the Individual pool.
+        Route::patch('store-variants/{storeVariant}/business-pool', [StockPoolController::class, 'update'])
+            ->name('store-variant.business-pool');
+
         // Customer-price upsert / delete
         Route::post('store-variants/{storeVariant}/customer-prices', [StoreController::class, 'upsertCustomerPrice'])
             ->name('store-variant.customer-price.upsert');
+
+        // One price for many customers at once.
+        Route::post('store-variants/{storeVariant}/customer-prices/bulk', [\App\Http\Controllers\Admin\CustomerPriceController::class, 'bulk'])
+            ->name('store-variant.customer-price.bulk');
 
         Route::delete('store-variant-customer-prices/{price}', [StoreController::class, 'destroyCustomerPrice'])
             ->name('store-variant.customer-price.destroy');

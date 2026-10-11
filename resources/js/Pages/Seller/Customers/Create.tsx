@@ -5,7 +5,7 @@ import { Box, Button, MenuItem, Stack, TextField } from "@mui/material";
 import React from "react";
 
 export default function Create() {
-    const { data, setData, post, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, transform } = useForm({
         first_name: "",
         last_name: "",
         email: "",
@@ -40,6 +40,9 @@ export default function Create() {
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        // The type travels with the form so the server can insist on a TIN
+        // for an individual instead of quietly saving a business.
+        transform((form) => ({ ...form, customer_type: customerType }));
         post(route("seller.customers.store"));
     };
 

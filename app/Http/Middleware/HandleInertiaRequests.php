@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Seller\Cart;
 use App\Services\Admin\ActiveStore;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -84,10 +85,18 @@ class HandleInertiaRequests extends Middleware
                     'store_id' => $request->user()->store_id,
                 ] : null,
             ],
-            // The seller bottom nav badges its Carts tab with the open carts.
+            // The seller bottom nav badges its Carts tab with how many items
+            // sit in the seller's open carts (not how many carts there are).
             // Lazy, and null for every other role, so nobody else pays the query.
             'seller' => fn () => $request->user()?->roleKey() === 'seller'
-                ? ['open_carts' => Cart::where('seller_id', $request->user()->id)->where('status', 'open')->count()]
+                ? [
+                    'open_carts' => Cart::where('seller_id', $request->user()->id)->where('status', 'open')->count(),
+                    'cart_items' => (int) DB::table('cart_items')
+                        ->join('carts', 'carts.id', '=', 'cart_items.cart_id')
+                        ->where('carts.seller_id', $request->user()->id)
+                        ->where('carts.status', 'open')
+                        ->sum('cart_items.quantity'),
+                ]
                 : null,
             // The admin app's store scope (sidebar dropdown, zones). Lazy:
             // share() runs before the route's ResolveActiveStore middleware,
@@ -100,6 +109,9 @@ class HandleInertiaRequests extends Middleware
             'adminNav' => fn () => app(ActiveStore::class)->isResolved() && $request->user()?->isRole('admin')
                 ? ['counts' => app(\App\Services\Admin\AdminNavCounts::class)->counts()]
                 : null,
+            // The top bar's bell: what this user has to do next (TaskInbox).
+            // Lazy and recomputed per visit, so a done task drops off.
+            'tasks' => fn () => $request->user() ? app(\App\Services\Tasks\TaskInbox::class)->for($request->user()) : [],
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

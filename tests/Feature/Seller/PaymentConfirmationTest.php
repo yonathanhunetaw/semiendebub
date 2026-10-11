@@ -22,9 +22,10 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * Splitting an order's total across the store's accounts and cash, and the
- * owner of each account confirming the money arrived before the order moves
- * on to Pick & Pack.
+ * Splitting an order's total across the store's accounts and cash, and a
+ * second person confirming every money part before the order moves on to
+ * Pick & Pack: the account's owner for a deposit, a store manager or admin
+ * for cash. Whoever marked a part paid never confirms it.
  */
 class PaymentConfirmationTest extends TestCase
 {
@@ -85,11 +86,49 @@ class PaymentConfirmationTest extends TestCase
 
         $sale = Sale::query()->sole();
         $this->assertSame(Sale::STAGE_AWAITING_PAYMENT, $sale->fulfillment_stage);
-        $this->assertSame('partially_paid', $sale->payment_status, 'The cash part is in hand.');
+        $this->assertSame('unpaid', $sale->payment_status, 'Cash counts once a manager confirms it.');
         $this->assertSame(
-            [Payment::STATUS_PENDING, Payment::STATUS_PENDING, Payment::STATUS_PENDING, Payment::STATUS_CONFIRMED],
+            [Payment::STATUS_PENDING, Payment::STATUS_PENDING, Payment::STATUS_PENDING, Payment::STATUS_CLAIMED],
             $sale->payments()->orderBy('id')->pluck('status')->all(),
         );
+    }
+
+    #[Test]
+    public function the_owner_sees_an_expected_deposit_and_may_confirm_it_before_anyone_marks_it_paid(): void
+    {
+        $this->place(4, [['payment_account_id' => $this->cbeOne->id, 'amount' => 1000]]);
+        $sale = Sale::query()->sole();
+        $part = $sale->payments()->sole();
+
+        $this->asOwner()->get(route('seller.payments.inbox'))
+            ->assertInertia(fn ($page) => $page
+                ->where('payments', [])
+                ->where('expected.0.id', $part->id)
+                ->where('expected.0.expected', true));
+
+        // The seller who recorded it is not the second person.
+        $this->asSeller()->post(route('seller.payments.confirm', $part))->assertForbidden();
+
+        $this->asOwner()->post(route('seller.payments.confirm', $part))->assertSessionHas('success');
+
+        $this->assertSame(Payment::STATUS_CONFIRMED, $part->fresh()->status);
+        $this->assertSame([Sale::STAGE_PICK_PACK, 'paid'], [$sale->fresh()->fulfillment_stage, $sale->fresh()->payment_status]);
+    }
+
+    #[Test]
+    public function an_owner_who_recorded_the_part_into_their_own_account_cannot_confirm_it_early(): void
+    {
+        $cart = $this->cart(4);
+        $cart->update(['seller_id' => $this->owner->id, 'user_id' => $this->owner->id]);
+        $this->asOwner()->post(route('seller.orders.store'), [
+            'cart_id' => $cart->id,
+            'parts' => [['payment_account_id' => $this->cbeOne->id, 'amount' => 1000]],
+        ])->assertSessionHasNoErrors();
+        $part = Payment::query()->sole();
+
+        $this->asOwner()->get(route('seller.payments.inbox'))->assertInertia(fn ($page) => $page->where('expected', []));
+        $this->asOwner()->post(route('seller.payments.confirm', $part))->assertSessionHas('error');
+        $this->assertSame(Payment::STATUS_PENDING, $part->fresh()->status);
     }
 
     #[Test]
@@ -192,7 +231,7 @@ class PaymentConfirmationTest extends TestCase
     }
 
     #[Test]
-    public function the_owner_may_be_the_seller_who_made_the_sale(): void
+    public function an_owner_who_marked_their_own_deposit_paid_needs_a_manager_to_confirm_it(): void
     {
         $mine = $this->account('awash', PaymentAccount::TYPE_BANK, '555', ['owner_user_id' => $this->seller->id]);
 
@@ -201,18 +240,81 @@ class PaymentConfirmationTest extends TestCase
         $part = $sale->payments()->sole();
 
         $this->claim($sale, $part);
-        $this->asSeller()->post(route('seller.payments.confirm', $part))->assertSessionHas('success');
+        $this->asSeller()->post(route('seller.payments.confirm', $part))->assertForbidden();
+        $this->assertSame(Sale::STAGE_AWAITING_PAYMENT, $sale->fresh()->fulfillment_stage);
+
+        $manager = $this->manager();
+        $this->as($manager)->get(route('seller.payments.inbox'))
+            ->assertInertia(fn ($page) => $page->where('payments', fn ($rows) => count($rows) === 1));
+        $this->as($manager)->post(route('seller.payments.confirm', $part))->assertSessionHas('success');
 
         $this->assertSame(Sale::STAGE_PICK_PACK, $sale->fresh()->fulfillment_stage);
+        $this->assertSame($manager->id, (int) $part->fresh()->confirmed_by);
     }
 
     #[Test]
-    public function a_part_cannot_be_confirmed_before_the_customer_says_they_paid(): void
+    public function cash_waits_for_a_store_manager_never_the_seller_who_took_it(): void
+    {
+        $this->place(1, [['amount' => 250]]);
+        $sale = Sale::query()->sole();
+        $cash = $sale->payments()->sole();
+
+        $this->assertSame([Payment::STATUS_CLAIMED, $this->seller->id], [$cash->status, (int) $cash->claimed_by]);
+        $this->assertSame(Sale::STAGE_AWAITING_PAYMENT, $sale->fulfillment_stage, 'One person is not enough.');
+
+        // Not the seller, and not another plain seller.
+        $this->asSeller()->post(route('seller.payments.confirm', $cash))->assertForbidden();
+        $this->asOwner()->post(route('seller.payments.confirm', $cash))->assertForbidden();
+
+        // Another store's manager cannot either.
+        $elsewhere = $this->manager(Store::factory()->create(['type' => Store::TYPE_RETAIL])->id);
+        $this->as($elsewhere)->post(route('seller.payments.confirm', $cash))->assertForbidden();
+
+        $manager = $this->manager();
+        $this->as($manager)->post(route('seller.payments.confirm', $cash))->assertSessionHas('success');
+
+        $this->assertSame(Sale::STAGE_PICK_PACK, $sale->fresh()->fulfillment_stage);
+        // The cash is in the seller's hand, so it is on the seller's balance.
+        $this->assertSame(25000, app(\App\Services\Finance\BalanceLedger::class)->heldCents((int) $this->seller->id));
+        $this->assertSame(0, app(\App\Services\Finance\BalanceLedger::class)->heldCents((int) $manager->id));
+    }
+
+    #[Test]
+    public function a_manager_who_took_the_cash_still_needs_someone_else(): void
+    {
+        $manager = $this->manager();
+        $this->seller = $manager;
+
+        $this->place(1, [['amount' => 250]]);
+        $cash = Payment::query()->sole();
+
+        $this->as($manager)->post(route('seller.payments.confirm', $cash))->assertForbidden();
+        $this->as($this->manager())->post(route('seller.payments.confirm', $cash))->assertSessionHas('success');
+    }
+
+    #[Test]
+    public function the_bell_lists_what_the_user_has_to_confirm(): void
+    {
+        $this->place(1, [['amount' => 250]]);
+
+        $this->as($this->manager())->get(route('seller.payments.inbox'))
+            ->assertInertia(fn ($page) => $page->where('tasks', fn ($tasks) => collect($tasks)->contains(
+                fn ($task) => $task['id'] === 'confirm-cash' && $task['count'] === 1,
+            )));
+        $this->asSeller()->get(route('seller.payments.inbox'))
+            ->assertInertia(fn ($page) => $page->where('tasks', fn ($tasks) => ! collect($tasks)->contains(
+                fn ($task) => $task['id'] === 'confirm-cash',
+            )));
+    }
+
+    #[Test]
+    public function only_the_accounts_owner_may_confirm_a_part_before_the_customer_says_they_paid(): void
     {
         $this->place(1, [['payment_account_id' => $this->cbeOne->id, 'amount' => 250]]);
         $part = Payment::query()->sole();
 
-        $this->asOwner()->post(route('seller.payments.confirm', $part))->assertSessionHas('error');
+        // A manager stands in only once someone marked it paid.
+        $this->as($this->manager())->post(route('seller.payments.confirm', $part))->assertForbidden();
         $this->assertSame(Payment::STATUS_PENDING, $part->fresh()->status);
     }
 
@@ -269,8 +371,9 @@ class PaymentConfirmationTest extends TestCase
 
         $this->asSeller()->post(route('seller.orders.cancel', ['reference' => $sale->reference_number]))->assertSessionHasNoErrors();
 
+        // No manager confirmed the cash, so it goes back to the customer too.
         $this->assertSame(
-            [Payment::STATUS_VOID, Payment::STATUS_CONFIRMED],
+            [Payment::STATUS_VOID, Payment::STATUS_VOID],
             $sale->payments()->orderBy('id')->pluck('status')->all(),
         );
     }
@@ -355,6 +458,23 @@ class PaymentConfirmationTest extends TestCase
     {
         $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
         $this->actingAs($this->seller, 'web');
+
+        return $this;
+    }
+
+    private function manager(?int $storeId = null): User
+    {
+        Role::firstOrCreate(['name' => 'store_manager']);
+        $user = User::factory()->create(['role' => 'store_manager', 'store_id' => $storeId ?? $this->store->id]);
+        $user->assignRole('store_manager');
+
+        return $user->refresh();
+    }
+
+    private function as(User $user): self
+    {
+        $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
+        $this->actingAs($user, 'web');
 
         return $this;
     }

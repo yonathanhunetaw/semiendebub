@@ -14,6 +14,7 @@ import React from "react";
 
 import { SELLER_CITY_OPTIONS } from "./sellerConstants";
 import { FONT_SANS } from "@/theme";
+import NotificationsBell from "@/Components/Navigation/Admin/NotificationsBell";
 
 // Colors come from the theme tokens (MUI palette / rgb(var(--token))), not constants.
 export { SELLER_CITY_OPTIONS };
@@ -90,19 +91,19 @@ export function SellerHeader({
                         ) : null}
                     </Box>
 
-                    {action ? (
-                        <Box
-                            sx={{
-                                minWidth: 40,
-                                display: "flex",
-                                justifyContent: "flex-end",
-                            }}
-                        >
-                            {action}
-                        </Box>
-                    ) : (
-                        <Box sx={{ width: 40, height: 40, flexShrink: 0 }} />
-                    )}
+                    {/* The user's to-do bell sits on every seller page. */}
+                    <Box
+                        sx={{
+                            minWidth: 40,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-end",
+                            gap: 0.75,
+                        }}
+                    >
+                        <NotificationsBell buttonSx={sellerHeaderButtonSx} />
+                        {action}
+                    </Box>
                 </Stack>
 
                 {children}

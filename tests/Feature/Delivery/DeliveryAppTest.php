@@ -65,7 +65,7 @@ class DeliveryAppTest extends TestCase
 
     private function user(string $role, ?int $storeId = null, array $overrides = []): User
     {
-        $user = User::factory()->create(['role' => $role, 'store_id' => $storeId] + $overrides);
+        $user = User::factory()->create(['role' => $role, 'store_id' => $storeId, 'is_driver' => $role === 'delivery'] + $overrides);
         $user->assignRole($role);
 
         return $user->refresh();

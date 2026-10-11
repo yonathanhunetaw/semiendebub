@@ -25,7 +25,8 @@ class AssignShipmentFleetRequest extends FormRequest
         return [
             'vehicle_id' => ['nullable', 'integer', 'exists:vehicles,id'],
             'courier_ids' => ['nullable', 'array', 'max:50'],
-            'courier_ids.*' => ['integer', 'exists:users,id'],
+            // Freight is offered to drivers only.
+            'courier_ids.*' => ['integer', \Illuminate\Validation\Rule::exists('users', 'id')->where('is_driver', true)],
         ];
     }
 

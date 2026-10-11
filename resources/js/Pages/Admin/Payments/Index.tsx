@@ -14,6 +14,7 @@ import {
     Typography,
 } from "@mui/material";
 import React from "react";
+import { dayDateTime } from "@/utils/dates";
 
 interface PaymentRow {
     id: number;
@@ -100,7 +101,7 @@ export default function PaymentsIndex({ payments = [], today = [], methods = [],
                         <TableBody>
                             {payments.map((p) => (
                                 <TableRow key={p.id} hover>
-                                    <TableCell>{p.paid_at ? new Date(p.paid_at).toLocaleString() : "—"}</TableCell>
+                                    <TableCell>{dayDateTime(p.paid_at)}</TableCell>
                                     <TableCell>
                                         {p.order ? (
                                             <Button size="small" onClick={() => router.visit(route("admin.orders.custody", { reference: p.order as string }))}>

@@ -28,6 +28,7 @@ import {
     SectionTitle,
     StatTile,
     TRANSITION_LABELS,
+    transitionLabel,
 } from "@/Components/Delivery/deliveryUi";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
 import type {
@@ -228,7 +229,7 @@ export default function Runs({
                                                         }
                                                         onClick={() => advance(run, status)}
                                                     >
-                                                        {TRANSITION_LABELS[status]}
+                                                        {transitionLabel(run, status)}
                                                     </Button>
                                                 ))}
                                         </Stack>

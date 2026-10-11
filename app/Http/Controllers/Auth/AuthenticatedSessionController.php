@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -199,7 +198,7 @@ class AuthenticatedSessionController extends Controller
     /**
      * Destroy an authenticated session.
      */
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request): \Symfony\Component\HttpFoundation\Response
     {
         Auth::guard('web')->logout();
 
@@ -207,11 +206,29 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
-        // Leave the role subdomain behind. A bare redirect('/') resolved
-        // against the current host, so logging out of delivery.duka.test
-        // dropped the user back on delivery.duka.test — still inside a
-        // workspace they no longer have a session for.
-        return redirect()->away($this->mainLandingUrl($request));
+        // Sign-out lands on the login page of the app the user signed out
+        // of (seller.…/login), or the main landing off a role subdomain. A
+        // bare redirect('/') stayed inside a workspace they no longer have a
+        // session for. Inertia::location makes it a full-page visit: an
+        // Inertia request cannot follow a plain redirect to another host,
+        // so sign-out used to look like it did nothing.
+        return Inertia::location($this->signedOutUrl($request));
+    }
+
+    /** The current role app's /login, or the main domain's root. */
+    private function signedOutUrl(Request $request): string
+    {
+        $baseDomain = (string) config('app.system_domain', config('subdomains.base_domain', 'duka.local'));
+        $host = $request->getHost();
+
+        if ($host === $baseDomain || ! str_ends_with($host, '.'.$baseDomain)) {
+            return $this->mainLandingUrl($request);
+        }
+
+        $port = $request->getPort();
+        $portSuffix = ($port && ! in_array($port, [80, 443], true)) ? ":{$port}" : '';
+
+        return ($request->isSecure() ? 'https://' : 'http://').$host.$portSuffix.'/login';
     }
 
     /**

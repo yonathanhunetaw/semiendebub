@@ -28,7 +28,11 @@ trait CustomerRules
             'email' => ['required', 'email', 'max:255', $unique('email')],
             'phone_number' => ['required', 'string', 'max:20', $unique('phone_number')],
             'city' => ['nullable', 'string', 'max:255'],
-            'tin_number' => ['nullable', 'string', 'max:10', $unique('tin_number')],
+            // The form's choice. An individual needs the TIN that makes them
+            // one: without this an "individual" with a blank TIN was saved as
+            // a business and priced as one.
+            'customer_type' => ['nullable', 'in:individual,business'],
+            'tin_number' => ['nullable', 'required_if:customer_type,individual', 'string', 'max:10', $unique('tin_number')],
         ];
     }
 
@@ -36,6 +40,13 @@ trait CustomerRules
     public function customerData(): array
     {
         $data = $this->validated();
+        $type = $data['customer_type'] ?? null;
+        unset($data['customer_type']);
+
+        // A business holds no TIN in this app (see the trait doc).
+        if ($type === 'business') {
+            $data['tin_number'] = null;
+        }
 
         if (! empty($data['city'])) {
             $data['city'] = Str::title($data['city']);
@@ -43,7 +54,7 @@ trait CustomerRules
 
         // Only when the form sent the field, so an update that omits it does
         // not silently turn an individual into a business.
-        if ($this->has('tin_number')) {
+        if ($this->has('tin_number') && $type !== 'business') {
             $tin = trim((string) ($data['tin_number'] ?? ''));
             $data['tin_number'] = $tin === '' ? null : $tin;
         }

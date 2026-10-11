@@ -1,3 +1,4 @@
+import NotificationsBell from "@/Components/Navigation/Admin/NotificationsBell";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { ABOVE_NAV } from "@/Data/sellerOrderFlow";
 import { Head, Link, router } from "@inertiajs/react";
@@ -24,6 +25,7 @@ interface CartLine {
     sku: string | null;
     name: string;
     variant_label: string | null;
+    variant?: { color: string | null; size: string | null; packaging: string | null; pack_quantity: number | null };
     image: string;
     quantity: number;
     price: number;
@@ -42,6 +44,8 @@ interface CartSummary {
     line_count: number;
     total: number;
     lines: CartLine[];
+    /** Its seller, a store manager or an admin may delete it. */
+    can_delete?: boolean;
 }
 
 interface Props {
@@ -78,7 +82,83 @@ const birr = (amount: number) =>
 const cartLabel = (cart: CartSummary) =>
     cart.customer?.name ? `${cart.customer.name}'s cart` : `Cart #${cart.id}`;
 
+/**
+ * Which variant a line is, spelled out: colour, size and pack each on their
+ * own chip, so two lines of the same product cannot be mistaken.
+ */
+function VariantChips({ line }: { line: CartLine }) {
+    const parts = [
+        line.variant?.color ? { icon: "palette", label: line.variant.color } : null,
+        line.variant?.size ? { icon: "straighten", label: line.variant.size } : null,
+        line.variant?.packaging
+            ? {
+                  icon: "inventory_2",
+                  label:
+                      line.variant.pack_quantity && line.variant.pack_quantity > 1
+                          ? `${line.variant.packaging} of ${line.variant.pack_quantity}`
+                          : line.variant.packaging,
+              }
+            : null,
+    ].filter((part): part is { icon: string; label: string } => part !== null);
+
+    if (parts.length === 0) {
+        return line.variant_label ? (
+            <p className="mt-1 text-[11px] font-semibold text-primary">{line.variant_label}</p>
+        ) : (
+            <p className="mt-1 text-[11px] text-outline">Standard</p>
+        );
+    }
+
+    return (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+            {parts.map((part) => (
+                <span
+                    key={part.icon}
+                    className="inline-flex items-center gap-0.5 rounded-[6px] border border-primary/30 bg-primary-container/40 px-1.5 py-0.5 text-[11px] font-semibold text-on-surface"
+                >
+                    <span className="material-symbols-outlined text-[13px] text-primary">{part.icon}</span>
+                    {part.label}
+                </span>
+            ))}
+        </div>
+    );
+}
+
 /** Circular select control from the reference design. */
+/**
+ * Delete a cart: the first tap arms it, a second tap within a few seconds
+ * deletes it, so a stray tap never throws a cart away.
+ */
+function DeleteCartButton({ cart, compact = false }: { cart: CartSummary; compact?: boolean }) {
+    const [armed, setArmed] = useState(false);
+
+    useEffect(() => {
+        if (!armed) return undefined;
+        const timer = window.setTimeout(() => setArmed(false), 4000);
+        return () => window.clearTimeout(timer);
+    }, [armed]);
+
+    if (!cart.can_delete) return null;
+
+    return (
+        <button
+            type="button"
+            onClick={() =>
+                armed
+                    ? router.delete(route("seller.carts.destroy", cart.id), { preserveScroll: true })
+                    : setArmed(true)
+            }
+            aria-label={armed ? `Confirm deleting ${cartLabel(cart)}` : `Delete ${cartLabel(cart)}`}
+            className={`flex shrink-0 items-center gap-0.5 rounded-[999px] border font-bold transition-colors ${
+                armed ? "border-error bg-error text-on-error" : "border-outline-variant text-on-surface-variant"
+            } ${compact ? "px-1.5 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]"}`}
+        >
+            <span className={`material-symbols-outlined ${compact ? "text-[13px]" : "text-[15px]"}`}>delete</span>
+            {armed ? "Tap to delete" : compact ? null : "Delete cart"}
+        </button>
+    );
+}
+
 function SelectDot({ checked, onClick, className = "" }: {
     checked: boolean;
     onClick: () => void;
@@ -234,6 +314,8 @@ export default function CartsIndex({ carts = [], home_store, focus_cart = null }
                                 </div>
                             ) : null}
 
+                            <NotificationsBell />
+
                             {/* Other carts */}
                             <button
                                 type="button"
@@ -344,6 +426,8 @@ export default function CartsIndex({ carts = [], home_store, focus_cart = null }
                                                     </span>
                                                 </button>
 
+                                                <DeleteCartButton cart={cart} compact />
+
                                                 {/* Manual reordering only makes sense in manual mode. */}
                                                 {sortMode === "manual" ? (
                                                     <span className="flex shrink-0 flex-col">
@@ -420,6 +504,7 @@ export default function CartsIndex({ carts = [], home_store, focus_cart = null }
                                     {active.customer?.type === "business" ? " · Business" : ""}
                                 </p>
                             </div>
+                            <DeleteCartButton key={active.id} cart={active} />
                         </div>
 
                         {groups.map(([key, lines], groupIndex) => {
@@ -511,13 +596,7 @@ export default function CartsIndex({ carts = [], home_store, focus_cart = null }
                                                         {line.name}
                                                     </p>
 
-                                                    {line.variant_label ? (
-                                                        <div className="mt-1 inline-flex items-center space-x-1 rounded border border-outline-variant/80 bg-surface-container-low px-1.5 py-0.5">
-                                                            <span className="text-[11px] font-normal text-on-surface-variant">
-                                                                {line.variant_label}
-                                                            </span>
-                                                        </div>
-                                                    ) : null}
+                                                    <VariantChips line={line} />
 
                                                     <div className="mt-2 flex items-center justify-between">
                                                         <div className="flex items-baseline space-x-1.5">

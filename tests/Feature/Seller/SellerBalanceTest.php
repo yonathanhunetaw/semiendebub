@@ -245,9 +245,23 @@ class SellerBalanceTest extends TestCase
             $this->as($part->account->owner)->post(route('seller.payments.confirm', $part));
         }
 
+        // Cash the seller took waits for a store manager: the second person.
+        foreach ($sale->payments()->where('status', Payment::STATUS_CLAIMED)->whereNull('payment_account_id')->get() as $cash) {
+            $this->as($this->storeManager())->post(route('seller.payments.confirm', $cash))->assertSessionHas('success');
+        }
+
         $this->assertSame(Sale::STAGE_PICK_PACK, $sale->fresh()->fulfillment_stage);
 
         return $sale;
+    }
+
+    private function storeManager(): User
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'store_manager']);
+        $user = User::factory()->create(['role' => 'store_manager', 'store_id' => $this->store->id]);
+        $user->assignRole('store_manager');
+
+        return $user->refresh();
     }
 
     private function account(string $provider, User $owner, string $purpose): PaymentAccount

@@ -65,6 +65,9 @@ class OrderController extends Controller
         return Inertia::render('Seller/Orders/PickPack', [
             'reference' => $reference,
             'plan' => $this->sourcing->pickPackPlan($sale),
+            // The other paid orders waiting at this store, oldest first, so
+            // the picker can see the queue and step through it.
+            'queue' => $this->queue((int) $sale->store_id, (int) $sale->id),
         ]);
     }
 
@@ -94,8 +97,39 @@ class OrderController extends Controller
             return back()->withErrors(['lines' => $exception->getMessage()]);
         }
 
-        return redirect()
-            ->to(route('seller.orders.index').'?tab=paid')
-            ->with('success', "Order {$sale->reference_number} sourced and moved to delivery.");
+        // Straight on to the next order waiting to be picked, if any.
+        $next = $this->queue((int) $sale->store_id, (int) $sale->id)[0] ?? null;
+
+        return $next !== null
+            ? redirect()->route('seller.orders.pickpack', ['reference' => $next['reference']])
+                ->with('success', "Order {$sale->reference_number} packed and handed to delivery. Next up: {$next['reference']}.")
+            : redirect()->to(route('seller.orders.index').'?tab=to_deliver')
+                ->with('success', "Order {$sale->reference_number} packed and handed to delivery. Nothing else waiting to pick.");
+    }
+
+    /**
+     * Paid orders waiting to be picked at a store, oldest payment first.
+     *
+     * @return array<int, array{reference: string, customer: string, lines: int, paid_at: string|null}>
+     */
+    private function queue(int $storeId, int $exceptId): array
+    {
+        return Sale::query()
+            ->forStore($storeId)
+            ->awaitingSourcing()
+            ->whereKeyNot($exceptId)
+            ->with('customer')
+            ->withCount('items')
+            ->orderBy('updated_at')
+            ->limit(20)
+            ->get()
+            ->map(fn (Sale $sale): array => [
+                'reference' => (string) $sale->reference_number,
+                'customer' => $sale->customer?->name ?? 'Walk-in',
+                'lines' => (int) $sale->items_count,
+                'paid_at' => $sale->updated_at?->toIso8601String(),
+            ])
+            ->values()
+            ->all();
     }
 }

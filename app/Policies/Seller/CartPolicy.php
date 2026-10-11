@@ -33,8 +33,23 @@ class CartPolicy
         return $this->view($user, $cart); // Same logic for editing
     }
 
+    /**
+     * Only an open cart (one that never became an order) is deleted, by the
+     * seller who raised or holds it, a store manager of its store, or an
+     * admin.
+     */
     public function delete(User $user, Cart $cart): bool
     {
-        return $user->hasRole('admin') || $user->store_id === $cart->store_id;
+        if ($cart->status !== 'open') {
+            return false;
+        }
+
+        if ($user->hasRole('admin')) {
+            return true;
+        }
+
+        $own = (int) $cart->seller_id === (int) $user->id || (int) $cart->user_id === (int) $user->id;
+
+        return (int) $user->store_id === (int) $cart->store_id && ($own || $user->hasRole('store_manager'));
     }
 }

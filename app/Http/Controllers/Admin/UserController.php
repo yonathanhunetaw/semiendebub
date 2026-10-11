@@ -63,7 +63,11 @@ class UserController extends Controller
             'role' => ['required', 'string', \Illuminate\Validation\Rule::in($this->roleNames())],
             'store_id' => 'nullable|integer|exists:stores,id',
             'password' => 'required|string|min:8|confirmed',
+            'is_driver' => 'nullable|boolean',
         ]);
+
+        // Only a courier can be a driver (the one who may carry freight).
+        $validatedData['is_driver'] = $validatedData['role'] === 'delivery' && (bool) ($validatedData['is_driver'] ?? false);
 
         $validatedData['created_by'] = auth()->id();
         $validatedData['store_id'] = $this->storeFor($validatedData['store_id'] ?? null);
@@ -101,6 +105,7 @@ class UserController extends Controller
             // Keeper"), which matches no option and failed validation on save.
             'user' => $user->only(['id', 'first_name', 'last_name', 'email', 'phone_number', 'store_id']) + [
                 'role' => $user->roleKey(),
+                'is_driver' => (bool) $user->is_driver,
             ],
         ]);
     }
@@ -122,7 +127,10 @@ class UserController extends Controller
             'email' => 'required|email|unique:users,email,'.$user->id,
             'role' => ['required', 'string', \Illuminate\Validation\Rule::in($this->roleNames())],
             'store_id' => 'nullable|integer|exists:stores,id',
+            'is_driver' => 'nullable|boolean',
         ]);
+
+        $validatedData['is_driver'] = $validatedData['role'] === 'delivery' && (bool) ($validatedData['is_driver'] ?? false);
 
         if ($request->filled('password')) {
             $validatedData['password'] = $request->validate([

@@ -151,6 +151,36 @@ class SellerCategoryBrowseTest extends TestCase
     }
 
     #[Test]
+    public function the_carts_badge_counts_items_in_open_carts_not_carts(): void
+    {
+        $line = $this->carriedItem('Blue Pen', ItemCategory::factory()->create());
+        foreach ([['open', 3], ['open', 2], ['completed', 5]] as [$status, $quantity]) {
+            $cart = Cart::create(['seller_id' => $this->seller->id, 'store_id' => $this->store->id, 'status' => $status]);
+            $cart->variants()->attach($line->item_variant_id, ['quantity' => $quantity, 'price' => 10, 'store_id' => $this->store->id]);
+        }
+
+        $this->get(route('seller.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('seller.cart_items', 5)->where('seller.open_carts', 2));
+    }
+
+    #[Test]
+    public function a_seller_deletes_their_own_open_cart_but_not_someone_elses(): void
+    {
+        $mine = Cart::create(['seller_id' => $this->seller->id, 'store_id' => $this->store->id, 'status' => 'open']);
+        $colleague = User::factory()->create(['role' => 'seller', 'store_id' => $this->store->id]);
+        $theirs = Cart::create(['seller_id' => $colleague->id, 'user_id' => $colleague->id, 'store_id' => $this->store->id, 'status' => 'open']);
+        $done = Cart::create(['seller_id' => $this->seller->id, 'store_id' => $this->store->id, 'status' => 'completed']);
+
+        $this->delete(route('seller.carts.destroy', $theirs))->assertForbidden();
+        $this->delete(route('seller.carts.destroy', $done))->assertForbidden();
+        $this->delete(route('seller.carts.destroy', $mine))->assertRedirect(route('seller.carts.index'));
+
+        $this->assertDatabaseMissing('carts', ['id' => $mine->id]);
+        $this->assertDatabaseHas('carts', ['id' => $theirs->id]);
+        $this->assertDatabaseHas('carts', ['id' => $done->id]);
+    }
+
+    #[Test]
     public function search_prices_for_the_same_cart_as_the_store_page(): void
     {
         $this->carriedItem('Blue Pen', ItemCategory::factory()->create());
@@ -162,6 +192,19 @@ class SellerCategoryBrowseTest extends TestCase
                 ->where('has_tin_cart', true)
                 ->where('top_cart_is_individual', true)
                 ->where('items.0.product_name', 'Blue Pen'));
+        }
+    }
+
+    #[Test]
+    public function with_no_cart_open_search_and_categories_still_say_vat_is_included(): void
+    {
+        $category = ItemCategory::factory()->create();
+        $this->carriedItem('Blue Pen', $category);
+
+        foreach ([route('seller.items.search', ['search' => 'Blue']), route('seller.categories.show', $category)] as $url) {
+            $this->get($url)->assertInertia(fn (Assert $page) => $page
+                ->where('has_tin_cart', true)
+                ->where('top_cart_is_individual', true));
         }
     }
 

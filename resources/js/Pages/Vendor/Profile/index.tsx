@@ -1,4 +1,4 @@
-import { Head, Link, useForm } from "@inertiajs/react";
+import { Head, router, useForm } from "@inertiajs/react";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import {
     Alert,
@@ -133,11 +133,10 @@ export default function Profile({
                                 <Button type="submit" variant="contained" disabled={processing}>
                                     Save changes
                                 </Button>
+                                {/* Inside the profile form: a submit-type button would save instead. */}
                                 <Button
-                                    component={Link}
-                                    href={route("logout")}
-                                    method="post"
-                                    as="button"
+                                    type="button"
+                                    onClick={() => router.post(route("logout"))}
                                     color="error"
                                     startIcon={<LogoutRoundedIcon />}
                                 >

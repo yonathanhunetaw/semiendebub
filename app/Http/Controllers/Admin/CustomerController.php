@@ -26,7 +26,8 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         $customers = $this->activeStore->apply(Customer::query())
-            ->with(['creator', 'store:id,name'])
+            // Where each customer takes deliveries, saved from checkout.
+            ->with(['creator', 'store:id,name', 'addresses'])
             ->latest()
             ->get();
 

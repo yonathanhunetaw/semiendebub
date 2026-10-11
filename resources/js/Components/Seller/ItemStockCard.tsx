@@ -12,6 +12,10 @@ export interface ItemStockCardProps {
     unitsInPack: number;
     perPiece: number | null;
     perPacket: number | null;
+    /** Free units per customer pool when stock is set aside for Business. */
+    pools?: { business: number; individual: number } | null;
+    /** The open cart's customer pool, highlighted. */
+    pool?: "individual" | "business";
 }
 
 const plural = (count: number, unit: string) => (count === 1 || /s$/i.test(unit) ? unit : `${unit}s`);
@@ -52,7 +56,7 @@ function StockFigure({ icon, label, count, unitName }: { icon: string; label: st
  * the Store Floor, each with its own count. The Remote Hub is only flagged,
  * never counted, because selling from it means asking for a transfer.
  */
-export default function ItemStockCard({ shelfStock, floorStock, inRemoteHub, unitName, unitsInPack, perPiece, perPacket }: ItemStockCardProps) {
+export default function ItemStockCard({ shelfStock, floorStock, inRemoteHub, unitName, unitsInPack, perPiece, perPacket, pools = null, pool }: ItemStockCardProps) {
     return (
         <SellerCard>
             <Stack spacing={1.5}>
@@ -60,6 +64,36 @@ export default function ItemStockCard({ shelfStock, floorStock, inRemoteHub, uni
                     <StockFigure icon="shelves" label="Store Shelf" count={shelfStock} unitName={unitName} />
                     <StockFigure icon="warehouse" label="Store Floor" count={floorStock} unitName={unitName} />
                 </Stack>
+
+                {/* Stock kept for Business customers: each cart sells from its own pool. */}
+                {pools && (
+                    <Stack direction="row" spacing={1}>
+                        {([
+                            { key: "individual", label: "Individual (VAT)", count: pools.individual },
+                            { key: "business", label: "Business", count: pools.business },
+                        ] as const).map((entry) => (
+                            <Box
+                                key={entry.key}
+                                sx={(theme) => ({
+                                    flex: 1,
+                                    px: 1.25,
+                                    py: 0.75,
+                                    borderRadius: 2.5,
+                                    border: 1,
+                                    borderColor: pool === entry.key ? "primary.main" : "divider",
+                                    bgcolor: pool === entry.key ? alpha(theme.palette.primary.main, 0.06) : "transparent",
+                                })}
+                            >
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                    {entry.label} pool{pool === entry.key ? " · this cart" : ""}
+                                </Typography>
+                                <Typography sx={{ fontWeight: 800 }}>
+                                    {entry.count} {plural(entry.count, unitName)}
+                                </Typography>
+                            </Box>
+                        ))}
+                    </Stack>
+                )}
 
                 {inRemoteHub && (
                     <Stack

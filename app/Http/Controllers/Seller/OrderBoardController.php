@@ -66,7 +66,7 @@ class OrderBoardController extends Controller
             'accounts' => $this->payments->accountsFor($this->storeId($request)),
             // The customer's credit, when an admin gave them some.
             'credit' => $cart?->customer ? app(CustomerCreditService::class)->summary($cart->customer) : null,
-        ]);
+        ] + $this->deliveryOptions($cart?->customer_id));
     }
 
     /**
@@ -133,32 +133,18 @@ class OrderBoardController extends Controller
     /**
      * Change where an order goes while its run has not left yet.
      */
-    public function address(UpdateOrderAddressRequest $request, string $reference): RedirectResponse
+    public function address(UpdateOrderAddressRequest $request, string $reference, SellerOrderService $orders): RedirectResponse
     {
         $sale = $this->ownSale($request, $reference);
         $delivery = $sale->delivery;
 
         if ($delivery !== null && $delivery->status !== 'pending') {
-            return back()->with('error', 'The courier already has this order; the address can no longer change.');
+            return back()->with('error', 'The courier already has this order; the delivery can no longer change.');
         }
 
-        $attributes = array_filter([
-            'delivery_address' => $request->validated('delivery_address'),
-            'recipient_name' => $request->validated('recipient_name'),
-            'recipient_phone' => $request->validated('recipient_phone'),
-        ], fn ($value) => $value !== null);
+        $orders->arrange($sale, $request->validated());
 
-        if ($delivery === null) {
-            \App\Models\Fulfillment\Delivery::create($attributes + [
-                'sale_id' => $sale->id,
-                'tracking_number' => 'DEL-'.now()->format('Ymd').'-'.strtoupper(substr(uniqid(), -5)),
-                'status' => 'pending',
-            ]);
-        } else {
-            $delivery->update($attributes);
-        }
-
-        return back()->with('success', "Delivery address for {$reference} updated.");
+        return back()->with('success', "Delivery for {$reference} updated.");
     }
 
     public function cancel(Request $request, string $reference, SellerOrderService $orders): RedirectResponse
@@ -186,7 +172,7 @@ class OrderBoardController extends Controller
             'order' => $this->board->find($reference, $this->storeId($request)),
             'accounts' => $this->payments->accountsFor($this->storeId($request)),
             'credit' => $customer ? app(CustomerCreditService::class)->summary($customer) : null,
-        ]);
+        ] + $this->deliveryOptions($customer?->id));
     }
 
     /**
@@ -292,17 +278,37 @@ class OrderBoardController extends Controller
             'reference' => 'CART-'.$cart->id,
             'customer' => $cart->customer?->name ?? 'Walk-in customer',
             'stage' => 'to_pay',
-            'placed' => now()->format('d M Y, H:i'),
+            'placed' => now()->format('l, M j · H:i'),
             'lines' => $lines,
             'destination' => [
                 'name' => $cart->customer?->name ?? $storeName,
                 'kind' => 'Delivery',
                 'vehicle' => 'Assigned after Pick & Pack',
                 'driver' => '',
-                'address' => (string) ($cart->customer?->address ?? ''),
+                // The customer's most recently used saved address.
+                'address' => (string) ($cart->customer?->addresses()->value('address') ?? ''),
             ],
             'additionalCharges' => 0,
             'shippingFee' => 0,
+        ];
+    }
+
+    /**
+     * Who and what can carry an order, and where this customer has taken
+     * deliveries before.
+     *
+     * @return array<string, mixed>
+     */
+    private function deliveryOptions(?int $customerId): array
+    {
+        return [
+            'couriers' => app(\App\Services\ShipmentWorkflowService::class)->courierOptions(),
+            'vehicles' => \App\Models\Fulfillment\Vehicle::query()->active()->orderBy('name')->get(['id', 'name', 'plate'])
+                ->map(fn ($vehicle): array => ['id' => (int) $vehicle->id, 'name' => (string) $vehicle->name, 'plate' => (string) $vehicle->plate])
+                ->values(),
+            'addresses' => $customerId === null ? [] : \App\Models\Auth\CustomerAddress::query()
+                ->where('customer_id', $customerId)->orderByDesc('last_used_at')->orderByDesc('id')->limit(10)->get()
+                ->map->present()->values(),
         ];
     }
 

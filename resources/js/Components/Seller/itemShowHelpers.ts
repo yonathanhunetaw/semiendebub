@@ -17,6 +17,8 @@ export interface SellerVariantData {
     /** Store Shelf + Store Floor, in this variant's own packaging unit. */
     stock?: number | null;
     shelf_stock?: number | null;
+    /** Business / Individual pools, when stock is set aside for Business. */
+    pools?: { set_aside: number; business: number; individual: number } | null;
     floor_stock?: number | null;
     /** The store's Remote Hub holds some: reaching it is a transfer, so no figure. */
     in_remote_hub?: boolean;

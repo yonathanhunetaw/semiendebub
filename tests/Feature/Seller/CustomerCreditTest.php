@@ -113,6 +113,40 @@ class CustomerCreditTest extends TestCase
     }
 
     #[Test]
+    public function credit_swapped_for_cash_in_pick_and_pack_waits_for_the_money_before_delivery(): void
+    {
+        $sale = $this->creditOrder(2);
+        $total = (float) $sale->total_amount;
+        $shelf = StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_SHELF)->sole();
+        $handOver = fn () => $this->asSeller()->post(route('seller.orders.sourcing.confirm', $sale), [
+            'lines' => $sale->items->map(fn ($item) => [
+                'sale_item_id' => $item->id,
+                'location_type' => StockLocation::class,
+                'location_id' => $shelf->id,
+                'quantity' => $item->quantity,
+            ])->all(),
+        ]);
+
+        // The customer pays cash instead while the order is being picked.
+        $this->asSeller()->put(route('seller.orders.payments.update', $sale->reference_number), [
+            'parts' => [['amount' => $total]],
+        ])->assertSessionHas('success');
+
+        $sale->refresh();
+        $this->assertSame([Sale::STAGE_PICK_PACK, 'unpaid'], [$sale->fulfillment_stage, $sale->payment_status], 'It stays in Pick & pack.');
+        $this->assertSame(0, $this->credit()->outstandingCents($this->customer->id), 'The credit it used is given back.');
+
+        $handOver()->assertSessionHasErrors('lines');
+        $this->assertSame(Sale::STAGE_PICK_PACK, $sale->fresh()->fulfillment_stage, 'Not before the cash is confirmed.');
+
+        $this->confirmCash();
+        $this->assertSame([Sale::STAGE_PICK_PACK, 'paid'], [$sale->fresh()->fulfillment_stage, $sale->fresh()->payment_status]);
+
+        $handOver()->assertSessionHasNoErrors();
+        $this->assertSame(Sale::STAGE_TO_DELIVER, $sale->fresh()->fulfillment_stage);
+    }
+
+    #[Test]
     public function credit_can_be_one_part_of_a_split_and_holds_the_stock_from_the_start(): void
     {
         $cart = $this->cart(8);
@@ -175,7 +209,10 @@ class CustomerCreditTest extends TestCase
         $this->asSeller()->post(route('seller.orders.store'), [
             'cart_id' => $cart->id,
             'parts' => [['amount' => $this->total($cart)]],
-        ])->assertSessionHasNoErrors()->assertRedirectContains('/pick-pack');
+        ])->assertSessionHasNoErrors()->assertRedirectContains('/pay');
+        // Cash moves on once a store manager confirms it.
+        $this->confirmCash();
+        $this->assertSame(Sale::STAGE_PICK_PACK, Sale::query()->latest('id')->firstOrFail()->fulfillment_stage);
 
         $this->asAdmin()->patch(route('admin.credit.override', $this->customer), ['credit_override' => true])->assertSessionHas('success');
 
@@ -194,6 +231,8 @@ class CustomerCreditTest extends TestCase
 
         $this->asSeller()->post(route('seller.customers.repay', $this->customer), ['parts' => [['amount' => 200]]])
             ->assertSessionHas('success');
+        $this->assertSame($owed, $this->credit()->outstandingCents($this->customer->id), 'Not repaid until a manager confirms the cash.');
+        $this->confirmCash();
 
         $this->assertSame($owed - 20000, $this->credit()->outstandingCents($this->customer->id));
         $this->assertSame(20000, app(BalanceLedger::class)->heldCents($this->seller->id));
@@ -256,12 +295,14 @@ class CustomerCreditTest extends TestCase
         $oldOwed = (float) $old->payments()->sum('amount');
 
         $this->asSeller()->post(route('seller.customers.repay', $this->customer), ['parts' => [['amount' => $oldOwed]]]);
+        $this->confirmCash();
 
         $invoices = collect($this->credit()->invoices($this->customer->id))->keyBy('sale_id');
         $this->assertSame(0.0, (float) $invoices[$old->id]['owed']);
         $this->assertTrue($invoices[$new->id]['overdue']);
 
         $this->asSeller()->post(route('seller.customers.repay', $this->customer), ['parts' => [['amount' => (float) $new->payments()->sum('amount')]]]);
+        $this->confirmCash();
         $this->assertFalse($this->credit()->isBlocked($this->customer->fresh()));
     }
 
@@ -381,6 +422,17 @@ class CustomerCreditTest extends TestCase
         $cart->variants()->attach($this->variant->id, ['quantity' => $quantity, 'price' => 100, 'store_id' => $this->store->id]);
 
         return $cart;
+    }
+
+    /** A store manager, the second person, confirms every cash part waiting. */
+    private function confirmCash(): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'store_manager']);
+        $manager = $this->user('store_manager');
+
+        foreach (Payment::query()->where('status', Payment::STATUS_CLAIMED)->whereNull('payment_account_id')->get() as $cash) {
+            $this->as($manager)->post(route('seller.payments.confirm', $cash))->assertSessionHas('success');
+        }
     }
 
     private function credit(): CustomerCreditService

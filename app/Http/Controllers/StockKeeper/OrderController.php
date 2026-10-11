@@ -22,7 +22,9 @@ use RuntimeException;
  *   to_pick         paid and waiting for Pick & Pack. Each line offers the
  *                   places that serve customers — the store's shelf, its floor
  *                   and its Remote Hub — with what each holds, and the nearest
- *                   that covers it preselected.
+ *                   that covers it preselected. The keeper starts picking,
+ *                   ticks each line in hand and marks it packed
+ *                   (PickProgressController, shared with the seller app).
  *   with_delivery   picked: the goods are in Delivery's custody, waiting for
  *                   or riding with a courier.
  *
@@ -51,13 +53,15 @@ class OrderController extends Controller
 
         return Inertia::render('StockKeeper/Orders/index', [
             'orders' => collect($paginator->items())
-                ->map(fn (Sale $sale): array => $this->sourcing->pickPackPlan($sale) + [
-                    'delivery' => $sale->delivery === null ? null : [
-                        'status' => (string) $sale->delivery->status,
-                        'courier' => $sale->delivery->courier_name,
-                        'address' => $sale->delivery->delivery_address,
-                    ],
-                ])
+                ->map(function (Sale $sale): array {
+                    $plan = $this->sourcing->pickPackPlan($sale);
+
+                    if ($plan['delivery'] !== null) {
+                        $plan['delivery']['status'] = (string) $sale->delivery->status;
+                    }
+
+                    return $plan;
+                })
                 ->values()
                 ->all(),
             'tab' => $tab,

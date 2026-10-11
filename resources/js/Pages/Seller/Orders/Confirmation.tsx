@@ -12,6 +12,9 @@ import {
     savings,
     subtotal,
 } from "@/Data/sellerOrderFlow";
+import DeliveryPlanner from "@/Components/Seller/DeliveryPlanner";
+import type { CourierOption, DeliveryPlan, SavedAddress, VehicleOption } from "@/types/delivery-plan";
+import { planIsComplete, planToPayload } from "@/types/delivery-plan";
 import type { CreditSummary, PaymentAccountOption } from "@/types/payments";
 import { Head, Link, router } from "@inertiajs/react";
 import React, { useMemo, useState } from "react";
@@ -29,6 +32,8 @@ import React, { useMemo, useState } from "react";
 
 type PayTab = "now" | "later";
 
+type DeliveryOption = "standard" | "express" | "later" | "custom";
+
 interface Props {
     /** The cart being turned into an order; null when none was chosen. */
     cart_id?: number | null;
@@ -38,9 +43,27 @@ interface Props {
     accounts?: PaymentAccountOption[];
     /** The customer's credit; null for a walk-in or a customer without any. */
     credit?: CreditSummary | null;
+    couriers?: CourierOption[];
+    vehicles?: VehicleOption[];
+    /** The customer's saved delivery addresses, most recent first. */
+    addresses?: SavedAddress[];
 }
 
-export default function Confirmation({ cart_id = null, order = null, accounts = [], credit = null }: Props): React.ReactElement {
+interface DeliveryOptions {
+    couriers: CourierOption[];
+    vehicles: VehicleOption[];
+    addresses: SavedAddress[];
+}
+
+export default function Confirmation({
+    cart_id = null,
+    order = null,
+    accounts = [],
+    credit = null,
+    couriers = [],
+    vehicles = [],
+    addresses = [],
+}: Props): React.ReactElement {
     if (!order || cart_id === null) {
         return (
             <>
@@ -60,7 +83,15 @@ export default function Confirmation({ cart_id = null, order = null, accounts = 
         );
     }
 
-    return <ConfirmationForm cartId={cart_id} order={order} accounts={accounts} credit={credit} />;
+    return (
+        <ConfirmationForm
+            cartId={cart_id}
+            order={order}
+            accounts={accounts}
+            credit={credit}
+            options={{ couriers, vehicles, addresses }}
+        />
+    );
 }
 
 function ConfirmationForm({
@@ -68,36 +99,52 @@ function ConfirmationForm({
     order,
     accounts,
     credit,
+    options,
 }: {
     cartId: number;
     order: SellerOrder;
     accounts: PaymentAccountOption[];
     credit: CreditSummary | null;
+    options: DeliveryOptions;
 }): React.ReactElement {
 
     const [tab, setTab] = useState<PayTab>("now");
     const [legs, setLegs] = useState<PaymentLeg[]>([]);
     const [placed, setPlaced] = useState(false);
-    const [delivery, setDelivery] = useState<"standard" | "express" | "later">("standard");
+    const [delivery, setDelivery] = useState<DeliveryOption>("standard");
+    const [customFee, setCustomFee] = useState("");
 
-    const [address, setAddress] = useState(order.destination.address ?? "");
-    const [recipient, setRecipient] = useState(order.destination.name ?? "");
-    const [phone, setPhone] = useState("");
+    const lastAddress = options.addresses[0] ?? null;
+    const [plan, setPlan] = useState<DeliveryPlan>({
+        method: "courier",
+        driverPhone: "",
+        address: lastAddress?.address ?? order.destination.address ?? "",
+        addressId: lastAddress?.id ?? null,
+        recipient: lastAddress?.recipient_name ?? order.destination.name ?? "",
+        phone: lastAddress?.recipient_phone ?? "",
+        courierId: null,
+        vehicleId: null,
+        plate: "",
+    });
 
     const groups = useMemo(() => groupByFulfillment(order.lines), [order]);
     const total = orderTotal(order);
-    // The delivery fee is quoted when the run is dispatched, not charged here:
-    // adding it to this total would show an amount nobody collects.
-    const deliveryFee = 0;
+    // Standard and express are quoted when the run is dispatched; only a fee
+    // the seller types now is charged, on top of the order.
+    const feeValue = Number(customFee);
+    const feeValid = delivery !== "custom" || (customFee.trim() !== "" && Number.isFinite(feeValue) && feeValue >= 0);
+    const deliveryFee = delivery === "custom" && feeValid ? Math.round(feeValue * 100) / 100 : 0;
     const grandTotal = total + deliveryFee;
     // Lines the store cannot cover today come from a hub: the buyer must accept the wait.
     const needsDelay = order.lines.some((line) => !line.inStore);
 
     const balanced = legsBalanced(legs, grandTotal);
     const creditOk = creditWithinLimit(legs, credit);
-    const canPlace = tab === "later" || (balanced && creditOk);
-    // Cash and credit are settled on the spot; only account parts wait.
-    const settledNow = legs.length > 0 && legs.every((leg) => leg.credit || leg.accountId === null);
+    const planOk = planIsComplete(plan);
+    const canPlace = feeValid && planOk && (tab === "later" || (balanced && creditOk));
+    // Only credit settles on the spot. Every money part needs a second
+    // person: the account owner, or a store manager/admin for cash.
+    const settledNow = legs.length > 0 && legs.every((leg) => leg.credit);
 
     const place = () => {
         setPlaced(true);
@@ -107,16 +154,16 @@ function ConfirmationForm({
             {
                 cart_id: cartId,
                 parts: tab === "now" ? legsToParts(legs) : [],
-                delivery_address: address || null,
-                recipient_name: recipient || null,
-                recipient_phone: phone || null,
+                ...planToPayload(plan),
                 delay_agreed: needsDelay,
+                delivery_option: delivery,
+                delivery_fee: delivery === "custom" ? deliveryFee : null,
             },
             { onFinish: () => setPlaced(false) },
         );
     };
 
-    const cta = tab === "later" ? "Place order (To pay)" : settledNow ? "Place order" : "Place order & request payment";
+    const cta = tab === "later" ? "Place order (To pay)" : settledNow ? "Place order" : "Place order & request confirmation";
 
     return (
         <>
@@ -216,9 +263,10 @@ function ConfirmationForm({
                                                         <p className="truncate text-xs font-medium text-on-surface">
                                                             {line.name}
                                                         </p>
-                                                        <p className="mt-0.5 truncate text-xs text-outline">
-                                                            {line.variant}
-                                                        </p>
+                                                        <span className="mt-1 inline-flex max-w-full items-center gap-0.5 rounded-[6px] border border-primary/30 bg-primary-container/40 px-1.5 py-0.5 text-[11px] font-semibold text-on-surface">
+                                                            <span className="material-symbols-outlined text-[13px] text-primary">sell</span>
+                                                            <span className="truncate">{line.variant}</span>
+                                                        </span>
                                                     </div>
 
                                                     <div className="mt-2 flex items-center justify-between">
@@ -312,39 +360,21 @@ function ConfirmationForm({
                         )}
                     </section>
 
-                    {/* ── Delivery address ── */}
+                    {/* ── Delivery: location, courier, vehicle ── */}
                     <section className="bg-surface-container-lowest p-4 shadow-sm sm:rounded-[12px]">
-                        <div className="mb-2 flex items-center justify-between">
-                            <h2 className="text-base font-bold text-on-surface">Delivery address</h2>
+                        <div className="mb-3 flex items-center justify-between">
+                            <h2 className="text-base font-bold text-on-surface">Delivery</h2>
                             <span className="rounded bg-info-container px-2 py-0.5 text-[10px] font-bold leading-none text-on-info-container">
-                                Carrier delivery
+                                {plan.method === "vehicle" ? "Vehicle dispatch" : plan.method === "later" ? "Add later" : "Carrier delivery"}
                             </span>
                         </div>
-                        <div className="space-y-2">
-                            <input
-                                value={recipient}
-                                onChange={(event) => setRecipient(event.target.value)}
-                                placeholder="Recipient name"
-                                className="w-full rounded-[10px] border border-outline-variant bg-surface-container-low px-3 py-2 text-sm"
-                            />
-                            <input
-                                value={phone}
-                                onChange={(event) => setPhone(event.target.value)}
-                                placeholder="Recipient phone"
-                                inputMode="tel"
-                                className="w-full rounded-[10px] border border-outline-variant bg-surface-container-low px-3 py-2 text-sm"
-                            />
-                            <textarea
-                                value={address}
-                                onChange={(event) => setAddress(event.target.value)}
-                                placeholder="Delivery address (sub-city, woreda, house no.)"
-                                rows={2}
-                                className="w-full rounded-[10px] border border-outline-variant bg-surface-container-low px-3 py-2 text-sm"
-                            />
-                            <p className="text-[11px] text-outline">
-                                A courier is assigned once the order has been picked and packed.
-                            </p>
-                        </div>
+                        <DeliveryPlanner
+                            plan={plan}
+                            onChange={setPlan}
+                            couriers={options.couriers}
+                            vehicles={options.vehicles}
+                            addresses={options.addresses}
+                        />
                     </section>
 
                     {/* ── Delivery fee & schedule ── */}
@@ -368,6 +398,7 @@ function ConfirmationForm({
                                 { id: "standard", label: "Standard delivery", hint: "3 – 5 business days", fee: "Quoted at dispatch" },
                                 { id: "express", label: "Express delivery", hint: "Next-day delivery", fee: "Quoted at dispatch" },
                                 { id: "later", label: "Calculate later", hint: "Confirm destination & slot before paying", fee: "Pending" },
+                                { id: "custom", label: "Custom fee", hint: "Charge an agreed amount now", fee: deliveryFee > 0 ? birr(deliveryFee) : "Enter amount" },
                             ] as const).map((option) => (
                                 <button
                                     key={option.id}
@@ -406,6 +437,26 @@ function ConfirmationForm({
                                     </span>
                                 </button>
                             ))}
+                            {delivery === "custom" ? (
+                                <label className="mt-1 flex items-center gap-2 rounded-[10px] border border-primary/40 bg-primary-container/15 px-2.5 py-2">
+                                    <span className="text-[11px] font-bold text-on-surface">Fee</span>
+                                    <input
+                                        value={customFee}
+                                        onChange={(event) => setCustomFee(event.target.value.replace(/[^0-9.]/g, ""))}
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        autoFocus
+                                        aria-label="Custom delivery fee in birr"
+                                        className="min-w-0 flex-1 rounded-[8px] border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-right font-mono text-sm text-on-surface"
+                                    />
+                                    <span className="text-[11px] font-semibold text-on-surface-variant">ETB</span>
+                                </label>
+                            ) : null}
+                            {delivery === "custom" ? (
+                                <p className="text-[10px] text-on-surface-variant">
+                                    Added to the order total; the payment split must cover it.
+                                </p>
+                            ) : null}
                         </div>
                     </section>
 
@@ -439,7 +490,11 @@ function ConfirmationForm({
                         <div className="flex items-center justify-between text-sm text-on-surface">
                             <span className="font-medium">Delivery</span>
                             <span className="font-bold">
-                                {delivery === "later" ? "Pending" : "Quoted at dispatch"}
+                                {delivery === "custom"
+                                    ? birr(deliveryFee)
+                                    : delivery === "later"
+                                      ? "Pending"
+                                      : "Quoted at dispatch"}
                             </span>
                         </div>
 
@@ -477,7 +532,15 @@ function ConfirmationForm({
                         {cta}
                     </button>
                 </div>
-                {tab === "now" && !balanced ? (
+                {!planOk ? (
+                    <p className="mx-auto mt-1.5 max-w-md text-center text-[10px] text-error">
+                        {plan.method === "vehicle"
+                            ? "Enter the collecting vehicle's plate and driver phone, or choose Add later."
+                            : "Enter the delivery address, or choose Add later."}
+                    </p>
+                ) : !feeValid ? (
+                    <p className="mx-auto mt-1.5 max-w-md text-center text-[10px] text-error">Enter the custom delivery fee.</p>
+                ) : tab === "now" && !balanced ? (
                     <p className="mx-auto mt-1.5 max-w-md text-center text-[10px] text-error">
                         Add payment parts that add up to the total to continue.
                     </p>

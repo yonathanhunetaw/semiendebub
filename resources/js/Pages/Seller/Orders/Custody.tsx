@@ -2,6 +2,7 @@ import SellerLayout from "@/Layouts/SellerLayout";
 import { birr } from "@/Data/sellerOrderFlow";
 import { Head, router } from "@inertiajs/react";
 import React, { useState } from "react";
+import { dayDateTime } from "@/utils/dates";
 
 /** App\Services\Fulfillment\CustodyLog::forSale() */
 interface Place {
@@ -95,7 +96,7 @@ const time = (iso: string | null): string =>
     iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
 
 const dateTime = (iso: string | null): string =>
-    iso ? new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
+    dayDateTime(iso);
 
 const initials = (name: string): string =>
     name
@@ -203,8 +204,15 @@ export default function Custody({ log, backRoute = "seller.orders.index" }: Prop
                             </span>
                         </div>
 
-                        <div className="relative flex items-center justify-between gap-2 px-2 py-2">
-                            <div className="absolute left-8 right-8 top-6 z-0 h-1 rounded-[999px] bg-gradient-to-r from-success via-primary to-primary" />
+                        {/* The line joins the three stops' centres and stops at the last one. */}
+                        <div className="-mx-1 overflow-x-auto scroll-smooth px-1 py-2">
+                        <div className="relative grid min-w-[300px] grid-cols-3">
+                            <div className="absolute left-[16.667%] right-[16.667%] top-[16px] z-0 h-1 rounded-[999px] bg-surface-container" />
+                            <div
+                                className={`absolute left-[16.667%] top-[16px] z-0 h-1 rounded-[999px] bg-gradient-to-r from-success to-primary ${
+                                    log.phase.current >= 3 ? "w-[66.667%]" : log.phase.current === 2 ? "w-[33.333%]" : "w-0"
+                                }`}
+                            />
                             {[1, 2, 3].map((p) => {
                                 const reached = p <= log.phase.current;
                                 const selected = p === phase;
@@ -237,6 +245,7 @@ export default function Custody({ log, backRoute = "seller.orders.index" }: Prop
                                     </button>
                                 );
                             })}
+                        </div>
                         </div>
 
                         <div className="border-t border-outline-variant pt-3">
@@ -375,14 +384,20 @@ export default function Custody({ log, backRoute = "seller.orders.index" }: Prop
                         </div>
 
                         <div className="relative flex flex-col rounded-[16px] border border-outline-variant bg-surface-container-lowest p-3 shadow-sm">
-                            <div className="absolute bottom-7 left-[29px] top-7 z-0 w-0.5 bg-gradient-to-b from-success via-info to-primary" />
                             {log.events.map((event, index) => {
                                 const tone = TONE[event.tone] ?? TONE.slate;
                                 const current = index === log.events.length - 1;
 
                                 return (
-                                    <div key={event.step} className={`relative z-10 flex items-start gap-3.5 ${current ? "" : "pb-5"}`}>
-                                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[999px] shadow-md ring-4 ring-surface-container-lowest ${tone.node}`}>
+                                    <div key={event.step} className={`relative flex items-start gap-3.5 ${current ? "" : "pb-5"}`}>
+                                        {/* Joins this node to the next; the last (e.g. Delivered) has none, so the line ends there. */}
+                                        {!current ? (
+                                            <span
+                                                aria-hidden="true"
+                                                className="absolute -bottom-[18px] left-[17px] top-[18px] z-0 w-0.5 bg-gradient-to-b from-success to-info"
+                                            />
+                                        ) : null}
+                                        <div className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-[999px] shadow-md ring-4 ring-surface-container-lowest ${tone.node}`}>
                                             <span className="material-symbols-outlined text-[18px]">{event.icon}</span>
                                         </div>
                                         <div className={`flex-1 rounded-[12px] border bg-surface-container/70 p-3 ${current ? "border-2 border-primary/20" : "border-outline-variant"}`}>

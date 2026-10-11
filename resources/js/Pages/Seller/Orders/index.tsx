@@ -60,6 +60,10 @@ function useTicker(active: boolean): number {
     return tick;
 }
 
+/** Tick a line in hand (or put it back) without leaving the board. */
+const tickLine = (order: SellerOrder, lineId: number, done: boolean) =>
+    router.post(route("seller.orders.lines.tick", { sale: order.id, item: lineId }), { done }, { preserveScroll: true, preserveState: true });
+
 export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): React.ReactElement {
     /* Hiding is a view filter only; it never deletes an order. */
     const [hidden, setHidden] = useState<number[]>([]);
@@ -104,6 +108,12 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
         return sortNewest ? rows : [...rows].reverse();
     }, [orders, tab, search, sortNewest]);
 
+    // Paid orders not yet handed to delivery, oldest first: the pick queue.
+    const toPick = useMemo(
+        () => [...orders].filter((order) => order.stage === "paid" || order.stage === "packing").reverse(),
+        [orders],
+    );
+
     const tabs: TabSpec[] = TABS.map((entry) => ({
         id: entry.id,
         label: entry.label,
@@ -141,6 +151,29 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                     onDelete={() => (selectMode ? leaveSelectMode() : setSelectMode(true))}
                     deleteActive={selectMode}
                 />
+
+                {/* Paid orders waiting on the shelf: the most important thing on this board. */}
+                {toPick.length > 0 ? (
+                    <section className="mx-2.5 mt-2.5 flex items-center gap-3 rounded-[16px] bg-primary p-3.5 text-on-primary shadow-md">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[999px] bg-on-primary/15">
+                            <span className="material-symbols-outlined text-[24px]">package_2</span>
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[15px] font-extrabold leading-tight">
+                                {toPick.length} order{toPick.length === 1 ? "" : "s"} ready to pick
+                            </p>
+                            <p className="truncate text-[11px] opacity-85">
+                                Paid and confirmed · oldest {toPick[0].reference} for {toPick[0].customer}
+                            </p>
+                        </div>
+                        <Link
+                            href={route("seller.orders.pickpack", toPick[0].reference)}
+                            className="shrink-0 rounded-[999px] bg-on-primary px-4 py-2 text-xs font-extrabold text-primary active:scale-95"
+                        >
+                            Start
+                        </Link>
+                    </section>
+                ) : null}
 
                 {limit > 0 && loaded.length >= limit ? (
                     <p className="px-4 pt-3 text-[10px] font-medium uppercase tracking-wide text-outline">
@@ -229,10 +262,24 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                                     </span>
                                 </Link>
 
-                                {/* Lines */}
+                                {/* Lines: in Pick & pack each one is ticked once it is in hand. */}
                                 <div className="space-y-2.5">
                                     {order.lines.map((line) => (
-                                        <div key={line.id} className="flex gap-3">
+                                        <div key={line.id} className="flex items-center gap-3">
+                                            {!selectMode && (order.stage === "paid" || order.stage === "packing") ? (
+                                                <label className="flex shrink-0 cursor-pointer flex-col items-center gap-0.5">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={Boolean(line.ticked)}
+                                                        onChange={(event) => tickLine(order, line.id, event.target.checked)}
+                                                        aria-label={`${line.name} in hand`}
+                                                        className="h-5 w-5 rounded accent-[rgb(var(--primary))]"
+                                                    />
+                                                    <span className="text-[9px] font-bold uppercase text-on-surface-variant">
+                                                        {line.ticked ? "In hand" : "Pick"}
+                                                    </span>
+                                                </label>
+                                            ) : null}
                                             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[10px] border border-outline-variant/60 bg-surface-container">
                                                 <span className="material-symbols-outlined text-[26px] text-outline">
                                                     inventory_2
@@ -317,10 +364,21 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                                             </>
                                         ) : null}
 
+                                        {(order.stage === "paid" || order.stage === "packing") && order.paid === false ? (
+                                            <Link
+                                                href={route("seller.orders.pay", { reference: order.reference })}
+                                                className="mr-auto flex items-center gap-1 rounded-[8px] border border-warning/40 bg-warning-container/60 px-2 py-1 text-[11px] font-semibold text-on-warning-container"
+                                            >
+                                                <span className="material-symbols-outlined text-[15px]">payments</span>
+                                                Payment changed · confirm it before delivery
+                                            </Link>
+                                        ) : null}
+
                                         {(order.stage === "paid" || order.stage === "packing") && order.sourced ? (
                                             <span className="mr-auto flex items-center gap-1 text-[11px] font-semibold text-on-surface-variant">
-                                                <span className="material-symbols-outlined text-[15px] text-outline">where_to_vote</span>
-                                                {order.sourced.done}/{order.sourced.total} lines sourced
+                                                <span className="material-symbols-outlined text-[15px] text-outline">back_hand</span>
+                                                {order.picking?.ticked ?? 0}/{order.sourced.total} in hand
+                                                {order.picking?.packed ? " · packed" : ""}
                                                 {order.delayAgreed ? (
                                                     <span className="ml-1 rounded-[999px] border border-warning/30 bg-warning-container/60 px-2 py-0.5 text-[9px] font-bold uppercase text-on-warning-container">
                                                         Delay agreed
@@ -330,14 +388,26 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                                         ) : null}
 
                                         {order.stage === "paid" ? (
-                                            <Link
-                                                href={route("seller.orders.pickpack", {
-                                                    reference: order.reference,
-                                                })}
-                                                className="rounded-[999px] px-5 py-1.5 text-xs font-semibold text-on-primary shadow-sm active:scale-95 bg-primary"
-                                            >
-                                                Start pick &amp; pack
-                                            </Link>
+                                            <div className="flex items-center gap-2">
+                                                <Link
+                                                    href={route("seller.orders.pay", { reference: order.reference })}
+                                                    className="rounded-[999px] border border-outline/50 px-3 py-1.5 text-xs font-semibold text-on-surface"
+                                                >
+                                                    Payment
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        router.post(route("seller.orders.picking.start", order.id), {}, {
+                                                            preserveScroll: true,
+                                                            onSuccess: () => router.visit(route("seller.orders.pickpack", { reference: order.reference })),
+                                                        })
+                                                    }
+                                                    className="rounded-[999px] px-5 py-1.5 text-xs font-semibold text-on-primary shadow-sm active:scale-95 bg-primary"
+                                                >
+                                                    Start pick &amp; pack
+                                                </button>
+                                            </div>
                                         ) : null}
 
                                         {["to_deliver", "delivered", "canceled"].includes(order.stage) ? (

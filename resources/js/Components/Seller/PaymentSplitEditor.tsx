@@ -15,7 +15,8 @@ import React, { useState } from "react";
  * Every tap on an account adds a leg, so the same bank can take two or three
  * parts, and banks, wallets and cash mix freely. The legs must add up to
  * `total` exactly; the server checks the same. Account legs wait for the
- * account's owner to confirm the money arrived; cash is taken on the spot.
+ * account's owner to confirm the money arrived; cash waits for a store
+ * manager or admin to confirm the seller holds it.
  *
  * When the customer has credit (an admin set it), part of the total can go
  * on credit, up to what is left of their limit.

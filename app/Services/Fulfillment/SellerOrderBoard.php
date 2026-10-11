@@ -7,6 +7,7 @@ namespace App\Services\Fulfillment;
 use App\Models\Finance\Payment;
 use App\Models\Finance\Sale;
 use App\Models\Finance\SaleItem;
+use App\Models\Fulfillment\Delivery;
 use App\Services\Finance\PaymentBoard;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -115,7 +116,7 @@ class SellerOrderBoard
         return $query->with([
             'customer',
             'store',
-            'delivery',
+            'delivery.vehicle',
             'payments.account.owner',
             'items.storeVariant.item',
             'items.storeVariant.itemVariant.item',
@@ -157,16 +158,19 @@ class SellerOrderBoard
                         : 'local',
                 'supplier' => $storeName,
                 'inStore' => true,
+                // Ticked in Pick & pack: the picker has it in hand.
+                'ticked' => $line->ticked_at !== null,
             ];
         })->values()->all();
 
         $linesTotal = array_sum(array_map(fn (array $line): float => $line['unitPrice'] * $line['quantity'], $lines));
+        $fee = round((float) ($sale->delivery_fee ?? 0), 2);
 
         return [
             'id' => $sale->id,
             'reference' => (string) $sale->reference_number,
             'customer' => $this->customerName($sale),
-            'stage' => $this->stageFor($sale->fulfillment_stage, $sale->payment_status, $anyPicked),
+            'stage' => $this->stageFor($sale->fulfillment_stage, $sale->payment_status, $anyPicked || $sale->picking_started_at !== null),
             // The payment split; voided parts of a cancelled order are left out.
             'payments' => $sale->payments
                 ->where('status', '!=', Payment::STATUS_VOID)
@@ -180,22 +184,46 @@ class SellerOrderBoard
                 'total' => $sale->items->count(),
             ],
             'delayAgreed' => $sale->delayAgreed(),
+            // Every part confirmed: the gate before it may go to delivery.
+            'paid' => $sale->isFullyPaid(),
+            // Someone started picking it, and how many lines are in hand.
+            'picking' => [
+                'startedAt' => $sale->picking_started_at?->toIso8601String(),
+                'ticked' => $sale->items->filter(fn (SaleItem $line): bool => $line->ticked_at !== null)->count(),
+                'packed' => $sale->packed_at !== null,
+            ],
             // How long an unpaid order's stock stays held.
             'expiresInMinutes' => $sale->fulfillment_stage === Sale::STAGE_AWAITING_PAYMENT
                 ? app(SellerOrderService::class)->minutesLeft($sale)
                 : null,
-            'placed' => $sale->created_at?->format('d M Y, H:i') ?? '',
+            // With the day of the week: "Monday, Oct 12 · 09:14".
+            'placed' => $sale->created_at?->format($sale->created_at->isCurrentYear() ? 'l, M j · H:i' : 'l, M j Y · H:i') ?? '',
             'lines' => $lines,
             'destination' => [
                 'name' => $sale->delivery?->recipient_name ?? $storeName,
                 'kind' => $sale->delivery ? 'Delivery' : 'Store pickup',
-                'vehicle' => $sale->delivery?->courier_name ?? 'Not assigned',
-                'driver' => $sale->delivery?->recipient_phone ?? '',
+                // These were crossed: "vehicle" showed the courier and
+                // "driver" the recipient's phone.
+                'vehicle' => collect([$sale->delivery?->vehicle?->name, $sale->delivery?->vehicle_plate ?? $sale->delivery?->vehicle?->plate])
+                    ->filter()->join(' · ') ?: 'Not assigned',
+                'driver' => $sale->delivery?->courier_name ?? 'Not assigned',
+                'phone' => $sale->delivery?->recipient_phone,
                 'address' => $sale->delivery?->delivery_address ?? $storeName,
+                'courierId' => $sale->delivery?->courier_id !== null ? (int) $sale->delivery->courier_id : null,
+                'vehicleId' => $sale->delivery?->vehicle_id !== null ? (int) $sale->delivery->vehicle_id : null,
+                'plate' => $sale->delivery?->vehicle_plate,
+                // courier to an address, a vehicle collecting at the store,
+                // or nothing decided yet.
+                'method' => $sale->delivery === null
+                    ? 'later'
+                    : ($sale->delivery->method === Delivery::METHOD_VEHICLE ? 'vehicle' : ($sale->delivery->delivery_address ? 'courier' : 'later')),
+                'driverPhone' => $sale->delivery?->driver_phone,
             ],
+            'deliveryOption' => $sale->delivery_option,
             // Tax and discounts, so the card total equals the sale total.
-            'additionalCharges' => round((float) $sale->total_amount - $linesTotal, 2),
-            'shippingFee' => 0,
+            'additionalCharges' => round((float) $sale->total_amount - $linesTotal - $fee, 2),
+            // A custom delivery fee typed at checkout, part of the total.
+            'shippingFee' => $fee,
         ];
     }
 

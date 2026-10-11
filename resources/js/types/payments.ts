@@ -3,7 +3,8 @@
  *
  * An order's total is split into parts. A part paid into an account goes
  * pending → claimed ("customer says paid") → confirmed (the account's owner
- * saw the money). Cash is confirmed on the spot by the seller taking it.
+ * saw the money). Cash starts claimed by the seller who took it and is
+ * confirmed by a store manager or admin. The two are never the same person.
  */
 
 export type PaymentAccountType = "bank" | "wallet";
@@ -45,6 +46,10 @@ export interface InboxPayment extends OrderPayment {
     customer: string;
     store: string | null;
     claimed_by: string | null;
+    /** Expected in the owner's account but nobody marked it paid yet. */
+    expected?: boolean;
+    /** Who recorded the part (the seller who took the order). */
+    recorded_by?: string | null;
 }
 
 /**

@@ -1,5 +1,5 @@
 import AdminLayout from "@/Layouts/AppLayout";
-import { Head, useForm, usePage } from "@inertiajs/react";
+import { Head, Link, useForm, usePage } from "@inertiajs/react";
 import { useAdminScope } from "@/Components/Navigation/Admin/useAdminScope";
 import {
     Box,
@@ -45,6 +45,7 @@ import LocationOn from "@mui/icons-material/LocationOn";
 import Business from "@mui/icons-material/Business";
 import Person from "@mui/icons-material/Person";
 import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
+import Sell from "@mui/icons-material/Sell";
 import { useState, useEffect } from "react";
 
 const getInitials = (first: string, last: string) => {
@@ -79,7 +80,7 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
     const [customerType, setCustomerType] = useState<"individual" | "business">("individual");
     const [editingId, setEditingId] = useState<number | null>(null);
 
-    const { data, setData, post, put, delete: destroy, processing, errors, reset, clearErrors } = useForm({
+    const { data, setData, post, put, delete: destroy, processing, errors, reset, clearErrors, transform } = useForm({
         first_name: "",
         last_name: "",
         email: "",
@@ -143,6 +144,7 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        transform((form) => ({ ...form, customer_type: customerType }));
 
         if (editingId) {
             put(route("admin.customers.update", editingId), {
@@ -234,6 +236,7 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                                 <TableCell>Type</TableCell>
                                 <TableCell>Contact</TableCell>
                                 <TableCell>City</TableCell>
+                                <TableCell>Delivery locations</TableCell>
                                 <TableCell align="right">Actions</TableCell>
                             </TableRow>
                         </TableHead>
@@ -293,7 +296,15 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                                     <TableCell>
                                         <Typography variant="body2" color="text.secondary">{customer.city || "—"}</Typography>
                                     </TableCell>
+                                    <TableCell sx={{ maxWidth: 280 }}>
+                                        <DeliveryLocations addresses={customer.addresses} />
+                                    </TableCell>
                                     <TableCell align="right">
+                                        <Tooltip title="Their own prices">
+                                            <IconButton component={Link} href={route("admin.customers.prices", customer.id)} size="small" sx={{ color: "text.secondary", "&:hover": { color: "primary.main" } }}>
+                                                <Sell fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
                                         <Tooltip title="Edit">
                                             <IconButton onClick={() => handleEdit(customer)} size="small" sx={{ color: "text.secondary", "&:hover": { color: "primary.main", bgcolor: "primary.50" } }}>
                                                 <Edit fontSize="small" />
@@ -383,9 +394,19 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                                             </Typography>
                                         )}
                                     </Stack>
+                                    <Divider sx={{ my: 1.5 }} />
+                                    <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                                        Delivery locations
+                                    </Typography>
+                                    <Box sx={{ mt: 0.5 }}>
+                                        <DeliveryLocations addresses={customer.addresses} />
+                                    </Box>
                                 </CardContent>
                                 <Divider />
                                 <CardActions sx={{ justifyContent: "flex-end", py: 0.5 }}>
+                                    <Button component={Link} href={route("admin.customers.prices", customer.id)} size="small" startIcon={<Sell fontSize="small" />} sx={{ mr: "auto", textTransform: "none" }}>
+                                        Prices
+                                    </Button>
                                     <IconButton onClick={() => handleEdit(customer)} size="small" sx={{ color: "text.secondary", "&:hover": { color: "primary.main" } }}>
                                         <Edit fontSize="small" />
                                     </IconButton>
@@ -574,3 +595,51 @@ Customers.layout = (page: React.ReactNode) => (
         {page}
     </AdminLayout>
 );
+
+interface SavedAddressRow {
+    id: number;
+    address: string;
+    recipient_name: string | null;
+    recipient_phone: string | null;
+    times_used: number;
+    last_used_at: string | null;
+}
+
+/** Where a customer's orders have gone, most recent first (saved at checkout). */
+function DeliveryLocations({ addresses = [] }: { addresses?: SavedAddressRow[] }) {
+    const [expanded, setExpanded] = useState(false);
+
+    if (addresses.length === 0) {
+        return (
+            <Typography variant="body2" color="text.disabled">
+                None yet
+            </Typography>
+        );
+    }
+
+    const shown = expanded ? addresses : addresses.slice(0, 2);
+
+    return (
+        <Stack spacing={0.75}>
+            {shown.map((address) => (
+                <Stack key={address.id} direction="row" spacing={0.75} alignItems="flex-start">
+                    <LocationOn sx={{ fontSize: 16, color: "primary.main", mt: 0.25 }} />
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ lineHeight: 1.3 }}>
+                            {address.address}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {[address.recipient_name, address.recipient_phone].filter(Boolean).join(" · ") || "No recipient"} · used{" "}
+                            {address.times_used}×
+                        </Typography>
+                    </Box>
+                </Stack>
+            ))}
+            {addresses.length > 2 ? (
+                <Button size="small" onClick={() => setExpanded((open) => !open)} sx={{ alignSelf: "flex-start", textTransform: "none", px: 0.5 }}>
+                    {expanded ? "Show less" : `+${addresses.length - 2} more`}
+                </Button>
+            ) : null}
+        </Stack>
+    );
+}

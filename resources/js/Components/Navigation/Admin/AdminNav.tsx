@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import MenuIcon from "@mui/icons-material/Menu";
+import NotificationsBell from "./NotificationsBell";
 import {
     AppBar,
     Avatar,
@@ -91,6 +92,7 @@ export default function AdminNav({
                             {auth?.user?.email || ""}
                         </Typography>
                     </Box>
+                    <NotificationsBell />
                     <IconButton
                         onClick={(e) => setAnchorEl(e.currentTarget)}
                         size="small"

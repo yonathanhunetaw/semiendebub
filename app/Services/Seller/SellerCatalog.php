@@ -108,9 +108,9 @@ class SellerCatalog
     /**
      * The cart prices are quoted for, and what it means for VAT. That is the
      * requested cart when the seller can see it and it is still open,
-     * otherwise their highest-priority open cart. A cart with no customer
-     * (walk-in) or a customer with a TIN prices as individual, so its cards
-     * show VAT-inclusive prices (the rule CheckoutService charges by).
+     * otherwise their highest-priority open cart. No cart at all, a cart with
+     * no customer (walk-in) or a customer with a TIN prices as individual, so
+     * its cards show VAT-inclusive prices (the rule CheckoutService charges by).
      *
      * @return array{cart: ?Cart, customer: mixed, has_tin_cart: bool, top_cart_is_individual: bool}
      */
@@ -121,7 +121,9 @@ class SellerCatalog
         $cart = ($cartId ? (clone $open)->find($cartId) : null)
             ?? (clone $open)->where('seller_id', $seller->id)->orderBy('priority')->first();
 
-        $individual = $cart !== null && ($cart->customer_id === null || ! empty($cart->customer?->tin_number));
+        // No open cart prices like a walk-in (PriceProvider: no customer is
+        // individual), so search and category cards say "incl. VAT" then too.
+        $individual = $cart === null || $cart->customer_id === null || ! empty($cart->customer?->tin_number);
 
         return [
             'cart' => $cart,

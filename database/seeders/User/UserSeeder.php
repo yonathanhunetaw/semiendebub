@@ -140,6 +140,8 @@ class UserSeeder extends Seeder
             'email' => 'hulala@mezgebedirijit.com',
             'email_verified_at' => now(),
             'role' => 'delivery',
+            // Carries freight too (hub → store shipments).
+            'is_driver' => true,
             'password' => Hash::make('79230274'),
             'remember_token' => Str::random(10),
             'store_id' => 1,

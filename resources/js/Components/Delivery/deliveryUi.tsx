@@ -1,5 +1,6 @@
 import CallRoundedIcon from "@mui/icons-material/CallRounded";
 import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
+import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import MapRoundedIcon from "@mui/icons-material/MapRounded";
 import PlaceRoundedIcon from "@mui/icons-material/PlaceRounded";
 import ReceiptLongRoundedIcon from "@mui/icons-material/ReceiptLongRounded";
@@ -18,6 +19,7 @@ import {
     type ChipProps,
 } from "@mui/material";
 import React from "react";
+import NotificationsBell from "@/Components/Navigation/Admin/NotificationsBell";
 
 import type { DeliveryRun, DeliveryStatus } from "@/types/delivery";
 
@@ -46,8 +48,29 @@ export const TRANSITION_LABELS: Record<string, string> = {
     returned: "Return to depot",
 };
 
-export function DeliveryStatusChip({ status }: { status: DeliveryStatus }): React.ReactElement {
-    const meta = STATUS_META[status] ?? { label: status, color: "default" as const };
+/**
+ * A vehicle collecting at the store walks its own steps: it picks the order
+ * up at the store, then transports it to the destination.
+ */
+const VEHICLE_STATUS_LABELS: Partial<Record<DeliveryStatus, string>> = {
+    pending: "Waiting for vehicle",
+    dispatched: "Vehicle picked up",
+    in_transit: "To destination",
+};
+
+const VEHICLE_TRANSITION_LABELS: Record<string, string> = {
+    dispatched: "Vehicle picked up",
+    in_transit: "Transport to destination",
+};
+
+/** The button copy for moving a run to `status`, by how the run travels. */
+export function transitionLabel(run: Pick<DeliveryRun, "method">, status: string): string {
+    return (run.method === "vehicle" ? VEHICLE_TRANSITION_LABELS[status] : undefined) ?? TRANSITION_LABELS[status] ?? status;
+}
+
+export function DeliveryStatusChip({ status, method }: { status: DeliveryStatus; method?: DeliveryRun["method"] }): React.ReactElement {
+    const base = STATUS_META[status] ?? { label: status, color: "default" as const };
+    const meta = { ...base, label: (method === "vehicle" ? VEHICLE_STATUS_LABELS[status] : undefined) ?? base.label };
 
     return <Chip size="small" label={meta.label} color={meta.color} sx={{ fontWeight: 800, borderRadius: 2 }} />;
 }
@@ -101,7 +124,19 @@ export function DeliveryHero({
                             </Typography>
                         ) : null}
                     </Box>
-                    {action}
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                        {/* The courier's to-do bell: runs to collect. */}
+                        <NotificationsBell
+                            buttonSx={{
+                                width: 40,
+                                height: 40,
+                                color: "primary.contrastText",
+                                bgcolor: "rgb(255 255 255 / 0.14)",
+                                "&:hover": { bgcolor: "rgb(255 255 255 / 0.22)" },
+                            }}
+                        />
+                        {action}
+                    </Stack>
                 </Stack>
                 {children ? <Box sx={{ mt: 2 }}>{children}</Box> : null}
             </Container>
@@ -229,7 +264,7 @@ export function RunCard({ run, actions }: RunCardProps): React.ReactElement {
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.25 }} noWrap>
                             {run.recipient_name ?? "Recipient not set"}
                         </Typography>
-                        <DeliveryStatusChip status={run.status} />
+                        <DeliveryStatusChip status={run.status} method={run.method} />
                     </Stack>
                     <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
                         <ReceiptLongRoundedIcon sx={{ fontSize: 14 }} />
@@ -240,6 +275,16 @@ export function RunCard({ run, actions }: RunCardProps): React.ReactElement {
                     </Stack>
                 </Box>
             </Stack>
+
+            {run.method === "vehicle" ? (
+                <Stack direction="row" spacing={0.75} sx={{ mt: 1.5 }}>
+                    <LocalShippingRoundedIcon fontSize="small" sx={{ color: "text.disabled", mt: "1px" }} />
+                    <Typography variant="body2" color="text.secondary">
+                        Vehicle collects at the store · {run.vehicle_plate ?? "plate not set"}
+                        {run.driver_phone ? ` · driver ${run.driver_phone}` : ""}
+                    </Typography>
+                </Stack>
+            ) : null}
 
             {run.delivery_address ? (
                 <Stack direction="row" spacing={0.75} sx={{ mt: 1.5 }}>

@@ -37,6 +37,8 @@ class StockReservation extends Model
         'store_id',
         'stock_location_id',
         'quantity',
+        // individual / business: the pool a store hold draws on.
+        'pool',
         'status',
         'picked_stock_location_id',
         'expires_at',

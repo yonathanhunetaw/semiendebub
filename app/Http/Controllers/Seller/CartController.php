@@ -67,6 +67,7 @@ class CartController extends Controller
             'variants.item',
             'variants.itemColor',
             'variants.itemSize',
+            'variants.itemPackagingType',
         ])
             ->visibleTo($user)
             // Only carts that can still take items: a checked-out cart is
@@ -107,7 +108,16 @@ class CartController extends Controller
                 'variant_label' => trim(implode(' / ', array_filter([
                     $variant->itemColor?->name,
                     $variant->itemSize?->name,
+                    $variant->itemPackagingType?->name,
                 ]))) ?: null,
+                // Each part of the variant on its own, so the cart can say
+                // which one this is at a glance rather than in a slash list.
+                'variant' => [
+                    'color' => $variant->itemColor?->name,
+                    'size' => $variant->itemSize?->name,
+                    'packaging' => $variant->itemPackagingType?->name,
+                    'pack_quantity' => $variant->itemPackagingType?->quantity !== null ? (int) $variant->itemPackagingType->quantity : null,
+                ],
                 'image' => $variant->image_url,
                 'quantity' => $quantity,
                 'price' => $price,
@@ -133,6 +143,8 @@ class CartController extends Controller
             'line_count' => $lines->count(),
             'total' => round((float) $lines->sum('line_total'), 2),
             'lines' => $lines->all(),
+            // Its seller, a store manager or an admin may delete it (CartPolicy).
+            'can_delete' => request()->user()?->can('delete', $cart) ?? false,
         ];
     }
 
@@ -143,15 +155,28 @@ class CartController extends Controller
     {
         $storeId = auth()->user()->store_id;
 
-        $customers = Customer::query()
+        $customers = CustomerController::forSeller(request())
+            ->withCount('carts')
             ->orderBy('first_name')
             ->orderBy('last_name')
-            ->get(['id', 'name', 'first_name', 'last_name', 'tin_number']);
-        $sellers = User::where('role', 'seller')
-            ->where('store_id', $storeId)
-            ->get();
+            ->get(['id', 'name', 'first_name', 'last_name', 'tin_number', 'phone', 'phone_number', 'city', 'credit_limit', 'credit_days'])
+            ->map(fn (Customer $customer): array => [
+                'id' => (int) $customer->id,
+                'name' => $customer->name,
+                'phone' => $customer->phone,
+                'city' => $customer->city,
+                'type' => $customer->tin_number ? 'individual' : 'business',
+                'tin_number' => $customer->tin_number,
+                'has_credit' => $customer->hasCredit(),
+                'carts' => (int) $customer->carts_count,
+            ])
+            ->values();
 
-        return Inertia::render('Seller/Carts/Create', compact('customers', 'sellers'));
+        return Inertia::render('Seller/Carts/Create', [
+            'customers' => $customers,
+            'store' => auth()->user()->store?->name,
+            'open_carts' => Cart::query()->visibleTo(auth()->user())->open()->count(),
+        ]);
     }
 
     /**
@@ -164,7 +189,11 @@ class CartController extends Controller
         $isAdmin = auth()->user()->role === 'admin';
 
         $request->validate([
-            'customer_id' => 'nullable|exists:customers,id',
+            'customer_id' => ['nullable', function ($attribute, $value, $fail) use ($request) {
+                if (! CustomerController::forSeller($request)->whereKey($value)->exists()) {
+                    $fail('That customer is not one of this store\'s customers.');
+                }
+            }],
             'seller_id' => 'nullable|exists:users,id,role,seller',
             'store_id' => $isAdmin ? 'required|exists:stores,id' : 'nullable', // Admin MUST pick a store
         ]);
@@ -179,8 +208,10 @@ class CartController extends Controller
             'session_id' => (string) mt_rand(100000, 999999),
         ]);
 
-        $routeName = $isAdmin ? 'admin.carts.index' : 'seller.carts.index';
-        return redirect()->route($routeName)->with('message', 'Cart initialized.');
+        // Straight onto the new cart, so the seller can start adding to it.
+        return $isAdmin
+            ? redirect()->route('admin.carts.index')->with('success', 'Cart created.')
+            : redirect()->route('seller.carts.index', ['cart' => $cart->id])->with('success', 'Cart created. Add items from the catalogue.');
     }
 
     /**
@@ -202,7 +233,7 @@ class CartController extends Controller
         $this->authorize('update', $cart);
         $storeId = auth()->user()->store_id;
 
-        $customers = Customer::all();
+        $customers = CustomerController::forSeller(request())->get();
         $sellers = User::where('role', 'seller')->where('store_id', $storeId)->get();
 
         $cart->load(['customer', 'seller']);
@@ -218,7 +249,11 @@ class CartController extends Controller
         $this->authorize('update', $cart);
 
         $request->validate([
-            'customer_id' => 'required|exists:customers,id',
+            'customer_id' => ['required', function ($attribute, $value, $fail) use ($request) {
+                if (! CustomerController::forSeller($request)->whereKey($value)->exists()) {
+                    $fail('That customer is not one of this store\'s customers.');
+                }
+            }],
             'seller_id' => 'nullable|exists:users,id',
             'status' => 'required|in:open,processing,completed,canceled',
         ]);
@@ -240,9 +275,13 @@ class CartController extends Controller
     {
         $this->authorize('delete', $cart);
 
-        $cart->delete();
+        // Its lines go with it; nothing was reserved, since it never became an order.
+        DB::transaction(function () use ($cart): void {
+            $cart->variants()->detach();
+            $cart->delete();
+        });
 
-        return redirect()->route('seller.carts.index')->with('success', 'Cart deleted successfully!');
+        return redirect()->route('seller.carts.index')->with('success', 'Cart deleted.');
     }
 
     /**

@@ -32,7 +32,8 @@ class SaveShipmentManifestRequest extends FormRequest
             // The fleet car and the drivers the run is offered to.
             'vehicle_id' => ['sometimes', 'nullable', 'integer', 'exists:vehicles,id'],
             'courier_ids' => ['sometimes', 'nullable', 'array', 'max:50'],
-            'courier_ids.*' => ['integer', 'exists:users,id'],
+            // Freight is offered to drivers only.
+            'courier_ids.*' => ['integer', \Illuminate\Validation\Rule::exists('users', 'id')->where('is_driver', true)],
         ];
     }
 }

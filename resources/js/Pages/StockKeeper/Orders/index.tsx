@@ -9,7 +9,9 @@ import {
     AccordionDetails,
     AccordionSummary,
     Button,
+    Checkbox,
     Chip,
+    FormControlLabel,
     Grid,
     MenuItem,
     Stack,
@@ -53,6 +55,8 @@ interface PickLine {
     suggested_source: { location_type: string; location_id: number } | null;
     confirmed_source: { location_type: string; location_id: number } | null;
     options: SourceOption[];
+    /** In the picker's hand; saved so the seller and the courier see it. */
+    ticked_at?: string | null;
 }
 
 interface PickOrder {
@@ -63,10 +67,26 @@ interface PickOrder {
         store_name: string | null;
         stage_label: string;
         delay_agreed: boolean;
+        /** Every payment part confirmed: it may not leave before. */
+        paid?: boolean;
+        picking_started_at?: string | null;
+        picking_started_by?: string | null;
+        packed_at?: string | null;
     };
     lines: PickLine[];
-    delivery: { status: string; courier: string | null; address: string | null } | null;
+    delivery: {
+        status?: string;
+        method: "courier" | "vehicle";
+        courier: string | null;
+        address: string | null;
+        plate: string | null;
+        driver_phone: string | null;
+    } | null;
 }
+
+/** Saved without reloading the list, so the chosen locations stay. */
+const save = (url: string, done?: boolean): void =>
+    router.post(url, done === undefined ? {} : { done }, { preserveScroll: true, preserveState: true });
 
 interface OrdersProps extends SharedProps {
     orders?: PickOrder[];
@@ -83,7 +103,9 @@ const key = (source: { location_type: string; location_id: number } | null): str
  *
  * Each line names where it comes from: the store's shelf, its floor or its
  * Remote Hub, with what each holds and the nearest that covers it preselected.
- * Confirming books the goods out and hands them to Delivery.
+ * The keeper walks it like the seller does: start picking, tick each line in
+ * hand, mark the parcel packed, then hand it to Delivery, which books the
+ * goods out. An order whose payment is not all confirmed cannot be handed over.
  */
 export default function Orders({
     orders = [],
@@ -194,8 +216,26 @@ function OrderCard({ order, editable }: { order: PickOrder; editable: boolean })
     );
     const [busy, setBusy] = useState(false);
 
+    const [ticked, setTicked] = useState<Record<number, boolean>>(() =>
+        Object.fromEntries(order.lines.map((line) => [line.id, Boolean(line.ticked_at)])),
+    );
+    const [packed, setPacked] = useState(Boolean(order.sale.packed_at));
+    const [started, setStarted] = useState(Boolean(order.sale.picking_started_at));
+
     const short = order.lines.filter((line) => !line.options.some((o) => o.sufficient)).length;
-    const ready = order.lines.every((line) => choices[line.id]);
+    const inHand = order.lines.filter((line) => ticked[line.id]).length;
+    const allInHand = inHand === order.lines.length;
+    const paid = order.sale.paid !== false;
+    const ready = order.lines.every((line) => choices[line.id]) && allInHand && packed && paid;
+
+    const tick = (lineId: number, done: boolean): void => {
+        setTicked((current) => ({ ...current, [lineId]: done }));
+        setPacked(false);
+        setStarted(true);
+        save(route("stock_keeper.orders.lines.tick", { sale: order.sale.id, item: lineId }), done);
+    };
+
+    const stage = !started ? "Not started" : packed ? "Packed" : `Picking · ${inHand}/${order.lines.length} in hand`;
 
     const confirm = (): void => {
         setBusy(true);
@@ -230,7 +270,13 @@ function OrderCard({ order, editable }: { order: PickOrder; editable: boolean })
                             {order.delivery?.address ? ` · to ${order.delivery.address}` : ""}
                         </Typography>
                     </Stack>
-                    <Stack direction="row" spacing={1}>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        {editable && !paid ? (
+                            <Chip size="small" label="Not fully paid" color="warning" sx={{ fontWeight: 700 }} />
+                        ) : null}
+                        {editable ? (
+                            <Chip size="small" label={stage} color={packed ? "success" : started ? "info" : "default"} variant="outlined" sx={{ fontWeight: 700 }} />
+                        ) : null}
                         {editable ? (
                             <Chip
                                 size="small"
@@ -254,6 +300,7 @@ function OrderCard({ order, editable }: { order: PickOrder; editable: boolean })
                 <Table size="small">
                     <TableHead>
                         <TableRow>
+                            {editable ? <TableCell padding="checkbox">In hand</TableCell> : null}
                             <TableCell>Product</TableCell>
                             <TableCell align="right">Qty</TableCell>
                             <TableCell>{editable ? "Pick from" : "Picked from"}</TableCell>
@@ -262,6 +309,16 @@ function OrderCard({ order, editable }: { order: PickOrder; editable: boolean })
                     <TableBody>
                         {order.lines.map((line) => (
                             <TableRow key={line.id}>
+                                {editable ? (
+                                    <TableCell padding="checkbox">
+                                        <Checkbox
+                                            checked={Boolean(ticked[line.id])}
+                                            disabled={!choices[line.id]}
+                                            onChange={(event) => tick(line.id, event.target.checked)}
+                                            inputProps={{ "aria-label": `${line.title} in hand` }}
+                                        />
+                                    </TableCell>
+                                ) : null}
                                 <TableCell>
                                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
                                         {line.title}
@@ -297,10 +354,61 @@ function OrderCard({ order, editable }: { order: PickOrder; editable: boolean })
                 </Table>
 
                 {editable ? (
-                    <Stack direction="row" justifyContent="flex-end" sx={{ p: 1.5 }}>
-                        <Button variant="contained" disabled={!ready || busy} onClick={confirm} startIcon={<LocalShippingRoundedIcon />}>
-                            Pick &amp; hand to Delivery
-                        </Button>
+                    <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1.5}
+                        alignItems={{ sm: "center" }}
+                        justifyContent="space-between"
+                        sx={{ p: 1.5, borderTop: "1px solid", borderColor: "divider" }}
+                    >
+                        <Stack spacing={0.25}>
+                            {order.delivery ? (
+                                <Typography variant="caption" color="text.secondary">
+                                    {order.delivery.method === "vehicle"
+                                        ? `Vehicle collects · ${order.delivery.plate ?? "plate not set"}${order.delivery.driver_phone ? ` · ${order.delivery.driver_phone}` : ""}`
+                                        : `Courier${order.delivery.courier ? ` ${order.delivery.courier}` : ""} · ${order.delivery.address ?? "address not set yet"}`}
+                                </Typography>
+                            ) : (
+                                <Typography variant="caption" color="warning.main">No delivery details yet; the seller adds them.</Typography>
+                            )}
+                            {order.sale.picking_started_by ? (
+                                <Typography variant="caption" color="text.secondary">Started by {order.sale.picking_started_by}</Typography>
+                            ) : null}
+                            {!paid ? (
+                                <Typography variant="caption" color="warning.main">
+                                    The payment changed and is not all confirmed: pick it, but it cannot leave yet.
+                                </Typography>
+                            ) : null}
+                        </Stack>
+                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                            {!started ? (
+                                <Button
+                                    variant="outlined"
+                                    onClick={() => {
+                                        setStarted(true);
+                                        save(route("stock_keeper.orders.picking.start", order.sale.id));
+                                    }}
+                                >
+                                    Start picking
+                                </Button>
+                            ) : null}
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        checked={packed}
+                                        disabled={!allInHand}
+                                        onChange={(event) => {
+                                            setPacked(event.target.checked);
+                                            save(route("stock_keeper.orders.packed", order.sale.id), event.target.checked);
+                                        }}
+                                    />
+                                }
+                                label="Packed & labelled"
+                            />
+                            <Button variant="contained" disabled={!ready || busy} onClick={confirm} startIcon={<LocalShippingRoundedIcon />}>
+                                Hand to Delivery
+                            </Button>
+                        </Stack>
                     </Stack>
                 ) : null}
             </AccordionDetails>

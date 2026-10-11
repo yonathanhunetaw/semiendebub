@@ -7,9 +7,12 @@ namespace App\Services\Fulfillment;
 use App\Exceptions\CartCheckoutException;
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\PaymentException;
+use App\Models\Auth\CustomerAddress;
 use App\Models\Auth\User;
 use App\Models\Finance\Sale;
 use App\Models\Finance\SaleItem;
+use App\Models\Fulfillment\Delivery;
+use App\Models\Fulfillment\Vehicle;
 use App\Models\Inventory\StockReservation;
 use App\Models\Seller\Cart;
 use App\Services\CheckoutService;
@@ -40,7 +43,7 @@ class SellerOrderService
     }
 
     /**
-     * @param  array{parts?: array<int, array{payment_account_id?: int|null, amount: float|string, transaction_reference?: string|null}>, delivery_address?: string|null, recipient_name?: string|null, recipient_phone?: string|null, delay_agreed?: bool}  $input
+     * @param  array{parts?: array<int, array{payment_account_id?: int|null, amount: float|string, transaction_reference?: string|null}>, delivery_method?: string|null, delivery_address?: string|null, recipient_name?: string|null, recipient_phone?: string|null, delivery_option?: string|null, delivery_fee?: float|string|null, delay_agreed?: bool}  $input
      *
      * @throws CartCheckoutException
      * @throws InsufficientStockException
@@ -48,7 +51,10 @@ class SellerOrderService
      */
     public function place(Cart $cart, User $seller, array $input): Sale
     {
-        $delivery = array_filter([
+        // A courier run opens its delivery at checkout; a vehicle collection
+        // is opened by arrange(), and "add later" opens none yet.
+        $method = (string) ($input['delivery_method'] ?? Delivery::METHOD_COURIER);
+        $delivery = $method !== Delivery::METHOD_COURIER ? [] : array_filter([
             'delivery_address' => $input['delivery_address'] ?? null,
             'recipient_name' => $input['recipient_name'] ?? null,
             'recipient_phone' => $input['recipient_phone'] ?? null,
@@ -63,10 +69,113 @@ class SellerOrderService
                 (bool) ($input['delay_agreed'] ?? false),
             );
 
+            $this->chargeDeliveryFee($sale, $input);
+            $this->arrange($sale, $input);
+
             $parts = $input['parts'] ?? [];
 
             return $parts === [] ? $sale : $this->payments->setParts($sale, $parts, $seller);
         });
+    }
+
+    /**
+     * The delivery option chosen at checkout. Standard and express are quoted
+     * at dispatch and "later" is decided later, so only a custom fee the
+     * seller typed is charged now: it joins the order total, which the
+     * payment parts must then cover.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    private function chargeDeliveryFee(Sale $sale, array $input): void
+    {
+        $option = $input['delivery_option'] ?? null;
+        $fee = $option === 'custom' ? round(max(0.0, (float) ($input['delivery_fee'] ?? 0)), 2) : 0.0;
+
+        $sale->update([
+            'delivery_option' => $option,
+            'delivery_fee' => $fee,
+            'total_amount' => round((float) $sale->total_amount + $fee, 2),
+        ]);
+    }
+
+    /**
+     * Who carries the order and on what, and where it goes: kept on the
+     * delivery, and the address saved on the customer for next time. The
+     * courier is named now but only sees the run once it is paid and picked
+     * (Delivery::scopeVisibleToCourier).
+     *
+     * @param  array<string, mixed>  $input
+     */
+    public function arrange(Sale $sale, array $input): void
+    {
+        $sale->loadMissing(['delivery', 'customer']);
+        $method = (string) ($input['delivery_method'] ?? Delivery::METHOD_COURIER);
+        // "Add later": nothing about the destination is known yet.
+        $later = $method === 'later';
+        $vehicleCollects = $method === Delivery::METHOD_VEHICLE;
+        $address = $later || $vehicleCollects ? '' : trim((string) ($input['delivery_address'] ?? ''));
+        $saved = null;
+
+        if (! $later && ! $vehicleCollects && ! empty($input['customer_address_id']) && $sale->customer_id !== null) {
+            $saved = CustomerAddress::query()->where('customer_id', $sale->customer_id)->find((int) $input['customer_address_id']);
+            $address = $address !== '' ? $address : (string) ($saved?->address ?? '');
+        }
+
+        if ($address !== '' && $sale->customer_id !== null) {
+            $saved = CustomerAddress::remember((int) $sale->customer_id, $address, $input['recipient_name'] ?? null, $input['recipient_phone'] ?? null);
+        }
+
+        $courier = ! $vehicleCollects && ! empty($input['courier_id']) ? User::query()->find((int) $input['courier_id']) : null;
+        $vehicle = ! empty($input['vehicle_id']) ? Vehicle::query()->find((int) $input['vehicle_id']) : null;
+        $plate = trim((string) ($input['vehicle_plate'] ?? ''));
+        $driverPhone = trim((string) ($input['driver_phone'] ?? ''));
+
+        $attributes = array_filter([
+            'method' => $later ? null : ($vehicleCollects ? Delivery::METHOD_VEHICLE : null),
+            'delivery_address' => $address !== '' ? $address : null,
+            'customer_address_id' => $saved?->id,
+            'recipient_name' => $input['recipient_name'] ?? $saved?->recipient_name,
+            'recipient_phone' => $input['recipient_phone'] ?? $saved?->recipient_phone,
+            'courier_id' => $courier?->id,
+            'courier_name' => $courier ? trim($courier->first_name.' '.$courier->last_name) : null,
+            'vehicle_id' => $vehicle?->id,
+            'vehicle_plate' => $plate !== '' ? strtoupper($plate) : $vehicle?->plate,
+            'driver_phone' => $driverPhone !== '' ? $driverPhone : null,
+        ], fn ($value) => $value !== null && $value !== '');
+
+        // Switching back from a vehicle collection to a courier, or to "add
+        // later", must clear what no longer applies.
+        if ($sale->delivery !== null) {
+            $attributes['method'] = $vehicleCollects ? Delivery::METHOD_VEHICLE : Delivery::METHOD_COURIER;
+
+            if ($vehicleCollects) {
+                $attributes += ['delivery_address' => null, 'customer_address_id' => null, 'courier_id' => null, 'courier_name' => null];
+            } else {
+                $attributes += ['driver_phone' => null];
+            }
+
+            if ($later) {
+                $attributes += ['delivery_address' => null, 'customer_address_id' => null];
+            }
+        }
+
+        if ($attributes === []) {
+            return;
+        }
+
+        if ($sale->delivery === null) {
+            Delivery::create($attributes + [
+                'sale_id' => $sale->id,
+                'tracking_number' => 'DEL-'.now()->format('Ymd').'-'.strtoupper(substr(uniqid(), -5)),
+                'status' => 'pending',
+                'recipient_name' => $sale->customer?->name,
+                'recipient_phone' => $sale->customer?->phone,
+            ]);
+        } else {
+            $sale->delivery->update($attributes);
+        }
+
+        $sale->unsetRelation('delivery');
     }
 
     /**

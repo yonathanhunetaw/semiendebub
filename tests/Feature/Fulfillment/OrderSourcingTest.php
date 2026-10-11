@@ -437,7 +437,8 @@ class OrderSourcingTest extends TestCase
                 ]],
             ])
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('seller.orders.index').'?tab=paid');
+            // Nothing else waiting to pick: on to the To deliver tab.
+            ->assertRedirect(route('seller.orders.index').'?tab=to_deliver');
 
         $this->assertSame(Sale::STAGE_TO_DELIVER, $sale->fresh()->fulfillment_stage);
     }

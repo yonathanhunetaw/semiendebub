@@ -12,9 +12,22 @@ export interface CatalogItem {
     final_price: number | null;
     discount_ends_at: string | null;
     sold_count: number;
-    /** Pieces at this seller's store, shelf + floor. */
+    /** Pieces at this seller's store, Store Shelf + Store Floor. */
     store_stock?: number;
-    category?: { category_name: string } | null;
+    /** Shelf in the smallest unit, floor biggest unit first; Remote Hub as yes/no only. */
+    stock?: {
+        shelf: StockFigure;
+        floor: StockFigure;
+        in_remote_hub: boolean;
+    };
+    category?: { category_name: string; parent_name?: string | null } | null;
+    /** What the item comes in, across the variants this store sells. */
+    variant_summary?: {
+        count: number;
+        colors: string[];
+        sizes: string[];
+        packaging: string[];
+    };
     pricing_matrix?: Array<{
         level: string;
         price: number;
@@ -27,6 +40,12 @@ export interface CatalogItem {
         discount_price: number | null;
         discount_ends_at: string | null;
     } | null;
+}
+
+/** PackagingLadder::present() — e.g. pieces 3617, label "30 Cartons · 17 Pieces". */
+export interface StockFigure {
+    pieces: number;
+    label: string;
 }
 
 export interface CardPricing {

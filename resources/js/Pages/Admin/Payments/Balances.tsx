@@ -18,6 +18,7 @@ import React from "react";
 
 import AdminLayout from "@/Layouts/AdminLayout";
 import type { BalanceBucket, OverdueCash, RemittanceRow } from "@/types/payments";
+import { dayDateTime } from "@/utils/dates";
 
 interface SellerBalance {
     id: number;
@@ -133,7 +134,7 @@ export default function SellerBalances({ sellers = [], remittances = [], cash_fl
                     <TableBody>
                         {remittances.map((row) => (
                             <TableRow key={row.id} hover>
-                                <TableCell>{row.at ? new Date(row.at).toLocaleString() : "—"}</TableCell>
+                                <TableCell>{dayDateTime(row.at)}</TableCell>
                                 <TableCell>{row.by ?? "—"}</TableCell>
                                 <TableCell>
                                     {row.from} → {row.to ? `${row.to.provider_name} · ${row.to.account_number}` : "—"}

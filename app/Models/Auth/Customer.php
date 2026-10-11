@@ -97,6 +97,12 @@ class Customer extends Model
         return $this->belongsTo(\App\Models\Store\Store::class);
     }
 
+    /** Where they take deliveries, most recently used first. */
+    public function addresses(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CustomerAddress::class)->orderByDesc('last_used_at')->orderByDesc('id');
+    }
+
     /** An admin gave this customer a credit limit and days to pay. */
     public function hasCredit(): bool
     {

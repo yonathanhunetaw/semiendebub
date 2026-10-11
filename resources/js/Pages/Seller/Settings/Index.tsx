@@ -5,7 +5,7 @@ import {
     sellerShadow,
 } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { Head, Link, useForm, usePage } from "@inertiajs/react";
+import { Head, router, useForm, usePage } from "@inertiajs/react";
 import {
     Avatar, Box, Button, Chip, Divider, FormControlLabel, Stack, Switch,
     TextField, Typography, ToggleButtonGroup, ToggleButton, alpha, useTheme,
@@ -288,12 +288,14 @@ export default function Index() {
                         </Stack>
                     </Box>
 
-                    {/* ── Sign out ── */}
+                    {/* ── Sign out ──
+                        A plain button: this sits inside the settings <form>,
+                        and a submit-type button saved the settings ("Settings
+                        updated!") instead of signing out. The server answers
+                        with a full-page visit to this app's login page. */}
                     <Button
-                        component={Link}
-                        href={route("logout")}
-                        method="post"
-                        as="button"
+                        type="button"
+                        onClick={() => router.post(route("logout"))}
                         variant="outlined"
                         fullWidth
                         sx={{

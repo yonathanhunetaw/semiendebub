@@ -2,7 +2,7 @@ import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm, Link } from "@inertiajs/react";
 import Grid from '@mui/material/Grid';
 import {
-    Box, Button, Paper, Stack, TextField, Typography, MenuItem
+    Box, Button, Paper, Stack, TextField, Typography, MenuItem, Checkbox, FormControlLabel
 } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
@@ -27,6 +27,7 @@ export default function CreateUser({ roles = [], stores = [], can_assign_any_sto
         store_id: (default_store_id ?? '') as number | '',
         password: '',
         password_confirmation: '',
+        is_driver: false,
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -102,6 +103,14 @@ export default function CreateUser({ roles = [], stores = [], can_assign_any_sto
                                 ))}
                             </TextField>
                         </Grid>
+                        {data.role === 'delivery' && (
+                            <Grid size={{ xs: 12 }}>
+                                <FormControlLabel
+                                    control={<Checkbox checked={data.is_driver} onChange={e => setData('is_driver', e.target.checked)} />}
+                                    label="Driver: may carry freight (hub → store shipments)"
+                                />
+                            </Grid>
+                        )}
                         <Grid size={{ xs: 12 }}>
                             <TextField
                                 fullWidth label="Phone Number"

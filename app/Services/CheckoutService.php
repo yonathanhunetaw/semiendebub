@@ -123,7 +123,8 @@ class CheckoutService
                 // wait, the nearest hub that has it. A friendly early refusal
                 // here — the binding check is the reservation below, which
                 // repeats it under the variant lock.
-                $availableStock = $this->stockService->availableAtStore((int) $variant->id, (int) $cart->store_id);
+                // Within the customer's pool when stock is set aside for Business.
+                $availableStock = $this->stockService->availableAtStore((int) $variant->id, (int) $cart->store_id, $customerType);
                 $holdAt = null;
 
                 if ($availableStock < $requestedQuantity && $delayAgreed && $cart->store !== null) {
@@ -234,6 +235,8 @@ class CheckoutService
                     'expires_at' => $holdUntil,
                     'user_id' => $userId ?? auth()->id(),
                     'reason' => 'Checkout '.$sale->reference_number,
+                    // Individual or Business stock (StockPools).
+                    'pool' => $customerType,
                 ];
 
                 if ($item['hold_at'] !== null) {
@@ -334,7 +337,7 @@ class CheckoutService
             throw new CartCheckoutException("'{$variant->sku}' is not sold as loose pieces at this store.", $cart->id);
         }
 
-        $available = $this->stockService->availableAtStore((int) $pieceVariant->id, (int) $cart->store_id);
+        $available = $this->stockService->availableAtStore((int) $pieceVariant->id, (int) $cart->store_id, $customerType);
         $holdAt = null;
 
         if ($available < $pieces && $delayAgreed && $cart->store !== null) {

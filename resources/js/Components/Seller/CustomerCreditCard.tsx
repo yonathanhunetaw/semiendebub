@@ -5,13 +5,14 @@ import type { CreditInvoice, CreditSummary, OrderPayment, PaymentAccountOption }
 import { router } from "@inertiajs/react";
 import { Typography } from "@mui/material";
 import React, { useState } from "react";
+import { dayDate } from "@/utils/dates";
 
 /**
  * A customer's credit on their page: the limit an admin set, what they owe
  * and when, and taking a repayment.
  *
  * The seller cannot change the limit or the days. A repayment is split like
- * any payment: cash is taken on the spot, an account part waits for the
+ * any payment: cash waits for a store manager or admin, an account part waits for the
  * customer to pay and for the account's owner to confirm it, and only then
  * does what the customer owes go down.
  */
@@ -31,7 +32,7 @@ const REPAYMENT_CHIP: Record<string, { label: string; className: string }> = {
     confirmed: { label: "Received", className: "border-success/30 bg-success-container/60 text-on-success-container" },
 };
 
-const date = (iso: string | null): string => (iso ? new Date(iso).toLocaleDateString() : "—");
+const date = (iso: string | null): string => dayDate(iso);
 
 export default function CustomerCreditCard({
     customerId,

@@ -48,6 +48,8 @@ export interface PickPackLine {
     suggested_source: SourceRef | null;
     options: SourcingOption[];
     is_sourced: boolean;
+    /** When the picker ticked it as in hand; saved so every role sees it. */
+    ticked_at?: string | null;
 }
 
 export interface PickPackSale {
@@ -62,9 +64,25 @@ export interface PickPackSale {
     /** The buyer accepted a longer wait for hub-sourced lines at checkout. */
     delay_agreed: boolean;
     sourcing_confirmed_at: string | null;
+    /** Every payment part confirmed: the gate before it may go to delivery. */
+    paid?: boolean;
+    picking_started_at?: string | null;
+    picking_started_by?: string | null;
+    packed_at?: string | null;
+}
+
+/** Where the order goes once it is handed over. */
+export interface PickPackDelivery {
+    method: "courier" | "vehicle";
+    address: string | null;
+    recipient: string | null;
+    courier: string | null;
+    plate: string | null;
+    driver_phone: string | null;
 }
 
 export interface PickPackPlan {
     sale: PickPackSale;
     lines: PickPackLine[];
+    delivery?: PickPackDelivery | null;
 }

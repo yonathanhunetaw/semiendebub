@@ -20,9 +20,9 @@ class CustomerController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $customers = Customer::with('creator')
+        $customers = self::forSeller($request)->with('creator')
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get();
@@ -45,7 +45,12 @@ class CustomerController extends Controller
     {
         // A TIN means "individual" and VAT-inclusive pricing, no TIN means
         // "business". Credit is never set here: only an admin gives it.
-        Customer::create([...$request->customerData(), 'created_by' => auth()->id()]);
+        // The customer belongs to the seller's store, like an admin's do.
+        Customer::create([
+            ...$request->customerData(),
+            'store_id' => $request->user()->store_id,
+            'created_by' => auth()->id(),
+        ]);
 
         return redirect()->route('seller.customers.index')
             ->with('success', 'Customer created successfully.');
@@ -56,13 +61,16 @@ class CustomerController extends Controller
      */
     public function show(Request $request, Customer $customer, CustomerCreditService $credit, PaymentBoard $board)
     {
-        $customer->load(['creator', 'carts']);
+        $this->guard($request, $customer);
+        $customer->load(['creator', 'carts', 'addresses']);
 
         return Inertia::render('Seller/Customers/Show', [
             'customer' => $customer,
             // What they owe and may still buy on credit. The seller sees it
             // and takes repayments; only an admin sets the limit.
             'credit' => $credit->summary($customer),
+            // Where their orders have gone, saved at checkout.
+            'addresses' => $customer->addresses->map->present()->values(),
             'invoices' => $credit->invoices((int) $customer->id),
             'repayments' => Payment::query()
                 ->where('kind', Payment::KIND_REPAYMENT)
@@ -81,6 +89,8 @@ class CustomerController extends Controller
     /** The customer pays back credit, split across accounts and cash. */
     public function repay(SetPaymentPartsRequest $request, Customer $customer, PaymentService $payments): RedirectResponse
     {
+        $this->guard($request, $customer);
+
         try {
             $payments->setRepayment($customer, $request->parts(), $request->user());
         } catch (PaymentException $e) {
@@ -93,6 +103,7 @@ class CustomerController extends Controller
     /** The customer says they paid a repayment part into an account. */
     public function claimRepayment(Request $request, Customer $customer, int $payment, PaymentService $payments): RedirectResponse
     {
+        $this->guard($request, $customer);
         $part = Payment::query()->where('kind', Payment::KIND_REPAYMENT)->where('customer_id', $customer->id)->findOrFail($payment);
 
         try {
@@ -105,8 +116,9 @@ class CustomerController extends Controller
     }
 
     /** Drop a repayment part the customer never paid. */
-    public function voidRepayment(Customer $customer, int $payment, PaymentService $payments): RedirectResponse
+    public function voidRepayment(Request $request, Customer $customer, int $payment, PaymentService $payments): RedirectResponse
     {
+        $this->guard($request, $customer);
         $part = Payment::query()->where('kind', Payment::KIND_REPAYMENT)->where('customer_id', $customer->id)->findOrFail($payment);
 
         try {
@@ -121,9 +133,9 @@ class CustomerController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(string $id)
+    public function edit(Request $request, string $id)
     {
-        $customer = Customer::findOrFail($id);
+        $customer = self::forSeller($request)->findOrFail($id);
 
         return Inertia::render('Seller/Customers/Edit', compact('customer'));
     }
@@ -133,7 +145,7 @@ class CustomerController extends Controller
      */
     public function update(SellerCustomerRequest $request, string $id)
     {
-        $customer = Customer::findOrFail($id);
+        $customer = self::forSeller($request)->findOrFail($id);
         $customer->update($request->customerData());
 
         return redirect()->route('seller.customers.show', $customer->id)
@@ -143,12 +155,33 @@ class CustomerController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
-        $customer = Customer::findOrFail($id);
+        $customer = self::forSeller($request)->findOrFail($id);
         $customer->delete();
 
         return redirect()->route('seller.customers.index')
             ->with('success', 'Customer deleted successfully.');
+    }
+
+    /**
+     * Customers of the seller's store. A seller with no store (an admin on
+     * the seller app) sees every customer; customers saved before they had
+     * a store stay visible to all.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<Customer>
+     */
+    public static function forSeller(Request $request): \Illuminate\Database\Eloquent\Builder
+    {
+        $storeId = $request->user()?->store_id;
+
+        return Customer::query()->when($storeId !== null, fn ($query) => $query
+            ->where(fn ($q) => $q->where('store_id', $storeId)->orWhereNull('store_id')));
+    }
+
+    /** Another store's customer is a 404. */
+    private function guard(Request $request, Customer $customer): void
+    {
+        abort_unless(self::forSeller($request)->whereKey($customer->id)->exists(), 404);
     }
 }

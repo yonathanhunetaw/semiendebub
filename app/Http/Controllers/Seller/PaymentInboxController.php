@@ -18,16 +18,20 @@ use Inertia\Response;
 
 /**
  * The account owner's inbox: parts a customer says they paid into one of
- * this seller's accounts, and handovers other sellers sent to a settlement
- * account they own. The owner checks the account and confirms, or answers
- * "not received yet".
+ * this seller's accounts, deposits expected there that nobody has marked
+ * paid yet, and handovers other sellers sent to a settlement account they
+ * own. The owner checks the account and confirms, or answers "not received
+ * yet".
  */
 class PaymentInboxController extends Controller
 {
     public function index(Request $request, PaymentBoard $board): Response
     {
         return Inertia::render('Seller/Payments/Inbox', [
-            'payments' => $board->inbox((int) $request->user()->id),
+            'payments' => $board->inbox($request->user()),
+            // Deposits into this owner's accounts not marked paid yet: they
+            // may confirm one the moment it shows in the account.
+            'expected' => $board->expectedInbox($request->user()),
             'handovers' => $board->handoverInbox((int) $request->user()->id),
         ]);
     }

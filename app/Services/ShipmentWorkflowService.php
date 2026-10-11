@@ -459,10 +459,12 @@ class ShipmentWorkflowService
      *
      * @return array<int, array{id: int, name: string, phone: string|null}>
      */
-    public function courierOptions(): array
+    public function courierOptions(bool $driversOnly = false): array
     {
         return User::query()
             ->where('role', 'delivery')
+            // Freight goes only to couriers designated as drivers.
+            ->when($driversOnly, fn ($query) => $query->where('is_driver', true))
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name', 'email', 'phone_number', 'role'])
             ->filter(fn (User $u): bool => $u->roleKey() === 'delivery')
@@ -919,13 +921,23 @@ class ShipmentWorkflowService
     /**
      * A courier takes ownership of a dispatched shipment.
      */
+    /**
+     * Freight (hub → store runs) is a driver's job: only couriers an admin
+     * designated as drivers are offered it, may claim it or agree to carry
+     * it. A courier who only does last-mile deliveries never sees the pool.
+     */
+    public static function canCarryFreight(User $user): bool
+    {
+        return $user->roleKey() !== 'delivery' || (bool) $user->is_driver;
+    }
+
     public function claim(Shipment $shipment, User $courier): bool
     {
         if ($shipment->courier_id !== null || $shipment->status !== self::DISPATCHED) {
             return false;
         }
 
-        if (! $shipment->courierIsEligible((int) $courier->id)) {
+        if (! self::canCarryFreight($courier) || ! $shipment->courierIsEligible((int) $courier->id)) {
             return false;
         }
 
@@ -1137,7 +1149,9 @@ class ShipmentWorkflowService
             return $query->where(function (Builder $q) use ($user): void {
                 $q->where('courier_id', $user->id)
                     ->orWhere(function (Builder $open) use ($user): void {
-                        $open->whereNull('courier_id')
+                        // The open pool is for drivers only.
+                        $open->whereRaw(self::canCarryFreight($user) ? '1 = 1' : '1 = 0')
+                            ->whereNull('courier_id')
                             ->whereNotIn('status', [self::RECEIVED, self::CANCELLED])
                             // Offered to every driver, or to this one.
                             ->where(fn (Builder $offered) => $offered
@@ -1452,10 +1466,10 @@ class ShipmentWorkflowService
         }
 
         if ($role === 'delivery') {
-            // The assigned courier, or any courier while the run is unclaimed.
+            // The assigned courier, or any driver while the run is unclaimed.
             // Only a driver the creator offered the run to.
             if ((int) $shipment->courier_id === (int) $user->id
-                || ($shipment->courier_id === null && $shipment->courierIsEligible((int) $user->id))
+                || ($shipment->courier_id === null && self::canCarryFreight($user) && $shipment->courierIsEligible((int) $user->id))
             ) {
                 $parties[] = self::PARTY_FLEET;
             }

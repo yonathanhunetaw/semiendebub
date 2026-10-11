@@ -13,6 +13,8 @@ use App\Models\Finance\PaymentAccount;
 use App\Models\Finance\Sale;
 use App\Models\Finance\SaleItem;
 use App\Models\Inventory\StockReservation;
+use App\Services\Admin\ActiveStore;
+use App\Services\Inventory\StockPools;
 use App\Services\StockService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -22,19 +24,32 @@ use Illuminate\Support\Facades\DB;
  *
  *   setParts      the seller splits the order total across collection
  *                 accounts, cash and the customer's credit. Account parts
- *                 start pending; cash is confirmed on the spot by the seller
- *                 taking it; credit is confirmed on the spot, within the
- *                 limit an admin set. The parts must add up to the total.
+ *                 start pending; cash starts claimed by the seller taking
+ *                 it and waits on a store manager or admin; credit is
+ *                 confirmed on the spot, within the limit an admin set. The
+ *                 parts must add up to the total.
  *   setRepayment  a customer pays back credit, split the same way (no
  *                 credit). It reduces what they owe once confirmed.
  *   claim         the customer says they paid a part: it waits on the
  *                 account's owner, and the order's stock stops lapsing.
- *   confirm       the owner saw the money arrive.
+ *   confirm       a second person saw the money arrive. The account's owner
+ *                 may confirm a deposit before anyone marks it paid, as
+ *                 long as they did not record the part themselves.
  *   reject        "not received yet": the part goes back to pending.
  *   voidOpen      the order was cancelled; parts whose money never arrived,
  *                 and any credit it used, are voided.
  *
- * Once every live part is confirmed the order moves to Pick & Pack. Each step
+ * Two people stand behind every money part: whoever marks it paid (claims
+ * it) cannot also confirm it. Cash is claimed by the seller who took it and
+ * confirmed by a store manager or admin of the store; an account part is
+ * confirmed by the account's owner, or, when the owner claimed it themselves,
+ * by a store manager or admin. Credit needs no second person: an admin
+ * already set it.
+ *
+ * Once every live part is confirmed the order moves to Pick & Pack. Until it
+ * is handed to delivery its payment may still change (a credit part swapped
+ * for cash, say); it then waits in Pick & pack for that money, and cannot
+ * leave until it is in (OrderSourcingService::confirmSourcing). Each step
  * locks the sale row (or, for a repayment, the customer), so two
  * confirmations cannot both advance it. Money that is confirmed lands on the
  * confirmer's balance (BalanceLedger); credit is not money and does not.
@@ -49,10 +64,15 @@ class PaymentService
     }
 
     /**
-     * Replace the order's pending parts with $parts.
+     * Replace how the order is paid: its pending parts and any credit it used
+     * give way to $parts.
      *
-     * Claimed and confirmed parts are kept; together with the new ones they
-     * must equal the order total. No parts at all is "pay later".
+     * Money someone already marked paid or confirmed is kept; together with
+     * the new parts it must equal the order total. No parts at all is "pay
+     * later". This works in To pay and, until the order is handed to
+     * delivery, in Pick & pack: a customer may swap credit for cash while the
+     * order is being picked, and the order then waits for that money before
+     * it can leave (OrderSourcingService::confirmSourcing).
      *
      * @param  array<int, array{payment_account_id?: int|null, amount: float|int|string, transaction_reference?: string|null}>  $parts
      *
@@ -61,15 +81,18 @@ class PaymentService
     public function setParts(Sale $sale, array $parts, User $by): Sale
     {
         return DB::transaction(function () use ($sale, $parts, $by): Sale {
-            $sale = $this->lockAwaitingPayment($sale);
+            $sale = $this->lockPayable($sale);
 
-            $kept = $sale->payments()->whereIn('status', [Payment::STATUS_CLAIMED, Payment::STATUS_CONFIRMED])->get();
+            $kept = $sale->payments()
+                ->whereIn('status', [Payment::STATUS_CLAIMED, Payment::STATUS_CONFIRMED])
+                ->where('payment_method', '!=', Payment::METHOD_CREDIT)
+                ->get();
             $keptCents = $this->cents($kept->sum('amount'));
             $newCents = array_sum(array_map(fn (array $part): int => $this->cents($part['amount']), $parts));
             $totalCents = $this->cents($sale->total_amount);
 
             if ($parts === [] && $kept->isEmpty()) {
-                $sale->payments()->where('status', Payment::STATUS_PENDING)->delete();
+                $this->dropReplaceable($sale);
 
                 return $this->settle($sale, $by);
             }
@@ -85,11 +108,13 @@ class PaymentService
             $accounts = $this->collectionAccounts((int) $sale->store_id, $parts);
             $creditCents = $this->creditCents($parts);
 
+            // The old credit is given back before the limit is checked, so
+            // re-splitting an order does not count its credit twice.
+            $this->dropReplaceable($sale);
+
             if ($creditCents > 0) {
                 $this->guardCredit($sale, $creditCents);
             }
-
-            $sale->payments()->where('status', Payment::STATUS_PENDING)->delete();
 
             foreach ($parts as $part) {
                 $this->createPart(['sale_id' => $sale->id], $part, $accounts, $by);
@@ -182,7 +207,9 @@ class PaymentService
             $sale = $this->lockFor($payment);
             $payment = $this->fresh($payment);
 
-            if ($payment->status !== Payment::STATUS_PENDING || $payment->payment_account_id === null) {
+            $claimable = $payment->payment_account_id !== null || $payment->payment_method === Payment::METHOD_CASH;
+
+            if ($payment->status !== Payment::STATUS_PENDING || ! $claimable) {
                 throw new PaymentException('Only a payment still waiting for the customer can be marked as paid.');
             }
 
@@ -209,7 +236,14 @@ class PaymentService
     {
         return DB::transaction(function () use ($payment, $by): Payment {
             $sale = $this->lockFor($payment);
-            $payment = $this->claimedFor($payment, $by);
+            $early = self::mayConfirmEarly($this->fresh($payment), $by);
+            $payment = $early ? $this->fresh($payment) : $this->claimedFor($payment, $by);
+
+            // Confirmed before anyone said "customer paid": the money is in,
+            // so the order's stock stops lapsing just as a claim would.
+            if ($early && $sale !== null) {
+                $this->keepHolds($sale, $by);
+            }
 
             $payment->update([
                 'status' => Payment::STATUS_CONFIRMED,
@@ -266,9 +300,20 @@ class PaymentService
             ->update(['status' => Payment::STATUS_VOID]);
     }
 
+    /** Pending parts are deleted and credit voided: what a new split replaces. */
+    private function dropReplaceable(Sale $sale): void
+    {
+        $sale->payments()->where('status', Payment::STATUS_PENDING)->delete();
+        $sale->payments()
+            ->where('payment_method', Payment::METHOD_CREDIT)
+            ->where('status', '!=', Payment::STATUS_VOID)
+            ->update(['status' => Payment::STATUS_VOID]);
+    }
+
     /**
      * Move the order on once its money is in: every live part confirmed and
-     * adding up to the total.
+     * adding up to the total. An order already in Pick & pack stays there
+     * either way; only its payment status follows the money.
      */
     private function settle(Sale $sale, User $by): Sale
     {
@@ -298,7 +343,7 @@ class PaymentService
      */
     private function keepHolds(Sale $sale, User $by): void
     {
-        $sale->loadMissing('items.storeVariant');
+        $sale->loadMissing(['items.storeVariant', 'customer']);
 
         foreach ($sale->items as $item) {
             /** @var SaleItem $item */
@@ -314,6 +359,7 @@ class PaymentService
                 'sale_item_id' => $item->id,
                 'user_id' => $by->id,
                 'reason' => 'Renewed on payment '.$sale->reference_number,
+                'pool' => StockPools::forCustomer($sale->customer),
             ]);
         }
     }
@@ -355,18 +401,15 @@ class PaymentService
         $account = isset($part['payment_account_id']) ? $accounts->get((int) $part['payment_account_id']) : null;
 
         if ($account === null) {
-            // Cash is in the seller's hand: taking it is confirming it, and it
-            // is now on their balance.
-            $cash = Payment::create($base + [
+            // Cash is in the seller's hand, so it starts claimed by them. A
+            // store manager or admin confirms it; only then does it count,
+            // and it lands on the balance of the seller who took it.
+            return Payment::create($base + [
                 'payment_method' => Payment::METHOD_CASH,
-                'status' => Payment::STATUS_CONFIRMED,
-                'paid_at' => now(),
-                'confirmed_at' => now(),
-                'confirmed_by' => $by->id,
+                'status' => Payment::STATUS_CLAIMED,
+                'claimed_at' => now(),
+                'claimed_by' => $by->id,
             ]);
-            $this->ledger->recordPayment($cash);
-
-            return $cash;
         }
 
         return Payment::create($base + [
@@ -458,11 +501,16 @@ class PaymentService
             return null;
         }
 
-        return $this->lockAwaitingPayment($payment->sale);
+        return $this->lockPayable($payment->sale);
     }
 
-    /** @throws PaymentException */
-    private function lockAwaitingPayment(?Sale $sale): Sale
+    /**
+     * Lock an order whose payment may still change: in To pay, or in Pick &
+     * pack before it is handed to delivery.
+     *
+     * @throws PaymentException
+     */
+    private function lockPayable(?Sale $sale): Sale
     {
         if ($sale === null) {
             throw new PaymentException('This payment does not belong to an order.');
@@ -470,15 +518,18 @@ class PaymentService
 
         $locked = Sale::query()->whereKey($sale->id)->lockForUpdate()->first();
 
-        if ($locked === null || $locked->fulfillment_stage !== Sale::STAGE_AWAITING_PAYMENT) {
-            throw new PaymentException("Order {$sale->reference_number} is not waiting for payment.");
+        if ($locked === null || ! in_array($locked->fulfillment_stage, [Sale::STAGE_AWAITING_PAYMENT, Sale::STAGE_PICK_PACK], true)) {
+            throw new PaymentException("Order {$sale->reference_number} has left Pick & pack; its payment can no longer change.");
         }
 
         return $locked;
     }
 
     /**
-     * A claimed part, checked by the owner of the account it was paid into.
+     * A claimed part, checked by a second person: never the one who claimed
+     * it. An account part is the owner's to confirm (a store manager or admin
+     * stands in when the owner claimed it themselves); cash is a store
+     * manager's or admin's.
      *
      * @throws PaymentException
      */
@@ -486,8 +537,14 @@ class PaymentService
     {
         $payment = $this->fresh($payment);
 
-        if ((int) ($payment->account?->owner_user_id ?? 0) !== (int) $by->id) {
-            throw new PaymentException('Only the owner of this account can confirm what arrived in it.', 403);
+        if (! self::mayConfirm($payment, $by)) {
+            if ((int) $payment->claimed_by === (int) $by->id) {
+                throw new PaymentException('You marked this payment as paid yourself. A second person has to confirm it.', 403);
+            }
+
+            throw new PaymentException($payment->payment_account_id !== null
+                ? 'Only the owner of this account can confirm what arrived in it.'
+                : 'Only a store manager or admin can confirm cash a seller took.', 403);
         }
 
         if ($payment->status !== Payment::STATUS_CLAIMED) {
@@ -495,6 +552,65 @@ class PaymentService
         }
 
         return $payment;
+    }
+
+    /**
+     * The account's owner saw the deposit arrive before anyone marked it
+     * paid. Still two people: whoever recorded the part (its user_id) is
+     * never the one who confirms it early.
+     */
+    public static function mayConfirmEarly(Payment $payment, User $by): bool
+    {
+        $payment->loadMissing('account');
+
+        return $payment->status === Payment::STATUS_PENDING
+            && $payment->payment_account_id !== null
+            && (int) ($payment->account?->owner_user_id ?? 0) === (int) $by->id
+            && (int) $payment->user_id !== (int) $by->id;
+    }
+
+    /** May $by be the second person on this part? */
+    public static function mayConfirm(Payment $payment, User $by): bool
+    {
+        $payment->loadMissing(['account', 'sale']);
+
+        if ((int) $payment->claimed_by === (int) $by->id) {
+            return false;
+        }
+
+        $ownerId = (int) ($payment->account?->owner_user_id ?? 0);
+
+        if ($payment->payment_account_id !== null && $ownerId === (int) $by->id) {
+            return true;
+        }
+
+        // Cash, or an account part its own owner claimed: the store's manager.
+        $standIn = $payment->payment_account_id === null || $ownerId === (int) $payment->claimed_by;
+
+        return $standIn && self::managesStore($by, self::storeOf($payment));
+    }
+
+    /** A store manager or admin of $storeId (a global admin of any store). */
+    public static function managesStore(User $user, ?int $storeId): bool
+    {
+        if (! $user->isRole('admin', 'store_manager')) {
+            return false;
+        }
+
+        $ids = ActiveStore::accessibleIdsFor($user);
+
+        return $ids === null || ($storeId !== null && in_array($storeId, $ids, true));
+    }
+
+    /** The store a part was taken at. */
+    public static function storeOf(Payment $payment): ?int
+    {
+        $storeId = $payment->sale?->store_id
+            ?? $payment->account?->store_id
+            ?? $payment->claimer?->store_id
+            ?? $payment->user?->store_id;
+
+        return $storeId !== null ? (int) $storeId : null;
     }
 
     private function fresh(Payment $payment): Payment

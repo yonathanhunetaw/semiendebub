@@ -134,7 +134,7 @@ class ShipmentController extends Controller
                 // The car the run goes in and the drivers it is offered to.
                 'fleet' => $this->workflow->presentFleet($shipment),
                 'vehicle_options' => $this->workflow->vehicleOptions($shipment),
-                'courier_options' => $this->workflow->courierOptions(),
+                'courier_options' => $this->workflow->courierOptions(driversOnly: true),
                 'workflow_status' => (string) $shipment->status,
                 // Pick → prepare → driver → receiver, once scheduled.
                 'handoff' => $transfer['handoff'],

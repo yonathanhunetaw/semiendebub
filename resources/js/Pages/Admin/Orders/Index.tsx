@@ -16,6 +16,7 @@ import {
     Typography,
 } from "@mui/material";
 import React, { useState } from "react";
+import { dayDateTime } from "@/utils/dates";
 
 type Stage = "to_pay" | "paid" | "packing" | "to_deliver" | "delivered" | "canceled";
 
@@ -166,7 +167,7 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, stores 
                                             {order.delivery_status ? `${order.delivery_status.replace("_", " ")}${order.courier ? ` · ${order.courier}` : ""}` : "—"}
                                         </TableCell>
                                         <TableCell align="right">{birr(order.total)}</TableCell>
-                                        <TableCell>{order.placed_at ? new Date(order.placed_at).toLocaleString() : "—"}</TableCell>
+                                        <TableCell>{dayDateTime(order.placed_at)}</TableCell>
                                     </TableRow>
                                 );
                             })}

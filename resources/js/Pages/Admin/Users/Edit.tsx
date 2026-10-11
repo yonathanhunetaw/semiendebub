@@ -1,6 +1,6 @@
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm, Link } from "@inertiajs/react";
-import { Box, Button, Paper, Stack, TextField, Typography, MenuItem, Alert } from "@mui/material";
+import { Box, Button, Paper, Stack, TextField, Typography, MenuItem, Alert, Checkbox, FormControlLabel } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UpdateIcon from '@mui/icons-material/Update';
 import Grid from '@mui/material/Grid';
@@ -14,6 +14,8 @@ interface User {
     /** The role key (stock_keeper), not its display form. */
     role: string;
     store_id: number | null;
+    /** A courier who may carry freight (hub → store runs). */
+    is_driver?: boolean;
 }
 
 interface Props {
@@ -36,6 +38,7 @@ export default function EditUser({ user, roles = [], stores = [], can_assign_any
         store_id: (user.store_id ?? '') as number | '',
         password: '',
         password_confirmation: '',
+        is_driver: Boolean(user.is_driver),
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -101,6 +104,14 @@ export default function EditUser({ user, roles = [], stores = [], can_assign_any
                                 ))}
                             </TextField>
                         </Grid>
+                        {data.role === 'delivery' && (
+                            <Grid size={{ xs: 12 }}>
+                                <FormControlLabel
+                                    control={<Checkbox checked={data.is_driver} onChange={e => setData('is_driver', e.target.checked)} />}
+                                    label="Driver: may carry freight (hub → store shipments)"
+                                />
+                            </Grid>
+                        )}
                         <Grid size={{ xs: 12, sm: 6 }}>
                             <TextField
                                 fullWidth label="New Password" type="password"

@@ -8,7 +8,7 @@ import {
     IconButton, Collapse, Drawer, Divider, TextField, MenuItem,
     Select, FormControl, InputLabel, Tooltip, Alert, CircularProgress,
     Tabs, Tab, InputAdornment, Snackbar, Pagination, useMediaQuery,
-    useTheme, Card, CardContent, Slider,
+    useTheme, Card, CardContent, Slider, Checkbox,
 } from "@mui/material";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
@@ -105,6 +105,69 @@ export interface Variant {
     min_reorder?: number;
     target_cap?: number;
     incoming_transfer?: { qty: number; from?: string } | null;
+    /** Units kept for Business customers; null when there is one shared count. */
+    business_pool?: number | null;
+    /** Free stock in each pool now (StockPools::present). */
+    pools?: { set_aside: number; business: number; individual: number } | null;
+}
+
+/**
+ * Stock set aside for Business customers on this store item. Business sales
+ * draw only on it; Individual (VAT) sales never touch it. Empty means one
+ * shared count.
+ */
+function StockPoolBox({ variant }: { variant: Variant }) {
+    const [value, setValue] = useState(variant.business_pool == null ? "" : String(variant.business_pool));
+    const [pools, setPools] = useState(variant.pools ?? null);
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+
+    const save = async (next: string) => {
+        setSaving(true);
+        setMessage(null);
+        try {
+            const { data } = await axios.patch(`/store-variants/${variant.id}/business-pool`, {
+                business_pool: next.trim() === "" ? null : Number(next),
+            });
+            setValue(data.business_pool == null ? "" : String(data.business_pool));
+            setPools(data.pools ?? null);
+            setMessage({ text: data.business_pool == null ? "One shared count again." : "Business pool saved.", error: false });
+        } catch (e: any) {
+            setMessage({ text: e?.response?.data?.message ?? "Could not save the pool.", error: true });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+            <Typography variant="subtitle2" fontWeight={700}>Stock pools</Typography>
+            <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+                Units kept for Business customers. Individual (VAT) sales use the rest; leave empty for one shared count.
+            </Typography>
+            {pools ? (
+                <Stack direction="row" spacing={1} mb={1.5}>
+                    <Chip size="small" color="info" label={`Business ${pools.business} free`} />
+                    <Chip size="small" color="success" label={`Individual ${pools.individual} free`} />
+                </Stack>
+            ) : null}
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+                <TextField label="Set aside for Business" type="number" size="small" fullWidth value={value}
+                    onChange={e => setValue(e.target.value.replace(/[^0-9]/g, ""))}
+                    inputProps={{ min: 0, inputMode: "numeric" }}
+                    helperText={`In ${variant.label}`} />
+                <Button variant="contained" onClick={() => save(value)} disabled={saving} sx={{ flexShrink: 0, mt: 0.25 }}>
+                    Save
+                </Button>
+                {variant.business_pool != null || value !== "" ? (
+                    <Button onClick={() => save("")} disabled={saving} sx={{ flexShrink: 0, mt: 0.25 }}>Clear</Button>
+                ) : null}
+            </Stack>
+            {message ? (
+                <Typography variant="caption" color={message.error ? "error.main" : "success.main"}>{message.text}</Typography>
+            ) : null}
+        </Paper>
+    );
 }
 
 /** One of a store's stock-bearing places, as StoreLocationStockService reports it. */
@@ -380,7 +443,8 @@ export function EditDrawer({
     const [indActive, setIndActive] = useState(variant.individual_price?.active ?? true);
     const [individualPrice, setIndividualPrice] = useState<IndividualPrice | null>(variant.individual_price ?? null);
 
-    const [cpCustomer, setCpCustomer] = useState("");
+    // Several customers can take the same price in one save.
+    const [cpCustomers, setCpCustomers] = useState<string[]>([]);
     const [cpPrice, setCpPrice] = useState("");
     const [cpDiscount, setCpDiscount] = useState("");
     const [cpEndsAt, setCpEndsAt] = useState("");
@@ -434,28 +498,28 @@ export function EditDrawer({
     }, "Base price saved successfully!");
 
     const addCustomerPrice = () => wrap(async () => {
-        const { data } = await axios.post(`/store-variants/${variant.id}/customer-prices`, {
-            customer_id: cpCustomer, customer_type: customerType, price: cpPrice,
+        const { data } = await axios.post(`/store-variants/${variant.id}/customer-prices/bulk`, {
+            customer_ids: cpCustomers.map(Number), price: cpPrice,
             discount_price: cpDiscount || null, discount_ends_at: cpEndsAt || null,
         });
-        const row: CustomerPrice = {
-            id: data.id, customer_id: data.customer_id,
-            customer_name: data.customer?.first_name
-                ? `${data.customer.first_name} ${data.customer.last_name ?? ""}`.trim()
-                : `Customer #${data.customer_id}`,
-            tin_number: data.customer?.tin_number ?? null,
-            customer_type: data.customer?.tin_number ? "individual" : "business",
-            price: data.pricing_matrix?.price ?? data.price ?? 0,
+        const rows: CustomerPrice[] = (data as any[]).map((entry) => ({
+            id: entry.id, customer_id: entry.customer_id,
+            customer_name: entry.customer?.first_name
+                ? `${entry.customer.first_name} ${entry.customer.last_name ?? ""}`.trim()
+                : `Customer #${entry.customer_id}`,
+            tin_number: entry.customer?.tin_number ?? null,
+            customer_type: entry.customer?.tin_number ? "individual" : "business",
+            price: entry.pricing_matrix?.price ?? 0,
             individual_price: null, business_price: null,
-            discount_price: data.pricing_matrix?.discount_price ?? data.discount_price,
-            discount_ends_at: data.pricing_matrix?.discount_ends_at ?? data.discount_ends_at,
-        };
-        const index = customerPrices.findIndex(p => p.customer_id === Number(cpCustomer));
-        const next = index >= 0 ? customerPrices.map((p, i) => (i === index ? row : p)) : [...customerPrices, row];
+            discount_price: entry.pricing_matrix?.discount_price ?? null,
+            discount_ends_at: entry.pricing_matrix?.discount_ends_at ?? null,
+        }));
+        const updated = new Set(rows.map((row) => row.customer_id));
+        const next = [...customerPrices.filter((p) => !updated.has(p.customer_id)), ...rows];
         setCustomerPrices(next);
         onSaved({ ...variant, customer_prices: next, seller_prices: sellerPrices, individual_price: individualPrice });
-        setCpCustomer(""); setCpPrice(""); setCpDiscount(""); setCpEndsAt("");
-    }, "Customer price saved successfully!");
+        setCpCustomers([]); setCpPrice(""); setCpDiscount(""); setCpEndsAt("");
+    }, cpCustomers.length > 1 ? `Price saved for ${cpCustomers.length} customers.` : "Customer price saved successfully!");
 
     const deleteCustomerPrice = (id: number) => wrap(async () => {
         await axios.delete(`/store-variant-customer-prices/${id}`);
@@ -538,6 +602,8 @@ export function EditDrawer({
 
                 <Box sx={{ px: 3, py: 2, overflowY: "auto", flex: 1 }}>
                     {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+                    <StockPoolBox variant={variant} />
 
                     <Tabs value={pricingSection} onChange={(_, s) => setPricingSection(s)} variant="fullWidth"
                         sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}>
@@ -669,19 +735,34 @@ export function EditDrawer({
 
                             <Stack spacing={2}>
                                 <FormControl size="small" fullWidth>
-                                    <InputLabel>Customer</InputLabel>
-                                    <Select value={cpCustomer} label="Customer"
+                                    <InputLabel>Customers</InputLabel>
+                                    <Select multiple value={cpCustomers} label="Customers"
+                                        renderValue={(ids) => (ids as string[])
+                                            .map((id) => getPersonName(eligibleCustomers.find((c) => String(c.id) === id) ?? { id: Number(id), first_name: `Customer #${id}` }))
+                                            .join(", ")}
                                         onChange={e => {
-                                            setCpCustomer(String(e.target.value));
-                                            setCpPrice(defaultTierPrice);
-                                            setCpDiscount("");
-                                            setCpEndsAt(defaultExpiryDate());
+                                            const ids = typeof e.target.value === "string" ? e.target.value.split(",") : (e.target.value as string[]);
+                                            if (cpCustomers.length === 0 && ids.length > 0) {
+                                                setCpPrice(defaultTierPrice);
+                                                setCpDiscount("");
+                                                setCpEndsAt(defaultExpiryDate());
+                                            }
+                                            setCpCustomers(ids.map(String));
                                         }}>
                                         {eligibleCustomers.map(c => (
-                                            <MenuItem key={c.id} value={c.id}>{getPersonName(c)}</MenuItem>
+                                            <MenuItem key={c.id} value={String(c.id)}>
+                                                <Checkbox size="small" checked={cpCustomers.includes(String(c.id))} sx={{ p: 0.5, mr: 1 }} />
+                                                {getPersonName(c)}
+                                            </MenuItem>
                                         ))}
                                     </Select>
                                 </FormControl>
+                                {eligibleCustomers.length > 1 ? (
+                                    <Button size="small" sx={{ alignSelf: "flex-start", textTransform: "none" }}
+                                        onClick={() => setCpCustomers(cpCustomers.length === eligibleCustomers.length ? [] : eligibleCustomers.map((c) => String(c.id)))}>
+                                        {cpCustomers.length === eligibleCustomers.length ? "Clear all" : `Select all ${eligibleCustomers.length} ${customerType} customers`}
+                                    </Button>
+                                ) : null}
                                 <TextField label={`${customerType === "business" ? "Business" : "Individual"} Customer Price`}
                                     type="number" value={cpPrice} onChange={e => setCpPrice(e.target.value)}
                                     InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
@@ -698,8 +779,9 @@ export function EditDrawer({
                                     size="small" fullWidth />
                                 <Button variant="contained"
                                     startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <AddIcon />}
-                                    onClick={addCustomerPrice} disabled={saving || !cpCustomer || !cpPrice}>
+                                    onClick={addCustomerPrice} disabled={saving || cpCustomers.length === 0 || !cpPrice}>
                                     Save {customerType === "business" ? "Business" : "Individual"} Price
+                                    {cpCustomers.length > 1 ? ` for ${cpCustomers.length}` : ""}
                                 </Button>
                             </Stack>
                         </Box>

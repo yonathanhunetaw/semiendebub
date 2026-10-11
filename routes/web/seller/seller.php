@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Fulfillment\PickProgressController;
 use App\Http\Controllers\Seller\BalanceController;
 use App\Http\Controllers\Seller\CartController;
 use App\Http\Controllers\Seller\CategoryController;
@@ -103,6 +104,10 @@ Route::domain("seller.$baseDomain")
             Route::get('/orders/{reference}/pick-pack', [OrderController::class, 'pickPack'])->name('orders.pickpack');
             Route::post('/orders/{sale}/sourcing', [OrderController::class, 'confirmSourcing'])
                 ->name('orders.sourcing.confirm');
+            // Progress, saved so the stock keeper and the courier see it too.
+            Route::post('/orders/{sale}/picking', [PickProgressController::class, 'start'])->name('orders.picking.start');
+            Route::post('/orders/{sale}/lines/{item}/tick', [PickProgressController::class, 'tick'])->name('orders.lines.tick');
+            Route::post('/orders/{sale}/packed', [PickProgressController::class, 'packed'])->name('orders.packed');
             Route::get('/carts', [CartController::class, 'index'])->name('carts.index');
             Route::get('/items/search', [ItemController::class, 'search'])->name('items.search');
             Route::get('/items/page-json', [ItemController::class, 'pageItems'])->name('items.page-json');

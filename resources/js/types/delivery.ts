@@ -35,6 +35,29 @@ export interface DeliveryRun {
     created_at: string | null;
     /** Statuses this run may legally move to next, straight from the server. */
     allowed_transitions: DeliveryStatus[];
+    vehicle?: string | null;
+    vehicle_plate?: string | null;
+    /** courier: carried to the address; vehicle: a vehicle collects it at the store. */
+    method?: "courier" | "vehicle";
+    driver_phone?: string | null;
+}
+
+/** An order a seller or stock keeper is picking, coming the courier's way. */
+export interface BeingPackedRun {
+    id: number;
+    tracking_number: string | null;
+    reference: string | null;
+    store: string | null;
+    method: "courier" | "vehicle";
+    address: string | null;
+    plate: string | null;
+    /** Already named as this courier's run. */
+    mine: boolean;
+    lines: number;
+    in_hand: number;
+    packed: boolean;
+    paid: boolean;
+    started_at: string | null;
 }
 
 export interface DeliveryMetrics {
@@ -89,6 +112,7 @@ export interface DeliveryDashboardProps extends SharedProps {
     metrics: DeliveryMetrics;
     up_next: DeliveryRun[];
     available_runs: DeliveryRun[];
+    being_packed?: BeingPackedRun[];
     courier: Courier;
 }
 

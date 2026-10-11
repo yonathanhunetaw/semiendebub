@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Fulfillment\PickProgressController;
 use App\Http\Controllers\StockKeeper\DashboardController;
 use App\Http\Controllers\StockKeeper\InventoryController;
 use App\Http\Controllers\StockKeeper\OrderController;
@@ -74,6 +75,10 @@ Route::domain("stockkeeper.{$baseDomain}")
 
             // Pick the order and hand it to Delivery.
             Route::post('/orders/{sale}/pick', [OrderController::class, 'confirmSourcing'])->name('orders.pick');
+            // The same Pick & pack progress the seller app records.
+            Route::post('/orders/{sale}/picking', [PickProgressController::class, 'start'])->name('orders.picking.start');
+            Route::post('/orders/{sale}/lines/{item}/tick', [PickProgressController::class, 'tick'])->name('orders.lines.tick');
+            Route::post('/orders/{sale}/packed', [PickProgressController::class, 'packed'])->name('orders.packed');
             Route::get('/stock-alerts', [StockAlertController::class, 'index'])->name('alerts.index');
         });
     });

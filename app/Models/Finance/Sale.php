@@ -64,12 +64,17 @@ class Sale extends Model
         'subtotal',
         'tax_amount',
         'discount_amount',
+        'delivery_fee',
+        'delivery_option',
         'total_amount',
         'status',
         'payment_status',
         'due_date',
         'fulfillment_stage',
         'delay_agreed_at',
+        'picking_started_at',
+        'picking_started_by',
+        'packed_at',
         'sourcing_confirmed_at',
         'sourcing_confirmed_by',
         'notes',
@@ -80,6 +85,9 @@ class Sale extends Model
         'tax_amount' => 'decimal:2',
         'discount_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
+        'delivery_fee' => 'decimal:2',
+        'picking_started_at' => 'datetime',
+        'packed_at' => 'datetime',
         'delay_agreed_at' => 'datetime',
         'due_date' => 'date',
         'sourcing_confirmed_at' => 'datetime',
@@ -99,6 +107,11 @@ class Sale extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class, 'sale_id');
+    }
+
+    public function pickingStartedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'picking_started_by');
     }
 
     public function delivery(): HasOne
@@ -177,6 +190,15 @@ class Sale extends Model
     public function isAwaitingSourcing(): bool
     {
         return $this->fulfillment_stage === self::STAGE_PICK_PACK;
+    }
+
+    /**
+     * Every payment part confirmed (PaymentService::settle keeps
+     * payment_status in step), or nothing to pay at all.
+     */
+    public function isFullyPaid(): bool
+    {
+        return $this->payment_status === 'paid' || (float) $this->total_amount <= 0;
     }
 
     public function stageLabel(): string

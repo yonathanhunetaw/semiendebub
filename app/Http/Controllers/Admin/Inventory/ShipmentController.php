@@ -129,7 +129,7 @@ class ShipmentController extends Controller implements HasMiddleware
             'shipment' => $this->workflow->present($shipment, 'admin'),
             'variants' => $this->stock->variantOptions()->all(),
             'vehicle_options' => $this->workflow->vehicleOptions($shipment),
-            'courier_options' => $this->workflow->courierOptions(),
+            'courier_options' => $this->workflow->courierOptions(driversOnly: true),
         ]);
     }
 

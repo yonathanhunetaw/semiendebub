@@ -6,7 +6,11 @@ namespace App\Services\Finance;
 
 use App\Models\Finance\Payment;
 use App\Models\Finance\PaymentAccount;
+use App\Models\Auth\User;
 use App\Models\Finance\Remittance;
+use App\Models\Finance\Sale;
+use App\Services\Admin\ActiveStore;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * The read side of payments, shaped for the seller screens: the accounts a
@@ -78,14 +82,13 @@ class PaymentBoard
     }
 
     /**
-     * Claimed parts paid into this owner's accounts, oldest claim first.
+     * Claimed parts waiting on this user to confirm them, oldest claim first.
      *
      * @return array<int, array<string, mixed>>
      */
-    public function inbox(int $ownerId): array
+    public function inbox(User $user): array
     {
-        return Payment::query()
-            ->awaitingOwner($ownerId)
+        return $this->awaiting($user)
             ->with(['account.owner', 'sale.customer', 'sale.store', 'customer', 'claimer'])
             ->orderBy('claimed_at')
             ->get()
@@ -99,6 +102,50 @@ class PaymentBoard
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Deposits expected in this owner's accounts that nobody has marked
+     * paid yet: they reach the owner as soon as the split is saved, so the
+     * owner can confirm what already arrived without waiting for the seller.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function expectedInbox(User $user): array
+    {
+        return $this->expected($user)
+            ->with(['account.owner', 'sale.customer', 'sale.store', 'customer', 'user'])
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn (Payment $payment): array => $this->part($payment) + [
+                'order' => $payment->isRepayment() ? 'Credit repayment' : (string) ($payment->sale?->reference_number ?? ''),
+                'order_total' => (float) ($payment->sale?->total_amount ?? $payment->amount),
+                'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? 'Walk-in customer',
+                'store' => $payment->sale?->store?->name ?? $payment->account?->store?->name,
+                'claimed_by' => null,
+                'recorded_by' => $payment->user ? trim($payment->user->first_name.' '.$payment->user->last_name) : null,
+                'expected' => true,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Pending parts paid into $user's accounts, on orders whose payment can
+     * still change, that someone else recorded (PaymentService::
+     * mayConfirmEarly is the same rule, row by row).
+     *
+     * @return Builder<Payment>
+     */
+    public function expected(User $user): Builder
+    {
+        return Payment::query()
+            ->where('status', Payment::STATUS_PENDING)
+            ->whereHas('account', fn (Builder $account) => $account->where('owner_user_id', $user->id))
+            ->where(fn (Builder $q) => $q->whereNull('user_id')->orWhere('user_id', '!=', $user->id))
+            ->where(fn (Builder $q) => $q
+                ->whereNull('sale_id')
+                ->orWhereHas('sale', fn (Builder $sale) => $sale->whereIn('fulfillment_stage', [Sale::STAGE_AWAITING_PAYMENT, Sale::STAGE_PICK_PACK])));
     }
 
     /**
@@ -137,7 +184,47 @@ class PaymentBoard
     /** Deposits and handovers waiting on this owner: the More hub badge. */
     public function inboxCount(int $ownerId): int
     {
-        return Payment::query()->awaitingOwner($ownerId)->count()
+        $user = User::query()->find($ownerId);
+
+        return ($user ? $this->awaiting($user)->count() + $this->expected($user)->count() : 0)
             + Remittance::query()->awaitingOwner($ownerId)->count();
+    }
+
+    /**
+     * Claimed parts waiting on $user as the second person: deposits into
+     * their accounts, and, at stores they manage, cash and deposits the
+     * account's own owner claimed. Never a part they claimed themselves
+     * (PaymentService::mayConfirm is the same rule, row by row).
+     *
+     * @return Builder<Payment>
+     */
+    public function awaiting(User $user): Builder
+    {
+        $manager = $user->isRole('admin', 'store_manager');
+        // Null is every store (a global admin).
+        $managed = $manager ? ActiveStore::accessibleIdsFor($user) : [];
+
+        return Payment::query()
+            ->where('status', Payment::STATUS_CLAIMED)
+            ->where(fn (Builder $q) => $q->whereNull('claimed_by')->orWhere('claimed_by', '!=', $user->id))
+            ->where(function (Builder $q) use ($user, $manager, $managed): void {
+                $q->whereHas('account', fn (Builder $account) => $account->where('owner_user_id', $user->id));
+
+                if (! $manager) {
+                    return;
+                }
+
+                $q->orWhere(function (Builder $standIn) use ($managed): void {
+                    $standIn->where(fn (Builder $w) => $w->whereNull('payment_account_id')
+                        ->orWhereHas('account', fn (Builder $account) => $account->whereColumn('owner_user_id', 'payments.claimed_by')));
+
+                    if ($managed !== null) {
+                        $standIn->where(fn (Builder $w) => $w
+                            ->whereHas('sale', fn (Builder $sale) => $sale->whereIn('store_id', $managed))
+                            ->orWhere(fn (Builder $r) => $r->whereNull('sale_id')
+                                ->whereHas('claimer', fn (Builder $claimer) => $claimer->whereIn('store_id', $managed))));
+                    }
+                });
+            });
     }
 }

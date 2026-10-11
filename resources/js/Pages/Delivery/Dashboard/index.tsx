@@ -1,4 +1,4 @@
-import { Head, Link, router } from "@inertiajs/react";
+import { Head, Link, router, usePoll } from "@inertiajs/react";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 import ErrorRoundedIcon from "@mui/icons-material/ErrorRounded";
@@ -11,7 +11,9 @@ import {
     Box,
     Button,
     Container,
+    Chip,
     Grid,
+    LinearProgress,
     Paper,
     Stack,
     Typography,
@@ -22,7 +24,7 @@ import React from "react";
 
 import { DeliveryHero, EmptyRuns, RunCard, SectionTitle, StatTile } from "@/Components/Delivery/deliveryUi";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
-import type { DeliveryDashboardProps, DeliveryRun } from "@/types/delivery";
+import type { BeingPackedRun, DeliveryDashboardProps, DeliveryRun } from "@/types/delivery";
 
 /** "Good morning" etc., from the device clock. */
 function greeting(): string {
@@ -30,17 +32,61 @@ function greeting(): string {
     return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 
+/** One order being picked for the courier: who, where to, how far along. */
+function PackingCard({ run }: { run: BeingPackedRun }): React.ReactElement {
+    const progress = run.lines > 0 ? Math.round((run.in_hand / run.lines) * 100) : 0;
+
+    return (
+        <Paper elevation={0} sx={{ p: 1.5, borderRadius: 3, border: 1, borderColor: "divider", backgroundImage: "none" }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, fontFamily: "monospace" }} noWrap>
+                    {run.reference ?? run.tracking_number}
+                </Typography>
+                <Stack direction="row" spacing={0.5}>
+                    {run.mine ? <Chip size="small" color="primary" label="Yours" sx={{ fontWeight: 700 }} /> : null}
+                    <Chip
+                        size="small"
+                        color={run.packed ? "success" : "info"}
+                        variant="outlined"
+                        label={run.packed ? "Packed" : "Picking"}
+                        sx={{ fontWeight: 700 }}
+                    />
+                </Stack>
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} noWrap>
+                {run.store ?? "Store"} ·{" "}
+                {run.method === "vehicle" ? `vehicle collects${run.plate ? ` (${run.plate})` : ""}` : run.address ? `to ${run.address}` : "address to follow"}
+            </Typography>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                <LinearProgress variant="determinate" value={run.packed ? 100 : progress} sx={{ flex: 1, height: 6, borderRadius: 3 }} />
+                <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                    {run.in_hand}/{run.lines} in hand
+                </Typography>
+            </Stack>
+            {!run.paid ? (
+                <Typography variant="caption" color="warning.main" sx={{ display: "block", mt: 0.5 }}>
+                    Waiting for payment before it can be handed over.
+                </Typography>
+            ) : null}
+        </Paper>
+    );
+}
+
 /**
- * Courier home screen — today's workload, shortcuts to each board, and the
- * next runs waiting.
+ * Courier home screen — today's workload, shortcuts to each board, the next
+ * runs waiting, and orders being picked and packed for them (refreshed every
+ * 20 seconds, so progress at the store shows up without a reload).
  */
 export default function Dashboard({
     metrics,
     up_next: upNext,
     available_runs: availableRuns,
+    being_packed: beingPacked = [],
     courier,
 }: DeliveryDashboardProps): React.ReactElement {
     const theme = useTheme();
+
+    usePoll(20_000, { only: ["being_packed", "up_next", "available_runs", "metrics"] });
 
     const claim = (run: DeliveryRun): void => {
         router.post(route("delivery.delivery.claim", run.id), {}, { preserveScroll: true });
@@ -124,6 +170,18 @@ export default function Dashboard({
                         </Paper>
                     ))}
                 </Stack>
+
+                {/* ── Being picked at the store ── */}
+                {beingPacked.length > 0 ? (
+                    <>
+                        <SectionTitle title="Being packed" count={beingPacked.length} />
+                        <Stack spacing={1} sx={{ mb: 3 }}>
+                            {beingPacked.map((run) => (
+                                <PackingCard key={run.id} run={run} />
+                            ))}
+                        </Stack>
+                    </>
+                ) : null}
 
                 {/* ── Up next ── */}
                 <SectionTitle

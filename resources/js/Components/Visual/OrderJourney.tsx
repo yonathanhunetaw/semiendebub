@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "@inertiajs/react";
 import { Box, Chip, Stack, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import CheckRounded from "@mui/icons-material/CheckRounded";
 import RoleAvatar from "./RoleAvatar";
 import Scene, { type SceneKind } from "./scenes";
-import { bob, motionSafe, pop, pulse, slideX, slideY } from "./motion";
+import { bob, motionSafe, pop, pulse, slideX } from "./motion";
 import type { IdentityKey } from "./identities";
 
 /**
@@ -18,7 +18,8 @@ import type { IdentityKey } from "./identities";
  *   - pipeline: every order. `counts` puts a number on each stop; stops with
  *     orders waiting carry a bobbing parcel, and each stop can link to its list.
  *
- * Horizontal from md, vertical on a phone.
+ * Always one horizontal road: on a narrow screen it scrolls sideways
+ * (smoothly, snapping to stops) and brings the current stop into view.
  */
 
 export type JourneyStage = "store" | "cart" | "to_pay" | "paid" | "packing" | "to_deliver" | "delivered";
@@ -92,45 +93,71 @@ export default function OrderJourney({ current, cancelled = false, counts, hrefs
     const primary = theme.palette.primary.main;
     const muted = theme.palette.divider;
 
-    // The track runs through the centres of the first and last stop.
+    // The track runs from the centre of the first stop to the centre of the
+    // last (Delivered), so it ends under that node instead of running past it.
     const inset = `calc(100% / ${n} / 2)`;
+    const trackTop = (compact ? 0 : 44) + NODE / 2 - 2;
+
+    // Keep the current stop in view on a narrow screen: the road scrolls
+    // sideways (smoothly) rather than folding into a tall column.
+    const scroller = useRef<HTMLDivElement | null>(null);
+    const stopRefs = useRef<Array<HTMLElement | null>>([]);
+    useEffect(() => {
+        const box = scroller.current;
+        const stop = stopRefs.current[Math.max(0, reached)];
+        if (!box || !stop || pipeline || box.scrollWidth <= box.clientWidth) return;
+        box.scrollTo({ left: stop.offsetLeft - box.clientWidth / 2 + stop.clientWidth / 2, behavior: "smooth" });
+    }, [reached, pipeline]);
 
     return (
-        <Box sx={{ position: "relative", ...motionSafe }}>
+        <Box
+            ref={scroller}
+            sx={{
+                overflowX: "auto",
+                overscrollBehaviorX: "contain",
+                scrollBehavior: "smooth",
+                scrollSnapType: "x proximity",
+                WebkitOverflowScrolling: "touch",
+                pb: 1,
+                mx: { xs: -1, sm: 0 },
+                px: { xs: 1, sm: 0 },
+                "&::-webkit-scrollbar": { height: 6 },
+                "&::-webkit-scrollbar-thumb": { bgcolor: "divider", borderRadius: 3 },
+                ...motionSafe,
+            }}
+        >
+        <Box sx={{ position: "relative", minWidth: n * (compact ? 88 : 116) }}>
             {/* ── Track ── */}
             <Box
                 aria-hidden
                 sx={{
                     position: "absolute",
                     zIndex: 0,
-                    // Vertical on a phone: down the stops' centre column.
-                    left: { xs: NODE / 2 - 2, md: inset },
-                    right: { xs: "auto", md: inset },
-                    top: { xs: NODE / 2, md: (compact ? 0 : 44) + NODE / 2 - 2 },
-                    bottom: { xs: NODE / 2, md: "auto" },
-                    width: { xs: 4, md: "auto" },
-                    height: { xs: "auto", md: 4 },
+                    left: inset,
+                    right: inset,
+                    top: trackTop,
+                    height: 4,
                     borderRadius: 2,
                     // Marching dashes: the road ahead.
-                    backgroundImage: `repeating-linear-gradient(var(--track-angle), ${muted} 0 8px, transparent 8px 14px)`,
-                    "--track-angle": { xs: "180deg", md: "90deg" },
-                    backgroundSize: { xs: "4px 24px", md: "24px 4px" },
-                    animation: { xs: `${slideY} 1.2s linear infinite`, md: `${slideX} 1.2s linear infinite` },
+                    backgroundImage: `repeating-linear-gradient(90deg, ${muted} 0 8px, transparent 8px 14px)`,
+                    backgroundSize: "24px 4px",
+                    animation: `${slideX} 1.2s linear infinite`,
                 }}
             />
-            {/* ── Progress: the road travelled ── */}
+            {/* ── Progress: the road travelled, never past the last stop ── */}
             <Box
                 aria-hidden
                 sx={{
                     position: "absolute",
                     zIndex: 0,
-                    left: { xs: NODE / 2 - 2, md: inset },
-                    top: { xs: NODE / 2, md: (compact ? 0 : 44) + NODE / 2 - 2 },
-                    width: { xs: 4, md: `calc((100% - 100% / ${n}) * ${progress / 100})` },
-                    height: { xs: `calc((100% - ${NODE}px) * ${progress / 100})`, md: 4 },
+                    left: inset,
+                    top: trackTop,
+                    width: `calc((100% - 100% / ${n}) * ${progress / 100})`,
+                    maxWidth: `calc(100% - 100% / ${n})`,
+                    height: 4,
                     borderRadius: 2,
                     bgcolor: cancelled ? theme.palette.error.main : pipeline ? alpha(primary, 0.5) : success,
-                    transition: "width 1.1s cubic-bezier(.65,0,.35,1), height 1.1s cubic-bezier(.65,0,.35,1)",
+                    transition: "width 1.1s cubic-bezier(.65,0,.35,1)",
                 }}
             />
 
@@ -140,8 +167,7 @@ export default function OrderJourney({ current, cancelled = false, counts, hrefs
                     position: "relative",
                     zIndex: 1,
                     display: "grid",
-                    gridTemplateColumns: { xs: "1fr", md: `repeat(${n}, minmax(0, 1fr))` },
-                    rowGap: { xs: 2.5, md: 0 },
+                    gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`,
                 }}
             >
                 {JOURNEY.map((stage, index) => {
@@ -188,32 +214,36 @@ export default function OrderJourney({ current, cancelled = false, counts, hrefs
                     return (
                         <Box
                             key={stage.key}
+                            ref={(element: HTMLElement | null) => {
+                                stopRefs.current[index] = element;
+                            }}
                             component={href ? Link : "div"}
                             href={href}
                             sx={{
                                 display: "flex",
-                                flexDirection: { xs: "row", md: "column" },
+                                flexDirection: "column",
                                 alignItems: "center",
-                                gap: { xs: 1.5, md: 1 },
-                                textAlign: { xs: "left", md: "center" },
+                                gap: 1,
+                                textAlign: "center",
                                 textDecoration: "none",
                                 color: "inherit",
                                 borderRadius: 3,
-                                px: { md: 0.5 },
+                                px: 0.5,
+                                scrollSnapAlign: "center",
                                 ...(href ? { "&:hover .journey-label": { color: "primary.main" } } : {}),
                             }}
                         >
                             {/* Who works this stop: above it on wide screens. */}
                             {!compact && (
-                                <Stack direction="row" spacing={-1} sx={{ height: 36, alignItems: "flex-end", justifyContent: "center", display: { xs: "none", md: "flex" }, order: { md: 0 } }}>
+                                <Stack direction="row" spacing={-1} sx={{ height: 36, alignItems: "flex-end", justifyContent: "center", display: "flex" }}>
                                     {(pipeline || here ? stage.actors : []).map((actor) => (
                                         <RoleAvatar key={actor} role={actor} size={here ? 34 : 28} working={here && !cancelled} />
                                     ))}
                                 </Stack>
                             )}
-                            <Box sx={{ order: { md: 1 } }}>{node}</Box>
-                            <Box sx={{ order: { md: 2 }, minWidth: 0, flex: { xs: 1, md: "none" } }}>
-                                <Stack direction="row" spacing={0.75} alignItems="center" justifyContent={{ xs: "flex-start", md: "center" }}>
+                            <Box>{node}</Box>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
                                     <Typography className="journey-label" sx={{ fontWeight: here ? 800 : 700, fontSize: "0.875rem", color: here ? (cancelled ? "error.main" : "primary.main") : ahead ? "text.secondary" : "text.primary", transition: "color .3s" }}>
                                         {stage.label}
                                     </Typography>
@@ -222,23 +252,16 @@ export default function OrderJourney({ current, cancelled = false, counts, hrefs
                                     )}
                                 </Stack>
                                 {!compact && (
-                                    <Typography variant="caption" sx={{ color: "text.secondary", display: "block", lineHeight: 1.35, mt: 0.25, maxWidth: { md: 140 }, mx: { md: "auto" } }}>
+                                    <Typography variant="caption" sx={{ color: "text.secondary", display: "block", lineHeight: 1.35, mt: 0.25, maxWidth: 140, mx: "auto" }}>
                                         {here && cancelled ? "Cancelled here" : stage.hint}
                                     </Typography>
                                 )}
                             </Box>
-                            {/* On a phone the people sit at the end of the row. */}
-                            {!compact && (pipeline || here) && (
-                                <Stack direction="row" spacing={-1} sx={{ display: { xs: "flex", md: "none" } }}>
-                                    {stage.actors.map((actor) => (
-                                        <RoleAvatar key={actor} role={actor} size={30} working={here && !cancelled} />
-                                    ))}
-                                </Stack>
-                            )}
                         </Box>
                     );
                 })}
             </Box>
+        </Box>
         </Box>
     );
 }

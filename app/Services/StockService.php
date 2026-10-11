@@ -14,6 +14,7 @@ use App\Models\StockKeeper\Transfer;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Services\Inventory\StockLocationTree;
+use App\Services\Inventory\StockPools;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -520,10 +521,18 @@ class StockService
         return DB::transaction(function () use ($itemVariantId, $storeId, $quantity, $context): StockReservation {
             $this->lockVariants([$itemVariantId]);
 
-            $available = $this->availableAtStore($itemVariantId, $storeId);
+            // Individual and Business customers each draw on their own pool
+            // when a manager set stock aside for Business (StockPools).
+            $pool = $context['pool'] ?? null;
+            $available = $this->availableAtStore($itemVariantId, $storeId, $pool);
 
             if ($available < $quantity) {
-                throw InsufficientStockException::atLocation($itemVariantId, "store #{$storeId}", $quantity, $available);
+                throw InsufficientStockException::atLocation(
+                    $itemVariantId,
+                    $pool === null ? "store #{$storeId}" : "store #{$storeId} ({$pool} pool)",
+                    $quantity,
+                    $available,
+                );
             }
 
             $reservation = StockReservation::create([
@@ -531,6 +540,7 @@ class StockService
                 'item_variant_id' => $itemVariantId,
                 'store_id' => $storeId,
                 'quantity' => $quantity,
+                'pool' => $pool,
                 'status' => StockReservation::STATUS_OPEN,
                 'expires_at' => $context['expires_at'] ?? null,
                 'user_id' => $context['user_id'] ?? auth()->id(),
@@ -673,6 +683,11 @@ class StockService
                 'picked_at' => now(),
             ]);
 
+            // A Business order's units leave the stock set aside for Business.
+            if ($reservation->pool === StockPools::BUSINESS && $reservation->stock_location_id === null) {
+                app(StockPools::class)->consume((int) $reservation->item_variant_id, (int) $reservation->store_id, $quantity);
+            }
+
             if ($unpicked > 0) {
                 $this->journalReservation(
                     $reservation,
@@ -813,8 +828,11 @@ class StockService
             ->sum('quantity');
     }
 
-    /** On hand at the store, less what open reservations already promise. */
-    public function availableAtStore(int $itemVariantId, int $storeId): int
+    /**
+     * On hand at the store, less what open reservations already promise; for
+     * a $pool, only that pool's share (StockPools).
+     */
+    public function availableAtStore(int $itemVariantId, int $storeId, ?string $pool = null): int
     {
         // Store-level holds only; a hub hold placed for this store's order
         // draws on the hub, not on the counter.
@@ -825,7 +843,9 @@ class StockService
             ->whereNull('stock_location_id')
             ->sum('quantity');
 
-        return $this->onHandAtStore($itemVariantId, $storeId) - $reserved;
+        $free = $this->onHandAtStore($itemVariantId, $storeId) - $reserved;
+
+        return $pool === null ? $free : app(StockPools::class)->share($itemVariantId, $storeId, $free, $pool);
     }
 
     /** Release every open reservation whose hold has expired. Returns how many. */

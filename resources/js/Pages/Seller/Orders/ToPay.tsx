@@ -12,6 +12,9 @@ import {
     orderTotal,
     subtotal,
 } from "@/Data/sellerOrderFlow";
+import DeliveryPlanner from "@/Components/Seller/DeliveryPlanner";
+import type { CourierOption, DeliveryPlan, SavedAddress, VehicleOption } from "@/types/delivery-plan";
+import { planIsComplete, planToPayload } from "@/types/delivery-plan";
 import type { CreditSummary, OrderPayment, PaymentAccountOption } from "@/types/payments";
 import { Head, Link, router } from "@inertiajs/react";
 import React, { useEffect, useMemo, useState } from "react";
@@ -22,7 +25,8 @@ import React, { useEffect, useMemo, useState } from "react";
  * The order is the real sale, served by OrderBoardController, with its
  * payment split. For each part the seller taps "Customer says paid"; the
  * account's owner then checks their account and confirms it (or answers "not
- * received yet"). Once every part is confirmed the order moves to Pick &
+ * received yet"). Cash waits on a store manager or admin. The person who
+ * marks a part paid never confirms it. Once every part is confirmed the order moves to Pick &
  * Pack. Until a part is claimed the stock is held for 48 hours; the countdown
  * is when that hold lapses. Cancelling gives the stock back.
  */
@@ -34,11 +38,14 @@ interface Props {
     accounts?: PaymentAccountOption[];
     /** The customer's credit, when an admin gave them some. */
     credit?: CreditSummary | null;
+    couriers?: CourierOption[];
+    vehicles?: VehicleOption[];
+    addresses?: SavedAddress[];
 }
 
 const STATUS_CHIP: Record<string, { label: string; className: string }> = {
     pending: { label: "Waiting for customer", className: "border-outline/40 bg-surface-container text-on-surface-variant" },
-    claimed: { label: "Owner checking", className: "border-info/30 bg-info-container/60 text-on-info-container" },
+    claimed: { label: "Waiting for 2nd person", className: "border-info/30 bg-info-container/60 text-on-info-container" },
     confirmed: { label: "Received", className: "border-success/30 bg-success-container/60 text-on-success-container" },
 };
 
@@ -69,15 +76,51 @@ function useCountdown(minutes: number | undefined): string | null {
     return minutes ? countdownParts(seconds) : null;
 }
 
-export default function ToPay({ reference, order: served = null, accounts = [], credit = null }: Props): React.ReactElement {
+export default function ToPay({
+    reference,
+    order: served = null,
+    accounts = [],
+    credit = null,
+    couriers = [],
+    vehicles = [],
+    addresses = [],
+}: Props): React.ReactElement {
     const order: SellerOrder | undefined = useMemo(() => served ?? undefined, [served]);
     const [busy, setBusy] = useState(false);
+    const [editingDelivery, setEditingDelivery] = useState(false);
+    const [plan, setPlan] = useState<DeliveryPlan>(() => ({
+        method: served?.destination.method ?? (served?.destination.kind === "Delivery" ? "courier" : "later"),
+        driverPhone: served?.destination.driverPhone ?? "",
+        address: served?.destination.method === "courier" ? served.destination.address : "",
+        addressId: null,
+        recipient: served?.destination.name ?? "",
+        phone: served?.destination.phone ?? "",
+        courierId: served?.destination.courierId ?? null,
+        vehicleId: served?.destination.vehicleId ?? null,
+        plate: served?.destination.plate ?? "",
+    }));
+
+    const saveDelivery = () => {
+        if (!reference) return;
+        setBusy(true);
+        router.patch(route("seller.orders.address", reference), planToPayload(plan), {
+            preserveScroll: true,
+            onSuccess: () => setEditingDelivery(false),
+            onFinish: () => setBusy(false),
+        });
+    };
     const parts = order?.payments ?? [];
     const [editing, setEditing] = useState(parts.length === 0);
     const [legs, setLegs] = useState<PaymentLeg[]>([]);
 
-    // Claimed and confirmed parts stay; a new split covers what they leave.
-    const locked = parts.filter((part) => part.status === "claimed" || part.status === "confirmed");
+    // Money claimed or confirmed stays; a new split covers what it leaves.
+    // Credit is not money, so it can be swapped for another way to pay.
+    const locked = parts.filter(
+        (part) => (part.status === "claimed" || part.status === "confirmed") && part.method !== "credit",
+    );
+    const replaceable = parts.some((part) => part.status === "pending" || part.method === "credit");
+    // In Pick & pack the payment may still change; it must be in before delivery.
+    const packing = order?.stage === "packing" || order?.stage === "paid";
     const lockedTotal = locked.reduce((sum, part) => sum + part.amount, 0);
 
     const saveSplit = (): void => {
@@ -174,11 +217,32 @@ export default function ToPay({ reference, order: served = null, accounts = [], 
                             <span className="material-symbols-outlined text-[22px]">chevron_left</span>
                         </button>
                         <h1 className="text-lg font-bold tracking-tight text-on-surface">
-                            To pay
+                            {packing ? "Payment" : "To pay"}
                         </h1>
                     </div>
                     <span className="font-mono text-[11px] text-outline">{order.reference}</span>
                 </header>
+
+                {packing ? (
+                    <section className="mb-2.5 flex items-start gap-2 border-b border-warning/30 bg-warning-container/50 px-4 py-3 text-[12px] text-on-warning-container">
+                        <span className="material-symbols-outlined text-[18px]">inventory_2</span>
+                        <div>
+                            <p className="font-bold">This order is in Pick &amp; pack.</p>
+                            <p className="mt-0.5 leading-snug">
+                                {order?.paid
+                                    ? "It is fully paid. Changing how it is paid means it waits for the new money before it can go to delivery."
+                                    : "It is not fully paid. It cannot go to delivery until every part is confirmed."}
+                            </p>
+                            <Link
+                                href={route("seller.orders.pickpack", { reference: order?.reference ?? "" })}
+                                className="mt-1 inline-flex items-center gap-0.5 font-bold text-primary"
+                            >
+                                Back to Pick &amp; pack
+                                <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                            </Link>
+                        </div>
+                    </section>
+                ) : null}
 
                 {/* ── Countdown ── */}
                 {countdown ? (
@@ -201,27 +265,65 @@ export default function ToPay({ reference, order: served = null, accounts = [], 
                             <span className="material-symbols-outlined text-[17px] text-on-surface-variant">
                                 location_on
                             </span>
-                            <h2 className="text-base font-bold">Delivery address</h2>
+                            <h2 className="text-base font-bold">Delivery</h2>
                             <span className="rounded border border-info/30 bg-info-container/60 px-1.5 py-0.5 text-[10px] font-semibold text-on-info-container">
-                                Carrier delivery
+                                {order.destination.method === "vehicle"
+                                    ? "Vehicle dispatch"
+                                    : order.destination.method === "later"
+                                      ? "Add later"
+                                      : "Carrier delivery"}
                             </span>
                         </div>
                         <button
                             type="button"
+                            onClick={() => setEditingDelivery((open) => !open)}
                             className="shrink-0 rounded-[999px] border border-outline/50 px-3.5 py-1.5 text-xs font-medium text-on-surface hover:bg-surface-container-low"
                         >
-                            Edit address
+                            {editingDelivery ? "Close" : "Edit delivery"}
                         </button>
                     </div>
-                    <div className="space-y-1 text-[13px] leading-tight text-on-surface">
-                        <span className="font-bold text-on-surface">
-                            {order.destination.name} ({order.destination.kind})
-                        </span>
-                        <p className="font-normal leading-normal text-on-surface">
-                            {order.destination.vehicle} | Driver: {order.destination.driver}
-                        </p>
-                        <p className="text-xs text-on-surface-variant">{order.destination.address}</p>
-                    </div>
+                    {editingDelivery ? (
+                        <div className="pt-1">
+                            <DeliveryPlanner
+                                plan={plan}
+                                onChange={setPlan}
+                                couriers={couriers}
+                                vehicles={vehicles}
+                                addresses={addresses}
+                            />
+                            <button
+                                type="button"
+                                onClick={saveDelivery}
+                                disabled={busy || !planIsComplete(plan)}
+                                className="mt-3 w-full rounded-[999px] bg-primary py-2.5 text-xs font-bold text-on-primary disabled:opacity-40"
+                            >
+                                Save delivery
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-1 text-[13px] leading-tight text-on-surface">
+                            {order.destination.method === "later" ? (
+                                <p className="flex items-center gap-1 text-xs text-on-warning-container">
+                                    <span className="material-symbols-outlined text-[15px]">edit_location_alt</span>
+                                    No delivery details yet. Tap Edit delivery to add them.
+                                </p>
+                            ) : null}
+                            {order.destination.method === "vehicle" && order.destination.driverPhone ? (
+                                <p className="text-xs text-on-surface-variant">Driver phone: {order.destination.driverPhone}</p>
+                            ) : null}
+                            <span className="font-bold text-on-surface">
+                                {order.destination.name} ({order.destination.kind})
+                            </span>
+                            <p className="flex items-center gap-1 text-xs text-on-surface">
+                                <span className="material-symbols-outlined text-[15px] text-on-surface-variant">local_shipping</span>
+                                {order.destination.vehicle}
+                                <span className="mx-1 text-outline">·</span>
+                                <span className="material-symbols-outlined text-[15px] text-on-surface-variant">person_pin_circle</span>
+                                {order.destination.driver}
+                            </p>
+                            <p className="text-xs text-on-surface-variant">{order.destination.address}</p>
+                        </div>
+                    )}
                 </section>
 
                 {/* ── Order details ── */}
@@ -335,13 +437,13 @@ export default function ToPay({ reference, order: served = null, accounts = [], 
                 <section className="mb-3 bg-surface-container-lowest px-4 py-3.5 shadow-sm">
                     <div className="mb-2 flex items-center justify-between">
                         <h2 className="text-sm font-bold text-on-surface">Payment</h2>
-                        {!editing && parts.some((part) => part.status === "pending") ? (
+                        {!editing && (replaceable || (packing && parts.length === 0)) ? (
                             <button
                                 type="button"
                                 onClick={() => setEditing(true)}
                                 className="rounded-[999px] border border-outline/50 px-3 py-1 text-[11px] font-semibold text-on-surface hover:bg-surface-container-low"
                             >
-                                Change split
+                                Change payment method
                             </button>
                         ) : null}
                     </div>
@@ -367,6 +469,10 @@ export default function ToPay({ reference, order: served = null, accounts = [], 
                                                         {part.account.account_name}
                                                         {part.account.owner ? ` · confirmed by ${part.account.owner}` : ""}
                                                     </p>
+                                                ) : part.method === "cash" ? (
+                                                    <p className="truncate text-[10px] text-on-surface-variant">
+                                                        Confirmed by a store manager or admin
+                                                    </p>
                                                 ) : null}
                                                 {part.reference ? (
                                                     <p className="font-mono text-[10px] text-outline">Ref. {part.reference}</p>
@@ -383,19 +489,20 @@ export default function ToPay({ reference, order: served = null, accounts = [], 
                                         {part.not_received_at ? (
                                             <p className="mt-2 flex items-start gap-1.5 rounded-[8px] border border-warning/30 bg-warning-container/60 px-2 py-1.5 text-[11px] text-on-warning-container">
                                                 <span className="material-symbols-outlined text-[14px]">warning</span>
-                                                Not received yet: {part.account?.owner ?? "the owner"} found no deposit. Check with
-                                                the customer, then mark it again.
+                                                {part.account
+                                                    ? `Not received yet: ${part.account.owner ?? "the owner"} found no deposit. Check with the customer, then mark it again.`
+                                                    : "Not received yet: the manager did not get this cash from you. Hand it over, then mark it again."}
                                             </p>
                                         ) : null}
 
-                                        {part.status === "pending" && part.account ? (
+                                        {part.status === "pending" && (part.account || part.method === "cash") ? (
                                             <button
                                                 type="button"
                                                 onClick={() => claim(part)}
                                                 disabled={busy}
                                                 className="mt-2 w-full rounded-[999px] bg-primary py-2 text-xs font-bold text-on-primary active:scale-[0.98] disabled:opacity-40"
                                             >
-                                                Customer says paid
+                                                {part.account ? "Customer says paid" : "I have the cash"}
                                             </button>
                                         ) : null}
                                     </div>
@@ -412,8 +519,8 @@ export default function ToPay({ reference, order: served = null, accounts = [], 
                         <div className="mt-3 space-y-3 border-t border-outline-variant/60 pt-3">
                             <p className="text-[11px] text-on-surface-variant">
                                 {locked.length > 0
-                                    ? `Split the ${birr(splitTotal)} not yet claimed. This replaces the parts still waiting for the customer.`
-                                    : `Split the ${birr(splitTotal)} total.`}
+                                    ? `Split the ${birr(splitTotal)} not yet paid. This replaces the parts still waiting for the customer and any credit.`
+                                    : `Split the ${birr(splitTotal)} total. This replaces the current split.`}
                             </p>
                             <PaymentSplitEditor
                                 accounts={accounts}
@@ -486,7 +593,11 @@ export default function ToPay({ reference, order: served = null, accounts = [], 
                     Cancel order
                 </button>
                 <Link
-                    href={`${route("seller.orders.index")}?tab=to_pay`}
+                    href={
+                        packing
+                            ? route("seller.orders.pickpack", { reference: order.reference })
+                            : `${route("seller.orders.index")}?tab=to_pay`
+                    }
                     className="rounded-[999px] bg-primary px-7 py-2.5 text-xs font-bold text-on-primary shadow-sm active:scale-95"
                 >
                     Done

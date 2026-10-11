@@ -15,7 +15,7 @@ interface Customer {
 }
 
 export default function Edit({ customer }: { customer: Customer }) {
-    const { data, setData, put, processing, errors } = useForm({
+    const { data, setData, put, processing, errors, transform } = useForm({
         first_name: customer.first_name || "",
         last_name: customer.last_name || "",
         email: customer.email || "",
@@ -39,6 +39,7 @@ export default function Edit({ customer }: { customer: Customer }) {
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        transform((form) => ({ ...form, customer_type: customerType }));
         put(route("seller.customers.update", customer.id));
     };
 

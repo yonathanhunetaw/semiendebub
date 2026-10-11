@@ -51,7 +51,8 @@ class StoreShipmentRequest extends FormRequest
             'vehicle_max_cbm' => ['nullable', 'numeric', 'min:0', 'max:9999'],
             'vehicle_id' => ['nullable', 'integer', 'exists:vehicles,id'],
             'courier_ids' => ['nullable', 'array', 'max:50'],
-            'courier_ids.*' => ['integer', 'exists:users,id'],
+            // Freight is offered to drivers only.
+            'courier_ids.*' => ['integer', \Illuminate\Validation\Rule::exists('users', 'id')->where('is_driver', true)],
             'distance_km' => ['nullable', 'numeric', 'min:0', 'max:99999'],
             'slot' => ['nullable', 'string', 'max:64'],
             'notes' => ['nullable', 'string', 'max:2000'],

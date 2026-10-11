@@ -388,6 +388,8 @@ export default function Show({
                         unitsInPack={variant?.quantity ?? 1}
                         perPiece={perPiece}
                         perPacket={perPacket}
+                        pools={variant?.pools ?? null}
+                        pool={has_tin_cart ? "individual" : "business"}
                     />
 
                     <Stack direction="row" spacing={1.5} sx={{ pb: 1 }}>

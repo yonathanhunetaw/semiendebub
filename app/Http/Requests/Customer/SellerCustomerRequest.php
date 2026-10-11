@@ -40,6 +40,7 @@ class SellerCustomerRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'tin_number.required_if' => 'An individual customer needs a TIN.',
             'credit_limit.prohibited' => 'Only an admin can give a customer credit.',
             'credit_days.prohibited' => 'Only an admin can give a customer credit.',
             'credit_override.prohibited' => 'Only an admin can give a customer credit.',

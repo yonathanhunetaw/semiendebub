@@ -56,7 +56,7 @@ class SellerOrderJourneyTest extends TestCase
     {
         parent::setUp();
 
-        foreach (['seller', 'delivery'] as $role) {
+        foreach (['seller', 'delivery', 'store_manager'] as $role) {
             Role::firstOrCreate(['name' => $role]);
         }
 
@@ -213,18 +213,69 @@ class SellerOrderJourneyTest extends TestCase
     }
 
     #[Test]
-    public function paying_cash_on_the_spot_goes_straight_to_pick_and_pack(): void
+    public function cash_reaches_pick_and_pack_only_once_a_second_person_confirms_it(): void
     {
         $cart = $this->cart(2);
 
         $this->asSeller()
             ->post(route('seller.orders.store'), ['cart_id' => $cart->id, ...$this->cash(400)])
             ->assertSessionHasNoErrors()
-            ->assertRedirectContains('/pick-pack');
+            ->assertRedirectContains('/pay');
 
         $sale = Sale::query()->sole();
+        $this->assertSame([Sale::STAGE_AWAITING_PAYMENT, 'unpaid'], [$sale->fulfillment_stage, $sale->payment_status]);
+        $this->assertSame(Payment::STATUS_CLAIMED, $sale->payments()->sole()->status, 'The seller holds it; nobody has confirmed it.');
+
+        // Nobody can pick it yet.
+        $this->asSeller()
+            ->post(route('seller.orders.sourcing.confirm', $sale), [
+                'lines' => [['sale_item_id' => $sale->items()->first()->id, 'location_type' => StockLocation::class, 'location_id' => $this->shelf->id]],
+            ])
+            ->assertSessionHas('error');
+
+        $this->confirmCash();
+
+        $sale->refresh();
         $this->assertSame([Sale::STAGE_PICK_PACK, 'paid'], [$sale->fulfillment_stage, $sale->payment_status]);
-        $this->assertSame(Payment::STATUS_CONFIRMED, $sale->payments()->sole()->status, 'Cash in hand is confirmed by the seller taking it.');
+    }
+
+    #[Test]
+    public function a_courier_named_at_checkout_sees_the_run_only_after_payment_and_pick(): void
+    {
+        $vehicle = \App\Models\Fulfillment\Vehicle::query()->create(['name' => 'Isuzu NPR', 'plate' => '3-A12345', 'status' => 'active']);
+        $customer = \App\Models\Auth\Customer::factory()->create(['store_id' => $this->store->id]);
+        $cart = $this->cart(1);
+        $cart->update(['customer_id' => $customer->id]);
+
+        $this->asSeller()->post(route('seller.orders.store'), [
+            'cart_id' => $cart->id,
+            ...$this->cash(200),
+            'delivery_address' => 'Bole, Woreda 3, House 12',
+            'recipient_phone' => '0911223344',
+            'courier_id' => $this->courier->id,
+            'vehicle_id' => $vehicle->id,
+        ])->assertSessionHasNoErrors();
+
+        $sale = Sale::query()->with(['delivery', 'items'])->sole();
+        $this->assertSame([$this->courier->id, $vehicle->id, '3-A12345'], [(int) $sale->delivery->courier_id, (int) $sale->delivery->vehicle_id, $sale->delivery->vehicle_plate]);
+
+        // The address is saved on the customer for next time.
+        $saved = $customer->addresses()->sole();
+        $this->assertSame('Bole, Woreda 3, House 12', $saved->address);
+        $this->assertSame((int) $saved->id, (int) $sale->delivery->customer_address_id);
+
+        $visible = fn (): int => \App\Models\Fulfillment\Delivery::query()->forCourier($this->courier->id)->visibleToCourier()->count();
+        $this->assertSame(0, $visible(), 'Unpaid: the courier must not see it.');
+
+        $this->confirmCash();
+        $this->assertSame(0, $visible(), 'Paid but not picked: still nothing to collect.');
+
+        $this->asSeller()->post(route('seller.orders.sourcing.confirm', $sale), [
+            'lines' => [['sale_item_id' => $sale->items[0]->id, 'location_type' => StockLocation::class, 'location_id' => $this->shelf->id]],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(1, $visible());
+        $this->assertSame((int) $this->courier->id, (int) $sale->delivery->fresh()->courier_id, 'Pick & pack keeps the chosen courier.');
     }
 
     #[Test]
@@ -327,6 +378,7 @@ class SellerOrderJourneyTest extends TestCase
     public function a_seller_cannot_pick_and_pack_another_stores_order(): void
     {
         $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(1)->id, ...$this->cash(200)]);
+        $this->confirmCash();
         $sale = Sale::query()->with('items')->sole();
         $outsider = $this->user('seller', Store::factory()->create(['type' => Store::TYPE_RETAIL])->id);
 
@@ -457,9 +509,22 @@ class SellerOrderJourneyTest extends TestCase
         return (int) ItemStock::query()->where('item_variant_id', $this->variant->id)->where('stock_location_id', $leaf->id)->value('quantity');
     }
 
+    /** A store manager, the second person, confirms every cash part waiting. */
+    private function confirmCash(): void
+    {
+        $manager = $this->user('store_manager', $this->store->id);
+
+        foreach (Payment::query()->where('status', Payment::STATUS_CLAIMED)->whereNull('payment_account_id')->get() as $cash) {
+            $this->actingAs($manager)
+                ->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')])
+                ->post(route('seller.payments.confirm', $cash))
+                ->assertSessionHas('success');
+        }
+    }
+
     private function user(string $role, ?int $storeId = null): User
     {
-        $user = User::factory()->create(['role' => $role, 'store_id' => $storeId]);
+        $user = User::factory()->create(['role' => $role, 'store_id' => $storeId, 'is_driver' => $role === 'delivery']);
         $user->assignRole($role);
 
         return $user->refresh();
