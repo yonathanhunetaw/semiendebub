@@ -132,6 +132,16 @@ else
 fi
 
 # =============================================================================
+# 📨 QUEUE WORKER (visit notifications etc.) — restarts itself if it exits
+# =============================================================================
+(
+    while true; do
+        su -s /bin/sh www-data -c "cd /var/www/html && php artisan queue:work --sleep=3 --tries=1 --max-time=3600" || true
+        sleep 2
+    done
+) >> /var/www/html/storage/logs/queue-worker.log 2>&1 &
+
+# =============================================================================
 # 🚀 HAND CONTROL OFF TO APACHE
 # =============================================================================
 # "$@" evaluates to whatever command Docker passes (which is "apache2-foreground" via CMD)

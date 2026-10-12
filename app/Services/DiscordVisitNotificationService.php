@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendPublicVisitNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -34,16 +35,25 @@ class DiscordVisitNotificationService
             return;
         }
 
-        $ip = (string) $request->ip();
-        $host = (string) $request->getHost();
-        $path = '/'.ltrim($request->path(), '/');
+        // The geo lookup and Discord posts are slow external calls; queue them
+        // so the visitor's page never waits on them.
+        SendPublicVisitNotification::dispatch(
+            (string) $request->ip(),
+            (string) $request->getHost(),
+            '/'.ltrim($request->path(), '/'),
+            (string) $request->userAgent(),
+        );
+    }
+
+    public function deliver(string $ip, string $host, string $path, string $userAgent): void
+    {
         $cacheKey = 'discord_visit:'.sha1("{$ip}|{$host}|{$path}");
 
         try {
             $location = $this->resolveLocation($ip);
 
-            $this->sendFrequentVisitAlert($cacheKey, $host, $path, $ip, $location, $request);
-            $this->recordDailyVisit($host, $path, $ip, $location, $request);
+            $this->sendFrequentVisitAlert($cacheKey, $host, $path, $ip, $location, $userAgent);
+            $this->recordDailyVisit($host, $path, $ip, $location, $userAgent);
             $this->sendDailyVisitAlertIfDue();
         } catch (\Throwable $e) {
             Log::error('Discord visit notification failed', [
@@ -57,12 +67,22 @@ class DiscordVisitNotificationService
 
     private function resolveLocation(string $ip): string
     {
-        try {
-            $geo = Cache::remember("geo_ip_{$ip}", now()->addDay(), function () use ($ip) {
-                $response = Http::timeout(5)->get("http://ip-api.com/json/{$ip}?fields=status,country,countryCode,city");
+        $cacheKey = "geo_ip_{$ip}";
 
-                return $response->successful() ? $response->json() : null;
-            });
+        try {
+            $geo = Cache::get($cacheKey);
+
+            if ($geo === null) {
+                try {
+                    $response = Http::connectTimeout(1)->timeout(2)->get("http://ip-api.com/json/{$ip}?fields=status,country,countryCode,city");
+                    $geo = $response->successful() ? $response->json() : ['status' => 'fail'];
+                    Cache::put($cacheKey, $geo, now()->addDay());
+                } catch (\Throwable $e) {
+                    // Remember the failure briefly so every visit doesn't re-wait on a dead service.
+                    Cache::put($cacheKey, ['status' => 'fail'], now()->addMinutes(10));
+                    throw $e;
+                }
+            }
 
             if (is_array($geo) && ($geo['status'] ?? null) === 'success') {
                 $flag = $this->flagEmoji((string) ($geo['countryCode'] ?? ''));
@@ -79,7 +99,7 @@ class DiscordVisitNotificationService
         return 'Unknown';
     }
 
-    private function sendFrequentVisitAlert(string $cacheKey, string $host, string $path, string $ip, string $location, Request $request): void
+    private function sendFrequentVisitAlert(string $cacheKey, string $host, string $path, string $ip, string $location, string $userAgent): void
     {
         $webhookUrl = config('services.discord.visit_webhook_url');
 
@@ -100,7 +120,7 @@ class DiscordVisitNotificationService
             return;
         }
 
-        Http::timeout(5)->post($webhookUrl, [
+        Http::connectTimeout(2)->timeout(3)->post($webhookUrl, [
             'embeds' => [[
                 'title' => '👀 New Public Visit',
                 'color' => 3447003,
@@ -109,7 +129,7 @@ class DiscordVisitNotificationService
                     ['name' => 'Path', 'value' => $path, 'inline' => true],
                     ['name' => 'IP', 'value' => "`{$ip}`", 'inline' => true],
                     ['name' => 'Location', 'value' => $location, 'inline' => true],
-                    ['name' => 'User Agent', 'value' => substr((string) $request->userAgent(), 0, 1024) ?: 'Unknown', 'inline' => false],
+                    ['name' => 'User Agent', 'value' => substr($userAgent, 0, 1024) ?: 'Unknown', 'inline' => false],
                 ],
                 'footer' => ['text' => config('app.name').' Visit Monitoring'],
                 'timestamp' => now()->toIso8601String(),
@@ -124,7 +144,7 @@ class DiscordVisitNotificationService
         ]);
     }
 
-    private function recordDailyVisit(string $host, string $path, string $ip, string $location, Request $request): void
+    private function recordDailyVisit(string $host, string $path, string $ip, string $location, string $userAgent): void
     {
         $dailyWebhookUrl = config('services.discord.daily_visit_webhook_url');
 
@@ -141,7 +161,7 @@ class DiscordVisitNotificationService
             'path' => $path,
             'ip' => $ip,
             'location' => $location,
-            'user_agent' => substr((string) $request->userAgent(), 0, 180) ?: 'Unknown',
+            'user_agent' => substr($userAgent, 0, 180) ?: 'Unknown',
         ];
 
         // Keep the digest bounded so it cannot grow without limit.
@@ -217,7 +237,7 @@ class DiscordVisitNotificationService
             $description .= "\n...and {$remaining} more visits.";
         }
 
-        Http::timeout(5)->post($dailyWebhookUrl, [
+        Http::connectTimeout(2)->timeout(3)->post($dailyWebhookUrl, [
             'embeds' => [[
                 'title' => '📬 24-Hour Visit Digest',
                 'color' => 10181046,
