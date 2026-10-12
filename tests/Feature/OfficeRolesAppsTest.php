@@ -135,25 +135,4 @@ class OfficeRolesAppsTest extends TestCase
     {
         return ['finance' => ['finance'], 'marketing' => ['marketing']];
     }
-
-    // ---- Debug routes ------------------------------------------------------
-
-    #[Test]
-    public function the_marketing_and_shared_debug_host_pages_answer_with_the_host(): void
-    {
-        foreach (['marketing', 'shared'] as $role) {
-            $host = $role.'.'.config('app.system_domain');
-
-            $this->get("http://{$host}/debug-host")->assertOk()
-                ->assertJson(['host' => $host, 'expected' => config('app.system_domain')]);
-        }
-    }
-
-    #[Test]
-    public function the_shared_middleware_debug_page_lists_the_routes_middleware(): void
-    {
-        $host = 'shared.'.config('app.system_domain');
-
-        $this->get("http://{$host}/debug-middleware")->assertOk()->assertJsonIsArray();
-    }
 }

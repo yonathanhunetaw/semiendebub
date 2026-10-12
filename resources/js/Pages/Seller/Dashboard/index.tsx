@@ -133,9 +133,6 @@ export default function Dashboard({ items: initialItems, store, nextPageUrl, fil
     const observerRef = React.useRef<HTMLDivElement | null>(null);
     const [loaded, setLoaded] = React.useState<Record<number, boolean>>({});
 
-    // DEBUG: log incoming props
-    console.log('Dashboard props:', { items, categories, filters });
-
     // Build category list: "Active Inventory" first
     const categoryList = React.useMemo(() => {
         const base = categories.length > 0 ? categories : Array.from(

@@ -142,6 +142,16 @@ fi
 ) >> /var/www/html/storage/logs/queue-worker.log 2>&1 &
 
 # =============================================================================
+# ⏰ SCHEDULER (routes/console.php, e.g. nightly replenishment) — restarts itself
+# =============================================================================
+(
+    while true; do
+        su -s /bin/sh www-data -c "cd /var/www/html && php artisan schedule:work" || true
+        sleep 2
+    done
+) >> /var/www/html/storage/logs/scheduler.log 2>&1 &
+
+# =============================================================================
 # 🚀 HAND CONTROL OFF TO APACHE
 # =============================================================================
 # "$@" evaluates to whatever command Docker passes (which is "apache2-foreground" via CMD)

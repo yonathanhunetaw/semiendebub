@@ -62,6 +62,8 @@ class OrderBoardController extends Controller
 
         return Inertia::render('Seller/Orders/Confirmation', [
             'cart_id' => $cart?->id,
+            // No customer on the cart: a walk-in, who usually takes it now.
+            'walk_in' => $cart !== null && $cart->customer_id === null,
             'order' => $cart ? $this->preview($cart) : null,
             'accounts' => $this->payments->accountsFor($this->storeId($request)),
             // The customer's credit, when an admin gave them some.

@@ -201,7 +201,7 @@ class SellerOrderBoard
             'lines' => $lines,
             'destination' => [
                 'name' => $sale->delivery?->recipient_name ?? $storeName,
-                'kind' => $sale->delivery ? 'Delivery' : 'Store pickup',
+                'kind' => $sale->delivery && $sale->delivery->method !== Delivery::METHOD_STORE ? 'Delivery' : 'Store pickup',
                 // These were crossed: "vehicle" showed the courier and
                 // "driver" the recipient's phone.
                 'vehicle' => collect([$sale->delivery?->vehicle?->name, $sale->delivery?->vehicle_plate ?? $sale->delivery?->vehicle?->plate])
@@ -213,10 +213,13 @@ class SellerOrderBoard
                 'vehicleId' => $sale->delivery?->vehicle_id !== null ? (int) $sale->delivery->vehicle_id : null,
                 'plate' => $sale->delivery?->vehicle_plate,
                 // courier to an address, a vehicle collecting at the store,
-                // or nothing decided yet.
-                'method' => $sale->delivery === null
-                    ? 'later'
-                    : ($sale->delivery->method === Delivery::METHOD_VEHICLE ? 'vehicle' : ($sale->delivery->delivery_address ? 'courier' : 'later')),
+                // the customer taking it in the store, or nothing decided yet.
+                'method' => match (true) {
+                    $sale->delivery === null => 'later',
+                    $sale->delivery->method === Delivery::METHOD_STORE => 'store',
+                    $sale->delivery->method === Delivery::METHOD_VEHICLE => 'vehicle',
+                    default => $sale->delivery->delivery_address ? 'courier' : 'later',
+                },
                 'driverPhone' => $sale->delivery?->driver_phone,
             ],
             'deliveryOption' => $sale->delivery_option,

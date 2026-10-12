@@ -6,7 +6,7 @@ import AdminSidebar, { ADMIN_SIDEBAR_WIDTH } from "@/Components/Navigation/Admin
 import AdminTopBar from "@/Components/Navigation/Admin/AdminTopBar";
 import SectionTabs from "@/Components/Navigation/Admin/SectionTabs";
 import GuideButton from "@/Components/Guide/GuideButton";
-import { stackedTableSx, useStackedTableLabels } from "@/Components/Navigation/Admin/stackedTables";
+import { stackedTableSx, useStackedTableLabels } from "@/Components/Shared/stackedTables";
 import { arrive, motionSafe } from "@/Components/Visual/motion";
 import { getRole, useRole } from "@/theme";
 

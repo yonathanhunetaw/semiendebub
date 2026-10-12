@@ -76,6 +76,11 @@ export interface ShipmentLine {
     sku: string | null;
     quantity: number;
     picked_quantity: number;
+    /** The receiver's count, saved before signing in; null = not counted. */
+    received_quantity?: number | null;
+    damaged_quantity?: number | null;
+    receipt_note?: string | null;
+    barcode?: string | null;
     shortfall: number;
     unit: string | null;
     cbm: number | null;

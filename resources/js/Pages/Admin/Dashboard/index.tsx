@@ -230,7 +230,8 @@ function PipelineStrip({ pipeline }: { pipeline: Partial<Record<JourneyStage, nu
                 title="Orders on the road"
                 right={<Typography sx={tinySx}>Now · delivered 7d</Typography>}
             />
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 0.25 }}>
+            {/* Seven stops don't fit a phone; they scroll sideways until md. */}
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(7, minmax(56px, 1fr))", md: "repeat(7, minmax(0, 1fr))" }, overflowX: { xs: "auto", md: "visible" }, gap: 0.25 }}>
                 {JOURNEY.map((stage) => {
                     const n = pipeline[stage.key];
                     const busy = (n ?? 0) > 0;
@@ -266,12 +267,12 @@ function TrendPanel({ trend }: { trend: Trend }) {
 
     return (
         <Paper elevation={0} sx={densePanelSx}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 1 }}>
+            <Box sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, justifyContent: "space-between", alignItems: { xs: "stretch", sm: "flex-start" }, gap: 1 }}>
                 <Box sx={{ minWidth: 0 }}>
                     <Typography noWrap sx={{ fontWeight: 800, fontSize: "0.8125rem" }}>Orders &amp; revenue</Typography>
                     <Typography noWrap sx={tinySx}>Last 7 days · placed and confirmed</Typography>
                 </Box>
-                <Stack direction="row" divider={<Box sx={{ borderLeft: "1px solid", borderColor: "divider" }} />} spacing={1} sx={{ flexShrink: 0, textAlign: "right" }}>
+                <Stack direction="row" divider={<Box sx={{ borderLeft: "1px solid", borderColor: "divider" }} />} spacing={1} sx={{ flexShrink: 0, textAlign: { xs: "left", sm: "right" } }}>
                     <Box>
                         <Typography sx={{ ...tinySx, fontSize: "0.625rem" }}>Peak day</Typography>
                         <Typography sx={{ fontWeight: 700, fontSize: "0.6875rem" }}>
@@ -398,7 +399,7 @@ function LowStockPanel({ lowStock, isGlobalAdmin }: { lowStock: Paginated<LowSto
                     {items.map((item, index) => (
                         <Box
                             key={`${item.item_id}-${item.store_name}`}
-                            sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.75, borderTop: index === 0 ? 0 : "1px solid", borderColor: "divider" }}
+                            sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, alignItems: { xs: "stretch", sm: "center" }, gap: { xs: 0.5, sm: 1 }, py: 0.75, borderTop: index === 0 ? 0 : "1px solid", borderColor: "divider" }}
                         >
                             <Box sx={{ minWidth: 0, flexGrow: 1 }}>
                                 <Typography noWrap sx={{ fontWeight: 700, fontSize: "0.75rem" }}>{item.product_name}</Typography>

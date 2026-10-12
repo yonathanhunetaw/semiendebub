@@ -77,7 +77,7 @@ class OrderController extends Controller
         ]);
     }
 
-    /** Pick the order from the chosen places and hand it to Delivery. */
+    /** Pick the order from the chosen places and hand it to Delivery, or to the customer in store. */
     public function confirmSourcing(ConfirmSourcingRequest $request, Sale $sale): RedirectResponse
     {
         $storeId = $request->user()?->store_id;
@@ -94,6 +94,8 @@ class OrderController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
-        return back()->with('success', "Order {$sale->reference_number} picked and handed to Delivery.");
+        return back()->with('success', $sale->refresh()->fulfillment_stage === Sale::STAGE_DELIVERED
+            ? "Order {$sale->reference_number} picked and handed to the customer."
+            : "Order {$sale->reference_number} picked and handed to Delivery.");
     }
 }

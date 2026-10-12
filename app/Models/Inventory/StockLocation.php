@@ -105,6 +105,9 @@ class StockLocation extends Model
         'status',
         'store_id',
         'is_stockable',
+        'capacity_cbm',
+        'floor_width_m',
+        'floor_length_m',
         'legacy_type',
         'legacy_id',
     ];
@@ -113,6 +116,9 @@ class StockLocation extends Model
         'parent_id' => 'integer',
         'store_id' => 'integer',
         'is_stockable' => 'boolean',
+        'capacity_cbm' => 'float',
+        'floor_width_m' => 'float',
+        'floor_length_m' => 'float',
         'legacy_id' => 'integer',
     ];
 

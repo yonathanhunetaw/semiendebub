@@ -1,569 +1,239 @@
-import { Head, router, useForm } from "@inertiajs/react";
-import AddRoundedIcon from "@mui/icons-material/AddRounded";
-import EditRoundedIcon from "@mui/icons-material/EditRounded";
-import ExpandLessRoundedIcon from "@mui/icons-material/ExpandLessRounded";
-import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
-import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
-import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import {
-    Alert,
-    Autocomplete,
-    Box,
-    Button,
-    Chip,
-    Collapse,
-    CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    Grid,
-    IconButton,
-    InputAdornment,
-    MenuItem,
-    Snackbar,
-    Stack,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableRow,
-    TextField,
-    Tooltip,
-    Typography,
-} from "@mui/material";
+import { Head, Link, router, useForm } from "@inertiajs/react";
 import React from "react";
-
-import {
-    EmptyState,
-    PageHeader,
-    SkCard,
-    StatCard,
-    StockStatusChip,
-    formatMoment,
-} from "@/Components/StockKeeper/stockKeeperUi";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
-import type {
-    ItemStockRow,
-    ItemVariantStockRow,
-    StockKeeperInventoryProps,
-    StockRow,
-    VariantOption,
-} from "@/types/stockkeeper";
+import { EmptyState, StatusPill } from "@/Components/Shared/ui";
+import ItemVariantPicker from "@/Components/StockKeeper/ItemVariantPicker";
+import { SkButton, SkCard, SkField, SkHeader, SkPager, SkSearch, SkSheet, SkStats, STOCK_STATUS, fmt, inputClass, plural, when } from "@/Components/StockKeeper/skKit";
+import type { ItemStockRow, ItemVariantStockRow, StockKeeperInventoryProps, StockRow } from "@/types/stockkeeper";
 
 const SEARCH_DEBOUNCE_MS = 350;
 
 /**
- * The stock ledger, read the way the floor reads it.
- *
- * One row per *item*, not per ledger row: this screen used to list `item_stocks`
- * directly — 4,907 rows — and headline a distinct variant count, so a desk
- * holding 182 products reported "1,629 tracked SKUs". Quantities are spoken in
- * the item's own packaging and in the order that location cares about: a shop
- * floor in its smallest unit ("47 Packets"), everywhere else biggest first
- * ("30 Cartons · 17 Pieces").
- *
- * The variant rows are still here, one expand away, because a receipt or a
- * recount is always written against a variant.
+ * The stock ledger, read the way the floor reads it: one row per item, in its
+ * biggest packaging first ("30 Cartons · 17 Pieces"), a shop shelf in single
+ * units. The SKU rows sit one tap away, because a receipt or a recount is
+ * always written against a SKU.
  */
-export default function Inventory({
-    items,
-    locations,
-    variants,
-    filters,
-    metrics,
-    pagination,
-    flash,
-}: StockKeeperInventoryProps): React.ReactElement {
+export default function Inventory({ items = [], locations = [], filters, metrics, pagination }: StockKeeperInventoryProps): React.ReactElement {
     const [search, setSearch] = React.useState<string>(filters.search);
-    const [receiveOpen, setReceiveOpen] = React.useState<boolean>(false);
+    const [receiveOpen, setReceiveOpen] = React.useState(false);
     const [adjustRow, setAdjustRow] = React.useState<StockRow | null>(null);
-    const [notice, setNotice] = React.useState<string | null>(null);
-
-    /** Item id currently expanded, and the variant rows fetched for it. */
     const [openItem, setOpenItem] = React.useState<number | null>(null);
     const [variantRows, setVariantRows] = React.useState<Record<number, ItemVariantStockRow[]>>({});
     const [loadingItem, setLoadingItem] = React.useState<number | null>(null);
+    const [loadError, setLoadError] = React.useState<number | null>(null);
 
-    /**
-     * Variant rows are fetched on demand rather than shipped with the page:
-     * 182 items carry 1,629 variants between them, and almost none of them are
-     * looked at.
-     */
-    const toggleItem = async (row: ItemStockRow): Promise<void> => {
-        if (openItem === row.item_id) {
-            setOpenItem(null);
-            return;
-        }
+    const selectedLocation = filters.location_type && filters.location_id ? `${filters.location_type}#${filters.location_id}` : "";
 
+    const applyFilters = React.useCallback(
+        (next: { search?: string; location?: string | null; page?: number }) => {
+            const query: Record<string, string | number> = {};
+            const nextSearch = next.search ?? filters.search;
+            if (nextSearch) query.search = nextSearch;
+            const location = next.location !== undefined ? next.location : selectedLocation || null;
+            if (location) {
+                const [type, id] = location.split("#");
+                query.location_type = type;
+                query.location_id = Number(id);
+            }
+            if (next.page) query.page = next.page;
+            router.get(route("stock_keeper.inventory.index"), query, { preserveState: true, preserveScroll: true, replace: true });
+        },
+        [filters.search, selectedLocation],
+    );
+
+    React.useEffect(() => setSearch(filters.search), [filters.search]);
+    React.useEffect(() => {
+        if (search === filters.search) return;
+        const timer = window.setTimeout(() => applyFilters({ search }), SEARCH_DEBOUNCE_MS);
+        return () => window.clearTimeout(timer);
+    }, [search, filters.search, applyFilters]);
+
+    // SKU rows load on demand: 182 items carry 1,600+ SKUs and few are looked at.
+    const toggleItem = async (row: ItemStockRow) => {
+        if (openItem === row.item_id) return setOpenItem(null);
         setOpenItem(row.item_id);
-
         if (variantRows[row.item_id]) return;
-
         setLoadingItem(row.item_id);
-
+        setLoadError(null);
         try {
             const params = new URLSearchParams();
             if (filters.location_type) params.set("location_type", filters.location_type);
             if (filters.location_id) params.set("location_id", String(filters.location_id));
-
-            const response = await fetch(
-                `${route("stock_keeper.inventory.items.variants", row.item_id)}?${params.toString()}`,
-                { headers: { Accept: "application/json" } },
-            );
+            const response = await fetch(`${route("stock_keeper.inventory.items.variants", row.item_id)}?${params.toString()}`, { headers: { Accept: "application/json" } });
             const payload = await response.json();
-
             setVariantRows((current) => ({ ...current, [row.item_id]: payload.variants ?? [] }));
         } catch {
-            setNotice("Could not load the variants for that item.");
+            setLoadError(row.item_id);
         } finally {
             setLoadingItem(null);
         }
     };
 
-    /**
-     * The adjust dialog writes against a ledger row, so a variant row is shaped
-     * into the StockRow the dialog already understands.
-     */
-    const adjustVariant = (item: ItemStockRow, variant: ItemVariantStockRow): void =>
+    // The adjust sheet writes against a ledger row; shape a SKU row into one.
+    const adjustVariant = (item: ItemStockRow, v: ItemVariantStockRow) =>
         setAdjustRow({
-            id: variant.stock_id,
-            variant_id: variant.variant_id,
+            id: v.stock_id,
+            variant_id: v.variant_id,
             item_id: item.item_id,
             product_name: item.product_name,
-            sku: variant.sku,
-            variant_label: variant.variant_label,
-            location_name: variant.location_name,
+            sku: v.sku,
+            variant_label: v.variant_label,
+            location_name: v.location_name,
             location_kind: "store",
-            quantity: variant.quantity,
-            unit: variant.unit,
-            pieces_per_unit: variant.pieces_per_unit,
-            pieces: variant.pieces,
-            min_stock_level: variant.min_stock_level,
-            headroom: variant.quantity - variant.min_stock_level,
+            quantity: v.quantity,
+            unit: v.unit,
+            pieces_per_unit: v.pieces_per_unit,
+            pieces: v.pieces,
+            min_stock_level: v.min_stock_level,
+            headroom: v.quantity - v.min_stock_level,
             status: item.status,
-            updated_at: variant.updated_at,
+            updated_at: v.updated_at,
         });
 
-    React.useEffect(() => {
-        setSearch(filters.search);
-    }, [filters.search]);
-
-    React.useEffect(() => {
-        const message = flash?.success ?? flash?.error ?? null;
-        if (message) {
-            setNotice(message);
-        }
-    }, [flash?.success, flash?.error]);
-
-    const applyFilters = React.useCallback(
-        (next: { search?: string; location?: string | null }): void => {
-            const query: Record<string, string | number> = {};
-            const nextSearch = next.search ?? filters.search;
-
-            if (nextSearch) {
-                query.search = nextSearch;
-            }
-
-            // Location is passed as "type#id" from the select, then split apart.
-            const locationValue =
-                next.location !== undefined
-                    ? next.location
-                    : filters.location_type && filters.location_id
-                      ? `${filters.location_type}#${filters.location_id}`
-                      : null;
-
-            if (locationValue) {
-                const [type, id] = locationValue.split("#");
-                query.location_type = type;
-                query.location_id = Number(id);
-            }
-
-            router.get(route("stock_keeper.inventory.index"), query, {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-            });
-        },
-        [filters.search, filters.location_type, filters.location_id],
-    );
-
-    React.useEffect(() => {
-        if (search === filters.search) {
-            return;
-        }
-
-        const timer = window.setTimeout(() => applyFilters({ search }), SEARCH_DEBOUNCE_MS);
-        return () => window.clearTimeout(timer);
-    }, [search, filters.search, applyFilters]);
-
-    const selectedLocation =
-        filters.location_type && filters.location_id
-            ? `${filters.location_type}#${filters.location_id}`
-            : "";
+    const cols = "lg:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_110px_120px_140px_44px]";
 
     return (
         <>
-            <Head title="Inventory Ledger" />
+            <Head title="Stock" />
 
-            <PageHeader
-                title="Inventory Ledger"
+            <SkHeader
+                title="Stock"
                 subtitle="Every item on hand, in the units the place it sits is counted in."
-                action={
-                    <Button
-                        variant="contained"
-                        startIcon={<AddRoundedIcon />}
-                        onClick={() => setReceiveOpen(true)}
-                    >
+                actions={
+                    <SkButton icon="add_box" onClick={() => setReceiveOpen(true)}>
                         Receive stock
-                    </Button>
+                    </SkButton>
                 }
             />
 
-            {/*
-              Items lead. The old headline was `tracked_skus`, a distinct variant
-              count — a figure about how the catalogue is cut, not about what is
-              on the floor. Variants are still shown, under the item count.
-            */}
-            <Grid container spacing={2.5} sx={{ mb: 3 }}>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard
-                        label="Items on hand"
-                        value={metrics.items}
-                        icon={<Inventory2RoundedIcon fontSize="small" />}
-                        hint={`${metrics.variants.toLocaleString()} variants`}
-                    />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard
-                        label="Pieces on hand"
-                        value={metrics.pieces_on_hand}
-                        hint={`${metrics.ledger_rows.toLocaleString()} ledger rows`}
-                    />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard
-                        label="Low stock items"
-                        value={metrics.low_stock_items}
-                        tone={metrics.low_stock_items > 0 ? "warning" : "success"}
-                    />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard
-                        label="Out of stock items"
-                        value={metrics.out_of_stock_items}
-                        tone={metrics.out_of_stock_items > 0 ? "danger" : "success"}
-                    />
-                </Grid>
-            </Grid>
-
-            <SkCard sx={{ p: 0, overflow: "hidden" }}>
-                <Stack
-                    direction={{ xs: "column", md: "row" }}
-                    spacing={2}
-                    sx={{ p: 2.5 }}
-                >
-                    <TextField
-                        size="small"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Search product, SKU or barcode…"
-                        sx={{ flex: 1 }}
-                        slotProps={{
-                            input: {
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <SearchRoundedIcon fontSize="small" />
-                                    </InputAdornment>
-                                ),
-                            },
-                        }}
-                    />
-
-                    <TextField
-                        select
-                        size="small"
-                        label="Location"
-                        value={selectedLocation}
-                        onChange={(event) =>
-                            applyFilters({ location: event.target.value || null })
-                        }
-                        sx={{ minWidth: 240 }}
-                    >
-                        <MenuItem value="">All locations</MenuItem>
-                        {locations.map((location) => (
-                            <MenuItem
-                                key={`${location.kind}-${location.id}`}
-                                value={`${location.type}#${location.id}`}
-                            >
-                                {location.name} ({location.units.toLocaleString()})
-                            </MenuItem>
-                        ))}
-                    </TextField>
-                </Stack>
-
-                {items.length === 0 ? (
-                    <EmptyState
-                        icon={<Inventory2RoundedIcon fontSize="large" />}
-                        title="No items match"
-                        hint="Adjust the search or pick a different location."
-                    />
-                ) : (
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell sx={{ width: 48 }} />
-                                <TableCell>Item</TableCell>
-                                <TableCell>Variants</TableCell>
-                                <TableCell align="right">On hand</TableCell>
-                                <TableCell align="right">Pieces</TableCell>
-                                <TableCell align="right">Status</TableCell>
-                                <TableCell align="right">Updated</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {items.map((row) => {
-                                const expanded = openItem === row.item_id;
-                                const rows = variantRows[row.item_id] ?? [];
-
-                                return (
-                                    <React.Fragment key={row.item_id}>
-                                        <TableRow hover>
-                                            <TableCell>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={() => void toggleItem(row)}
-                                                    aria-label={expanded ? "Hide variants" : "Show variants"}
-                                                >
-                                                    {expanded ? (
-                                                        <ExpandLessRoundedIcon fontSize="small" />
-                                                    ) : (
-                                                        <ExpandMoreRoundedIcon fontSize="small" />
-                                                    )}
-                                                </IconButton>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                                    {row.product_name}
-                                                </Typography>
-                                                <Typography
-                                                    variant="caption"
-                                                    color="text.secondary"
-                                                    sx={{ fontFamily: "monospace" }}
-                                                >
-                                                    {row.item_sku ?? "—"}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Chip
-                                                    size="small"
-                                                    variant="outlined"
-                                                    label={`${row.variant_count} variant${row.variant_count === 1 ? "" : "s"}`}
-                                                />
-                                            </TableCell>
-                                            {/*
-                                              The figure, spoken in this location's
-                                              own units — smallest-first on a shop
-                                              floor, biggest-first everywhere else.
-                                            */}
-                                            <TableCell align="right">
-                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                                    {row.display}
-                                                </Typography>
-                                                {row.display_mode === "smallest" ? (
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        shop floor · single units
-                                                    </Typography>
-                                                ) : null}
-                                            </TableCell>
-                                            <TableCell align="right">
-                                                <Typography variant="caption" color="text.secondary">
-                                                    {row.pieces.toLocaleString()}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell align="right">
-                                                <StockStatusChip status={row.status} />
-                                            </TableCell>
-                                            <TableCell align="right">
-                                                <Typography variant="caption" color="text.secondary">
-                                                    {formatMoment(row.updated_at)}
-                                                </Typography>
-                                            </TableCell>
-                                        </TableRow>
-
-                                        <TableRow>
-                                            <TableCell colSpan={7} sx={{ py: 0, border: 0 }}>
-                                                <Collapse in={expanded} timeout="auto" unmountOnExit>
-                                                    <Box sx={{ py: 1.5, pl: 6 }}>
-                                                        {loadingItem === row.item_id ? (
-                                                            <Stack direction="row" spacing={1} alignItems="center">
-                                                                <CircularProgress size={16} />
-                                                                <Typography variant="caption">
-                                                                    Loading variants…
-                                                                </Typography>
-                                                            </Stack>
-                                                        ) : rows.length === 0 ? (
-                                                            <Typography variant="caption" color="text.secondary">
-                                                                No ledger rows for this item here.
-                                                            </Typography>
-                                                        ) : (
-                                                            <Table size="small">
-                                                                <TableHead>
-                                                                    <TableRow>
-                                                                        <TableCell>SKU</TableCell>
-                                                                        <TableCell>Variant</TableCell>
-                                                                        <TableCell>Location</TableCell>
-                                                                        <TableCell align="right">Counted</TableCell>
-                                                                        <TableCell align="right">Pieces</TableCell>
-                                                                        <TableCell align="right">Minimum</TableCell>
-                                                                        <TableCell align="right" />
-                                                                    </TableRow>
-                                                                </TableHead>
-                                                                <TableBody>
-                                                                    {rows.map((variant) => (
-                                                                        <TableRow key={variant.stock_id}>
-                                                                            <TableCell
-                                                                                sx={{ fontFamily: "monospace", fontSize: 12 }}
-                                                                            >
-                                                                                {variant.sku ?? "—"}
-                                                                            </TableCell>
-                                                                            <TableCell>{variant.variant_label}</TableCell>
-                                                                            <TableCell>{variant.location_name}</TableCell>
-                                                                            {/*
-                                                                              Named, not bare: "11 Cartons"
-                                                                              reads very differently from
-                                                                              "11" when a carton is 120.
-                                                                            */}
-                                                                            <TableCell align="right">
-                                                                                {variant.quantity.toLocaleString()}{" "}
-                                                                                {variant.unit}
-                                                                                {variant.quantity === 1 ? "" : "s"}
-                                                                            </TableCell>
-                                                                            <TableCell align="right">
-                                                                                {variant.pieces.toLocaleString()}
-                                                                            </TableCell>
-                                                                            <TableCell align="right">
-                                                                                {variant.min_stock_level.toLocaleString()}
-                                                                            </TableCell>
-                                                                            <TableCell align="right">
-                                                                                <Tooltip title="Adjust count">
-                                                                                    <IconButton
-                                                                                        size="small"
-                                                                                        onClick={() =>
-                                                                                            adjustVariant(row, variant)
-                                                                                        }
-                                                                                    >
-                                                                                        <EditRoundedIcon fontSize="small" />
-                                                                                    </IconButton>
-                                                                                </Tooltip>
-                                                                            </TableCell>
-                                                                        </TableRow>
-                                                                    ))}
-                                                                </TableBody>
-                                                            </Table>
-                                                        )}
-                                                    </Box>
-                                                </Collapse>
-                                            </TableCell>
-                                        </TableRow>
-                                    </React.Fragment>
-                                );
-                            })}
-                        </TableBody>
-                    </Table>
-                )}
-
-                {pagination.last_page > 1 ? (
-                    <Stack
-                        direction="row"
-                        spacing={2}
-                        alignItems="center"
-                        justifyContent="center"
-                        sx={{ p: 2 }}
-                    >
-                        <Button
-                            disabled={pagination.current_page <= 1}
-                            onClick={() =>
-                                router.get(
-                                    route("stock_keeper.inventory.index"),
-                                    { page: pagination.current_page - 1, search: filters.search },
-                                    { preserveState: true },
-                                )
-                            }
-                        >
-                            Previous
-                        </Button>
-                        <Typography variant="body2" color="text.secondary">
-                            Page {pagination.current_page} of {pagination.last_page} ·{" "}
-                            {pagination.total.toLocaleString()} rows
-                        </Typography>
-                        <Button
-                            disabled={pagination.current_page >= pagination.last_page}
-                            onClick={() =>
-                                router.get(
-                                    route("stock_keeper.inventory.index"),
-                                    { page: pagination.current_page + 1, search: filters.search },
-                                    { preserveState: true },
-                                )
-                            }
-                        >
-                            Next
-                        </Button>
-                    </Stack>
-                ) : null}
-            </SkCard>
-
-            <ReceiveStockDialog
-                open={receiveOpen}
-                onClose={() => setReceiveOpen(false)}
-                variants={variants}
-                locations={locations}
+            <SkStats
+                items={[
+                    { label: "Items on hand", value: fmt(metrics.items), hint: `${fmt(metrics.variants)} SKUs`, icon: "category" },
+                    { label: "Pieces on hand", value: fmt(metrics.pieces_on_hand), hint: "All packaging, in pieces", icon: "deployed_code" },
+                    { label: "Items low", value: fmt(metrics.low_stock_items), icon: "trending_down", tone: metrics.low_stock_items > 0 ? "warning" : undefined },
+                    { label: "Items out", value: fmt(metrics.out_of_stock_items), icon: "remove_shopping_cart", tone: metrics.out_of_stock_items > 0 ? "error" : undefined },
+                ]}
             />
 
-            <AdjustStockDialog row={adjustRow} onClose={() => setAdjustRow(null)} />
+            <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_280px]">
+                <SkSearch value={search} onChange={setSearch} placeholder="Search product, SKU or barcode" />
+                <select value={selectedLocation} onChange={(e) => applyFilters({ location: e.target.value || null, page: 1 })} className={`${inputClass} bg-surface-container-lowest shadow-sm`} aria-label="Place">
+                    <option value="">All places</option>
+                    {locations.map((l) => (
+                        <option key={`${l.kind}-${l.id}`} value={`${l.type}#${l.id}`}>
+                            {l.name}
+                        </option>
+                    ))}
+                </select>
+            </div>
 
-            <Snackbar
-                open={notice !== null}
-                autoHideDuration={4000}
-                onClose={() => setNotice(null)}
-                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-            >
-                <Alert
-                    severity={flash?.error ? "error" : "success"}
-                    variant="filled"
-                    onClose={() => setNotice(null)}
-                >
-                    {notice}
-                </Alert>
-            </Snackbar>
+            {items.length === 0 ? (
+                <EmptyState icon="inventory_2" title="No items match" description="Change the search or pick another place." framed />
+            ) : (
+                <SkCard className="overflow-hidden">
+                    {/* Column heads, desktop only. */}
+                    <div className={`hidden gap-3 border-b border-outline-variant/70 bg-surface-container-low px-4 py-2 text-[12px] font-bold uppercase tracking-wider text-on-surface-variant lg:grid ${cols}`}>
+                        <span>Item</span>
+                        <span>On hand</span>
+                        <span className="text-right">Pieces</span>
+                        <span>Status</span>
+                        <span>Updated</span>
+                        <span />
+                    </div>
+                    <ul className="divide-y divide-outline-variant/60">
+                        {items.map((row) => {
+                            const expanded = openItem === row.item_id;
+                            const lead = row.units[0];
+                            const status = STOCK_STATUS[row.status];
+                            const skus = variantRows[row.item_id] ?? [];
+                            return (
+                                <li key={row.item_id}>
+                                    <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 ${cols}`}>
+                                        <div className="min-w-0">
+                                            <Link href={route("stock_keeper.items.show", row.item_id)} className="block truncate text-[15px] font-bold text-on-surface hover:underline">
+                                                {row.product_name}
+                                            </Link>
+                                            <p className="truncate font-mono text-[11px] text-on-surface-variant">
+                                                {row.item_sku ?? "—"} · {row.variant_count} {plural("SKU", row.variant_count)}
+                                            </p>
+                                        </div>
+                                        <div className="text-right lg:text-left">
+                                            <p className="text-[18px] font-extrabold leading-tight tabular-nums text-on-surface">
+                                                {lead ? fmt(lead.count) : 0} <span className="text-[13px] font-bold text-on-surface-variant">{lead ? plural(lead.unit, lead.count) : ""}</span>
+                                            </p>
+                                            {row.units.length > 1 && <p className="text-[12px] text-on-surface-variant">{row.display}</p>}
+                                            {row.display_mode === "smallest" && <p className="text-[11px] text-on-surface-variant">shop shelf · single units</p>}
+                                        </div>
+                                        <p className="hidden text-right text-[13px] tabular-nums text-on-surface-variant lg:block">{fmt(row.pieces)}</p>
+                                        <div className="col-span-2 flex items-center justify-between gap-2 lg:col-span-1 lg:block">
+                                            <StatusPill tone={status.tone} label={status.label} size="sm" />
+                                            <span className="text-[12px] text-on-surface-variant lg:hidden">{when(row.updated_at)}</span>
+                                        </div>
+                                        <p className="hidden text-[12px] text-on-surface-variant lg:block">{when(row.updated_at)}</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => void toggleItem(row)}
+                                            aria-expanded={expanded}
+                                            aria-label={expanded ? "Hide SKUs" : "Show SKUs"}
+                                            className="col-span-2 flex items-center justify-center gap-1 rounded-[10px] border border-outline-variant py-1.5 text-[13px] font-bold text-primary hover:bg-surface-container-low lg:col-span-1 lg:border-0 lg:py-1"
+                                        >
+                                            <span className="lg:hidden">{expanded ? "Hide SKUs" : "SKUs & adjust"}</span>
+                                            <span className="material-symbols-outlined text-[20px]">{expanded ? "expand_less" : "expand_more"}</span>
+                                        </button>
+                                    </div>
+
+                                    {expanded && (
+                                        <div className="bg-surface-container-low/60 px-4 pb-3 pt-1">
+                                            {loadingItem === row.item_id ? (
+                                                <p className="py-2 text-[13px] text-on-surface-variant">Loading SKUs…</p>
+                                            ) : loadError === row.item_id ? (
+                                                <p className="py-2 text-[13px] text-error">Couldn't load the SKUs for this item.</p>
+                                            ) : skus.length === 0 ? (
+                                                <p className="py-2 text-[13px] text-on-surface-variant">No ledger rows for this item here.</p>
+                                            ) : (
+                                                <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                                    {skus.map((v) => (
+                                                        <li key={v.stock_id} className="flex items-center gap-3 rounded-[14px] border border-outline-variant/70 bg-surface-container-lowest p-3">
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="truncate font-mono text-[13px] font-bold text-on-surface">{v.sku ?? "—"}</p>
+                                                                <p className="truncate text-[12px] text-on-surface-variant">
+                                                                    {v.variant_label || "—"} · {v.location_name}
+                                                                </p>
+                                                                <p className="mt-1 text-[14px] font-extrabold tabular-nums text-on-surface">
+                                                                    {fmt(v.quantity)} {plural(v.unit, v.quantity)}
+                                                                    <span className="ml-1.5 text-[12px] font-medium text-on-surface-variant">
+                                                                        {fmt(v.pieces)} pcs · min {fmt(v.min_stock_level)}
+                                                                    </span>
+                                                                </p>
+                                                            </div>
+                                                            <SkButton variant="outline" icon="edit" onClick={() => adjustVariant(row, v)} className="shrink-0 px-3 py-2 text-[13px]">
+                                                                Adjust
+                                                            </SkButton>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    )}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </SkCard>
+            )}
+
+            <SkPager page={pagination.current_page} last={pagination.last_page} total={pagination.total} noun="items" onPage={(page) => applyFilters({ page })} />
+
+            <ReceiveSheet open={receiveOpen} onClose={() => setReceiveOpen(false)} locations={locations} />
+            <AdjustSheet row={adjustRow} onClose={() => setAdjustRow(null)} />
         </>
     );
 }
 
-/* ----------------------------------------------------------
- | Receive
- |----------------------------------------------------------*/
-
-interface ReceiveDialogProps {
-    open: boolean;
-    onClose: () => void;
-    variants: VariantOption[];
-    locations: StockKeeperInventoryProps["locations"];
-}
-
-function ReceiveStockDialog({
-    open,
-    onClose,
-    variants,
-    locations,
-}: ReceiveDialogProps): React.ReactElement {
-    const { data, setData, post, processing, errors, reset } = useForm<{
-        item_variant_id: number | "";
-        location_type: string;
-        location_id: number | "";
-        quantity: number | "";
-        min_stock_level: number | "";
-    }>({
+/** Receive: item first, then its SKU (ItemVariantPicker), the place and how many. */
+function ReceiveSheet({ open, onClose, locations }: { open: boolean; onClose: () => void; locations: StockKeeperInventoryProps["locations"] }) {
+    const form = useForm<{ item_variant_id: number | ""; location_type: string; location_id: number | ""; quantity: number | ""; min_stock_level: number | "" }>({
         item_variant_id: "",
         location_type: "",
         location_id: "",
@@ -571,232 +241,106 @@ function ReceiveStockDialog({
         min_stock_level: "",
     });
 
-    const submit = (event: React.FormEvent): void => {
-        event.preventDefault();
-        post(route("stock_keeper.inventory.receive"), {
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
+        form.post(route("stock_keeper.inventory.receive"), {
             preserveScroll: true,
             onSuccess: () => {
-                reset();
+                form.reset();
                 onClose();
             },
         });
     };
 
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-            <form onSubmit={submit}>
-                <DialogTitle sx={{ fontWeight: 800 }}>Receive stock</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2.5} sx={{ mt: 1 }}>
-                        <Autocomplete
-                            options={variants}
-                            getOptionLabel={(option) => option.label}
-                            onChange={(_event, value) =>
-                                setData("item_variant_id", value ? value.id : "")
-                            }
-                            renderInput={(params) => (
-                                <TextField
-                                    {...params}
-                                    label="Product variant"
-                                    error={Boolean(errors.item_variant_id)}
-                                    helperText={errors.item_variant_id}
-                                />
-                            )}
-                        />
-
-                        <TextField
-                            select
-                            label="Destination"
-                            value={
-                                data.location_type && data.location_id
-                                    ? `${data.location_type}#${data.location_id}`
-                                    : ""
-                            }
-                            onChange={(event) => {
-                                const [type, id] = event.target.value.split("#");
-                                setData((current) => ({
-                                    ...current,
-                                    location_type: type ?? "",
-                                    location_id: id ? Number(id) : "",
-                                }));
-                            }}
-                            error={Boolean(errors.location_id || errors.location_type)}
-                            helperText={errors.location_id ?? errors.location_type}
-                        >
-                            {locations.map((location) => (
-                                <MenuItem
-                                    key={`${location.kind}-${location.id}`}
-                                    value={`${location.type}#${location.id}`}
-                                >
-                                    {location.name} · {location.kind}
-                                </MenuItem>
-                            ))}
-                        </TextField>
-
-                        <TextField
-                            type="number"
-                            label="Quantity received"
-                            value={data.quantity}
-                            onChange={(event) =>
-                                setData(
-                                    "quantity",
-                                    event.target.value === "" ? "" : Number(event.target.value),
-                                )
-                            }
-                            error={Boolean(errors.quantity)}
-                            helperText={errors.quantity}
-                            slotProps={{ htmlInput: { min: 1 } }}
-                        />
-
-                        <TextField
-                            type="number"
-                            label="Minimum stock level (optional)"
-                            value={data.min_stock_level}
-                            onChange={(event) =>
-                                setData(
-                                    "min_stock_level",
-                                    event.target.value === "" ? "" : Number(event.target.value),
-                                )
-                            }
-                            error={Boolean(errors.min_stock_level)}
-                            helperText={
-                                errors.min_stock_level ??
-                                "Sets the threshold that triggers a stock alert."
-                            }
-                            slotProps={{ htmlInput: { min: 0 } }}
-                        />
-                    </Stack>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={onClose}>Cancel</Button>
-                    <Button type="submit" variant="contained" disabled={processing}>
-                        Receive
-                    </Button>
-                </DialogActions>
+        <SkSheet
+            open={open}
+            onClose={onClose}
+            title="Receive stock"
+            subtitle="Book stock in at a place, counted in the SKU's own packaging."
+            footer={
+                <>
+                    <SkButton variant="ghost" onClick={onClose}>Cancel</SkButton>
+                    <SkButton type="submit" form="sk-receive" disabled={form.processing || form.data.item_variant_id === ""}>Receive</SkButton>
+                </>
+            }
+        >
+            <form id="sk-receive" onSubmit={submit} className="flex flex-col gap-3">
+                <ItemVariantPicker open={open} value={form.data.item_variant_id} onChange={(id) => form.setData("item_variant_id", id)} error={form.errors.item_variant_id} />
+                <SkField label="Place" error={form.errors.location_id ?? form.errors.location_type}>
+                    <select
+                        value={form.data.location_type && form.data.location_id ? `${form.data.location_type}#${form.data.location_id}` : ""}
+                        onChange={(e) => {
+                            const [type, id] = e.target.value.split("#");
+                            form.setData((c) => ({ ...c, location_type: type ?? "", location_id: id ? Number(id) : "" }));
+                        }}
+                        className={inputClass}
+                    >
+                        <option value="">Choose a place…</option>
+                        {locations.map((l) => (
+                            <option key={`${l.kind}-${l.id}`} value={`${l.type}#${l.id}`}>
+                                {l.name}
+                            </option>
+                        ))}
+                    </select>
+                </SkField>
+                <div className="grid grid-cols-2 gap-3">
+                    <SkField label="Quantity" error={form.errors.quantity}>
+                        <input type="number" min={1} inputMode="numeric" value={form.data.quantity} onChange={(e) => form.setData("quantity", e.target.value === "" ? "" : Number(e.target.value))} className={inputClass} />
+                    </SkField>
+                    <SkField label="Minimum (optional)" error={form.errors.min_stock_level} hint="Alert below this">
+                        <input type="number" min={0} inputMode="numeric" value={form.data.min_stock_level} onChange={(e) => form.setData("min_stock_level", e.target.value === "" ? "" : Number(e.target.value))} className={inputClass} />
+                    </SkField>
+                </div>
             </form>
-        </Dialog>
+        </SkSheet>
     );
 }
 
-/* ----------------------------------------------------------
- | Adjust
- |----------------------------------------------------------*/
+function AdjustSheet({ row, onClose }: { row: StockRow | null; onClose: () => void }) {
+    const form = useForm<{ counted_quantity: number | ""; min_stock_level: number | ""; notes: string }>({ counted_quantity: 0, min_stock_level: "", notes: "" });
 
-function AdjustStockDialog({
-    row,
-    onClose,
-}: {
-    row: StockRow | null;
-    onClose: () => void;
-}): React.ReactElement {
-    const { data, setData, patch, processing, errors } = useForm<{
-        counted_quantity: number | "";
-        min_stock_level: number | "";
-        notes: string;
-    }>({
-        counted_quantity: 0,
-        min_stock_level: "",
-        notes: "",
-    });
-
-    // Seed the form from whichever row was opened.
     React.useEffect(() => {
-        if (row) {
-            setData({
-                counted_quantity: row.quantity,
-                min_stock_level: row.min_stock_level,
-                notes: "",
-            });
-        }
-        // setData identity is stable in Inertia's useForm.
+        if (row) form.setData({ counted_quantity: row.quantity, min_stock_level: row.min_stock_level, notes: "" });
+        // setData is stable in Inertia's useForm.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [row]);
 
-    const submit = (event: React.FormEvent): void => {
-        event.preventDefault();
-        if (!row) {
-            return;
-        }
-
-        patch(route("stock_keeper.inventory.adjust", row.id), {
-            preserveScroll: true,
-            onSuccess: onClose,
-        });
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (row) form.patch(route("stock_keeper.inventory.adjust", row.id), { preserveScroll: true, onSuccess: onClose });
     };
-
-    const delta =
-        row && data.counted_quantity !== ""
-            ? Number(data.counted_quantity) - row.quantity
-            : 0;
+    const delta = row && form.data.counted_quantity !== "" ? Number(form.data.counted_quantity) - row.quantity : 0;
+    const unit = row?.unit ?? "unit";
 
     return (
-        <Dialog open={row !== null} onClose={onClose} fullWidth maxWidth="sm">
-            <form onSubmit={submit}>
-                <DialogTitle sx={{ fontWeight: 800 }}>
-                    Adjust count
-                    <Typography variant="body2" color="text.secondary">
-                        {row?.product_name} · {row?.location_name}
-                    </Typography>
-                </DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2.5} sx={{ mt: 1 }}>
-                        <TextField
-                            type="number"
-                            label="Counted quantity"
-                            value={data.counted_quantity}
-                            onChange={(event) =>
-                                setData(
-                                    "counted_quantity",
-                                    event.target.value === "" ? "" : Number(event.target.value),
-                                )
-                            }
-                            error={Boolean(errors.counted_quantity)}
-                            helperText={
-                                errors.counted_quantity ??
-                                (delta === 0
-                                    ? "Matches the system count."
-                                    : `${delta > 0 ? "+" : ""}${delta} against the system count.`)
-                            }
-                            slotProps={{ htmlInput: { min: 0 } }}
-                        />
-
-                        <TextField
-                            type="number"
-                            label="Minimum stock level"
-                            value={data.min_stock_level}
-                            onChange={(event) =>
-                                setData(
-                                    "min_stock_level",
-                                    event.target.value === "" ? "" : Number(event.target.value),
-                                )
-                            }
-                            error={Boolean(errors.min_stock_level)}
-                            helperText={errors.min_stock_level}
-                            slotProps={{ htmlInput: { min: 0 } }}
-                        />
-
-                        <TextField
-                            label="Notes (optional)"
-                            value={data.notes}
-                            onChange={(event) => setData("notes", event.target.value)}
-                            error={Boolean(errors.notes)}
-                            helperText={errors.notes}
-                            multiline
-                            rows={2}
-                        />
-                    </Stack>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={onClose}>Cancel</Button>
-                    <Button type="submit" variant="contained" disabled={processing}>
-                        Save count
-                    </Button>
-                </DialogActions>
+        <SkSheet
+            open={row !== null}
+            onClose={onClose}
+            title="Adjust count"
+            subtitle={row ? `${row.product_name} · ${row.sku ?? ""} · ${row.location_name}` : ""}
+            footer={
+                <>
+                    <SkButton variant="ghost" onClick={onClose}>Cancel</SkButton>
+                    <SkButton type="submit" form="sk-adjust" disabled={form.processing}>Save count</SkButton>
+                </>
+            }
+        >
+            <form id="sk-adjust" onSubmit={submit} className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                    <SkField label={`Counted (${plural(unit, 2)})`} error={form.errors.counted_quantity} hint={delta === 0 ? "Matches the system." : `${delta > 0 ? "+" : ""}${fmt(delta)} against the system.`}>
+                        <input type="number" min={0} inputMode="numeric" value={form.data.counted_quantity} onChange={(e) => form.setData("counted_quantity", e.target.value === "" ? "" : Number(e.target.value))} className={`${inputClass} text-[18px] font-extrabold`} />
+                    </SkField>
+                    <SkField label="Minimum" error={form.errors.min_stock_level}>
+                        <input type="number" min={0} inputMode="numeric" value={form.data.min_stock_level} onChange={(e) => form.setData("min_stock_level", e.target.value === "" ? "" : Number(e.target.value))} className={inputClass} />
+                    </SkField>
+                </div>
+                <SkField label="Notes (optional)" error={form.errors.notes}>
+                    <textarea rows={2} value={form.data.notes} onChange={(e) => form.setData("notes", e.target.value)} className={inputClass} />
+                </SkField>
             </form>
-        </Dialog>
+        </SkSheet>
     );
 }
 
-Inventory.layout = (page: React.ReactNode) => (
-    <StockKeeperLayout>{page}</StockKeeperLayout>
-);
+Inventory.layout = (page: React.ReactNode) => <StockKeeperLayout>{page}</StockKeeperLayout>;

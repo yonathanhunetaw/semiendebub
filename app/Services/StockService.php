@@ -807,6 +807,35 @@ class StockService
             ->sum('quantity');
     }
 
+    /**
+     * Book stock out as lost or broken at a location (journal type
+     * `write_off`), e.g. goods that arrived damaged.
+     */
+    public function writeOff(int $itemVariantId, StockLocation|int $location, int $quantity, array $context = []): ItemStock
+    {
+        $this->assertPositive($quantity);
+
+        return DB::transaction(function () use ($itemVariantId, $location, $quantity, $context): ItemStock {
+            $this->lockVariants([$itemVariantId]);
+
+            return $this->applyDelta($itemVariantId, $this->stockableLeaf($location), -$quantity, 'write_off', $context + ['reason' => 'Written off']);
+        });
+    }
+
+    /**
+     * Write off goods still in a courier's custody (In Delivery), e.g. a
+     * short delivery that was never found.
+     */
+    public function writeOffInCustody(int $itemVariantId, int $quantity, ?int $courierId, array $context = []): void
+    {
+        $this->assertPositive($quantity);
+
+        DB::transaction(function () use ($itemVariantId, $quantity, $courierId, $context): void {
+            $this->lockVariants([$itemVariantId]);
+            $this->applyDelta($itemVariantId, $this->transit(), -$quantity, 'write_off', $context + ['courier_id' => $courierId, 'reason' => 'Lost in delivery']);
+        });
+    }
+
     private function transit(): StockLocation
     {
         return app(StockLocationTree::class)->transit();

@@ -68,6 +68,8 @@ class Transfer extends Model
         'destination_location_type',
         'destination_location_id',
         'quantity',
+        'received_quantity',
+        'damaged_quantity',
         'origin',
         'approval_state',
         'approved_by',
@@ -91,6 +93,8 @@ class Transfer extends Model
 
     protected $casts = [
         'quantity' => 'integer',
+        'received_quantity' => 'integer',
+        'damaged_quantity' => 'integer',
         'observed_quantity' => 'integer',
         'min_capacity' => 'integer',
         'max_capacity' => 'integer',

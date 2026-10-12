@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
-import { Head, router } from "@inertiajs/react";
+import { Head, router, usePoll } from "@inertiajs/react";
 import TransferCard from "@/Components/Seller/Shipments/TransferCard";
 import { DeliveryHero } from "@/Components/Delivery/deliveryUi";
 import type { ScheduledTransfer } from "@/types/shipments";
@@ -45,10 +45,18 @@ export default function DeliveryShipmentsIndex({
         );
     };
 
-    // Filter logic
-    const displayedTransfers = filter === "all"
-        ? transfers
-        : transfers.filter(t => t.status === filter);
+    // Live: picking at the origin, agreements and claims show up without a reload.
+    usePoll(20_000, { only: ["scheduled_transfers", "available_count"] });
+
+    // A run being picked (or ready) is "pending" on the legacy status, but it
+    // has passed the agreement gate, so it gets its own chip, not "To Agree".
+    const isPicking = (t: ScheduledTransfer) => t.workflow_status === "picking" || t.workflow_status === "ready";
+    const inFilter = (t: ScheduledTransfer, id: string) =>
+        id === "all" ? true
+            : id === "picking" ? isPicking(t)
+            : id === "pending" ? t.status === "pending" && !isPicking(t)
+            : t.status === id;
+    const displayedTransfers = transfers.filter(t => inFilter(t, filter));
 
     return (
         <>
@@ -88,6 +96,7 @@ export default function DeliveryShipmentsIndex({
                         { id: "all",        label: "All" },
                         // Runs still waiting on a driver to accept a window.
                         { id: "pending",    label: "To Agree" },
+                        { id: "picking",    label: "Being Picked" },
                         { id: "dispatched", label: "To Collect" },
                         { id: "en_route",   label: "En Route" },
                         { id: "shipped",    label: "Shipped" },
@@ -100,7 +109,7 @@ export default function DeliveryShipmentsIndex({
                                     ? "bg-primary text-on-primary border-primary"
                                     : "bg-surface-container-lowest text-on-surface-variant border-outline-variant"
                             }`}>
-                            {f.label} ({f.id === "all" ? transfers.length : transfers.filter(t => t.status === f.id).length})
+                            {f.label} ({transfers.filter(t => inFilter(t, f.id)).length})
                         </button>
                     ))}
                 </div>

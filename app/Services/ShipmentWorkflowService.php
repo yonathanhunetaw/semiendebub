@@ -1090,6 +1090,11 @@ class ShipmentWorkflowService
             'sku' => $variant?->sku,
             'quantity' => (int) $item->quantity,
             'picked_quantity' => (int) $item->picked_quantity,
+            // The receiver's count, saved before signing in (ReceivingService).
+            'received_quantity' => $item->received_quantity,
+            'damaged_quantity' => $item->damaged_quantity,
+            'receipt_note' => $item->receipt_note,
+            'barcode' => $variant?->barcode,
             'shortfall' => $item->shortfall,
             'unit' => $unit,
             'pieces_per_unit' => $piecesPerUnit,
@@ -1886,7 +1891,20 @@ class ShipmentWorkflowService
 
             match ($step) {
                 'dispatch' => $this->ledger->handToCourier((int) $item->item_variant_id, $origin, (int) $moving, $courierId, $context),
-                'receive' => $this->ledger->handOverFromCourier((int) $item->item_variant_id, $destination, (int) $moving, $courierId, $context),
+                // The receiver's count (if any) decides what lands; the rest is
+                // a discrepancy. With no count the whole line lands.
+                'receive' => app(\App\Services\Inventory\ReceivingService::class)->land(
+                    $shipment,
+                    (int) $item->item_variant_id,
+                    $destination,
+                    (int) $moving,
+                    $item->received_quantity,
+                    $item->damaged_quantity,
+                    $courierId,
+                    $context,
+                    auth()->user(),
+                    $item->receipt_note,
+                ),
                 'return' => $this->ledger->returnFromCourier((int) $item->item_variant_id, $origin, (int) $moving, $courierId, $context),
             };
         }

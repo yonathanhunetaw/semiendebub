@@ -73,7 +73,7 @@ export interface PickPackSale {
 
 /** Where the order goes once it is handed over. */
 export interface PickPackDelivery {
-    method: "courier" | "vehicle";
+    method: "courier" | "vehicle" | "store";
     address: string | null;
     recipient: string | null;
     courier: string | null;

@@ -8,6 +8,7 @@ use App\Models\Auth\User;
 use App\Models\Finance\Payment;
 use App\Models\Finance\Sale;
 use App\Models\Finance\SaleItem;
+use App\Models\Fulfillment\Delivery;
 use App\Models\Inventory\InventoryMovement;
 use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\StockReservation;
@@ -134,7 +135,9 @@ class CustodyLog
             default => 1,
         };
 
-        return ['current' => $current, 'labels' => [1 => 'Order placed', 2 => 'Sourcing', 3 => 'Delivery']];
+        $last = $sale->delivery?->method === Delivery::METHOD_STORE ? 'Handed over' : 'Delivery';
+
+        return ['current' => $current, 'labels' => [1 => 'Order placed', 2 => 'Sourcing', 3 => $last]];
     }
 
     /**
@@ -203,6 +206,14 @@ class CustodyLog
         // place keeps the trail readable while the lines carry the detail.
         $grouped = $journal->groupBy(fn (InventoryMovement $row): string => $row->type.'|'.$row->stock_location_id.'|'.$row->created_at?->format('Y-m-d H:i:s'));
 
+        // In store, the picker hands the goods to the customer at the
+        // counter: there is no courier, so no "Handed to Delivery" step.
+        $inStore = $sale->delivery?->method === Delivery::METHOD_STORE;
+
+        if ($inStore) {
+            $grouped = $grouped->reject(fn (Collection $rows): bool => $rows->first()->type === 'custody_in');
+        }
+
         foreach ($grouped as $rows) {
             /** @var InventoryMovement $first */
             $first = $rows->first();
@@ -212,7 +223,11 @@ class CustodyLog
                 : ($first->source_type === User::class ? $first->source_id : null);
             $units = (int) $rows->sum(fn (InventoryMovement $row): int => abs((int) $row->quantity));
 
-            $title = $first->type === 'pick' && $place !== null ? "Picked from {$place->name}" : $meta['title'];
+            $title = match (true) {
+                $first->type === 'pick' && $place !== null => "Picked from {$place->name}",
+                $first->type === 'deliver' && $inStore => 'Handed to the customer in store',
+                default => $meta['title'],
+            };
 
             $events->push($this->event(
                 $first->type,
@@ -223,13 +238,13 @@ class CustodyLog
                 trim(sprintf('%d unit%s%s', $units, $units === 1 ? '' : 's', $first->reason ? ' · '.$first->reason : '')),
                 $this->name($users->get($first->user_id)),
                 $place === null ? null : $this->place($place)['label'],
-                $courierId !== null ? 'Courier: '.($this->name($users->get($courierId)) ?? '#'.$courierId) : null,
+                $courierId !== null ? ($inStore ? 'Handed over by: ' : 'Courier: ').($this->name($users->get($courierId)) ?? '#'.$courierId) : null,
             ));
         }
 
         $delivery = $sale->delivery;
 
-        if ($delivery !== null) {
+        if ($delivery !== null && ! $inStore) {
             $courier = $this->name($delivery->courier) ?? $delivery->courier_name;
 
             foreach ([

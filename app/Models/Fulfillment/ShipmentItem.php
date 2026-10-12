@@ -23,6 +23,9 @@ class ShipmentItem extends Model
         'item_variant_id',
         'quantity',
         'picked_quantity',
+        'received_quantity',
+        'damaged_quantity',
+        'receipt_note',
         'cbm',
         'weight_kg',
         'unit',
@@ -32,6 +35,8 @@ class ShipmentItem extends Model
     protected $casts = [
         'quantity' => 'integer',
         'picked_quantity' => 'integer',
+        'received_quantity' => 'integer',
+        'damaged_quantity' => 'integer',
         'cbm' => 'decimal:3',
         'weight_kg' => 'decimal:2',
     ];

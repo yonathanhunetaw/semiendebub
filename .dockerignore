@@ -8,3 +8,8 @@
 /.env.*
 /.git/
 /docker-compose*.yml
+/e2e/
+/playwright.config.ts
+/test-results/
+/playwright-report/
+/blob-report/

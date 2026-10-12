@@ -33,6 +33,12 @@ class Delivery extends Model
     /** A vehicle (the customer's or a hired one) collects it at the store. */
     public const METHOD_VEHICLE = 'vehicle';
 
+    /**
+     * The customer takes it at the store: Pick & pack hands it over and the
+     * run is delivered on the spot, with no courier.
+     */
+    public const METHOD_STORE = 'store';
+
     protected $fillable = [
         'sale_id',
         'source_location_type',

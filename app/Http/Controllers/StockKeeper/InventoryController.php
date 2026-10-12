@@ -62,7 +62,6 @@ class InventoryController extends Controller
                 ->values()
                 ->all(),
             'locations' => $stock->locations(),
-            'variants' => $this->stock->variantOptions($search !== '' ? $search : null)->all(),
             'filters' => [
                 'search' => $search,
                 'location_type' => $locationType,
@@ -88,6 +87,26 @@ class InventoryController extends Controller
                 $request->string('location_type')->toString() ?: null,
                 $request->integer('location_id') ?: null,
             ),
+        ]);
+    }
+
+    /**
+     * Step one of the receive picker: items matching a search.
+     */
+    public function itemOptions(Request $request): \Illuminate\Http\JsonResponse
+    {
+        return response()->json([
+            'items' => $this->stock->itemOptions($request->string('q')->trim()->toString() ?: null)->all(),
+        ]);
+    }
+
+    /**
+     * Step two of the receive picker: every variant of the chosen item.
+     */
+    public function itemVariantOptions(int $item): \Illuminate\Http\JsonResponse
+    {
+        return response()->json([
+            'variants' => $this->stock->variantOptionsForItem($item)->all(),
         ]);
     }
 

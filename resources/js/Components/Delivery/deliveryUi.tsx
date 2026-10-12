@@ -70,7 +70,11 @@ export function transitionLabel(run: Pick<DeliveryRun, "method">, status: string
 
 export function DeliveryStatusChip({ status, method }: { status: DeliveryStatus; method?: DeliveryRun["method"] }): React.ReactElement {
     const base = STATUS_META[status] ?? { label: status, color: "default" as const };
-    const meta = { ...base, label: (method === "vehicle" ? VEHICLE_STATUS_LABELS[status] : undefined) ?? base.label };
+    const label =
+        method === "store" && status === "delivered"
+            ? "Handed over in store"
+            : ((method === "vehicle" ? VEHICLE_STATUS_LABELS[status] : undefined) ?? base.label);
+    const meta = { ...base, label };
 
     return <Chip size="small" label={meta.label} color={meta.color} sx={{ fontWeight: 800, borderRadius: 2 }} />;
 }

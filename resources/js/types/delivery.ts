@@ -38,7 +38,7 @@ export interface DeliveryRun {
     vehicle?: string | null;
     vehicle_plate?: string | null;
     /** courier: carried to the address; vehicle: a vehicle collects it at the store. */
-    method?: "courier" | "vehicle";
+    method?: "courier" | "vehicle" | "store";
     driver_phone?: string | null;
 }
 
@@ -48,7 +48,7 @@ export interface BeingPackedRun {
     tracking_number: string | null;
     reference: string | null;
     store: string | null;
-    method: "courier" | "vehicle";
+    method: "courier" | "vehicle" | "store";
     address: string | null;
     plate: string | null;
     /** Already named as this courier's run. */

@@ -218,8 +218,6 @@ export default function Show({
     };
 
     const selectedPrice = visiblePrice(variant, pricingMode);
-    console.log("🔥 [SHOW] RAW VARIANT DATA:", variant);
-    console.log(`🔥 [SHOW] PRICE RESOLUTION - Mode: ${pricingMode}, Calculated Price: ${selectedPrice}`);
     const perPiece =
         variant?.quantity && selectedPrice != null && variant.quantity > 0
             ? selectedPrice / variant.quantity

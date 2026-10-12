@@ -21,12 +21,6 @@ Route::domain("marketing.$baseDomain")
             })->name('login'); // CRITICAL: Laravel's 'auth' middleware needs this name
         });
 
-        Route::get('/debug-host', function () {
-            return [
-                'host' => request()->getHost(),
-                'expected' => config('app.system_domain'),
-            ];
-        });
 
         Route::middleware(['auth', 'verified', 'role.subdomain:marketing'])->group(function () {
             Route::get('/dashboard', function () {

@@ -2,8 +2,10 @@ import type { CourierOption, DeliveryMethod, DeliveryPlan, SavedAddress, Vehicle
 import React from "react";
 
 /**
- * Where an order goes and how. Three ways:
+ * Where an order goes and how. Four ways:
  *
+ *   store     the customer takes it in the store: Pick & pack hands it over
+ *             at the counter, with no courier. Off when a line needs a hub.
  *   courier   a courier takes it to an address: a saved address of the
  *             customer's (or a new one, saved on the customer when the order
  *             is placed), the recipient, the courier and optionally a vehicle.
@@ -16,6 +18,7 @@ import React from "react";
  */
 
 const METHODS: Array<{ id: DeliveryMethod; label: string; icon: string; hint: string }> = [
+    { id: "store", label: "In store", icon: "storefront", hint: "Customer takes it now" },
     { id: "courier", label: "Standard delivery", icon: "home_pin", hint: "Courier to an address" },
     { id: "vehicle", label: "Vehicle dispatch", icon: "local_shipping", hint: "A vehicle collects it" },
     { id: "later", label: "Add later", icon: "schedule", hint: "Decide before it ships" },
@@ -26,12 +29,15 @@ export default function DeliveryPlanner({
     couriers = [],
     vehicles = [],
     addresses = [],
+    inStoreBlocked = null,
 }: {
     plan: DeliveryPlan;
     onChange: (next: DeliveryPlan) => void;
     couriers?: CourierOption[];
     vehicles?: VehicleOption[];
     addresses?: SavedAddress[];
+    /** Why the customer cannot take it in the store (a line needs a hub). */
+    inStoreBlocked?: string | null;
 }): React.ReactElement {
     const set = (patch: Partial<DeliveryPlan>) => onChange({ ...plan, ...patch });
     const fleetVehicle = vehicles.find((vehicle) => vehicle.id === plan.vehicleId) ?? null;
@@ -49,9 +55,10 @@ export default function DeliveryPlanner({
     const labelClass = "mb-1 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-on-surface-variant";
 
     const methodPicker = (
-        <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Delivery method">
+        <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="Delivery method">
             {METHODS.map((method) => {
                 const active = plan.method === method.id;
+                const blocked = method.id === "store" && inStoreBlocked !== null;
 
                 return (
                     <button
@@ -59,19 +66,34 @@ export default function DeliveryPlanner({
                         type="button"
                         role="radio"
                         aria-checked={active}
+                        disabled={blocked}
+                        title={blocked ? inStoreBlocked : undefined}
                         onClick={() => set({ method: method.id })}
-                        className={`flex flex-col items-center gap-0.5 rounded-[10px] border px-1.5 py-2 text-center transition-colors ${
+                        className={`flex flex-col items-center gap-0.5 rounded-[10px] border px-1.5 py-2 text-center transition-colors disabled:opacity-40 ${
                             active ? "border-primary bg-primary-container/30 text-primary" : "border-outline-variant text-on-surface-variant"
                         }`}
                     >
                         <span className="material-symbols-outlined text-[20px]">{method.icon}</span>
                         <span className="text-[11px] font-bold leading-tight text-on-surface">{method.label}</span>
-                        <span className="text-[10px] leading-tight">{method.hint}</span>
+                        <span className="hidden text-[10px] leading-tight sm:block">{method.hint}</span>
                     </button>
                 );
             })}
         </div>
     );
+
+    if (plan.method === "store") {
+        return (
+            <div className="space-y-3">
+                {methodPicker}
+                <p className="flex items-start gap-1.5 rounded-[10px] border border-info/30 bg-info-container/50 px-2.5 py-2 text-[11px] text-on-info-container">
+                    <span className="material-symbols-outlined text-[14px]">storefront</span>
+                    The customer takes it here. Once every payment is confirmed, a seller or stock keeper picks it from
+                    the shelf or floor and hands it over in Pick &amp; pack.
+                </p>
+            </div>
+        );
+    }
 
     if (plan.method === "later") {
         return (
@@ -95,7 +117,7 @@ export default function DeliveryPlanner({
                         <span className="material-symbols-outlined text-[15px]">local_shipping</span>
                         Collecting vehicle
                     </p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <select
                             value={plan.vehicleId ?? ""}
                             onChange={(event) => {
@@ -188,7 +210,7 @@ export default function DeliveryPlanner({
                         rows={2}
                         className={inputClass}
                     />
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <input
                             value={plan.recipient}
                             onChange={(event) => set({ recipient: event.target.value })}
@@ -234,7 +256,7 @@ export default function DeliveryPlanner({
                     <span className="material-symbols-outlined text-[15px]">local_shipping</span>
                     Vehicle &amp; plate
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <select
                         value={plan.vehicleId ?? ""}
                         onChange={(event) => {

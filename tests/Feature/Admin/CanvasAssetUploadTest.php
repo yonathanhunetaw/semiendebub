@@ -26,6 +26,7 @@ class CanvasAssetUploadTest extends TestCase
 
         // 2. Create a test user
         $user = User::factory()->create();
+        $user->assignRole('admin');
 
         // 3. Generate a dummy image asset file mock
         $fakeImage = UploadedFile::fake()->image('canvas_diagram.jpg', 800, 600);

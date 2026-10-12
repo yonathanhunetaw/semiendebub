@@ -160,6 +160,8 @@ export default function PickPack({ reference, plan = null, queue = [] }: Props):
     const ready = allPicked && packed && !locked && !unpaid;
     const step = alreadyConfirmed ? 4 : awaitingPayment ? 0 : !allChosen ? 1 : !allPicked ? 2 : 3;
     const startedAt = sale.picking_started_at ? new Date(sale.picking_started_at) : null;
+    // In store: the customer takes it at the counter, so it is handed to them.
+    const inStore = plan.delivery?.method === "store";
 
     const fillSuggested = () =>
         setChoices((current) => {
@@ -357,10 +359,14 @@ export default function PickPack({ reference, plan = null, queue = [] }: Props):
                 {plan.delivery !== undefined && !alreadyConfirmed ? (
                     <div className="mx-3.5 mt-3 flex items-start gap-2 rounded-[10px] border border-outline-variant bg-surface-container-lowest px-3 py-2 text-[11px] text-on-surface-variant">
                         <span className="material-symbols-outlined mt-0.5 shrink-0 text-[15px]">
-                            {plan.delivery?.method === "vehicle" ? "local_shipping" : "home_pin"}
+                            {inStore ? "storefront" : plan.delivery?.method === "vehicle" ? "local_shipping" : "home_pin"}
                         </span>
                         <div className="min-w-0 flex-1">
-                            {plan.delivery === null || (plan.delivery.method === "courier" && !plan.delivery.address) ? (
+                            {inStore ? (
+                                <p>
+                                    <strong className="text-on-surface">In store</strong> · the customer takes it here
+                                </p>
+                            ) : plan.delivery === null || (plan.delivery.method === "courier" && !plan.delivery.address) ? (
                                 <p className="font-semibold text-on-warning-container">
                                     No delivery details yet. Add them before handing it over.
                                 </p>
@@ -388,7 +394,9 @@ export default function PickPack({ reference, plan = null, queue = [] }: Props):
                             check_circle
                         </span>
                         <p className="text-[11px] leading-snug text-on-success-container">
-                            Sourcing was confirmed and this order has moved on to delivery.
+                            {inStore
+                                ? "It was picked and handed to the customer in the store."
+                                : "Sourcing was confirmed and this order has moved on to delivery."}
                         </p>
                     </div>
                 ) : null}
@@ -491,7 +499,7 @@ export default function PickPack({ reference, plan = null, queue = [] }: Props):
                         </span>
                         <span className="text-[11px] font-semibold text-on-surface-variant">
                             {alreadyConfirmed
-                                ? "Already with delivery"
+                                ? inStore ? "Handed to the customer" : "Already with delivery"
                                 : awaitingPayment
                                   ? "Waiting for payment"
                                   : unpaid && allPicked && packed
@@ -511,7 +519,9 @@ export default function PickPack({ reference, plan = null, queue = [] }: Props):
                         onClick={confirm}
                         className="max-w-[220px] flex-1 rounded-[999px] px-6 py-3 text-center text-sm font-bold text-on-primary shadow-md transition-transform active:scale-[0.98] disabled:opacity-40 bg-primary"
                     >
-                        {submitting ? "Handing over…" : queue.length > 0 ? "Hand to delivery & next" : "Hand to delivery"}
+                        {submitting
+                            ? "Handing over…"
+                            : `Hand to ${inStore ? "customer" : "delivery"}${queue.length > 0 ? " & next" : ""}`}
                     </button>
                 </div>
             </nav>

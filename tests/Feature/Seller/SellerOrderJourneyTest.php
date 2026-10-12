@@ -9,6 +9,7 @@ use App\Models\Finance\Payment;
 use App\Models\Finance\PaymentAccount;
 use App\Models\Finance\Sale;
 use App\Models\Fulfillment\Delivery;
+use App\Models\Inventory\InventoryMovement;
 use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\StockReservation;
 use App\Models\Item\Item;
@@ -56,7 +57,7 @@ class SellerOrderJourneyTest extends TestCase
     {
         parent::setUp();
 
-        foreach (['seller', 'delivery', 'store_manager'] as $role) {
+        foreach (['seller', 'delivery', 'store_manager', 'stock_keeper'] as $role) {
             Role::firstOrCreate(['name' => $role]);
         }
 
@@ -475,6 +476,138 @@ class SellerOrderJourneyTest extends TestCase
         $this->assertSame('received', $shipment->fresh()->status);
         $this->assertSame(0, app(StockService::class)->inCustody($this->variant->id));
         $this->assertSame(30, (int) ItemStock::query()->where('stock_location_id', $floor->id)->where('item_variant_id', $this->variant->id)->value('quantity'));
+    }
+
+    #[Test]
+    public function a_walk_in_takes_it_in_store_once_a_manager_confirms_the_cash_and_a_seller_hands_it_over(): void
+    {
+        $cart = $this->cart(2);
+
+        $this->asSeller()
+            ->get(route('seller.orders.confirmation', ['cart' => $cart->id]))
+            ->assertInertia(fn ($page) => $page->where('walk_in', true));
+
+        $this->asSeller()
+            ->post(route('seller.orders.store'), ['cart_id' => $cart->id, ...$this->cash(400), 'delivery_method' => 'store'])
+            ->assertSessionHasNoErrors();
+
+        $sale = Sale::query()->with(['delivery', 'items'])->sole();
+        $this->assertSame(Delivery::METHOD_STORE, $sale->delivery->method);
+        $this->assertNull($sale->delivery->delivery_address);
+        $this->assertNull($sale->delivery->courier_id);
+
+        $lines = ['lines' => [['sale_item_id' => $sale->items[0]->id, 'location_type' => StockLocation::class, 'location_id' => $this->shelf->id]]];
+
+        // Two people: the goods do not leave on the seller's word alone.
+        $this->asSeller()->post(route('seller.orders.sourcing.confirm', $sale), $lines)->assertSessionHas('error');
+
+        $this->confirmCash();
+
+        $this->asSeller()
+            ->get(route('seller.orders.pickpack', ['reference' => $sale->reference_number]))
+            ->assertInertia(fn ($page) => $page
+                ->where('plan.delivery.method', 'store')
+                ->where('plan.lines.0.options', fn ($options) => collect($options)->every(fn ($option) => in_array($option['kind'], ['shelf', 'backroom'], true))));
+
+        $this->asSeller()
+            ->post(route('seller.orders.sourcing.confirm', $sale), $lines)
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, 'handed to the customer'))
+            ->assertRedirectContains('tab=delivered');
+
+        $sale->refresh();
+        $delivery = $sale->delivery()->sole();
+        $this->assertSame(Sale::STAGE_DELIVERED, $sale->fulfillment_stage);
+        $this->assertSame(['delivered', null], [$delivery->status, $delivery->courier_id]);
+        $this->assertNotNull($delivery->delivered_at);
+
+        // Off the shelf and out of the network; nothing left in Delivery's custody.
+        $this->assertSame(8, $this->at($this->shelf));
+        $this->assertSame(0, app(StockService::class)->inCustody($this->variant->id));
+        $this->assertSame(8, (int) ItemStock::query()->where('item_variant_id', $this->variant->id)->sum('quantity'));
+
+        // The custody row names the seller who handed it over.
+        $handover = InventoryMovement::query()->where('type', 'deliver')->sole();
+        $this->assertSame([User::class, (int) $this->seller->id], [$handover->source_type, (int) $handover->source_id]);
+
+        // No courier ever sees it.
+        $this->assertSame(0, Delivery::query()->forCourier($this->courier->id)->visibleToCourier()->count());
+        $this->assertSame(0, Delivery::query()->unassigned()->readyToCollect()->where('status', 'pending')->count());
+
+        $this->asSeller()
+            ->get(route('seller.orders.index'))
+            ->assertInertia(fn ($page) => $page->where('orders.0.stage', 'delivered')->where('orders.0.destination.method', 'store'));
+
+        $this->asSeller()
+            ->get(route('seller.orders.custody', ['reference' => $sale->reference_number]))
+            ->assertOk()
+            ->assertSee('Handed to the customer in store');
+    }
+
+    #[Test]
+    public function a_stock_keeper_hands_a_named_customers_in_store_order_over(): void
+    {
+        $customer = \App\Models\Auth\Customer::factory()->create(['store_id' => $this->store->id]);
+        $cart = $this->cart(1);
+        $cart->update(['customer_id' => $customer->id]);
+
+        $this->asSeller()
+            ->post(route('seller.orders.store'), ['cart_id' => $cart->id, ...$this->cash(200), 'delivery_method' => 'store'])
+            ->assertSessionHasNoErrors();
+        $this->confirmCash();
+
+        $sale = Sale::query()->with('items')->sole();
+        $keeper = $this->user('stock_keeper', $this->store->id);
+
+        $this->as($keeper, 'stockkeeper')
+            ->post(route('stock_keeper.orders.pick', $sale), [
+                'lines' => [['sale_item_id' => $sale->items[0]->id, 'location_type' => StockLocation::class, 'location_id' => $this->shelf->id]],
+            ])
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, 'handed to the customer'));
+
+        $this->assertSame(Sale::STAGE_DELIVERED, $sale->fresh()->fulfillment_stage);
+        $this->assertSame(9, $this->at($this->shelf));
+        $this->assertSame((int) $keeper->id, (int) InventoryMovement::query()->where('type', 'deliver')->sole()->source_id);
+    }
+
+    #[Test]
+    public function an_in_store_order_cannot_be_picked_from_the_remote_hub(): void
+    {
+        $remote = StockLocation::factory()->remoteHubFor($this->store)->create();
+        app(StockService::class)->receive($this->variant->id, $remote, 5);
+
+        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(1)->id, ...$this->cash(200), 'delivery_method' => 'store']);
+        $this->confirmCash();
+        $sale = Sale::query()->with('items')->sole();
+
+        $this->asSeller()
+            ->post(route('seller.orders.sourcing.confirm', $sale), [
+                'lines' => [['sale_item_id' => $sale->items[0]->id, 'location_type' => StockLocation::class, 'location_id' => $remote->id]],
+            ])
+            ->assertSessionHasErrors('lines');
+
+        $this->assertSame(Sale::STAGE_PICK_PACK, $sale->fresh()->fulfillment_stage);
+        $this->assertSame(5, $this->at($remote));
+    }
+
+    #[Test]
+    public function the_delivery_can_switch_between_in_store_and_a_courier_before_it_leaves(): void
+    {
+        $customer = \App\Models\Auth\Customer::factory()->create(['store_id' => $this->store->id]);
+        $cart = $this->cart(1);
+        $cart->update(['customer_id' => $customer->id]);
+        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $cart->id, 'delivery_method' => 'store']);
+        $sale = Sale::query()->sole();
+        $address = fn (array $plan) => $this->asSeller()
+            ->patch(route('seller.orders.address', ['reference' => $sale->reference_number]), $plan)
+            ->assertSessionHasNoErrors();
+
+        $address(['delivery_method' => 'courier', 'delivery_address' => 'Piassa', 'courier_id' => $this->courier->id]);
+        $this->assertSame([Delivery::METHOD_COURIER, 'Piassa', (int) $this->courier->id], [$sale->delivery()->value('method'), $sale->delivery()->value('delivery_address'), (int) $sale->delivery()->value('courier_id')]);
+
+        $address(['delivery_method' => 'store']);
+        $delivery = $sale->delivery()->sole();
+        $this->assertSame([Delivery::METHOD_STORE, null, null], [$delivery->method, $delivery->delivery_address, $delivery->courier_id]);
     }
 
     /** @return array{parts: array<int, array{amount: float|int}>} */

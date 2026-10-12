@@ -2,14 +2,15 @@ import { useEffect, type RefObject } from "react";
 import type { Theme } from "@mui/material";
 
 /**
- * Admin tables become stacked cards on phones and tablets (below md): one card
- * per row, each cell labelled with its column header. No admin table scrolls
+ * Tables become stacked cards on phones and tablets (below md): one card
+ * per row, each cell labelled with its column header. No table scrolls
  * sideways.
  *
  * The labels are copied from each table's header into the cells' `data-label`
  * (useStackedTableLabels), and the layout's styles (stackedTableSx) do the
- * rest, so pages need no changes. A table that must stay a grid (a matrix whose
- * columns mean nothing on their own) opts out with className="keep-table".
+ * rest, so pages need no changes. Used by AdminLayout and StockKeeperLayout.
+ * A table that must stay a grid (a matrix whose columns mean nothing on their
+ * own) opts out with className="keep-table".
  */
 
 const SELECTOR = "table:not(.keep-table)";

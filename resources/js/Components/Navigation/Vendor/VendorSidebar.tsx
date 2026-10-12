@@ -25,7 +25,7 @@ export interface VendorSidebarProps {
 }
 
 /**
- * Supplier navigation, mirroring StockKeeperSidebar so the two consoles share
+ * Supplier navigation, mirroring the old stock keeper sidebar so the two consoles share
  * one structure.
  */
 export default function VendorSidebar({

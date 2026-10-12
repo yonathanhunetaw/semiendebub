@@ -1,365 +1,210 @@
-import { Head, Link } from "@inertiajs/react";
-import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
-import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
-import NotificationsActiveRoundedIcon from "@mui/icons-material/NotificationsActiveRounded";
-import WarehouseRoundedIcon from "@mui/icons-material/WarehouseRounded";
-import {
-    Box,
-    Button,
-    Grid,
-    LinearProgress,
-    Stack,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableRow,
-    Typography,
-} from "@mui/material";
+import { Head, Link, usePage } from "@inertiajs/react";
 import React from "react";
-
-import {
-    EmptyState,
-    PageHeader,
-    SkCard,
-    StatCard,
-    StockStatusChip,
-    formatMoment,
-} from "@/Components/StockKeeper/stockKeeperUi";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
-import type { StockKeeperDashboardProps } from "@/types/stockkeeper";
+import { EmptyState, StatusPill, type Tone } from "@/Components/Shared/ui";
+import type { StockKeeperDashboardProps, StockRow, StockRowStatus } from "@/types/stockkeeper";
 
 /**
- * Warehouse desk overview.
- *
- * Reads entirely from the live stock ledger — no placeholder figures.
+ * The stock keeper's home: who and where, today's jobs (each opening the page
+ * where it is done), the stock at a glance, and what needs attention.
  */
-export default function Dashboard({
-    metrics,
-    alerts,
-    recent_movements: recentMovements,
-    locations,
-    assigned_location: assignedLocation,
-    transfer_summary: transferSummary,
-}: StockKeeperDashboardProps): React.ReactElement {
-    const warehouseShare =
-        metrics.units_on_hand > 0
-            ? Math.round((metrics.warehouse_units / metrics.units_on_hand) * 100)
-            : 0;
+
+const ROW_STATUS: Record<StockRowStatus, { label: string; tone: Tone }> = {
+    healthy: { label: "Healthy", tone: "success" },
+    low_stock: { label: "Low stock", tone: "warning" },
+    critical: { label: "Critical", tone: "error" },
+    out_of_stock: { label: "Out of stock", tone: "error" },
+};
+
+const KIND_ICON: Record<string, string> = {
+    main_hub: "warehouse",
+    remote_hub: "warehouse",
+    store: "storefront",
+    backroom: "storefront",
+    shelf: "shelves",
+    warehouse: "warehouse",
+};
+
+const fmt = (n: number) => n.toLocaleString();
+
+function greeting(): string {
+    const hour = new Date().getHours();
+    return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+}
+
+/** "11 Cartons" — the row's own packaging, which is how it is counted. */
+function amount(row: StockRow): string {
+    const unit = row.unit ?? "units";
+    return `${fmt(row.quantity)} ${row.quantity === 1 ? unit : `${unit}s`}`;
+}
+
+export default function Dashboard({ metrics, alerts = [], recent_movements = [], locations = [], todo }: StockKeeperDashboardProps) {
+    const { props } = usePage<{ auth?: { user?: { first_name?: string } | null } }>();
+    const name = props.auth?.user?.first_name;
+    const today = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+
+    const jobs: Array<{ key: string; label: string; icon: string; count: number; href: string; tone: "primary" | "warning" | "error" }> = todo
+        ? [
+              { key: "pick", label: "Shipments to pick", icon: "inventory", count: todo.shipments_to_pick, href: route("stock_keeper.shipments.index", { direction: "outbound" }), tone: "primary" },
+              { key: "receive", label: "Shipments to receive", icon: "move_to_inbox", count: todo.shipments_to_receive, href: route("stock_keeper.shipments.index", { direction: "inbound" }), tone: "primary" },
+              { key: "orders", label: "Orders to pick", icon: "package_2", count: todo.orders_to_pick, href: route("stock_keeper.orders.index"), tone: "primary" },
+              { key: "shelve", label: "To shelve", icon: "shelves", count: todo.to_shelve, href: route("stock_keeper.shelving.index"), tone: "primary" },
+              { key: "accept", label: "Remote Hub to accept", icon: "approval", count: todo.to_accept, href: route("stock_keeper.shelving.index"), tone: "primary" },
+              { key: "transfers", label: "Transfers queued", icon: "swap_horiz", count: todo.transfers_pending, href: route("stock_keeper.transfers.index", { status: "pending" }), tone: "primary" },
+              { key: "low", label: "Items low", icon: "trending_down", count: todo.levels_low, href: route("stock_keeper.levels.index"), tone: "warning" },
+              { key: "crit", label: "Crit low or empty", icon: "error", count: todo.levels_critical, href: route("stock_keeper.levels.index"), tone: "error" },
+          ]
+        : [];
+    const waiting = jobs.reduce((sum, job) => sum + job.count, 0);
+
+    const toneClass = { primary: "bg-primary text-on-primary", warning: "bg-warning text-on-warning", error: "bg-error text-on-error" } as const;
 
     return (
         <>
-            <Head title="StockKeeper Dashboard" />
+            <Head title="Home" />
 
-            <PageHeader
-                title="Warehouse Desk"
-                subtitle={
-                    assignedLocation
-                        ? `Posted at ${assignedLocation.name}`
-                        : "Live position across every stocked location"
-                }
-                action={
-                    <Stack direction="row" spacing={1}>
-                        <Button
-                            component={Link}
-                            href={route("stock_keeper.alerts.index")}
-                            variant="outlined"
-                            startIcon={<NotificationsActiveRoundedIcon />}
+            {/* Greeting */}
+            <section className="relative mb-4 overflow-hidden rounded-[24px] bg-primary px-5 py-5 text-on-primary shadow-sm sm:px-7 sm:py-6 lg:mb-6">
+                <span className="material-symbols-outlined pointer-events-none absolute -right-4 -top-6 text-[140px] opacity-10 sm:text-[180px]">warehouse</span>
+                <p className="text-[13px] font-medium opacity-80">{today}</p>
+                <h1 className="mt-0.5 text-[24px] font-extrabold tracking-tight sm:text-[30px]">
+                    {greeting()}
+                    {name ? `, ${name}` : ""}
+                </h1>
+                <p className="mt-1 max-w-[560px] text-[14px] opacity-90">
+                    {waiting > 0 ? `${fmt(waiting)} job${waiting === 1 ? "" : "s"} waiting across your docks.` : "Nothing waiting. Your docks are clear."}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                    {[
+                        { label: "Receive stock", icon: "add_box", href: route("stock_keeper.inventory.index") },
+                        { label: "Raise transfer", icon: "swap_horiz", href: route("stock_keeper.transfers.index") },
+                        { label: "Stock levels", icon: "speed", href: route("stock_keeper.levels.index") },
+                    ].map((action) => (
+                        <Link
+                            key={action.label}
+                            href={action.href}
+                            className="flex items-center gap-1.5 rounded-[999px] bg-on-primary/15 px-3.5 py-2 text-[13px] font-bold text-on-primary backdrop-blur hover:bg-on-primary/25"
                         >
-                            Alerts
-                        </Button>
-                        <Button
-                            component={Link}
-                            href={route("stock_keeper.inventory.index")}
-                            variant="contained"
-                            startIcon={<Inventory2RoundedIcon />}
-                        >
-                            Inventory
-                        </Button>
-                    </Stack>
-                }
-            />
+                            <span className="material-symbols-outlined text-[18px]">{action.icon}</span>
+                            {action.label}
+                        </Link>
+                    ))}
+                </div>
+            </section>
 
-            {/* ── KPIs ── */}
-            <Grid container spacing={2.5} sx={{ mb: 3 }}>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    {/*
-                      Items lead. This tile used to headline `units_on_hand`, a
-                      sum across mixed packaging units — adding 11 cartons to 6
-                      pieces and calling it 17 — beside a "Tracked SKUs" count of
-                      variants. Products and pieces are the two figures that mean
-                      something.
-                    */}
-                    <StatCard
-                        label="Items on hand"
-                        value={metrics.items}
-                        hint={`${metrics.variants.toLocaleString()} variants · ${metrics.ledger_rows.toLocaleString()} ledger rows`}
-                        icon={<Inventory2RoundedIcon fontSize="small" />}
-                    />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard
-                        label="Pieces on hand"
-                        value={metrics.pieces_on_hand}
-                        hint={`${metrics.warehouses} warehouse${metrics.warehouses === 1 ? "" : "s"}`}
-                        icon={<WarehouseRoundedIcon fontSize="small" />}
-                    />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard
-                        label="Low stock"
-                        value={metrics.low_stock}
-                        hint="At or below minimum"
-                        tone={metrics.low_stock > 0 ? "warning" : "success"}
-                        icon={<NotificationsActiveRoundedIcon fontSize="small" />}
-                    />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard
-                        label="Out of stock"
-                        value={metrics.out_of_stock}
-                        hint="Zero units remaining"
-                        tone={metrics.out_of_stock > 0 ? "danger" : "success"}
-                        icon={<LocalShippingRoundedIcon fontSize="small" />}
-                    />
-                </Grid>
-            </Grid>
+            {/* Today's jobs */}
+            {jobs.length > 0 && (
+                <section className="mb-4 lg:mb-6">
+                    <h2 className="mb-2 px-1 text-[13px] font-bold uppercase tracking-wider text-on-surface-variant">Today</h2>
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+                        {jobs.map((job) => {
+                            const live = job.count > 0;
+                            return (
+                                <Link
+                                    key={job.key}
+                                    href={job.href}
+                                    className={`group flex flex-col justify-between rounded-[18px] border p-3 transition-colors sm:p-4 ${
+                                        live ? "border-outline-variant bg-surface-container-lowest shadow-sm hover:border-primary" : "border-outline-variant/60 bg-surface-container-low/60"
+                                    }`}
+                                >
+                                    <span className={`flex h-9 w-9 items-center justify-center rounded-[11px] ${live ? toneClass[job.tone] : "bg-surface-container text-on-surface-variant/70"}`}>
+                                        <span className="material-symbols-outlined text-[20px]">{job.icon}</span>
+                                    </span>
+                                    <span className="mt-3">
+                                        <span className={`block text-[26px] font-extrabold leading-none tabular-nums ${live ? "text-on-surface" : "text-on-surface-variant/70"}`}>{fmt(job.count)}</span>
+                                        <span className="mt-1 block text-[13px] font-bold leading-tight text-on-surface-variant">{job.label}</span>
+                                    </span>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </section>
+            )}
 
-            <Grid container spacing={2.5}>
-                {/* ── Most urgent alerts ── */}
-                <Grid size={{ xs: 12, lg: 8 }}>
-                    <SkCard sx={{ p: 0, overflow: "hidden" }}>
-                        <Stack
-                            direction="row"
-                            alignItems="center"
-                            justifyContent="space-between"
-                            sx={{ p: 2.5, pb: 1.5 }}
-                        >
-                            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                                Needs replenishment
-                            </Typography>
-                            <Button
-                                component={Link}
-                                href={route("stock_keeper.alerts.index")}
-                                size="small"
+            {/* Stock at a glance */}
+            <section className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3 lg:mb-6 lg:grid-cols-4">
+                {[
+                    { label: "Items on hand", value: metrics.items, hint: `${fmt(metrics.variants)} SKUs`, icon: "category" },
+                    { label: "Pieces on hand", value: metrics.pieces_on_hand, hint: "All packaging, in pieces", icon: "deployed_code" },
+                    { label: "Items low", value: metrics.low_stock_items, hint: `${fmt(metrics.low_stock)} SKU rows`, icon: "trending_down" },
+                    { label: "Items out", value: metrics.out_of_stock_items, hint: `${fmt(metrics.out_of_stock)} SKU rows`, icon: "remove_shopping_cart" },
+                ].map((stat) => (
+                    <div key={stat.label} className="rounded-[18px] border border-outline-variant bg-surface-container-lowest p-3 shadow-sm sm:p-4">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[13px] font-bold text-on-surface-variant">{stat.label}</span>
+                            <span className="material-symbols-outlined text-[20px] text-primary">{stat.icon}</span>
+                        </div>
+                        <p className="mt-1 text-[24px] font-extrabold tabular-nums text-on-surface sm:text-[28px]">{fmt(stat.value)}</p>
+                        <p className="text-[12px] text-on-surface-variant">{stat.hint}</p>
+                    </div>
+                ))}
+            </section>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
+                <StockList title="Needs attention" icon="notification_important" rows={alerts} href={route("stock_keeper.alerts.index")} empty="Nothing is low. Everything is above its minimum." />
+                <StockList title="Recently changed" icon="history" rows={recent_movements} href={route("stock_keeper.inventory.index")} empty="No stock has changed yet." />
+            </div>
+
+            {locations.length > 0 && (
+                <section className="mt-4 lg:mt-6">
+                    <h2 className="mb-2 px-1 text-[13px] font-bold uppercase tracking-wider text-on-surface-variant">Your places</h2>
+                    <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden">
+                        {locations.map((location) => (
+                            <Link
+                                key={`${location.kind}-${location.id}`}
+                                href={route("stock_keeper.inventory.index", { location_type: location.type, location_id: location.id })}
+                                className="flex shrink-0 items-center gap-2 rounded-[14px] border border-outline-variant bg-surface-container-lowest px-3 py-2 text-[13px] font-bold text-on-surface hover:border-primary"
                             >
-                                View all
-                            </Button>
-                        </Stack>
-
-                        {alerts.length === 0 ? (
-                            <EmptyState
-                                title="Nothing below threshold"
-                                hint="Every tracked row is above its minimum."
-                            />
-                        ) : (
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Product</TableCell>
-                                        <TableCell>Location</TableCell>
-                                        <TableCell align="right">On hand</TableCell>
-                                        <TableCell align="right">Min</TableCell>
-                                        <TableCell align="right">Status</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {alerts.map((row) => (
-                                        <TableRow key={row.id} hover>
-                                            <TableCell>
-                                                <Typography
-                                                    variant="body2"
-                                                    sx={{ fontWeight: 600 }}
-                                                    noWrap
-                                                >
-                                                    {row.product_name}
-                                                </Typography>
-                                                <Typography
-                                                    variant="caption"
-                                                    color="text.secondary"
-                                                >
-                                                    {row.variant_label}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>{row.location_name}</TableCell>
-                                            <TableCell align="right">
-                                                {row.quantity.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell align="right">
-                                                {row.min_stock_level.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell align="right">
-                                                <StockStatusChip status={row.status} />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </SkCard>
-                </Grid>
-
-                {/* ── Distribution + transfers ── */}
-                <Grid size={{ xs: 12, lg: 4 }}>
-                    <Stack spacing={2.5}>
-                        <SkCard>
-                            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                                Where stock sits
-                            </Typography>
-
-                            <Box sx={{ mb: 1 }}>
-                                <Stack
-                                    direction="row"
-                                    justifyContent="space-between"
-                                    sx={{ mb: 0.5 }}
-                                >
-                                    <Typography variant="caption" color="text.secondary">
-                                        Warehouses
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                                        {metrics.warehouse_units.toLocaleString()} ({warehouseShare}%)
-                                    </Typography>
-                                </Stack>
-                                <LinearProgress
-                                    variant="determinate"
-                                    value={warehouseShare}
-                                    sx={{ height: 8, borderRadius: 4 }}
-                                />
-                            </Box>
-
-                            <Box>
-                                <Stack
-                                    direction="row"
-                                    justifyContent="space-between"
-                                    sx={{ mb: 0.5 }}
-                                >
-                                    <Typography variant="caption" color="text.secondary">
-                                        Stores
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                                        {metrics.store_units.toLocaleString()} ({100 - warehouseShare}%)
-                                    </Typography>
-                                </Stack>
-                                <LinearProgress
-                                    variant="determinate"
-                                    color="secondary"
-                                    value={100 - warehouseShare}
-                                    sx={{ height: 8, borderRadius: 4 }}
-                                />
-                            </Box>
-
-                            <Stack spacing={0.75} sx={{ mt: 2.5 }}>
-                                {locations.map((location) => (
-                                    <Stack
-                                        key={`${location.kind}-${location.id}`}
-                                        direction="row"
-                                        justifyContent="space-between"
-                                    >
-                                        <Typography variant="body2" noWrap>
-                                            {location.name}
-                                        </Typography>
-                                        <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 700 }}
-                                        >
-                                            {location.units.toLocaleString()}
-                                        </Typography>
-                                    </Stack>
-                                ))}
-                            </Stack>
-                        </SkCard>
-
-                        <SkCard>
-                            <Stack
-                                direction="row"
-                                alignItems="center"
-                                justifyContent="space-between"
-                                sx={{ mb: 1.5 }}
-                            >
-                                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                                    Transfers
-                                </Typography>
-                                <Button
-                                    component={Link}
-                                    href={route("stock_keeper.transfers.index")}
-                                    size="small"
-                                >
-                                    Manage
-                                </Button>
-                            </Stack>
-
-                            <Grid container spacing={1.5}>
-                                <Grid size={4}>
-                                    <StatCard label="Queued" value={transferSummary.pending} />
-                                </Grid>
-                                <Grid size={4}>
-                                    <StatCard
-                                        label="Transit"
-                                        value={transferSummary.in_transit}
-                                    />
-                                </Grid>
-                                <Grid size={4}>
-                                    <StatCard
-                                        label="Done"
-                                        value={transferSummary.completed}
-                                    />
-                                </Grid>
-                            </Grid>
-                        </SkCard>
-                    </Stack>
-                </Grid>
-
-                {/* ── Recently touched ── */}
-                <Grid size={12}>
-                    <SkCard sx={{ p: 0, overflow: "hidden" }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, p: 2.5, pb: 1.5 }}>
-                            Recently updated rows
-                        </Typography>
-
-                        {recentMovements.length === 0 ? (
-                            <EmptyState title="No ledger activity yet" />
-                        ) : (
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Product</TableCell>
-                                        <TableCell>SKU</TableCell>
-                                        <TableCell>Location</TableCell>
-                                        <TableCell align="right">On hand</TableCell>
-                                        <TableCell align="right">Updated</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {recentMovements.map((row) => (
-                                        <TableRow key={row.id} hover>
-                                            <TableCell>{row.product_name}</TableCell>
-                                            <TableCell>
-                                                <Typography
-                                                    variant="caption"
-                                                    sx={{ fontFamily: "monospace" }}
-                                                >
-                                                    {row.sku ?? "—"}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>{row.location_name}</TableCell>
-                                            <TableCell align="right">
-                                                {row.quantity.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell align="right">
-                                                {formatMoment(row.updated_at)}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </SkCard>
-                </Grid>
-            </Grid>
+                                <span className="material-symbols-outlined text-[18px] text-primary">{KIND_ICON[location.kind] ?? "location_on"}</span>
+                                {location.name}
+                            </Link>
+                        ))}
+                    </div>
+                </section>
+            )}
         </>
     );
 }
 
-Dashboard.layout = (page: React.ReactNode) => (
-    <StockKeeperLayout>{page}</StockKeeperLayout>
-);
+function StockList({ title, icon, rows, href, empty }: { title: string; icon: string; rows: StockRow[]; href: string; empty: string }) {
+    return (
+        <section className="rounded-[20px] border border-outline-variant bg-surface-container-lowest shadow-sm">
+            <header className="flex items-center justify-between gap-2 border-b border-outline-variant/70 px-4 py-3">
+                <h2 className="flex items-center gap-2 text-[15px] font-extrabold text-on-surface">
+                    <span className="material-symbols-outlined text-[20px] text-primary">{icon}</span>
+                    {title}
+                </h2>
+                <Link href={href} className="flex items-center text-[13px] font-bold text-primary hover:underline">
+                    View all
+                    <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                </Link>
+            </header>
+            {rows.length === 0 ? (
+                <EmptyState icon="check_circle" title={empty} />
+            ) : (
+                <ul className="divide-y divide-outline-variant/60">
+                    {rows.map((row) => {
+                        const status = ROW_STATUS[row.status];
+                        return (
+                            <li key={row.id} className="flex items-center gap-3 px-4 py-3">
+                                <div className="min-w-0 flex-1">
+                                    <p className="truncate text-[14px] font-bold text-on-surface">{row.product_name}</p>
+                                    <p className="truncate text-[12px] text-on-surface-variant">
+                                        {row.location_name}
+                                        {row.sku ? <span className="font-mono"> · {row.sku}</span> : null}
+                                    </p>
+                                </div>
+                                <div className="flex shrink-0 flex-col items-end gap-1">
+                                    <span className="text-[15px] font-extrabold tabular-nums text-on-surface">{amount(row)}</span>
+                                    {row.status !== "healthy" && <StatusPill tone={status.tone} label={status.label} size="sm" />}
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+        </section>
+    );
+}
+
+Dashboard.layout = (page: React.ReactNode) => <StockKeeperLayout>{page}</StockKeeperLayout>;

@@ -217,14 +217,16 @@ class TransferWorkflowService
      * destination, which takes them in.
      *
      * @param  User|null  $actor  the transfer's courier, or someone who may operate the destination; null = system
+     * @param  int|null  $received  how many arrived (null = all that was sent)
+     * @param  int|null  $damaged  of those, how many are damaged
      */
-    public function markCompleted(Transfer $transfer, ?User $actor = null): bool
+    public function markCompleted(Transfer $transfer, ?User $actor = null, ?int $received = null, ?int $damaged = null): bool
     {
         if ($transfer->status !== self::STATUS_IN_TRANSIT) {
             return false;
         }
 
-        return DB::transaction(function () use ($transfer, $actor): bool {
+        return DB::transaction(function () use ($transfer, $actor, $received, $damaged): bool {
             if (! $this->lockAtStatus($transfer, self::STATUS_IN_TRANSIT)) {
                 return false;
             }
@@ -239,12 +241,21 @@ class TransferWorkflowService
                 $this->assertMayOperate($destination, $actor, 'take stock into');
             }
 
-            $this->stock->handOverFromCourier(
-                (int) $transfer->item_variant_id,
+            if ($received !== null) {
+                if ($received < 0 || ($damaged ?? 0) < 0 || ($damaged ?? 0) > $received) {
+                    throw new \InvalidArgumentException('Damaged units are part of what arrived, and counts cannot be negative.');
+                }
+
+                $transfer->forceFill(['received_quantity' => $received, 'damaged_quantity' => $damaged ?? 0])->save();
+            }
+
+            // What arrived lands; any shortfall stays with the courier as a
+            // discrepancy (ReceivingService). Without a count it all lands.
+            app(\App\Services\Inventory\ReceivingService::class)->landTransfer(
+                $transfer,
                 $destination,
-                (int) $transfer->quantity,
-                $transfer->courier_id !== null ? (int) $transfer->courier_id : null,
                 $this->context($transfer, 'Transfer received', $actor),
+                $actor,
             );
 
             $transfer->update([

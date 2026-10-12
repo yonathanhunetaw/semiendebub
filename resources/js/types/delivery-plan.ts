@@ -26,8 +26,11 @@ export interface SavedAddress {
     last_used_at: string | null;
 }
 
-/** A courier to an address, a vehicle that collects at the store, or decided later. */
-export type DeliveryMethod = "courier" | "vehicle" | "later";
+/**
+ * A courier to an address, a vehicle that collects at the store, the customer
+ * taking it in the store (handed over at Pick & pack), or decided later.
+ */
+export type DeliveryMethod = "courier" | "vehicle" | "later" | "store";
 
 export type DeliveryPlan = {
     method: DeliveryMethod;
@@ -46,6 +49,8 @@ export type DeliveryPlan = {
 export const planToPayload = (plan: DeliveryPlan) => {
     const courier = plan.method === "courier";
     const vehicle = plan.method === "vehicle";
+    // Nothing leaves the store by road: no address, courier or vehicle.
+    const noRun = plan.method === "later" || plan.method === "store";
 
     return {
         delivery_method: plan.method,
@@ -54,8 +59,8 @@ export const planToPayload = (plan: DeliveryPlan) => {
         recipient_name: plan.method === "later" ? null : plan.recipient.trim() || null,
         recipient_phone: plan.method === "later" ? null : plan.phone.trim() || null,
         courier_id: courier ? plan.courierId : null,
-        vehicle_id: plan.method === "later" ? null : plan.vehicleId,
-        vehicle_plate: plan.method === "later" ? null : plan.plate.trim() || null,
+        vehicle_id: noRun ? null : plan.vehicleId,
+        vehicle_plate: noRun ? null : plan.plate.trim() || null,
         driver_phone: vehicle ? plan.driverPhone.trim() || null : null,
     };
 };

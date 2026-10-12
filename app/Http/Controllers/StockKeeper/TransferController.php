@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\StockKeeper;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StockKeeper\CompleteTransferRequest;
 use App\Http\Requests\StockKeeper\StoreTransferRequest;
 use App\Models\StockKeeper\Transfer;
 use App\Services\StockKeeperService;
@@ -65,7 +66,6 @@ class TransferController extends Controller
                 ->all(),
             // Every shelf, floor and hub in the location tree.
             'locations' => $this->stock->locations(),
-            'variants' => $this->stock->variantOptions()->all(),
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
@@ -121,13 +121,28 @@ class TransferController extends Controller
         return back()->with('success', "Transfer {$transfer->reference} is in transit.");
     }
 
-    public function complete(Transfer $transfer): RedirectResponse
+    public function complete(CompleteTransferRequest $request, Transfer $transfer): RedirectResponse
     {
-        if (! $this->workflow->markCompleted($transfer, request()->user())) {
+        try {
+            $done = $this->workflow->markCompleted(
+                $transfer,
+                $request->user(),
+                $request->filled('received') ? $request->integer('received') : null,
+                $request->filled('damaged') ? $request->integer('damaged') : null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if (! $done) {
             return back()->with('error', 'Only a transfer in transit can be completed.');
         }
 
-        return back()->with('success', "Transfer {$transfer->reference} received and stock moved.");
+        $short = $request->filled('received') && $request->integer('received') < (int) $transfer->quantity;
+
+        return back()->with('success', $short
+            ? "Transfer {$transfer->reference} received short; the missing units are logged under Receiving."
+            : "Transfer {$transfer->reference} received and stock moved.");
     }
 
     public function cancel(Transfer $transfer): RedirectResponse

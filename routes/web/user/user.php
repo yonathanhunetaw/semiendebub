@@ -112,7 +112,8 @@ Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
     Route::patch('/profile', [\App\Http\Controllers\Shared\ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [\App\Http\Controllers\Shared\ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    Route::prefix('sessions')->group(function () {
+    // Lists and ends every user's session, so admins only.
+    Route::prefix('sessions')->middleware('role:admin|dev')->group(function () {
         Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
         Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
     });

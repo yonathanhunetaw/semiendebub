@@ -1,286 +1,150 @@
-import { Head, router } from "@inertiajs/react";
-import NotificationsActiveRoundedIcon from "@mui/icons-material/NotificationsActiveRounded";
-import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import {
-    Box,
-    Button,
-    Chip,
-    Grid,
-    InputAdornment,
-    Stack,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableRow,
-    TextField,
-    Typography,
-} from "@mui/material";
+import { Head, Link, router } from "@inertiajs/react";
 import React from "react";
-
-import {
-    EmptyState,
-    PageHeader,
-    SkCard,
-    StatCard,
-    StockStatusChip,
-} from "@/Components/StockKeeper/stockKeeperUi";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
+import { EmptyState, StatusPill } from "@/Components/Shared/ui";
+import { KIND_LABEL, SkButton, SkCard, SkChips, SkHeader, SkPager, SkSearch, SkStats, STOCK_STATUS, fmt, plural } from "@/Components/StockKeeper/skKit";
 import type { StockKeeperAlertsProps } from "@/types/stockkeeper";
 
 const SEARCH_DEBOUNCE_MS = 350;
 
-const SEVERITIES: Array<{ value: string | null; label: string }> = [
-    { value: null, label: "All alerts" },
-    { value: "low_stock", label: "Low stock" },
-    { value: "out_of_stock", label: "Out of stock" },
-];
+type Severity = "all" | "low_stock" | "out_of_stock";
 
 /**
- * Replenishment queue: every ledger row at or below its minimum, deepest
- * breach first.
+ * The replenishment queue: every ledger row at or below its minimum, deepest
+ * breach first. Each opens its item; a transfer moves stock in.
  */
-export default function StockAlerts({
-    alerts,
-    filters,
-    summary,
-    pagination,
-}: StockKeeperAlertsProps): React.ReactElement {
+export default function StockAlerts({ alerts = [], filters, summary, pagination }: StockKeeperAlertsProps): React.ReactElement {
     const [search, setSearch] = React.useState<string>(filters.search);
-
-    React.useEffect(() => {
-        setSearch(filters.search);
-    }, [filters.search]);
+    const severity = (filters.severity ?? "all") as Severity;
 
     const applyFilters = React.useCallback(
-        (next: { search?: string; severity?: string | null }): void => {
-            const query: Record<string, string> = {};
-            const nextSearch = next.search ?? filters.search;
-            const nextSeverity =
-                next.severity !== undefined ? next.severity : filters.severity;
-
-            if (nextSearch) {
-                query.search = nextSearch;
-            }
-            if (nextSeverity) {
-                query.severity = nextSeverity;
-            }
-
-            router.get(route("stock_keeper.alerts.index"), query, {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-            });
+        (next: { search?: string; severity?: Severity; page?: number }) => {
+            const query: Record<string, string | number> = {};
+            const s = next.search ?? filters.search;
+            const sev = next.severity ?? severity;
+            if (s) query.search = s;
+            if (sev !== "all") query.severity = sev;
+            if (next.page) query.page = next.page;
+            router.get(route("stock_keeper.alerts.index"), query, { preserveState: true, preserveScroll: true, replace: true });
         },
-        [filters.search, filters.severity],
+        [filters.search, severity],
     );
 
+    React.useEffect(() => setSearch(filters.search), [filters.search]);
     React.useEffect(() => {
-        if (search === filters.search) {
-            return;
-        }
-
+        if (search === filters.search) return;
         const timer = window.setTimeout(() => applyFilters({ search }), SEARCH_DEBOUNCE_MS);
         return () => window.clearTimeout(timer);
     }, [search, filters.search, applyFilters]);
 
     return (
         <>
-            <Head title="Stock Alerts" />
+            <Head title="Stock alerts" />
 
-            <PageHeader
-                title="Stock Alerts"
-                subtitle="Rows that have fallen to or below the minimum set for them."
+            <SkHeader
+                title="Stock alerts"
+                subtitle="Stock that has fallen to or below the minimum set for it, deepest shortfall first."
+                actions={
+                    <Link href={route("stock_keeper.transfers.index")}>
+                        <SkButton variant="outline" icon="swap_horiz">Move stock</SkButton>
+                    </Link>
+                }
             />
 
-            <Grid container spacing={2.5} sx={{ mb: 3 }}>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <StatCard
-                        label="Breaching threshold"
-                        value={summary.low_stock}
-                        tone={summary.low_stock > 0 ? "warning" : "success"}
-                        icon={<NotificationsActiveRoundedIcon fontSize="small" />}
-                    />
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <StatCard
-                        label="Out of stock"
-                        value={summary.out_of_stock}
-                        tone={summary.out_of_stock > 0 ? "danger" : "success"}
-                    />
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <StatCard label="Tracked SKUs" value={summary.tracked_skus} />
-                </Grid>
-            </Grid>
+            <SkStats
+                cols={3}
+                items={[
+                    { label: "At or below minimum", value: fmt(summary.low_stock), icon: "notification_important", tone: summary.low_stock > 0 ? "warning" : undefined },
+                    { label: "Out of stock", value: fmt(summary.out_of_stock), icon: "remove_shopping_cart", tone: summary.out_of_stock > 0 ? "error" : undefined },
+                    { label: "Items tracked", value: fmt(summary.items), hint: `${fmt(summary.variants)} SKUs`, icon: "category" },
+                ]}
+            />
 
-            <SkCard sx={{ p: 0, overflow: "hidden" }}>
-                {/* ── Filters ── */}
-                <Stack
-                    direction={{ xs: "column", md: "row" }}
-                    spacing={2}
-                    alignItems={{ xs: "stretch", md: "center" }}
-                    justifyContent="space-between"
-                    sx={{ p: 2.5 }}
-                >
-                    <TextField
-                        size="small"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Search product, SKU or barcode…"
-                        sx={{ maxWidth: { md: 360 }, width: "100%" }}
-                        slotProps={{
-                            input: {
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <SearchRoundedIcon fontSize="small" />
-                                    </InputAdornment>
-                                ),
-                            },
-                        }}
-                    />
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center">
+                <div className="md:w-[360px]">
+                    <SkSearch value={search} onChange={setSearch} placeholder="Search product, SKU or barcode" />
+                </div>
+                <SkChips<Severity>
+                    value={severity}
+                    onChange={(v) => applyFilters({ severity: v, page: 1 })}
+                    options={[
+                        { value: "all", label: "All alerts" },
+                        { value: "low_stock", label: "Low stock", count: summary.low_stock },
+                        { value: "out_of_stock", label: "Out of stock", count: summary.out_of_stock },
+                    ]}
+                />
+            </div>
 
-                    <Stack direction="row" spacing={1} flexWrap="wrap">
-                        {SEVERITIES.map((option) => {
-                            const active = (filters.severity ?? null) === option.value;
+            {alerts.length === 0 ? (
+                <EmptyState icon="task_alt" title="No alerts here" description="Everything is above its minimum, or the filters are too narrow." framed />
+            ) : (
+                <SkCard className="overflow-hidden">
+                    <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_120px_100px_110px_130px] gap-3 border-b border-outline-variant/70 bg-surface-container-low px-4 py-2 text-[12px] font-bold uppercase tracking-wider text-on-surface-variant lg:grid">
+                        <span>Item</span>
+                        <span>Where</span>
+                        <span className="text-right">On hand</span>
+                        <span className="text-right">Minimum</span>
+                        <span className="text-right">Short by</span>
+                        <span>Status</span>
+                    </div>
+                    <ul className="grid grid-cols-1 divide-outline-variant/60 md:grid-cols-2 md:gap-px md:bg-outline-variant/50 lg:grid-cols-1 lg:divide-y lg:bg-transparent">
+                        {alerts.map((row) => {
+                            const status = STOCK_STATUS[row.status];
+                            const unit = row.unit ?? "unit";
+                            const short = row.headroom < 0 ? -row.headroom : 0;
                             return (
-                                <Chip
-                                    key={option.label}
-                                    label={option.label}
-                                    onClick={() => applyFilters({ severity: option.value })}
-                                    color={active ? "primary" : "default"}
-                                    variant={active ? "filled" : "outlined"}
-                                    sx={{ fontWeight: 700 }}
-                                />
+                                <li key={row.id} className="border-b border-outline-variant/60 bg-surface-container-lowest md:border-0 lg:border-0">
+                                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_120px_100px_110px_130px] lg:items-center">
+                                        <div className="min-w-0">
+                                            {row.item_id ? (
+                                                <Link href={route("stock_keeper.items.show", row.item_id)} className="block truncate text-[15px] font-bold text-on-surface hover:underline">
+                                                    {row.product_name}
+                                                </Link>
+                                            ) : (
+                                                <p className="truncate text-[15px] font-bold text-on-surface">{row.product_name}</p>
+                                            )}
+                                            <p className="truncate font-mono text-[11px] text-on-surface-variant">
+                                                {row.sku ?? "—"}
+                                                {row.variant_label ? ` · ${row.variant_label}` : ""}
+                                            </p>
+                                        </div>
+                                        <div className="text-right lg:hidden">
+                                            <StatusPill tone={status.tone} label={status.label} size="sm" />
+                                        </div>
+                                        <p className="col-span-2 truncate text-[13px] text-on-surface-variant lg:col-span-1">
+                                            <b className="text-on-surface">{row.location_name}</b> · {KIND_LABEL[row.location_kind] ?? row.location_kind}
+                                        </p>
+                                        {/* Figures: one row of three on phones, columns on desktop. */}
+                                        <div className="col-span-2 grid grid-cols-3 gap-2 rounded-[12px] bg-surface-container-low px-3 py-2 text-center lg:col-span-3 lg:bg-transparent lg:p-0 lg:text-right">
+                                            <div>
+                                                <p className="text-[11px] font-bold uppercase text-on-surface-variant lg:hidden">On hand</p>
+                                                <p className="text-[16px] font-extrabold tabular-nums text-on-surface">
+                                                    {fmt(row.quantity)} <span className="text-[12px] font-bold text-on-surface-variant">{plural(unit, row.quantity)}</span>
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[11px] font-bold uppercase text-on-surface-variant lg:hidden">Minimum</p>
+                                                <p className="text-[16px] font-bold tabular-nums text-on-surface-variant">{fmt(row.min_stock_level)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[11px] font-bold uppercase text-on-surface-variant lg:hidden">Short by</p>
+                                                <p className={`text-[16px] font-extrabold tabular-nums ${short > 0 ? "text-error" : "text-on-surface-variant"}`}>{short > 0 ? fmt(short) : "—"}</p>
+                                            </div>
+                                        </div>
+                                        <div className="hidden lg:block">
+                                            <StatusPill tone={status.tone} label={status.label} size="sm" />
+                                        </div>
+                                    </div>
+                                </li>
                             );
                         })}
-                    </Stack>
-                </Stack>
+                    </ul>
+                </SkCard>
+            )}
 
-                {/* ── Table ── */}
-                {alerts.length === 0 ? (
-                    <EmptyState
-                        icon={<NotificationsActiveRoundedIcon fontSize="large" />}
-                        title="No alerts match this view"
-                        hint="Every row here is above its minimum, or the filters are too narrow."
-                    />
-                ) : (
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Product</TableCell>
-                                <TableCell>SKU</TableCell>
-                                <TableCell>Location</TableCell>
-                                <TableCell align="right">On hand</TableCell>
-                                <TableCell align="right">Minimum</TableCell>
-                                <TableCell align="right">Shortfall</TableCell>
-                                <TableCell align="right">Status</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {alerts.map((row) => (
-                                <TableRow key={row.id} hover>
-                                    <TableCell>
-                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                            {row.product_name}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {row.variant_label}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography
-                                            variant="caption"
-                                            sx={{ fontFamily: "monospace" }}
-                                        >
-                                            {row.sku ?? "—"}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        {row.location_name}
-                                        <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                            display="block"
-                                        >
-                                            {row.location_kind}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        {row.quantity.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        {row.min_stock_level.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <Typography
-                                            variant="body2"
-                                            sx={{
-                                                fontWeight: 700,
-                                                color:
-                                                    row.headroom < 0
-                                                        ? "error.main"
-                                                        : "text.secondary",
-                                            }}
-                                        >
-                                            {row.headroom >= 0 ? "—" : row.headroom.toLocaleString()}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <StockStatusChip status={row.status} />
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                )}
-
-                {/* ── Pagination ── */}
-                {pagination.last_page > 1 ? (
-                    <Stack
-                        direction="row"
-                        spacing={2}
-                        alignItems="center"
-                        justifyContent="center"
-                        sx={{ p: 2 }}
-                    >
-                        <Button
-                            disabled={pagination.current_page <= 1}
-                            onClick={() =>
-                                router.get(
-                                    route("stock_keeper.alerts.index"),
-                                    { ...filters, page: pagination.current_page - 1 },
-                                    { preserveState: true },
-                                )
-                            }
-                        >
-                            Previous
-                        </Button>
-                        <Typography variant="body2" color="text.secondary">
-                            Page {pagination.current_page} of {pagination.last_page} ·{" "}
-                            {pagination.total.toLocaleString()} alerts
-                        </Typography>
-                        <Button
-                            disabled={pagination.current_page >= pagination.last_page}
-                            onClick={() =>
-                                router.get(
-                                    route("stock_keeper.alerts.index"),
-                                    { ...filters, page: pagination.current_page + 1 },
-                                    { preserveState: true },
-                                )
-                            }
-                        >
-                            Next
-                        </Button>
-                    </Stack>
-                ) : (
-                    <Box sx={{ p: 1.5 }} />
-                )}
-            </SkCard>
+            <SkPager page={pagination.current_page} last={pagination.last_page} total={pagination.total} noun="alerts" onPage={(page) => applyFilters({ page })} />
         </>
     );
 }
 
-StockAlerts.layout = (page: React.ReactNode) => (
-    <StockKeeperLayout>{page}</StockKeeperLayout>
-);
+StockAlerts.layout = (page: React.ReactNode) => <StockKeeperLayout>{page}</StockKeeperLayout>;

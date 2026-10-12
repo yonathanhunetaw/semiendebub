@@ -97,14 +97,19 @@ class OrderController extends Controller
             return back()->withErrors(['lines' => $exception->getMessage()]);
         }
 
+        // An in-store order went to the customer at the counter, not to Delivery.
+        $done = $sale->refresh()->fulfillment_stage === Sale::STAGE_DELIVERED
+            ? ['handed to the customer', 'delivered']
+            : ['packed and handed to delivery', 'to_deliver'];
+
         // Straight on to the next order waiting to be picked, if any.
         $next = $this->queue((int) $sale->store_id, (int) $sale->id)[0] ?? null;
 
         return $next !== null
             ? redirect()->route('seller.orders.pickpack', ['reference' => $next['reference']])
-                ->with('success', "Order {$sale->reference_number} packed and handed to delivery. Next up: {$next['reference']}.")
-            : redirect()->to(route('seller.orders.index').'?tab=to_deliver')
-                ->with('success', "Order {$sale->reference_number} packed and handed to delivery. Nothing else waiting to pick.");
+                ->with('success', "Order {$sale->reference_number} {$done[0]}. Next up: {$next['reference']}.")
+            : redirect()->to(route('seller.orders.index').'?tab='.$done[1])
+                ->with('success', "Order {$sale->reference_number} {$done[0]}. Nothing else waiting to pick.");
     }
 
     /**

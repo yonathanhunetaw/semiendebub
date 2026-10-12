@@ -74,7 +74,7 @@ export interface SellerOrder {
         vehicleId?: number | null;
         plate?: string | null;
         /** Courier to an address, a vehicle collecting at the store, or not decided yet. */
-        method?: "courier" | "vehicle" | "later";
+        method?: "courier" | "vehicle" | "later" | "store";
         driverPhone?: string | null;
     };
     /** standard / express / later / custom, chosen at checkout. */

@@ -303,13 +303,6 @@ class ItemController extends Controller
         $variantData = $item->variants->map(function ($variant) use ($storeId, $sellerId, $customerId, $customerType, $stocks, $catalog, $leaves) {
             // Get the store variant for the current store
             $storeVariant = $variant->storeVariants->where('store_id', $storeId)->first();
-            if (app()->environment('testing') && is_null($storeVariant)) {
-                // This will stop the test and show you the IDs
-                dd([
-                    'looking_for_store_id' => $storeId,
-                    'available_store_variants' => $variant->storeVariants->toArray()
-                ]);
-            }
 
             // 🛑 FIX: Use StockService SSOT ledger for stock
             $store_stock = $storeVariant ? ($stocks[$storeVariant->id] ?? 0) : 0;

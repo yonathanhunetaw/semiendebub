@@ -1,4 +1,4 @@
-import { Head, Link } from "@inertiajs/react";
+import { Head, Link, usePoll } from "@inertiajs/react";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import ArrowDownwardRoundedIcon from "@mui/icons-material/ArrowDownwardRounded";
 import DirectionsCarRoundedIcon from "@mui/icons-material/DirectionsCarRounded";
@@ -42,6 +42,9 @@ const AGREEING = ["draft", "pending_agreement"];
 export default function DeliveryShipmentShow({ shipment, is_mine: isMine, flash }: Props): React.ReactElement {
     const theme = useTheme();
     const [notice, setNotice] = React.useState<string | null>(null);
+
+    // Live: the origin's picking progress and hand-off steps appear without a reload.
+    usePoll(20_000, { only: ["shipment"] });
 
     React.useEffect(() => {
         const message = flash?.success ?? flash?.error ?? null;

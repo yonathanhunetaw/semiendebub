@@ -19,6 +19,9 @@ services:
       # layers back over it, read-only.
       - ../storage/app/seed-images:/var/www/html/storage/app/seed-images
       - vendor_data:/var/www/html/vendor
+      # Keep the container's linux node_modules apart from the host's macOS
+      # ones (native dev via ./dev.sh shares this bind-mounted folder).
+      - node_modules_data:/var/www/html/node_modules
       # Read-only Docker socket so /dev/logs can stream other containers' stdout
       # via the Engine API. DEV ONLY: a writable socket is root on the host, and
       # even read-only it exposes the whole daemon — never add this to
@@ -88,4 +91,5 @@ networks:
 volumes:
   storage_data:
   vendor_data:
+  node_modules_data:
   database_data:

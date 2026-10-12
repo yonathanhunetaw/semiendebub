@@ -11,8 +11,11 @@ export default defineConfig(({ mode }) => {
     // Auto-regenerate storage/app/dev-architecture-map.json for /dev/architecture.
     const domainMapEnabled = mode !== 'production' && env.DUKA_DOMAIN_MAP !== 'false';
 
+    // ./dev.sh sets DUKA_NATIVE=1: host filesystem events work, no polling needed.
+    const native = process.env.DUKA_NATIVE === '1';
+
     return {
-        cacheDir: '/tmp/vite-cache',
+        cacheDir: native ? '/tmp/vite-cache-native' : '/tmp/vite-cache',
         
         server: {
             host: true,
@@ -25,7 +28,7 @@ export default defineConfig(({ mode }) => {
                 protocol: 'ws',
             },
             watch: {
-                usePolling: true,
+                usePolling: !native,
             },
         },
         

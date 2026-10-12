@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\Warehouse;
+use App\Models\Item\Item;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
@@ -477,6 +478,58 @@ class StockKeeperService
                 'id' => (int) $variant->id,
                 'label' => ($variant->item?->product_name ?? 'Unknown')
                     . ' — ' . $this->variantLabel($variant),
+                'sku' => $variant->sku,
+            ])
+            ->values();
+    }
+
+    /**
+     * Items to receive against, searchable by name or any variant's SKU or
+     * barcode. The receive dialog picks the item first, then one of its
+     * variants (see variantOptionsForItem).
+     *
+     * @return Collection<int, array{id: int, name: string, variant_count: int}>
+     */
+    public function itemOptions(?string $search = null, int $limit = 30): Collection
+    {
+        $query = Item::query()->withCount('variants')->orderBy('product_name');
+
+        if ($search !== null && $search !== '') {
+            $term = '%' . $search . '%';
+            $query->where(fn (Builder $q) => $q
+                ->where('product_name', 'LIKE', $term)
+                ->orWhereHas('variants', fn (Builder $vq) => $vq
+                    ->where('sku', 'LIKE', $term)
+                    ->orWhere('barcode', 'LIKE', $term)));
+        }
+
+        return $query
+            ->limit($limit)
+            ->get()
+            ->map(fn (Item $item) => [
+                'id' => (int) $item->id,
+                'name' => (string) $item->product_name,
+                'variant_count' => (int) $item->variants_count,
+            ])
+            ->values();
+    }
+
+    /**
+     * Every variant of one item (stocked or not), for the second step of the
+     * receive picker.
+     *
+     * @return Collection<int, array{id: int, label: string, sku: string|null}>
+     */
+    public function variantOptionsForItem(int $itemId): Collection
+    {
+        return ItemVariant::query()
+            ->with(['itemColor', 'itemSize'])
+            ->where('item_id', $itemId)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (ItemVariant $variant) => [
+                'id' => (int) $variant->id,
+                'label' => $this->variantLabel($variant),
                 'sku' => $variant->sku,
             ])
             ->values();

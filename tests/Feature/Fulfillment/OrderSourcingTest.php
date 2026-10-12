@@ -202,6 +202,22 @@ class OrderSourcingTest extends TestCase
     }
 
     #[Test]
+    public function a_line_the_store_cannot_cover_cannot_be_taken_in_store(): void
+    {
+        $this->sellableFromTheHubOnly();
+
+        try {
+            app(\App\Services\Fulfillment\SellerOrderService::class)
+                ->place($this->cartWith(1), $this->staff, ['delivery_method' => 'store', 'delay_agreed' => true]);
+            $this->fail('A hub line cannot be handed over at the counter.');
+        } catch (CartCheckoutException $exception) {
+            $this->assertStringContainsString('not in this store', $exception->getMessage());
+        }
+
+        $this->assertSame(0, Sale::query()->count());
+    }
+
+    #[Test]
     public function an_agreed_delay_is_recorded_on_the_sale(): void
     {
         $this->sellableFromTheHubOnly();

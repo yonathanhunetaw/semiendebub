@@ -39,6 +39,7 @@ class SellerOrderService
         private readonly CheckoutService $checkout,
         private readonly StockService $stock,
         private readonly PaymentService $payments,
+        private readonly OrderSourcingService $sourcing,
     ) {
     }
 
@@ -52,8 +53,16 @@ class SellerOrderService
     public function place(Cart $cart, User $seller, array $input): Sale
     {
         // A courier run opens its delivery at checkout; a vehicle collection
-        // is opened by arrange(), and "add later" opens none yet.
+        // and an in-store hand-over are opened by arrange(), and "add later"
+        // opens none yet.
         $method = (string) ($input['delivery_method'] ?? Delivery::METHOD_COURIER);
+
+        // In store means the customer takes it now, from this store's shelf
+        // or floor; a line that has to come from a hub cannot go that way.
+        if ($method === Delivery::METHOD_STORE && $cart->store !== null && $this->sourcing->requiresDelayAgreement($cart, $cart->store)) {
+            throw new CartCheckoutException('Some lines are not in this store, so the customer cannot take them now. Choose a delivery instead.');
+        }
+
         $delivery = $method !== Delivery::METHOD_COURIER ? [] : array_filter([
             'delivery_address' => $input['delivery_address'] ?? null,
             'recipient_name' => $input['recipient_name'] ?? null,
@@ -113,10 +122,13 @@ class SellerOrderService
         // "Add later": nothing about the destination is known yet.
         $later = $method === 'later';
         $vehicleCollects = $method === Delivery::METHOD_VEHICLE;
-        $address = $later || $vehicleCollects ? '' : trim((string) ($input['delivery_address'] ?? ''));
+        // In store: the customer takes it at the counter, so there is no
+        // address, courier or vehicle; Pick & pack hands it over.
+        $inStore = $method === Delivery::METHOD_STORE;
+        $address = $later || $vehicleCollects || $inStore ? '' : trim((string) ($input['delivery_address'] ?? ''));
         $saved = null;
 
-        if (! $later && ! $vehicleCollects && ! empty($input['customer_address_id']) && $sale->customer_id !== null) {
+        if (! $later && ! $vehicleCollects && ! $inStore && ! empty($input['customer_address_id']) && $sale->customer_id !== null) {
             $saved = CustomerAddress::query()->where('customer_id', $sale->customer_id)->find((int) $input['customer_address_id']);
             $address = $address !== '' ? $address : (string) ($saved?->address ?? '');
         }
@@ -125,13 +137,17 @@ class SellerOrderService
             $saved = CustomerAddress::remember((int) $sale->customer_id, $address, $input['recipient_name'] ?? null, $input['recipient_phone'] ?? null);
         }
 
-        $courier = ! $vehicleCollects && ! empty($input['courier_id']) ? User::query()->find((int) $input['courier_id']) : null;
-        $vehicle = ! empty($input['vehicle_id']) ? Vehicle::query()->find((int) $input['vehicle_id']) : null;
-        $plate = trim((string) ($input['vehicle_plate'] ?? ''));
-        $driverPhone = trim((string) ($input['driver_phone'] ?? ''));
+        $courier = ! $vehicleCollects && ! $inStore && ! empty($input['courier_id']) ? User::query()->find((int) $input['courier_id']) : null;
+        $vehicle = ! $inStore && ! empty($input['vehicle_id']) ? Vehicle::query()->find((int) $input['vehicle_id']) : null;
+        $plate = $inStore ? '' : trim((string) ($input['vehicle_plate'] ?? ''));
+        $driverPhone = $inStore ? '' : trim((string) ($input['driver_phone'] ?? ''));
 
         $attributes = array_filter([
-            'method' => $later ? null : ($vehicleCollects ? Delivery::METHOD_VEHICLE : null),
+            'method' => match (true) {
+                $inStore => Delivery::METHOD_STORE,
+                $vehicleCollects => Delivery::METHOD_VEHICLE,
+                default => null,
+            },
             'delivery_address' => $address !== '' ? $address : null,
             'customer_address_id' => $saved?->id,
             'recipient_name' => $input['recipient_name'] ?? $saved?->recipient_name,
@@ -143,12 +159,21 @@ class SellerOrderService
             'driver_phone' => $driverPhone !== '' ? $driverPhone : null,
         ], fn ($value) => $value !== null && $value !== '');
 
-        // Switching back from a vehicle collection to a courier, or to "add
-        // later", must clear what no longer applies.
+        // Switching between a courier, a vehicle collection, in store and
+        // "add later" must clear what no longer applies.
         if ($sale->delivery !== null) {
-            $attributes['method'] = $vehicleCollects ? Delivery::METHOD_VEHICLE : Delivery::METHOD_COURIER;
+            $attributes['method'] = match (true) {
+                $inStore => Delivery::METHOD_STORE,
+                $vehicleCollects => Delivery::METHOD_VEHICLE,
+                default => Delivery::METHOD_COURIER,
+            };
 
-            if ($vehicleCollects) {
+            if ($inStore) {
+                $attributes += [
+                    'delivery_address' => null, 'customer_address_id' => null, 'courier_id' => null, 'courier_name' => null,
+                    'vehicle_id' => null, 'vehicle_plate' => null, 'driver_phone' => null,
+                ];
+            } elseif ($vehicleCollects) {
                 $attributes += ['delivery_address' => null, 'customer_address_id' => null, 'courier_id' => null, 'courier_name' => null];
             } else {
                 $attributes += ['driver_phone' => null];

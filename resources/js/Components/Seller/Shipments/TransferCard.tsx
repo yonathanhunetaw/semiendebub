@@ -17,6 +17,10 @@ const statusConfig: Record<string, StatusConfigEntry> = {
     en_route:   { label: "En Route",         color: tone("en_route"),   icon: "route" },
     shipped:    { label: "Shipped",          color: tone("shipped"),    icon: "task_alt" },
     pending:    { label: "Pending Manifest", color: tone("pending"),    icon: "warning" },
+    // The board's legacy status reads these as "pending"; the real workflow
+    // status tells the run is already being picked at the origin.
+    picking:    { label: "Picking",          color: tone("scheduled"),  icon: "inventory" },
+    ready:      { label: "Ready for pickup", color: tone("scheduled"),  icon: "inventory_2" },
     overdue:    { label: "Overdue",          color: tone("overdue"),    icon: "error" },
 };
 
@@ -98,7 +102,8 @@ export default function TransferCard({
     const [activePartyModal, setActivePartyModal] = useState<PartyKey | null>(null);
     const [agreeing, setAgreeing] = useState(false);
     const [advancing, setAdvancing] = useState(false);
-    const cfg = statusConfig[t.status] || statusConfig.scheduled;
+    const picking = t.status === "pending" && (t.workflow_status === "picking" || t.workflow_status === "ready");
+    const cfg = (picking ? statusConfig[t.workflow_status as string] : statusConfig[t.status]) || statusConfig.scheduled;
     const creator = t.created_by || "Admin";
     const createdAt = t.created_at ? formatDateTime(t.created_at) : "Today • 06:14 AM";
     const loadPercent = t.load_percentage ?? (t.vehicle_max_cbm && t.total_cbm ? Math.round((t.total_cbm / t.vehicle_max_cbm) * 100) : 60);

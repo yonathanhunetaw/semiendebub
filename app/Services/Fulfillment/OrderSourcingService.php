@@ -183,6 +183,15 @@ class OrderSourcingService
             fn (array $node): bool => ! in_array($node['kind'], [MovementDomainService::NODE_MAIN_WAREHOUSE, MovementDomainService::NODE_STORE], true),
         ));
 
+        // In store: the customer is at the counter, so only the store's own
+        // shelf and floor (confirmSourcing refuses anything else).
+        if ($sale->delivery?->method === Delivery::METHOD_STORE) {
+            $hierarchy = array_values(array_filter(
+                $hierarchy,
+                fn (array $node): bool => in_array($node['kind'], [MovementDomainService::NODE_SHELF, MovementDomainService::NODE_BACKROOM], true),
+            ));
+        }
+
         $lines = $sale->items->map(function (SaleItem $item) use ($hierarchy): array {
             $storeVariant = $item->storeVariant;
             $variant = $storeVariant?->itemVariant;
@@ -391,6 +400,10 @@ class OrderSourcingService
                 );
             }
 
+            // In store: the customer takes the goods at the counter, so they
+            // come off this store's own shelf or floor and are handed over now.
+            $inStore = $sale->delivery?->method === Delivery::METHOD_STORE;
+
             foreach ($sale->items as $item) {
                 $decision = $byLine->get((int) $item->id);
 
@@ -403,6 +416,10 @@ class OrderSourcingService
                 $locationType = (string) $decision['location_type'];
                 $locationId = (int) $decision['location_id'];
                 $quantity = (int) ($decision['quantity'] ?? $item->quantity);
+
+                if ($inStore) {
+                    $this->assertCounterSource($sale, $item, $locationType, $locationId);
+                }
 
                 $storeVariant = $item->storeVariant;
 
@@ -444,12 +461,16 @@ class OrderSourcingService
             }
 
             $sale->update([
-                'fulfillment_stage' => Sale::STAGE_TO_DELIVER,
+                'fulfillment_stage' => $inStore ? Sale::STAGE_DELIVERED : Sale::STAGE_TO_DELIVER,
                 'sourcing_confirmed_at' => now(),
                 'sourcing_confirmed_by' => $staff?->id,
             ]);
 
             $this->attachDelivery($sale->refresh());
+
+            if ($inStore) {
+                $this->handOverInStore($sale->refresh(), $staff);
+            }
 
             return $sale;
         });
@@ -563,6 +584,54 @@ class OrderSourcingService
         }
 
         $this->stock->pickWithoutReservation($itemVariantId, $leaf, $quantity, $context);
+    }
+
+    /**
+     * An in-store order leaves from this store's Store Shelf or store floor,
+     * where the customer is standing; never its Remote Hub.
+     */
+    private function assertCounterSource(Sale $sale, SaleItem $item, string $locationType, int $locationId): void
+    {
+        $leaf = $this->scope->leafFor($locationType, $locationId);
+
+        $counter = $leaf !== null
+            && in_array($leaf->kind, [\App\Models\Inventory\StockLocation::KIND_SHELF, \App\Models\Inventory\StockLocation::KIND_BACKROOM], true)
+            && (int) $leaf->store_id === (int) $sale->store_id;
+
+        if (! $counter) {
+            throw new RuntimeException(
+                "Line #{$item->id}: the customer takes this order in the store, so pick it from this store's shelf or floor."
+            );
+        }
+    }
+
+    /**
+     * The picker hands an in-store order to the customer at the counter: the
+     * goods leave Delivery's custody straight away (the custody row names the
+     * picker), and the run is delivered with no courier.
+     */
+    private function handOverInStore(Sale $sale, ?User $staff): void
+    {
+        $sale->loadMissing(['items.storeVariant', 'delivery']);
+
+        foreach ($sale->items as $item) {
+            $quantity = (int) $item->picked_quantity;
+            $variantId = (int) ($item->storeVariant?->item_variant_id ?? 0);
+
+            if ($quantity > 0 && $variantId > 0) {
+                $this->stock->deliverFromCourier($variantId, $quantity, $staff?->id, [
+                    'user_id' => $staff?->id,
+                    'reason' => 'Handed over in store',
+                    'reference' => $item,
+                ]);
+            }
+        }
+
+        $sale->delivery?->update([
+            'status' => 'delivered',
+            'picked_up_at' => now(),
+            'delivered_at' => now(),
+        ]);
     }
 
     private function storeIdFor(string $locationType, int $locationId): int

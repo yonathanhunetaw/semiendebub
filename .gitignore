@@ -45,3 +45,10 @@ frontend_map.txt
 .aider*
 CLAUDE.md
 graphify-out/
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/e2e/.auth/
+/e2e/.fixture/

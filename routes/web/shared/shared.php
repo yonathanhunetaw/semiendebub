@@ -20,16 +20,7 @@ Route::domain("shared.$baseDomain")
             })->name('login'); // CRITICAL: Laravel's 'auth' middleware needs this name
         });
 
-        Route::get('/debug-host', function () {
-            return [
-                'host' => request()->getHost(),
-                'expected' => config('app.system_domain'),
-            ];
-        });
 
-        Route::get('/debug-middleware', function () {
-            return request()->route()->gatherMiddleware();
-        });
 
         Route::middleware(['auth', 'verified', 'role.subdomain:shared'])->group(function () {
             Route::get('/dashboard', function () {

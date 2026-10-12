@@ -28,7 +28,8 @@ fail() {
 }
 
 # 1. Dump the database cleanly using --no-tablespaces and compress it
-docker exec duka-prod-db mysqldump -u dukauser -pdukapass --no-tablespaces duka | gzip > "$BACKUP_FILE" \
+# Credentials come from the container's own MYSQL_* env, never from this file.
+docker exec duka-prod-db sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysqldump -u"$MYSQL_USER" --no-tablespaces "$MYSQL_DATABASE"' | gzip > "$BACKUP_FILE" \
     || fail "mysqldump/gzip failed"
 [ -s "$BACKUP_FILE" ] || fail "dump file is empty"
 gzip -t "$BACKUP_FILE" || fail "dump file is not valid gzip"

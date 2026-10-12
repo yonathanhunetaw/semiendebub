@@ -1,358 +1,186 @@
-import { Head, router, useForm } from "@inertiajs/react";
-import AddRoundedIcon from "@mui/icons-material/AddRounded";
-import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
-import {
-    Alert,
-    Autocomplete,
-    Button,
-    Chip,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    Grid,
-    MenuItem,
-    Snackbar,
-    Stack,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableRow,
-    TextField,
-    Typography,
-} from "@mui/material";
+import { Head, Link, router, useForm } from "@inertiajs/react";
 import React from "react";
-
-import {
-    EmptyState,
-    PageHeader,
-    SkCard,
-    StatCard,
-    TransferStatusChip,
-    formatMoment,
-} from "@/Components/StockKeeper/stockKeeperUi";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
-import type { StockKeeperTransfersProps, StockLocation, TransferRow } from "@/types/stockkeeper";
+import { EmptyState, StatusPill, type Tone } from "@/Components/Shared/ui";
+import ItemVariantPicker from "@/Components/StockKeeper/ItemVariantPicker";
+import TransferReceiveSheet from "@/Components/StockKeeper/TransferReceiveSheet";
+import { KIND_LABEL, SkButton, SkCard, SkChips, SkField, SkHeader, SkPager, SkSheet, SkStats, fmt, inputClass, when } from "@/Components/StockKeeper/skKit";
+import type { StockKeeperTransfersProps, StockLocation, TransferRow, TransferStatus } from "@/types/stockkeeper";
 
-const STATUS_TABS: Array<{ value: string; label: string }> = [
-    { value: "all", label: "All" },
-    { value: "pending", label: "Queued" },
-    { value: "in_transit", label: "In transit" },
-    { value: "completed", label: "Completed" },
-    { value: "cancelled", label: "Cancelled" },
-];
+type StatusFilter = "all" | TransferStatus;
+
+const STATUS: Record<TransferStatus, { label: string; tone: Tone; icon: string }> = {
+    pending: { label: "Queued", tone: "warning", icon: "schedule" },
+    in_transit: { label: "In transit", tone: "info", icon: "local_shipping" },
+    completed: { label: "Completed", tone: "success", icon: "task_alt" },
+    cancelled: { label: "Cancelled", tone: "neutral", icon: "block" },
+};
+
+/** "App\Models\…#12": the pair the server resolves to a location. */
+const pairOf = (location: StockLocation): string => `${location.type}#${location.id}`;
 
 /**
- * Stock movements between stores, from the warehouse floor.
- *
- * Stock leaves the origin at dispatch and lands at the destination on
- * completion, so units are never counted twice.
+ * Transfers: one item moved between two places, such as store floor → Store
+ * Shelf or Remote Hub → store (a courier carries those). Stock leaves at
+ * dispatch and lands when it is received, with any shortfall logged under
+ * Receiving.
  */
-export default function Transfers({
-    transfers,
-    filters,
-    counts,
-    locations = [],
-    variants,
-    pagination,
-    flash,
-}: StockKeeperTransfersProps): React.ReactElement {
-    const [createOpen, setCreateOpen] = React.useState<boolean>(false);
-    const [notice, setNotice] = React.useState<string | null>(null);
+export default function Transfers({ transfers = [], filters, counts, locations = [], pagination }: StockKeeperTransfersProps): React.ReactElement {
+    const [createOpen, setCreateOpen] = React.useState(false);
+    const [receiving, setReceiving] = React.useState<TransferRow | null>(null);
+    const [busy, setBusy] = React.useState<number | null>(null);
+    const status = (filters.status || "all") as StatusFilter;
 
-    React.useEffect(() => {
-        const message = flash?.success ?? flash?.error ?? null;
-        if (message) {
-            setNotice(message);
-        }
-    }, [flash?.success, flash?.error]);
-
-    const setStatus = (status: string): void => {
-        router.get(
-            route("stock_keeper.transfers.index"),
-            status === "all" ? {} : { status },
-            { preserveState: true, preserveScroll: true, replace: true },
-        );
+    const go = (next: { status?: StatusFilter; page?: number }) => {
+        const s = next.status ?? status;
+        router.get(route("stock_keeper.transfers.index"), { ...(s !== "all" ? { status: s } : {}), ...(next.page ? { page: next.page } : {}) }, { preserveState: true, preserveScroll: true, replace: true });
     };
 
-    const act = (transfer: TransferRow, action: "dispatch" | "complete" | "cancel"): void => {
-        router.post(
-            route(`stock_keeper.transfers.${action}`, transfer.id),
-            {},
-            { preserveScroll: true },
-        );
+    const act = (transfer: TransferRow, action: "dispatch" | "cancel") => {
+        setBusy(transfer.id);
+        router.post(route(`stock_keeper.transfers.${action}`, transfer.id), {}, { preserveScroll: true, onFinish: () => setBusy(null) });
     };
 
     return (
         <>
-            <Head title="Stock Transfers" />
+            <Head title="Transfers" />
 
-            <PageHeader
-                title="Stock Transfers"
-                subtitle="Move units between stores and confirm they landed."
-                action={
-                    <Button
-                        variant="contained"
-                        startIcon={<AddRoundedIcon />}
-                        onClick={() => setCreateOpen(true)}
-                    >
+            <SkHeader
+                title="Transfers"
+                subtitle="One item between two places. Stock leaves when it's sent and lands when it's received."
+                actions={
+                    <SkButton icon="add" onClick={() => setCreateOpen(true)}>
                         Raise transfer
-                    </Button>
+                    </SkButton>
                 }
             />
 
-            <Grid container spacing={2.5} sx={{ mb: 3 }}>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard label="All transfers" value={counts.all} />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard label="Queued" value={counts.pending} tone="warning" />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard
-                        label="In transit"
-                        value={counts.in_transit}
-                        icon={<LocalShippingRoundedIcon fontSize="small" />}
-                    />
-                </Grid>
-                <Grid size={{ xs: 6, md: 3 }}>
-                    <StatCard label="Completed" value={counts.completed} tone="success" />
-                </Grid>
-            </Grid>
-
-            <SkCard sx={{ p: 0, overflow: "hidden" }}>
-                <Stack direction="row" spacing={1} sx={{ p: 2.5 }} flexWrap="wrap" useFlexGap>
-                    {STATUS_TABS.map((tab) => {
-                        const active = filters.status === tab.value;
-                        return (
-                            <Chip
-                                key={tab.value}
-                                label={tab.label}
-                                onClick={() => setStatus(tab.value)}
-                                color={active ? "primary" : "default"}
-                                variant={active ? "filled" : "outlined"}
-                                sx={{ fontWeight: 700 }}
-                            />
-                        );
-                    })}
-                </Stack>
-
-                {transfers.length === 0 ? (
-                    <EmptyState
-                        icon={<LocalShippingRoundedIcon fontSize="large" />}
-                        title="No transfers here yet"
-                        hint="Raise one to move units between stores."
-                    />
-                ) : (
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Reference</TableCell>
-                                <TableCell>Product</TableCell>
-                                <TableCell align="right">Qty</TableCell>
-                                <TableCell>Route</TableCell>
-                                <TableCell>Status</TableCell>
-                                <TableCell align="right">Raised</TableCell>
-                                <TableCell align="right">Actions</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {transfers.map((transfer) => (
-                                <TableRow key={transfer.id} hover>
-                                    <TableCell>
-                                        <Typography
-                                            variant="caption"
-                                            sx={{ fontFamily: "monospace", fontWeight: 700 }}
-                                        >
-                                            {transfer.reference}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                            {transfer.product_name}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {transfer.sku ?? "—"}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        {transfer.quantity.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2">
-                                            {transfer.source_label ?? transfer.from_store ?? "—"} →{" "}
-                                            {transfer.destination_label ?? transfer.to_store ?? "—"}
-                                        </Typography>
-                                        {transfer.needs_courier ? (
-                                            <Typography variant="caption" color={transfer.courier ? "text.secondary" : "warning.main"}>
-                                                {transfer.courier ? `Courier: ${transfer.courier}` : "Waiting for a courier to claim it"}
-                                            </Typography>
-                                        ) : null}
-                                    </TableCell>
-                                    <TableCell>
-                                        <TransferStatusChip status={transfer.status} />
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <Typography variant="caption" color="text.secondary">
-                                            {formatMoment(transfer.created_at)}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <Stack
-                                            direction="row"
-                                            spacing={0.5}
-                                            justifyContent="flex-end"
-                                        >
-                                            {transfer.status === "pending" ? (
-                                                <Button
-                                                    size="small"
-                                                    variant="contained"
-                                                    disabled={Boolean(transfer.needs_courier && !transfer.courier)}
-                                                    onClick={() => act(transfer, "dispatch")}
-                                                >
-                                                    {transfer.needs_courier ? "Hand to courier" : "Dispatch"}
-                                                </Button>
-                                            ) : null}
-                                            {transfer.status === "in_transit" ? (
-                                                <Button
-                                                    size="small"
-                                                    variant="contained"
-                                                    color="success"
-                                                    onClick={() => act(transfer, "complete")}
-                                                >
-                                                    Complete
-                                                </Button>
-                                            ) : null}
-                                            {transfer.status === "pending" ||
-                                            transfer.status === "in_transit" ? (
-                                                <Button
-                                                    size="small"
-                                                    color="error"
-                                                    onClick={() => act(transfer, "cancel")}
-                                                >
-                                                    Cancel
-                                                </Button>
-                                            ) : null}
-                                        </Stack>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                )}
-
-                {pagination.last_page > 1 ? (
-                    <Stack
-                        direction="row"
-                        spacing={2}
-                        alignItems="center"
-                        justifyContent="center"
-                        sx={{ p: 2 }}
-                    >
-                        <Button
-                            disabled={pagination.current_page <= 1}
-                            onClick={() =>
-                                router.get(
-                                    route("stock_keeper.transfers.index"),
-                                    { page: pagination.current_page - 1, status: filters.status },
-                                    { preserveState: true },
-                                )
-                            }
-                        >
-                            Previous
-                        </Button>
-                        <Typography variant="body2" color="text.secondary">
-                            Page {pagination.current_page} of {pagination.last_page}
-                        </Typography>
-                        <Button
-                            disabled={pagination.current_page >= pagination.last_page}
-                            onClick={() =>
-                                router.get(
-                                    route("stock_keeper.transfers.index"),
-                                    { page: pagination.current_page + 1, status: filters.status },
-                                    { preserveState: true },
-                                )
-                            }
-                        >
-                            Next
-                        </Button>
-                    </Stack>
-                ) : null}
-            </SkCard>
-
-            <RaiseTransferDialog
-                open={createOpen}
-                onClose={() => setCreateOpen(false)}
-                locations={locations}
-                variants={variants}
+            <SkStats
+                items={[
+                    { label: "Queued", value: fmt(counts.pending), icon: "schedule", tone: counts.pending > 0 ? "warning" : undefined },
+                    { label: "In transit", value: fmt(counts.in_transit), icon: "local_shipping" },
+                    { label: "Completed", value: fmt(counts.completed), icon: "task_alt", tone: "success" },
+                    { label: "All transfers", value: fmt(counts.all), icon: "swap_horiz" },
+                ]}
             />
 
-            <Snackbar
-                open={notice !== null}
-                autoHideDuration={4000}
-                onClose={() => setNotice(null)}
-                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-            >
-                <Alert
-                    severity={flash?.error ? "error" : "success"}
-                    variant="filled"
-                    onClose={() => setNotice(null)}
-                >
-                    {notice}
-                </Alert>
-            </Snackbar>
+            <div className="mb-3">
+                <SkChips<StatusFilter>
+                    value={status}
+                    onChange={(v) => go({ status: v, page: 1 })}
+                    options={[
+                        { value: "all", label: "All", count: counts.all },
+                        { value: "pending", label: "Queued", count: counts.pending },
+                        { value: "in_transit", label: "In transit", count: counts.in_transit },
+                        { value: "completed", label: "Completed", count: counts.completed },
+                        { value: "cancelled", label: "Cancelled", count: counts.cancelled },
+                    ]}
+                />
+            </div>
+
+            {transfers.length === 0 ? (
+                <EmptyState icon="swap_horiz" title="No transfers here" description="Raise one to move an item between places." framed />
+            ) : (
+                <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {transfers.map((t) => {
+                        const s = STATUS[t.status];
+                        const from = t.source_label ?? t.from_store ?? "—";
+                        const to = t.destination_label ?? t.to_store ?? "—";
+                        const waitingCourier = Boolean(t.needs_courier && !t.courier);
+                        return (
+                            <li key={t.id}>
+                                <SkCard className="flex h-full flex-col p-4">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-[15px] font-bold text-on-surface">{t.product_name}</p>
+                                            <p className="truncate font-mono text-[11px] text-on-surface-variant">
+                                                {t.reference} · {t.sku ?? "—"}
+                                            </p>
+                                        </div>
+                                        <StatusPill tone={s.tone} label={s.label} icon={s.icon} />
+                                    </div>
+
+                                    <p className="mt-2 text-[24px] font-extrabold leading-none tabular-nums text-on-surface">{fmt(t.quantity)}</p>
+
+                                    {/* The route, from → to. */}
+                                    <div className="mt-3 flex items-stretch gap-2 rounded-[14px] bg-surface-container-low p-2.5">
+                                        <div className="flex flex-col items-center py-1">
+                                            <span className="h-2.5 w-2.5 rounded-[999px] border-2 border-primary" />
+                                            <span className="my-0.5 w-0.5 flex-1 bg-outline-variant" />
+                                            <span className="h-2.5 w-2.5 rounded-[999px] bg-primary" />
+                                        </div>
+                                        <div className="min-w-0 flex-1 text-[13px]">
+                                            <p className="truncate text-on-surface-variant">
+                                                From <b className="text-on-surface">{from}</b>
+                                            </p>
+                                            <p className="mt-1.5 truncate text-on-surface-variant">
+                                                To <b className="text-on-surface">{to}</b>
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {t.needs_courier && (
+                                        <p className={`mt-2 flex items-center gap-1.5 text-[13px] ${t.courier ? "text-on-surface-variant" : "font-bold text-warning"}`}>
+                                            <span className="material-symbols-outlined text-[18px]">delivery_truck_speed</span>
+                                            {t.courier ? `Courier: ${t.courier}` : "Waiting for a courier to claim it"}
+                                        </p>
+                                    )}
+                                    {t.notes && <p className="mt-2 rounded-[10px] bg-surface-container-low px-2.5 py-1.5 text-[13px] text-on-surface-variant">“{t.notes}”</p>}
+
+                                    <p className="mt-2 text-[12px] text-on-surface-variant">
+                                        Raised {when(t.created_at)}
+                                        {t.initiated_by ? ` by ${t.initiated_by}` : ""}
+                                        {t.completed_at ? ` · landed ${when(t.completed_at)}` : t.dispatched_at ? ` · sent ${when(t.dispatched_at)}` : ""}
+                                    </p>
+
+                                    {(t.status === "pending" || t.status === "in_transit") && (
+                                        <div className="mt-auto flex gap-2 pt-3">
+                                            {t.status === "pending" && (
+                                                <SkButton icon="send" disabled={busy !== null || waitingCourier} onClick={() => act(t, "dispatch")} className="flex-1">
+                                                    {t.needs_courier ? "Hand to courier" : "Send"}
+                                                </SkButton>
+                                            )}
+                                            {t.status === "in_transit" && (
+                                                <SkButton variant="success" icon="move_to_inbox" disabled={busy !== null} onClick={() => setReceiving(t)} className="flex-1">
+                                                    Receive
+                                                </SkButton>
+                                            )}
+                                            <SkButton variant="danger" disabled={busy !== null} onClick={() => act(t, "cancel")}>
+                                                Cancel
+                                            </SkButton>
+                                        </div>
+                                    )}
+                                </SkCard>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+
+            <SkPager page={pagination.current_page} last={pagination.last_page} total={pagination.total} noun="transfers" onPage={(page) => go({ page })} />
+
+            <p className="mt-4 text-center text-[12px] text-on-surface-variant">
+                Hub runs of many items are <Link href={route("stock_keeper.shipments.index")} className="font-bold text-primary hover:underline">shipments</Link>; customer orders leave as{" "}
+                <Link href={route("stock_keeper.orders.index")} className="font-bold text-primary hover:underline">deliveries</Link>.
+            </p>
+
+            <RaiseSheet open={createOpen} onClose={() => setCreateOpen(false)} locations={locations} />
+            {receiving && <TransferReceiveSheet transfer={receiving} onClose={() => setReceiving(null)} />}
         </>
     );
 }
 
-/** Human label for a location kind in the pick list. */
-const KIND_LABEL: Record<string, string> = {
-    store: "whole store",
-    shelf: "shelf",
-    backroom: "store floor",
-    remote_hub: "remote hub",
-    main_hub: "main hub",
-    warehouse: "warehouse",
-};
-
-/** "App\Models\…#12" — the pair the server resolves to a location. */
-const pairOf = (location: StockLocation): string => `${location.type}#${location.id}`;
-
-function RaiseTransferDialog({
-    open,
-    onClose,
-    locations,
-    variants,
-}: {
-    open: boolean;
-    onClose: () => void;
-    locations: StockLocation[];
-    variants: StockKeeperTransfersProps["variants"];
-}): React.ReactElement {
-    const { data, setData, post, processing, errors, reset, transform } = useForm<{
-        item_variant_id: number | "";
-        from: string;
-        to: string;
-        quantity: number | "";
-        notes: string;
-    }>({
-        item_variant_id: "",
-        from: "",
-        to: "",
-        quantity: 1,
-        notes: "",
-    });
+function RaiseSheet({ open, onClose, locations }: { open: boolean; onClose: () => void; locations: StockLocation[] }) {
+    const form = useForm<{ item_variant_id: number | ""; from: string; to: string; quantity: number | ""; notes: string }>({ item_variant_id: "", from: "", to: "", quantity: 1, notes: "" });
 
     // The pick lists carry "type#id"; the server takes the pair split out.
-    transform((form) => {
-        const [sourceType, sourceId] = form.from.split("#");
-        const [destinationType, destinationId] = form.to.split("#");
-
+    form.transform((data) => {
+        const [sourceType, sourceId] = data.from.split("#");
+        const [destinationType, destinationId] = data.to.split("#");
         return {
-            item_variant_id: form.item_variant_id,
-            quantity: form.quantity,
-            notes: form.notes,
+            item_variant_id: data.item_variant_id,
+            quantity: data.quantity,
+            notes: data.notes,
             source_location_type: sourceType || null,
             source_location_id: sourceId ? Number(sourceId) : null,
             destination_location_type: destinationType || null,
@@ -360,112 +188,69 @@ function RaiseTransferDialog({
         };
     });
 
-    const submit = (event: React.FormEvent): void => {
-        event.preventDefault();
-        post(route("stock_keeper.transfers.store"), {
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
+        form.post(route("stock_keeper.transfers.store"), {
             preserveScroll: true,
             onSuccess: () => {
-                reset();
+                form.reset();
                 onClose();
             },
         });
     };
 
     // The server reports against the fields it received, not the form's.
-    const serverErrors = errors as Record<string, string | undefined>;
-    const fromError = serverErrors.source_location_id ?? serverErrors.from_store_id;
-    const toError = serverErrors.destination_location_id ?? serverErrors.to_store_id;
+    const errors = form.errors as Record<string, string | undefined>;
+    const fromError = errors.source_location_id ?? errors.from_store_id;
+    const toError = errors.destination_location_id ?? errors.to_store_id;
+    const option = (l: StockLocation) => `${l.name} · ${KIND_LABEL[l.kind] ?? l.kind}`;
 
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-            <form onSubmit={submit}>
-                <DialogTitle sx={{ fontWeight: 800 }}>Raise a transfer</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2.5} sx={{ mt: 1 }}>
-                        <Autocomplete
-                            options={variants}
-                            getOptionLabel={(option) => option.label}
-                            onChange={(_event, value) =>
-                                setData("item_variant_id", value ? value.id : "")
-                            }
-                            renderInput={(params) => (
-                                <TextField
-                                    {...params}
-                                    label="Product variant"
-                                    error={Boolean(errors.item_variant_id)}
-                                    helperText={errors.item_variant_id}
-                                />
-                            )}
-                        />
-
-                        <TextField
-                            select
-                            label="From"
-                            value={data.from}
-                            onChange={(event) => setData("from", event.target.value)}
-                            error={Boolean(fromError)}
-                            helperText={fromError ?? "A whole store sends from its floor."}
-                        >
-                            {locations.map((location) => (
-                                <MenuItem key={pairOf(location)} value={pairOf(location)}>
-                                    {location.name} · {KIND_LABEL[location.kind] ?? location.kind} (
-                                    {location.units.toLocaleString()} units)
-                                </MenuItem>
+        <SkSheet
+            open={open}
+            onClose={onClose}
+            title="Raise a transfer"
+            subtitle="One item between two places."
+            footer={
+                <>
+                    <SkButton variant="ghost" onClick={onClose}>Cancel</SkButton>
+                    <SkButton type="submit" form="sk-raise" disabled={form.processing || form.data.item_variant_id === ""}>Raise transfer</SkButton>
+                </>
+            }
+        >
+            <form id="sk-raise" onSubmit={submit} className="flex flex-col gap-3">
+                <ItemVariantPicker open={open} value={form.data.item_variant_id} onChange={(id) => form.setData("item_variant_id", id)} error={errors.item_variant_id} />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <SkField label="From" error={fromError} hint="A whole store sends from its floor.">
+                        <select value={form.data.from} onChange={(e) => form.setData("from", e.target.value)} className={inputClass}>
+                            <option value="">Choose…</option>
+                            {locations.map((l) => (
+                                <option key={pairOf(l)} value={pairOf(l)}>
+                                    {option(l)}
+                                </option>
                             ))}
-                        </TextField>
-
-                        <TextField
-                            select
-                            label="To"
-                            value={data.to}
-                            onChange={(event) => setData("to", event.target.value)}
-                            error={Boolean(toError)}
-                            helperText={toError ?? "e.g. a store floor to its Store Shelf."}
-                        >
-                            {locations.map((location) => (
-                                <MenuItem key={pairOf(location)} value={pairOf(location)}>
-                                    {location.name} · {KIND_LABEL[location.kind] ?? location.kind}
-                                </MenuItem>
+                        </select>
+                    </SkField>
+                    <SkField label="To" error={toError} hint="e.g. a store floor to its Store Shelf.">
+                        <select value={form.data.to} onChange={(e) => form.setData("to", e.target.value)} className={inputClass}>
+                            <option value="">Choose…</option>
+                            {locations.map((l) => (
+                                <option key={pairOf(l)} value={pairOf(l)}>
+                                    {option(l)}
+                                </option>
                             ))}
-                        </TextField>
-
-                        <TextField
-                            type="number"
-                            label="Quantity"
-                            value={data.quantity}
-                            onChange={(event) =>
-                                setData(
-                                    "quantity",
-                                    event.target.value === "" ? "" : Number(event.target.value),
-                                )
-                            }
-                            error={Boolean(errors.quantity)}
-                            helperText={errors.quantity ?? "In the variant's own unit."}
-                            slotProps={{ htmlInput: { min: 1 } }}
-                        />
-
-                        <TextField
-                            label="Notes (optional)"
-                            value={data.notes}
-                            onChange={(event) => setData("notes", event.target.value)}
-                            error={Boolean(errors.notes)}
-                            helperText={errors.notes}
-                            multiline
-                            rows={2}
-                        />
-                    </Stack>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={onClose}>Cancel</Button>
-                    <Button type="submit" variant="contained" disabled={processing}>
-                        Raise transfer
-                    </Button>
-                </DialogActions>
+                        </select>
+                    </SkField>
+                </div>
+                <SkField label="Quantity" error={errors.quantity} hint="In the SKU's own packaging.">
+                    <input type="number" min={1} inputMode="numeric" value={form.data.quantity} onChange={(e) => form.setData("quantity", e.target.value === "" ? "" : Number(e.target.value))} className={inputClass} />
+                </SkField>
+                <SkField label="Notes (optional)" error={errors.notes}>
+                    <textarea rows={2} value={form.data.notes} onChange={(e) => form.setData("notes", e.target.value)} className={inputClass} />
+                </SkField>
             </form>
-        </Dialog>
+        </SkSheet>
     );
 }
 
-Transfers.layout = (page: React.ReactNode) => (
-    <StockKeeperLayout>{page}</StockKeeperLayout>
-);
+Transfers.layout = (page: React.ReactNode) => <StockKeeperLayout>{page}</StockKeeperLayout>;

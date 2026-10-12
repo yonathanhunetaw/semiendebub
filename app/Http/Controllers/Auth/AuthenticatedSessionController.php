@@ -36,11 +36,9 @@ class AuthenticatedSessionController extends Controller
 
         // LOG: Trace the entry point and capture the incoming port
         \Log::info('Login attempt started', [
-            'email' => $request->email,
             'ip' => $request->ip(),
             'host' => $request->getHost(),
             'port' => $request->getPort(),
-            'request_cookies' => $request->cookies->all(),
         ]);
 
         $request->authenticate();
@@ -50,16 +48,12 @@ class AuthenticatedSessionController extends Controller
             'user_id' => auth()->id(),
             'roles' => auth()->user()->roles->pluck('name'),
             'host' => $request->getHost(),
-            'request_cookies' => $request->cookies->all(),
         ]);
 
         $request->session()->regenerate();
 
         // LOG: Trace the new session ID and cookie state
         \Log::info('Session regenerated', [
-            'session_id' => $request->session()->getId(),
-            'request_cookies' => $request->cookies->all(),
-            'set_cookie' => $request->session()->getName() . '=' . $request->session()->getId(),
         ]);
 
         $user = auth()->user();
@@ -81,8 +75,6 @@ class AuthenticatedSessionController extends Controller
         // LOG: Confirm the role is stored in the session
         \Log::info('User role set in session', [
             'role' => $role,
-            'session_id' => $request->session()->getId(),
-            'request_cookies' => $request->cookies->all(),
         ]);
 
         if (config('session.driver') === 'database') {
@@ -91,8 +83,6 @@ class AuthenticatedSessionController extends Controller
             // LOG: Database-specific session tracking
             \Log::info('User ID stored in database session', [
                 'user_id' => $user->id,
-                'session_id' => $request->session()->getId(),
-                'request_cookies' => $request->cookies->all(),
             ]);
         }
 
@@ -129,7 +119,6 @@ class AuthenticatedSessionController extends Controller
                 'from' => $currentHost,
                 'to' => $targetHost,
                 'full_url' => $url,
-                'request_cookies' => $request->cookies->all(),
             ]);
 
             \Log::error('CONTROLLER REDIRECT: Sending user to target host', [
@@ -152,8 +141,6 @@ class AuthenticatedSessionController extends Controller
         \Log::info('Login process complete, redirecting', [
             'redirect_to' => '/dashboard',
             'user_id' => $user->id,
-            'session_id' => $request->session()->getId(),
-            'request_cookies' => $request->cookies->all(),
         ]);
 
         // Redirect back to the page the user originally tried to visit (e.g. /canvas),

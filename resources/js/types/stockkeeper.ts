@@ -227,6 +227,17 @@ export interface StockKeeperDashboardProps extends SharedProps {
     recent_movements: StockRow[];
     locations: StockLocation[];
     assigned_location: { id: number; name: string } | null;
+    /** Jobs waiting on the keeper today (DashboardController::todo). */
+    todo?: {
+        shipments_to_pick: number;
+        shipments_to_receive: number;
+        orders_to_pick: number;
+        to_shelve: number;
+        to_accept: number;
+        transfers_pending: number;
+        levels_low: number;
+        levels_critical: number;
+    };
     transfer_summary: {
         pending: number;
         in_transit: number;
@@ -240,7 +251,6 @@ export interface StockKeeperInventoryProps extends SharedProps {
     /** The variant-level rows, for the keeper who needs them. */
     stock: StockRow[];
     locations: StockLocation[];
-    variants: VariantOption[];
     filters: {
         search: string;
         location_type: string | null;
@@ -274,6 +284,209 @@ export interface StockKeeperTransfersProps extends SharedProps {
     stores: StockLocation[];
     /** Every shelf, store floor and hub, from the location tree. */
     locations?: StockLocation[];
-    variants: VariantOption[];
+    /** No longer sent: the raise sheet searches items on the server. */
+    variants?: VariantOption[];
     pagination: Pagination;
+}
+
+/* ----------------------------------------------------------
+ | Levels (App\Services\Inventory\LocationLevels)
+ |----------------------------------------------------------*/
+
+/** full ≥ max · ok · low ≤ low line · critical ≤ crit line · empty = none. */
+export type LevelStatus = "full" | "ok" | "low" | "critical" | "empty";
+
+export interface PackUnit {
+    id: number | null;
+    name: string;
+    pieces: number;
+}
+
+export interface LevelRow {
+    item_id: number;
+    name: string;
+    image: string | null;
+    skus: string[];
+    pieces: number;
+    /** Biggest packaging first, e.g. "50 Cartons · 6 Pieces". */
+    display: string;
+    lead: { unit: string; count: number; pieces: number } | null;
+    /** Stock in the lines' unit, e.g. 50.5 (Cartons). */
+    in_unit: number;
+    unit: PackUnit;
+    units: PackUnit[];
+    level: { max: number; low: number; critical: number } | null;
+    /** 0–1 against full; null without lines. */
+    fill: number | null;
+    /** How many of `unit` until full. */
+    to_full: number | null;
+    cbm: number;
+    status: LevelStatus;
+    assigned: boolean;
+    /** Floor-plan areas holding it here, e.g. ["A1", "B3"]. */
+    areas?: string[];
+}
+
+export interface LevelsBoard {
+    location: { id: number; name: string; kind: string; code: string | null };
+    capacity: { cbm: number | null; used_cbm: number; free_cbm: number | null; percent: number | null };
+    counts: Record<"items" | "with_levels" | LevelStatus, number>;
+    items: LevelRow[];
+}
+
+export interface StockKeeperLevelsProps extends SharedProps {
+    locations: Array<{ id: number; name: string; kind: string; store: string | null }>;
+    board: LevelsBoard | null;
+    can_edit: boolean;
+}
+
+/* ----------------------------------------------------------
+ | Floor plan (App\Services\Inventory\FloorPlan)
+ |----------------------------------------------------------*/
+
+export interface FloorAreaItem {
+    item_id: number;
+    name: string;
+    image: string | null;
+    display: string;
+    status: LevelStatus;
+    /** This area's share of the item's volume at the location. */
+    cbm: number;
+    shared: boolean;
+}
+
+export interface FloorAreaRow {
+    id: number;
+    code: string;
+    name: string | null;
+    kind: string;
+    /** Metres from the floor's top-left corner. */
+    x: number;
+    y: number;
+    width: number;
+    length: number;
+    area_m2: number;
+    notes: string | null;
+    cbm: number;
+    items: FloorAreaItem[];
+}
+
+export interface FloorPlanData {
+    location: LevelsBoard["location"];
+    floor: { width: number | null; length: number | null; area_m2: number | null };
+    capacity: LevelsBoard["capacity"];
+    areas: FloorAreaRow[];
+    unplaced: Array<Pick<LevelRow, "item_id" | "name" | "image" | "display" | "status" | "cbm" | "skus">>;
+    items: Array<{ item_id: number; name: string; display: string }>;
+    kinds: string[];
+}
+
+export interface StockKeeperFloorProps extends SharedProps {
+    locations: StockKeeperLevelsProps["locations"];
+    plan: FloorPlanData | null;
+    can_edit: boolean;
+    focus: number | null;
+}
+
+/* ----------------------------------------------------------
+ | Item detail (App\Services\Inventory\ItemLookup)
+ |----------------------------------------------------------*/
+
+export interface ItemDetail {
+    id: number;
+    name: string;
+    description: string | null;
+    packaging_details: string | null;
+    status: string;
+    is_incomplete: boolean;
+    category: string[];
+    images: string[];
+    packaging: Array<{ id: number; name: string; image: string | null; pieces: number }>;
+    variants: Array<{
+        id: number;
+        sku: string | null;
+        barcode: string | null;
+        status: string | null;
+        color: { name: string; image: string | null } | null;
+        size: string | null;
+        packaging: { name: string; image: string | null; pieces: number } | null;
+        volumes: Array<{ packaging: string; quantity: number; cbm: number | null }>;
+        images: string[];
+        owner: string | null;
+    }>;
+    stock: Array<{
+        location: { id: number; name: string; kind: string; store: string | null };
+        pieces: number;
+        display: string;
+        by_sku: Array<{ sku: string | null; quantity: number }>;
+        level: { max: number; low: number; critical: number; unit: string } | null;
+        areas: Array<{ code: string; name: string | null }>;
+    }>;
+}
+
+/* ----------------------------------------------------------
+ | Receiving (App\Services\Inventory\ReceivingService)
+ |----------------------------------------------------------*/
+
+export type DiscrepancyKind = "short" | "damaged" | "over";
+
+export interface DiscrepancyRow {
+    id: number;
+    reference: string;
+    kind: DiscrepancyKind;
+    status: "open" | "resolved";
+    resolution: string | null;
+    item: { id: number; name: string; sku: string | null };
+    expected: number;
+    received: number;
+    quantity: number;
+    note: string | null;
+    resolution_note: string | null;
+    location: string;
+    courier: string | null;
+    recorded_by: string | null;
+    resolved_by: string | null;
+    source: { type: string; reference: string; url: string | null };
+    created_at: string | null;
+    resolved_at: string | null;
+    can_resolve: boolean;
+}
+
+/* ----------------------------------------------------------
+ | Stocktakes (App\Services\Inventory\StocktakeService)
+ |----------------------------------------------------------*/
+
+export type StocktakeStatus = "counting" | "submitted" | "posted" | "voided";
+
+export interface StocktakeLine {
+    id: number;
+    item_variant_id: number;
+    item_id: number;
+    name: string;
+    variant: string;
+    sku: string | null;
+    barcode: string | null;
+    unit: string;
+    pieces_per_unit: number;
+    expected: number;
+    counted: number | null;
+    variance: number | null;
+    counted_at: string | null;
+}
+
+export interface StocktakeDetail {
+    id: number;
+    reference: string;
+    status: StocktakeStatus;
+    note: string | null;
+    location: { id: number; name: string; kind: string };
+    started_by: string | null;
+    submitted_by: string | null;
+    approved_by: string | null;
+    created_at: string | null;
+    submitted_at: string | null;
+    posted_at: string | null;
+    totals: { lines: number; counted: number; matching: number; over: number; short: number };
+    can_approve: boolean;
+    lines: StocktakeLine[];
 }

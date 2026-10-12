@@ -32,6 +32,8 @@ print_usage() {
     echo ""
     echo "Required:"
     echo "  -e, --env <dev|prod>       Target environment"
+    echo "                             (dev = Docker dev, only for testing Docker changes;"
+    echo "                              everyday local work: ./dev.sh)"
     echo ""
     echo "Options:"
     echo "  -h, --help                 Show this help message"

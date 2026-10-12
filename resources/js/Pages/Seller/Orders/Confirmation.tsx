@@ -37,6 +37,8 @@ type DeliveryOption = "standard" | "express" | "later" | "custom";
 interface Props {
     /** The cart being turned into an order; null when none was chosen. */
     cart_id?: number | null;
+    /** The cart has no customer: checkout starts on "In store". */
+    walk_in?: boolean;
     /** The cart, priced and checked against the store's stock (OrderBoardController::preview). */
     order?: SellerOrder | null;
     /** The store's active collection accounts. */
@@ -57,6 +59,7 @@ interface DeliveryOptions {
 
 export default function Confirmation({
     cart_id = null,
+    walk_in = false,
     order = null,
     accounts = [],
     credit = null,
@@ -86,6 +89,7 @@ export default function Confirmation({
     return (
         <ConfirmationForm
             cartId={cart_id}
+            walkIn={walk_in}
             order={order}
             accounts={accounts}
             credit={credit}
@@ -96,12 +100,14 @@ export default function Confirmation({
 
 function ConfirmationForm({
     cartId,
+    walkIn,
     order,
     accounts,
     credit,
     options,
 }: {
     cartId: number;
+    walkIn: boolean;
     order: SellerOrder;
     accounts: PaymentAccountOption[];
     credit: CreditSummary | null;
@@ -111,12 +117,18 @@ function ConfirmationForm({
     const [tab, setTab] = useState<PayTab>("now");
     const [legs, setLegs] = useState<PaymentLeg[]>([]);
     const [placed, setPlaced] = useState(false);
-    const [delivery, setDelivery] = useState<DeliveryOption>("standard");
+    const [deliveryPick, setDelivery] = useState<DeliveryOption>("standard");
     const [customFee, setCustomFee] = useState("");
+
+    // Lines the store cannot cover today come from a hub: the buyer must accept the wait.
+    const needsDelay = order.lines.some((line) => !line.inStore);
+    // The customer can only take it now if the store holds every line.
+    const inStoreBlocked = needsDelay ? "Some lines come from a hub, so the customer cannot take it now." : null;
 
     const lastAddress = options.addresses[0] ?? null;
     const [plan, setPlan] = useState<DeliveryPlan>({
-        method: "courier",
+        // A walk-in usually takes it there and then.
+        method: walkIn && !needsDelay ? "store" : "courier",
         driverPhone: "",
         address: lastAddress?.address ?? order.destination.address ?? "",
         addressId: lastAddress?.id ?? null,
@@ -127,6 +139,9 @@ function ConfirmationForm({
         plate: "",
     });
 
+    // In store has no run to charge for, so no delivery fee applies.
+    const delivery: DeliveryOption = plan.method === "store" ? "standard" : deliveryPick;
+
     const groups = useMemo(() => groupByFulfillment(order.lines), [order]);
     const total = orderTotal(order);
     // Standard and express are quoted when the run is dispatched; only a fee
@@ -135,8 +150,6 @@ function ConfirmationForm({
     const feeValid = delivery !== "custom" || (customFee.trim() !== "" && Number.isFinite(feeValue) && feeValue >= 0);
     const deliveryFee = delivery === "custom" && feeValid ? Math.round(feeValue * 100) / 100 : 0;
     const grandTotal = total + deliveryFee;
-    // Lines the store cannot cover today come from a hub: the buyer must accept the wait.
-    const needsDelay = order.lines.some((line) => !line.inStore);
 
     const balanced = legsBalanced(legs, grandTotal);
     const creditOk = creditWithinLimit(legs, credit);
@@ -365,7 +378,13 @@ function ConfirmationForm({
                         <div className="mb-3 flex items-center justify-between">
                             <h2 className="text-base font-bold text-on-surface">Delivery</h2>
                             <span className="rounded bg-info-container px-2 py-0.5 text-[10px] font-bold leading-none text-on-info-container">
-                                {plan.method === "vehicle" ? "Vehicle dispatch" : plan.method === "later" ? "Add later" : "Carrier delivery"}
+                                {plan.method === "store"
+                                    ? "In store"
+                                    : plan.method === "vehicle"
+                                      ? "Vehicle dispatch"
+                                      : plan.method === "later"
+                                        ? "Add later"
+                                        : "Carrier delivery"}
                             </span>
                         </div>
                         <DeliveryPlanner
@@ -374,10 +393,12 @@ function ConfirmationForm({
                             couriers={options.couriers}
                             vehicles={options.vehicles}
                             addresses={options.addresses}
+                            inStoreBlocked={inStoreBlocked}
                         />
                     </section>
 
                     {/* ── Delivery fee & schedule ── */}
+                    {plan.method !== "store" ? (
                     <section className="space-y-3 bg-surface-container-lowest p-4 shadow-sm sm:rounded-[12px]">
                         <div className="flex items-center justify-between">
                             <h2 className="text-base font-bold text-on-surface">Delivery fee &amp; schedule</h2>
@@ -459,6 +480,7 @@ function ConfirmationForm({
                             ) : null}
                         </div>
                     </section>
+                    ) : null}
 
                     {/* ── Summary ── */}
                     <section className="space-y-3 bg-surface-container-lowest p-4 shadow-sm sm:rounded-[12px]">

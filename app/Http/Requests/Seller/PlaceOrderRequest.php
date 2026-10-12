@@ -34,8 +34,9 @@ class PlaceOrderRequest extends FormRequest
             'vehicle_plate' => ['nullable', 'string', 'max:32'],
             'customer_address_id' => ['nullable', 'integer', 'exists:customer_addresses,id'],
             // A courier to an address, a vehicle that collects at the store
-            // (its plate and driver's phone), or the address comes later.
-            'delivery_method' => ['nullable', 'in:courier,vehicle,later'],
+            // (its plate and driver's phone), the customer takes it in the
+            // store, or the address comes later.
+            'delivery_method' => ['nullable', 'in:courier,vehicle,later,store'],
             'driver_phone' => ['nullable', 'string', 'max:32', 'required_if:delivery_method,vehicle'],
             'delay_agreed' => ['nullable', 'boolean'],
             // Standard / express are quoted at dispatch, "later" is decided

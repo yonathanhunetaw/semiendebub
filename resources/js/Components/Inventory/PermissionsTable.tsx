@@ -52,7 +52,7 @@ export default function PermissionsTable({
         <Stack spacing={2.5}>
         <Paper variant="outlined" sx={{ borderRadius: 3, overflow: "hidden" }}>
             <TableContainer sx={{ maxWidth: "100%", overflowX: "auto" }}>
-                <Table size="small" aria-label="Who may do what">
+                <Table size="small" aria-label="Who may do what" className="keep-table">
                     <TableHead>
                         <TableRow>
                             <TableCell sx={{ fontWeight: 700, minWidth: 220 }}>Action</TableCell>

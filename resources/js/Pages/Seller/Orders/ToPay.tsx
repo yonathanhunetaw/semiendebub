@@ -267,7 +267,9 @@ export default function ToPay({
                             </span>
                             <h2 className="text-base font-bold">Delivery</h2>
                             <span className="rounded border border-info/30 bg-info-container/60 px-1.5 py-0.5 text-[10px] font-semibold text-on-info-container">
-                                {order.destination.method === "vehicle"
+                                {order.destination.method === "store"
+                                    ? "In store"
+                                    : order.destination.method === "vehicle"
                                     ? "Vehicle dispatch"
                                     : order.destination.method === "later"
                                       ? "Add later"
@@ -290,6 +292,11 @@ export default function ToPay({
                                 couriers={couriers}
                                 vehicles={vehicles}
                                 addresses={addresses}
+                                inStoreBlocked={
+                                    order.lines.some((line) => !line.inStore)
+                                        ? "Some lines come from a hub, so the customer cannot take it now."
+                                        : null
+                                }
                             />
                             <button
                                 type="button"
@@ -314,14 +321,23 @@ export default function ToPay({
                             <span className="font-bold text-on-surface">
                                 {order.destination.name} ({order.destination.kind})
                             </span>
-                            <p className="flex items-center gap-1 text-xs text-on-surface">
-                                <span className="material-symbols-outlined text-[15px] text-on-surface-variant">local_shipping</span>
-                                {order.destination.vehicle}
-                                <span className="mx-1 text-outline">·</span>
-                                <span className="material-symbols-outlined text-[15px] text-on-surface-variant">person_pin_circle</span>
-                                {order.destination.driver}
-                            </p>
-                            <p className="text-xs text-on-surface-variant">{order.destination.address}</p>
+                            {order.destination.method === "store" ? (
+                                <p className="flex items-center gap-1 text-xs text-on-surface">
+                                    <span className="material-symbols-outlined text-[15px] text-on-surface-variant">storefront</span>
+                                    The customer takes it here; it is handed over in Pick &amp; pack.
+                                </p>
+                            ) : (
+                                <>
+                                    <p className="flex items-center gap-1 text-xs text-on-surface">
+                                        <span className="material-symbols-outlined text-[15px] text-on-surface-variant">local_shipping</span>
+                                        {order.destination.vehicle}
+                                        <span className="mx-1 text-outline">·</span>
+                                        <span className="material-symbols-outlined text-[15px] text-on-surface-variant">person_pin_circle</span>
+                                        {order.destination.driver}
+                                    </p>
+                                    <p className="text-xs text-on-surface-variant">{order.destination.address}</p>
+                                </>
+                            )}
                         </div>
                     )}
                 </section>

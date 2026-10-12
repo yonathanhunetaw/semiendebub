@@ -304,6 +304,24 @@ class StockKeeperWritePathsTest extends TestCase
     }
 
     #[Test]
+    public function the_receive_picker_finds_an_item_first_then_lists_all_its_variants(): void
+    {
+        // Nothing is in stock yet: receiving must still offer every variant.
+        $name = $this->item->product_name;
+
+        $this->getJson(route('stock_keeper.inventory.item_options', ['q' => $name]))->assertOk()
+            ->assertJsonPath('items.0.id', $this->item->id)
+            ->assertJsonPath('items.0.name', $name);
+
+        $this->getJson(route('stock_keeper.inventory.item_options', ['q' => 'zzz-no-such-item']))->assertOk()
+            ->assertJsonCount(0, 'items');
+
+        $this->getJson(route('stock_keeper.inventory.items.variant_options', $this->item))->assertOk()
+            ->assertJsonPath('variants.0.id', $this->variant->id)
+            ->assertJsonStructure(['variants' => [['id', 'label', 'sku']]]);
+    }
+
+    #[Test]
     public function the_variant_picker_lists_the_variants_of_an_item(): void
     {
         $this->stock->receive($this->variant->id, $this->floor, 8);
