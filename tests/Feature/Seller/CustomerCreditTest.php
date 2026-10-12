@@ -102,7 +102,7 @@ class CustomerCreditTest extends TestCase
         $this->asSeller()->post(route('seller.orders.store'), [
             'cart_id' => $cart->id,
             'parts' => [['method' => 'credit', 'amount' => $total]],
-        ])->assertRedirectContains('/pick-pack');
+        ])->assertRedirectContains('/orders?open=');
 
         $sale = Sale::query()->sole();
         $this->assertSame([Sale::STAGE_PICK_PACK, 'paid'], [$sale->fulfillment_stage, $sale->payment_status]);
@@ -220,7 +220,7 @@ class CustomerCreditTest extends TestCase
         $this->asSeller()->post(route('seller.orders.store'), [
             'cart_id' => $next->id,
             'parts' => [['method' => 'credit', 'amount' => $this->total($next)]],
-        ])->assertRedirectContains('/pick-pack');
+        ])->assertRedirectContains('/orders?open=');
     }
 
     #[Test]

@@ -8,6 +8,7 @@
 # Usage:
 #   ./dev.sh setup        one-time: php@8.4, MySQL, DB (imports Docker dev data), deps
 #   ./dev.sh [up]         start MySQL + app (:8095) + queue + Vite (:5177); Ctrl-C stops
+#   ./dev.sh status       show whether MySQL, PHP, queue and Vite are up
 #   ./dev.sh stop         stop the MySQL service (frees RAM)
 #   ./dev.sh artisan ...  run artisan against the native DB (also: composer, npm)
 #   ./dev.sh e2e [...]    Playwright on a fresh copy of the DB (needs ./dev.sh up running)
@@ -149,70 +150,152 @@ cmd_setup() {
     ok "Setup done. Run ./dev.sh"
 }
 
-cmd_up() {
-    if docker_dev_running; then
-        die "Docker dev is running (same ports 8095/5177). Stop it first:
-  docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.dev.yml down"
+# ── Pretty step runner ───────────────────────────────────────────────────────
+UP_LOG="/tmp/duka-native.log"          # services' output (followed after start-up)
+STEP_LOG="/tmp/duka-native-steps.log"  # output of each start-up step
+UP_TOTAL=7
+UP_DONE=0
+CPID=""
+TTY=0; [ -t 1 ] && TTY=1
+
+C_DIM=$'\033[2m'; C_BOLD=$'\033[1m'; C_CYAN=$'\033[38;5;80m'; C_GREEN=$'\033[38;5;78m'
+C_RED=$'\033[38;5;203m'; C_YEL=$'\033[38;5;221m'; C_VIO=$'\033[38;5;141m'; C_OFF=$'\033[0m'
+
+# [██████░░░░░░░░░░] 3/7
+bar() {
+    local done=$1 total=$2 width=22 i out=""
+    local fill=$(( done * width / total ))
+    for ((i = 0; i < width; i++)); do
+        if [ $i -lt $fill ]; then out+="█"; else out+="░"; fi
+    done
+    printf '%s%s%s %s%d/%d%s' "$C_CYAN" "$out" "$C_OFF" "$C_DIM" "$done" "$total" "$C_OFF"
+}
+
+cursor_show() { [ $TTY -eq 1 ] && printf '\033[?25h'; return 0; }
+
+# run_step "Label" command args...   (command runs in background, spinner while it works)
+run_step() {
+    local label="$1"; shift
+    local frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) i=0 rc=0 t0=$SECONDS
+    : > "$STEP_LOG"
+    "$@" >> "$STEP_LOG" 2>&1 &
+    local pid=$!
+    if [ $TTY -eq 1 ]; then
+        printf '\033[?25l'
+        while kill -0 "$pid" 2>/dev/null; do
+            printf '\r\033[K  %s%s%s %s  %s' "$C_VIO" "${frames[i % 10]}" "$C_OFF" "$label" "$(bar $UP_DONE $UP_TOTAL)"
+            i=$((i + 1)); sleep 0.08
+        done
+        printf '\033[?25h'
     fi
-    [ -d node_modules ] && [ -d vendor ] || die "Dependencies missing. Run ./dev.sh setup"
+    wait "$pid" || rc=$?
+    local took=$((SECONDS - t0))
+    if [ $rc -eq 0 ]; then
+        UP_DONE=$((UP_DONE + 1))
+        [ $TTY -eq 1 ] && printf '\r\033[K'
+        printf '  %s✔%s %-38s %s%ss%s\n' "$C_GREEN" "$C_OFF" "$label" "$C_DIM" "$took" "$C_OFF"
+    else
+        [ $TTY -eq 1 ] && printf '\r\033[K'
+        printf '  %s✘ %s%s\n' "$C_RED" "$label" "$C_OFF"
+        echo -e "${C_DIM}$(grep -v opcache "$STEP_LOG" | tail -15 | sed 's/^/      /')${C_OFF}"
+        stop_previous quiet
+        exit 1
+    fi
+}
 
-    ensure_mysql
-    native_env
+# ── Step bodies ──────────────────────────────────────────────────────────────
+check_docker_free() {
+    docker_dev_running || return 0
+    echo "Docker dev is running (same ports 8095/5177). Stop it first:"
+    echo "  docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.dev.yml stop"
+    return 1
+}
 
-    info "Migrating..."
-    php artisan migrate --force
+# Kill whatever a previous ./dev.sh left running (never touches MySQL or Docker).
+stop_previous() {
+    local p pid comm
+    pkill -f "concurrently -k -n app,queue,vite" 2>/dev/null || true
+    pkill -f "artisan queue:(listen|work)" 2>/dev/null || true
+    for p in "$APP_PORT_NATIVE" 5177; do
+        for pid in $(lsof -ti "tcp:$p" -sTCP:LISTEN 2>/dev/null); do
+            comm="$(ps -o comm= -p "$pid" 2>/dev/null || true)"
+            case "$comm" in
+                *docker*|*vpnkit*|*colima*|*lima*|*qemu*|*vz*)
+                    echo "Port $p is held by Docker ($comm); stop that first."; return 1 ;;
+            esac
+            kill "$pid" 2>/dev/null || true
+        done
+    done
+    local i
+    for i in $(seq 1 25); do
+        lsof -ti "tcp:$APP_PORT_NATIVE" -sTCP:LISTEN "tcp:5177" >/dev/null 2>&1 || return 0
+        sleep 0.2
+    done
+    # Still alive after 5s: force.
+    for p in "$APP_PORT_NATIVE" 5177; do
+        lsof -ti "tcp:$p" -sTCP:LISTEN 2>/dev/null | xargs kill -9 2>/dev/null || true
+    done
+    return 0
+}
 
-    info "App  http://$(env_value APP_DOMAIN):${APP_PORT_NATIVE}   Vite :5177   (Ctrl-C to stop)"
+stop_previous_step() {
+    if pgrep -f "artisan serve|node_modules/.bin/vite|queue:listen" >/dev/null 2>&1 \
+        || lsof -ti "tcp:$APP_PORT_NATIVE" -sTCP:LISTEN >/dev/null 2>&1 \
+        || lsof -ti tcp:5177 -sTCP:LISTEN >/dev/null 2>&1; then
+        echo "Found a previous session, restarting it"
+    fi
+    stop_previous
+}
+
+start_services() {
+    : > "$UP_LOG"
     # PHP_CLI_SERVER_WORKERS lets artisan serve handle parallel requests.
-    PHP_CLI_SERVER_WORKERS=4 exec npx --no-install concurrently -k \
+    PHP_CLI_SERVER_WORKERS=4 nohup npx --no-install concurrently -k \
         -n app,queue,vite -c "#93c5fd,#c4b5fd,#fdba74" \
         "php artisan serve --host=0.0.0.0 --port=${APP_PORT_NATIVE}" \
         "php artisan queue:listen --tries=1 --timeout=0" \
-        "npm run dev"
+        "npm run dev" >> "$UP_LOG" 2>&1 < /dev/null &
+    echo $! > /tmp/duka-native.pid
 }
 
-# Playwright against a throwaway copy of the dev DB: duka → duka_e2e, a second
-# app server on :8096 for it, and the test users/items from e2e:prepare.
-# Vite comes from the running ./dev.sh, so that must be up.
-E2E_DB="${DB_NAME}_e2e"
-E2E_PORT="${E2E_PORT:-8096}"
+wait_port() {
+    local port=$1 i
+    for i in $(seq 1 120); do
+        curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$port/" && return 0
+        pgrep -f "concurrently -k -n app,queue,vite" >/dev/null 2>&1 || { echo "Services exited early:"; tail -20 "$UP_LOG"; return 1; }
+        sleep 0.5
+    done
+    echo "Nothing answered on :$port after 60s"; tail -20 "$UP_LOG"; return 1
+}
 
-cmd_e2e() {
-    [ -f public/hot ] || die "Vite is not running. Start ./dev.sh in another terminal first."
-    ensure_mysql
+cmd_up() {
+    [ -d node_modules ] && [ -d vendor ] || die "Dependencies missing. Run ./dev.sh setup"
+    local domain; domain="$(env_value APP_DOMAIN)"
     native_env
 
-    info "Copying ${DB_NAME} → ${E2E_DB}"
-    mysql_root -e "DROP DATABASE IF EXISTS \`${E2E_DB}\`;
-        CREATE DATABASE \`${E2E_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-        GRANT ALL PRIVILEGES ON \`${E2E_DB}\`.* TO '${DB_USER}'@'%';"
-    "$MYSQL_BIN/mysqldump" -uroot --socket="$DUKA_MYSQL_SOCK" --single-transaction --routines --triggers "$DB_NAME" \
-        | mysql_root "$E2E_DB"
+    trap 'cursor_show' EXIT
+    echo
+    echo -e "  ${C_BOLD}${C_CYAN}Duka${C_OFF} ${C_DIM}· native dev · php $(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;') · node $(node -v)${C_OFF}"
+    echo -e "  ${C_DIM}────────────────────────────────────────────────────${C_OFF}"
 
-    # The test server: its own DB and URL, jobs run inline, and nothing
-    # leaves the machine (Discord login/visit pings, mail, Sentry); no debugbar
-    # covering the phone UI.
-    export DB_DATABASE="$E2E_DB"
-    export APP_URL="http://$(env_value APP_DOMAIN):${E2E_PORT}"
-    export QUEUE_CONNECTION=sync MAIL_MAILER=log SENTRY_LARAVEL_DSN= DEBUGBAR_ENABLED=false
-    export DISCORD_VISIT_WEBHOOK_URL= DISCORD_DAILY_VISIT_WEBHOOK_URL= DISCORD_LOGIN_WEBHOOK_URL=
+    run_step "Checking Docker dev is stopped"      check_docker_free
+    run_step "Stopping previous session"           stop_previous_step
+    run_step "Starting MySQL 8.0"                  ensure_mysql
+    run_step "Migrating database"                  php artisan migrate --force
+    run_step "Starting app · queue · vite"         start_services
+    run_step "App ready on :${APP_PORT_NATIVE}"    wait_port "$APP_PORT_NATIVE"
+    run_step "Vite ready on :5177"                 wait_port 5177
 
-    php artisan migrate --force >/dev/null
-    mkdir -p e2e/.fixture
-    php artisan e2e:prepare > e2e/.fixture/fixture.json || { cat e2e/.fixture/fixture.json; die "e2e:prepare failed"; }
-    ok "Test users and items ready (e2e/.fixture/fixture.json)"
+    echo -e "  ${C_DIM}────────────────────────────────────────────────────${C_OFF}"
+    echo -e "  $(bar $UP_DONE $UP_TOTAL)  ${C_GREEN}${C_BOLD}All systems up${C_OFF}"
+    echo
+    echo -e "  ${C_BOLD}App ${C_OFF} ${C_CYAN}http://${domain}:${APP_PORT_NATIVE}${C_OFF}"
+    echo -e "  ${C_BOLD}Vite${C_OFF} ${C_CYAN}http://localhost:5177${C_OFF}"
+    echo -e "  ${C_DIM}Logs below · Ctrl-C stops app, queue, vite (MySQL stays; ./dev.sh stop to stop it)${C_OFF}"
+    echo
 
-    # artisan serve forks php -S, so stop whatever holds the port.
-    trap 'lsof -ti "tcp:$E2E_PORT" -sTCP:LISTEN | xargs kill 2>/dev/null || true' EXIT
-    PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=0.0.0.0 --port="$E2E_PORT" > e2e/.fixture/server.log 2>&1 &
-    local i
-    for i in $(seq 1 30); do
-        curl -s -o /dev/null "$APP_URL/login" && break
-        sleep 1
-    done
-
-    export E2E_PORT
-    npx --no-install playwright test "$@"
+    trap 'echo; echo -e "  ${C_YEL}Stopping app, queue, vite...${C_OFF}"; stop_previous >/dev/null 2>&1; cursor_show; echo -e "  ${C_GREEN}✔ Stopped${C_OFF}"; exit 0' INT TERM
+    tail -n 0 -f "$UP_LOG"
 }
 
 cmd_stop() {
@@ -220,7 +303,21 @@ cmd_stop() {
     ok "MySQL stopped"
 }
 
+cmd_status() {
+    check() { # name, pgrep pattern
+        if pgrep -f "$2" >/dev/null 2>&1; then echo -e "${GREEN}● up  ${NC} $1"; else echo -e "${RED}○ down${NC} $1"; fi
+    }
+    check "MySQL         (mysqld, :3306)"        "duka-mysql/my.cnf"
+    check "PHP web       (artisan serve, :8095)" "artisan serve"
+    check "PHP queue     (queue:listen)"         "queue:listen"
+    check "Vite          (hot reload, :5177)"    "node_modules/.bin/vite"
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q .; then
+        echo -e "${YELLOW}Docker containers running:${NC} $(docker ps --format '{{.Names}}' | tr '\n' ' ')"
+    fi
+}
+
 case "${1:-up}" in
+    status)           cmd_status ;;
     setup)            cmd_setup ;;
     up)               cmd_up ;;
     stop)             cmd_stop ;;

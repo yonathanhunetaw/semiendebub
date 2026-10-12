@@ -1,6 +1,6 @@
 import SellerLayout from "@/Layouts/SellerLayout";
 import { birr } from "@/Data/sellerOrderFlow";
-import type { InboxPayment, RemittanceRow } from "@/types/payments";
+import type { InboxPayment, RemittanceRow, WaitingPayment } from "@/types/payments";
 import { Head, router } from "@inertiajs/react";
 import React, { useState } from "react";
 import { dayDateTime } from "@/utils/dates";
@@ -22,12 +22,17 @@ import { dayDateTime } from "@/utils/dates";
  * seller owns: confirming takes the amount off the sender's balance.
  *
  * Every confirmation asks "are you sure?" first: it cannot be undone.
+ *
+ * Deposits into the owner's own accounts that the owner recorded or marked
+ * paid themselves are listed last, read-only: two people handle every money
+ * part, so the store's admin or manager confirms those.
  */
 
 interface Props {
     payments?: InboxPayment[];
     expected?: InboxPayment[];
     handovers?: RemittanceRow[];
+    waiting_on_others?: WaitingPayment[];
 }
 
 /** What the "are you sure?" sheet is about to confirm. */
@@ -35,10 +40,10 @@ type PendingConfirm =
     | { kind: "payment"; payment: InboxPayment }
     | { kind: "handover"; handover: RemittanceRow };
 
-const accountName = (payment: InboxPayment): string =>
+const accountName = (payment: Pick<InboxPayment, "account">): string =>
     payment.account ? `${payment.account.provider_name} · ${payment.account.account_number}` : "Cash in hand";
 
-export default function Inbox({ payments = [], expected = [], handovers = [] }: Props): React.ReactElement {
+export default function Inbox({ payments = [], expected = [], handovers = [], waiting_on_others: waiting = [] }: Props): React.ReactElement {
     const [busy, setBusy] = useState<number | null>(null);
     const [busyHandover, setBusyHandover] = useState<number | null>(null);
     const [asking, setAsking] = useState<PendingConfirm | null>(null);
@@ -216,7 +221,46 @@ export default function Inbox({ payments = [], expected = [], handovers = [] }: 
                         </div>
                     ))}
 
-                    {payments.length === 0 && handovers.length === 0 && expected.length === 0 ? (
+                    {waiting.length > 0 ? (
+                        <p className="px-1 pt-1 text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">
+                            Waiting for a second person · {waiting.length}
+                        </p>
+                    ) : null}
+                    {waiting.map((payment) => (
+                        <div key={`w${payment.id}`} className="rounded-[16px] border border-outline-variant/60 bg-surface-container-low p-3.5">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="truncate text-[13px] font-bold text-on-surface">{accountName(payment)}</p>
+                                    <p className="mt-0.5 truncate text-[11px] text-on-surface-variant">
+                                        {payment.customer} · <span className="font-mono">{payment.order}</span>
+                                    </p>
+                                </div>
+                                <span className="shrink-0 text-[15px] font-extrabold text-on-surface">{birr(payment.amount)}</span>
+                            </div>
+                            <div className="mt-2 flex items-start gap-2 rounded-[10px] bg-surface-container-lowest px-2.5 py-2 text-[11px] leading-snug text-on-surface-variant">
+                                <span className="material-symbols-outlined mt-0.5 shrink-0 text-[16px] text-primary">group</span>
+                                <span>
+                                    {payment.status === "claimed"
+                                        ? "You marked this paid, so you can't also confirm it."
+                                        : "You recorded this payment. Mark it paid on the order once the customer pays."}{" "}
+                                    {payment.confirmers.length > 0 ? (
+                                        <>
+                                            <b className="text-on-surface">{payment.confirmers.slice(0, 3).join(", ")}</b>
+                                            {payment.confirmers.length > 3 ? ` +${payment.confirmers.length - 3}` : ""} or an admin confirms it.
+                                        </>
+                                    ) : (
+                                        "An admin confirms it."
+                                    )}
+                                </span>
+                            </div>
+                            <p className="mt-2 text-[11px] text-outline">
+                                {payment.status === "claimed" && payment.claimed_at ? `Marked paid ${dayDateTime(payment.claimed_at)}` : `Recorded ${dayDateTime(payment.created_at)}`}
+                                {payment.store ? ` · ${payment.store}` : ""}
+                            </p>
+                        </div>
+                    ))}
+
+                    {payments.length === 0 && handovers.length === 0 && expected.length === 0 && waiting.length === 0 ? (
                         <div className="flex flex-col items-center px-6 py-16 text-center">
                             <div className="flex h-20 w-20 items-center justify-center rounded-[999px] bg-primary-container">
                                 <span className="material-symbols-outlined text-[40px] text-primary">

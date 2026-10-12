@@ -52,6 +52,12 @@ export interface InboxPayment extends OrderPayment {
     recorded_by?: string | null;
 }
 
+/** A deposit into the owner's own account that they recorded or claimed: someone else confirms it. */
+export interface WaitingPayment extends Omit<InboxPayment, "claimed_by"> {
+    /** The store's admins and managers by name; a global admin can always confirm. */
+    confirmers: string[];
+}
+
 /**
  * What the seller sends for one part; no account means cash. A type alias,
  * not an interface, so Inertia accepts it as form data.

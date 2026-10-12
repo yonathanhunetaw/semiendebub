@@ -33,6 +33,10 @@ class PaymentInboxController extends Controller
             // may confirm one the moment it shows in the account.
             'expected' => $board->expectedInbox($request->user()),
             'handovers' => $board->handoverInbox((int) $request->user()->id),
+            // Deposits into this owner's accounts that they recorded or claimed
+            // themselves: someone else confirms those (two people), shown so
+            // the owner knows where they are.
+            'waiting_on_others' => $board->waitingOnOthers($request->user()),
         ]);
     }
 

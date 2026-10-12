@@ -1,4 +1,6 @@
 import ListTopBar, { type TabSpec } from "@/Components/Seller/ListTopBar";
+import PickPackPanel from "@/Components/Seller/Orders/PickPackPanel";
+import type { PickPackPlan } from "@/types/sourcing";
 import SellerLayout from "@/Layouts/SellerLayout";
 import {
     ABOVE_NAV,
@@ -16,15 +18,20 @@ import React, { useEffect, useMemo, useState } from "react";
  * Seller "My Orders".
  *
  * Real sales, shaped by SellerOrderBoard into the card format the sample data
- * in `@/Data/sellerOrderFlow` defined. Unpaid orders carry the pay actions;
- * paid ones open straight into pick & pack. The Paid and Pick & pack tabs are
- * the pick list: there is no separate queue screen.
+ * in `@/Data/sellerOrderFlow` defined. Unpaid orders carry the pay actions.
+ * Pick & pack happens here too: a paid order's card opens its pick panel in
+ * place (PickPackPanel), so there is no separate pick screen; the old
+ * /orders/{ref}/pick-pack link opens this board with that card open.
  */
 
 interface Props {
     orders?: SellerOrder[];
     /** The list is capped at the newest N orders. */
     limit?: number;
+    /** Pick plans for every order in Pick & pack, keyed by sale id. */
+    plans?: Record<number, PickPackPlan>;
+    /** A reference whose pick panel opens on arrival. */
+    open?: string | null;
 }
 
 const TABS: Array<{ id: string; label: string; stage: OrderStage | null }> = [
@@ -37,8 +44,13 @@ const TABS: Array<{ id: string; label: string; stage: OrderStage | null }> = [
     { id: "canceled", label: "Canceled", stage: "canceled" },
 ];
 
-/** Read `?tab=` so the More hub's pipeline tiles deep-link into a stage. */
-function initialTab(): string {
+/**
+ * Read `?tab=` so the More hub's pipeline tiles deep-link into a stage; an
+ * order opened by reference lands on its own stage's tab.
+ */
+function initialTab(orders: SellerOrder[], open: string | null): string {
+    const opened = open ? orders.find((order) => order.reference === open) : undefined;
+    if (opened) return TABS.find((tab) => tab.stage === opened.stage)?.id ?? "all";
     if (typeof window === "undefined") return "all";
 
     const requested = new URLSearchParams(window.location.search).get("tab");
@@ -60,18 +72,32 @@ function useTicker(active: boolean): number {
     return tick;
 }
 
-/** Tick a line in hand (or put it back) without leaving the board. */
-const tickLine = (order: SellerOrder, lineId: number, done: boolean) =>
-    router.post(route("seller.orders.lines.tick", { sale: order.id, item: lineId }), { done }, { preserveScroll: true, preserveState: true });
-
-export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): React.ReactElement {
+export default function OrdersIndex({ orders: loaded = [], limit = 0, plans = {}, open = null }: Props): React.ReactElement {
     /* Hiding is a view filter only; it never deletes an order. */
     const [hidden, setHidden] = useState<number[]>([]);
     const orders = useMemo(
         () => loaded.filter((order) => !hidden.includes(order.id)),
         [loaded, hidden],
     );
-    const [tab, setTab] = useState<string>(initialTab);
+    const [tab, setTab] = useState<string>(() => initialTab(loaded, open));
+    /** Orders whose pick panel is open. */
+    const [picking, setPicking] = useState<number[]>(() => {
+        const opened = open ? loaded.find((order) => order.reference === open) : undefined;
+        return opened ? [opened.id] : [];
+    });
+    const togglePick = (id: number) => setPicking((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+    const openPick = (order: SellerOrder) => {
+        setPicking((current) => (current.includes(order.id) ? current : [...current, order.id]));
+        setTab(TABS.find((entry) => entry.stage === order.stage)?.id ?? "all");
+        window.setTimeout(() => document.getElementById(`order-${order.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    };
+
+    // An order opened by reference (or the next one after a hand-over).
+    useEffect(() => {
+        const opened = open ? loaded.find((order) => order.reference === open) : undefined;
+        if (opened) openPick(opened);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
     const [search, setSearch] = useState("");
     const [selectMode, setSelectMode] = useState(false);
     const [selected, setSelected] = useState<number[]>([]);
@@ -166,12 +192,13 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                                 Paid and confirmed · oldest {toPick[0].reference} for {toPick[0].customer}
                             </p>
                         </div>
-                        <Link
-                            href={route("seller.orders.pickpack", toPick[0].reference)}
+                        <button
+                            type="button"
+                            onClick={() => openPick(toPick[0])}
                             className="shrink-0 rounded-[999px] bg-on-primary px-4 py-2 text-xs font-extrabold text-primary active:scale-95"
                         >
                             Start
-                        </Link>
+                        </button>
                     </section>
                 ) : null}
 
@@ -202,6 +229,7 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                         return (
                             <div
                                 key={order.id}
+                                id={`order-${order.id}`}
                                 onClick={() =>
                                     selectMode
                                         ? setSelected((current) =>
@@ -262,24 +290,10 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                                     </span>
                                 </Link>
 
-                                {/* Lines: in Pick & pack each one is ticked once it is in hand. */}
+                                {/* Lines. Picking them happens in the pick panel below. */}
                                 <div className="space-y-2.5">
                                     {order.lines.map((line) => (
                                         <div key={line.id} className="flex items-center gap-3">
-                                            {!selectMode && (order.stage === "paid" || order.stage === "packing") ? (
-                                                <label className="flex shrink-0 cursor-pointer flex-col items-center gap-0.5">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={Boolean(line.ticked)}
-                                                        onChange={(event) => tickLine(order, line.id, event.target.checked)}
-                                                        aria-label={`${line.name} in hand`}
-                                                        className="h-5 w-5 rounded accent-[rgb(var(--primary))]"
-                                                    />
-                                                    <span className="text-[9px] font-bold uppercase text-on-surface-variant">
-                                                        {line.ticked ? "In hand" : "Pick"}
-                                                    </span>
-                                                </label>
-                                            ) : null}
                                             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[10px] border border-outline-variant/60 bg-surface-container">
                                                 <span className="material-symbols-outlined text-[26px] text-outline">
                                                     inventory_2
@@ -387,7 +401,7 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                                             </span>
                                         ) : null}
 
-                                        {order.stage === "paid" ? (
+                                        {order.stage === "paid" || order.stage === "packing" ? (
                                             <div className="flex items-center gap-2">
                                                 <Link
                                                     href={route("seller.orders.pay", { reference: order.reference })}
@@ -397,15 +411,22 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                                                 </Link>
                                                 <button
                                                     type="button"
-                                                    onClick={() =>
-                                                        router.post(route("seller.orders.picking.start", order.id), {}, {
-                                                            preserveScroll: true,
-                                                            onSuccess: () => router.visit(route("seller.orders.pickpack", { reference: order.reference })),
-                                                        })
-                                                    }
-                                                    className="rounded-[999px] px-5 py-1.5 text-xs font-semibold text-on-primary shadow-sm active:scale-95 bg-primary"
+                                                    onClick={() => {
+                                                        // Opening a paid order's panel the first time starts picking.
+                                                        if (order.stage === "paid" && !picking.includes(order.id)) {
+                                                            router.post(route("seller.orders.picking.start", order.id), {}, { preserveScroll: true, preserveState: true });
+                                                            // It moves to Pick & pack: follow it there.
+                                                            if (tab === "paid") setTab("packing");
+                                                        }
+                                                        togglePick(order.id);
+                                                    }}
+                                                    aria-expanded={picking.includes(order.id)}
+                                                    className={`flex items-center gap-1 rounded-[999px] px-5 py-1.5 text-xs font-semibold shadow-sm active:scale-95 ${
+                                                        picking.includes(order.id) ? "border border-primary bg-surface-container-lowest text-primary" : "bg-primary text-on-primary"
+                                                    }`}
                                                 >
-                                                    Start pick &amp; pack
+                                                    <span className="material-symbols-outlined text-[16px]">{picking.includes(order.id) ? "expand_less" : "package_2"}</span>
+                                                    {picking.includes(order.id) ? "Hide pick & pack" : order.stage === "paid" ? "Start pick & pack" : "Resume pick & pack"}
                                                 </button>
                                             </div>
                                         ) : null}
@@ -422,17 +443,18 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0 }: Props): 
                                             </Link>
                                         ) : null}
 
-                                        {order.stage === "packing" ? (
-                                            <Link
-                                                href={route("seller.orders.pickpack", {
-                                                    reference: order.reference,
-                                                })}
-                                                className="rounded-[999px] border border-on-surface bg-surface-container-lowest px-4 py-1.5 text-xs font-semibold text-on-surface hover:bg-surface-container-low active:scale-95"
-                                            >
-                                                Resume pick &amp; pack
-                                            </Link>
-                                        ) : null}
                                     </div>
+                                ) : null}
+
+                                {/* Pick & pack, in place. */}
+                                {!selectMode && picking.includes(order.id) && (order.stage === "paid" || order.stage === "packing") ? (
+                                    plans[order.id] ? (
+                                        <PickPackPanel key={order.id} plan={plans[order.id]} />
+                                    ) : (
+                                        <p className="rounded-[10px] bg-surface-container-low px-3 py-2 text-[11px] text-on-surface-variant">
+                                            This order isn't waiting in Pick &amp; pack any more. Pull down to refresh.
+                                        </p>
+                                    )
                                 ) : null}
                             </div>
                         );

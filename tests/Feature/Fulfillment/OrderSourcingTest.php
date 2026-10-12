@@ -396,15 +396,16 @@ class OrderSourcingTest extends TestCase
 
         $response = $this->actingAs($this->staff, 'web')
             ->withServerVariables(['HTTP_HOST' => 'seller.' . config('app.system_domain')])
-            ->get(route('seller.orders.pickpack', $sale->reference_number));
+            ->get(route('seller.orders.index', ['open' => $sale->reference_number]));
 
         $response->assertOk();
 
         $props = $response->viewData('page')['props'];
 
-        $this->assertSame('Seller/Orders/PickPack', $response->viewData('page')['component']);
-        $this->assertSame($sale->reference_number, $props['plan']['sale']['reference']);
-        $this->assertCount(1, $props['plan']['lines']);
+        // Pick & pack lives on My Orders: the board carries each order's plan.
+        $this->assertSame('Seller/Orders/index', $response->viewData('page')['component']);
+        $this->assertSame($sale->reference_number, $props['plans'][$sale->id]['sale']['reference']);
+        $this->assertCount(1, $props['plans'][$sale->id]['lines']);
     }
 
     #[Test]

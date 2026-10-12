@@ -171,9 +171,17 @@ class SellerOrderJourneyTest extends TestCase
             ->assertSessionHas('error');
 
         // ── Pick & Pack → To deliver ──
+        // The old pick screen's link opens My Orders with the order's card open,
+        // and the board carries its pick plan.
         $this->asSeller()
             ->get(route('seller.orders.pickpack', ['reference' => $sale->reference_number]))
-            ->assertOk();
+            ->assertRedirect(route('seller.orders.index', ['open' => $sale->reference_number]));
+        $this->asSeller()
+            ->get(route('seller.orders.index', ['open' => $sale->reference_number]))
+            ->assertInertia(fn ($page) => $page
+                ->component('Seller/Orders/index')
+                ->where('open', $sale->reference_number)
+                ->where("plans.{$sale->id}.sale.reference", $sale->reference_number));
 
         $this->asSeller()
             ->post(route('seller.orders.sourcing.confirm', $sale), [
@@ -390,9 +398,10 @@ class SellerOrderJourneyTest extends TestCase
             ])
             ->assertNotFound();
 
+        // Another store's board has no pick plan for it.
         $this->actingAs($outsider)
-            ->get(route('seller.orders.pickpack', ['reference' => $sale->reference_number]))
-            ->assertInertia(fn ($page) => $page->where('plan', null));
+            ->get(route('seller.orders.index', ['open' => $sale->reference_number]))
+            ->assertInertia(fn ($page) => $page->missing("plans.{$sale->id}"));
 
         $this->assertSame(Sale::STAGE_PICK_PACK, $sale->fresh()->fulfillment_stage);
     }
@@ -504,10 +513,10 @@ class SellerOrderJourneyTest extends TestCase
         $this->confirmCash();
 
         $this->asSeller()
-            ->get(route('seller.orders.pickpack', ['reference' => $sale->reference_number]))
+            ->get(route('seller.orders.index'))
             ->assertInertia(fn ($page) => $page
-                ->where('plan.delivery.method', 'store')
-                ->where('plan.lines.0.options', fn ($options) => collect($options)->every(fn ($option) => in_array($option['kind'], ['shelf', 'backroom'], true))));
+                ->where("plans.{$sale->id}.delivery.method", 'store')
+                ->where("plans.{$sale->id}.lines.0.options", fn ($options) => collect($options)->every(fn ($option) => in_array($option['kind'], ['shelf', 'backroom'], true))));
 
         $this->asSeller()
             ->post(route('seller.orders.sourcing.confirm', $sale), $lines)
@@ -611,6 +620,37 @@ class SellerOrderJourneyTest extends TestCase
     }
 
     /** @return array{parts: array<int, array{amount: float|int}>} */
+    #[Test]
+    public function an_owner_who_claims_a_deposit_into_their_own_account_sees_who_must_confirm_it(): void
+    {
+        // The account's owner sells, records the deposit and marks it paid.
+        $cart = Cart::create(['store_id' => $this->store->id, 'user_id' => $this->owner->id, 'seller_id' => $this->owner->id, 'status' => 'open']);
+        $cart->variants()->attach($this->variant->id, ['quantity' => 2, 'price' => 200, 'store_id' => $this->store->id]);
+        $manager = $this->user('store_manager', $this->store->id);
+
+        $this->as($this->owner, 'seller')->post(route('seller.orders.store'), ['cart_id' => $cart->id])->assertSessionHasNoErrors();
+        $sale = Sale::query()->sole();
+        $this->as($this->owner, 'seller')->put(route('seller.orders.payments.update', ['reference' => $sale->reference_number]), [
+            'parts' => [['payment_account_id' => $this->account->id, 'amount' => 400]],
+        ]);
+        $part = $sale->payments()->sole();
+        $this->as($this->owner, 'seller')->post(route('seller.orders.payments.claim', ['reference' => $sale->reference_number, 'payment' => $part->id]));
+
+        // Two people: not theirs to confirm, but shown, with who confirms it.
+        $this->as($this->owner, 'seller')
+            ->get(route('seller.payments.inbox'))
+            ->assertInertia(fn ($page) => $page
+                ->where('payments', [])
+                ->where('waiting_on_others.0.id', $part->id)
+                ->where('waiting_on_others.0.status', Payment::STATUS_CLAIMED)
+                ->where('waiting_on_others.0.confirmers', fn ($names) => collect($names)->contains(trim($manager->first_name.' '.$manager->last_name))));
+
+        // The store manager has it to confirm.
+        $this->as($manager, 'seller')
+            ->get(route('seller.payments.inbox'))
+            ->assertInertia(fn ($page) => $page->where('payments.0.id', $part->id));
+    }
+
     private function cash(float|int $amount): array
     {
         return ['parts' => [['amount' => $amount]]];

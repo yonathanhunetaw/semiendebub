@@ -12,8 +12,6 @@ use App\Models\Finance\Sale;
 use App\Services\Fulfillment\OrderSourcingService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Inertia\Response;
 use RuntimeException;
 
 /**
@@ -39,36 +37,12 @@ class OrderController extends Controller
     }
 
     /**
-     * One paid order, with every location that holds each of its lines.
-     *
-     * Resolved by reference rather than id because that is what the pipeline
-     * screens link with, and what staff read off a receipt.
+     * The old pick screen's address. Pick & pack now happens on My Orders, in
+     * the order's own card, so this opens the board with that card open.
      */
-    public function pickPack(Request $request, string $reference): Response
+    public function pickPack(string $reference): RedirectResponse
     {
-        // Only the seller's own store's orders, like the board.
-        $sale = Sale::query()
-            ->where('reference_number', $reference)
-            ->when($request->user()?->store_id !== null, fn ($query) => $query->forStore((int) $request->user()->store_id))
-            ->first();
-
-        if ($sale === null) {
-            // Rendered rather than 404'd: the sample-data pipeline links here
-            // with references that were never real orders, and an explanatory
-            // screen is more useful to a seller than an error page.
-            return Inertia::render('Seller/Orders/PickPack', [
-                'reference' => $reference,
-                'plan' => null,
-            ]);
-        }
-
-        return Inertia::render('Seller/Orders/PickPack', [
-            'reference' => $reference,
-            'plan' => $this->sourcing->pickPackPlan($sale),
-            // The other paid orders waiting at this store, oldest first, so
-            // the picker can see the queue and step through it.
-            'queue' => $this->queue((int) $sale->store_id, (int) $sale->id),
-        ]);
+        return redirect()->route('seller.orders.index', ['open' => $reference]);
     }
 
     /**
@@ -106,7 +80,7 @@ class OrderController extends Controller
         $next = $this->queue((int) $sale->store_id, (int) $sale->id)[0] ?? null;
 
         return $next !== null
-            ? redirect()->route('seller.orders.pickpack', ['reference' => $next['reference']])
+            ? redirect()->route('seller.orders.index', ['open' => $next['reference']])
                 ->with('success', "Order {$sale->reference_number} {$done[0]}. Next up: {$next['reference']}.")
             : redirect()->to(route('seller.orders.index').'?tab='.$done[1])
                 ->with('success', "Order {$sale->reference_number} {$done[0]}. Nothing else waiting to pick.");

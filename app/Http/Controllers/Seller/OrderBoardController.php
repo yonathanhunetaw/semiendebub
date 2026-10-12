@@ -20,6 +20,7 @@ use App\Services\Finance\CustomerCreditService;
 use App\Services\Finance\PaymentBoard;
 use App\Services\Finance\PaymentService;
 use App\Services\Fulfillment\CustodyLog;
+use App\Services\Fulfillment\OrderSourcingService;
 use App\Services\Fulfillment\SellerOrderBoard;
 use App\Services\Fulfillment\SellerOrderService;
 use App\Services\StockService;
@@ -31,8 +32,9 @@ use Inertia\Response;
 /**
  * The seller's "My Orders" list and the to-pay screen, backed by real sales.
  *
- * Pick & Pack stays in OrderController; this is only the read side the More
- * hub's order tiles open into.
+ * Pick & pack happens on this board: each paid order's card opens its pick
+ * plan (where every line comes from, ticks, packed, hand over), so there is
+ * no separate pick screen. Confirming the hand-over stays in OrderController.
  */
 class OrderBoardController extends Controller
 {
@@ -49,6 +51,19 @@ class OrderBoardController extends Controller
         return Inertia::render('Seller/Orders/index', [
             'orders' => $this->board->orders($storeId),
             'limit' => SellerOrderBoard::LIST_LIMIT,
+            // Every order waiting in Pick & pack at this store, keyed by sale
+            // id: what each card's pick panel works from.
+            'plans' => Sale::query()
+                ->when($storeId !== null, fn ($query) => $query->forStore((int) $storeId))
+                ->awaitingSourcing()
+                ->with(['items', 'customer', 'store', 'delivery'])
+                ->latest('id')
+                ->limit(SellerOrderBoard::LIST_LIMIT)
+                ->get()
+                ->mapWithKeys(fn (Sale $sale): array => [(int) $sale->id => app(OrderSourcingService::class)->pickPackPlan($sale)])
+                ->all(),
+            // A card to open straight away (from an old pick-pack link).
+            'open' => $request->string('open')->toString() ?: null,
         ]);
     }
 
@@ -88,7 +103,7 @@ class OrderBoardController extends Controller
         }
 
         return $sale->fulfillment_stage === Sale::STAGE_PICK_PACK
-            ? redirect()->route('seller.orders.pickpack', ['reference' => $sale->reference_number])
+            ? redirect()->route('seller.orders.index', ['open' => $sale->reference_number])
                 ->with('success', "Order {$sale->reference_number} paid. Pick and pack it now.")
             : redirect()->route('seller.orders.pay', ['reference' => $sale->reference_number])
                 ->with('success', "Order {$sale->reference_number} placed. Its stock is held while it waits for payment.");
@@ -106,7 +121,7 @@ class OrderBoardController extends Controller
         }
 
         return $sale->fulfillment_stage === Sale::STAGE_PICK_PACK
-            ? redirect()->route('seller.orders.pickpack', ['reference' => $reference])
+            ? redirect()->route('seller.orders.index', ['open' => $reference])
                 ->with('success', "Order {$reference} paid. Pick and pack it now.")
             : back()->with('success', "Payment split saved for {$reference}.");
     }

@@ -149,6 +149,52 @@ class PaymentBoard
     }
 
     /**
+     * Deposits into $user's own accounts that $user recorded or claimed
+     * themselves, so a second person has to confirm them (the two-person
+     * rule). Shown read-only in the owner's inbox, with who can confirm, so
+     * nothing waits out of sight.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function waitingOnOthers(User $user): array
+    {
+        $rows = Payment::query()
+            ->whereHas('account', fn (Builder $account) => $account->where('owner_user_id', $user->id))
+            ->where(fn (Builder $q) => $q
+                ->where(fn (Builder $c) => $c->where('status', Payment::STATUS_CLAIMED)->where('claimed_by', $user->id))
+                ->orWhere(fn (Builder $p) => $p->where('status', Payment::STATUS_PENDING)->where('user_id', $user->id)))
+            ->where(fn (Builder $q) => $q
+                ->whereNull('sale_id')
+                ->orWhereHas('sale', fn (Builder $sale) => $sale->whereIn('fulfillment_stage', [Sale::STAGE_AWAITING_PAYMENT, Sale::STAGE_PICK_PACK])))
+            ->with(['account.owner', 'sale.customer', 'sale.store', 'customer'])
+            ->orderBy('created_at')
+            ->get();
+
+        // Who stands in at each store: its own admins and store managers.
+        $storeIds = $rows->map(fn (Payment $p) => $p->sale?->store_id ?? $p->account?->store_id)->filter()->unique()->values();
+        $standIns = User::query()
+            ->whereIn('store_id', $storeIds)
+            ->whereKeyNot($user->id)
+            ->get()
+            ->filter(fn (User $u): bool => $u->isRole('admin', 'store_manager'))
+            ->groupBy('store_id')
+            ->map(fn ($users) => $users->map(fn (User $u): string => trim($u->first_name.' '.$u->last_name))->values()->all());
+
+        return $rows->map(function (Payment $payment) use ($standIns): array {
+            $storeId = $payment->sale?->store_id ?? $payment->account?->store_id;
+
+            return $this->part($payment) + [
+                'order' => $payment->isRepayment() ? 'Credit repayment' : (string) ($payment->sale?->reference_number ?? ''),
+                'order_total' => (float) ($payment->sale?->total_amount ?? $payment->amount),
+                'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? 'Walk-in customer',
+                'store' => $payment->sale?->store?->name ?? $payment->account?->store?->name,
+                // Store admins and managers by name; a global admin can always.
+                'confirmers' => $standIns->get($storeId, []),
+            ];
+        })->values()->all();
+    }
+
+    /**
      * Handovers sent to this owner's settlement accounts, oldest first.
      *
      * @return array<int, array<string, mixed>>
