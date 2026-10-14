@@ -60,19 +60,18 @@ CURRENT_STEP_START_TIME=0  # epoch seconds when current step started
 # Initialize steps
 init_steps() {
     STEPS=(
-        "Load Configuration & Environment"
-        "Start Services (Docker Compose)"
-        # "MinIO Readiness & Bucket Setup"
-        "PHP Dependencies Installation"
-        "Node Dependencies Installation"
-        "Frontend Assets Build"
-        "Database Migration & Seeding"
-        "Cache & Permissions Setup"
-        "Final Verification"
-        "Post-Deployment Image Sync"
-        "Cloudflare Cache Purging"
+        "Load Configuration & Environment"      # 0
+        "Start Services (Docker Compose)"       # 1
+        "Database Readiness"                    # 2
+        "PHP Dependencies Installation"         # 3
+        "Node Dependencies Installation"        # 4
+        "Frontend Assets Build"                 # 5
+        "Database Migration"                    # 6
+        "Cache & Permissions Setup"             # 7
+        "Final Verification"                    # 8
+        "Cloudflare Cache Purging"              # 9
     )
-    
+
     for i in "${!STEPS[@]}"; do
         STEP_STATUS[$i]="pending"
         STEP_MESSAGES[$i]=""
@@ -1329,7 +1328,7 @@ fi
 log_done "Database migration completed"
 
 # Show the specific backup filename in the progress row
-DB_MSG_LABEL="Database migrated and seeded"
+DB_MSG_LABEL="Database migrated (data kept)"
 [ -n "${RESTORED_BACKUP_NAME:-}" ] && DB_MSG_LABEL="Database restored from ${RESTORED_BACKUP_NAME}"
 
 step_success 6 "${DB_MSG_LABEL}"
@@ -1438,11 +1437,16 @@ else
 fi
 
 # Check application health
-if curl -sf http://localhost/health >/dev/null 2>&1; then
-    log_success "Application health check passed"
-else
-    log_warning "Health check endpoint not responding"
-fi
+health_code=000
+for _try in 1 2 3 4 5 6 7 8 9 10; do
+    health_code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' -H "Host: ${APP_DOMAIN:-localhost}" "http://localhost:${APP_PORT:-8096}/" 2>/dev/null || true)"
+    case "$health_code" in 2??|3??|4??) break ;; esac
+    sleep 3
+done
+case "$health_code" in
+    2??|3??|4??) log_success "Application answers on port ${APP_PORT:-8096} (HTTP $health_code)" ;;
+    *)           log_warning "Application did not answer on port ${APP_PORT:-8096} (HTTP $health_code): check 'docker logs $APP_CONTAINER'" ;;
+esac
 
 step_success 8 "Deployment verification complete"
 
