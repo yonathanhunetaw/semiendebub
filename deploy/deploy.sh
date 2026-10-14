@@ -401,6 +401,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 log_info "Environment: ${APP_ENV:-not set}"
 log_info "Compose Project: ${COMPOSE_PROJECT_NAME:-default}"
+log_info "Node: ${NODE_NAME:-?} / role ${NODE_ROLE:-NOT SET (set NODE_ROLE in $(basename "$ENV_FILE"))}"
 log_info "Log file: $LOG_FILE"
 log_success "=================================================================================="
 
@@ -459,12 +460,23 @@ else
     log_info "Using docker with sudo"
 fi
 
+# Shared database/R2 helpers (dump, backup state). DB_CONTAINER was set above.
+APP_ROOT="$PROJECT_ROOT"
+DUKA_ENV_FILE="$ENV_FILE"
+DB_DOCKER="${DOCKER_CMD[*]}"
+# shellcheck source=db-lib.sh
+source "$SCRIPT_DIR/db-lib.sh"
+db_init
+BACKUP_BUCKET_PATH="$BACKUP_BUCKET"
+
 # =================================================================================================
 # VARIABLE LOADING WITH DEFAULTS
 # =================================================================================================
 
 # Default to skipping the database reset
 SKIP_DB_RESET=1
+# Restoring from R2 only happens when --restore-db is passed
+RESTORE_DB=0
 
 for arg in "${@:2}"; do
     case $arg in
@@ -473,6 +485,9 @@ for arg in "${@:2}"; do
             ;;
         --no-reset|--skip-reset|--no-seed)
             SKIP_DB_RESET=1
+            ;;
+        --restore-db)
+            RESTORE_DB=1
             ;;
     esac
 done    
@@ -1178,121 +1193,129 @@ step_start 6
 # =================================================================================================
 # R2 DATABASE SYNC CHECK (ROBUST WITH PYTHON FALLBACK)
 # =================================================================================================
-if [ "${SYNC_DB_FROM_R2:-true}" = "true" ]; then
-    BACKUP_BUCKET_PATH="duka-prod-db-backups"
-    
-    log_step "SYNC_DB_FROM_R2 is enabled. Finding latest timestamped backup in R2 (${BACKUP_BUCKET_PATH})..."
-    
-    mkdir -p "$PROJECT_ROOT/storage/app/backups"
-    download_success=false
-    TARGET_BACKUP_FILE=""
+# Deploys keep the live database. Restoring is explicit: --restore-db. (The old
+# SYNC_DB_FROM_R2=true default wiped live data on every deploy.)
+if [ "${SYNC_DB_FROM_R2:-}" = "true" ] && [ "$RESTORE_DB" != "1" ]; then
+    log_warning "SYNC_DB_FROM_R2=true is no longer used. The live database is kept; pass --restore-db to restore from R2."
+fi
 
-    # Try 1: Try using MinIO Client (mc) to find the latest duka_backup_*.sql.gz file
+if [ "$RESTORE_DB" = "1" ]; then
+    log_step "--restore-db: restoring the newest backup from R2 (${BACKUP_BUCKET_PATH})..."
+
+    mkdir -p "$PROJECT_ROOT/storage/app/backups"
+    RESTORE_FILE="$PROJECT_ROOT/storage/app/backups/latest.sql.gz"
+    rm -f "$RESTORE_FILE"
+    download_success=false
+    REMOTE_INFO=""
+
+    # Try 1: MinIO client (mc). latest.sql.gz is always the newest dump, and
+    # latest.json says which file/sha256 it is.
     if command -v mc >/dev/null 2>&1; then
-        log_info "Querying R2 via MinIO client (mc)..."
-        TARGET_BACKUP_FILE=$(mc ls "r2/${BACKUP_BUCKET_PATH}/" | awk '{print $NF}' | grep '^duka_backup_.*\.sql\.gz$' | sort | tail -n 1)
-        
-        if [ -n "$TARGET_BACKUP_FILE" ]; then
-            log_info "Found latest backup file: ${TARGET_BACKUP_FILE}"
-            if mc cp "r2/${BACKUP_BUCKET_PATH}/${TARGET_BACKUP_FILE}" "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" 2>/dev/null; then
-                download_success=true
-            else
-                log_warning "mc download failed for ${TARGET_BACKUP_FILE}. Switching to Python fallback..."
-            fi
+        log_info "Downloading via MinIO client (mc)..."
+        REMOTE_INFO="$(mc cat "$R2/latest.json" 2>/dev/null || true)"
+        if mc cp "$R2/latest.sql.gz" "$RESTORE_FILE" >/dev/null 2>&1; then
+            download_success=true
         else
-            log_warning "No timestamped backup found, falling back to 'latest.sql.gz'..."
-            TARGET_BACKUP_FILE="latest.sql.gz"
-            if mc cp "r2/${BACKUP_BUCKET_PATH}/latest.sql.gz" "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" 2>/dev/null; then
-                download_success=true
-            fi
+            log_warning "mc download failed. Switching to Python fallback..."
         fi
     fi
 
-    # Try 2: Fallback to Python using the R2_* keys from the env file
+    # Try 2: Python (boto3) using the R2_* keys from the env file
     if [ "$download_success" = false ]; then
         if [ -z "${R2_ENDPOINT:-}" ] || [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
             log_warning "R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY are not set in $(basename "$ENV_FILE"); cannot use the Python R2 client."
         elif python3 -c "import boto3" 2>/dev/null; then
             log_info "Downloading via Python R2 client..."
-            TARGET_BACKUP_FILE=$(python3 -c "
-import os
-import boto3
+            R2_BUCKET_NAME="$BACKUP_BUCKET_PATH" R2_DEST="$RESTORE_FILE" python3 -c "
+import os, sys, boto3
 from botocore.config import Config
+s3 = boto3.client('s3', endpoint_url=os.environ['R2_ENDPOINT'],
+    aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],
+    aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY'],
+    config=Config(signature_version='s3v4'))
+bucket = os.environ['R2_BUCKET_NAME']
 try:
-    s3 = boto3.client(
-        's3',
-        endpoint_url=os.environ['R2_ENDPOINT'],
-        aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],
-        aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY'],
-        config=Config(signature_version='s3v4')
-    )
-    response = s3.list_objects_v2(Bucket='${BACKUP_BUCKET_PATH}')
-    files = [obj['Key'] for obj in response.get('Contents', []) if obj['Key'].startswith('duka_backup_')]
-    if files:
-        print(sorted(files)[-1])
-    else:
-        print('latest.sql.gz')
+    s3.download_file(bucket, 'latest.sql.gz', os.environ['R2_DEST'])
 except Exception as e:
-    print('latest.sql.gz')
-")
-            
-            [ -z "$TARGET_BACKUP_FILE" ] && TARGET_BACKUP_FILE="latest.sql.gz"
-
-            python3 -c "
-import os
-import boto3
-from botocore.config import Config
+    print(f'Python R2 error: {e}'); sys.exit(1)
 try:
-    s3 = boto3.client(
-        's3',
-        endpoint_url=os.environ['R2_ENDPOINT'],
-        aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],
-        aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY'],
-        config=Config(signature_version='s3v4')
-    )
-    s3.download_file('${BACKUP_BUCKET_PATH}', '${TARGET_BACKUP_FILE}', '$PROJECT_ROOT/storage/app/backups/latest.sql.gz')
-    exit(0)
-except Exception as e:
-    print(f'Python R2 error: {e}')
-    exit(1)
+    print(s3.get_object(Bucket=bucket, Key='latest.json')['Body'].read().decode(), file=open(os.environ['R2_DEST'] + '.json', 'w'))
+except Exception:
+    pass
 " && download_success=true
+            [ -f "$RESTORE_FILE.json" ] && REMOTE_INFO="$(cat "$RESTORE_FILE.json")" && rm -f "$RESTORE_FILE.json"
         else
             log_warning "Python boto3 library not found."
         fi
     fi
 
-    # Restore if any download method succeeded
-    if [ "$download_success" = true ]; then
-        # Export this globally so the final summary box can access it
-        export RESTORED_BACKUP_NAME="$TARGET_BACKUP_FILE"
-
-        # Empty the database first. A dump only drops and recreates the tables
-        # it contains, so tables created by migrations newer than the backup
-        # survive the restore while the `migrations` table is rolled back —
-        # and the next `migrate` dies on "table already exists".
-        log_info "Clearing database '${DB_DATABASE}' before restore..."
-        existing_tables=$(docker exec "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" -N -B -e \
-            "SET SESSION group_concat_max_len = 1000000; SELECT GROUP_CONCAT(CONCAT('\`', table_name, '\`')) FROM information_schema.tables WHERE table_schema = '${DB_DATABASE}' AND table_type = 'BASE TABLE'" 2>/dev/null)
-        if [ -n "$existing_tables" ] && [ "$existing_tables" != "NULL" ]; then
-            if ! docker exec "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}" -e \
-                "SET FOREIGN_KEY_CHECKS=0; DROP TABLE IF EXISTS ${existing_tables}; SET FOREIGN_KEY_CHECKS=1;" 2>/dev/null; then
-                log_error "Could not clear database '${DB_DATABASE}' before restore."
-                exit 1
-            fi
-        fi
-
-        log_info "Restoring backup file '${RESTORED_BACKUP_NAME}' into database container ($DB_CONTAINER)..."
-
-        if gunzip -c "$PROJECT_ROOT/storage/app/backups/latest.sql.gz" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
-            log_success "Database successfully restored from R2 backup (${RESTORED_BACKUP_NAME})!"
-        else
-            log_error "Failed to restore database from backup file: ${RESTORED_BACKUP_NAME}."
-            exit 1
-        fi
-    else
-        log_error "All R2 download methods failed. Aborting deployment."
+    if [ "$download_success" != true ]; then
+        log_error "All R2 download methods failed. Aborting deployment (database untouched)."
         exit 1
     fi
+
+    # Verify before touching the live database
+    if ! gzip -t "$RESTORE_FILE" 2>/dev/null; then
+        log_error "Downloaded backup is not valid gzip. Aborting (database untouched)."
+        exit 1
+    fi
+    FILE_SHA="$(file_sha "$RESTORE_FILE")"
+    REMOTE_SHA="$(json_get "$REMOTE_INFO" sha256)"
+    if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$FILE_SHA" ]; then
+        log_error "Backup checksum does not match latest.json (got ${FILE_SHA:0:12}, expected ${REMOTE_SHA:0:12}). Aborting (database untouched)."
+        exit 1
+    fi
+    [ -z "$REMOTE_SHA" ] && log_warning "No latest.json next to latest.sql.gz (older backup format): checksum not verified."
+    export RESTORED_BACKUP_NAME="$(json_get "$REMOTE_INFO" file)"
+    RESTORED_BACKUP_NAME="${RESTORED_BACKUP_NAME:-latest.sql.gz}"
+    log_info "Backup: ${RESTORED_BACKUP_NAME} (sha256 ${FILE_SHA:0:12}...), made by '$(json_get "$REMOTE_INFO" node)' at $(json_get "$REMOTE_INFO" time)"
+
+    existing_tables=$(docker exec "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" -N -B -e \
+        "SET SESSION group_concat_max_len = 1000000; SELECT GROUP_CONCAT(CONCAT('\`', table_name, '\`')) FROM information_schema.tables WHERE table_schema = '${DB_DATABASE}' AND table_type = 'BASE TABLE'" 2>/dev/null)
+    if [ $? -ne 0 ]; then
+        log_error "Cannot read the live database in container '$DB_CONTAINER'. Refusing to restore over something I cannot inspect."
+        exit 1
+    fi
+
+    # Safety net: dump the live database before it is wiped, and refuse to
+    # continue if that dump fails.
+    if [ -n "$existing_tables" ] && [ "$existing_tables" != "NULL" ]; then
+        SAFETY_DUMP="$SCRIPT_DIR/backups/pre-restore_$(utc_stamp).sql.gz"
+        mkdir -p "$SCRIPT_DIR/backups"
+        log_info "Saving a safety dump of the live database first..."
+        if ! db_dump "$SAFETY_DUMP"; then
+            rm -f "$SAFETY_DUMP"
+            log_error "Could not take a safety dump of the live database. Refusing to wipe it."
+            exit 1
+        fi
+        log_success "Safety dump saved: ${SAFETY_DUMP} (undo = restore this file)"
+        ls -1t "$SCRIPT_DIR"/backups/pre-restore_*.sql.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+    fi
+
+    # Empty the database first. A dump only drops and recreates the tables it
+    # contains, so tables created by migrations newer than the backup survive
+    # the restore while the `migrations` table is rolled back, and the next
+    # `migrate` dies on "table already exists".
+    log_info "Clearing database '${DB_DATABASE}' before restore..."
+    if [ -n "$existing_tables" ] && [ "$existing_tables" != "NULL" ]; then
+        if ! docker exec "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}" -e \
+            "SET FOREIGN_KEY_CHECKS=0; DROP TABLE IF EXISTS ${existing_tables}; SET FOREIGN_KEY_CHECKS=1;" 2>/dev/null; then
+            log_error "Could not clear database '${DB_DATABASE}' before restore."
+            exit 1
+        fi
+    fi
+
+    log_info "Restoring '${RESTORED_BACKUP_NAME}' into database container ($DB_CONTAINER)..."
+    if gunzip -c "$RESTORE_FILE" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
+        state_set last_sha "$FILE_SHA"
+        log_success "Database restored from R2 (${RESTORED_BACKUP_NAME}). This node now descends from that backup."
+    else
+        log_error "Failed to restore database from '${RESTORED_BACKUP_NAME}'."
+        [ -n "${SAFETY_DUMP:-}" ] && log_error "The previous live database is in ${SAFETY_DUMP}"
+        exit 1
+    fi
+else
+    log_info "Keeping the live database (no restore). Use --restore-db to load the newest R2 backup."
 fi
 
 log_step "${ICON_DB} Running database migration..."

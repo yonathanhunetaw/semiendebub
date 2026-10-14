@@ -39,6 +39,8 @@ print_usage() {
     echo "  -c, --clean                Tear down volumes before deploying"
     echo "  -l, --logs                 Follow container logs after deployment"
     echo "  -y, --yes                  Skip the \"Continue with deployment?\" prompt"
+    echo "      --restore-db           Replace the database with the newest R2 backup (takes a safety dump first)."
+    echo "                             Without it the live database is always kept."
     echo "  --no-cache                 Build images without Docker layer cache"
     echo "  --no-reset                 Pass --no-reset flag through to deploy.sh"
     echo ""
@@ -61,6 +63,7 @@ CLEAN_VOLUMES=0
 FOLLOW_LOGS=0
 NO_CACHE=0
 ASSUME_YES=0
+RESTORE_DB=0
 PASSTHROUGH_FLAGS=()
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
@@ -86,6 +89,10 @@ while [[ $# -gt 0 ]]; do
             NO_CACHE=1; shift ;;
         -y|--yes)
             ASSUME_YES=1; shift ;;
+        --restore-db)
+            RESTORE_DB=1
+            PASSTHROUGH_FLAGS+=("$1")
+            shift ;;
         --no-reset|--skip-reset|--no-seed)
             PASSTHROUGH_FLAGS+=("$1"); shift ;;
         # Legacy long flags for backwards compatibility
@@ -187,6 +194,7 @@ echo -e "Env File:         ${YELLOW}${ENV_FILE}${NC}"
 echo -e "App Container:    ${YELLOW}${APP_CONTAINER}${NC}"
 echo -e "Force Build:      ${YELLOW}$FORCE_BUILD${NC}"
 echo -e "Reset Database:   ${YELLOW}$RESET_DB${NC}"
+echo -e "Restore from R2:  ${YELLOW}$RESTORE_DB${NC}"
 echo -e "Observability:    ${YELLOW}$OBSERVABILITY${NC}"
 echo -e "Clean Volumes:    ${YELLOW}$CLEAN_VOLUMES${NC}"
 echo -e "No Cache:         ${YELLOW}$NO_CACHE${NC}"

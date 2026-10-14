@@ -48,3 +48,4 @@ graphify-out/
 
 # Deployment logs written by deploy/deploy.sh
 /deploy/logs/
+/deploy/backups/
