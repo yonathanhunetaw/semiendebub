@@ -96,11 +96,22 @@ EOS
 
 # db_dump <out.gz>: consistent, deterministic dump (same data => same bytes).
 # Fails if ANY stage fails (docker, mysqldump, gzip) or if the result has no
-# table definitions: an empty gzip must never pass for a backup.
+# table definitions: an empty gzip must never pass for a backup. On failure the
+# real error text is printed to stderr.
+# NB: count matches instead of `grep -q` in a pipe. grep -q exits at the first
+# match, gzip then dies of SIGPIPE, and under `set -o pipefail` that reads as a
+# failed dump for any dump bigger than the pipe buffer.
 db_dump() {
-    local out="$1"
-    ( set -o pipefail; _db_dump_stream | gzip -n > "$out" ) || return 1
-    [ -s "$out" ] && gzip -t "$out" && gzip -dc "$out" | grep -q 'CREATE TABLE'
+    local out="$1" err="$1.err"
+    if ! ( set -o pipefail; _db_dump_stream 2>"$err" | gzip -n > "$out" ); then
+        echo "dump command failed: $(tail -n 5 "$err" 2>/dev/null | tr '\n' ' ')" >&2
+        rm -f "$err"; return 1
+    fi
+    rm -f "$err"
+    [ -s "$out" ] && gzip -t "$out" || { echo "dump file is empty or not valid gzip" >&2; return 1; }
+    if [ "$(gzip -dc "$out" | grep -c 'CREATE TABLE')" -eq 0 ]; then
+        echo "dump contains no tables: refusing to use it" >&2; return 1
+    fi
 }
 
 r2_latest_info() { "$MC" cat "$R2/latest.json" 2>/dev/null || true; }
