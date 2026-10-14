@@ -39,8 +39,12 @@ test('a walk-in pays cash, the manager confirms it, a stock keeper hands it over
     });
 
     await test.step('nothing can be picked before the manager confirms the cash', async () => {
+        // Pick & pack redirects to the orders list; an unpaid order stays under To pay.
         await seller.goto(app('seller', `/orders/${reference}/pick-pack`));
-        await expect(seller.getByText('Not paid yet: do not pick this order.')).toBeVisible();
+        const card = seller.getByRole('link', { name: new RegExp(reference) }).locator('xpath=ancestor::*[.//a[contains(@href, "/pay")]][1]');
+        await expect(card).toContainText('To pay');
+        await expect(card.getByRole('link', { name: 'Pay now' })).toBeVisible();
+        await expect(card.getByRole('button', { name: 'Start' })).toHaveCount(0);
     });
 
     const manager = await signIn(browser, 'seller', fixture.manager.email);

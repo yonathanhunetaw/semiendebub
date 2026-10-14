@@ -1,62 +1,116 @@
-# Duka: short commands for the scripts in deploy/.   Run `make` to list them.
-# Extra flags go in ARGS, e.g.  make prod ARGS="--observability"
+# Duka: every day-to-day command in one place.   Run `make` (or `make help`) for the menu.
+#
+# How this file works
+#   - A line  `target: ## text`   is a command; `text` is what `make help` shows.
+#   - A line  `##@ TITLE`         starts a group in the menu.
+#   - A line  `#@ NAME | text`    documents a deploy option (a VARIABLE you add to the command).
+#   - A line  `#> text`           is an example in the menu.
+#   - Options are plain variables:  make prod FORCE_BUILD=1 YES=1
+#     Unset (or empty) means off. Anything else you need goes in ARGS="...".
+#   - The real work is done by the scripts in deploy/ and docker/; this file only
+#     turns the options below into their flags.
 
 .DEFAULT_GOAL := help
 ARGS ?=
 
-.PHONY: help setup dev stop status test e2e e2e-ui artisan deploy-dev prod restore prod-stop prod-status backup sync logs
+.PHONY: help setup dev stop status test e2e e2e-ui artisan deploy-dev prod restore prod-stop prod-status logs backup sync
 
-help: ## List commands
-	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
+# --- Deploy options -> flags of deploy/deploy-with-options.sh ---------------------------------
+DEPLOY_FLAGS = $(if $(FORCE_BUILD),-f) $(if $(NO_CACHE),--no-cache) $(if $(OBSERVABILITY),-o) \
+               $(if $(RESET_DB),-r) $(if $(CLEAN),-c) $(if $(RESTORE_DB),--restore-db) \
+               $(if $(FOLLOW_LOGS),-l) $(if $(YES),-y)
 
-# --- Local development (native, no Docker) ---------------------------------
-setup: ## One-time native dev setup (php, MySQL, deps)
+# A typo here must not be able to wipe production: these two need CONFIRM_WIPE=yes on prod.
+define GUARD_PROD_WIPE
+	@if { [ -n "$(RESET_DB)" ] || [ -n "$(CLEAN)" ]; } && [ "$(CONFIRM_WIPE)" != "yes" ]; then \
+	  echo "Refusing: RESET_DB / CLEAN would WIPE the production database."; \
+	  echo "If you really mean it, add CONFIRM_WIPE=yes (and take a backup first: make backup)."; exit 1; fi
+endef
+
+##@ HELP
+help: ## Show this menu
+	@C=""; B=""; D=""; R=""; if [ -t 1 ]; then C="$$(printf '\033[36m')"; B="$$(printf '\033[1m')"; D="$$(printf '\033[2m')"; R="$$(printf '\033[0m')"; fi; \
+	printf '%sDuka: make commands%s   %s(make <command>; options as VARIABLE=1; anything else via ARGS="...")%s\n\n' "$$B" "$$R" "$$D" "$$R"; \
+	awk -v c="$$C" -v b="$$B" -v r="$$R" ' \
+	  /^##@ / { t = substr($$0, 5); if (t != "HELP") printf "\n%s%s%s\n", b, t, r; next } \
+	  /^[a-zA-Z0-9_-]+:.*## / { split($$0, a, ":.*## "); printf "  %smake %-14s%s %s\n", c, a[1], r, a[2]; next } \
+	  /^#@ / { split(substr($$0, 4), a, " \\| "); printf "  %s%-18s%s %s\n", c, a[1], r, a[2]; next } \
+	  /^#> / { printf "  %s\n", substr($$0, 4) }' $(MAKEFILE_LIST)
+	@echo
+
+##@ LOCAL DEVELOPMENT  (native on this Mac, no Docker)
+setup: ## One-time setup: PHP, MySQL, a dev database and the dependencies
 	./deploy/dev.sh setup
 
-dev: ## Start MySQL + app + queue + Vite (Ctrl-C stops)
+dev: ## Start MySQL, the app (:8095), the queue and Vite (:5177). Ctrl-C stops them
 	./deploy/dev.sh up
 
-stop: ## Stop the local MySQL service
+stop: ## Stop the local MySQL service (frees RAM)
 	./deploy/dev.sh stop
 
-status: ## Show what is running locally
+status: ## Is local MySQL / the app / the queue / Vite running?
 	./deploy/dev.sh status
 
-test: ## Run the PHP test suite natively (1G memory, no cached config)
+test: ## Run the PHP tests natively. Narrow it with ARGS="--filter SomeTest"
 	APP_CONFIG_CACHE=/nonexistent/config.php APP_ROUTES_CACHE=/nonexistent/routes.php \
 	APP_EVENTS_CACHE=/nonexistent/events.php php -d memory_limit=1G vendor/bin/phpunit --no-coverage $(ARGS)
 
-e2e: ## Playwright end-to-end (needs `make dev` running)
+e2e: ## Browser tests (Playwright) on a throwaway copy of the database. Needs `make dev` running
 	./deploy/dev.sh e2e $(ARGS)
 
-e2e-ui: ## Playwright in the interactive UI window (needs `make dev` running)
+e2e-ui: ## Same, in Playwright's interactive window
 	./deploy/dev.sh e2e --ui $(ARGS)
 
-artisan: ## Run artisan natively:  make artisan ARGS="migrate"
+artisan: ## Run artisan on the native database:  make artisan ARGS="migrate"
 	./deploy/dev.sh artisan $(ARGS)
 
-# --- Docker deploys --------------------------------------------------------
-deploy-dev: ## Deploy the Docker dev stack (testing Docker changes)
-	./deploy/deploy-with-options.sh -e dev $(ARGS)
+##@ DEPLOY  (Docker; the options below apply to all three)
+prod: ## Deploy production here: build, migrate, restart. Keeps the database. On the Mac it TAKES OVER from the live server
+	$(GUARD_PROD_WIPE)
+	DUKA_NO_BAR=$(NO_BAR) ./deploy/deploy-with-options.sh -e prod $(DEPLOY_FLAGS) $(ARGS)
 
-prod: ## Deploy production (after git pull)
-	./deploy/deploy-with-options.sh -e prod $(ARGS)
+restore: ## Deploy production AND replace the database with the newest R2 backup (takes a safety dump first)
+	$(GUARD_PROD_WIPE)
+	DUKA_NO_BAR=$(NO_BAR) ./deploy/deploy-with-options.sh -e prod --restore-db $(DEPLOY_FLAGS) $(ARGS)
 
-restore: ## Deploy prod AND replace the database with the newest R2 backup (safety dump first)
-	./deploy/deploy-with-options.sh -e prod --restore-db $(ARGS)
+deploy-dev: ## Deploy the Docker DEV stack (only to test Docker changes; everyday work is `make dev`)
+	DUKA_NO_BAR=$(NO_BAR) ./deploy/deploy-with-options.sh -e dev $(DEPLOY_FLAGS) $(ARGS)
 
-prod-stop: ## Stop prod on THIS node cleanly: last backup, hand the lease back, stop containers
+prod-stop: ## Stop production on THIS node cleanly: last backup, hand the lease back, stop the containers
 	./docker/backup-db.sh --release
 	docker compose --env-file .env.production -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down
 
-prod-status: ## What is happening across the servers: who is live, health, possible data loss, latest events
+##@ DEPLOY OPTIONS  (add to prod / restore / deploy-dev, e.g.  make prod FORCE_BUILD=1 YES=1)
+#@ FORCE_BUILD=1 | Rebuild the Docker images first (after changing a Dockerfile or system packages)
+#@ NO_CACHE=1 | Rebuild images ignoring Docker's layer cache (slow; fixes a stale layer)
+#@ OBSERVABILITY=1 | Also start the monitoring stack (Grafana LGTM + GlitchTip)
+#@ RESTORE_DB=1 | Replace the database with the newest R2 backup first (what `make restore` does)
+#@ FOLLOW_LOGS=1 | Keep following the app container's logs after the deploy
+#@ YES=1 | Do not ask "Continue with deployment?" (for scripts)
+#@ NO_BAR=1 | Plain output, no progress bar pinned to the bottom of the terminal
+#@ RESET_DB=1 | WIPE the database: fresh migrate + seed. On prod also needs CONFIRM_WIPE=yes
+#@ CLEAN=1 | Remove containers AND volumes first (deletes the DB data). On prod also needs CONFIRM_WIPE=yes
+#@ ARGS="..." | Any other flag, passed straight through to the script
+
+##@ WHAT IS HAPPENING
+prod-status: ## Who is live, each server's health, possible data loss, latest events. ARGS="-n 50" (more) or "--loss"
 	./docker/status.sh $(ARGS)
 
-backup: ## Run the backup script once, now (what cron runs every 5 min)
+logs: ## Follow the latest deploy log (deploy/logs/latest.log)
+	tail -f deploy/logs/latest.log
+
+##@ BACKUPS  (cron runs these for you; run by hand to check or to repair)
+backup: ## Back up the database to R2 now. ARGS="--adopt" (this DB is the truth), "--force" (take the lease), "--release"
 	./docker/backup-db.sh $(ARGS)
 
-sync: ## Run the standby sync once, now (what cron runs every minute)
+sync: ## Run the standby sync now: follow the newest backup, or catch up after a takeover
 	./docker/sync-db.sh $(ARGS)
 
-logs: ## Follow the latest deploy log
-	tail -f deploy/logs/latest.log
+##@ EXAMPLES
+#> make prod                                  deploy after git pull; the database is kept
+#> make prod FORCE_BUILD=1 YES=1              rebuild the images, no question asked
+#> make restore                               deploy and load the newest backup (a new or stale server)
+#> make prod OBSERVABILITY=1                  deploy with the monitoring stack
+#> make deploy-dev RESET_DB=1                 wipe and reseed the Docker DEV database
+#> make test ARGS="--filter SystemStatus"     run just the tests that match
+#> make prod-status ARGS="--loss"             only the possible-data-loss list
