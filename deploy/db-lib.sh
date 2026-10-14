@@ -165,3 +165,42 @@ r2_prune() {
     done
     return 0
 }
+
+# lock_acquire <name> / lock_release <name>: one backup/sync at a time per node.
+# A lock whose process is gone is treated as stale and replaced.
+lock_acquire() {
+    local d="$STATE_DIR/$1.lock" pid
+    if mkdir "$d" 2>/dev/null; then echo $$ > "$d/pid"; return 0; fi
+    pid="$(cat "$d/pid" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then return 1; fi
+    rm -rf "$d"
+    mkdir "$d" 2>/dev/null && echo $$ > "$d/pid"
+}
+lock_release() { rm -rf "$STATE_DIR/$1.lock"; }
+
+# db_restore_file <file.gz>: replace the database in $DB_CONTAINER with the dump.
+# Drops every table first (a dump only recreates the tables it contains, so
+# newer tables would survive and the next migrate would die on "already exists").
+db_restore_file() {
+    local f="$1"
+    ${DB_DOCKER:-docker} exec -i "$DB_CONTAINER" sh -s <<'EOS' || return 1
+set -e
+export MYSQL_PWD="$MYSQL_PASSWORD"
+t="$(mysql -u"$MYSQL_USER" -N -B -e "SET SESSION group_concat_max_len=1000000; SELECT GROUP_CONCAT(CONCAT(CHAR(96),table_name,CHAR(96))) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE'" "$MYSQL_DATABASE")"
+if [ -n "$t" ] && [ "$t" != "NULL" ]; then
+    mysql -u"$MYSQL_USER" -e "SET FOREIGN_KEY_CHECKS=0; DROP TABLE IF EXISTS $t; SET FOREIGN_KEY_CHECKS=1;" "$MYSQL_DATABASE"
+fi
+EOS
+    ( set -o pipefail
+      gzip -dc "$f" | ${DB_DOCKER:-docker} exec -i "$DB_CONTAINER" sh -c 'export MYSQL_PWD="$MYSQL_PASSWORD"; exec mysql -u"$MYSQL_USER" "$MYSQL_DATABASE"' )
+}
+
+# r2_fetch_latest <dest> <expected_sha>: download latest.sql.gz and verify it.
+# Returns 2 when the checksum differs (an upload is probably in progress; retry
+# later) and 1 on any other failure.
+r2_fetch_latest() {
+    local dest="$1" want="$2"
+    "$MC" cp "$R2/latest.sql.gz" "$dest" >/dev/null 2>&1 || return 1
+    gzip -t "$dest" 2>/dev/null || return 1
+    [ "$(file_sha "$dest")" = "$want" ] || return 2
+}

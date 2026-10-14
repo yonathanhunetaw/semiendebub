@@ -51,6 +51,11 @@ case "$NODE_ROLE" in
     *)      fail "unknown NODE_ROLE '$NODE_ROLE' (use primary, standby or viewer)" ;;
 esac
 
+# One backup/sync at a time: never upload while a restore is in progress.
+lock_acquire db || { log "a sync/restore is running: skipping this run"; exit 0; }
+TMP=""
+trap 'rm -f "${TMP:-}"; lock_release db' EXIT
+
 # --- rule 2: lease -----------------------------------------------------------
 read -r holder lease_ts <<< "$(lease_read)" || true
 holder="${holder:-}"; lease_ts="${lease_ts:-0}"
@@ -79,7 +84,6 @@ fi
 
 # --- dump --------------------------------------------------------------------
 TMP="$(mktemp "${TMPDIR:-/tmp}/duka_backup.XXXXXX")"
-trap 'rm -f "$TMP"' EXIT
 db_dump "$TMP" || fail "mysqldump/gzip failed (is container '$DB_CONTAINER' running?)"
 sha="$(file_sha "$TMP")"
 
