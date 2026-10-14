@@ -87,6 +87,7 @@ restore_latest() {
     log "restoring '$(json_get "$info" file)' made by '$(json_get "$info" node)' at $(json_get "$info" time)"
     db_restore_file "$TMP" || fail "restore failed; this node's last_sha is unchanged, so it will retry (database may be partly loaded)"
     state_set last_sha "$remote_sha"
+    heartbeat_write "$remote_sha"                    # report "in sync" now, not at the next run
     log "restored: now matches the newest backup (${remote_sha:0:12})"
     local from; from="$(json_get "$info" node)"
     if [ "$safety" = 1 ]; then
