@@ -1,17 +1,18 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
     addCustomer,
     addItems,
     confirmPayment,
     courierDelivery,
     customer,
+    deliver,
     openCheckout,
     payIntoAccount,
     pickAndPack,
     placeOrder,
     startCart,
-} from './flows';
-import { app, fixture, signIn } from './support';
+} from '../../lib/flows';
+import { app, fixture, signIn } from '../../lib/support';
 
 /**
  * The seller order pipeline end to end, for both customer types:
@@ -101,21 +102,3 @@ test('seller → payment → pick & pack → delivery, for an individual and a b
         }
     });
 });
-
-async function deliver(page: Page, reference: string): Promise<void> {
-    const card = () => page.locator('.MuiCard-root, .MuiPaper-root').filter({ hasText: reference }).last();
-
-    await page.goto(app('delivery', '/delivery'));
-
-    // The delivery app shows no flash; each move swaps the card's next button.
-    const steps: Array<[string, string | null]> = [['Collect', 'Start run'], ['Start run', 'Mark delivered'], ['Mark delivered', null]];
-    for (const [step, next] of steps) {
-        await card().getByRole('button', { name: step }).click();
-        if (next) {
-            await expect(card().getByRole('button', { name: next })).toBeVisible();
-        }
-    }
-
-    await page.goto(app('delivery', '/delivery?status=delivered'));
-    await expect(page.getByText(reference).first()).toBeVisible();
-}

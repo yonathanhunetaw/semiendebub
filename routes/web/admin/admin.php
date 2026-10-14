@@ -138,6 +138,9 @@ Route::domain("admin.{$baseDomain}")
             Route::get('/deliveries', [\App\Http\Controllers\Admin\DeliveryController::class, 'index'])->name('deliveries.index');
             Route::patch('/deliveries/{delivery}/courier', [\App\Http\Controllers\Admin\DeliveryController::class, 'assign'])->name('deliveries.assign');
             Route::get('/payments', [\App\Http\Controllers\Admin\PaymentController::class, 'index'])->name('payments.index');
+            // An admin as the second person on a payment part (PaymentService decides who may).
+            Route::post('/payments/{payment}/confirm', [\App\Http\Controllers\Admin\PaymentController::class, 'confirm'])->name('payments.confirm');
+            Route::post('/payments/{payment}/reject', [\App\Http\Controllers\Admin\PaymentController::class, 'reject'])->name('payments.reject');
             // The accounts customers pay into, per store, and who confirms each.
             Route::get('/payment-accounts', [\App\Http\Controllers\Admin\PaymentAccountController::class, 'index'])->name('payment-accounts.index');
             Route::post('/payment-accounts', [\App\Http\Controllers\Admin\PaymentAccountController::class, 'store'])->name('payment-accounts.store');

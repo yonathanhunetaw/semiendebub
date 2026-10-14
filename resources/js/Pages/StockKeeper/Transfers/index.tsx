@@ -123,6 +123,7 @@ export default function Transfers({ transfers = [], filters, counts, locations =
                                         <p className={`mt-2 flex items-center gap-1.5 text-[13px] ${t.courier ? "text-on-surface-variant" : "font-bold text-warning"}`}>
                                             <span className="material-symbols-outlined text-[18px]">delivery_truck_speed</span>
                                             {t.courier ? `Courier: ${t.courier}` : "Waiting for a courier to claim it"}
+                                            {t.handed_over_at && t.status === "in_transit" ? " · handed over: check it and receive it" : ""}
                                         </p>
                                     )}
                                     {t.notes && <p className="mt-2 rounded-[10px] bg-surface-container-low px-2.5 py-1.5 text-[13px] text-on-surface-variant">“{t.notes}”</p>}

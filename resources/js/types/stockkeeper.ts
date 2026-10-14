@@ -185,6 +185,8 @@ export interface TransferRow {
     initiated_by: string | null;
     notes: string | null;
     dispatched_at: string | null;
+    /** The courier handed it over; it lands when the keeper receives it. */
+    handed_over_at: string | null;
     completed_at: string | null;
     cancelled_at: string | null;
     created_at: string | null;

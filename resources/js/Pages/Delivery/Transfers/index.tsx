@@ -18,6 +18,8 @@ interface CourierTransfer {
     courier: string | null;
     courier_id: number | null;
     dispatched_at: string | null;
+    /** Set once the courier handed it over; it lands when the store receives it. */
+    handed_over_at: string | null;
     created_at: string | null;
 }
 
@@ -119,7 +121,9 @@ export default function DeliveryTransfersIndex({ transfers = [], tab = "all", co
                                         : mine
                                           ? t.status === "pending"
                                               ? "Yours — the origin hands it to you when they dispatch"
-                                              : "Yours — hand it to the destination"
+                                              : t.handed_over_at
+                                            ? "Handed over — the store checks and receives it"
+                                            : "Yours — hand it to the destination"
                                           : `Carried by ${t.courier}`}
                                 </p>
                                 {t.courier_id === null && t.status === "pending" ? (
@@ -131,7 +135,7 @@ export default function DeliveryTransfersIndex({ transfers = [], tab = "all", co
                                         Claim
                                     </button>
                                 ) : null}
-                                {mine && t.status === "in_transit" ? (
+                                {mine && t.status === "in_transit" && !t.handed_over_at ? (
                                     <button
                                         type="button"
                                         onClick={() => act("delivery.transfers.handover", t)}

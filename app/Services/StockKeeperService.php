@@ -458,11 +458,16 @@ class StockKeeperService
     /**
      * Variants a stock keeper can book in, as a searchable pick list.
      *
-     * @return Collection<int, array{id: int, label: string, sku: string|null}>
+     * Given a location, the list is what that location holds (every one of them, with
+     * how many), which is what a manifest or transfer out of it can carry. The label
+     * names the packaging and the SKU: two variants of one colour and size differ
+     * only by packaging, and the pickers filter on the label alone.
+     *
+     * @return Collection<int, array{id: int, label: string, sku: string|null, on_hand?: int}>
      */
-    public function variantOptions(?string $search = null, int $limit = 50): Collection
+    public function variantOptions(?string $search = null, int $limit = 50, ?int $atLocationId = null): Collection
     {
-        $query = ItemVariant::query()->with(['item', 'itemColor', 'itemSize']);
+        $query = ItemVariant::query()->with(['item', 'itemColor', 'itemSize', 'itemPackagingType'])->orderBy('id');
 
         if ($search !== null && $search !== '') {
             $term = '%' . $search . '%';
@@ -471,15 +476,32 @@ class StockKeeperService
                 ->orWhereHas('item', fn (Builder $iq) => $iq->where('product_name', 'LIKE', $term)));
         }
 
+        $onHand = collect();
+
+        if ($atLocationId !== null) {
+            $onHand = ItemStock::query()
+                ->where('stock_location_id', $atLocationId)
+                ->where('quantity', '>', 0)
+                ->groupBy('item_variant_id')
+                ->selectRaw('item_variant_id, SUM(quantity) AS quantity')
+                ->pluck('quantity', 'item_variant_id');
+            $query->whereIn('id', $onHand->keys());
+        } else {
+            $query->limit($limit);
+        }
+
         return $query
-            ->limit($limit)
             ->get()
-            ->map(fn (ItemVariant $variant) => [
+            ->map(fn (ItemVariant $variant) => array_filter([
                 'id' => (int) $variant->id,
-                'label' => ($variant->item?->product_name ?? 'Unknown')
-                    . ' — ' . $this->variantLabel($variant),
+                'label' => implode(' · ', array_filter([
+                    ($variant->item?->product_name ?? 'Unknown') . ' — ' . $this->variantLabel($variant),
+                    $variant->itemPackagingType?->name,
+                    $variant->sku,
+                ])),
                 'sku' => $variant->sku,
-            ])
+                'on_hand' => $atLocationId !== null ? (int) ($onHand[$variant->id] ?? 0) : null,
+            ], fn ($value, $key) => $key !== 'on_hand' || $value !== null, ARRAY_FILTER_USE_BOTH))
             ->values();
     }
 

@@ -1035,7 +1035,9 @@ class ShipmentWorkflowService
             'gate_pass' => $shipment->gate_pass,
             'notes' => $shipment->notes,
             'cancel_reason' => $shipment->cancel_reason,
-            'scheduled_for' => $shipment->scheduled_for?->toIso8601String(),
+            // The slots are wall-clock times as the creator typed them, with no zone. Sent with
+            // a zone (UTC) the browser shifts them by its offset; send them as the slots are.
+            'scheduled_for' => $shipment->scheduled_for?->format('Y-m-d\TH:i'),
             'picked_at' => $shipment->picked_at?->toIso8601String(),
             'dispatched_at' => $shipment->dispatched_at?->toIso8601String(),
             'in_transit_at' => $shipment->in_transit_at?->toIso8601String(),
@@ -1045,7 +1047,7 @@ class ShipmentWorkflowService
             'created_at' => $shipment->created_at?->toIso8601String(),
             'schedule_options' => $this->scheduleOptions($shipment),
             'agreements' => $this->presentAgreements($shipment),
-            'agreed_scheduled_for' => $shipment->agreed_scheduled_for?->toIso8601String(),
+            'agreed_scheduled_for' => $shipment->agreed_scheduled_for?->format('Y-m-d\TH:i'),
             'outstanding_parties' => $this->outstandingParties($shipment),
             'can_schedule' => $this->canSchedule($shipment),
             // Which parties the *viewer* may tick. Without this the detail
@@ -1507,6 +1509,16 @@ class ShipmentWorkflowService
                 }
             }
         }
+
+        // A dock seat is only for someone who may work that dock. Once a location has
+        // managers or staff, only they hand stock out of or take it into it
+        // (StockLocation::canBeOperatedBy), so anyone else agreeing for it would be
+        // refused later at the pick or the receipt.
+        $parties = array_filter($parties, fn (string $party): bool => match ($party) {
+            self::PARTY_ORIGIN => $this->originLeaf($shipment)->canBeOperatedBy($user),
+            self::PARTY_DESTINATION => $this->destinationLeaf($shipment)->canBeOperatedBy($user),
+            default => true,
+        });
 
         return array_values(array_unique($parties));
     }

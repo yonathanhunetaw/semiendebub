@@ -293,6 +293,40 @@ class PaymentConfirmationTest extends TestCase
     }
 
     #[Test]
+    public function a_store_admin_confirms_a_managers_own_cash_from_the_admin_app(): void
+    {
+        // A one-manager store: the only other person who may confirm is an admin, and
+        // admins work in the admin app.
+        $manager = $this->manager();
+        $this->seller = $manager;
+        $this->place(1, [['amount' => 250]]);
+        $cash = Payment::query()->sole();
+
+        $admin = $this->admin($this->store->id);
+        $this->asAdmin($admin)->get(route('admin.payments.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('to_confirm', 1)->where('to_confirm.0.id', $cash->id));
+
+        $this->asAdmin($admin)->post(route('admin.payments.confirm', $cash))->assertSessionHas('success');
+        $this->assertSame(Payment::STATUS_CONFIRMED, $cash->fresh()->status);
+        $this->assertSame($admin->id, (int) $cash->fresh()->confirmed_by);
+    }
+
+    #[Test]
+    public function an_admin_of_another_store_neither_sees_nor_confirms_it(): void
+    {
+        $this->seller = $this->manager();
+        $this->place(1, [['amount' => 250]]);
+        $cash = Payment::query()->sole();
+
+        $elsewhere = $this->admin(Store::factory()->create(['type' => Store::TYPE_RETAIL, 'status' => 'active'])->id);
+        $this->asAdmin($elsewhere)->get(route('admin.payments.index'))
+            ->assertInertia(fn ($page) => $page->has('to_confirm', 0));
+        $this->asAdmin($elsewhere)->post(route('admin.payments.confirm', $cash))->assertForbidden();
+        $this->assertSame(Payment::STATUS_CLAIMED, $cash->fresh()->status);
+    }
+
+    #[Test]
     public function the_bell_lists_what_the_user_has_to_confirm(): void
     {
         $this->place(1, [['amount' => 250]]);
@@ -483,6 +517,23 @@ class PaymentConfirmationTest extends TestCase
     {
         $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
         $this->actingAs($this->owner, 'web');
+
+        return $this;
+    }
+
+    private function admin(?int $storeId): User
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+        $user = User::factory()->create(['role' => 'admin', 'store_id' => $storeId]);
+        $user->assignRole('admin');
+
+        return $user->refresh();
+    }
+
+    private function asAdmin(User $user): self
+    {
+        $this->withServerVariables(['HTTP_HOST' => 'admin.'.config('app.system_domain')]);
+        $this->actingAs($user, 'web');
 
         return $this;
     }

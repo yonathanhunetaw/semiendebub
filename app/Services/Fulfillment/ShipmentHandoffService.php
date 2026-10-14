@@ -223,7 +223,8 @@ class ShipmentHandoffService
                 'bay' => $shipment->slot,
             ],
             'times' => [
-                'scheduled_for' => $at($shipment->agreed_scheduled_for ?? $shipment->scheduled_for),
+                // A wall-clock slot, not an instant: no zone, or the browser shifts it.
+                'scheduled_for' => ($shipment->agreed_scheduled_for ?? $shipment->scheduled_for)?->format('Y-m-d\TH:i'),
                 'picking_started' => $at($shipment->picked_at),
                 'prepared' => $at($shipment->prepared_at),
                 'courier_started' => $at($shipment->courier_started_at),

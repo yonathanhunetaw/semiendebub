@@ -127,7 +127,8 @@ class ShipmentController extends Controller implements HasMiddleware
     {
         return Inertia::render('Admin/Inventory/Shipments/Show', [
             'shipment' => $this->workflow->present($shipment, 'admin'),
-            'variants' => $this->stock->variantOptions()->all(),
+            // What the origin holds: that is all a manifest from it can carry.
+            'variants' => $this->stock->variantOptions(atLocationId: $this->workflow->originLeaf($shipment)->id)->all(),
             'vehicle_options' => $this->workflow->vehicleOptions($shipment),
             'courier_options' => $this->workflow->courierOptions(driversOnly: true),
         ]);

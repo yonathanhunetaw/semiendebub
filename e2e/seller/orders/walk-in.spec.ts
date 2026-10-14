@@ -10,8 +10,8 @@ import {
     pickAndPack,
     placeOrder,
     startCart,
-} from './flows';
-import { app, fixture, signIn } from './support';
+} from '../../lib/flows';
+import { app, fixture, signIn } from '../../lib/support';
 
 /**
  * In-store sales: the customer takes the goods at the counter, so Pick &

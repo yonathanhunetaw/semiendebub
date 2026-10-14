@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Head, Link, usePage } from "@inertiajs/react";
-import { Box, Button, Chip, IconButton, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, CircularProgress, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import ArrowForwardRounded from "@mui/icons-material/ArrowForwardRounded";
 import CheckRounded from "@mui/icons-material/CheckRounded";
@@ -18,6 +18,11 @@ import { identityFor } from "@/Components/Visual/identities";
 import { arrive, motionSafe } from "@/Components/Visual/motion";
 import GuideStage from "@/Components/Guide/GuideStage";
 import { CHAPTERS, DEFAULT_CHAPTER, type GuideApp, type GuideLink } from "@/Components/Guide/chapters";
+
+// Three.js only downloads when someone opens the world.
+const DukaWorld = lazy(() => import("@/Components/Guide/world/DukaWorld"));
+
+type GuideView = "story" | "world";
 
 /**
  * The guide: every way of working in Duka, told step by step by the person
@@ -63,6 +68,9 @@ export default function GuideIndex({ app, chapter, step }: Props) {
     const current = CHAPTERS.find((c) => c.key === chapterKey) ?? CHAPTERS[0];
     const [index, setIndex] = useState(() => Math.max(0, initialChapter.steps.findIndex((s) => s.key === step)));
     const [playing, setPlaying] = useState(!step);
+    const [view, setView] = useState<GuideView>(() =>
+        typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view") === "world" ? "world" : "story",
+    );
 
     const active = current.steps[Math.min(index, current.steps.length - 1)];
     const narrator = active.who[0] ?? current.narrator;
@@ -85,6 +93,13 @@ export default function GuideIndex({ app, chapter, step }: Props) {
         window.history.replaceState(window.history.state, "", url.toString());
     }, [current.key, active.key]);
 
+    useEffect(() => {
+        const url = new URL(window.location.href);
+        if (view === "world") url.searchParams.set("view", "world");
+        else url.searchParams.delete("view");
+        window.history.replaceState(window.history.state, "", url.toString());
+    }, [view]);
+
     const choose = (stepIndex: number) => {
         setPlaying(false);
         setIndex(stepIndex);
@@ -93,6 +108,11 @@ export default function GuideIndex({ app, chapter, step }: Props) {
         setChapterKey(key);
         setIndex(0);
         setPlaying(true);
+    };
+    const openChapterFromWorld = (key: string) => {
+        chooseChapter(key);
+        setView("story");
+        window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
     const grouped = useMemo(() => {
@@ -110,10 +130,29 @@ export default function GuideIndex({ app, chapter, step }: Props) {
         <Box sx={{ maxWidth: 1200, mx: "auto", px: { xs: app === "admin" ? 0 : 1.5, sm: 0 }, py: { xs: app === "admin" ? 0 : 2, sm: 0 }, display: "flex", flexDirection: "column", gap: { xs: 2, sm: 3 }, ...motionSafe }}>
             <Head title="Guide" />
 
-            <Box>
-                <Typography sx={{ fontSize: { xs: "1.5rem", sm: "1.9rem" }, fontWeight: 900 }}>How Duka works</Typography>
-                <Typography color="text.secondary">Pick a way of working. Each step is told by the person who does it; press the button to go and do it.</Typography>
-            </Box>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ sm: "flex-end" }}>
+                <Box>
+                    <Typography sx={{ fontSize: { xs: "1.5rem", sm: "1.9rem" }, fontWeight: 900 }}>How Duka works</Typography>
+                    <Typography color="text.secondary">
+                        {view === "story"
+                            ? "Pick a way of working. Each step is told by the person who does it; press the button to go and do it."
+                            : "The whole business as one small world: every place, who works there, and what travels between them."}
+                    </Typography>
+                </Box>
+                <ToggleButtonGroup exclusive size="small" value={view} onChange={(_, next: GuideView | null) => next && setView(next)} aria-label="Guide view"
+                    sx={{ flexShrink: 0, "& .MuiToggleButton-root": { px: 2, fontWeight: 800, borderRadius: 999, textTransform: "none" } }}>
+                    <ToggleButton value="story">Story</ToggleButton>
+                    <ToggleButton value="world">World</ToggleButton>
+                </ToggleButtonGroup>
+            </Stack>
+
+            {view === "world" && (
+                <Suspense fallback={<Box sx={{ height: { xs: 520, md: 640 }, display: "grid", placeItems: "center" }}><CircularProgress /></Box>}>
+                    <DukaWorld onOpenChapter={openChapterFromWorld} />
+                </Suspense>
+            )}
+
+            {view === "story" && (<>
 
             {/* Chapters */}
             <Box sx={{ display: "flex", gap: 1.25, overflowX: "auto", pb: 0.5, mx: { xs: -1.5, sm: 0 }, px: { xs: 1.5, sm: 0 }, "&::-webkit-scrollbar": { display: "none" } }}>
@@ -217,6 +256,7 @@ export default function GuideIndex({ app, chapter, step }: Props) {
                     </Box>
                 ))}
             </Paper>
+            </>)}
         </Box>
     );
 }

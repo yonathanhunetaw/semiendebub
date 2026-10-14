@@ -230,7 +230,9 @@ class SellerOrderService
                 ->each(fn (int $id) => $this->stock->release($id, ['reason' => 'Order cancelled', 'user_id' => $by->id]));
 
             $this->payments->voidOpen($sale);
-            $sale->update(['fulfillment_stage' => Sale::STAGE_CANCELLED, 'status' => 'cancelled']);
+            // sales.status is a MySQL enum spelt 'canceled' (one l); 'cancelled' fails the
+            // update there, though SQLite (the PHP tests) accepts it.
+            $sale->update(['fulfillment_stage' => Sale::STAGE_CANCELLED, 'status' => 'canceled']);
             $sale->delivery?->update(['status' => 'failed', 'failure_reason' => 'Order cancelled', 'failed_at' => now()]);
 
             return $sale->refresh();

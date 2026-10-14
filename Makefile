@@ -56,10 +56,10 @@ test: ## Run the PHP tests natively. Narrow it with ARGS="--filter SomeTest"
 	APP_EVENTS_CACHE=/nonexistent/events.php php -d memory_limit=1G vendor/bin/phpunit --no-coverage $(ARGS)
 
 e2e: ## Browser tests (Playwright) on a throwaway copy of the database. Needs `make dev` running
-	./deploy/dev.sh e2e $(ARGS)
+	./deploy/dev.sh e2e $(if $(T),e2e/$(T)) $(ARGS)
 
 e2e-ui: ## Same, in Playwright's interactive window
-	./deploy/dev.sh e2e --ui $(ARGS)
+	./deploy/dev.sh e2e --ui $(if $(T),e2e/$(T)) $(ARGS)
 
 artisan: ## Run artisan on the native database:  make artisan ARGS="migrate"
 	./deploy/dev.sh artisan $(ARGS)
@@ -91,6 +91,7 @@ prod-stop: ## Stop production on THIS node cleanly: last backup, hand the lease 
 #@ RESET_DB=1 | WIPE the database: fresh migrate + seed. On prod also needs CONFIRM_WIPE=yes
 #@ CLEAN=1 | Remove containers AND volumes first (deletes the DB data). On prod also needs CONFIRM_WIPE=yes
 #@ ARGS="..." | Any other flag, passed straight through to the script
+#@ T=seller/checkout | e2e / e2e-ui: only the browser tests in that folder of e2e/ (see e2e/README.md)
 
 ##@ WHAT IS HAPPENING
 prod-status: ## Who is live, each server's health, possible data loss, latest events. ARGS="-n 50" (more) or "--loss"
@@ -113,4 +114,6 @@ sync: ## Run the standby sync now: follow the newest backup, or catch up after a
 #> make prod OBSERVABILITY=1                  deploy with the monitoring stack
 #> make deploy-dev RESET_DB=1                 wipe and reseed the Docker DEV database
 #> make test ARGS="--filter SystemStatus"     run just the tests that match
+#> make e2e T=seller                          only the seller browser tests
+#> make e2e-ui T=seller/payments              one module, in Playwright's window
 #> make prod-status ARGS="--loss"             only the possible-data-loss list

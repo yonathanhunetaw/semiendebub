@@ -79,10 +79,12 @@ class TransferController extends Controller
             return back()->with('error', 'That transfer is not yours to hand over.');
         }
 
-        if (! $this->workflow->markCompleted($transfer, Auth::user())) {
+        // Handing over is not receiving: the stock lands when the destination's
+        // keeper receives it and counts it.
+        if (! $this->workflow->markHandedOver($transfer, Auth::user())) {
             return back()->with('error', 'Only a transfer you have collected can be handed over.');
         }
 
-        return back()->with('success', "{$transfer->reference} handed over.");
+        return back()->with('success', "{$transfer->reference} handed over. The store receives it next.");
     }
 }

@@ -125,6 +125,27 @@ class DeliveryAppTest extends TestCase
     }
 
     #[Test]
+    public function a_failed_run_stays_in_the_couriers_open_list_until_retried_or_returned(): void
+    {
+        $run = $this->claimed();
+        $this->patch(route('delivery.delivery.transition', $run), ['status' => 'dispatched'])->assertSessionHas('success');
+        $this->patch(route('delivery.delivery.transition', $run), ['status' => 'failed', 'failure_reason' => 'Nobody home'])->assertSessionHas('success');
+
+        // The goods are still in the courier's hands, so the run is still their work.
+        $this->get(route('delivery.delivery.index'))
+            ->assertInertia(fn ($page) => $page->where('pagination.total', 1)->where('metrics.open', 1));
+        $this->get(route('delivery.delivery.index', ['status' => 'failed']))
+            ->assertInertia(fn ($page) => $page->where('pagination.total', 1));
+
+        $this->patch(route('delivery.delivery.transition', $run), ['status' => 'returned'])->assertSessionHas('success');
+        $this->get(route('delivery.delivery.index'))
+            ->assertInertia(fn ($page) => $page->where('pagination.total', 0));
+
+        // Returned closes the order as cancelled, its status too, so it stops counting as a sale.
+        $this->assertSame(['cancelled', 'canceled'], [$run->sale->fresh()->fulfillment_stage, $run->sale->fresh()->status]);
+    }
+
+    #[Test]
     public function a_courier_claims_a_picked_run_but_not_one_still_being_picked(): void
     {
         $early = $this->order(picked: false);
@@ -279,7 +300,7 @@ class DeliveryAppTest extends TestCase
     }
 
     #[Test]
-    public function a_courier_hands_over_only_a_transfer_they_collected_and_it_lands(): void
+    public function a_courier_hands_over_only_a_transfer_they_collected_and_it_lands_when_the_store_receives_it(): void
     {
         $transfer = $this->transfer();
         $floor = StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_BACKROOM)->sole();
@@ -292,11 +313,41 @@ class DeliveryAppTest extends TestCase
         $this->post(route('delivery.transfers.handover', $transfer))->assertSessionHas('error');
         $this->assertSame('pending', $transfer->fresh()->status);
 
-        app(\App\Services\TransferWorkflowService::class)->markDispatched($transfer->fresh());
+        $workflow = app(\App\Services\TransferWorkflowService::class);
+        $workflow->markDispatched($transfer->fresh());
         $this->post(route('delivery.transfers.handover', $transfer))->assertSessionHas('success');
 
+        // Handed over, not received: it is still the courier's until the store counts it in.
+        $floorStock = fn (): int => (int) \App\Models\StockKeeper\ItemStock::query()->where('stock_location_id', $floor->id)->sum('quantity');
+        $this->assertSame('in_transit', $transfer->fresh()->status);
+        $this->assertNotNull($transfer->fresh()->handed_over_at);
+        $this->assertSame(0, $floorStock());
+        // Handing over twice does nothing more.
+        $this->post(route('delivery.transfers.handover', $transfer))->assertSessionHas('error');
+
+        // The floor's own keeper receives it; the courier cannot.
+        $receiver = $this->user('stock_keeper', $this->store->id);
+        $this->expectsNoReceiptBy($workflow, $transfer, $this->courier, $receiver);
+
+        $this->assertTrue($workflow->markCompleted($transfer->fresh(), $receiver));
         $this->assertSame('completed', $transfer->fresh()->status);
-        $this->assertSame(8, (int) \App\Models\StockKeeper\ItemStock::query()->where('stock_location_id', $floor->id)->sum('quantity'));
+        $this->assertSame(8, $floorStock());
+    }
+
+    private function expectsNoReceiptBy(\App\Services\TransferWorkflowService $workflow, Transfer $transfer, User $who, User $floorKeeper): void
+    {
+        // Staff the floor, so only its people may take stock in.
+        \App\Models\Inventory\LocationStaff::query()->firstOrCreate([
+            'stock_location_id' => StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_BACKROOM)->sole()->id,
+            'user_id' => $floorKeeper->id,
+        ]);
+
+        try {
+            $workflow->markCompleted($transfer->fresh(), $who);
+            $this->fail('A courier must not be able to receive the transfer they carry.');
+        } catch (\App\Exceptions\MovementDomainException) {
+            $this->assertSame('in_transit', $transfer->fresh()->status);
+        }
     }
 
     // ---- Freight -----------------------------------------------------------

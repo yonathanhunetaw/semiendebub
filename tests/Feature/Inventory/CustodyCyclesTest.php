@@ -114,7 +114,7 @@ class CustodyCyclesTest extends TestCase
      |====================================================================*/
 
     #[Test]
-    public function remote_hub_to_store_is_handed_to_a_courier_and_then_by_the_courier_to_the_store(): void
+    public function remote_hub_to_store_is_handed_to_a_courier_then_by_the_courier_to_the_store_which_receives_it(): void
     {
         $this->stock->receive($this->variant->id, $this->remote, 50);
 
@@ -155,9 +155,17 @@ class CustodyCyclesTest extends TestCase
         $this->assertSame([30, 20, 0], [$this->at($this->remote), $this->custody(), $this->at($this->floor)]);
         $this->assertSame(50, $this->network());
 
-        // Courier → store.
+        // Courier → store: handed over, still in the courier's custody until counted in.
         $this->as($this->courier, 'delivery')
             ->post(route('delivery.transfers.handover', $transfer))
+            ->assertSessionHas('success');
+
+        $this->assertSame([30, 20, 0], [$this->at($this->remote), $this->custody(), $this->at($this->floor)]);
+        $this->assertSame(TransferWorkflowService::STATUS_IN_TRANSIT, $transfer->fresh()->status);
+
+        // The store's keeper receives it: now it lands.
+        $this->as($this->keeper, 'stockkeeper')
+            ->post(route('stock_keeper.transfers.complete', $transfer), ['received' => 20, 'damaged' => 0])
             ->assertSessionHas('success');
 
         $this->assertSame([30, 0, 20], [$this->at($this->remote), $this->custody(), $this->at($this->floor)]);

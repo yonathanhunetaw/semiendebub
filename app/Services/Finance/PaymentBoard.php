@@ -86,9 +86,14 @@ class PaymentBoard
      *
      * @return array<int, array<string, mixed>>
      */
-    public function inbox(User $user): array
+    public function inbox(User $user, ?array $storeIds = null): array
     {
         return $this->awaiting($user)
+            // The admin app narrows it to the store it is looking at (null = every store).
+            ->when($storeIds !== null, fn (Builder $q) => $q->where(fn (Builder $w) => $w
+                ->whereHas('sale', fn (Builder $sale) => $sale->whereIn('store_id', $storeIds))
+                ->orWhere(fn (Builder $r) => $r->whereNull('sale_id')
+                    ->whereHas('claimer', fn (Builder $claimer) => $claimer->whereIn('store_id', $storeIds)))))
             ->with(['account.owner', 'sale.customer', 'sale.store', 'customer', 'claimer'])
             ->orderBy('claimed_at')
             ->get()

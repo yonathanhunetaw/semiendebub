@@ -407,10 +407,10 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                                     <Button component={Link} href={route("admin.customers.prices", customer.id)} size="small" startIcon={<Sell fontSize="small" />} sx={{ mr: "auto", textTransform: "none" }}>
                                         Prices
                                     </Button>
-                                    <IconButton onClick={() => handleEdit(customer)} size="small" sx={{ color: "text.secondary", "&:hover": { color: "primary.main" } }}>
+                                    <IconButton aria-label="Edit" onClick={() => handleEdit(customer)} size="small" sx={{ color: "text.secondary", "&:hover": { color: "primary.main" } }}>
                                         <Edit fontSize="small" />
                                     </IconButton>
-                                    <IconButton onClick={() => handleDelete(customer.id)} size="small" sx={{ color: "text.secondary", "&:hover": { color: "error.main" } }}>
+                                    <IconButton aria-label="Delete" onClick={() => handleDelete(customer.id)} size="small" sx={{ color: "text.secondary", "&:hover": { color: "error.main" } }}>
                                         <Delete fontSize="small" />
                                     </IconButton>
                                 </CardActions>

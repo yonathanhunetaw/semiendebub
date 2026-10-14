@@ -96,7 +96,7 @@ class DeliveryService
                 ->count(),
             'delivered_total' => (int) $mine()->where('status', self::STATUS_DELIVERED)->count(),
             'failed' => (int) $mine()->where('status', self::STATUS_FAILED)->count(),
-            'open' => (int) $mine()->open()->count(),
+            'open' => (int) $mine()->where(fn (Builder $q) => $q->open()->orWhere('status', self::STATUS_FAILED))->count(),
             'unassigned' => (int) $this->readyToCollect(Delivery::query()->unassigned()->where('status', self::STATUS_PENDING))->count(),
         ];
     }
@@ -118,7 +118,9 @@ class DeliveryService
             ->visibleToCourier();
 
         if ($status === 'open') {
-            $query->open();
+            // A failed attempt is still the courier's work: the goods are in their hands
+            // until they try again or return them to the depot.
+            $query->where(fn (Builder $q) => $q->open()->orWhere('status', self::STATUS_FAILED));
         } elseif ($status !== null && $status !== 'all') {
             $query->where('status', $status);
         }
@@ -252,7 +254,9 @@ class DeliveryService
                 if ($to === self::STATUS_DELIVERED) {
                     $sale->update(['fulfillment_stage' => \App\Models\Finance\Sale::STAGE_DELIVERED]);
                 } elseif ($to === self::STATUS_RETURNED) {
-                    $sale->update(['fulfillment_stage' => \App\Models\Finance\Sale::STAGE_CANCELLED]);
+                    // As a seller's cancel does (SellerOrderService::cancel): a sale left
+                    // 'completed' still counts in best-sellers and reports.
+                    $sale->update(['fulfillment_stage' => \App\Models\Finance\Sale::STAGE_CANCELLED, 'status' => 'canceled']);
                 }
             }
 

@@ -24,8 +24,12 @@ class StorefrontCatalogService
 {
     /** Location type used by the stock ledger for store-held inventory. */
 
+    /** The store the storefront sells from when STOREFRONT_STORE_ID is not set. */
+    public const ONLINE_STORE_NAME = 'Online Store';
+
     /**
-     * The store the public storefront sells from.
+     * The store the public storefront sells from: STOREFRONT_STORE_ID, else
+     * the Online Store, else the first active store.
      */
     public function resolveStore(): ?Store
     {
@@ -39,7 +43,8 @@ class StorefrontCatalogService
             }
         }
 
-        return Store::query()
+        return Store::query()->where('name', self::ONLINE_STORE_NAME)->first()
+            ?? Store::query()
             ->where('status', 'active')
             ->orderBy('id')
             ->first()

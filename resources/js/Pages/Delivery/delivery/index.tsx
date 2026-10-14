@@ -44,6 +44,7 @@ const STATUS_TABS: Array<{ value: string; label: string }> = [
     { value: "pending", label: "To collect" },
     { value: "dispatched", label: "Collected" },
     { value: "in_transit", label: "In transit" },
+    { value: "failed", label: "Failed" },
     { value: "delivered", label: "Delivered" },
     { value: "all", label: "All" },
 ];

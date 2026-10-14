@@ -1,9 +1,14 @@
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, router } from "@inertiajs/react";
 import {
+    Alert,
     Box,
     Button,
     Chip,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
     Paper,
     Stack,
     Table,
@@ -33,7 +38,23 @@ interface PaymentRow {
     paid_at: string | null;
 }
 
+/** A part this admin may be the second person on (PaymentBoard::inbox). */
+interface ToConfirm {
+    id: number;
+    method: string;
+    amount: number;
+    reference: string | null;
+    account: { provider_name: string; account_number: string } | null;
+    order: string;
+    order_total: number;
+    customer: string;
+    store: string | null;
+    claimed_by: string | null;
+    claimed_at: string | null;
+}
+
 interface Props {
+    to_confirm?: ToConfirm[];
     payments?: PaymentRow[];
     today?: Array<{ method: string; total: number; count: number }>;
     methods?: string[];
@@ -54,7 +75,7 @@ const STATUS: Record<string, { label: string; color: "default" | "info" | "succe
 };
 
 /** Every payment part, with today's confirmed takings by method. */
-export default function PaymentsIndex({ payments = [], today = [], methods = [], filters, pagination }: Props): React.ReactElement {
+export default function PaymentsIndex({ to_confirm = [], payments = [], today = [], methods = [], filters, pagination }: Props): React.ReactElement {
     const go = (patch: Record<string, string | number | null>): void =>
         router.get(route("admin.payments.index"), { ...filters, ...patch }, { preserveState: true, replace: true });
 
@@ -71,6 +92,8 @@ export default function PaymentsIndex({ payments = [], today = [], methods = [],
                     Received today: {money(todayTotal)}
                     {today.length > 0 ? ` — ${today.map((row) => `${label(row.method)} ${money(row.total)} (${row.count})`).join(" · ")}` : ""}
                 </Typography>
+
+                <ConfirmInbox parts={to_confirm} />
 
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
                     <Chip label="All methods" color={filters.method === null ? "primary" : "default"} onClick={() => go({ method: null, page: null })} />
@@ -164,6 +187,90 @@ export default function PaymentsIndex({ payments = [], today = [], methods = [],
                 ) : null}
             </Box>
         </>
+    );
+}
+
+/**
+ * The parts waiting on a second person that this admin may be: the same rules as
+ * the seller app's inbox (PaymentService), so never one they took or claimed.
+ */
+function ConfirmInbox({ parts }: { parts: ToConfirm[] }): React.ReactElement | null {
+    const [confirming, setConfirming] = React.useState<ToConfirm | null>(null);
+    const [busy, setBusy] = React.useState(false);
+
+    if (parts.length === 0) return null;
+
+    const act = (part: ToConfirm, action: "confirm" | "reject"): void => {
+        setBusy(true);
+        router.post(route(`admin.payments.${action}`, part.id), {}, {
+            preserveScroll: true,
+            onFinish: () => {
+                setBusy(false);
+                setConfirming(null);
+            },
+        });
+    };
+
+    return (
+        <Paper variant="outlined" sx={{ borderRadius: 3, p: 2, mb: 3, borderColor: "warning.light" }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                Waiting for you to confirm ({parts.length})
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Money someone else took or says arrived. Confirm only what you hold or can see in the account.
+            </Typography>
+            <Stack spacing={1}>
+                {parts.map((part) => (
+                    <Stack
+                        key={part.id}
+                        data-testid={`to-confirm-${part.order}`}
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1.5}
+                        alignItems={{ sm: "center" }}
+                        sx={{ p: 1.5, borderRadius: 2, bgcolor: "action.hover" }}
+                    >
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                {part.order} · {part.customer}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" component="div">
+                                <Box component="span" sx={{ textTransform: "capitalize" }}>{label(part.method)}</Box>
+                                {part.account ? ` · ${part.account.provider_name} ${part.account.account_number}` : ""}
+                                {part.store ? ` · ${part.store}` : ""}
+                                {part.claimed_by ? ` · taken by ${part.claimed_by}` : ""}
+                            </Typography>
+                        </Box>
+                        <Typography variant="body1" sx={{ fontWeight: 800, whiteSpace: "nowrap" }}>
+                            {money(part.amount)}
+                        </Typography>
+                        <Stack direction="row" spacing={1}>
+                            <Button size="small" color="warning" disabled={busy} onClick={() => act(part, "reject")}>
+                                Not received
+                            </Button>
+                            <Button size="small" variant="contained" disabled={busy} onClick={() => setConfirming(part)}>
+                                Confirm received
+                            </Button>
+                        </Stack>
+                    </Stack>
+                ))}
+            </Stack>
+
+            <Dialog open={confirming !== null} onClose={() => setConfirming(null)}>
+                <DialogTitle sx={{ fontWeight: 800 }}>Are you sure?</DialogTitle>
+                <DialogContent>
+                    <Alert severity="info" variant="outlined">
+                        You confirm you received {confirming ? money(confirming.amount) : ""} for {confirming?.order}.
+                        The order moves on once every part is confirmed.
+                    </Alert>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirming(null)}>Cancel</Button>
+                    <Button variant="contained" disabled={busy} onClick={() => confirming && act(confirming, "confirm")}>
+                        Yes, confirm
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </Paper>
     );
 }
 

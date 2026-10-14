@@ -140,7 +140,8 @@ class ShelfRefillFlowsTest extends TestCase
 
         $workflow->assignCourier($transfer, $this->courier);
         $workflow->markDispatched($transfer->fresh());
-        $workflow->markCompleted($transfer->fresh(), $this->courier);
+        $workflow->markHandedOver($transfer->fresh(), $this->courier);
+        $workflow->markCompleted($transfer->fresh(), $this->keeper);
 
         // Landed on the floor: the leg is done, and the 40 go onto the shelving list.
         $this->assertSame(RefillRequest::STATUS_FULFILLED, $leg->fresh()->status);

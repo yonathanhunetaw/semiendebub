@@ -1,0 +1,91 @@
+import React from "react";
+import { Box, Button, Chip, IconButton, Paper, Stack, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
+import CloseRounded from "@mui/icons-material/CloseRounded";
+import MenuBookRounded from "@mui/icons-material/MenuBookRounded";
+import RoleAvatar from "@/Components/Visual/RoleAvatar";
+import { identityFor } from "@/Components/Visual/identities";
+import { CHAPTERS } from "@/Components/Guide/chapters";
+import { flowsThrough, type Place } from "./places";
+
+/** What a place in the Duka world is for, who works there, and where to read more. */
+export default function PlaceCard({
+    place,
+    onClose,
+    onOpenChapter,
+}: {
+    place: Place;
+    onClose: () => void;
+    onOpenChapter: (key: string) => void;
+}) {
+    const theme = useTheme();
+    const tone = theme.palette[identityFor(place.roles[0]).color].main;
+    const chapters = CHAPTERS.filter((c) => place.chapters.includes(c.key));
+
+    return (
+        <Paper
+            elevation={6}
+            sx={{
+                width: { xs: "auto", sm: 340 },
+                maxHeight: { xs: "55%", sm: "calc(100% - 32px)" },
+                overflowY: "auto",
+                p: 2,
+                borderRadius: 4,
+                borderTop: "4px solid",
+                borderTopColor: tone,
+                bgcolor: alpha(theme.palette.background.paper, 0.97),
+            }}
+        >
+            <Stack direction="row" alignItems="flex-start" spacing={1}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 900, fontSize: "1.15rem", lineHeight: 1.2 }}>{place.label}</Typography>
+                    <Typography variant="body2" color="text.secondary">{place.does}</Typography>
+                </Box>
+                <IconButton size="small" onClick={onClose} aria-label="Close"><CloseRounded fontSize="small" /></IconButton>
+            </Stack>
+
+            <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800, display: "block", mt: 1.5 }}>What happens here</Typography>
+            <Box component="ol" sx={{ m: 0, pl: 2.5 }}>
+                {place.happens.map((line) => (
+                    <Typography key={line} component="li" variant="body2" sx={{ mb: 0.5 }}>{line}</Typography>
+                ))}
+            </Box>
+
+            <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800, display: "block", mt: 1 }}>Who works here</Typography>
+            <Stack spacing={1}>
+                {place.roles.map((role) => (
+                    <Stack key={role} direction="row" spacing={1.25} alignItems="center">
+                        <RoleAvatar role={role} size={32} />
+                        <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 800, lineHeight: 1.2 }}>{identityFor(role).label}</Typography>
+                            <Typography variant="caption" color="text.secondary">{identityFor(role).does}</Typography>
+                        </Box>
+                    </Stack>
+                ))}
+            </Stack>
+
+            {flowsThrough(place.key).length > 0 && (
+                <>
+                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800, display: "block", mt: 1.5 }}>Passing through</Typography>
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                        {flowsThrough(place.key).map((flow) => (
+                            <Chip key={flow.key} size="small" label={flow.label}
+                                sx={{ fontWeight: 700, bgcolor: alpha(theme.palette[flow.color].main, 0.15), color: `${flow.color}.main` }} />
+                        ))}
+                    </Stack>
+                </>
+            )}
+
+            {chapters.length > 0 && (
+                <Stack spacing={1} sx={{ mt: 2 }}>
+                    {chapters.map((chapter) => (
+                        <Button key={chapter.key} variant="outlined" startIcon={<MenuBookRounded />} onClick={() => onOpenChapter(chapter.key)}
+                            sx={{ justifyContent: "flex-start", borderRadius: 999, fontWeight: 800 }}>
+                            Read “{chapter.title}”
+                        </Button>
+                    ))}
+                </Stack>
+            )}
+        </Paper>
+    );
+}

@@ -213,6 +213,23 @@ class TransferWorkflowService
     }
 
     /**
+     * The courier has handed the transfer over at its destination. Nothing moves:
+     * the goods stay in the courier's custody until the destination's keeper
+     * receives them (markCompleted), counting what arrived.
+     */
+    public function markHandedOver(Transfer $transfer, User $courier): bool
+    {
+        if ($transfer->status !== self::STATUS_IN_TRANSIT
+            || $transfer->courier_id === null
+            || (int) $transfer->courier_id !== (int) $courier->id
+            || $transfer->handed_over_at !== null) {
+            return false;
+        }
+
+        return $transfer->update(['handed_over_at' => now()]);
+    }
+
+    /**
      * Completion: the courier (or whoever carried it) hands the goods to the
      * destination, which takes them in.
      *
@@ -235,11 +252,9 @@ class TransferWorkflowService
             [$type, $id] = $this->destinationEndpoint($transfer);
             $destination = $this->leaf($type, $id);
 
-            $isCourier = $actor !== null && $transfer->courier_id !== null && (int) $transfer->courier_id === (int) $actor->id;
-
-            if (! $isCourier) {
-                $this->assertMayOperate($destination, $actor, 'take stock into');
-            }
+            // The courier hands it over (markHandedOver); only the destination's own
+            // people take it in, with their count. Two people, as for a shipment.
+            $this->assertMayOperate($destination, $actor, 'take stock into');
 
             if ($received !== null) {
                 if ($received < 0 || ($damaged ?? 0) < 0 || ($damaged ?? 0) > $received) {
@@ -374,6 +389,7 @@ class TransferWorkflowService
             'courier_id' => $transfer->courier_id !== null ? (int) $transfer->courier_id : null,
             'needs_courier' => $this->needsCourierSafely($transfer),
             'dispatched_at' => $transfer->dispatched_at?->toIso8601String(),
+            'handed_over_at' => $transfer->handed_over_at?->toIso8601String(),
             'completed_at' => $transfer->completed_at?->toIso8601String(),
             'cancelled_at' => $transfer->cancelled_at?->toIso8601String(),
             'created_at' => $transfer->created_at?->toIso8601String(),

@@ -331,6 +331,41 @@ class PartyAgreementGateTest extends TestCase
     }
 
     #[Test]
+    public function a_dock_seat_goes_only_to_people_who_may_work_that_dock(): void
+    {
+        $shipment = $this->proposeShipment();
+
+        // The receiving dock gets its own staff: from then on only they take stock into it,
+        // so the destination store's other keeper must not be offered its seat either.
+        $dockKeeper = $this->user('stock_keeper', $this->destination->id);
+        \App\Models\Inventory\LocationStaff::query()->create([
+            'stock_location_id' => $this->workflow->destinationLeaf($shipment)->id,
+            'user_id' => $dockKeeper->id,
+        ]);
+
+        $this->assertSame([], $this->workflow->partiesFor($shipment, $this->destinationKeeper));
+        $this->assertSame(['destination'], $this->workflow->partiesFor($shipment, $dockKeeper));
+        // The origin, still unstaffed, is unaffected.
+        $this->assertSame(['origin'], $this->workflow->partiesFor($shipment, $this->originKeeper));
+    }
+
+    #[Test]
+    public function the_agreed_window_is_presented_as_the_wall_clock_slot_that_was_proposed(): void
+    {
+        $shipment = $this->reachConsensus($this->proposeShipment());
+
+        // A slot carries no zone. Sent with one (UTC) the browser would shift it by its
+        // own offset, showing 08:30 as 11:30 in Addis Ababa.
+        $presented = $this->workflow->present($shipment);
+        $this->assertSame(self::PRIMARY, $presented['scheduled_for']);
+        $this->assertSame(self::PRIMARY, $presented['agreed_scheduled_for']);
+        $this->assertSame(
+            self::PRIMARY,
+            app(\App\Services\Fulfillment\ShipmentHandoffService::class)->present($shipment, $this->creator)['times']['scheduled_for'],
+        );
+    }
+
+    #[Test]
     public function the_agree_endpoint_refuses_a_party_the_user_does_not_hold(): void
     {
         $shipment = $this->proposeShipment();
