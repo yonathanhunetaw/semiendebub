@@ -5,7 +5,11 @@
 # A node uploads only if ALL of these hold:
 #   1. NODE_ROLE (in .env.production) is primary or standby. viewer never uploads.
 #   2. Nobody else holds a fresh primary lease in R2 (primary.json). A standby
-#      takes over only when that lease is older than BACKUP_LEASE_MIN minutes.
+#      takes over only when that lease has expired (BACKUP_LEASE_MIN minutes).
+#      An ON-DEMAND node (NODE_ON_DEMAND=true, the Mac) only acts while its
+#      database container is running, and holds a PINNED lease with a short ttl
+#      (BACKUP_PINNED_TTL, default 180 s) that the other nodes follow instead of
+#      taking back; it claims the lease with --force from `make prod`.
 #   3. This node's database descends from R2's newest dump (state last_sha ==
 #      latest.json sha256). Otherwise it is stale: restore first with
 #      `./deploy-with-options.sh -e prod --restore-db`. Never overwrites the truth.
@@ -14,7 +18,10 @@
 # Flags:
 #   --adopt   this node's database IS the truth: skip rule 3 once (first run on a
 #             node, or after a deliberate manual repair)
-#   --force   ignore another node's fresh lease (only if you know it is dead)
+#   --force   ignore another node's fresh lease (only if you know it is dead; the
+#             on-demand node does this on purpose when `make prod` takes over)
+#   --release take a last dump, then hand the lease back (nobody holds it; the
+#             next node takes over). `make prod-stop` uses it before stopping.
 set -euo pipefail
 
 # cron runs with a minimal PATH/HOME. macOS (Homebrew) first if present; the Pi
@@ -27,12 +34,13 @@ APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../deploy/db-lib.sh
 . "$APP_ROOT/deploy/db-lib.sh"
 
-ADOPT=0; FORCE=0
+ADOPT=0; FORCE=0; RELEASE=0
 for arg in "$@"; do
     case "$arg" in
         --adopt) ADOPT=1 ;;
         --force) FORCE=1 ;;
-        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        --release) RELEASE=1 ;;
+        -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
         *) echo "Unknown option: $arg" >&2; exit 1 ;;
     esac
 done
@@ -51,28 +59,44 @@ case "$NODE_ROLE" in
     *)      fail "unknown NODE_ROLE '$NODE_ROLE' (use primary, standby or viewer)" ;;
 esac
 
+# An on-demand node is "off" while its database container is not running: stay
+# silent (cron runs every minute), but let --release hand back a lease it holds.
+if [ "$ON_DEMAND" = true ] && ! db_container_running; then
+    if [ "$RELEASE" = 1 ]; then
+        lease_load
+        if [ "$LEASE_HOLDER" = "$NODE_NAME" ]; then lease_release; log "database container is not running: lease released"; fi
+    fi
+    exit 0
+fi
+
 # One backup/sync at a time: never upload while a restore is in progress.
 lock_acquire db || { log "a sync/restore is running: skipping this run"; exit 0; }
 TMP=""
 trap 'rm -f "${TMP:-}"; lock_release db' EXIT
 
 # --- rule 2: lease -----------------------------------------------------------
-read -r holder lease_ts <<< "$(lease_read)" || true
-holder="${holder:-}"; lease_ts="${lease_ts:-0}"
-lease_age=$(( $(now_epoch) - lease_ts ))
-lease_fresh=0
-[ -n "$holder" ] && [ "$lease_age" -lt $(( LEASE_MIN * 60 )) ] && lease_fresh=1
-
-if [ "$lease_fresh" = 1 ] && [ "$holder" != "$NODE_NAME" ] && [ "$FORCE" = 0 ]; then
-    if [ "$NODE_ROLE" = standby ]; then
-        log "primary '$holder' is alive (lease ${lease_age}s old): standby does not back up"
+lease_load
+holder="$LEASE_HOLDER"
+if [ "$LEASE_FRESH" = 1 ] && [ "$holder" != "$NODE_NAME" ] && [ "$FORCE" = 0 ]; then
+    if [ "$ON_DEMAND" = true ]; then
+        log "'$holder' holds the lease (${LEASE_AGE}s old): run 'make prod' on this node to take over"
         exit 0
     fi
-    fail "node '$holder' holds the primary lease (${lease_age}s old). If it is really down, re-run with --force" 3
+    if [ "$NODE_ROLE" = standby ]; then
+        log "primary '$holder' is alive (lease ${LEASE_AGE}s old): standby does not back up"
+        exit 0
+    fi
+    fail "node '$holder' holds the primary lease (${LEASE_AGE}s old). If it is really down, re-run with --force" 3
 fi
-if [ "$holder" != "$NODE_NAME" ] && [ -n "$holder" ] && [ "$FORCE" = 0 ]; then
-    log "lease of '$holder' is stale (${lease_age}s): taking over"
+if [ -n "$holder" ] && [ "$holder" != "$NODE_NAME" ]; then
+    if [ "$LEASE_FRESH" = 1 ]; then log "--force: taking the lease from '$holder'"
+    else log "lease of '$holder' is stale (${LEASE_AGE}s): taking over"; fi
 fi
+
+# finish_lease: refresh the lease the way this node holds it, or hand it back (--release)
+finish_lease() {
+    if [ "$RELEASE" = 1 ]; then lease_release; log "lease released: the next node takes over"; else lease_touch; fi
+}
 
 # --- rule 3: lineage ---------------------------------------------------------
 info="$(r2_latest_info)"
@@ -89,13 +113,13 @@ sha="$(file_sha "$TMP")"
 
 # --- rule 4: changed? --------------------------------------------------------
 if [ "$ADOPT" = 0 ] && [ "$sha" = "$remote_sha" ]; then
-    lease_write
+    finish_lease
     log "unchanged since the last dump: lease refreshed, nothing uploaded"
     exit 0
 fi
 
 name="$(r2_publish "$TMP" "$sha")" || fail "upload to $R2 failed"
-lease_write
+finish_lease
 log "pushed $name ($(wc -c < "$TMP" | tr -d ' ') bytes) to $R2"
 
 # Prune at most once an hour.

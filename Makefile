@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 ARGS ?=
 
-.PHONY: help setup dev stop status test e2e artisan deploy-dev prod restore backup sync logs
+.PHONY: help setup dev stop status test e2e artisan deploy-dev prod restore prod-stop backup sync logs
 
 help: ## List commands
 	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -41,6 +41,10 @@ prod: ## Deploy production (after git pull)
 
 restore: ## Deploy prod AND replace the database with the newest R2 backup (safety dump first)
 	./deploy/deploy-with-options.sh -e prod --restore-db $(ARGS)
+
+prod-stop: ## Stop prod on THIS node cleanly: last backup, hand the lease back, stop containers
+	./docker/backup-db.sh --release
+	docker compose --env-file .env.production -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down
 
 backup: ## Run the backup script once, now (what cron runs every 5 min)
 	./docker/backup-db.sh $(ARGS)

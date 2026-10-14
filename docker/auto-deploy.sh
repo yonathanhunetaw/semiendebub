@@ -42,9 +42,8 @@ target="$(json_get "$info" commit)"
 [ "$target" = "$(state_get deployed_commit)" ] && exit 0     # already deployed (the common case)
 
 # Do not restart a node that is currently serving as the primary.
-read -r holder lease_ts <<< "$(lease_read)" || true
-holder="${holder:-}"; lease_ts="${lease_ts:-0}"
-if [ "$holder" = "$NODE_NAME" ] && [ $(( $(now_epoch) - lease_ts )) -lt $(( LEASE_MIN * 60 )) ]; then
+lease_load
+if [ "$LEASE_HOLDER" = "$NODE_NAME" ] && [ "$LEASE_FRESH" = 1 ]; then
     exit 0
 fi
 

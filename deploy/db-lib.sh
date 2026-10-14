@@ -36,6 +36,8 @@ db_init() {
     DB_CONTAINER="${DB_CONTAINER:-$(db_env DB_CONTAINER "$(db_env COMPOSE_PROJECT_NAME duka-prod)-db")}"
     DB_DOCKER="${DB_DOCKER:-docker}"
     LEASE_MIN="$(db_env BACKUP_LEASE_MIN 15)"
+    ON_DEMAND="$(db_env NODE_ON_DEMAND false)"
+    PINNED_TTL="$(db_env BACKUP_PINNED_TTL 180)"
     EXCLUDE_DATA="$(db_env BACKUP_EXCLUDE_DATA "sessions cache cache_locks")"
     STATE_DIR="${DUKA_STATE_DIR:-${HOME:-/tmp}/.duka-backup}"
     R2="$BACKUP_REMOTE/$BACKUP_BUCKET"
@@ -122,13 +124,45 @@ db_dump() {
 
 r2_latest_info() { "$MC" cat "$R2/latest.json" 2>/dev/null || true; }
 
-# lease_read -> "node ts" (empty if none)
-lease_read() {
-    local j; j="$("$MC" cat "$R2/primary.json" 2>/dev/null || true)"
-    [ -n "$j" ] && printf '%s %s' "$(json_get "$j" node)" "$(json_get "$j" ts)" || true
+# The lease (primary.json): {"node","ts","ttl","pinned"}.
+#   ttl    seconds it stays valid (default BACKUP_LEASE_MIN * 60). The on-demand
+#          node (the Mac) writes a short one so others take over quickly when it stops.
+#   pinned a deliberate takeover (make prod on an on-demand node): the other nodes
+#          follow its data and must NOT take the lease back.
+# lease_load sets: LEASE_HOLDER LEASE_AGE LEASE_FRESH(0|1) LEASE_PINNED(true|false)
+lease_load() {
+    local j ts ttl
+    j="$("$MC" cat "$R2/primary.json" 2>/dev/null || true)"
+    LEASE_HOLDER="$(json_get "$j" node)"
+    ts="$(json_get "$j" ts)"; ttl="$(json_get "$j" ttl)"
+    LEASE_PINNED="$(json_get "$j" pinned)"; [ "$LEASE_PINNED" = true ] || LEASE_PINNED=false
+    case "$ts" in ''|*[!0-9]*) ts=0 ;; esac
+    case "$ttl" in ''|*[!0-9]*|0) ttl=$(( LEASE_MIN * 60 )) ;; esac
+    LEASE_AGE=$(( $(now_epoch) - ts ))
+    LEASE_FRESH=0
+    [ -n "$LEASE_HOLDER" ] && [ "$LEASE_AGE" -lt "$ttl" ] && LEASE_FRESH=1
+    return 0
 }
+
+# lease_write [pinned:true|false] [ttl_seconds]: claim or refresh the lease as this node
 lease_write() {
-    printf '{"node":"%s","ts":%s}' "$NODE_NAME" "$(now_epoch)" | "$MC" pipe "$R2/primary.json" >/dev/null
+    printf '{"node":"%s","ts":%s,"ttl":%s,"pinned":%s}' "$NODE_NAME" "$(now_epoch)" "${2:-$(( LEASE_MIN * 60 ))}" "${1:-false}" \
+        | "$MC" pipe "$R2/primary.json" >/dev/null
+}
+
+# lease_release: nobody holds the lease; the next node to run takes it
+lease_release() {
+    printf '{"node":"","ts":0,"ttl":0,"pinned":false}' | "$MC" pipe "$R2/primary.json" >/dev/null
+}
+
+# lease_touch: refresh the lease the way this node holds it. An on-demand node pins it with a short ttl.
+lease_touch() {
+    if [ "$ON_DEMAND" = true ]; then lease_write true "$PINNED_TTL"; else lease_write false; fi
+}
+
+# db_container_running: is the database container up?
+db_container_running() {
+    [ "$(${DB_DOCKER:-docker} inspect -f '{{.State.Running}}' "$DB_CONTAINER" 2>/dev/null || true)" = true ]
 }
 
 # r2_publish <file.gz> <sha>: history copy, latest copy, then latest.json last

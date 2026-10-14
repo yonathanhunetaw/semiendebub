@@ -200,6 +200,11 @@ echo -e "Clean Volumes:    ${YELLOW}$CLEAN_VOLUMES${NC}"
 echo -e "No Cache:         ${YELLOW}$NO_CACHE${NC}"
 echo -e "${BLUE}════════════════════════════════════════${NC}"
 
+if [ "${NODE_ON_DEMAND:-false}" = true ]; then
+    echo -e "${YELLOW}⚠  ON-DEMAND node (${NODE_NAME:-?}): deploying takes over live traffic from the current primary${NC}"
+    echo -e "${YELLOW}   (restores the newest backup if it is behind, then claims the lease). Stop with: make prod-stop${NC}"
+fi
+
 if [ "$ASSUME_YES" -eq 1 ]; then
     echo -e "${YELLOW}--yes given: continuing without confirmation${NC}"
 else

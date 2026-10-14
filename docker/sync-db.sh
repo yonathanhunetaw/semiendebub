@@ -7,10 +7,14 @@
 #   nothing when the lease is stale (primary down: backup-db.sh takes over,
 #   which is allowed because this node is already current) or when this node
 #   itself holds the lease.
-# primary: if another node has taken over and uploaded newer dumps, this node
-#   is BEHIND. By default (BACKUP_AUTO_CATCHUP unset or true) it saves a safety
-#   dump, restores the newer dump and takes the lease back. Set
-#   BACKUP_AUTO_CATCHUP=false in the env file to only log BEHIND instead.
+# primary: three cases when another node's data is newer than this node's:
+#   - that node holds a PINNED lease (the Mac, started on purpose): FOLLOW it like
+#     a standby (restore each new dump), never take the lease back. When the Mac
+#     stops, the lease expires/is released and this node takes over.
+#   - an unpinned node took over (a crash fail-over), or the lease is expired or
+#     released: this node is BEHIND. By default (BACKUP_AUTO_CATCHUP unset or
+#     true) it saves a safety dump, restores the newer dump and takes the lease.
+#     Set BACKUP_AUTO_CATCHUP=false to only log BEHIND instead.
 # viewer: never does anything.
 #
 # Shares a lock with backup-db.sh so a backup can never upload a half-restored
@@ -44,6 +48,7 @@ case "$NODE_ROLE" in
     *)      fail "unknown NODE_ROLE '$NODE_ROLE'" ;;
 esac
 find_mc || fail "mc (MinIO client) not found in PATH ($PATH)"
+[ "$ON_DEMAND" = true ] && exit 0          # an on-demand node (the Mac) restores when you run make prod
 
 lock_acquire db || { log_every busy 600 "another backup/sync is running: skipping"; exit 0; }
 TMP=""
@@ -54,11 +59,8 @@ remote_sha="$(json_get "$info" sha256)"
 [ -n "$remote_sha" ] || exit 0                      # nothing published yet
 my_sha="$(state_get last_sha)"
 
-read -r holder lease_ts <<< "$(lease_read)" || true
-holder="${holder:-}"; lease_ts="${lease_ts:-0}"
-lease_age=$(( $(now_epoch) - lease_ts ))
-lease_fresh=0
-[ -n "$holder" ] && [ "$lease_age" -lt $(( LEASE_MIN * 60 )) ] && lease_fresh=1
+lease_load
+holder="$LEASE_HOLDER"; lease_age="$LEASE_AGE"; lease_fresh="$LEASE_FRESH"
 
 # restore_latest <safety:0|1>: fetch + verify + (optional safety dump) + restore
 restore_latest() {
@@ -91,14 +93,24 @@ if [ "$NODE_ROLE" = standby ]; then
     exit 0
 fi
 
-# NODE_ROLE=primary: am I behind a node that took over?
-if [ "$lease_fresh" = 1 ] && [ "$holder" != "$NODE_NAME" ] && [ "$remote_sha" != "$my_sha" ]; then
-    if [ "$(db_env BACKUP_AUTO_CATCHUP true)" != false ]; then
-        log "node '$holder' took over and has newer data: catching up"
-        restore_latest 1 || exit 0
-        lease_write
-        log "lease taken back"
-    else
-        log_every behind 600 "BEHIND: '$holder' holds the lease with newer data than this node. BACKUP_AUTO_CATCHUP=false is set, so run 'make restore' here to catch up. Nothing is being uploaded."
-    fi
+# NODE_ROLE=primary
+if [ "$lease_fresh" = 1 ] && [ "$holder" = "$NODE_NAME" ]; then exit 0; fi      # I hold it: nothing to do
+[ "$remote_sha" != "$my_sha" ] || exit 0                                         # I have the newest data
+
+if [ "$lease_fresh" = 1 ] && [ "$LEASE_PINNED" = true ]; then
+    # '$holder' took over on purpose (the Mac): stay a warm follower, do not reclaim
+    restore_latest 0 || exit 0
+    exit 0
+fi
+
+# Another node took over after a crash, or the lease expired / was released:
+# this node is behind.
+if [ "$(db_env BACKUP_AUTO_CATCHUP true)" != false ]; then
+    if [ "$lease_fresh" = 1 ]; then log "node '$holder' took over and has newer data: catching up"
+    else log "newer data in R2 (made by '$(json_get "$info" node)') and nobody holds the lease: catching up"; fi
+    restore_latest 1 || exit 0
+    lease_write false
+    log "lease taken"
+else
+    log_every behind 600 "BEHIND: R2 has newer data (made by '$(json_get "$info" node)'). BACKUP_AUTO_CATCHUP=false is set, so run 'make restore' here to catch up. Nothing is being uploaded."
 fi

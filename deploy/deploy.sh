@@ -424,6 +424,7 @@ fi
 log_info "Environment: ${APP_ENV:-not set}"
 log_info "Compose Project: ${COMPOSE_PROJECT_NAME:-default}"
 log_info "Node: ${NODE_NAME:-?} / role ${NODE_ROLE:-NOT SET (set NODE_ROLE in $(basename "$ENV_FILE"))}"
+[ "$ON_DEMAND" = true ] && log_warning "ON-DEMAND node: this deploy takes over live traffic from the current primary"
 log_info "Log file: $LOG_FILE"
 
 
@@ -1192,6 +1193,23 @@ step_start 6
 # =================================================================================================
 # R2 DATABASE SYNC CHECK (ROBUST WITH PYTHON FALLBACK)
 # =================================================================================================
+# An on-demand node (NODE_ON_DEMAND=true, the Mac): `make prod` means "take over
+# from the current primary". If R2 holds newer data than this node, restore it
+# first (a safety dump of this node's own data is taken before it is replaced).
+if [ "$ON_DEMAND" = true ] && [ "$RESTORE_DB" != "1" ]; then
+    if find_mc; then
+        _info="$(r2_latest_info)"; _rsha="$(json_get "$_info" sha256)"
+        if [ -n "$_rsha" ] && [ "$_rsha" != "$(state_get last_sha)" ]; then
+            log_info "On-demand node: R2 has newer data (made by '$(json_get "$_info" node)'): restoring it before going live"
+            RESTORE_DB=1
+        else
+            log_info "On-demand node: this database already matches the newest backup"
+        fi
+    else
+        log_warning "mc not found: cannot check R2 for newer data; pass --restore-db to restore it"
+    fi
+fi
+
 # Deploys keep the live database. Restoring is explicit: --restore-db. (The old
 # SYNC_DB_FROM_R2=true default wiped live data on every deploy.)
 if [ "${SYNC_DB_FROM_R2:-}" = "true" ] && [ "$RESTORE_DB" != "1" ]; then
@@ -1483,6 +1501,17 @@ step_success 9 "Cloudflare cache purged"
 banner "${ICON_ROCKET} DEPLOYMENT COMPLETE"
 log_success "Application is running"
 log_info "Log file: $LOG_FILE"
+
+# On-demand node: claim the (pinned) lease now, so the other nodes follow this one
+# and this node's backups are accepted.
+if [ "$ON_DEMAND" = true ]; then
+    log_step "Taking over: claiming the pinned lease so the other nodes follow this node..."
+    if DUKA_ENV_FILE="$ENV_FILE" "$APP_ROOT/docker/backup-db.sh" --force; then
+        log_success "This node now holds the lease and backs up every minute (launchd/cron); stop it with: make prod-stop"
+    else
+        log_error "Could not claim the lease: this node is NOT backed up yet. Run: docker/backup-db.sh --force"
+    fi
+fi
 
 # Tell the standby nodes which commit is live, so they can follow (auto-deploy.sh).
 if [ "${NODE_ROLE:-}" = "primary" ]; then
