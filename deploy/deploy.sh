@@ -92,9 +92,9 @@ update_step() {
 # Display progress board (full view)
 show_full_progress() {
     echo ""
-    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BOLD_CYAN}                                DEPLOYMENT PROGRESS                                 ${NC}"
-    echo -e "${BOLD_CYAN}════════════════════════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD_CYAN}$(ui_rule)${NC}"
+    echo -e "${BOLD_CYAN}$(ui_center "DEPLOYMENT PROGRESS")${NC}"
+    echo -e "${BOLD_CYAN}$(ui_rule)${NC}"
     
     for i in "${!STEPS[@]}"; do
         local step_name="${STEPS[$i]}"
@@ -123,7 +123,7 @@ show_full_progress() {
         esac
     done
     
-    echo -e "${BOLD_CYAN}═════════════════════════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD_CYAN}$(ui_rule)${NC}"
     echo ""
 }
 
@@ -135,13 +135,12 @@ step_start() {
     IN_STEP=1
 
     local total_elapsed=$(( $(date +%s) - DEPLOY_START_TIME ))
-    local total_mins=$(( total_elapsed / 60 ))
-    local total_secs=$(( total_elapsed % 60 ))
     local step_label="Step $((step_num + 1))/${#STEPS[@]}: ${STEPS[$step_num]}"
 
-    # Box-drawing header with right-aligned elapsed time
+    # Box-drawing header that fills the terminal width, elapsed time at the right
     echo ""
-    echo -e "${BOLD_CYAN}┌─ ${step_label} $(printf '%.0s─' {1..20}) [${total_mins}m ${total_secs}s elapsed]${NC}"
+    echo -e "${BOLD_CYAN}$(ui_header "$step_label" "$total_elapsed")${NC}"
+    ui_bar_draw force
     echo "$(echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STEP] Starting: $((step_num + 1)). ${STEPS[$step_num]}")" >> "$LOG_FILE"
 }
 
@@ -156,6 +155,8 @@ step_success() {
     update_step "$step_num" "success" "$message"
     IN_STEP=0
     echo -e "${GREEN}└─ ✓ done in ${step_mins}m ${step_secs}s${NC}"
+    echo -e "${CYAN}   $(ui_bar_line)${NC}"
+    ui_bar_draw force
     echo "$(echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] ✓ Step $((step_num + 1)). ${STEPS[$step_num]} completed in ${step_mins}m ${step_secs}s: $message")" >> "$LOG_FILE"
     echo ""
 }
@@ -171,6 +172,7 @@ step_failed() {
     update_step "$step_num" "failed" "$message"
     IN_STEP=0
     echo -e "${RED}└─ ✗ failed after ${step_mins}m ${step_secs}s — ${message}${NC}"
+    ui_bar_draw force
     echo "$(echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] ✗ Step $((step_num + 1)). ${STEPS[$step_num]} failed after ${step_mins}m ${step_secs}s: $message")" >> "$LOG_FILE"
     echo ""
 }
@@ -182,6 +184,8 @@ step_failed() {
 
 # Get the directory where this script lives
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=ui-lib.sh
+source "$SCRIPT_DIR/ui-lib.sh"
 
 # PROJECT_ROOT is the app root: the parent of deploy/ (this script's folder).
 # Everything below (compose files, env files, git, vendor/, node_modules/) is
@@ -211,6 +215,7 @@ log() {
 
     # Log file always gets the full unindented timestamped line
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
+    ui_bar_draw
 
     # Terminal gets the grouped/indented view
     case "$level" in
@@ -253,6 +258,7 @@ log_stream() {
     while IFS= read -r line; do
         echo -e "${indent}${NC}${line}"
         echo "$line" >> "$LOG_FILE"
+        ui_bar_draw
     done
 }
 
@@ -298,6 +304,7 @@ error_handler() {
 on_exit() {
     local code=$?
     trap - EXIT
+    ui_bar_teardown
     if [ "$code" -ne 0 ]; then
         local i
         for i in "${!STEPS[@]}"; do
@@ -317,6 +324,8 @@ on_exit() {
     fi
 }
 trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Paths
 BASE_DIR="$PROJECT_ROOT/docker"
@@ -408,6 +417,7 @@ log_success "===================================================================
 
 # Initialize progress tracking
 init_steps
+ui_bar_init
 
 # =================================================================================================
 # HELPER FUNCTIONS
