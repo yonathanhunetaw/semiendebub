@@ -37,6 +37,17 @@ repeat_char() {
     printf '%s' "$out"
 }
 
+# ui_width: width of headers and rules = 2/3 of the terminal, but at least 60
+# columns when the terminal has them, and always inside the terminal.
+ui_width() {
+    local cols max w
+    cols="$(term_cols)"; max=$(( cols - 1 ))
+    w=$(( cols * 2 / 3 ))
+    [ "$w" -lt 60 ] && w=60
+    [ "$w" -gt "$max" ] && w=$max
+    echo "$w"
+}
+
 # fmt_time <seconds> -> "1m 07s"
 fmt_time() { printf '%dm %02ds' $(( $1 / 60 )) $(( $1 % 60 )); }
 
@@ -44,7 +55,7 @@ fmt_time() { printf '%dm %02ds' $(( $1 / 60 )) $(( $1 % 60 )); }
 # Narrow terminals drop "elapsed", then the time, then shorten the text.
 ui_header() {
     local text="$1" secs="$2" width right used fill
-    width=$(( $(term_cols) - 1 ))
+    width="$(ui_width)"
     right=" [$(fmt_time "$secs") elapsed]"
     used=$(( 3 + ${#text} + 1 + ${#right} ))
     if [ "$used" -gt "$width" ]; then right=" $(fmt_time "$secs")"; used=$(( 3 + ${#text} + 1 + ${#right} )); fi
@@ -54,13 +65,13 @@ ui_header() {
     printf '┌─ %s %s%s' "$text" "$(repeat_char '─' "$fill")" "$right"
 }
 
-# ui_rule: a full-width ═══ line
-ui_rule() { repeat_char '═' $(( $(term_cols) - 1 )); }
+# ui_rule: a ═══ line as wide as the headers
+ui_rule() { repeat_char '═' "$(ui_width)"; }
 
 # ui_center <text>: text centred in the current width
 ui_center() {
     local width pad
-    width=$(( $(term_cols) - 1 ))
+    width="$(ui_width)"
     pad=$(( (width - ${#1}) / 2 )); [ "$pad" -lt 0 ] && pad=0
     printf '%*s%s' "$pad" '' "$1"
 }
@@ -75,6 +86,9 @@ ui_current_name() {
     local i
     for i in "${!STEPS[@]}"; do
         [ "${STEP_STATUS[$i]:-}" = in_progress ] && { echo "${STEPS[$i]}"; return; }
+    done
+    for i in "${!STEPS[@]}"; do
+        [ "${STEP_STATUS[$i]:-}" = pending ] && { echo "${STEPS[$i]}"; return; }
     done
     echo "${STEPS[$(( ${#STEPS[@]} - 1 ))]}"
 }

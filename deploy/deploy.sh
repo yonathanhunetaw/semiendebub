@@ -26,6 +26,7 @@ BOLD_CYAN='\033[1;36m'
 
 # Reset
 NC='\033[0m'
+DIM='\033[2m'
 
 # Icons
 ICON_SUCCESS="✅"
@@ -109,13 +110,13 @@ show_full_progress() {
                 echo -e "  ${BLUE}${ICON_IN_PROGRESS}${NC} ${step_name} ${CYAN}...${NC}"
                 ;;
             "success")
-                echo -e "  ${GREEN}${ICON_CHECK}${NC} ${step_name} ${GREEN}✓${NC} ${CYAN}(${STEP_SECS[$i]:-0}s)${NC}"
+                printf '  %b %-34s %b\n' "${GREEN}${ICON_CHECK}${NC}" "$step_name" "${CYAN}${STEP_SECS[$i]:-0}s${NC}"
                 if [ -n "$message" ]; then
                     echo -e "      ${GREEN}→${NC} $message"
                 fi
                 ;;
             "failed")
-                echo -e "  ${RED}${ICON_CROSS}${NC} ${step_name} ${RED}✗${NC} ${CYAN}(${STEP_SECS[$i]:-0}s)${NC}"
+                printf '  %b %-34s %b\n' "${RED}${ICON_CROSS}${NC}" "$step_name" "${CYAN}${STEP_SECS[$i]:-0}s${NC}"
                 if [ -n "$message" ]; then
                     echo -e "      ${RED}→${NC} $message"
                 fi
@@ -155,10 +156,8 @@ step_success() {
     update_step "$step_num" "success" "$message"
     IN_STEP=0
     echo -e "${GREEN}└─ ✓ done in ${step_mins}m ${step_secs}s${NC}"
-    echo -e "${CYAN}   $(ui_bar_line)${NC}"
     ui_bar_draw force
     echo "$(echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] ✓ Step $((step_num + 1)). ${STEPS[$step_num]} completed in ${step_mins}m ${step_secs}s: $message")" >> "$LOG_FILE"
-    echo ""
 }
 
 # Mark step as failed — prints the closing └─ footer in red with step time
@@ -202,6 +201,14 @@ mkdir -p "$LOG_DIR"
 ls -1t "$LOG_DIR"/deploy_*.log 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/null || true
 ln -sf "$(basename "$LOG_FILE")" "$LOG_DIR/latest.log"
 
+# banner <title>: title between two rules on screen, one plain line in the log
+banner() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [BANNER] $*" >> "$LOG_FILE"
+    echo -e "${BOLD_CYAN}$(ui_rule)${NC}"
+    echo -e "${BOLD_CYAN} $*${NC}"
+    echo -e "${BOLD_CYAN}$(ui_rule)${NC}"
+}
+
 # Logging function
 log() {
     local level="$1"
@@ -217,30 +224,18 @@ log() {
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
     ui_bar_draw
 
-    # Terminal gets the grouped/indented view
+    # Terminal gets the compact, indented view: time, icon, message
+    local now_t="${timestamp:11}" color="" icon=""
     case "$level" in
-        "INFO")
-            echo -e "${indent}[$timestamp] ${BLUE}[INFO]${NC} ${ICON_INFO} $message"
-            ;;
-        "SUCCESS")
-            echo -e "${indent}[$timestamp] ${GREEN}[SUCCESS]${NC} ${ICON_SUCCESS} $message"
-            ;;
-        "ERROR")
-            echo -e "${indent}[$timestamp] ${RED}[ERROR]${NC} ${ICON_ERROR} $message"
-            ;;
-        "WARNING")
-            echo -e "${indent}[$timestamp] ${YELLOW}[WARNING]${NC} ${ICON_WARNING} $message"
-            ;;
-        "STEP")
-            echo -e "${indent}[$timestamp] ${CYAN}[STEP]${NC} ${ICON_STEP} $message"
-            ;;
-        "DONE")
-            echo -e "${indent}[$timestamp] ${BOLD_GREEN}[DONE]${NC} ${ICON_DONE} $message"
-            ;;
-        *)
-            echo -e "${indent}[$timestamp] [$level] $message"
-            ;;
+        INFO)    icon="$ICON_INFO" ;;
+        SUCCESS) icon="$ICON_SUCCESS"; color="$GREEN" ;;
+        ERROR)   icon="$ICON_ERROR";   color="$RED" ;;
+        WARNING) icon="$ICON_WARNING"; color="$YELLOW" ;;
+        STEP)    icon="$ICON_STEP";    color="$CYAN" ;;
+        DONE)    icon="$ICON_DONE";    color="$BOLD_GREEN" ;;
+        *)       icon="·" ;;
     esac
+    echo -e "${indent}${DIM}${now_t}${NC} ${icon} ${color}${message}${NC}"
 }
 
 
@@ -260,6 +255,27 @@ log_stream() {
         echo "$line" >> "$LOG_FILE"
         ui_bar_draw
     done
+}
+
+# log_stream_quiet <regex>: like log_stream, but lines matching <regex> go to the
+# log file only; the screen gets one "N lines hidden" note at the end.
+log_stream_quiet() {
+    local re="$1" indent="" line hidden=0
+    [ "${IN_STEP:-0}" = "1" ] && indent="  │  "
+    while IFS= read -r line; do
+        echo "$line" >> "$LOG_FILE"
+        if [[ "$line" =~ $re ]]; then hidden=$(( hidden + 1 )); else echo -e "${indent}${NC}${line}"; fi
+        ui_bar_draw
+    done
+    [ "$hidden" -gt 0 ] && echo -e "${indent}${DIM}(${hidden} more lines in the log file)${NC}"
+    return 0
+}
+
+# run_logged_quiet <regex> cmd...: run_logged with log_stream_quiet
+run_logged_quiet() {
+    local re="$1"; shift
+    "$@" 2>&1 | log_stream_quiet "$re"
+    return "${PIPESTATUS[0]}"
 }
 
 # Run a command, stream its output through log_stream, and return the
@@ -398,9 +414,7 @@ DB_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-db"
 # MINIO_SETUP_CONTAINER="${COMPOSE_PROJECT_NAME:-duka}-minio-setup"
 
 # Log deployment start
-log_success "=================================================================================="
-log_success "${ICON_ROCKET} DEPLOYMENT STARTED ${ICON_ROCKET}"
-log_success "=================================================================================="
+banner "${ICON_ROCKET} DEPLOYMENT STARTED"
 log_info "Project Root: $PROJECT_ROOT"
 if git rev-parse --git-dir >/dev/null 2>&1; then
     _git_dirty=""; git diff --quiet HEAD -- 2>/dev/null || _git_dirty=" (uncommitted changes)"
@@ -411,7 +425,6 @@ log_info "Environment: ${APP_ENV:-not set}"
 log_info "Compose Project: ${COMPOSE_PROJECT_NAME:-default}"
 log_info "Node: ${NODE_NAME:-?} / role ${NODE_ROLE:-NOT SET (set NODE_ROLE in $(basename "$ENV_FILE"))}"
 log_info "Log file: $LOG_FILE"
-log_success "=================================================================================="
 
 
 
@@ -726,7 +739,7 @@ compose_rm_services() {
 
 install_node_dependencies() {
     log_step "Installing Node dependencies from lock file..."
-    if ! run_logged exec_in_app npm install --no-audit --no-fund --loglevel=info; then
+    if ! run_logged exec_in_app npm install --no-audit --no-fund --loglevel=warn; then
         log_error "npm install failed"
         return 1
     fi
@@ -834,23 +847,14 @@ run_migration_with_retry() {
 # MAIN DEPLOYMENT LOGIC
 # =================================================================================================
 
-log_success "=================================================================================="
-log_success "${ICON_ROCKET} DEPLOYMENT CONFIGURATION ${ICON_ROCKET}"
-log_success "=================================================================================="
-log_info "Environment: $APP_ENV"
-log_info "Skip Database Reset: $SKIP_DB_RESET"
-log_info "Force Build: $FORCE_BUILD"
-log_info "Enable Observability: $ENABLE_OBSERVABILITY"
-log_success "=================================================================================="
+log_info "Options: force-build=$FORCE_BUILD  reset-db=$((1 - SKIP_DB_RESET))  restore-db=$RESTORE_DB  observability=$ENABLE_OBSERVABILITY"
 
 # =================================================================================================
 # STEP 1: LOAD CONFIGURATION & ENVIRONMENT
 # =================================================================================================
 
 step_start 0
-log_info "Configuration loaded successfully"
-log_info "Project Root: $PROJECT_ROOT"
-log_info "Environment: $APP_ENV"
+log_info "Configuration loaded"
 step_success 0 "Environment: $APP_ENV, Force Build: $FORCE_BUILD"
 
 # =================================================================================================
@@ -859,7 +863,7 @@ step_success 0 "Environment: $APP_ENV, Force Build: $FORCE_BUILD"
 
 step_start 1
 
-log_step "Forcefully stopping and cleaning containers (PI optimized)..."
+log_step "Stopping existing containers..."
 
 # Temporarily disable set -e while bringing services down
 set +e
@@ -976,7 +980,7 @@ log_done "Pre-deployment storage structures are ready"
 set -e
 
 log_info "All services started — current container status:"
-docker ps -a | grep duka | log_stream
+docker ps --filter "name=${COMPOSE_PROJECT_NAME:-duka}" --format '{{.Names}}  {{.Status}}' | log_stream
 
 step_success 1 "All containers started successfully"
 
@@ -1046,30 +1050,16 @@ fi
 
 # 3. Perform the clean master dependency installation (fatal on failure: a
 #    half-installed vendor/ must not roll on into migrations and builds)
-if ! run_logged exec_in_app composer install $INSTALL_FLAGS; then
+if ! run_logged_quiet '(\.{5,} DONE$|looking for funding|composer fund)' exec_in_app composer install $INSTALL_FLAGS; then
     log_error "composer install failed - see the output above / the log file"
     step_failed 3 "composer install failed"
     exit 1
 fi
 
-# Define files path
+# Sanity check: the S3 storage driver must be in vendor/ after the install above
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
-
-# Detect if we need to run composer (vendor is empty, file missing, or lockfile changed)
-if [ ! -d "vendor" ] || [ ! -f "$S3_CONVERTER_FILE" ] || has_git_path_changes "composer.lock"; then
-    log_warning "Dependencies are missing or composer.lock changed. Pre-populating vendor directory..."
-
-    # Define composition flags
-    COMPOSE_CMD="composer install --optimize-autoloader --no-interaction"
-    if [ "$APP_ENV" = "production" ]; then
-        log_info "Production mode: Installing without dev dependencies"
-        COMPOSE_CMD="composer install --no-dev --optimize-autoloader --no-interaction"
-    fi
-
-    # Run inside the container
-    exec_in_app $COMPOSE_CMD 2>&1 | log_stream
-else
-    log_success "PHP dependencies up to date"
+if ! exec_in_app test -f "$S3_CONVERTER_FILE"; then
+    log_warning "league/flysystem-aws-s3-v3 is not in vendor/: S3/R2 storage will not work"
 fi
 
 log_done "PHP dependencies installed"
@@ -1127,7 +1117,7 @@ if [ "$APP_ENV" = "production" ]; then
     log_step "Building production assets..."
     exec_in_app rm -f public/hot
     
-    if ! run_logged exec_in_app npm run build; then
+    if ! run_logged_quiet '^public/build/assets/' exec_in_app npm run build; then
         log_error "Frontend build failed"
         step_failed 5 "npm run build failed"
         exit 1
@@ -1399,12 +1389,8 @@ exec_in_app rm -rf bootstrap/cache/*.php
 log_done "Cache files cleaned"
 
 log_step "Purging Laravel caches..."
-exec_in_app php artisan cache:clear 2>&1 | log_stream
-exec_in_app php artisan config:clear 2>&1 | log_stream
-exec_in_app php artisan route:clear 2>&1 | log_stream
-exec_in_app php artisan view:clear 2>&1 | log_stream
-exec_in_app php artisan event:clear 2>&1 | log_stream
-exec_in_app php artisan optimize:clear 2>&1 | log_stream
+# optimize:clear covers cache, config, routes, views, events and compiled files
+exec_in_app php artisan optimize:clear 2>&1 | log_stream_quiet '^\s*$'
 log_done "Laravel caches purged"
 
 log_step "Refreshing Laravel optimizations..."
@@ -1494,12 +1480,9 @@ step_success 9 "Cloudflare cache purged"
 # DEPLOYMENT COMPLETE
 # =================================================================================================
 
-log_success "=================================================================================="
-log_success "${ICON_ROCKET} DEPLOYMENT COMPLETE ${ICON_ROCKET}"
-log_success "=================================================================================="
-log_success "Application is now running ${ICON_SUCCESS}"
-log_success "Log file saved to: $LOG_FILE"
-log_success "=================================================================================="
+banner "${ICON_ROCKET} DEPLOYMENT COMPLETE"
+log_success "Application is running"
+log_info "Log file: $LOG_FILE"
 
 # Tell the standby nodes which commit is live, so they can follow (auto-deploy.sh).
 if [ "${NODE_ROLE:-}" = "primary" ]; then
