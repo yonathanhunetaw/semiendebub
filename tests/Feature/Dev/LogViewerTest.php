@@ -104,13 +104,14 @@ LOG);
     #[Test]
     public function it_parses_deploy_script_entries(): void
     {
-        $path = base_path('logs/deploy_29990101_000000.log');
+        $path = base_path('deploy/logs/deploy_29990101_000000.log');
+        @mkdir(dirname($path), 0755, true);
 
         file_put_contents($path, "[2029-01-01 00:00:00] [SUCCESS] deploy started\n[2029-01-01 00:00:01] [ERROR] it failed\n");
 
         try {
             $this->actingAs($this->devUser())
-                ->getJson('http://'.$this->host().'/logs/fetch?source_type=file&identifier=logs/deploy_29990101_000000.log')
+                ->getJson('http://'.$this->host().'/logs/fetch?source_type=file&identifier=deploy/logs/deploy_29990101_000000.log')
                 ->assertOk()
                 ->assertJsonPath('entries.0.level', 'SUCCESS')
                 ->assertJsonPath('entries.0.channel', 'deploy')
@@ -145,7 +146,7 @@ LOG);
             'storage/logs/../../.env',
             '/etc/passwd',
             'storage/logs/../../../../etc/passwd',
-            'logs/../composer.json',
+            'deploy/logs/../../composer.json',
             'storage/logs/nope.log',
         ];
 

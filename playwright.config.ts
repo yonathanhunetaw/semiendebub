@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * E2E tests run on the host through ./dev.sh e2e, which copies the dev DB to
+ * E2E tests run on the host through ./deploy/dev.sh e2e, which copies the dev DB to
  * duka_e2e, prepares test users (e2e:prepare) and serves it on :8096.
- * Keep ./dev.sh running in another terminal: its Vite serves the assets.
+ * Keep ./deploy/dev.sh running in another terminal: its Vite serves the assets.
  */
 const port = process.env.E2E_PORT ?? '8096';
 

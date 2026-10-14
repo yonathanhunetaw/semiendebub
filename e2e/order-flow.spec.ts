@@ -22,7 +22,7 @@ import { app, fixture, signIn } from './support';
  *   the store manager confirms both payments → the seller picks & packs →
  *   the courier collects, starts the run and marks it delivered.
  *
- * Runs against the duka_e2e copy prepared by ./dev.sh e2e.
+ * Runs against the duka_e2e copy prepared by ./deploy/dev.sh e2e.
  */
 
 const customers = {

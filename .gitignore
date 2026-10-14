@@ -11,7 +11,6 @@
 .env.bak
 .phpactor.json
 .phpunit.result.cache
-smart_context.txt
 /.fleet
 /.idea
 /.nova
@@ -29,17 +28,11 @@ smart_context.txt
 Homestead.json
 Homestead.yaml
 Thumbs.db
-note.md
-ኤምዲ_files/noteDuka1.3.0docker.md
-ኤምዲ_files/noteDuka1.3.0.md
-ኤምዲ_files/notemdfile.md
 resources/js/Pages/Errors
 certs/
 config/cloudflared/*.json
 .cursorignore
-backend_map.txt
 DESIGN.md
-frontend_map.txt
 # docs/ is its own local-only git repo; never tracked or pushed from Duka.
 /docs/
 .aider*
@@ -52,3 +45,6 @@ graphify-out/
 /playwright/.cache/
 /e2e/.auth/
 /e2e/.fixture/
+
+# Deployment logs written by deploy/deploy.sh
+/deploy/logs/

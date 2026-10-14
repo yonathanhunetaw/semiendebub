@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
     // Auto-regenerate storage/app/dev-architecture-map.json for /dev/architecture.
     const domainMapEnabled = mode !== 'production' && env.DUKA_DOMAIN_MAP !== 'false';
 
-    // ./dev.sh sets DUKA_NATIVE=1: host filesystem events work, no polling needed.
+    // ./deploy/dev.sh sets DUKA_NATIVE=1: host filesystem events work, no polling needed.
     const native = process.env.DUKA_NATIVE === '1';
 
     return {

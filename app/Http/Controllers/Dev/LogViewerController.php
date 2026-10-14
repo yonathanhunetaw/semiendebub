@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
  * Live log viewer for the three layers a local stack writes to:
  *
  *   1. Laravel App    — storage/logs/{laravel,auth-*,observability-*}.log
- *   2. Deploy Runs    — logs/deploy_*.log written by deploy.sh
+ *   2. Deploy Runs    — deploy/logs/deploy_*.log written by deploy/deploy.sh
  *   3. Docker         — stdout/stderr of whatever containers are up
  *
  * Security shape, since this reads arbitrary-looking identifiers off the wire:
@@ -136,7 +136,7 @@ final class LogViewerController extends Controller
     private function sources(): array
     {
         $laravel = $this->filesIn(storage_path('logs'), 'storage/logs');
-        $deploy = $this->filesIn(base_path('logs'), 'logs');
+        $deploy = $this->filesIn(base_path('deploy/logs'), 'deploy/logs');
 
         $dockerAvailable = $this->docker->available();
         $containers = $dockerAvailable ? $this->docker->containers() : [];

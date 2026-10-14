@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, type Browser, type Page } from '@playwright/test';
 
-/** Written by `php artisan e2e:prepare` (./dev.sh e2e). */
+/** Written by `php artisan e2e:prepare` (./deploy/dev.sh e2e). */
 export interface Fixture {
     password: string;
     store: { id: number; name: string };

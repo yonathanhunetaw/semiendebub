@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
 
 /**
- * Readies the throwaway duka_e2e copy for Playwright (./dev.sh e2e): a test
+ * Readies the throwaway duka_e2e copy for Playwright (./deploy/dev.sh e2e): a test
  * seller, store manager, courier and stock keeper in one store, a bank account the
  * manager owns, and items with a price and free stock on the shelf or floor.
  * Prints the fixture as JSON for the specs.

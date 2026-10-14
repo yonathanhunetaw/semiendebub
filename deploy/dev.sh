@@ -6,16 +6,16 @@
 # php artisan serve, queue worker and Vite, all on the host.
 #
 # Usage:
-#   ./dev.sh setup        one-time: php@8.4, MySQL, DB (imports Docker dev data), deps
-#   ./dev.sh [up]         start MySQL + app (:8095) + queue + Vite (:5177); Ctrl-C stops
-#   ./dev.sh status       show whether MySQL, PHP, queue and Vite are up
-#   ./dev.sh stop         stop the MySQL service (frees RAM)
-#   ./dev.sh artisan ...  run artisan against the native DB (also: composer, npm)
-#   ./dev.sh e2e [...]    Playwright on a fresh copy of the DB (needs ./dev.sh up running)
+#   ./deploy/dev.sh setup        one-time: php@8.4, MySQL, DB (imports Docker dev data), deps
+#   ./deploy/dev.sh [up]         start MySQL + app (:8095) + queue + Vite (:5177); Ctrl-C stops
+#   ./deploy/dev.sh status       show whether MySQL, PHP, queue and Vite are up
+#   ./deploy/dev.sh stop         stop the MySQL service (frees RAM)
+#   ./deploy/dev.sh artisan ...  run artisan against the native DB (also: composer, npm)
+#   ./deploy/dev.sh e2e [...]    Playwright on a fresh copy of the DB (needs ./deploy/dev.sh up running)
 
 set -e
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 info() { echo -e "${BLUE}$*${NC}"; }
@@ -61,7 +61,7 @@ mysql_root() { "$MYSQL_BIN/mysql" -uroot --socket="$DUKA_MYSQL_SOCK" "$@"; }
 
 ensure_mysql() {
     brew list --formula "$MYSQL_FORMULA" >/dev/null 2>&1 \
-        || die "$MYSQL_FORMULA not installed. Run ./dev.sh setup"
+        || die "$MYSQL_FORMULA not installed. Run ./deploy/dev.sh setup"
     mysql_root -e 'SELECT 1' >/dev/null 2>&1 && return 0
 
     mkdir -p "$DUKA_MYSQL_DIR"
@@ -147,7 +147,7 @@ cmd_setup() {
 
     info "6/6 Storage link"
     php artisan storage:link >/dev/null 2>&1 || true
-    ok "Setup done. Run ./dev.sh"
+    ok "Setup done. Run ./deploy/dev.sh"
 }
 
 # ── Pretty step runner ───────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ check_docker_free() {
     return 1
 }
 
-# Kill whatever a previous ./dev.sh left running (never touches MySQL or Docker).
+# Kill whatever a previous ./deploy/dev.sh left running (never touches MySQL or Docker).
 stop_previous() {
     local p pid comm
     pkill -f "concurrently -k -n app,queue,vite" 2>/dev/null || true
@@ -269,7 +269,7 @@ wait_port() {
 }
 
 cmd_up() {
-    [ -d node_modules ] && [ -d vendor ] || die "Dependencies missing. Run ./dev.sh setup"
+    [ -d node_modules ] && [ -d vendor ] || die "Dependencies missing. Run ./deploy/dev.sh setup"
     local domain; domain="$(env_value APP_DOMAIN)"
     native_env
 
@@ -291,11 +291,55 @@ cmd_up() {
     echo
     echo -e "  ${C_BOLD}App ${C_OFF} ${C_CYAN}http://${domain}:${APP_PORT_NATIVE}${C_OFF}"
     echo -e "  ${C_BOLD}Vite${C_OFF} ${C_CYAN}http://localhost:5177${C_OFF}"
-    echo -e "  ${C_DIM}Logs below · Ctrl-C stops app, queue, vite (MySQL stays; ./dev.sh stop to stop it)${C_OFF}"
+    echo -e "  ${C_DIM}Logs below · Ctrl-C stops app, queue, vite (MySQL stays; ./deploy/dev.sh stop to stop it)${C_OFF}"
     echo
 
     trap 'echo; echo -e "  ${C_YEL}Stopping app, queue, vite...${C_OFF}"; stop_previous >/dev/null 2>&1; cursor_show; echo -e "  ${C_GREEN}✔ Stopped${C_OFF}"; exit 0' INT TERM
     tail -n 0 -f "$UP_LOG"
+}
+
+# Playwright against a throwaway copy of the dev DB: duka → duka_e2e, a second
+# app server on :8096 for it, and the test users/items from e2e:prepare.
+# Vite comes from the running ./deploy/dev.sh, so that must be up.
+E2E_DB="${DB_NAME}_e2e"
+E2E_PORT="${E2E_PORT:-8096}"
+
+cmd_e2e() {
+    [ -f public/hot ] || die "Vite is not running. Start ./deploy/dev.sh in another terminal first."
+    ensure_mysql
+    native_env
+
+    info "Copying ${DB_NAME} → ${E2E_DB}"
+    mysql_root -e "DROP DATABASE IF EXISTS \`${E2E_DB}\`;
+        CREATE DATABASE \`${E2E_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        GRANT ALL PRIVILEGES ON \`${E2E_DB}\`.* TO '${DB_USER}'@'%';"
+    "$MYSQL_BIN/mysqldump" -uroot --socket="$DUKA_MYSQL_SOCK" --single-transaction --routines --triggers "$DB_NAME" \
+        | mysql_root "$E2E_DB"
+
+    # The test server: its own DB and URL, jobs run inline, and nothing
+    # leaves the machine (Discord login/visit pings, mail, Sentry); no debugbar
+    # covering the phone UI.
+    export DB_DATABASE="$E2E_DB"
+    export APP_URL="http://$(env_value APP_DOMAIN):${E2E_PORT}"
+    export QUEUE_CONNECTION=sync MAIL_MAILER=log SENTRY_LARAVEL_DSN= DEBUGBAR_ENABLED=false
+    export DISCORD_VISIT_WEBHOOK_URL= DISCORD_DAILY_VISIT_WEBHOOK_URL= DISCORD_LOGIN_WEBHOOK_URL=
+
+    php artisan migrate --force >/dev/null
+    mkdir -p e2e/.fixture
+    php artisan e2e:prepare > e2e/.fixture/fixture.json || { cat e2e/.fixture/fixture.json; die "e2e:prepare failed"; }
+    ok "Test users and items ready (e2e/.fixture/fixture.json)"
+
+    # artisan serve forks php -S, so stop whatever holds the port.
+    trap 'lsof -ti "tcp:$E2E_PORT" -sTCP:LISTEN | xargs kill 2>/dev/null || true' EXIT
+    PHP_CLI_SERVER_WORKERS=4 php artisan serve --host=0.0.0.0 --port="$E2E_PORT" > e2e/.fixture/server.log 2>&1 &
+    local i
+    for i in $(seq 1 30); do
+        curl -s -o /dev/null "$APP_URL/login" && break
+        sleep 1
+    done
+
+    export E2E_PORT
+    npx --no-install playwright test "$@"
 }
 
 cmd_stop() {
@@ -326,5 +370,5 @@ case "${1:-up}" in
     npm)              shift; native_env; exec npm "$@" ;;
     e2e)              shift; cmd_e2e "$@" ;;
     -h|--help|help)   sed -n '2,14p' "$0" ;;
-    *)                die "Unknown command: $1 (try ./dev.sh help)" ;;
+    *)                die "Unknown command: $1 (try ./deploy/dev.sh help)" ;;
 esac

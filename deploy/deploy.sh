@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Track how long the deployment takes (like npm run build)
-DEPLOY_START_TIME=$(date +%s)
+DEPLOY_START_TIME=${DEPLOY_START_TIME:-$(date +%s)}
 
 # =================================================================================================
 # COLOR CODES FOR LOGGING
@@ -51,6 +51,7 @@ ICON_IN_PROGRESS="◉"
 declare -a STEPS=()
 declare -a STEP_STATUS=()
 declare -a STEP_MESSAGES=()
+declare -a STEP_SECS=()
 
 # Step timing / indentation state
 IN_STEP=0               # 1 while inside a step block — log() uses this to indent
@@ -75,6 +76,7 @@ init_steps() {
     for i in "${!STEPS[@]}"; do
         STEP_STATUS[$i]="pending"
         STEP_MESSAGES[$i]=""
+        STEP_SECS[$i]=""
     done
 }
 
@@ -108,13 +110,13 @@ show_full_progress() {
                 echo -e "  ${BLUE}${ICON_IN_PROGRESS}${NC} ${step_name} ${CYAN}...${NC}"
                 ;;
             "success")
-                echo -e "  ${GREEN}${ICON_CHECK}${NC} ${step_name} ${GREEN}✓${NC}"
+                echo -e "  ${GREEN}${ICON_CHECK}${NC} ${step_name} ${GREEN}✓${NC} ${CYAN}(${STEP_SECS[$i]:-0}s)${NC}"
                 if [ -n "$message" ]; then
                     echo -e "      ${GREEN}→${NC} $message"
                 fi
                 ;;
             "failed")
-                echo -e "  ${RED}${ICON_CROSS}${NC} ${step_name} ${RED}✗${NC}"
+                echo -e "  ${RED}${ICON_CROSS}${NC} ${step_name} ${RED}✗${NC} ${CYAN}(${STEP_SECS[$i]:-0}s)${NC}"
                 if [ -n "$message" ]; then
                     echo -e "      ${RED}→${NC} $message"
                 fi
@@ -136,7 +138,7 @@ step_start() {
     local total_elapsed=$(( $(date +%s) - DEPLOY_START_TIME ))
     local total_mins=$(( total_elapsed / 60 ))
     local total_secs=$(( total_elapsed % 60 ))
-    local step_label="Step $((step_num + 1)): ${STEPS[$step_num]}"
+    local step_label="Step $((step_num + 1))/${#STEPS[@]}: ${STEPS[$step_num]}"
 
     # Box-drawing header with right-aligned elapsed time
     echo ""
@@ -151,6 +153,7 @@ step_success() {
     local step_elapsed=$(( $(date +%s) - CURRENT_STEP_START_TIME ))
     local step_mins=$(( step_elapsed / 60 ))
     local step_secs=$(( step_elapsed % 60 ))
+    STEP_SECS[$step_num]=$step_elapsed
     update_step "$step_num" "success" "$message"
     IN_STEP=0
     echo -e "${GREEN}└─ ✓ done in ${step_mins}m ${step_secs}s${NC}"
@@ -165,6 +168,7 @@ step_failed() {
     local step_elapsed=$(( $(date +%s) - CURRENT_STEP_START_TIME ))
     local step_mins=$(( step_elapsed / 60 ))
     local step_secs=$(( step_elapsed % 60 ))
+    STEP_SECS[$step_num]=$step_elapsed
     update_step "$step_num" "failed" "$message"
     IN_STEP=0
     echo -e "${RED}└─ ✗ failed after ${step_mins}m ${step_secs}s — ${message}${NC}"
@@ -180,17 +184,20 @@ step_failed() {
 # Get the directory where this script lives
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Determine PROJECT_ROOT
-if [ "$(basename "$SCRIPT_DIR")" = "docker" ]; then
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-else
-    PROJECT_ROOT="$SCRIPT_DIR"
-fi
+# PROJECT_ROOT is the app root: the parent of deploy/ (this script's folder).
+# Everything below (compose files, env files, git, vendor/, node_modules/) is
+# resolved against it, so move to it so relative paths work from any cwd.
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
 
-# Set up logging
-LOG_DIR="$PROJECT_ROOT/logs"
+# Set up logging (deployment logs live beside the scripts)
+LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/deploy_$(date +%Y%m%d_%H%M%S).log"
 mkdir -p "$LOG_DIR"
+: > "$LOG_FILE"
+# Keep the 30 newest deploy logs and point latest.log at this run.
+ls -1t "$LOG_DIR"/deploy_*.log 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/null || true
+ln -sf "$(basename "$LOG_FILE")" "$LOG_DIR/latest.log"
 
 # Logging function
 log() {
@@ -286,7 +293,31 @@ error_handler() {
     show_full_progress
 }
 
-#trap 'error_handler ${LINENO} $?' ERR
+# Runs on every exit. On failure it marks the running step failed, prints the
+# board, the tail of the log and where the full log is, so a bare `exit 1`
+# somewhere in the script never ends without an explanation.
+on_exit() {
+    local code=$?
+    trap - EXIT
+    if [ "$code" -ne 0 ]; then
+        local i
+        for i in "${!STEPS[@]}"; do
+            if [ "${STEP_STATUS[$i]}" = "in_progress" ]; then
+                STEP_SECS[$i]=$(( $(date +%s) - CURRENT_STEP_START_TIME ))
+                update_step "$i" "failed" "exited with code $code"
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] Step $((i + 1)). ${STEPS[$i]} aborted (exit $code)" >> "$LOG_FILE"
+            fi
+        done
+        IN_STEP=0
+        show_full_progress
+        echo -e "${BOLD_RED}${ICON_ERROR} DEPLOYMENT FAILED (exit code $code) after $(elapsed_time)${NC}"
+        echo -e "${RED}Last lines of the log:${NC}"
+        tail -n 20 "$LOG_FILE" | sed 's/^/    /'
+        echo -e "${YELLOW}Full log: ${LOG_FILE}${NC}"
+        echo ""
+    fi
+}
+trap on_exit EXIT
 
 # Paths
 BASE_DIR="$PROJECT_ROOT/docker"
@@ -307,7 +338,7 @@ elif [ "$ENVIRONMENT" = "dev" ]; then
     COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.dev.yml")
 else
     echo "❌ Please specify an environment!"
-    echo "Usage: ./deploy.sh dev  OR  ./deploy.sh prod"
+    echo "Usage: ./deploy/deploy.sh dev  OR  ./deploy/deploy.sh prod  (or use ./deploy-with-options.sh -e <dev|prod>)"
     exit 1
 fi
 
@@ -363,6 +394,11 @@ log_success "===================================================================
 log_success "${ICON_ROCKET} DEPLOYMENT STARTED ${ICON_ROCKET}"
 log_success "=================================================================================="
 log_info "Project Root: $PROJECT_ROOT"
+if git rev-parse --git-dir >/dev/null 2>&1; then
+    _git_dirty=""; git diff --quiet HEAD -- 2>/dev/null || _git_dirty=" (uncommitted changes)"
+    log_info "Git: $(git rev-parse --abbrev-ref HEAD 2>/dev/null) @ $(git rev-parse --short HEAD 2>/dev/null)${_git_dirty}"
+    unset _git_dirty
+fi
 log_info "Environment: ${APP_ENV:-not set}"
 log_info "Compose Project: ${COMPOSE_PROJECT_NAME:-default}"
 log_info "Log file: $LOG_FILE"
@@ -791,7 +827,7 @@ step_start 0
 log_info "Configuration loaded successfully"
 log_info "Project Root: $PROJECT_ROOT"
 log_info "Environment: $APP_ENV"
-step_success 0 "[1/9] Environment: $APP_ENV, Force Build: $FORCE_BUILD"
+step_success 0 "Environment: $APP_ENV, Force Build: $FORCE_BUILD"
 
 # =================================================================================================
 # STEP 2: START SERVICES (FIXED FOR RASPBERRY PI)
@@ -918,7 +954,7 @@ set -e
 log_info "All services started — current container status:"
 docker ps -a | grep duka | log_stream
 
-step_success 1 "[2/9] All containers started successfully"
+step_success 1 "All containers started successfully"
 
 
 # =================================================================================================
@@ -984,8 +1020,13 @@ if ! exec_in_app composer validate --no-check-all --quiet 2>/dev/null; then
     exec_in_app composer update league/flysystem-aws-s3-v3 --no-interaction 2>&1 | log_stream
 fi
 
-# 3. Perform the clean master dependency installation
-exec_in_app composer install $INSTALL_FLAGS 2>&1 | log_stream
+# 3. Perform the clean master dependency installation (fatal on failure: a
+#    half-installed vendor/ must not roll on into migrations and builds)
+if ! run_logged exec_in_app composer install $INSTALL_FLAGS; then
+    log_error "composer install failed - see the output above / the log file"
+    step_failed 3 "composer install failed"
+    exit 1
+fi
 
 # Define files path
 S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
@@ -1008,7 +1049,7 @@ else
 fi
 
 log_done "PHP dependencies installed"
-step_success 3 "[4/9] PHP dependencies installed successfully"
+step_success 3 "PHP dependencies installed successfully"
 
 # =================================================================================================
 # STEP 5: NODE DEPENDENCIES
@@ -1047,7 +1088,7 @@ else
     log_success "Node dependencies already installed and complete"
 fi
 
-step_success 4 "[5/9] Node dependencies ready"
+step_success 4 "Node dependencies ready"
 
 
 # =================================================================================================
@@ -1126,7 +1167,7 @@ else
 fi
 
 
-step_success 5 "[6/11] Frontend assets processed"
+step_success 5 "Frontend assets processed"
 # =================================================================================================
 # STEP 7: DATABASE MIGRATION & SEEDING (NOW MINIO IS READY WITH BUCKET!)
 # =================================================================================================
@@ -1167,19 +1208,22 @@ if [ "${SYNC_DB_FROM_R2:-true}" = "true" ]; then
         fi
     fi
 
-    # Try 2: Fallback to Python with your direct Cloudflare R2 keys
+    # Try 2: Fallback to Python using the R2_* keys from the env file
     if [ "$download_success" = false ]; then
-        if python3 -c "import boto3" 2>/dev/null; then
+        if [ -z "${R2_ENDPOINT:-}" ] || [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
+            log_warning "R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY are not set in $(basename "$ENV_FILE"); cannot use the Python R2 client."
+        elif python3 -c "import boto3" 2>/dev/null; then
             log_info "Downloading via Python R2 client..."
             TARGET_BACKUP_FILE=$(python3 -c "
+import os
 import boto3
 from botocore.config import Config
 try:
     s3 = boto3.client(
         's3',
-        endpoint_url='https://9497f0e6bbe4c681a7331d9f50191c58.r2.cloudflarestorage.com',
-        aws_access_key_id='d011eaa19f57ded4bd0d9938cdee55bc',
-        aws_secret_access_key='c835d108de840c2cef151d2d5971b064ecc07f834b2738209597d385e3873d83',
+        endpoint_url=os.environ['R2_ENDPOINT'],
+        aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],
+        aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY'],
         config=Config(signature_version='s3v4')
     )
     response = s3.list_objects_v2(Bucket='${BACKUP_BUCKET_PATH}')
@@ -1195,14 +1239,15 @@ except Exception as e:
             [ -z "$TARGET_BACKUP_FILE" ] && TARGET_BACKUP_FILE="latest.sql.gz"
 
             python3 -c "
+import os
 import boto3
 from botocore.config import Config
 try:
     s3 = boto3.client(
         's3',
-        endpoint_url='https://9497f0e6bbe4c681a7331d9f50191c58.r2.cloudflarestorage.com',
-        aws_access_key_id='d011eaa19f57ded4bd0d9938cdee55bc',
-        aws_secret_access_key='c835d108de840c2cef151d2d5971b064ecc07f834b2738209597d385e3873d83',
+        endpoint_url=os.environ['R2_ENDPOINT'],
+        aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],
+        aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY'],
         config=Config(signature_version='s3v4')
     )
     s3.download_file('${BACKUP_BUCKET_PATH}', '${TARGET_BACKUP_FILE}', '$PROJECT_ROOT/storage/app/backups/latest.sql.gz')
@@ -1260,11 +1305,11 @@ fi
 
 log_done "Database migration completed"
 
-# Dynamically display the specific backup filename in your [7/11] progress row
+# Show the specific backup filename in the progress row
 DB_MSG_LABEL="Database migrated and seeded"
 [ -n "${RESTORED_BACKUP_NAME:-}" ] && DB_MSG_LABEL="Database restored from ${RESTORED_BACKUP_NAME}"
 
-step_success 6 "[7/11] ${DB_MSG_LABEL}"
+step_success 6 "${DB_MSG_LABEL}"
 
 # # =================================================================================================
 # # POST-SEEDING: ENSURE ALL UPLOADED IMAGES ARE PUBLIC
@@ -1331,19 +1376,16 @@ exec_in_app php artisan optimize:clear 2>&1 | log_stream
 log_done "Laravel caches purged"
 
 log_step "Refreshing Laravel optimizations..."
-exec_in_app php artisan optimize:clear || true
-exec_in_app php artisan storage:link --force
+# Caches were already cleared above; only re-link storage and (in production)
+# rebuild the optimized caches. Non-production runs uncached on purpose.
+exec_in_app php artisan storage:link --force 2>&1 | log_stream
 
 if [ "$APP_ENV" = "production" ]; then
     exec_in_app php artisan optimize 2>&1 | log_stream
-else
-    exec_in_app php artisan config:clear 2>&1 | log_stream
-    exec_in_app php artisan route:clear 2>&1 | log_stream
-    exec_in_app php artisan view:clear 2>&1 | log_stream || echo "View cache clear skipped"
 fi
 
 log_done "Laravel optimizations refreshed"
-step_success 7 "[8/9] Cache cleared and permissions set"
+step_success 7 "Cache cleared and permissions set"
 
 # =================================================================================================
 # STEP 9: FINAL VERIFICATION
@@ -1379,7 +1421,7 @@ else
     log_warning "Health check endpoint not responding"
 fi
 
-step_success 8 "[9/9] Deployment verification complete"
+step_success 8 "Deployment verification complete"
 
 # =================================================================================================
 # CLOUDFLARE CACHE PURGING (AUTOMATED)

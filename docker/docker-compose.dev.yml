@@ -20,13 +20,13 @@ services:
       - ../storage/app/seed-images:/var/www/html/storage/app/seed-images
       - vendor_data:/var/www/html/vendor
       # Keep the container's linux node_modules apart from the host's macOS
-      # ones (native dev via ./dev.sh shares this bind-mounted folder).
+      # ones (native dev via ./deploy/dev.sh shares this bind-mounted folder).
       - node_modules_data:/var/www/html/node_modules
       # Read-only Docker socket so /dev/logs can stream other containers' stdout
       # via the Engine API. DEV ONLY: a writable socket is root on the host, and
       # even read-only it exposes the whole daemon — never add this to
       # docker-compose.prod.yml. LogViewerController refuses to run outside
-      # local/development, and the root ./logs dir is already visible through
+      # local/development, and the deploy/logs dir is already visible through
       # the ../:/var/www/html bind mount above.
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
