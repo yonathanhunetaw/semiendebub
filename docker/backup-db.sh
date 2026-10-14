@@ -70,7 +70,7 @@ if [ "$ON_DEMAND" = true ] && ! db_container_running; then
 fi
 
 # One backup/sync at a time: never upload while a restore is in progress.
-lock_acquire db || { log "a sync/restore is running: skipping this run"; exit 0; }
+lock_acquire_wait db 120 || { log "a sync/restore has been running for over 2 minutes: skipping this run"; exit 0; }
 TMP=""
 trap 'rm -f "${TMP:-}"; lock_release db' EXIT
 

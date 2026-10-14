@@ -50,7 +50,6 @@ esac
 find_mc || fail "mc (MinIO client) not found in PATH ($PATH)"
 [ "$ON_DEMAND" = true ] && exit 0          # an on-demand node (the Mac) restores when you run make prod
 
-lock_acquire db || { log_every busy 600 "another backup/sync is running: skipping"; exit 0; }
 TMP=""
 trap 'rm -f "${TMP:-}"; lock_release db' EXIT
 
@@ -65,6 +64,9 @@ holder="$LEASE_HOLDER"; lease_age="$LEASE_AGE"; lease_fresh="$LEASE_FRESH"
 # restore_latest <safety:0|1>: fetch + verify + (optional safety dump) + restore
 restore_latest() {
     local safety="$1" rc=0
+    # Hold the lock only while restoring (the checks above are read-only), so a
+    # backup starting in the same second is not blocked.
+    lock_acquire db || { log_every busy 600 "a backup is running: restoring next run"; return 1; }
     TMP="$(mktemp "${TMPDIR:-/tmp}/duka_sync.XXXXXX")"
     r2_fetch_latest "$TMP" "$remote_sha" || rc=$?
     if [ "$rc" = 2 ]; then log_every mismatch 300 "latest.sql.gz does not match latest.json yet (upload in progress?): retrying next run"; return 1; fi

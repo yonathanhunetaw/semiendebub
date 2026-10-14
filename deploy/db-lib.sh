@@ -226,7 +226,20 @@ lock_acquire() {
     rm -rf "$d"
     mkdir "$d" 2>/dev/null && echo $$ > "$d/pid"
 }
-lock_release() { rm -rf "$STATE_DIR/$1.lock"; }
+# Only the owner (the pid recorded in the lock) can release it.
+lock_release() {
+    local d="$STATE_DIR/$1.lock"
+    [ "$(cat "$d/pid" 2>/dev/null || true)" = "$$" ] && rm -rf "$d"
+    return 0
+}
+# lock_acquire_wait <name> <seconds>: keep trying (every 2 s) instead of giving up at once
+lock_acquire_wait() {
+    local waited=0
+    while ! lock_acquire "$1"; do
+        [ "$waited" -ge "$2" ] && return 1
+        sleep 2; waited=$(( waited + 2 ))
+    done
+}
 
 # db_restore_file <file.gz>: replace the database in $DB_CONTAINER with the dump.
 # Drops every table first (a dump only recreates the tables it contains, so
