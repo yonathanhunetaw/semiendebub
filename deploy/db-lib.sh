@@ -62,6 +62,12 @@ epoch_of_stamp() {
     fi
 }
 
+# epoch_of_date 2026-10-14 -> epoch seconds at 00:00 UTC
+epoch_of_date() {
+    if date -u -d "@0" >/dev/null 2>&1; then date -u -d "$1" +%s
+    else date -u -j -f "%Y-%m-%d" "$1" +%s; fi
+}
+
 file_sha() {
     if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
     else shasum -a 256 "$1" | cut -d' ' -f1; fi
@@ -140,7 +146,7 @@ r2_publish() {
 }
 
 # r2_prune: keep every dump for 2h, one per hour for 2 days, one per day for 30
-# days, delete the rest. Only touches the new sortable names.
+# days, delete the rest. Old-format dumps are simply deleted after 30 days.
 r2_prune() {
     local now name stamp age bucket seen_h=" " seen_d=" "
     now="$(now_epoch)"
@@ -162,6 +168,16 @@ r2_prune() {
         echo "$name"
     done | while read -r name; do
         "$MC" rm "$R2/$name" >/dev/null 2>&1 || true
+    done
+
+    # Old-format dumps (duka_backup_Oct_Wed_2026-10-14_04:00_AM.sql.gz, made by the
+    # previous backup script): delete the ones older than 30 days, by the date in
+    # the name. Nothing creates new ones any more, so this just ages them out.
+    "$MC" ls "$R2/" 2>/dev/null | awk '{print $NF}' \
+        | grep -E '^duka_backup_[A-Za-z]{3}_[A-Za-z]{3}_[0-9]{4}-[0-9]{2}-[0-9]{2}_.*\.sql\.gz$' | while read -r name; do
+        d="$(printf '%s' "$name" | sed -E 's/^duka_backup_[A-Za-z]{3}_[A-Za-z]{3}_([0-9]{4}-[0-9]{2}-[0-9]{2})_.*/\1/')"
+        age=$(( now - $(epoch_of_date "$d") ))
+        [ "$age" -gt 2592000 ] && "$MC" rm "$R2/$name" >/dev/null 2>&1 || true
     done
     return 0
 }
