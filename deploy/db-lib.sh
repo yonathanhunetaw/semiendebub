@@ -204,3 +204,12 @@ r2_fetch_latest() {
     gzip -t "$dest" 2>/dev/null || return 1
     [ "$(file_sha "$dest")" = "$want" ] || return 2
 }
+
+# deployed.json in R2 says which git commit the primary last deployed
+# successfully; standbys follow it (docker/auto-deploy.sh).
+deploy_marker_write() {
+    local commit; commit="$(git -C "$APP_ROOT" rev-parse HEAD 2>/dev/null)" || return 1
+    printf '{"commit":"%s","node":"%s","time":"%s"}' "$commit" "$NODE_NAME" "$(date -u +%FT%TZ)" \
+        | "$MC" pipe "$R2/deployed.json" >/dev/null
+}
+deploy_marker_read() { "$MC" cat "$R2/deployed.json" 2>/dev/null || true; }

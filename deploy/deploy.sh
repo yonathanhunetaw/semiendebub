@@ -1487,6 +1487,15 @@ log_success "Application is now running ${ICON_SUCCESS}"
 log_success "Log file saved to: $LOG_FILE"
 log_success "=================================================================================="
 
+# Tell the standby nodes which commit is live, so they can follow (auto-deploy.sh).
+if [ "${NODE_ROLE:-}" = "primary" ]; then
+    if find_mc && deploy_marker_write; then
+        log_info "Published deployed commit to R2 (standbys will follow): $(git rev-parse --short HEAD 2>/dev/null)"
+    else
+        log_warning "Could not publish the deployed commit to R2; standbys will not auto-deploy this one."
+    fi
+fi
+
 show_full_progress
 
 finish_banner
