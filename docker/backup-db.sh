@@ -12,7 +12,7 @@
 #      taking back; it claims the lease with --force from `make prod`.
 #   3. This node's database descends from R2's newest dump (state last_sha ==
 #      latest.json sha256). Otherwise it is stale: restore first with
-#      `./deploy-with-options.sh -e prod --restore-db`. Never overwrites the truth.
+#      `make restore`. Never overwrites the truth.
 #   4. The data changed since the last dump (unchanged runs only refresh the lease).
 #
 # Flags:
@@ -120,7 +120,7 @@ info="$(r2_latest_info)"
 remote_sha="$(json_get "$info" sha256)"
 my_sha="$(state_get last_sha)"
 if [ "$ADOPT" = 0 ] && [ -n "$remote_sha" ] && [ "$remote_sha" != "$my_sha" ]; then
-    fail "this node's database is not known to descend from the newest backup in R2 (made by '$(json_get "$info" node)' at $(json_get "$info" time)). Restore first: ./deploy-with-options.sh -e prod --restore-db. If THIS database is the truth, run: $0 --adopt" 2
+    fail "this node's database is not known to descend from the newest backup in R2 (made by '$(json_get "$info" node)' at $(json_get "$info" time)). Restore first: make restore. If THIS database is the truth, run: $0 --adopt" 2
 fi
 
 # --- dump --------------------------------------------------------------------

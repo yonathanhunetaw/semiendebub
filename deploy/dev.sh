@@ -2,7 +2,7 @@
 # dev.sh - Native (no Docker) local development on the Mac.
 #
 # Docker is for prod, and for testing Docker changes via
-# ./deploy-with-options.sh -e dev. Everyday work runs here: brew MySQL,
+# `make deploy-dev`. Everyday work runs here: brew MySQL,
 # php artisan serve, queue worker and Vite, all on the host.
 #
 # Usage:

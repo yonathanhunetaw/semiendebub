@@ -364,7 +364,7 @@ elif [ "$ENVIRONMENT" = "dev" ]; then
     COMPOSE_FILES=(-f "$BASE_DIR/docker-compose.yml" -f "$BASE_DIR/docker-compose.dev.yml")
 else
     echo "❌ Please specify an environment!"
-    echo "Usage: ./deploy/deploy.sh dev  OR  ./deploy/deploy.sh prod  (or use ./deploy-with-options.sh -e <dev|prod>)"
+    echo "Usage: ./deploy/deploy.sh dev  OR  ./deploy/deploy.sh prod  (or better: make prod / make deploy-dev)"
     exit 1
 fi
 
@@ -378,7 +378,7 @@ fi
 # by the deployment wrapper/environment.
 #
 # Important:
-#   ./deploy-with-options.sh --observability
+#   make prod OBSERVABILITY=1
 #   sets ENABLE_OBSERVABILITY=1 before calling this script.
 #
 # We must not allow .env / .env.production to overwrite that explicit
