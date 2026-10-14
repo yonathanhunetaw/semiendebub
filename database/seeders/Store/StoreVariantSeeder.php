@@ -8,6 +8,7 @@ use App\Models\Item\ItemVariant;
 use App\Models\Store\StoreVariant;
 use App\Models\Store\Store;
 use Carbon\Carbon;
+use Database\Seeders\Admin\ItemSeeder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -25,6 +26,13 @@ use Illuminate\Support\Facades\DB;
  * across three, so the seller and storefront catalogues were all but empty while
  * the stock ledger held a row for every variant at every store — the exact
  * disagreement that made each role report a different figure.
+ *
+ * A variant's price is ItemSeeder's piece price × the size's factor × the
+ * pieces in its pack, less a bulk discount (8 % for a packet/box/bundle, 15 %
+ * for a carton/bag), rounded to what a shop would write on a tag. It used to
+ * be a flat 10 birr whatever the item or pack — a carton of 1,000 Bic pens
+ * cost 16 birr — because the pack multiplier was read off a relation that
+ * never carried it.
  */
 class StoreVariantSeeder extends Seeder
 {
@@ -35,6 +43,15 @@ class StoreVariantSeeder extends Seeder
     {
         $stores = Store::all();
         $now = Carbon::now();
+
+        $piecePrices = (new ItemSeeder())->piecePrices();
+        $piecesPerUnit = [];
+        foreach (DB::table('item_packaging_type_item')->get() as $row) {
+            $piecesPerUnit[(int) $row->item_id][(int) $row->item_packaging_type_id] = max(1, (int) $row->quantity);
+        }
+
+        // Same prices and promotions on every run.
+        mt_srand(2026);
         
         // Optional: set to true if you also want seller/customer/individual prices (can be very heavy)
         $createSellerPrices = false;
@@ -47,7 +64,7 @@ class StoreVariantSeeder extends Seeder
             // Get variants belonging to this store (via item.stores)
             $variants = ItemVariant::whereHas('item.stores', function ($q) use ($store) {
                 $q->where('store_id', $store->id);
-            })->get();
+            })->with(['item:id,file_prefix', 'itemSize:id,name', 'itemPackagingType:id,name'])->get();
 
             if ($variants->isEmpty()) {
                 $this->command->warn("No variants for store {$store->id}, skipping.");
@@ -61,20 +78,12 @@ class StoreVariantSeeder extends Seeder
             $storeVariantsData = [];
             
             foreach ($variants as $variant) {
-                // Calculate base price for this variant
-                $baseItemPrice = $this->calculateBaseProductRate($variant);
-                $packType = $variant->itemPackagingType;
-                $multiplier = (int) ($packType->pivot->quantity ?? 1);
-                $price = round($baseItemPrice * $multiplier * (rand(95, 105) / 100), 2);
+                $price = $this->priceFor($variant, $piecePrices, $piecesPerUnit);
 
-                // Tiered discount logic
-                if ($multiplier >= 120) $price *= 0.80;
-                elseif ($multiplier >= 10) $price *= 0.90;
-                $price = round($price, 2);
-
-                $hasDiscount = (bool) rand(0, 1);
-                $discountPrice = $hasDiscount ? round($price * (rand(90, 99) / 100), 2) : null;
-                $discountEnds = $hasDiscount ? $now->copy()->addDays(rand(1, 10))->toDateTimeString() : null;
+                // About one listing in seven is on promotion: 5–10 % off for a few days.
+                $hasDiscount = mt_rand(1, 7) === 1;
+                $discountPrice = $hasDiscount ? $this->tagPrice($price * mt_rand(90, 95) / 100) : null;
+                $discountEnds = $hasDiscount ? $now->copy()->addDays(mt_rand(3, 10))->toDateTimeString() : null;
 
                 // Prepare store variant data
                 $storeVariantsData[] = [
@@ -180,13 +189,35 @@ class StoreVariantSeeder extends Seeder
         }
     }
 
-    private function calculateBaseProductRate($variant): float
+    /**
+     * @param  array<string, array{piece: float, sizes?: array<string, float>}>  $piecePrices
+     * @param  array<int, array<int, int>>  $piecesPerUnit
+     */
+    private function priceFor(ItemVariant $variant, array $piecePrices, array $piecesPerUnit): float
     {
-        $name = $variant->item?->product_name ?? '';
-        return match (true) {
-            str_contains($name, 'Bic') => 17.00,
-            str_contains($name, 'Ring') => 15.00,
-            default => 10.00,
+        $price = $piecePrices[$variant->item?->file_prefix] ?? ['piece' => 10.0];
+        $sizeFactor = $price['sizes'][$variant->itemSize?->name] ?? 1.0;
+        $pieces = $piecesPerUnit[$variant->item_id][$variant->item_packaging_type_id] ?? 1;
+
+        $bulkDiscount = match ($variant->itemPackagingType?->name) {
+            'Carton', 'Bag' => 0.85,
+            'Packet', 'Box', 'Bundle', 'Doz' => 0.92,
+            default => 1.0,
         };
+
+        return $this->tagPrice($price['piece'] * $sizeFactor * $pieces * ($pieces > 1 ? $bulkDiscount : 1.0));
+    }
+
+    /** Round to what goes on a price tag: 0.50 under 10 birr, 1 under 100, 5 under 1,000, then 10. */
+    private function tagPrice(float $price): float
+    {
+        $step = match (true) {
+            $price < 10 => 0.5,
+            $price < 100 => 1.0,
+            $price < 1000 => 5.0,
+            default => 10.0,
+        };
+
+        return max($step, round($price / $step) * $step);
     }
 }

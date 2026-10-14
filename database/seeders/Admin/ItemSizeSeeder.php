@@ -1,69 +1,46 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders\Admin;
 
 use App\Models\Item\ItemSize;
 use Illuminate\Database\Seeder;
 
+/**
+ * The size vocabulary, grouped by what is being measured. ItemSeeder refers to
+ * sizes by name, so a name used there must exist here.
+ */
 class ItemSizeSeeder extends Seeder
 {
+    public const SIZES = [
+        // Paper formats
+        'A3', 'A4', 'A5', 'A6', 'B5',
+        // Pocket-notebook formats (sheets cut from one full sheet)
+        '18k', '25k', '32k', '60k',
+        // Exercise books
+        '9×7 in', '3 Subjects', '4 Subjects', '5 Subjects',
+        // Sticky notes
+        '3×3 in', '3×4 in', '3×5 in',
+        // Lengths
+        '15 cm', '20 cm', '30 cm', '35 cm', '50 cm', '60 cm',
+        // Binding ring diameters
+        '6 mm', '8 mm', '10 mm', '12 mm', '14 mm', '16 mm', '18 mm', '20 mm',
+        '22 mm', '24 mm', '26 mm', '28 mm', '30 mm', '32 mm', '34 mm', '36 mm',
+        // Pencil lead and grades
+        '0.5 mm', '0.7 mm', 'HB', '2B', '4B', '6B', '8B',
+        // Staples
+        'No. 335', 'No. 435',
+        // Laminating pouches
+        '65×95 mm', '76×106 mm',
+        // Generic
+        'Small', 'Medium', 'Large', 'Extra Large',
+    ];
+
     public function run(): void
     {
-        $sizes = [
-            // Inch-based (No 'mm')
-            ['id' => 1, 'name' => '3x3Inch'],
-            ['id' => 2, 'name' => '4x4Inch'],
-            ['id' => 3, 'name' => '5x5Inch'],
-
-            // Measurements (Include 'mm')
-            ['id' => 4, 'name' => '10x10mm'],
-
-            // Descriptive sizes (No 'mm')
-            ['id' => 5, 'name' => 'Small'],
-            ['id' => 6, 'name' => 'Medium'],
-            ['id' => 7, 'name' => 'Large'],
-            ['id' => 8, 'name' => 'Extra Large'],
-
-            // Paper sizes (No 'mm')
-            ['id' => 9, 'name' => 'A1'],
-            ['id' => 10, 'name' => 'A2'],
-            ['id' => 11, 'name' => 'A3'],
-            ['id' => 12, 'name' => 'A4'],
-            ['id' => 13, 'name' => 'A5'],
-            ['id' => 14, 'name' => 'A6'],
-            ['id' => 15, 'name' => 'A7'],
-            ['id' => 16, 'name' => 'A8'],
-            ['id' => 17, 'name' => 'A9'],
-            ['id' => 18, 'name' => 'A10'],
-
-            // Ring/Numerical measurements (Include 'mm')
-            ['id' => 19, 'name' => '6mm'],
-            ['id' => 20, 'name' => '8mm'],
-            ['id' => 21, 'name' => '10mm'],
-            ['id' => 22, 'name' => '12mm'],
-            ['id' => 23, 'name' => '14mm'],
-            ['id' => 24, 'name' => '16mm'],
-            ['id' => 25, 'name' => '18mm'],
-            ['id' => 26, 'name' => '20mm'],
-            ['id' => 27, 'name' => '22mm'],
-            ['id' => 28, 'name' => '24mm'],
-            ['id' => 29, 'name' => '26mm'],
-            ['id' => 30, 'name' => '28mm'],
-            ['id' => 31, 'name' => '30mm'],
-            ['id' => 32, 'name' => '32mm'],
-            ['id' => 33, 'name' => '34mm'],
-            ['id' => 34, 'name' => '36mm'],
-
-            // Inch-based (No 'mm')
-            ['id' => 35, 'name' => '335'],
-            ['id' => 36, 'name' => '435'],
-            ['id' => 37, 'name' => '520'],
-        ];
-
-        foreach ($sizes as $size) {  // Changed from $sizeName to $size
-            ItemSize::firstOrCreate([
-                'name' => $size['name'],  // Access the 'name' key from the array
-            ]);
+        foreach (self::SIZES as $name) {
+            ItemSize::firstOrCreate(['name' => $name]);
         }
     }
 }

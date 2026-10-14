@@ -15,11 +15,10 @@ use Illuminate\Database\Seeder;
  * introduces but that function cannot classify is dropped silently from the
  * packaging picker, so the two must be changed together.
  *
- * ORDER IS LOAD-BEARING. ItemSeeder names packaging by numeric id in 373
- * places (`'item_packaging_type_id' => 3`, and so on), so these rows must
- * keep the ids they have always had. New types are appended, never inserted,
- * and nothing is reordered into "sensible" sequence — doing so would silently
- * repoint a third of the catalogue at the wrong packaging.
+ * ItemSeeder names packaging by *name* (`'type' => 'Carton'`), so a rename
+ * here must be made there too. Keep the ids stable anyway: databases seeded
+ * before that change, and their variants' item_packaging_type_id, still
+ * point at them. New types are appended, never inserted.
  *
  * How many pieces a unit holds is *not* stored here — it varies per item and
  * lives on the item_packaging_type_item pivot (`quantity`). The figures below
