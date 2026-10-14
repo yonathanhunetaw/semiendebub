@@ -8,9 +8,9 @@
 #   which is allowed because this node is already current) or when this node
 #   itself holds the lease.
 # primary: if another node has taken over and uploaded newer dumps, this node
-#   is BEHIND. By default it only logs that. With BACKUP_AUTO_CATCHUP=true in
-#   the env file it saves a safety dump, restores the newer dump and takes the
-#   lease back.
+#   is BEHIND. By default (BACKUP_AUTO_CATCHUP unset or true) it saves a safety
+#   dump, restores the newer dump and takes the lease back. Set
+#   BACKUP_AUTO_CATCHUP=false in the env file to only log BEHIND instead.
 # viewer: never does anything.
 #
 # Shares a lock with backup-db.sh so a backup can never upload a half-restored
@@ -93,12 +93,12 @@ fi
 
 # NODE_ROLE=primary: am I behind a node that took over?
 if [ "$lease_fresh" = 1 ] && [ "$holder" != "$NODE_NAME" ] && [ "$remote_sha" != "$my_sha" ]; then
-    if [ "$(db_env BACKUP_AUTO_CATCHUP false)" = true ]; then
+    if [ "$(db_env BACKUP_AUTO_CATCHUP true)" != false ]; then
         log "node '$holder' took over and has newer data: catching up"
         restore_latest 1 || exit 0
         lease_write
         log "lease taken back"
     else
-        log_every behind 600 "BEHIND: '$holder' holds the lease with newer data than this node. Run 'make restore' here (or set BACKUP_AUTO_CATCHUP=true). Nothing is being uploaded."
+        log_every behind 600 "BEHIND: '$holder' holds the lease with newer data than this node. BACKUP_AUTO_CATCHUP=false is set, so run 'make restore' here to catch up. Nothing is being uploaded."
     fi
 fi
