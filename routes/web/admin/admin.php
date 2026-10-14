@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\ItemDeployController;
 use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\SessionController;
+use App\Http\Controllers\Admin\SystemStatusController;
 use App\Http\Controllers\Admin\Store\StoreController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -93,7 +94,8 @@ Route::domain("admin.{$baseDomain}")
             Route::post('items/{item}/deploy', [ItemDeployController::class, 'deploy'])->name('items.deploy');
             Route::resource('items', ItemController::class);
 
-            // Users and sessions live under Settings, for global admins only.
+            // Users, sessions and the system status live under Settings, for global admins only.
+            Route::get('system', SystemStatusController::class)->name('system.index');
             Route::resource('users', UserController::class);
             $sessionController = SessionController::class;
             require __DIR__ . '/../sessions.php';

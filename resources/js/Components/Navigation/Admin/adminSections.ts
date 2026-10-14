@@ -4,7 +4,7 @@
  *
  *   Payments   → payments, collection accounts, seller balances
  *   Customers  → customers, who has credit, customer prices & discounts
- *   Settings   → general, users and sessions (the last two global admins only)
+ *   Settings   → general, users, sessions and system status (all but general: global admins only)
  *   Store      → the active store's items, replenishment and price deviations,
  *                plus the inventory screens (locations, transfers, capacity,
  *                approvals, shipments). On "All stores" the first tab is the
@@ -69,6 +69,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
             { label: "General", route: "admin.settings", match: ["/settings"] },
             { label: "Users", route: "admin.users.index", match: ["/users"], globalOnly: true },
             { label: "Sessions", route: "admin.sessions.index", match: ["/sessions"], globalOnly: true },
+            { label: "System", route: "admin.system.index", match: ["/system"], globalOnly: true },
         ],
     },
 ];

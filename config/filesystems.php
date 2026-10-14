@@ -75,6 +75,21 @@ return [
             'report'                  => false,
         ],
 
+        // The database-backup bucket (backups, lease, events, node heartbeats).
+        // Only ever READ by the admin "System status" page; the backup scripts
+        // in docker/ and deploy/ are the only writers.
+        'backup_r2' => [
+            'driver'                  => 's3',
+            'key'                     => env('R2_ACCESS_KEY_ID'),
+            'secret'                  => env('R2_SECRET_ACCESS_KEY'),
+            'region'                  => 'us-east-1',
+            'bucket'                  => env('BACKUP_BUCKET', 'duka-prod-db-backups'),
+            'endpoint'                => env('R2_ENDPOINT'),
+            'use_path_style_endpoint' => true,
+            'throw'                   => false,
+            'report'                  => false,
+        ],
+
     ],
 
     /*

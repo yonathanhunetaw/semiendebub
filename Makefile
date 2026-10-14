@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 ARGS ?=
 
-.PHONY: help setup dev stop status test e2e artisan deploy-dev prod restore prod-stop backup sync logs
+.PHONY: help setup dev stop status test e2e e2e-ui artisan deploy-dev prod restore prod-stop backup sync logs
 
 help: ## List commands
 	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -28,6 +28,9 @@ test: ## Run the PHP test suite natively (1G memory, no cached config)
 
 e2e: ## Playwright end-to-end (needs `make dev` running)
 	./deploy/dev.sh e2e $(ARGS)
+
+e2e-ui: ## Playwright in the interactive UI window (needs `make dev` running)
+	./deploy/dev.sh e2e --ui $(ARGS)
 
 artisan: ## Run artisan natively:  make artisan ARGS="migrate"
 	./deploy/dev.sh artisan $(ARGS)
