@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 ARGS ?=
 
-.PHONY: help setup dev stop status test e2e artisan deploy-dev prod logs
+.PHONY: help setup dev stop status test e2e artisan deploy-dev prod restore backup logs
 
 help: ## List commands
 	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -38,6 +38,12 @@ deploy-dev: ## Deploy the Docker dev stack (testing Docker changes)
 
 prod: ## Deploy production (after git pull)
 	./deploy/deploy-with-options.sh -e prod $(ARGS)
+
+restore: ## Deploy prod AND replace the database with the newest R2 backup (safety dump first)
+	./deploy/deploy-with-options.sh -e prod --restore-db $(ARGS)
+
+backup: ## Run the backup script once, now (what cron runs every 5 min)
+	./docker/backup-db.sh $(ARGS)
 
 logs: ## Follow the latest deploy log
 	tail -f deploy/logs/latest.log
