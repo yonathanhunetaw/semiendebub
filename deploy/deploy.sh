@@ -333,6 +333,8 @@ on_exit() {
         IN_STEP=0
         show_full_progress
         echo -e "${BOLD_RED}${ICON_ERROR} DEPLOYMENT FAILED (exit code $code) after $(elapsed_time)${NC}"
+        event_emit deploy_failed error "$NODE_NAME: deploy of $(git rev-parse --short HEAD 2>/dev/null) failed (exit $code)" \
+            "{\"commit\":\"$(git rev-parse --short HEAD 2>/dev/null)\",\"exit\":$code}"
         echo -e "${RED}Last lines of the log:${NC}"
         tail -n 20 "$LOG_FILE" | sed 's/^/    /'
         echo -e "${YELLOW}Full log: ${LOG_FILE}${NC}"
@@ -490,6 +492,7 @@ DB_DOCKER="${DOCKER_CMD[*]}"
 # shellcheck source=db-lib.sh
 source "$SCRIPT_DIR/db-lib.sh"
 db_init
+find_mc || true            # for the shared event record; deploys work without it
 BACKUP_BUCKET_PATH="$BACKUP_BUCKET"
 
 # =================================================================================================
@@ -848,6 +851,8 @@ run_migration_with_retry() {
 # MAIN DEPLOYMENT LOGIC
 # =================================================================================================
 
+event_emit deploy_started info "$NODE_NAME started a deploy of $(git rev-parse --short HEAD 2>/dev/null)" \
+    "{\"commit\":\"$(git rev-parse --short HEAD 2>/dev/null)\",\"env\":\"${APP_ENV:-}\"}"
 log_info "Options: force-build=$FORCE_BUILD  reset-db=$((1 - SKIP_DB_RESET))  restore-db=$RESTORE_DB  observability=$ENABLE_OBSERVABILITY"
 
 # =================================================================================================
@@ -1313,6 +1318,8 @@ except Exception:
     # contains, so tables created by migrations newer than the backup survive
     # the restore while the `migrations` table is rolled back, and the next
     # `migrate` dies on "table already exists".
+    COUNTS_BEFORE="$(mktemp "${TMPDIR:-/tmp}/duka_before.XXXXXX")"; COUNTS_AFTER="$(mktemp "${TMPDIR:-/tmp}/duka_after.XXXXXX")"
+    db_table_counts > "$COUNTS_BEFORE"
     log_info "Clearing database '${DB_DATABASE}' before restore..."
     if [ -n "$existing_tables" ] && [ "$existing_tables" != "NULL" ]; then
         if ! docker exec "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}" -e \
@@ -1326,6 +1333,15 @@ except Exception:
     if gunzip -c "$RESTORE_FILE" | docker exec -i "$DB_CONTAINER" mysql -u"${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}"; then
         state_set last_sha "$FILE_SHA"
         log_success "Database restored from R2 (${RESTORED_BACKUP_NAME}). This node now descends from that backup."
+        db_table_counts > "$COUNTS_AFTER"
+        _changed="$(counts_diff "$COUNTS_BEFORE" "$COUNTS_AFTER")"; read -r _missing _added <<< "$(counts_summary "$COUNTS_BEFORE" "$COUNTS_AFTER")"
+        if [ "${_missing:-0}" -gt 0 ]; then _verdict=rows_missing; _lvl=warn
+        elif [ "$_changed" != "{}" ]; then _verdict=rows_added_only; _lvl=info
+        else _verdict=identical_rowcounts; _lvl=info; fi
+        log_info "Data replaced: ${_missing:-0} rows existed here but not in the backup, ${_added:-0} rows are new ($_verdict)${SAFETY_DUMP:+; previous data kept in $(basename "$SAFETY_DUMP")}"
+        event_emit data_replaced "$_lvl" "$NODE_NAME restored the backup from $(json_get "$REMOTE_INFO" node) (${_missing:-0} rows missing, ${_added:-0} new)" \
+            "{\"from\":\"$(json_get "$REMOTE_INFO" node)\",\"file\":\"${RESTORED_BACKUP_NAME}\",\"safety_dump\":\"$(basename "${SAFETY_DUMP:-}")\",\"verdict\":\"$_verdict\",\"rows_missing\":${_missing:-0},\"rows_added\":${_added:-0},\"changed\":$_changed}"
+        rm -f "$COUNTS_BEFORE" "$COUNTS_AFTER"
     else
         log_error "Failed to restore database from '${RESTORED_BACKUP_NAME}'."
         [ -n "${SAFETY_DUMP:-}" ] && log_error "The previous live database is in ${SAFETY_DUMP}"
@@ -1501,6 +1517,9 @@ step_success 9 "Cloudflare cache purged"
 banner "${ICON_ROCKET} DEPLOYMENT COMPLETE"
 log_success "Application is running"
 log_info "Log file: $LOG_FILE"
+
+event_emit deploy_done info "$NODE_NAME finished deploying $(git rev-parse --short HEAD 2>/dev/null) in $(elapsed_time)" \
+    "{\"commit\":\"$(git rev-parse --short HEAD 2>/dev/null)\",\"seconds\":$(( $(date +%s) - DEPLOY_START_TIME )),\"restored\":$([ "${RESTORED_BACKUP_NAME:-}" ] && echo true || echo false)}"
 
 # On-demand node: claim the (pinned) lease now, so the other nodes follow this one
 # and this node's backups are accepted.

@@ -55,6 +55,7 @@ trap 'rm -f "${TMP:-}"; lock_release db' EXIT
 
 info="$(r2_latest_info)"
 remote_sha="$(json_get "$info" sha256)"
+heartbeat_write "$remote_sha"                       # "I am alive, this is my state" (one tiny object per node)
 [ -n "$remote_sha" ] || exit 0                      # nothing published yet
 my_sha="$(state_get last_sha)"
 
@@ -77,10 +78,31 @@ restore_latest() {
         log "safety dump of this node's database saved: $safe"
         ls -1t "$STATE_DIR"/pre-catchup_*.sql.gz 2>/dev/null | tail -n +4 | xargs rm -f 2>/dev/null || true
     fi
+    local before="" after="" safe_name=""
+    if [ "$safety" = 1 ]; then
+        safe_name="$(basename "$(ls -1t "$STATE_DIR"/pre-catchup_*.sql.gz 2>/dev/null | head -1)")"
+        before="$(mktemp "${TMPDIR:-/tmp}/duka_before.XXXXXX")"; after="$(mktemp "${TMPDIR:-/tmp}/duka_after.XXXXXX")"
+        db_table_counts > "$before"
+    fi
     log "restoring '$(json_get "$info" file)' made by '$(json_get "$info" node)' at $(json_get "$info" time)"
     db_restore_file "$TMP" || fail "restore failed; this node's last_sha is unchanged, so it will retry (database may be partly loaded)"
     state_set last_sha "$remote_sha"
     log "restored: now matches the newest backup (${remote_sha:0:12})"
+    local from; from="$(json_get "$info" node)"
+    if [ "$safety" = 1 ]; then
+        db_table_counts > "$after"
+        local changed missing added verdict level=info
+        changed="$(counts_diff "$before" "$after")"; read -r missing added <<< "$(counts_summary "$before" "$after")"
+        if [ "${missing:-0}" -gt 0 ]; then verdict=rows_missing; level=warn
+        elif [ "$changed" != "{}" ]; then verdict=rows_added_only
+        else verdict=identical_rowcounts; fi
+        log "data replaced: ${missing:-0} rows existed here but not in the restored backup, ${added:-0} rows are new ($verdict); previous data kept in ${safe_name:-the safety dump}"
+        event_emit data_replaced "$level" "$NODE_NAME replaced its data with the backup from $from (${missing:-0} rows missing, ${added:-0} new)" \
+            "{\"from\":\"$from\",\"file\":\"$(json_get "$info" file)\",\"safety_dump\":\"$safe_name\",\"verdict\":\"$verdict\",\"rows_missing\":${missing:-0},\"rows_added\":${added:-0},\"changed\":$changed}"
+        rm -f "$before" "$after"
+    else
+        event_emit synced info "$NODE_NAME followed the backup from $from" "{\"from\":\"$from\",\"file\":\"$(json_get "$info" file)\"}"
+    fi
 }
 
 if [ "$NODE_ROLE" = standby ]; then
@@ -114,5 +136,6 @@ if [ "$(db_env BACKUP_AUTO_CATCHUP true)" != false ]; then
     lease_write false
     log "lease taken"
 else
+    event_emit_every behind 1800 behind warn "$NODE_NAME is behind the backup in R2 and BACKUP_AUTO_CATCHUP=false: nothing is being uploaded"
     log_every behind 600 "BEHIND: R2 has newer data (made by '$(json_get "$info" node)'). BACKUP_AUTO_CATCHUP=false is set, so run 'make restore' here to catch up. Nothing is being uploaded."
 fi

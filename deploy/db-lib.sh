@@ -213,6 +213,7 @@ r2_prune() {
         age=$(( now - $(epoch_of_date "$d") ))
         [ "$age" -gt 2592000 ] && "$MC" rm "$R2/$name" >/dev/null 2>&1 || true
     done
+    events_prune
     return 0
 }
 
@@ -276,3 +277,94 @@ deploy_marker_write() {
         | "$MC" pipe "$R2/deployed.json" >/dev/null
 }
 deploy_marker_read() { "$MC" cat "$R2/deployed.json" 2>/dev/null || true; }
+
+# ---------------------------------------------------------------------------
+# Shared event record (R2 events/…) and node heartbeats (R2 nodes/…), read by
+# the admin "System status" page. Everything here is best effort: a failure to
+# write an event must never break a backup, sync or deploy.
+# ---------------------------------------------------------------------------
+
+# json_str <text>: escape for use inside a JSON string
+json_str() { printf '%s' "$1" | tr '\n\t\r' '   ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+
+# event_emit <type> <level:info|warn|error> <message> [data-json-object]
+event_emit() {
+    [ -n "${MC:-}" ] || return 0
+    local type="$1" level="$2" msg data="${4:-}" key
+    [ -n "$data" ] || data='{}'
+    msg="$(json_str "$3")"
+    key="events/$(utc_stamp)_${NODE_NAME}_${type}_${RANDOM}.json"
+    printf '{"ts":%s,"time":"%s","node":"%s","role":"%s","type":"%s","level":"%s","message":"%s","data":%s}' \
+        "$(now_epoch)" "$(date -u +%FT%TZ)" "$NODE_NAME" "${NODE_ROLE:-}" "$type" "$level" "$msg" "$data" \
+        | "$MC" pipe "$R2/$key" >/dev/null 2>&1 || true
+    return 0
+}
+
+# event_emit_every <key> <seconds> <type> <level> <message> [data]: rate-limited
+# (for repeating failures: one event per window, not one per cron run)
+event_emit_every() {
+    local k="$1" secs="$2"; shift 2
+    local last; last="$(state_get "evt_$k")"
+    if [ $(( $(now_epoch) - ${last:-0} )) -ge "$secs" ]; then
+        event_emit "$@"; state_set "evt_$k" "$(now_epoch)"
+    fi
+    return 0
+}
+
+# heartbeat_write [remote_sha]: nodes/<name>.json, one small object per node, rewritten each run
+heartbeat_write() {
+    [ -n "${MC:-}" ] || return 0
+    local remote="${1:-}" mine insync=false up=true commit
+    mine="$(state_get last_sha)"
+    [ -n "$remote" ] && [ "$remote" = "$mine" ] && insync=true
+    [ "$ON_DEMAND" = true ] && ! db_container_running && up=false
+    commit="$(git -C "$APP_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
+    printf '{"ts":%s,"node":"%s","role":"%s","on_demand":%s,"commit":"%s","last_sha":"%s","in_sync":%s,"db_up":%s}' \
+        "$(now_epoch)" "$NODE_NAME" "${NODE_ROLE:-}" "$ON_DEMAND" "$commit" "${mine:0:8}" "$insync" "$up" \
+        | "$MC" pipe "$R2/nodes/${NODE_NAME}.json" >/dev/null 2>&1 || true
+    return 0
+}
+
+# db_table_counts: "table<TAB>rows" for every table (volatile ones excluded), for
+# before/after comparisons around a restore. Prints nothing if the DB is unreachable.
+db_table_counts() {
+    ${DB_DOCKER:-docker} exec -i -e EXCLUDE="$EXCLUDE_DATA" -e WANT=counts "$DB_CONTAINER" sh -s 2>/dev/null <<'EOS' || true
+export MYSQL_PWD="$MYSQL_PASSWORD"
+q=""
+for t in $(mysql -u"$MYSQL_USER" -N -e "SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE' ORDER BY 1" "$MYSQL_DATABASE"); do
+    case " $EXCLUDE " in *" $t "*) continue ;; esac
+    q="$q SELECT '$t', COUNT(*) FROM \`$t\` UNION ALL"
+done
+[ -z "$q" ] || mysql -u"$MYSQL_USER" -N -e "${q% UNION ALL}" "$MYSQL_DATABASE"
+EOS
+}
+
+# counts_diff <before.tsv> <after.tsv>: JSON {"table":[before,after],…} for tables that differ
+counts_diff() {
+    awk -F'\t' 'NR==FNR { b[$1]=$2; all[$1]=1; next } { a[$1]=$2; all[$1]=1 }
+        END { printf "{"; n=0
+              for (t in all) { bb=(t in b)?b[t]:0; aa=(t in a)?a[t]:0
+                  if (bb != aa) { printf "%s\"%s\":[%d,%d]", (n++?",":""), t, bb, aa } }
+              printf "}" }' "$1" "$2"
+}
+
+# counts_summary <before.tsv> <after.tsv>: "missing added" = rows in before-but-not-after, rows only in after
+counts_summary() {
+    awk -F'\t' 'NR==FNR { b[$1]=$2; all[$1]=1; next } { a[$1]=$2; all[$1]=1 }
+        END { m=0; ad=0
+              for (t in all) { bb=(t in b)?b[t]:0; aa=(t in a)?a[t]:0
+                  if (aa < bb) m += bb-aa; else if (aa > bb) ad += aa-bb }
+              printf "%d %d", m, ad }' "$1" "$2"
+}
+
+# events_prune: delete event files older than 30 days (names start with the UTC stamp)
+events_prune() {
+    local now name stamp age
+    now="$(now_epoch)"
+    "$MC" ls "$R2/events/" 2>/dev/null | awk '{print $NF}' | grep -E '^[0-9]{8}T[0-9]{6}Z_' | while read -r name; do
+        stamp="${name:0:16}"
+        age=$(( now - $(epoch_of_stamp "$stamp") ))
+        [ "$age" -gt 2592000 ] && "$MC" rm "$R2/events/$name" >/dev/null 2>&1 || true
+    done
+    return 0
+}

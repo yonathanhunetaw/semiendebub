@@ -70,10 +70,13 @@ fi
 
 DEPLOY_CMD="${DUKA_DEPLOY_CMD:-./deploy/deploy-with-options.sh -e prod -y}"
 log "deploying: $DEPLOY_CMD"
+event_emit auto_deploy_started info "$NODE_NAME is deploying ${target:0:10}, which $(json_get "$info" node) deployed" "{\"commit\":\"${target:0:10}\"}"
 if $DEPLOY_CMD; then
     state_set deployed_commit "$target"
     log "deployed ${target:0:10}"
+    event_emit auto_deploy_done info "$NODE_NAME finished deploying ${target:0:10}" "{\"commit\":\"${target:0:10}\"}"
 else
+    event_emit auto_deploy_failed error "$NODE_NAME failed to deploy ${target:0:10}" "{\"commit\":\"${target:0:10}\"}"
     record_failure
     fail "deploy of ${target:0:10} failed; will retry in 30 min (see deploy/logs/latest.log)"
 fi

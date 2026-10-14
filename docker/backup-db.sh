@@ -47,7 +47,13 @@ done
 
 db_init
 log()  { echo "[$(date '+%F %T')] [${NODE_NAME}/${NODE_ROLE:-?}] $*"; }
-fail() { echo "[$(date '+%F %T')] [${NODE_NAME}/${NODE_ROLE:-?}] ERROR: $*" >&2; exit "${2:-1}"; }
+fail() {
+    echo "[$(date '+%F %T')] [${NODE_NAME}/${NODE_ROLE:-?}] ERROR: $*" >&2
+    # a refused upload (stale node, lease held elsewhere) is a warning; anything else an error
+    local lvl=error; [ "${2:-1}" != 1 ] && lvl=warn
+    event_emit_every backup_fail 1800 backup_failed "$lvl" "$1"
+    exit "${2:-1}"
+}
 
 find_mc || fail "mc (MinIO client) not found in PATH ($PATH)"
 
@@ -89,13 +95,24 @@ if [ "$LEASE_FRESH" = 1 ] && [ "$holder" != "$NODE_NAME" ] && [ "$FORCE" = 0 ]; 
     fail "node '$holder' holds the primary lease (${LEASE_AGE}s old). If it is really down, re-run with --force" 3
 fi
 if [ -n "$holder" ] && [ "$holder" != "$NODE_NAME" ]; then
-    if [ "$LEASE_FRESH" = 1 ]; then log "--force: taking the lease from '$holder'"
-    else log "lease of '$holder' is stale (${LEASE_AGE}s): taking over"; fi
+    if [ "$LEASE_FRESH" = 1 ]; then
+        log "--force: taking the lease from '$holder'"
+        event_emit lease_takeover warn "$NODE_NAME took the primary lease from $holder (forced)" \
+            "{\"from\":\"$holder\",\"forced\":true,\"lease_age\":$LEASE_AGE}"
+    else
+        log "lease of '$holder' is stale (${LEASE_AGE}s): taking over"
+        event_emit lease_takeover warn "$NODE_NAME took the primary lease from $holder (its lease expired ${LEASE_AGE}s after the last refresh)" \
+            "{\"from\":\"$holder\",\"forced\":false,\"lease_age\":$LEASE_AGE}"
+    fi
 fi
 
 # finish_lease: refresh the lease the way this node holds it, or hand it back (--release)
 finish_lease() {
-    if [ "$RELEASE" = 1 ]; then lease_release; log "lease released: the next node takes over"; else lease_touch; fi
+    if [ "$RELEASE" = 1 ]; then
+        lease_release; log "lease released: the next node takes over"
+        event_emit lease_released info "$NODE_NAME handed the primary lease back"
+    else lease_touch; fi
+    heartbeat_write "$sha"
 }
 
 # --- rule 3: lineage ---------------------------------------------------------
@@ -121,6 +138,8 @@ fi
 name="$(r2_publish "$TMP" "$sha")" || fail "upload to $R2 failed"
 finish_lease
 log "pushed $name ($(wc -c < "$TMP" | tr -d ' ') bytes) to $R2"
+event_emit backup_pushed info "$NODE_NAME uploaded a backup" \
+    "{\"file\":\"$name\",\"bytes\":$(wc -c < "$TMP" | tr -d ' '),\"sha\":\"${sha:0:8}\"}"
 
 # Prune at most once an hour.
 last_prune="$(state_get last_prune)"
