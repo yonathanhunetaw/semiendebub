@@ -13,7 +13,7 @@
 .DEFAULT_GOAL := help
 ARGS ?=
 
-.PHONY: help setup dev stop status test e2e e2e-ui artisan deploy-dev prod restore prod-stop prod-status logs backup sync tunnel
+.PHONY: help setup dev stop status test e2e e2e-ui artisan dev-from-prod compare-prod deploy-dev prod restore prod-stop prod-status logs backup sync tunnel env-keys
 
 # --- Deploy options -> flags of deploy/deploy-with-options.sh ---------------------------------
 DEPLOY_FLAGS = $(if $(FORCE_BUILD),-f) $(if $(NO_CACHE),--no-cache) $(if $(OBSERVABILITY),-o) \
@@ -54,6 +54,12 @@ status: ## Is local MySQL / the app / the queue / Vite running?
 test: ## Run the PHP tests natively. Narrow it with ARGS="--filter SomeTest"
 	APP_CONFIG_CACHE=/nonexistent/config.php APP_ROUTES_CACHE=/nonexistent/routes.php \
 	APP_EVENTS_CACHE=/nonexistent/events.php php -d memory_limit=1G vendor/bin/phpunit --no-coverage $(ARGS)
+
+dev-from-prod: ## Replace the dev database with prod's newest backup (a safety dump of dev first). Read-only on prod
+	./deploy/dev.sh pull-prod
+
+compare-prod: ## How dev differs from prod: code, migrations, settings (names only), PHP/Node/MySQL versions
+	./deploy/dev.sh compare
 
 e2e: ## Browser tests (Playwright) on a throwaway copy of the database. Needs `make dev` running
 	./deploy/dev.sh e2e $(if $(T),e2e/$(T)) $(ARGS)
@@ -107,6 +113,9 @@ backup: ## Back up the database to R2 now. ARGS="--adopt" (this DB is the truth)
 
 sync: ## Run the standby sync now: follow the newest backup, or catch up after a takeover
 	./docker/sync-db.sh $(ARGS)
+
+env-keys: ## Print this server's .env.production setting names (+ a short hash of non-secret values) to compare servers
+	@./docker/env-keys.sh $(ARGS)
 
 tunnel: ## Only the live server keeps its Cloudflare tunnel up: run the guard now. ARGS="--dry-run" (just say), "--status"
 	./docker/tunnel-guard.sh $(ARGS)

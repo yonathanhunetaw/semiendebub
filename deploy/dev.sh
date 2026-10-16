@@ -12,6 +12,9 @@
 #   ./deploy/dev.sh stop         stop the MySQL service (frees RAM)
 #   ./deploy/dev.sh artisan ...  run artisan against the native DB (also: composer, npm)
 #   ./deploy/dev.sh e2e [...]    Playwright on a fresh copy of the DB (needs ./deploy/dev.sh up running)
+#   ./deploy/dev.sh pull-prod    replace the dev DB with prod's newest R2 backup (safety dump first)
+#   ./deploy/dev.sh compare      how dev differs from prod: code, migrations, settings, versions
+#   ./deploy/dev.sh mysql        a mysql shell on the dev DB (also: gzip -dc dump.sql.gz | ./deploy/dev.sh mysql)
 
 set -e
 
@@ -342,6 +345,121 @@ cmd_e2e() {
     npx --no-install playwright test "$@"
 }
 
+# Prod's R2 helpers (deploy/db-lib.sh), read-only here: this never writes the lease,
+# heartbeats or events. R2 settings come from .env.production on this Mac.
+prod_r2() {
+    APP_ROOT="$PWD"
+    # shellcheck source=db-lib.sh
+    . deploy/db-lib.sh
+    export DUKA_ENV_FILE="$PWD/.env.production"
+    db_init
+    find_mc || die "mc (MinIO client) not found: brew install minio/stable/mc"
+}
+
+# Load prod's newest backup into the native dev database (a safety dump of dev first).
+cmd_pull_prod() {
+    [ "$(env_value APP_ENV)" != production ] || die ".env says APP_ENV=production: refusing to treat this as dev"
+    [ -f .env.production ] || die ".env.production not found (its R2 settings say where the backups are)"
+    ensure_mysql
+    native_env
+    prod_r2
+
+    local info sha tmp stamp safety
+    info="$(r2_latest_info)"
+    sha="$(json_get "$info" sha256)"
+    [ -n "$sha" ] || die "No backup found in R2 (latest.json is missing or unreadable)"
+    info "Newest prod backup: $(json_get "$info" file), by $(json_get "$info" node) at $(json_get "$info" time)"
+
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    mkdir -p "$HOME/.duka-backup"
+    safety="$HOME/.duka-backup/dev-pre-pull_${stamp}.sql.gz"
+    info "1/5 Safety dump of the dev database → $safety"
+    ( set -o pipefail; "$MYSQL_BIN/mysqldump" -uroot --socket="$DUKA_MYSQL_SOCK" --single-transaction --routines --triggers "$DB_NAME" | gzip > "$safety" ) \
+        || die "Safety dump failed: nothing was changed"
+
+    info "2/5 Downloading and checking the backup"
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' RETURN
+    local rc=0
+    r2_fetch_latest "$tmp/latest.sql.gz" "$sha" || rc=$?
+    [ "$rc" -eq 0 ] || die "Download failed$([ "$rc" -eq 2 ] && echo ': the checksum differs, an upload is probably running. Try again in a minute')"
+
+    info "3/5 Replacing the dev database"
+    local tables
+    tables="$(mysql_root -N -B -e "SET SESSION group_concat_max_len=1000000; SELECT GROUP_CONCAT(CONCAT(CHAR(96),table_name,CHAR(96))) FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_type='BASE TABLE'")"
+    if [ -n "$tables" ] && [ "$tables" != NULL ]; then
+        mysql_root "$DB_NAME" -e "SET FOREIGN_KEY_CHECKS=0; DROP TABLE IF EXISTS $tables; SET FOREIGN_KEY_CHECKS=1;"
+    fi
+    ( set -o pipefail; gzip -dc "$tmp/latest.sql.gz" | mysql_root "$DB_NAME" ) \
+        || die "Import failed. Put dev back with: gzip -dc $safety | ./deploy/dev.sh mysql"
+
+    info "4/5 Making it safe for dev"
+    # Prod's queued jobs would run again from the dev queue (mails, webhooks, notifications).
+    mysql_root "$DB_NAME" -e "DELETE FROM jobs;" 2>/dev/null || true
+    php artisan migrate --force
+    php artisan optimize:clear >/dev/null
+
+    info "5/5 What is in dev now"
+    mysql_root -t "$DB_NAME" -e "SELECT 'users' AS what, COUNT(*) AS \`rows\` FROM users
+        UNION ALL SELECT 'stores', COUNT(*) FROM stores
+        UNION ALL SELECT 'items', COUNT(*) FROM items
+        UNION ALL SELECT 'item_stocks', COUNT(*) FROM item_stocks" 2>/dev/null || true
+    ok "Dev now has prod's data as of $(json_get "$info" time). Log in with a prod account."
+    echo "   Dev's old data: $safety"
+}
+
+# Show how this Mac's dev differs from prod: code, migrations, settings, versions.
+# Prints names and same/different only, never a value.
+cmd_compare() {
+    native_env
+    prod_r2
+    local deployed head
+    deployed="$(json_get "$(deploy_marker_read)" commit)"
+    head="$(git rev-parse HEAD)"
+
+    info "Code"
+    if [ -z "$deployed" ]; then warn "Prod has not published a deployed commit"
+    elif [ "$head" = "$deployed" ]; then ok "Same commit as prod (${head:0:7})"
+    elif git merge-base --is-ancestor "$deployed" "$head" 2>/dev/null; then
+        warn "Dev is $(git rev-list --count "$deployed..$head") commit(s) ahead of prod (${deployed:0:7} → ${head:0:7}): deploy to bring prod up"
+    else warn "Dev ${head:0:7} and prod ${deployed:0:7} differ: git fetch && git log --oneline ${deployed:0:7}..HEAD"
+    fi
+    [ -z "$(git status --porcelain)" ] || warn "Uncommitted changes: $(git status --porcelain | wc -l | tr -d ' ') file(s)"
+
+    info "Database"
+    ensure_mysql
+    local pending
+    pending="$(php artisan migrate:status 2>/dev/null | grep -c 'Pending' || true)"
+    if [ "${pending:-0}" -eq 0 ]; then ok "No pending migrations in dev"; else warn "$pending migration(s) pending in dev: ./deploy/dev.sh artisan migrate"; fi
+    local mine latest
+    latest="$(json_get "$(r2_latest_info)" time)"
+    mine="$(ls -t "$HOME"/.duka-backup/dev-pre-pull_*.sql.gz 2>/dev/null | head -1)"
+    echo "   Newest prod backup: ${latest:-none}. Last time dev loaded prod: $( [ -n "$mine" ] && date -r "$(stat -f %m "$mine")" '+%F %T' || echo never) (make dev-from-prod)"
+
+    info "Settings (.env vs .env.production)"
+    # Meant to differ: the environment itself, the node/tunnel/Cloudflare keys, Docker limits, dev tools.
+    local expected=' APP_ENV APP_DEBUG APP_URL APP_DOMAIN APP_SYSTEM_DOMAIN APP_PORT ASSET_URL SESSION_DOMAIN SESSION_COOKIE SESSION_SECURE_COOKIE SANCTUM_STATEFUL_DOMAINS LOG_LEVEL DEBUGBAR_ENABLED DEBUGBAR_EDITOR AWS_URL R2_URL VITE_DEV_SERVER_URL COMPOSE_PROJECT_NAME DB_HOSTNAME MYSQL_EXPOSE_PORT MINIO_PORT MINIO_CONSOLE_PORT SENTRY_LARAVEL_DSN '
+    keys() { grep -E '^[A-Z_][A-Z0-9_]*=' "$1" | cut -d= -f1 | sort -u; }
+    val() { grep -m1 -E "^$2=" "$1" | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/'; }
+    local k only_dev only_prod diff=""
+    only_dev="$(comm -23 <(keys .env) <(keys .env.production) | grep -vE '^(APP|DB)_(CPU|MEM)_|^DEBUGBAR_|^GLITCHTIP_|^DISCORD_(LOGIN|NOTIFY)' | tr '\n' ' ')"
+    only_prod="$(comm -13 <(keys .env) <(keys .env.production) | grep -vE '^(NODE_|TUNNEL_|BACKUP_|CLOUDFLARE_|SYNC_DB|MYSQL_SERVER_ID|AUTO_DEPLOY|DEPLOY_GRACE|ASSET_URL|GOOGLE_ANALYTICS_ID)' | tr '\n' ' ')"
+    for k in $(comm -12 <(keys .env) <(keys .env.production)); do
+        case "$expected" in *" $k "*) continue ;; esac
+        [ "$(val .env "$k")" = "$(val .env.production "$k")" ] || diff="$diff $k"
+    done
+    [ -z "$only_dev" ] && ok "No setting is only in dev" || warn "Only in dev: $only_dev"
+    [ -z "$only_prod" ] && ok "No setting is only in prod" || warn "Only in prod: $only_prod"
+    [ -z "$diff" ] && ok "All shared settings match (apart from the expected ones)" || warn "Different values:$diff"
+
+    info "Versions (dev on this Mac vs the prod image)"
+    echo "   PHP    dev $(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')    prod $(sed -nE 's/^FROM php:([0-9.]+).*/\1/p' docker/Dockerfile | head -1)"
+    echo "   Node   dev $(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')      prod $(sed -nE 's/.*setup_([0-9]+)\.x.*/\1/p' docker/Dockerfile | head -1)"
+    echo "   MySQL  dev $("$MYSQL_BIN/mysql" --version | sed -E 's/.*Ver ([0-9]+\.[0-9]+).*/\1/')   prod $(sed -nE 's/.*image: mysql:([0-9.]+).*/\1/p' docker/docker-compose.yml | head -1)"
+    echo
+    echo "This Mac's .env.production may differ from the servers' copies: run  make env-keys  on each and compare."
+}
+
 cmd_stop() {
     "$MYSQL_BIN/mysqladmin" -uroot --socket="$DUKA_MYSQL_SOCK" shutdown 2>/dev/null || true
     ok "MySQL stopped"
@@ -369,6 +487,9 @@ case "${1:-up}" in
     composer)         shift; native_env; exec composer "$@" ;;
     npm)              shift; native_env; exec npm "$@" ;;
     e2e)              shift; cmd_e2e "$@" ;;
-    -h|--help|help)   sed -n '2,14p' "$0" ;;
+    pull-prod)        cmd_pull_prod ;;
+    compare)          cmd_compare ;;
+    mysql)            shift; mysql_root "$DB_NAME" "$@" ;;
+    -h|--help|help)   sed -n '2,17p' "$0" ;;
     *)                die "Unknown command: $1 (try ./deploy/dev.sh help)" ;;
 esac
