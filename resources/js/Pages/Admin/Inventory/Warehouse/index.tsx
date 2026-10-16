@@ -314,7 +314,7 @@ export default function WarehouseIndex({
                             elevation={0}
                             sx={{
                                 p: 2.5,
-                                borderRadius: "16px",
+                                borderRadius: 2,
                                 border: "1px solid",
                                 borderColor: "divider",
                                 display: "flex",
@@ -370,7 +370,7 @@ export default function WarehouseIndex({
                 component={Paper}
                 elevation={0}
                 sx={{
-                    borderRadius: "16px",
+                    borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
                     mb: 4,
@@ -713,7 +713,7 @@ export default function WarehouseIndex({
                 component={Paper}
                 elevation={0}
                 sx={{
-                    borderRadius: "16px",
+                    borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
                 }}

@@ -362,6 +362,100 @@ class SellerOrderJourneyTest extends TestCase
         $this->assertSame(8, app(StockService::class)->availableAtStore($this->variant->id, $this->store->id));
     }
 
+    /** A carton variant with a sibling piece variant priced at 5 and $pieceStock on the shelf. */
+    private function looseableCarton(int $pieceStock): ItemVariant
+    {
+        $carton = \App\Models\Item\ItemPackagingType::factory()->create(['name' => 'Carton']);
+        $piece = \App\Models\Item\ItemPackagingType::factory()->create(['name' => 'Piece']);
+        $this->variant->update(['item_packaging_type_id' => $carton->id]);
+        $pieceVariant = ItemVariant::factory()->create([
+            'item_id' => $this->variant->item_id, 'item_color_id' => $this->variant->item_color_id,
+            'item_size_id' => $this->variant->item_size_id, 'item_packaging_type_id' => $piece->id,
+        ]);
+        StoreVariant::factory()->create([
+            'store_id' => $this->store->id, 'item_id' => $this->variant->item_id, 'item_variant_id' => $pieceVariant->id,
+            'pricing_matrix' => ['price' => 5.00], 'active' => true,
+        ]);
+        if ($pieceStock > 0) {
+            app(StockService::class)->receive($pieceVariant->id, $this->shelf, $pieceStock);
+        }
+
+        return $pieceVariant;
+    }
+
+    #[Test]
+    public function the_confirmation_shows_loose_pieces_as_their_own_row_and_where_they_come_from(): void
+    {
+        $pieceVariant = $this->looseableCarton(5);
+        $cart = $this->cart(2);
+        $cart->variants()->updateExistingPivot($this->variant->id, ['extra_pieces' => 3, 'extra_piece_price' => 4]);
+
+        $this->asSeller()->get(route('seller.orders.confirmation', ['cart' => $cart->id]))->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('order.lines.1.id', $pieceVariant->id)
+                ->where('order.lines.1.variant', 'Loose pieces')
+                ->where('order.lines.1.quantity', 3)
+                ->where('order.lines.1.unitPrice', 4)
+                ->where('order.lines.1.inStore', true));
+
+        $cart->variants()->updateExistingPivot($this->variant->id, ['extra_pieces' => 9]);
+        $this->asSeller()->get(route('seller.orders.confirmation', ['cart' => $cart->id]))
+            ->assertInertia(fn ($page) => $page->where('order.lines.1.fulfillment', 'hub')->where('order.lines.1.inStore', false));
+    }
+
+    #[Test]
+    public function loose_pieces_are_refused_when_the_product_has_none_or_too_few_are_on_hand(): void
+    {
+        // No piece variant at all.
+        $cart = $this->cart(1);
+        $cart->variants()->updateExistingPivot($this->variant->id, ['extra_pieces' => 2, 'extra_piece_price' => 4]);
+        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $cart->id, ...$this->cash(208)])
+            ->assertSessionHas('error');
+        $this->assertSame(0, Sale::query()->count());
+
+        // A piece variant, but only 2 pieces for 6 asked.
+        $this->looseableCarton(2);
+        $cart->variants()->updateExistingPivot($this->variant->id, ['extra_pieces' => 6]);
+        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $cart->id, ...$this->cash(224)])
+            ->assertSessionHas('error');
+        $this->assertSame(0, Sale::query()->count());
+    }
+
+    #[Test]
+    public function an_order_with_a_picked_line_cannot_be_cancelled(): void
+    {
+        $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart(1)->id, ...$this->cash(200)]);
+        $sale = Sale::query()->sole();
+        $sale->items()->update(['picked_quantity' => 1]);
+
+        $this->asSeller()->post(route('seller.orders.cancel', ['reference' => $sale->reference_number]))
+            ->assertSessionHas('error', "Order {$sale->reference_number} has already been picked; it can only be returned through Delivery.");
+        $this->assertNotSame(Sale::STAGE_CANCELLED, $sale->fresh()->fulfillment_stage);
+    }
+
+    #[Test]
+    public function switching_to_a_vehicle_collection_or_in_store_clears_what_no_longer_applies(): void
+    {
+        $this->asSeller()->post(route('seller.orders.store'), [
+            'cart_id' => $this->cart(1)->id, ...$this->cash(200), 'delivery_address' => 'Bole',
+        ]);
+        $sale = Sale::query()->sole();
+        $reference = ['reference' => $sale->reference_number];
+
+        $this->asSeller()->patch(route('seller.orders.address', $reference), ['delivery_method' => 'vehicle', 'vehicle_plate' => 'aa-3-1234', 'driver_phone' => '0911000000'])
+            ->assertSessionHas('success');
+        $delivery = $sale->delivery()->first();
+        $this->assertSame(['vehicle', null, 'AA-3-1234', '0911000000'], [$delivery->method, $delivery->delivery_address, $delivery->vehicle_plate, $delivery->driver_phone]);
+
+        $this->asSeller()->patch(route('seller.orders.address', $reference), ['delivery_method' => 'store'])->assertSessionHas('success');
+        $delivery->refresh();
+        $this->assertSame(['store', null, null, null], [$delivery->method, $delivery->delivery_address, $delivery->vehicle_plate, $delivery->driver_phone]);
+
+        $this->asSeller()->patch(route('seller.orders.address', $reference), ['delivery_method' => 'later'])->assertSessionHas('success');
+        $this->assertSame('courier', $delivery->fresh()->method);
+        $this->assertNull($delivery->fresh()->delivery_address);
+    }
+
     #[Test]
     public function the_address_can_change_until_the_courier_has_the_goods(): void
     {

@@ -1,4 +1,5 @@
 import { Head, Link, router, usePoll } from "@inertiajs/react";
+import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 import ErrorRoundedIcon from "@mui/icons-material/ErrorRounded";
@@ -96,6 +97,7 @@ export default function Dashboard({
         { label: "Deliveries", hint: "Customer drop-offs", icon: <LocalShippingRoundedIcon />, href: route("delivery.delivery.index"), color: theme.palette.primary.main },
         { label: "Freight", hint: "Hub → store runs", icon: <WarehouseRoundedIcon />, href: route("delivery.shipments.index"), color: theme.palette.info.main },
         { label: "Transfers", hint: "Site to site", icon: <SwapHorizRoundedIcon />, href: route("delivery.transfers.index"), color: theme.palette.success.main },
+        { label: "Calendar", hint: "Your runs by day", icon: <CalendarMonthRoundedIcon />, href: route("delivery.calendar"), color: theme.palette.warning.main },
     ];
 
     return (

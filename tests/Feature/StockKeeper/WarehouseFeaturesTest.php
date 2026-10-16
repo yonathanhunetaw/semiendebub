@@ -54,7 +54,7 @@ class WarehouseFeaturesTest extends TestCase
     {
         parent::setUp();
 
-        foreach (['stock_keeper', 'admin'] as $role) {
+        foreach (['stock_keeper', 'admin', 'store_manager'] as $role) {
             Role::firstOrCreate(['name' => $role]);
         }
 
@@ -161,6 +161,22 @@ class WarehouseFeaturesTest extends TestCase
     }
 
     #[Test]
+    public function a_shortfall_is_settled_once_and_only_as_found_or_lost(): void
+    {
+        $this->post(route('stock_keeper.transfers.complete', $this->sendTwelve()), ['received' => 9]);
+        $short = ReceiptDiscrepancy::query()->sole();
+
+        $response = $this->actingAs($this->colleague)->post(route('stock_keeper.receiving.resolve', $short), ['resolution' => 'accepted']);
+        $this->assertTrue($response->getSession()->has('errors') || $response->getSession()->has('error'), 'a shortfall is not "accepted"');
+        $this->assertSame('open', $short->fresh()->status);
+
+        $this->actingAs($this->colleague)->post(route('stock_keeper.receiving.resolve', $short), ['resolution' => 'lost'])->assertSessionHas('success');
+        $this->actingAs($this->colleague)->post(route('stock_keeper.receiving.resolve', $short->fresh()), ['resolution' => 'found'])
+            ->assertSessionHas('error', "{$short->reference} is already settled.");
+        $this->assertSame('lost', $short->fresh()->resolution);
+    }
+
+    #[Test]
     public function a_lost_shortfall_is_written_off_from_the_couriers_custody(): void
     {
         $this->post(route('stock_keeper.transfers.complete', $this->sendTwelve()), ['received' => 10]);
@@ -212,6 +228,35 @@ class WarehouseFeaturesTest extends TestCase
 
         $this->actingAs($this->colleague)->post(route('stock_keeper.stocktakes.post', $take))->assertSessionHas('success');
         $this->assertSame([37, 'posted'], [$this->at($this->floor), $take->fresh()->status]);
+    }
+
+    #[Test]
+    public function in_a_one_keeper_store_the_store_manager_approves_the_count_in_admin(): void
+    {
+        $this->post(route('stock_keeper.stocktakes.store'), ['stock_location_id' => $this->floor->id]);
+        $take = Stocktake::query()->sole();
+        $this->post(route('stock_keeper.stocktakes.count', $take), ['item_variant_id' => $this->variant->id, 'counted' => 36]);
+        $this->post(route('stock_keeper.stocktakes.submit', $take));
+
+        $manager = User::factory()->create(['role' => 'store_manager', 'store_id' => $this->store->id]);
+        $manager->assignRole('store_manager');
+        $elsewhere = Store::factory()->create(['type' => Store::TYPE_RETAIL]);
+        $otherManager = User::factory()->create(['role' => 'store_manager', 'store_id' => $elsewhere->id]);
+        $otherManager->assignRole('store_manager');
+
+        $this->withServerVariables(['HTTP_HOST' => 'admin.'.config('app.system_domain')]);
+
+        // Another store's manager neither sees it nor approves it.
+        $this->actingAs($otherManager->refresh())->get(route('admin.inventory.counts.index'))
+            ->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/Inventory/Counts/Index')->has('counts', 0));
+        $this->post(route('admin.inventory.counts.approve', $take))->assertNotFound();
+        $this->assertSame(40, $this->at($this->floor));
+
+        $this->actingAs($manager->refresh())->get(route('admin.inventory.counts.index'))
+            ->assertOk()->assertInertia(fn (Assert $page) => $page->has('counts', 1)->where('counts.0.reference', $take->reference)->where('counts.0.can_approve', true));
+        $this->post(route('admin.inventory.counts.approve', $take))->assertSessionHas('success');
+
+        $this->assertSame([36, 'posted', $manager->id], [$this->at($this->floor), $take->fresh()->status, (int) $take->fresh()->approved_by]);
     }
 
     #[Test]

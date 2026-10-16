@@ -1,14 +1,14 @@
-import React, { useRef, useState, useMemo, useEffect } from 'react';
+import React, { useRef, useState, useMemo, useEffect, createContext, useContext } from 'react';
 import { Tldraw, Editor } from 'tldraw';
 import 'tldraw/tldraw.css';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
     ThemeProvider, createTheme, Box, Button, Select, MenuItem,
     TextField, IconButton, Dialog, DialogTitle, DialogContent,
     DialogActions, Typography, Drawer, Divider, List, ListItem,
     ListItemText, ListItemAvatar, Avatar, Tooltip, Snackbar,
-    Alert, Fab, FormControl, InputLabel, ListSubheader
+    Alert, Fab, FormControl, InputLabel, ListSubheader, Chip
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AddIcon from '@mui/icons-material/Add';
@@ -61,7 +61,7 @@ const customAssetStore: any = {
             window.dispatchEvent(new CustomEvent('canvas-upload-success'));
             return { src: url };
         } catch (error) {
-            window.dispatchEvent(new CustomEvent('canvas-upload-error'));
+            window.dispatchEvent(new CustomEvent('canvas-upload-error', { detail: describeError(error, 'upload') }));
             throw error;
         }
     },
@@ -69,6 +69,130 @@ const customAssetStore: any = {
         return asset.props?.src ?? '';
     }
 };
+
+/** Why a request failed, in words a person can act on. */
+interface Problem {
+    message: string;
+    /** The session is gone: the fix is to sign in again, not to retry. */
+    signedOut: boolean;
+}
+
+function describeError(error: any, what: 'upload' | 'save' | 'open'): Problem {
+    const status = error?.response?.status;
+    const fileErrors: string[] = error?.response?.data?.errors?.file ?? [];
+
+    if (status === 401 || status === 419) {
+        return { message: 'You were signed out. Sign in again to keep working.', signedOut: true };
+    }
+    if (status === 413 || fileErrors.some((m) => /kilobytes|greater|max/i.test(m))) {
+        return { message: 'Image too big (10 MB at most).', signedOut: false };
+    }
+    if (fileErrors.some((m) => /type|mimes/i.test(m))) {
+        return { message: 'Not an image type we take (JPG, PNG, GIF, SVG, WebP, HEIC).', signedOut: false };
+    }
+    if (error?.response === undefined) {
+        return { message: 'No connection. Check your internet and try again.', signedOut: false };
+    }
+
+    const label = { upload: 'Image upload', save: 'Saving', open: 'Opening that version' }[what];
+    return { message: `${label} failed. Try again.`, signedOut: false };
+}
+
+/** "just now", "3 min ago", "2 h ago", then the date. */
+function timeAgo(dateStr: string, now: number): string {
+    const seconds = Math.max(0, Math.round((now - new Date(dateStr).getTime()) / 1000));
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
+    return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+type StatusTone = 'ok' | 'busy' | 'warn' | 'error';
+
+interface StatusBarProps {
+    title: string;
+    owner: string;
+    isViewer: boolean;
+    tone: StatusTone;
+    text: string;
+    signedOut: boolean;
+    onMenu: () => void;
+    onSave: () => void;
+}
+
+const toneColor: Record<StatusTone, string> = {
+    ok: 'success.main',
+    busy: 'primary.main',
+    warn: 'warning.main',
+    error: 'error.main',
+};
+
+/**
+ * The one bar at the top right: which canvas this is, whose, and whether your
+ * work is saved. tldraw renders it in its SharePanel slot; the values come in
+ * through context so the slot component itself stays stable between renders.
+ */
+const StatusBarContext = createContext<StatusBarProps | null>(null);
+
+function CanvasStatusBar() {
+    const bar = useContext(StatusBarContext);
+    if (!bar) return null;
+
+    return (
+        <Box sx={{
+            pointerEvents: 'all',
+            display: 'flex',
+            alignItems: 'center',
+            gap: { xs: 0.75, sm: 1.5 },
+            m: { xs: 0.75, sm: 1.5 },
+            pl: { xs: 1.25, sm: 2 },
+            pr: 0.75,
+            py: 0.5,
+            bgcolor: 'background.paper',
+            borderRadius: 2,
+            boxShadow: 1,
+            border: '1px solid',
+            borderColor: 'divider',
+            maxWidth: { xs: 'calc(100vw - 24px)', sm: 520 },
+        }}>
+            <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                    <Typography variant="body2" fontWeight="bold" color="text.primary" noWrap sx={{ lineHeight: 1.3 }}>
+                        {bar.title}
+                    </Typography>
+                    {bar.isViewer && <Chip size="small" label="View only" sx={{ height: 18, fontSize: '10px' }} />}
+                </Box>
+                <Typography variant="caption" noWrap sx={{ lineHeight: 1.3, color: 'text.secondary' }}>
+                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{bar.owner} · </Box>
+                    <Box component="span" sx={{ color: toneColor[bar.tone], fontWeight: bar.tone === 'ok' ? 400 : 600 }}>
+                        {bar.text}
+                    </Box>
+                </Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto', flexShrink: 0 }}>
+                {bar.signedOut ? (
+                    // A reload goes through the login page and back here.
+                    <Button variant="contained" color="error" size="small" onClick={() => window.location.reload()}
+                        sx={{ textTransform: 'none', borderRadius: 2, fontSize: '12px' }}>
+                        Sign in
+                    </Button>
+                ) : !bar.isViewer && (
+                    <Button variant="contained" size="small" startIcon={<SaveIcon />} onClick={bar.onSave}
+                        sx={{ textTransform: 'none', borderRadius: 2, fontSize: '12px', boxShadow: 0 }}>
+                        Save version
+                    </Button>
+                )}
+                <Button variant="outlined" size="small" startIcon={<MenuIcon />} onClick={bar.onMenu}
+                    sx={{ textTransform: 'none', borderRadius: 2, fontSize: '12px' }}>
+                    Menu
+                </Button>
+            </Box>
+        </Box>
+    );
+}
+
+const tldrawComponents = { DebugMenu: null, SharePanel: CanvasStatusBar };
 
 const theme = createTheme({
     palette: {
@@ -377,14 +501,30 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
     const [saveComment, setSaveComment] = useState('Updated canvas blueprint');
     const [saveAnimKey, setSaveAnimKey] = useState(0);
 
+    const authUser = (usePage().props as any).auth?.user;
+    const [isSaving, setIsSaving] = useState(false);
+    const [problem, setProblem] = useState<Problem | null>(null);
+    const [lastSaved, setLastSaved] = useState<{ at: string; by?: string } | null>(
+        latestVersionInfo ? { at: latestVersionInfo.created_at, by: latestVersionInfo.user?.first_name } : null
+    );
+    // Re-render now and then so "3 min ago" stays true.
+    const [now, setNow] = useState(Date.now());
     useEffect(() => {
-        const handleStart = () => setUploadProgress(0);
+        const timer = setInterval(() => setNow(Date.now()), 30000);
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        const handleStart = () => { setUploadProgress(0); setProblem(null); };
         const handleProgress = (e: any) => setUploadProgress(e.detail.progress);
         const handleEnd = () => {
             setUploadProgress(100);
             setTimeout(() => setUploadProgress(null), 1000);
         };
-        const handleError = () => setUploadProgress(null);
+        const handleError = (e: any) => {
+            setUploadProgress(null);
+            if (e?.detail) setProblem(e.detail);
+        };
 
         window.addEventListener('canvas-upload-start', handleStart);
         window.addEventListener('canvas-upload-progress', handleProgress);
@@ -518,9 +658,9 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     const mb = size / (1024 * 1024);
 
                     if (mb >= 2.5) {
-                        setCanvasSizeWarning(`Warning: Canvas is getting very large (${mb.toFixed(1)}MB). Please take a snapshot soon to prevent data loss.`);
+                        setCanvasSizeWarning(`Warning: Canvas is getting very large (${mb.toFixed(1)}MB). Save a version soon so nothing is lost.`);
                     } else if (mb >= 1.5) {
-                        setCanvasSizeWarning(`Notice: Canvas size is ${mb.toFixed(1)}MB. Consider taking a snapshot.`);
+                        setCanvasSizeWarning(`Notice: Canvas size is ${mb.toFixed(1)}MB. Consider saving a version.`);
                     } else {
                         setCanvasSizeWarning(null);
                     }
@@ -542,6 +682,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         const editor = editorRef.current;
         if (!editor) return;
         setSaveDialogOpen(false);
+        setIsSaving(true);
         try {
             const snapshot = getSanitizedSnapshot(editor.getSnapshot());
             const response = await axios.post(route('admin.canvas.save'), {
@@ -551,7 +692,9 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             });
 
             if (response.status === 200) {
-                setSnackbar({ open: true, message: 'Canvas snapshot saved!', severity: 'success' });
+                setSnackbar({ open: true, message: 'Version saved', severity: 'success' });
+                setProblem(null);
+                setLastSaved({ at: new Date().toISOString(), by: authUser?.first_name });
                 setIsDrawerOpen(false);
                 setHasUnsavedChanges(false);
                 setUnsavedChangesCount(0);
@@ -560,14 +703,18 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
 
                 const newVersionId = response.data.version_id;
                 setHistory(prev => [
-                    { id: newVersionId, comment, created_at: new Date().toISOString() },
+                    { id: newVersionId, comment, created_at: new Date().toISOString(), user: authUser ? { id: authUser.id, first_name: authUser.first_name, last_name: authUser.last_name } : undefined },
                     ...prev,
                 ]);
                 setActiveVersionId(newVersionId);
             }
         } catch (error) {
             console.error('Failed to save canvas data:', error);
-            setSnackbar({ open: true, message: 'Save failed — check console.', severity: 'error' });
+            const why = describeError(error, 'save');
+            setProblem(why);
+            setSnackbar({ open: true, message: why.message, severity: 'error' });
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -586,11 +733,14 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 setActiveVersionId(id);
                 setIsDrawerOpen(false);
                 setHasUnsavedChanges(false);
-                setSnackbar({ open: true, message: `Loaded version ${id}`, severity: 'success' });
+                setProblem(null);
+                setSnackbar({ open: true, message: `Opened version #${id}`, severity: 'success' });
             }
         } catch (error: any) {
             console.error('Failed to load snapshot version:', error);
-            alert(`Could not open this canvas version entry: ${error?.message || 'Unknown error'}`);
+            const why = describeError(error, 'open');
+            setProblem(why);
+            setSnackbar({ open: true, message: why.message, severity: 'error' });
         }
     };
 
@@ -605,9 +755,33 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         }
     }, [isViewer]);
 
+    // What the status bar says, most urgent first.
+    const latestVersionId = history[0]?.id ?? null;
+    const viewedVersion = activeVersionId !== null && activeVersionId !== latestVersionId
+        ? history.find((h) => h.id === activeVersionId)
+        : undefined;
+    const [statusTone, statusText]: [StatusTone, string] = problem ? ['error', problem.message]
+        : uploadProgress !== null && uploadProgress < 100 ? ['busy', `Uploading image ${uploadProgress}%`]
+        : isSaving ? ['busy', 'Saving…']
+        : viewedVersion && !hasUnsavedChanges ? ['warn', `Viewing an older version (${formatDate(viewedVersion.created_at)})`]
+        : hasUnsavedChanges ? ['warn', isViewer ? 'Changes here are not saved (view only)' : 'Unsaved changes']
+        : lastSaved ? ['ok', `Saved ${timeAgo(lastSaved.at, now)}${lastSaved.by ? ` by ${lastSaved.by}` : ''}`]
+        : ['ok', 'Nothing saved yet'];
+
+    const statusBar: StatusBarProps = {
+        title: activeCanvas?.title ?? 'Canvas',
+        owner: isOwner ? 'Your canvas' : `Shared by ${activeCanvas?.user?.first_name || 'an admin'}`,
+        isViewer,
+        tone: statusTone,
+        text: statusText,
+        signedOut: problem?.signedOut ?? false,
+        onMenu: () => setIsDrawerOpen(true),
+        onSave: handleSave,
+    };
+
     return (
     <ThemeProvider theme={theme}>
-        <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'background.default', touchAction: 'none' }}>            <Head title="Canvas Admin" />
+        <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'background.default', touchAction: 'none' }}>            <Head title={activeCanvas?.title ? `${activeCanvas.title} · Canvas` : 'Canvas'} />
 
                 {uploadProgress !== null && (
                     <Box sx={{
@@ -624,92 +798,15 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     </Box>
                 )}
 
-                <Tldraw
-                    key={tldrawKey}
-                    snapshot={stableInitialSnapshot}
-                    assets={customAssetStore}
-                    onMount={handleMount}
-                    components={{
-                        DebugMenu: null,
-                        SharePanel: () => (
-                            <Box sx={{
-                                pointerEvents: 'all',
-                                display: 'flex',
-                                alignItems: { xs: 'flex-end', sm: 'center' },
-                                gap: { xs: 0.75, sm: 1.5 },
-                                mr: { xs: 0.75, sm: 1.5 },
-                                my: { xs: 0.75, sm: 1.5 },
-                                flexDirection: { xs: 'column', sm: 'row' },
-                            }}>
-                                {activeCanvas && (
-                                    <Box sx={{
-                                        bgcolor: 'background.paper',
-                                        px: { xs: 1.25, sm: 2 },
-                                        py: { xs: 0.5, sm: 0.75 },
-                                        borderRadius: 2,
-                                        boxShadow: 1,
-                                        border: '1px solid',
-                                        borderColor: 'divider',
-                                        display: { xs: 'none', md: 'flex' },
-                                        flexDirection: 'column',
-                                    }}>
-                                        <Typography variant="body2" fontWeight="bold" color="text.primary" noWrap sx={{ lineHeight: 1.2 }}>
-                                            {activeCanvas.title}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1, fontSize: '10px' }}>
-                                            Owned by {activeCanvas.user_id === currentUserId ? 'you' : (activeCanvas.user?.first_name || 'Admin')}
-                                        </Typography>
-                                    </Box>
-                                )}
-
-                                <Box sx={{
-                                    display: 'flex',
-                                    flexDirection: { xs: 'column', sm: 'row' },
-                                    gap: 0.75,
-                                    alignItems: { xs: 'flex-end', sm: 'center' },
-                                }}>
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
-                                        startIcon={<MenuIcon />}
-                                        onClick={() => setIsDrawerOpen(true)}
-                                        sx={{
-                                            bgcolor: 'background.paper',
-                                            textTransform: 'none',
-                                            borderRadius: 2,
-                                            boxShadow: 1,
-                                            order: { xs: 1, sm: 2 },
-                                            fontSize: { xs: '12px', sm: '13px' },
-                                            px: { xs: 1.25, sm: 1.5 },
-                                            py: { xs: 0.35, sm: 0.5 },
-                                        }}
-                                    >
-                                        Menu
-                                    </Button>
-                                    <Button
-                                        variant="contained"
-                                        size="small"
-                                        startIcon={<SaveIcon />}
-                                        onClick={handleSave}
-                                        sx={{
-                                            bgcolor: 'primary.main',
-                                            '&:hover': { bgcolor: 'primary.dark' },
-                                            textTransform: 'none',
-                                            borderRadius: 2,
-                                            boxShadow: 1,
-                                            order: { xs: 2, sm: 1 },
-                                            fontSize: { xs: '12px', sm: '13px' },
-                                            px: { xs: 1.25, sm: 1.5 },
-                                            py: { xs: 0.35, sm: 0.5 },
-                                        }}
-                                    >
-                                        Snapshot
-                                    </Button>
-                                </Box>
-                            </Box>
-                        )
-                    }}
-                />
+                <StatusBarContext.Provider value={statusBar}>
+                    <Tldraw
+                        key={tldrawKey}
+                        snapshot={stableInitialSnapshot}
+                        assets={customAssetStore}
+                        onMount={handleMount}
+                        components={tldrawComponents}
+                    />
+                </StatusBarContext.Provider>
 
                 {/* Main Management Drawer */}
                 <Drawer
@@ -825,7 +922,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     <List sx={{ flexGrow: 1, overflowY: 'auto', maxHeight: 240, bgcolor: 'background.default', borderRadius: 2, p: 1 }}>
                         {history.length === 0 ? (
                             <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 3 }}>
-                                No snapshots recorded yet.
+                                No versions saved yet.
                             </Typography>
                         ) : (
                             history.map((item) => {
@@ -940,12 +1037,12 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 </Dialog>
 
                 <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="xs" fullWidth>
-                    <DialogTitle sx={{ fontWeight: 'bold' }}>Save Canvas Snapshot</DialogTitle>
+                    <DialogTitle sx={{ fontWeight: 'bold' }}>Save a version</DialogTitle>
                     <DialogContent>
                         <TextField
                             autoFocus
                             margin="dense"
-                            label="Version Description / Comment"
+                            label="What changed?"
                             fullWidth
                             variant="outlined"
                             value={saveComment}
@@ -955,7 +1052,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     </DialogContent>
                     <DialogActions sx={{ px: 3, pb: 2 }}>
                         <Button onClick={() => setSaveDialogOpen(false)} color="inherit">Cancel</Button>
-                        <Button onClick={() => performSave(saveComment)} variant="contained">Save Snapshot</Button>
+                        <Button onClick={() => performSave(saveComment)} variant="contained">Save version</Button>
                     </DialogActions>
                 </Dialog>
 

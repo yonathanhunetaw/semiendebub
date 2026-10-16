@@ -27,10 +27,14 @@ class AllowSubdomainLogin
         }
 
         $host = $request->getHost();
-        $expectedRole = config("subdomains.host_role_map.{$host}");
+        // Not config("subdomains.host_role_map.{$host}"): the dots in a hostname
+        // would be read as nested keys and the lookup would always come back null.
+        $expectedRole = config('subdomains.host_role_map', [])[$host] ?? null;
 
         // If the host matches a role and the user has it, send them to dashboard.
-        if ($expectedRole && $user->hasRole($expectedRole)) {
+        // A store manager works in the seller app (see EnsureCorrectSubdomainRole),
+        // but has no host of their own in the map.
+        if ($expectedRole && ($user->hasRole($expectedRole) || ($expectedRole === 'seller' && $user->hasRole('store_manager')))) {
             return redirect()->to('/dashboard');
         }
 
@@ -51,6 +55,14 @@ class AllowSubdomainLogin
                 $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
                 return redirect()->to($protocol . $targetHost . $portSuffix . '/dashboard');
             }
+        }
+
+        // A signed-in user on a host with no role of its own (the root domain, or
+        // a role the map does not know) has no business on a guest page: send them
+        // to the home route, which routes them on. Only for page views, so a POST
+        // (signing in as someone else) still goes through.
+        if (! $expectedRole && $request->isMethodSafe()) {
+            return redirect()->to('/');
         }
 
         // Otherwise allow the login/register forms on this subdomain.

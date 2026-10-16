@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SaveIcon from "@mui/icons-material/Save";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 // 1. Define strict interfaces
 interface Customer {
@@ -81,7 +82,7 @@ export default function Create({ customers = [], sellers = [], stores = [], defa
     };
 
     return (
-        <Box sx={{ p: 3 }}>
+        <Box sx={ROOT}>
             <Head title="Create New Cart" />
 
             <Stack direction="row" alignItems="center" spacing={2} mb={4}>

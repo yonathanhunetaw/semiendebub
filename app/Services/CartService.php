@@ -36,14 +36,17 @@ class CartService
         }
 
         \DB::transaction(function () use ($guestCart, $user, $storeId) {
-            // 2. Find or Create the User's active cart
-            $userCart = Cart::firstOrCreate([
+            // 2. The user's own cart: the same one currentBuyerCart() shows them.
+            $attributes = [
                 'user_id' => $user->id,
                 'store_id' => $storeId,
-                'status' => 'pending',
-            ]);
+                'status' => (string) config('storefront.cart_status', 'pending'),
+            ];
+            $userCart = Cart::query()->where($attributes)->latest('id')->first()
+                ?? Cart::create($attributes);
+            $ceiling = (int) config('storefront.max_line_quantity', 999);
 
-            // 3. Move items
+            // 3. Move items, loose pieces and all
             foreach ($guestCart->variants as $variant) {
                 $existing = $userCart->variants()
                     ->where('item_variant_id', $variant->id)
@@ -51,12 +54,16 @@ class CartService
 
                 if ($existing) {
                     $userCart->variants()->updateExistingPivot($variant->id, [
-                        'quantity' => $existing->pivot->quantity + $variant->pivot->quantity
+                        'quantity' => min($ceiling, (int) $existing->pivot->quantity + (int) $variant->pivot->quantity),
+                        'extra_pieces' => (int) $existing->pivot->extra_pieces + (int) $variant->pivot->extra_pieces,
+                        'extra_piece_price' => $variant->pivot->extra_piece_price ?? $existing->pivot->extra_piece_price,
                     ]);
                 } else {
                     $userCart->variants()->attach($variant->id, [
-                        'quantity' => $variant->pivot->quantity,
+                        'quantity' => min($ceiling, (int) $variant->pivot->quantity),
                         'price' => $variant->pivot->price,
+                        'extra_pieces' => (int) $variant->pivot->extra_pieces,
+                        'extra_piece_price' => $variant->pivot->extra_piece_price,
                         'store_id' => $storeId,
                     ]);
                 }

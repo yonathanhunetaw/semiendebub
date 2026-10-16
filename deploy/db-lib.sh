@@ -319,8 +319,12 @@ heartbeat_write() {
     [ -n "$remote" ] && [ "$remote" = "$mine" ] && insync=true
     [ "$ON_DEMAND" = true ] && ! db_container_running && up=false
     commit="$(git -C "$APP_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
-    printf '{"ts":%s,"node":"%s","role":"%s","on_demand":%s,"commit":"%s","last_sha":"%s","in_sync":%s,"db_up":%s}' \
-        "$(now_epoch)" "$NODE_NAME" "${NODE_ROLE:-}" "$ON_DEMAND" "$commit" "${mine:0:8}" "$insync" "$up" \
+    # tunnel (on|off) and app_up (true|false) come from docker/tunnel-guard.sh; empty
+    # tunnel = the guard does not run on this node.
+    local tunnel app; tunnel="$(state_get tunnel)"; app="$(state_get app_up)"
+    [ "$app" = false ] || app=true
+    printf '{"ts":%s,"node":"%s","role":"%s","on_demand":%s,"commit":"%s","last_sha":"%s","in_sync":%s,"db_up":%s,"tunnel":"%s","app_up":%s}' \
+        "$(now_epoch)" "$NODE_NAME" "${NODE_ROLE:-}" "$ON_DEMAND" "$commit" "${mine:0:8}" "$insync" "$up" "$tunnel" "$app" \
         | "$MC" pipe "$R2/nodes/${NODE_NAME}.json" >/dev/null 2>&1 || true
     return 0
 }

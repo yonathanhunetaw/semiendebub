@@ -30,6 +30,7 @@ class Store extends Model
         'type',
         'code',
         'location',
+        'manager',
         'status',
     ];
 

@@ -16,6 +16,7 @@ import {
     Typography,
 } from "@mui/material";
 import React, { useState } from "react";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 interface DeliveryRow {
     id: number;
@@ -70,7 +71,7 @@ export default function DeliveriesIndex({
     return (
         <>
             <Head title="Deliveries" />
-            <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200, mx: "auto" }}>
+            <Box sx={ROOT}>
                 <Typography variant="h5" sx={{ fontWeight: 800 }}>
                     Deliveries
                 </Typography>
@@ -94,7 +95,7 @@ export default function DeliveriesIndex({
                     })}
                 </Stack>
 
-                <Paper variant="outlined" sx={{ borderRadius: 3, overflowX: "auto" }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
                     <Table size="small">
                         <TableHead>
                             <TableRow>

@@ -213,6 +213,22 @@ class SellerBalanceTest extends TestCase
     }
 
     #[Test]
+    public function only_the_settlement_owner_rejects_and_a_settled_handover_cannot_be_ruled_on_again(): void
+    {
+        $this->paidOrder(1, [['amount' => 100]]);
+        $this->as($this->seller)->post(route('seller.balance.remit'), ['to_payment_account_id' => $this->settlement->id, 'amount' => 100]);
+        $remittance = Remittance::query()->sole();
+
+        $this->as($this->seller)->post(route('seller.handovers.reject', $remittance))->assertForbidden();
+
+        $this->as($this->boss)->post(route('seller.handovers.confirm', $remittance))->assertSessionHas('success');
+        $this->as($this->boss)->post(route('seller.handovers.confirm', $remittance->fresh()))->assertSessionHas('error');
+        $this->as($this->boss)->post(route('seller.handovers.reject', $remittance->fresh()))->assertSessionHas('error');
+
+        $this->assertSame(Remittance::STATUS_CONFIRMED, $remittance->fresh()->status);
+    }
+
+    #[Test]
     public function cash_held_past_three_days_is_flagged_oldest_first(): void
     {
         $this->paidOrder(1, [['amount' => 100]]);

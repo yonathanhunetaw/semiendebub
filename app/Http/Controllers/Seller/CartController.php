@@ -145,6 +145,30 @@ class CartController extends Controller
             'lines' => $lines->all(),
             // Its seller, a store manager or an admin may delete it (CartPolicy).
             'can_delete' => request()->user()?->can('delete', $cart) ?? false,
+            'share' => $this->presentShare($cart),
+        ];
+    }
+
+    /**
+     * The cart's live customer link, if any, and how far the customer got.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function presentShare(Cart $cart): ?array
+    {
+        $share = app(\App\Services\Shared\CartShareService::class)->liveFor($cart);
+
+        if ($share === null) {
+            return null;
+        }
+
+        return [
+            'url' => \App\Services\Shared\CartShareService::url((string) $share->token),
+            'stage' => $share->stage(),
+            'expires_at' => $share->expires_at->toIso8601String(),
+            'opened_at' => $share->opened_at?->toIso8601String(),
+            'last_seen_at' => $share->last_seen_at?->toIso8601String(),
+            'customer_edited_at' => $share->customer_edited_at?->toIso8601String(),
         ];
     }
 
@@ -186,7 +210,10 @@ class CartController extends Controller
 
     public function store(Request $request)
     {
-        $isAdmin = auth()->user()->role === 'admin';
+        // roleKey(), not `role` (a display string, "Admin"). A global admin has
+        // no store of their own, so they must name one; a store admin's cart
+        // is their store's, like a seller's.
+        $isAdmin = auth()->user()->roleKey() === 'admin' && auth()->user()->store_id === null;
 
         $request->validate([
             'customer_id' => ['nullable', function ($attribute, $value, $fail) use ($request) {

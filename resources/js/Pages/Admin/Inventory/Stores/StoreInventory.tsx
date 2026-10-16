@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import StitchProductDetails from './StitchProductDetails';
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
@@ -266,6 +266,8 @@ interface StoreSummary {
 interface Props {
     store: { id: number; name: string; location?: string; manager?: string; status: string };
     filter?: StoreFilter;
+    /** The server-side search (?search=), across every page of the catalogue. */
+    search?: string;
     summary?: StoreSummary;
     locations?: StoreSite[];
     inventory: PaginatedData<InventoryItem> | InventoryItem[];
@@ -277,7 +279,7 @@ interface Props {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 const fmt = (v: string | number | null | undefined) =>
-    v != null && v !== "" ? `$${Number(v).toFixed(2)}` : "—";
+    v != null && v !== "" ? `ETB ${Number(v).toFixed(2)}` : "—";
 
 const getPersonName = (person: Person) =>
     person.last_name ? `${person.first_name} ${person.last_name}` : person.first_name;
@@ -619,11 +621,11 @@ export function EditDrawer({
                             </Typography>
                             <TextField label="Default Business Price" type="number" value={basePrice}
                                 onChange={e => setBasePrice(e.target.value)}
-                                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                InputProps={{ startAdornment: <InputAdornment position="start">ETB</InputAdornment> }}
                                 fullWidth size="small" />
                             <TextField label="Discount Price" type="number" value={discountPrice}
                                 onChange={e => setDiscountPrice(e.target.value)}
-                                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                InputProps={{ startAdornment: <InputAdornment position="start">ETB</InputAdornment> }}
                                 fullWidth size="small" helperText="Leave blank for no discount" />
                             <TextField label="Discount Ends At" type="date" value={discountEndsAt}
                                 onChange={e => setDiscountEndsAt(e.target.value)}
@@ -653,10 +655,10 @@ export function EditDrawer({
                             <Stack spacing={1.5}>
                                 <TextField label="Individual Price" type="number" value={indPrice}
                                     onChange={e => setIndPrice(e.target.value)} size="small" fullWidth
-                                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
+                                    InputProps={{ startAdornment: <InputAdornment position="start">ETB</InputAdornment> }} />
                                 <TextField label="Individual Discount Price" type="number" value={indDiscount}
                                     onChange={e => setIndDiscount(e.target.value)} size="small" fullWidth
-                                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
+                                    InputProps={{ startAdornment: <InputAdornment position="start">ETB</InputAdornment> }} />
                                 <TextField label="Discount Ends At" type="date" value={indEndsAt}
                                     InputLabelProps={{ shrink: true }} size="small" fullWidth disabled
                                     helperText="Matches the Default Business Price discount expiry." />
@@ -765,14 +767,14 @@ export function EditDrawer({
                                 ) : null}
                                 <TextField label={`${customerType === "business" ? "Business" : "Individual"} Customer Price`}
                                     type="number" value={cpPrice} onChange={e => setCpPrice(e.target.value)}
-                                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                    InputProps={{ startAdornment: <InputAdornment position="start">ETB</InputAdornment> }}
                                     size="small" fullWidth />
                                 <Typography variant="caption" color="text.secondary">
                                     Discount from the default: {discountFromDefault(defaultTierPrice, cpPrice)}
                                 </Typography>
                                 <TextField label="Discount Price" type="number" value={cpDiscount}
                                     onChange={e => setCpDiscount(e.target.value)}
-                                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                    InputProps={{ startAdornment: <InputAdornment position="start">ETB</InputAdornment> }}
                                     size="small" fullWidth helperText="Leave blank for no discount" />
                                 <TextField label="Discount Ends At" type="date" value={cpEndsAt}
                                     onChange={e => setCpEndsAt(e.target.value)} InputLabelProps={{ shrink: true }}
@@ -853,14 +855,14 @@ export function EditDrawer({
                                 </FormControl>
                                 <TextField label={`${customerType === "business" ? "Business" : "Individual"} Seller Price`}
                                     type="number" value={spPrice} onChange={e => setSpPrice(e.target.value)}
-                                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                    InputProps={{ startAdornment: <InputAdornment position="start">ETB</InputAdornment> }}
                                     size="small" fullWidth />
                                 <Typography variant="caption" color="text.secondary">
                                     Discount from the default: {discountFromDefault(defaultTierPrice, spPrice)}
                                 </Typography>
                                 <TextField label="Discount Price" type="number" value={spDiscount}
                                     onChange={e => setSpDiscount(e.target.value)}
-                                    InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                    InputProps={{ startAdornment: <InputAdornment position="start">ETB</InputAdornment> }}
                                     size="small" fullWidth helperText="Leave blank for no discount" />
                                 <TextField label="Discount Ends At" type="date" value={spEndsAt}
                                     onChange={e => setSpEndsAt(e.target.value)} InputLabelProps={{ shrink: true }}
@@ -1170,7 +1172,7 @@ export function StockBreakdownPanel({ item, variants }: { item: InventoryItem; v
             </Box>
 
             {/* 3. Single Unified Card: Location Breakdown + Composition + Trigger Bar + Replenishment Rules */}
-            <Paper elevation={0} sx={{ p: 2, borderRadius: 3,
+            <Paper elevation={0} sx={{ p: 2, borderRadius: 2,
                 background: "linear-gradient(135deg, rgb(var(--primary) / 0.08), rgb(var(--primary) / 0.04))",
                 border: "1px solid rgb(var(--primary) / 0.18)" }}>
                 
@@ -1842,7 +1844,7 @@ function StitchProductCard({ store, item, customers, sellers }: {
     };
 
     return (
-        <Card sx={{ mb: 2, borderRadius: 3, overflow: "visible" }}>
+        <Card sx={{ mb: 2, borderRadius: 2, overflow: "visible" }}>
             <CardContent sx={{ pb: 1 }}>
                 <Stack direction="row" spacing={1.25} alignItems="flex-start">
                     <Box sx={{ position: "relative", width: 72, height: 72, borderRadius: 2, flex: "0 0 auto",
@@ -2045,7 +2047,7 @@ function PriceLine({ price, discount, endsAt, emphasis = false }: {
 /** One group of prices on the selected variant, in the seller's list style. */
 function PriceGroup({ title, caption, count, children }: { title: string; caption: string; count?: number; children: React.ReactNode }) {
     return (
-        <Box sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
+        <Box sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.75, py: 1.25, bgcolor: "rgb(var(--surface-container-low))" }}>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontWeight: 800, fontSize: 15 }}>{title}</Typography>
@@ -2354,8 +2356,20 @@ function CatalogTopBar({ store, summary, filter, onSearch, search }: {
 // ─────────────────────────────────────────────────────────────────────────────
 const EMPTY_SUMMARY: StoreSummary = { items: 0, active: 0, low: 0, out: 0, in_stock_rate: null, active_variants: 0, total_variants: 0, monitored_variants: 0 };
 
-export default function StoreInventory({ store, filter = "all", summary = EMPTY_SUMMARY, locations = [], inventory, customers = [], sellers = [] }: Props) {
-    const [search, setSearch] = useState("");
+export default function StoreInventory({ store, filter = "all", search: searched = "", summary = EMPTY_SUMMARY, locations = [], inventory, customers = [], sellers = [] }: Props) {
+    const [search, setSearch] = useState(searched);
+
+    // The list is paged, so the server searches every page; typing waits a beat first.
+    useEffect(() => {
+        if (search.trim() === searched) return;
+        const timer = window.setTimeout(() => router.get(
+            route("store.show", store.id),
+            { ...(filter === "all" ? {} : { filter }), ...(search.trim() ? { search: search.trim() } : {}) },
+            { preserveState: true, preserveScroll: true, replace: true },
+        ), 300);
+
+        return () => window.clearTimeout(timer);
+    }, [search]);
     const phone = useMediaQuery(useTheme().breakpoints.down("md"));
     const [openItem, setOpenItem] = useState<InventoryItem | null>(null);
 

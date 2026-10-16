@@ -112,7 +112,7 @@ function PhaseStepper({ active }: { active: 1 | 2 | 3 }) {
         { label: "Dispatched", sublabel: active === 3 ? "Active" : "Pending", done: false },
     ];
     return (
-        <Paper elevation={0} sx={{ p: 1.5, borderRadius: "12px", bgcolor: "action.hover", border: "1px solid", borderColor: "divider", mb: 2 }}>
+        <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, bgcolor: "action.hover", border: "1px solid", borderColor: "divider", mb: 2 }}>
             <Stack direction="row" alignItems="center">
                 {steps.map((step, i) => (
                     <React.Fragment key={step.label}>
@@ -272,7 +272,7 @@ export default function ReplenishReview({
             {/* ── Validation Banner ── */}
             <Box mb={2}>
                 {loadState === "healthy" && (
-                    <Paper elevation={0} sx={{ p: 2, borderRadius: "14px", border: "1px solid", borderColor: "success.light", bgcolor: "background.paper" }}>
+                    <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: "1px solid", borderColor: "success.light", bgcolor: "background.paper" }}>
                         <Stack direction="row" alignItems="flex-start" spacing={1.5}>
                             <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: "success.light", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                 <CheckCircleIcon color="success" sx={{ fontSize: 20 }} />
@@ -288,7 +288,7 @@ export default function ReplenishReview({
                     </Paper>
                 )}
                 {loadState === "warning" && (
-                    <Paper elevation={0} sx={{ p: 2, borderRadius: "14px", border: "1px solid", borderColor: "warning.light", bgcolor: "warning.light" }}>
+                    <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: "1px solid", borderColor: "warning.light", bgcolor: "warning.light" }}>
                         <Stack direction="row" alignItems="flex-start" spacing={1.5}>
                             <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: "warning.main", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                 <WarningAmberIcon sx={{ color: "warning.contrastText", fontSize: 20 }} />
@@ -304,7 +304,7 @@ export default function ReplenishReview({
                     </Paper>
                 )}
                 {loadState === "over" && (
-                    <Paper elevation={0} sx={{ p: 2, borderRadius: "14px", border: "1px solid", borderColor: "error.light", bgcolor: "error.light" }}>
+                    <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: "1px solid", borderColor: "error.light", bgcolor: "error.light" }}>
                         <Stack direction="row" alignItems="flex-start" spacing={1.5} mb={1.5}>
                             <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: "error.main", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                 <ErrorIcon sx={{ color: "error.contrastText", fontSize: 20 }} />
@@ -332,7 +332,7 @@ export default function ReplenishReview({
             </Box>
 
             {/* ── Replenishment Corridor Card ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
                     <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10 }}>REPLENISHMENT CORRIDOR</Typography>
                     <Chip icon={<TimerIcon sx={{ fontSize: 13 }} />} label={cutoff_label} size="small" color="warning" sx={{ fontWeight: 700 }} />
@@ -364,7 +364,7 @@ export default function ReplenishReview({
             </Paper>
 
             {/* ── Assigned Carrier Card ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
                     <Stack direction="row" alignItems="center" spacing={1}>
                         <Box sx={{ width: 28, height: 28, borderRadius: "8px", bgcolor: "action.hover", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -392,7 +392,7 @@ export default function ReplenishReview({
             </Paper>
 
             {/* ── 4-Party Consensus Gate ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
                     <Box>
                         <Typography variant="subtitle1" fontWeight={700}>4-Party Agreement Gate</Typography>
@@ -441,7 +441,7 @@ export default function ReplenishReview({
             />
 
             {/* ── Volumetric Load Telemetry ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
                     <Stack direction="row" alignItems="center" spacing={1}>
                         <Box sx={{ width: 28, height: 28, borderRadius: "8px", bgcolor: "action.hover", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -508,7 +508,7 @@ export default function ReplenishReview({
                     {manifest_items.map((item) => {
                         const cfg = statusColors[item.status];
                         return (
-                            <Paper key={item.id} elevation={0} sx={{ p: 2, borderRadius: "14px", border: "1px solid", borderColor: "divider" }}>
+                            <Paper key={item.id} elevation={0} sx={{ p: 2, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
                                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5} mb={1}>
                                     <Stack direction="row" spacing={1.5} sx={{ minWidth: 0 }}>
                                         <Box sx={{ width: 38, height: 38, borderRadius: "10px", bgcolor: "action.hover", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -544,7 +544,7 @@ export default function ReplenishReview({
             </Box>
 
             {/* ── Dispatch Notes ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 3 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 3 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.25}>
                     <Typography variant="subtitle1" fontWeight={700}>Dispatch Notes <Typography component="span" variant="body2" color="text.secondary">(optional)</Typography></Typography>
                     <Typography variant="caption" color="text.secondary">{notes.length} / 280</Typography>
@@ -567,7 +567,7 @@ export default function ReplenishReview({
             </Paper>
 
             {/* ── Sticky Bottom Bar ── */}
-            <Paper elevation={4} sx={{ position: "sticky", bottom: 16, borderRadius: "16px", p: 2, border: "1px solid", borderColor: "divider", backdropFilter: "blur(12px)", bgcolor: "background.paper", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2 }}>
+            <Paper elevation={4} sx={{ position: "sticky", bottom: 16, borderRadius: 2, p: 2, border: "1px solid", borderColor: "divider", backdropFilter: "blur(12px)", bgcolor: "background.paper", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2 }}>
                 <Box>
                     <Stack direction="row" alignItems="baseline" spacing={0.75}>
                         <Typography variant="h6" fontWeight={800} color="primary.main">{total_cbm.toFixed(1)} CBM</Typography>
@@ -600,7 +600,7 @@ export default function ReplenishReview({
                     <Typography variant="body2" color="text.secondary" mb={2}>
                         {total_cartons} cartons across {manifest_items.length} SKUs will be committed and scheduled for transit to <strong>{destination.name} — {destination.detail}</strong>.
                     </Typography>
-                    <Paper elevation={0} sx={{ bgcolor: "action.hover", borderRadius: "12px", p: 2, mb: 2.5 }}>
+                    <Paper elevation={0} sx={{ bgcolor: "action.hover", borderRadius: 2, p: 2, mb: 2.5 }}>
                         {[
                             { label: "Assigned Carrier:", value: `${vehicle.name} (${vehicle.plate})` },
                             { label: "Loading Bay:", value: vehicle.bay ?? "TBD", primary: true },

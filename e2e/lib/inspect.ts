@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
  */
 const appRoot = fileURLToPath(new URL('../..', import.meta.url));
 
-function inspect<T>(what: 'stock' | 'item' | 'sale' | 'transfer', key: string | number): T {
+function inspect<T>(what: 'stock' | 'item' | 'sale' | 'transfer' | 'store', key: string | number): T {
     const out = execFileSync('php', ['artisan', 'e2e:inspect', what, String(key)], { cwd: appRoot, env: process.env, encoding: 'utf8' });
     // Debug logging may share stdout; the answer is the last JSON line.
     const line = out.trim().split('\n').reverse().find((l) => l.startsWith('{') || l.startsWith('['));
@@ -48,3 +48,6 @@ export interface TransferFacts {
 }
 
 export const transferOf = (reference: string): TransferFacts => inspect('transfer', reference);
+
+/** A store by its name: its id, status and the kinds of stock location it has. */
+export const storeNamed = (name: string): { id: number; status: string; locations: string[] } => inspect('store', name);

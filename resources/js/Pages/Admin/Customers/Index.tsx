@@ -47,6 +47,7 @@ import Person from "@mui/icons-material/Person";
 import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
 import Sell from "@mui/icons-material/Sell";
 import { useState, useEffect } from "react";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 const getInitials = (first: string, last: string) => {
     const a = (first || "").trim().charAt(0);
@@ -170,7 +171,7 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                 p: { xs: 4, sm: 6 },
                 textAlign: "center",
                 borderStyle: "dashed",
-                borderRadius: 3,
+                borderRadius: 2,
                 bgcolor: "rgb(var(--surface-container-low))",
             }}
         >
@@ -188,7 +189,7 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
     );
 
     return (
-        <Box sx={{ p: { xs: 2, sm: 3, lg: 4 }, pb: { xs: 12, sm: 3 }, maxWidth: 1400, mx: "auto" }}>
+        <Box sx={{ ...ROOT, pb: { xs: 10, sm: 0 } }}>
             <Box
                 sx={{
                     display: "flex",
@@ -196,14 +197,14 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                     alignItems: { xs: "flex-start", sm: "center" },
                     flexDirection: { xs: "column", sm: "row" },
                     gap: 1.5,
-                    mb: { xs: 3, sm: 4 },
+                    mb: 1.5,
                 }}
             >
                 <Box>
-                    <Typography variant="h4" fontWeight={700} sx={{ fontSize: { xs: "1.6rem", sm: "2rem" }, letterSpacing: "-0.02em" }}>
+                    <Typography variant="h4">
                         Customers
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    <Typography variant="body2" color="text.secondary">
                         {customers.length} {customers.length === 1 ? "customer" : "customers"} on file
                     </Typography>
                 </Box>
@@ -227,7 +228,7 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                 <TableContainer
                     component={Paper}
                     variant="outlined"
-                    sx={{ borderRadius: 3, overflow: "hidden" }}
+                    sx={{ borderRadius: 2, overflow: "hidden" }}
                 >
                     <Table>
                         <TableHead>
@@ -329,7 +330,7 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                             <Card
                                 variant="outlined"
                                 sx={{
-                                    borderRadius: 3,
+                                    borderRadius: 2,
                                     height: "100%",
                                     display: "flex",
                                     flexDirection: "column",

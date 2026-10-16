@@ -144,8 +144,14 @@ class AuthenticatedSessionController extends Controller
         ]);
 
         // Redirect back to the page the user originally tried to visit (e.g. /canvas),
-        // falling back to /dashboard if no intended URL was stored.
-        return redirect()->intended('/dashboard');
+        // falling back to /dashboard if no intended URL was stored. A store manager
+        // has no app of their own; on the admin app the dashboard refuses them, and
+        // what they may open there is the approvals queue.
+        $home = $role === 'store_manager' && $this->expectedRoleForHost($currentHost) === 'admin'
+            ? route('admin.inventory.replenishment.index', absolute: false)
+            : '/dashboard';
+
+        return redirect()->intended($home);
     }
 
     /**
@@ -164,7 +170,9 @@ class AuthenticatedSessionController extends Controller
 
     private function expectedRoleForHost(string $host): ?string
     {
-        return config("subdomains.host_role_map.{$host}");
+        // Not config("subdomains.host_role_map.{$host}"): the dots in a hostname are
+        // read as nested keys and that lookup always comes back null.
+        return config('subdomains.host_role_map', [])[$host] ?? null;
     }
 
     private function loginComponentForHost(string $host): string

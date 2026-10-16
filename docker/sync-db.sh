@@ -119,7 +119,7 @@ if [ "$NODE_ROLE" = standby ]; then
 fi
 
 # NODE_ROLE=primary
-if [ "$lease_fresh" = 1 ] && [ "$holder" = "$NODE_NAME" ]; then exit 0; fi      # I hold it: nothing to do
+if [ "$lease_fresh" = 1 ] && [ "$holder" = "$NODE_NAME" ]; then state_set handback_wait ""; exit 0; fi   # I hold it: nothing to do
 [ "$remote_sha" != "$my_sha" ] || exit 0                                         # I have the newest data
 
 if [ "$lease_fresh" = 1 ] && [ "$LEASE_PINNED" = true ]; then
@@ -127,6 +127,24 @@ if [ "$lease_fresh" = 1 ] && [ "$LEASE_PINNED" = true ]; then
     restore_latest 0 || exit 0
     exit 0
 fi
+
+# A standby that took over (its tunnel guard runs) hands back by itself: connector
+# off, a last backup, lease released (docker/tunnel-guard.sh). Catching up before
+# that would miss the writes it takes meanwhile, so wait for it, up to
+# TUNNEL_HANDBACK_MAX seconds (default 900); then catch up as before.
+if [ "$lease_fresh" = 1 ]; then
+    hb="$("$MC" cat "$R2/nodes/$holder.json" 2>/dev/null || true)"
+    hb_ts="$(json_get "$hb" ts)"; case "$hb_ts" in ''|*[!0-9]*) hb_ts=0 ;; esac
+    if [ -n "$(json_get "$hb" tunnel)" ] && [ $(( $(now_epoch) - hb_ts )) -lt 180 ]; then
+        since="$(state_get handback_wait)"; [ -n "$since" ] || { since="$(now_epoch)"; state_set handback_wait "$since"; }
+        if [ $(( $(now_epoch) - since )) -lt "$(db_env TUNNEL_HANDBACK_MAX 900)" ]; then
+            log_every handback 300 "'$holder' is live and will hand back by itself: waiting (its last backup comes first)"
+            exit 0
+        fi
+        log "'$holder' has not handed back in time: catching up anyway"
+    fi
+fi
+state_set handback_wait ""
 
 # Another node took over after a crash, or the lease expired / was released:
 # this node is behind.

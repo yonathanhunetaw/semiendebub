@@ -143,6 +143,25 @@ class SellerWritePathsTest extends TestCase
     }
 
     #[Test]
+    public function the_customer_page_lists_their_saved_addresses(): void
+    {
+        $customer = $this->customer();
+        \App\Models\Auth\CustomerAddress::query()->create([
+            'customer_id' => $customer->id, 'label' => 'Shop', 'address' => 'Bole, near Edna Mall',
+            'recipient_name' => 'Hana', 'recipient_phone' => '0911223344', 'times_used' => 3, 'last_used_at' => '2026-10-01 10:00:00',
+        ]);
+
+        $this->get(route('seller.customers.show', $customer))->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('addresses.0.label', 'Shop')
+                ->where('addresses.0.address', 'Bole, near Edna Mall')
+                ->where('addresses.0.recipient_name', 'Hana')
+                ->where('addresses.0.recipient_phone', '0911223344')
+                ->where('addresses.0.times_used', 3)
+                ->where('addresses.0.last_used_at', fn ($at) => str_starts_with((string) $at, '2026-10-01T10:00:00')));
+    }
+
+    #[Test]
     public function a_seller_updates_a_customer_and_a_blank_tin_is_stored_as_none(): void
     {
         $customer = $this->customer(['tin_number' => '1234567890']);

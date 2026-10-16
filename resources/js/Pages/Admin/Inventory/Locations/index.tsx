@@ -20,6 +20,7 @@ import {
     Typography,
 } from "@mui/material";
 import React, { useState } from "react";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 interface Manager {
     id: number;
@@ -118,7 +119,7 @@ export default function LocationsIndex({
         <>
             <Head title="Locations" />
 
-            <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1100, mx: "auto" }}>
+            <Box sx={ROOT}>
                 <Typography variant="h5" sx={{ fontWeight: 800 }}>
                     Locations
                 </Typography>
@@ -127,7 +128,7 @@ export default function LocationsIndex({
                     and stock keepers also run its shelf, floor and Remote Hub.
                 </Typography>
 
-                <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 3, bgcolor: "rgb(var(--primary-container) / 0.6)" }}>
+                <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2, bgcolor: "rgb(var(--primary-container) / 0.6)" }}>
                     <Stack direction="row" spacing={1.5} alignItems="center">
                         <span className="material-symbols-outlined">local_shipping</span>
                         <Box>
@@ -186,7 +187,7 @@ function LocationCard({
     const [editingStaff, setEditingStaff] = useState(false);
 
     return (
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, ...(location.kind === "store" ? { bgcolor: "rgb(var(--surface-container-low))" } : {}) }}>
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, ...(location.kind === "store" ? { bgcolor: "rgb(var(--surface-container-low))" } : {}) }}>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }} justifyContent="space-between">
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
                     <Box sx={iconBoxSx}>

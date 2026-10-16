@@ -17,6 +17,7 @@ import {
 } from "@mui/material";
 import React, { useState } from "react";
 import { dayDateTime } from "@/utils/dates";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 type Stage = "to_pay" | "paid" | "packing" | "to_deliver" | "delivered" | "canceled";
 
@@ -83,7 +84,7 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, stores 
     return (
         <>
             <Head title="Orders" />
-            <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200, mx: "auto" }}>
+            <Box sx={ROOT}>
                 <Typography variant="h5" sx={{ fontWeight: 800 }}>
                     Orders
                 </Typography>
@@ -134,7 +135,7 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, stores 
                     />
                 </Stack>
 
-                <Paper variant="outlined" sx={{ borderRadius: 3, overflowX: "auto" }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
                     <Table size="small">
                         <TableHead>
                             <TableRow>

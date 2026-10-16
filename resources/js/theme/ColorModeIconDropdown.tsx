@@ -5,7 +5,7 @@ import IconButton, { IconButtonOwnProps } from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useTheme } from '@mui/material/styles';
-import { ThemeContext } from '@/app';
+import { ThemeContext } from '@/theme/ThemeContext';
 import type { ThemeSetting } from '@/theme';
 
 /**

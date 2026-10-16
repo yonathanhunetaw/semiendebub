@@ -17,6 +17,7 @@ import ScheduleIcon from "@mui/icons-material/Schedule";
 import CancelIcon from "@mui/icons-material/Cancel";
 import SaveIcon from "@mui/icons-material/Save";
 import WarningIcon from "@mui/icons-material/Warning";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -224,7 +225,7 @@ export default function PriceDeviations({ store, deviations = [] }: Props) {
     };
 
     return (
-        <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 }, maxWidth: "100%" }}>
+        <Box sx={ROOT}>
             <Head title={`${store?.name} — Price Deviations`} />
 
             {/* Header */}
@@ -263,7 +264,7 @@ export default function PriceDeviations({ store, deviations = [] }: Props) {
                 <Box>{filtered.map(d => <DeviationCard key={`${d.tier}-${d.id}`} d={d} />)}</Box>
             ) : (
                 <TableContainer component={Paper} elevation={0}
-                    sx={{ border: "1px solid rgb(var(--outline-variant))", borderRadius: 3 }}>
+                    sx={{ border: "1px solid rgb(var(--outline-variant))", borderRadius: 2 }}>
                     <Table size="small">
                         <TableHead sx={{ bgcolor: "rgb(var(--surface-container-low))" }}>
                             <TableRow>
@@ -334,7 +335,7 @@ export default function PriceDeviations({ store, deviations = [] }: Props) {
             {editing && (
                 <Paper elevation={6} sx={{
                     position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)",
-                    p: 2, borderRadius: 3, zIndex: 1300, width: { xs: "calc(100% - 32px)", sm: 420 },
+                    p: 2, borderRadius: 2, zIndex: 1300, width: { xs: "calc(100% - 32px)", sm: 420 },
                     border: "1px solid rgb(var(--outline-variant))",
                 }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>

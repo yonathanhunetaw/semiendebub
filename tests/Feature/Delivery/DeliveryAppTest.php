@@ -247,6 +247,24 @@ class DeliveryAppTest extends TestCase
 
         $this->get(route('delivery.history.index'))->assertInertia(fn ($page) => $page->where('pagination.total', 1));
         $this->get(route('delivery.history.index', ['search' => 'zzz-no-such-order']))->assertInertia(fn ($page) => $page->where('pagination.total', 0));
+        // By the order's reference, the number the run card leads with.
+        $this->get(route('delivery.history.index', ['search' => $run->sale->reference_number]))->assertInertia(fn ($page) => $page->where('pagination.total', 1));
+    }
+
+    #[Test]
+    public function a_run_returned_today_is_listed_above_one_delivered_yesterday(): void
+    {
+        $delivered = $this->claimed();
+        $delivered->update(['status' => 'delivered', 'delivered_at' => now()->subDay()]);
+        $returned = $this->claimed();
+        $this->travel(1)->minutes();
+        $returned->update(['status' => 'returned']);
+
+        $this->get(route('delivery.history.index'))->assertInertia(fn ($page) => $page
+            ->where('shipments.0.id', $returned->id)
+            ->where('shipments.0.closed_at', $returned->fresh()->updated_at->toIso8601String())
+            ->where('shipments.1.id', $delivered->id)
+            ->where('shipments.1.closed_at', null));
     }
 
     // ---- Transfers ---------------------------------------------------------

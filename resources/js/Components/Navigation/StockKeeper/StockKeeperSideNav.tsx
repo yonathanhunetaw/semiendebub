@@ -1,6 +1,6 @@
 import { Link, router, usePage } from "@inertiajs/react";
 import React from "react";
-import { ThemeContext } from "@/app";
+import { ThemeContext } from '@/theme/ThemeContext';
 import { SK_NAV, activeSkItem } from "./stockKeeperNav";
 
 interface SideNavProps {

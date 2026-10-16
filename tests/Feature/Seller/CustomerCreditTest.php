@@ -286,6 +286,27 @@ class CustomerCreditTest extends TestCase
     }
 
     #[Test]
+    public function credit_cannot_repay_credit_and_a_claimed_repayment_cannot_be_removed(): void
+    {
+        $this->creditOrder(2);
+
+        $this->asSeller()->post(route('seller.customers.repay', $this->customer), ['parts' => [['method' => 'credit', 'amount' => 10]]])
+            ->assertSessionHas('error');
+
+        $this->asSeller()->post(route('seller.customers.repay', $this->customer), [
+            'parts' => [['payment_account_id' => $this->cbe->id, 'amount' => 10]],
+        ])->assertSessionHas('success');
+        $part = Payment::query()->where('kind', Payment::KIND_REPAYMENT)->sole();
+        $this->asSeller()->post(route('seller.customers.repayments.claim', [$this->customer, $part->id]))->assertSessionHas('success');
+        $this->asSeller()->post(route('seller.customers.repayments.claim', [$this->customer, $part->id]))
+            ->assertSessionHas('error', 'Only a payment still waiting for the customer can be marked as paid.');
+
+        $this->asSeller()->post(route('seller.customers.repayments.void', [$this->customer, $part->id]))
+            ->assertSessionHas('error', 'Only a repayment still waiting for the customer can be removed.');
+        $this->assertSame(Payment::STATUS_CLAIMED, $part->fresh()->status);
+    }
+
+    #[Test]
     public function repayments_pay_off_the_oldest_invoice_first(): void
     {
         $old = $this->creditOrder(2);

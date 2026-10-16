@@ -1,136 +1,198 @@
-import type { IdentityColor, IdentityKey } from "@/Components/Visual/identities";
+import type { IdentityKey } from "@/Components/Visual/identities";
 
 /**
- * The Duka world: the places stock lives in, and the roads it travels between
- * them. Pure data; DukaWorld draws it.
+ * The Duka world: the places stock lives in and the roads the vans drive.
+ * Pure data; DukaWorld draws it.
  *
- * One world unit is one metre. x runs across, z towards the viewer; the store
- * faces +z and the Remote Hub stands behind it. The two Main Hubs share a
- * compound far to the west and only ever send shipments, to the store or the
- * Remote Hub; orders go out to customers from the store or the Remote Hub.
+ * One world unit is one metre. x runs east, z runs south (towards the
+ * viewer). The Main Hub compound, laid out from the site photo, lies far to
+ * the west: Hub A (20 × 20 m) at its west end, a building that is not ours in
+ * the middle, Hub B (23 × 7 m) along the north fence, and the gate in the east
+ * fence. Its hubs only send shipments, by van, to the store or the Remote Hub;
+ * goods wait for the van on the 4 × 4 m platform between the two hub doors.
+ * The Main Store stands to the east with the Remote Hub behind it.
  *
- * `chapters` are keys into the Guide's CHAPTERS, so a place can open the story
- * of the work done there.
+ * `chapters` are keys into the Guide's CHAPTERS.
  */
 
-export type PlaceShape = "hub" | "shelves" | "floor" | "bay" | "houses" | "tower";
+export type PlaceShape = "hub" | "platform" | "shelves" | "floor" | "counter" | "bay" | "houses" | "tower";
 
-export type PlaceKey = "main_hub_a" | "main_hub_b" | "store_shelf" | "store_floor" | "remote_hub" | "loading_bay" | "customers" | "admin_hq";
+export type PlaceKey = "main_hub_a" | "main_hub_b" | "platform" | "store_shelf" | "store_floor" | "store_counter" | "remote_hub" | "loading_bay" | "customers" | "admin_hq";
+
+/** Which wall a door is in, and where along it (metres from the wall's west or north end). */
+export interface Door {
+    wall: "north" | "south" | "east" | "west";
+    at: number;
+    width: number;
+}
 
 export interface Place {
     key: PlaceKey;
     label: string;
-    /** One line: what this place is for. */
     does: string;
-    /** What happens here, in the order it usually happens. */
     happens: string[];
-    /** Centre of the footprint, [x, z] in metres. */
+    /** Centre of the footprint, [x, z]. */
     position: [number, number];
-    /** Footprint, [width along x, depth along z] in metres. */
+    /** Footprint, [width along x, depth along z]. */
     size: [number, number];
-    /** Wall height in metres, for the buildings that have walls. */
     height?: number;
     shape: PlaceShape;
     /** Inside the store building, so it has no walls or roof of its own. */
     indoor?: boolean;
-    /** Who works here; the first one's colour tints the building. */
+    /** Hubs: the double swing door, and whether the floor is laid out in 1 m cells. */
+    door?: Door;
+    cells?: boolean;
+    /** Where the label floats, relative to the centre, when not straight above it. */
+    labelAt?: [number, number, number];
     roles: IdentityKey[];
     chapters: string[];
 }
 
-/** A point a road bends through: a place, or a bare [x, z] (a gate, a junction). */
-export type Waypoint = PlaceKey | [number, number];
+/**
+ * The Main Store, 12 × 8 m and 3.5 m high, open-topped so you can see in. The
+ * 2 m main door is in the south wall, 4 m from the west wall, and the 4 m
+ * counter stands straight in from it. Shelving runs floor to ceiling along the
+ * west, north and east walls and two rows high along the south wall, over the
+ * door: 200 bins, 4 tiers of 50. The strip under the lowest shelf, and the
+ * open floor either side of the counter, are the Store Floor.
+ */
+export const STORE = {
+    label: "Main Store",
+    position: [20, 8] as [number, number],
+    size: [12, 8] as [number, number],
+    wall: 3.5,
+    door: { at: 4, width: 2, height: 2.8 },
+    shelfDepth: 0.45,
+    /** Height of the floor strip under the lowest shelf. */
+    plinth: 0.5,
+    counter: { width: 4, depth: 0.8, height: 1, z: 0 },
+};
 
-export type FlowKey = "shipment" | "refill" | "order";
+/**
+ * The shelf's four tiers, in order: which wall, and how its 50 bins lie. Seen
+ * from inside, facing the wall, A is on the left and 1 at the top. The south
+ * tier is two rows over the door: rows 1–5 in the top band, 6–10 below, each
+ * row's A–E side by side.
+ */
+export const SHELF_TIERS: Array<{ wall: "west" | "north" | "east" | "south"; label: string }> = [
+    { wall: "west", label: "Tier 1 · west wall" },
+    { wall: "north", label: "Tier 2 · back wall" },
+    { wall: "east", label: "Tier 3 · east wall" },
+    { wall: "south", label: "Tier 4 · over the door" },
+];
 
-export interface Flow {
-    key: FlowKey;
-    label: string;
-    does: string;
-    color: IdentityColor;
-    paths: Waypoint[][];
-}
+/** The fenced yard, as a polygon of [x, z] corners, and the double swing gate in its east fence. */
+export const COMPOUND = {
+    label: "Main Hub compound",
+    corners: [[-94, -15], [-31, -15], [-31, -1], [-94, 12]] as Array<[number, number]>,
+    gate: { at: [-31, -4] as [number, number], width: 4 },
+};
 
-/** The Main Store building: shelves at the front-left, its floor to the right. No roof, so you can see in. */
-export const STORE = { label: "Main Store", position: [20, 8] as [number, number], size: [16, 10] as [number, number], wall: 2.6 };
-
-/** The fenced yard both Main Hubs stand in. */
-export const COMPOUND = { label: "Main Hub compound", position: [-58, 0] as [number, number], size: [34, 26] as [number, number] };
-
-/** Where the compound's road leaves the gate. */
-const GATE: [number, number] = [-39, 0];
+/** The building between the hubs that is not ours: drawn grey, not clickable. */
+export const NEIGHBOUR = { position: [-65, -8] as [number, number], size: [10, 10] as [number, number], height: 4 };
 
 export const PLACES: Place[] = [
     {
         key: "main_hub_a",
         label: "Main Hub A",
-        does: "The big central warehouse, 15 × 15 m. Bulk stock in cartons.",
-        happens: ["Hold bulk stock, carton by carton", "Pack shipments for the store and the Remote Hub", "Ships only; never sells or delivers to customers"],
-        position: [-63, 0],
-        size: [15, 15],
-        height: 8,
+        does: "The big central warehouse, 20 × 20 m. Bulk stock in cartons, cell by cell.",
+        happens: ["Pick the shipment's list from the cells", "Put the goods out on the platform", "Hand them to the driver, who loads and signs"],
+        position: [-82, -3],
+        size: [20, 20],
+        height: 7,
         shape: "hub",
-        roles: ["stock_keeper", "delivery"],
+        door: { wall: "east", at: 16, width: 3 },
+        cells: true,
+        roles: ["stock_keeper"],
         chapters: ["moving", "stock_keeper"],
     },
     {
         key: "main_hub_b",
         label: "Main Hub B",
-        does: "The second warehouse in the same compound, 4 × 12 m.",
-        happens: ["Hold the overflow from Hub A", "Pack shipments for the store and the Remote Hub", "Ships only; never sells or delivers to customers"],
-        position: [-49, 0],
-        size: [4, 12],
+        does: "The long warehouse on the north fence, 23 × 7 m.",
+        happens: ["Pick the shipment's list from the cells", "Put the goods out on the platform", "Hand them to the driver, who loads and signs"],
+        position: [-45.5, -9.5],
+        size: [23, 7],
         height: 6,
         shape: "hub",
+        door: { wall: "south", at: 8, width: 3 },
+        cells: true,
         roles: ["stock_keeper"],
         chapters: ["moving"],
     },
     {
+        key: "platform",
+        label: "Platform",
+        does: "The 4 × 4 m pickup platform between the hub doors.",
+        happens: ["The origin hub puts the picked goods here", "They wait for the driver", "The driver checks them, loads the van and signs on the stock keeper's phone"],
+        position: [-62, 1],
+        size: [4, 4],
+        shape: "platform",
+        roles: ["stock_keeper", "delivery"],
+        chapters: ["moving", "delivery"],
+    },
+    {
         key: "store_shelf",
         label: "Store Shelf",
-        does: "The shelves inside the store. Customers buy here, a piece at a time.",
-        happens: ["A seller finds the item and builds the cart", "Payment is taken and confirmed by a second person", "Each item has a bin; it raises an alert when it runs low"],
-        position: [16, 8.5],
-        size: [6, 7],
+        does: "200 bins on the walls, floor to ceiling: 4 tiers of 50, A–E across, 1–10 down.",
+        happens: ["Each item has its own bin, with a max, a refill line and a critical line", "A bin at the refill line raises a refill from the floor", "Tap a bin to see what is in it and how full it is"],
+        position: [20, 8],
+        size: [12, 8],
         shape: "shelves",
         indoor: true,
-        roles: ["seller", "customer", "store_manager"],
-        chapters: ["seller"],
+        labelAt: [0, 4.6, -3.6],
+        roles: ["stock_keeper", "store_manager"],
+        chapters: ["stock_keeper", "seller"],
     },
     {
         key: "store_floor",
         label: "Store Floor",
-        does: "The store's floor: the boxes and cartons not yet on a shelf.",
-        happens: ["Receive shipments from the Main Hubs", "Refill the shelf: no approval needed", "Pick & pack orders for delivery"],
-        position: [24.5, 8],
-        size: [6, 8],
+        does: "The floor under the lowest shelves and either side of the counter: boxes and cartons not yet on a shelf.",
+        happens: ["Receive shipments and transfers", "Refill the shelf: no approval needed", "Pick & pack orders for delivery"],
+        position: [20, 8],
+        size: [12, 8],
         shape: "floor",
         indoor: true,
+        labelAt: [-5, 2.6, -1],
         roles: ["stock_keeper"],
         chapters: ["stock_keeper"],
+    },
+    {
+        key: "store_counter",
+        label: "Counter",
+        does: "The 4 m counter straight in from the door. Sales happen here.",
+        happens: ["The customer asks; the seller finds the item on the shelf", "The seller builds the cart and checks out", "Payment is confirmed by a second person", "In-store orders are handed over here"],
+        position: [18, 8],
+        size: [4, 0.8],
+        shape: "counter",
+        indoor: true,
+        roles: ["seller", "customer"],
+        chapters: ["seller"],
     },
     {
         key: "remote_hub",
         label: "Remote Hub",
         does: "The warehouse behind the store, as big as the store itself.",
-        happens: ["Receive shipments from the Main Hubs", "Send stock into the store when the floor runs short", "Orders can be delivered straight from here", "Sellers only see whether an item is stocked here"],
+        happens: ["Receive shipments from the Main Hubs", "Send stock into the store when the floor runs short", "Orders can be delivered straight from here"],
         position: [20, -8],
         size: [16, 10],
         height: 5,
         shape: "hub",
+        door: { wall: "south", at: 11, width: 3 },
+        cells: true,
         roles: ["stock_keeper", "store_manager"],
         chapters: ["moving", "stock_keeper"],
     },
     {
         key: "loading_bay",
         label: "Delivery",
-        does: "Where couriers load: beside the store and the Remote Hub.",
-        happens: ["Take a run from the list on offer", "Collect the parcel: custody is now the courier's", "Hand it over, or report why it failed", "Drive shipments in from the Main Hubs"],
+        does: "Where couriers load orders: beside the store and the Remote Hub.",
+        happens: ["Take a run from the list on offer", "Collect the parcel: custody is now the courier's", "Hand it over, or report why it failed"],
         position: [36, 0],
         size: [8, 8],
         shape: "bay",
         roles: ["delivery"],
-        chapters: ["delivery", "moving"],
+        chapters: ["delivery"],
     },
     {
         key: "customers",
@@ -147,7 +209,7 @@ export const PLACES: Place[] = [
         key: "admin_hq",
         label: "Admin",
         does: "Runs the business: catalogue, prices, people and stock rules.",
-        happens: ["Keep the catalogue and set prices", "Set shelf levels and refill routes", "Build shipment manifests from the Main Hubs", "Look after the people and their roles"],
+        happens: ["Create shipments: the first of the four ticks", "Set shelf levels and refill routes", "Look after the people and their roles"],
         position: [0, 22],
         size: [6, 6],
         height: 9,
@@ -157,40 +219,41 @@ export const PLACES: Place[] = [
     },
 ];
 
-export const FLOWS: Flow[] = [
-    {
-        key: "shipment",
-        label: "Shipments",
-        does: "Bulk stock from the Main Hubs to the store or the Remote Hub. The only thing the hubs send.",
-        color: "warning",
-        paths: [
-            ["main_hub_a", GATE, "remote_hub"],
-            ["main_hub_a", GATE, "store_floor"],
-            ["main_hub_b", GATE, "remote_hub"],
-            ["main_hub_b", GATE, "store_floor"],
-        ],
-    },
-    {
-        key: "refill",
-        label: "Refills",
-        does: "The Remote Hub tops up the store floor; the floor tops up the shelf.",
-        color: "success",
-        paths: [
-            ["remote_hub", "store_floor"],
-            ["store_floor", "store_shelf"],
-        ],
-    },
-    {
-        key: "order",
-        label: "Deliveries",
-        does: "Orders go out to customers, from the store or straight from the Remote Hub.",
-        color: "primary",
-        paths: [
-            ["store_floor", "loading_bay", "customers"],
-            ["remote_hub", "loading_bay", "customers"],
-        ],
-    },
+/** Where a van stops to unload at each shipment destination. */
+export const PARKING: Partial<Record<PlaceKey, [number, number]>> = {
+    store_floor: [22.5, 14.6],
+    remote_hub: [25.8, -1.3],
+};
+
+/** Where unloaded goods are set down: just outside the door they go in by. */
+export const DROP: Partial<Record<PlaceKey, [number, number]>> = {
+    store_floor: [18, 13],
+    remote_hub: [22, -2.1],
+};
+
+/** Where a van waits to load at the platform: alongside it, facing the gate. */
+export const PLATFORM_BERTH: [number, number] = [-57.5, 1];
+
+/**
+ * The roads, as polylines of [x, z]: the main road from the gate along the
+ * back of the store (past the Remote Hub) to the delivery bay and on to the
+ * customers, and the street that loops round to the store's front door.
+ */
+export const ROADS: Array<Array<[number, number]>> = [
+    [[-31, -4], [-12, -2.5], [6, -0.5], [24, 0], [31, -1], [36, -3.5], [44, -2], [52, 2], [58, 4]],
+    [[6, -0.5], [10, 8], [15, 14.6], [30, 14.6], [44, 12], [54, 9]],
 ];
+
+const YARD: Array<[number, number]> = [PLATFORM_BERTH, [-44, -1.5], [-36, -3.5], [-31, -4]];
+
+/** A van's path from the platform, out of the gate, to where it unloads. */
+export function vanRoute(destination: PlaceKey): Array<[number, number]> {
+    switch (destination) {
+        case "store_floor": return [...YARD, [-12, -2.5], [6, -0.5], [10, 8], [15, 14.6], PARKING.store_floor!];
+        case "remote_hub": return [...YARD, [-12, -2.5], [6, -0.5], [20, -0.3], PARKING.remote_hub!];
+        default: return YARD;
+    }
+}
 
 export function placeFor(key: PlaceKey): Place {
     const place = PLACES.find((p) => p.key === key);
@@ -198,11 +261,91 @@ export function placeFor(key: PlaceKey): Place {
     return place;
 }
 
-/** Where a waypoint is on the ground. */
-export function pointOf(waypoint: Waypoint): [number, number] {
-    return typeof waypoint === "string" ? placeFor(waypoint).position : waypoint;
+/** A door's hinge-to-hinge centre in world coordinates, and the direction it opens out to. */
+export function doorPosition(place: Place): { at: [number, number]; out: [number, number] } | null {
+    if (!place.door) return null;
+    const [cx, cz] = place.position;
+    const [w, d] = place.size;
+    const { wall, at } = place.door;
+    switch (wall) {
+        case "east": return { at: [cx + w / 2, cz - d / 2 + at], out: [1, 0] };
+        case "west": return { at: [cx - w / 2, cz - d / 2 + at], out: [-1, 0] };
+        case "north": return { at: [cx - w / 2 + at, cz - d / 2], out: [0, -1] };
+        case "south": return { at: [cx - w / 2 + at, cz + d / 2], out: [0, 1] };
+    }
 }
 
-export function flowsThrough(key: PlaceKey): Flow[] {
-    return FLOWS.filter((flow) => flow.paths.some((path) => path.includes(key)));
+export interface Cell {
+    name: string;
+    /** Centre, relative to the hub's centre. */
+    x: number;
+    z: number;
+}
+
+export interface HubLayout {
+    cells: Cell[];
+    /** Walkway rectangles, relative to the hub's centre: [x0, z0, x1, z1]. */
+    aisles: Array<[number, number, number, number]>;
+}
+
+/** A, B, … Z, AA, AB, …: the column letters of a grid. */
+export function columnLetter(index: number): string {
+    let n = index;
+    let out = "";
+    do {
+        out = String.fromCharCode(65 + (n % 26)) + out;
+        n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    return out;
+}
+
+/**
+ * A hub's floor as 1 m cells, with a 2 m walkway down the middle of its length
+ * and a 2 m path from the door to it. Cells are named like a spreadsheet:
+ * letters across from the west wall, numbers down from the north wall (C4).
+ * Walkway squares keep their letters and numbers but hold no cell.
+ */
+export function hubLayout(place: Place): HubLayout {
+    const [w, d] = place.size;
+    const x0 = -w / 2;
+    const z0 = -d / 2;
+    const aisles: HubLayout["aisles"] = [];
+
+    // The walkway runs along the longer side, through the middle.
+    if (w >= d) {
+        const mid = Math.floor(d / 2) - 1;
+        aisles.push([x0, z0 + mid, x0 + w, z0 + mid + 2]);
+    } else {
+        const mid = Math.floor(w / 2) - 1;
+        aisles.push([x0 + mid, z0, x0 + mid + 2, z0 + d]);
+    }
+
+    // From the door straight in to the walkway.
+    const door = place.door;
+    if (door) {
+        const [mx0, mz0, mx1, mz1] = aisles[0];
+        const along = Math.round(door.at) - 1;
+        const dz = z0 + along;
+        const dx = x0 + along;
+        switch (door.wall) {
+            case "east": aisles.push([w >= d ? x0 + w - 2 : mx1, w >= d ? Math.min(dz, mz0) : dz, x0 + w, w >= d ? Math.max(dz + 2, mz1) : dz + 2]); break;
+            case "west": aisles.push([x0, w >= d ? Math.min(dz, mz0) : dz, w >= d ? x0 + 2 : mx0, w >= d ? Math.max(dz + 2, mz1) : dz + 2]); break;
+            case "south": aisles.push([w >= d ? dx : Math.min(dx, mx0), w >= d ? mz1 : z0 + d - 2, w >= d ? dx + 2 : Math.max(dx + 2, mx1), z0 + d]); break;
+            case "north": aisles.push([w >= d ? dx : Math.min(dx, mx0), z0, w >= d ? dx + 2 : Math.max(dx + 2, mx1), w >= d ? mz0 : z0 + 2]); break;
+        }
+    }
+
+    const inAisle = (x: number, z: number) => aisles.some(([ax0, az0, ax1, az1]) => x > ax0 && x < ax1 && z > az0 && z < az1);
+
+    const cells: Cell[] = [];
+    for (let row = 0; row < Math.floor(d); row++) {
+        for (let col = 0; col < Math.floor(w); col++) {
+            const x = x0 + col + 0.5;
+            const z = z0 + row + 0.5;
+            if (inAisle(x, z)) continue;
+            cells.push({ name: `${columnLetter(col)}${row + 1}`, x, z });
+        }
+    }
+
+    return { cells, aisles };
 }

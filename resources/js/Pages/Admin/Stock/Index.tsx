@@ -3,7 +3,7 @@ import { Head } from '@inertiajs/react';
 
 export default function StockIndex() {
     return (
-        <div className="p-6 bg-background text-on-surface">
+        <div className="bg-background text-on-surface">
             <Head title="Admin | Stock Management" />
             <div className="flex justify-between items-center border-b border-primary pb-4">
                 <h1 className="text-xl font-extrabold uppercase tracking-widest text-primary">

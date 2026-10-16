@@ -1527,6 +1527,8 @@ if [ "$ON_DEMAND" = true ]; then
     log_step "Taking over: claiming the pinned lease so the other nodes follow this node..."
     if DUKA_ENV_FILE="$ENV_FILE" "$APP_ROOT/docker/backup-db.sh" --force; then
         log_success "This node now holds the lease and backs up every minute (launchd/cron); stop it with: make prod-stop"
+        # Connect this node's tunnel now; the other nodes' guards drop theirs within a minute.
+        DUKA_ENV_FILE="$ENV_FILE" "$APP_ROOT/docker/tunnel-guard.sh" || log_warning "tunnel-guard.sh failed: start cloudflared by hand"
     else
         log_error "Could not claim the lease: this node is NOT backed up yet. Run: docker/backup-db.sh --force"
     fi

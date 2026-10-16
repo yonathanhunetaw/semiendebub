@@ -57,7 +57,7 @@ class VendorAppTest extends TestCase
         return ItemVariant::factory()->create(['item_id' => $item->id, 'owner_id' => $owner->id]);
     }
 
-    private function purchase(User $vendor, string $status = 'pending', float $total = 100, array $overrides = []): Purchase
+    private function purchase(User $vendor, string $status = 'ordered', float $total = 100, array $overrides = []): Purchase
     {
         static $n = 0;
 
@@ -77,7 +77,7 @@ class VendorAppTest extends TestCase
         $mine = $this->variantFor($this->vendor);
         $this->variantFor($this->user('vendor'), 'Not mine');
         ItemStock::query()->create(['item_variant_id' => $mine->id, 'location_type' => Store::class, 'location_id' => $this->store->id, 'quantity' => 12, 'min_stock_level' => 0]);
-        $this->purchase($this->vendor, 'pending', 100);
+        $this->purchase($this->vendor, 'ordered', 100);
         $this->purchase($this->vendor, 'received', 250);
         $this->purchase($this->user('vendor'), 'received', 999);
 
@@ -128,10 +128,13 @@ class VendorAppTest extends TestCase
     #[Test]
     public function the_order_list_shows_only_my_orders_with_counts_filters_and_search(): void
     {
-        $a = $this->purchase($this->vendor, 'pending', 100, ['notes' => 'urgent restock']);
+        $a = $this->purchase($this->vendor, 'ordered', 100, ['notes' => 'urgent restock']);
         $this->purchase($this->vendor, 'received', 50);
-        $this->purchase($this->vendor, 'canceled', 10);
-        $this->purchase($this->user('vendor'), 'pending', 999);
+        $this->purchase($this->vendor, 'cancelled', 10);
+        $this->purchase($this->user('vendor'), 'ordered', 999);
+        // Internal until approved: a vendor never sees drafts or orders awaiting approval.
+        $this->purchase($this->vendor, 'draft', 70);
+        $this->purchase($this->vendor, 'submitted', 80);
 
         $this->get(route('vendor.orders.index'))->assertOk()
             ->assertInertia(fn ($page) => $page
@@ -150,8 +153,8 @@ class VendorAppTest extends TestCase
     #[Test]
     public function a_vendor_opens_their_own_order_but_not_another_vendors(): void
     {
-        $mine = $this->purchase($this->vendor, 'pending', 120);
-        $theirs = $this->purchase($this->user('vendor'), 'pending', 80);
+        $mine = $this->purchase($this->vendor, 'ordered', 120);
+        $theirs = $this->purchase($this->user('vendor'), 'ordered', 80);
 
         $this->get(route('vendor.orders.show', $mine))->assertOk()
             ->assertInertia(fn ($page) => $page

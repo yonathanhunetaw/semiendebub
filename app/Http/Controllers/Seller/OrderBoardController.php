@@ -23,6 +23,7 @@ use App\Services\Fulfillment\CustodyLog;
 use App\Services\Fulfillment\OrderSourcingService;
 use App\Services\Fulfillment\SellerOrderBoard;
 use App\Services\Fulfillment\SellerOrderService;
+use App\Services\Inventory\StockPools;
 use App\Services\StockService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -245,12 +246,15 @@ class OrderBoardController extends Controller
         $checkout = app(CheckoutService::class);
         $pieces = app(CartService::class);
         $storeName = $cart->store?->name ?? 'Store';
+        // Checked within the customer's pool, as checkout checks it: stock set aside
+        // for Business customers is not on hand for an Individual one, and the reverse.
+        $pool = StockPools::forCustomer($cart->customer);
 
         // Priced the way checkout prices them, loose pieces included, so the
         // total here is the one the payment parts are checked against.
-        $lines = $cart->variants->flatMap(function ($variant) use ($cart, $stock, $checkout, $pieces, $storeName): array {
+        $lines = $cart->variants->flatMap(function ($variant) use ($cart, $stock, $checkout, $pieces, $storeName, $pool): array {
             $quantity = (int) ($variant->pivot->quantity ?? 1);
-            $available = $cart->store_id ? $stock->availableAtStore((int) $variant->id, (int) $cart->store_id) : 0;
+            $available = $cart->store_id ? $stock->availableAtStore((int) $variant->id, (int) $cart->store_id, $pool) : 0;
             $label = collect([$variant->itemColor?->name, $variant->itemSize?->name, $variant->itemPackagingType?->name])
                 ->filter()->join(' · ');
             $storeVariant = StoreVariant::query()->where('store_id', $cart->store_id)->where('item_variant_id', $variant->id)->first();
@@ -273,7 +277,7 @@ class OrderBoardController extends Controller
             $pieceVariant = $extra > 0 ? $pieces->pieceVariantFor($variant) : null;
 
             if ($pieceVariant !== null) {
-                $onHand = $cart->store_id ? $stock->availableAtStore((int) $pieceVariant->id, (int) $cart->store_id) : 0;
+                $onHand = $cart->store_id ? $stock->availableAtStore((int) $pieceVariant->id, (int) $cart->store_id, $pool) : 0;
 
                 $rows[] = [
                     'id' => (int) $pieceVariant->id,

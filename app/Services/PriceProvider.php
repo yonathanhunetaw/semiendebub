@@ -33,7 +33,14 @@ class PriceProvider
         $matrix = json_decode($storeVariant->pricing_matrix, true);
 
         // 1️⃣ Normalize: Handle both [0 => ['price' => ...]] and ['price' => ...]
-        $base = self::normalizeMatrix($matrix);
+        $base = self::normalizeMatrix(is_array($matrix) ? $matrix : []);
+
+        // A matrix saved as [] (or with no price in it) is unpriced, not free:
+        // a 0.00 rung here would let the variant be sold for nothing.
+        if (! isset($base['price']) || ! is_numeric($base['price'])) {
+            return [];
+        }
+
         $prices[] = self::formatMatrixPrice('store', $base);
 
         // 2️⃣ Individual override

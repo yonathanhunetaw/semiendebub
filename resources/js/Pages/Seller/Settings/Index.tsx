@@ -21,7 +21,7 @@ import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
 import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
-import { ThemeContext } from "@/app";
+import { ThemeContext } from '@/theme/ThemeContext';
 
 interface AuthUser {
     id: number;

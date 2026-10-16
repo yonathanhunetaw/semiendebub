@@ -27,6 +27,7 @@ export const SK_NAV: SkNavGroup[] = [
         items: [
             { key: "home", label: "Home", icon: "home", route: "stock_keeper.dashboard", paths: ["/dashboard"], hint: "Today at a glance" },
             { key: "alerts", label: "Stock alerts", icon: "notification_important", route: "stock_keeper.alerts.index", paths: ["/stock-alerts"], hint: "Low and out of stock" },
+            { key: "calendar", label: "Calendar", icon: "calendar_month", route: "stock_keeper.calendar", paths: ["/calendar"], hint: "Freight, transfers and arrivals by day" },
         ],
     },
     {

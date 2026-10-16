@@ -382,6 +382,57 @@ class OrderSourcingTest extends TestCase
         $this->sourcing()->confirmSourcing($sale, [], $this->staff);
     }
 
+    #[Test]
+    public function an_order_that_has_left_pick_and_pack_cannot_be_sourced_or_ticked(): void
+    {
+        $this->stockAt(Store::class, (int) $this->store->id, 30);
+        $sale = $this->paidOrder(2);
+        $line = $sale->items()->sole();
+        $sale->update(['fulfillment_stage' => Sale::STAGE_AWAITING_PAYMENT]);
+
+        try {
+            $this->sourcing()->confirmSourcing($sale->fresh(), [['sale_item_id' => $line->id, 'location_type' => Store::class, 'location_id' => $this->store->id]], $this->staff);
+            $this->fail('expected the confirmation to be refused');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('is no longer waiting in Pick & Pack', $e->getMessage());
+        }
+
+        $this->expectExceptionMessage('is not in Pick & pack');
+        $this->sourcing()->tickLine($sale->fresh(), $line, true, $this->staff);
+    }
+
+    #[Test]
+    public function a_line_from_another_order_cannot_be_ticked(): void
+    {
+        $sale = $this->paidOrder(2);
+        $other = SaleItem::create([
+            'sale_id' => Sale::create(['reference_number' => 'SALE-TEST-2', 'store_id' => $this->store->id, 'seller_id' => $this->staff->id, 'subtotal' => 1, 'total_amount' => 1, 'status' => 'completed', 'payment_status' => 'paid', 'fulfillment_stage' => Sale::STAGE_PICK_PACK])->id,
+            'store_variant_id' => $this->storeVariant->id, 'quantity' => 1, 'unit_price' => 1, 'subtotal' => 1, 'total_price' => 1,
+        ]);
+
+        $this->expectExceptionMessage('That line is not on this order.');
+        $this->sourcing()->tickLine($sale, $other, true, $this->staff);
+    }
+
+    #[Test]
+    public function an_unpaid_order_in_pick_and_pack_still_cannot_go_to_delivery(): void
+    {
+        $this->stockAt(Store::class, (int) $this->store->id, 30);
+        $sale = $this->paidOrder(2);
+        $sale->update(['payment_status' => 'unpaid']);
+        $line = $sale->items()->sole();
+
+        $this->expectExceptionMessage('is not fully paid');
+        $this->sourcing()->confirmSourcing($sale->fresh(), [['sale_item_id' => $line->id, 'location_type' => Store::class, 'location_id' => $this->store->id]], $this->staff);
+    }
+
+    #[Test]
+    public function an_empty_cart_groups_into_nothing(): void
+    {
+        $this->assertSame(['groups' => [], 'requires_agreement' => false, 'delayed_line_count' => 0], $this->sourcing()->groupCart(null, $this->store));
+        $this->assertFalse($this->sourcing()->requiresDelayAgreement(null, $this->store));
+    }
+
     /* ---------------------------------------------------------------------
      | Through the seller's screens
      |--------------------------------------------------------------------*/

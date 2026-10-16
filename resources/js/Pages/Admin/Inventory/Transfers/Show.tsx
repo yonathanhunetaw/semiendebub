@@ -59,7 +59,7 @@ export default function TransferShow({ transfer, journal = [], couriers = [] }: 
     return (
         <>
             <Head title={`Transfer ${transfer.reference}`} />
-            <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1000, mx: "auto" }}>
+            <Box sx={{ maxWidth: 1000, mx: "auto" }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
                     <Box>
                         <Typography variant="h5" sx={{ fontWeight: 800, fontFamily: "monospace" }}>
@@ -77,7 +77,7 @@ export default function TransferShow({ transfer, journal = [], couriers = [] }: 
                     </Stack>
                 </Stack>
 
-                <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderRadius: 3, mb: 2 }}>
+                <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderRadius: 2, mb: 2 }}>
                     <TransferJourney
                         from={transfer.source_label ?? transfer.from_store ?? null}
                         to={transfer.destination_label ?? transfer.to_store ?? null}
@@ -88,7 +88,7 @@ export default function TransferShow({ transfer, journal = [], couriers = [] }: 
                     />
                 </Paper>
 
-                <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, mb: 2 }}>
+                <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, mb: 2 }}>
                     <Typography sx={{ fontWeight: 700 }}>
                         {transfer.source_label ?? transfer.from_store ?? "—"} → {transfer.destination_label ?? transfer.to_store ?? "—"}
                     </Typography>
@@ -158,7 +158,7 @@ export default function TransferShow({ transfer, journal = [], couriers = [] }: 
                 <Typography variant="overline" color="text.secondary">
                     Custody journal
                 </Typography>
-                <Paper variant="outlined" sx={{ borderRadius: 3 }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2 }}>
                     <Table size="small">
                         <TableHead>
                             <TableRow>

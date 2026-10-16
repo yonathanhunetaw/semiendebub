@@ -10,6 +10,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import StitchProductDetails from './StitchProductDetails';
 import VariantFan from '@/Components/Visual/VariantFan';
 import { InventoryItem, Variant, Person, EditDrawer, decomposeStock } from './StoreInventory';
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 export default function ItemVariants({ store, item, customers, sellers }: {
     store: { id: number; name: string };
@@ -58,7 +59,7 @@ export default function ItemVariants({ store, item, customers, sellers }: {
             {/* No horizontal padding on a phone: AdminLayout already supplies
                 the gutter, and a second one here is what made this page need
                 zooming out. */}
-            <Box sx={{ px: { xs: 0, md: 3 }, py: { xs: 1, md: 3 }, maxWidth: 1200, minWidth: 0, mx: 'auto' }}>
+            <Box sx={ROOT}>
 
                 {/* ── Back button (standalone, above card) ─────────────── */}
                 <Box sx={{ mb: 1.5 }}>
@@ -72,7 +73,7 @@ export default function ItemVariants({ store, item, customers, sellers }: {
                 </Box>
 
                 {/* ── Product header card — same as StitchProductCard ───── */}
-                <Card sx={{ mb: 2, borderRadius: 3, overflow: 'visible' }}>
+                <Card sx={{ mb: 2, borderRadius: 2, overflow: 'visible' }}>
                     <CardContent sx={{ pb: 1 }}>
                         <Stack direction="row" spacing={1.25} alignItems="flex-start">
                             <Box sx={{
@@ -119,7 +120,7 @@ export default function ItemVariants({ store, item, customers, sellers }: {
                 </Card>
 
                 {/* ── The item and its variants, drawn ───────────────────── */}
-                <Card sx={{ borderRadius: 3, mb: 2 }}>
+                <Card sx={{ borderRadius: 2, mb: 2 }}>
                     <CardContent>
                         <VariantFan
                             item={item.item_name}
@@ -129,7 +130,7 @@ export default function ItemVariants({ store, item, customers, sellers }: {
                 </Card>
 
                 {/* ── Details panel (tabs) ──────────────────────────────── */}
-                <Card sx={{ borderRadius: 3 }}>
+                <Card sx={{ borderRadius: 2 }}>
                     <CardContent sx={{ p: 0 }}>
                         <StitchProductDetails
                             expanded={expanded}

@@ -153,7 +153,7 @@ class CartController extends Controller
 
             return redirect()
                 ->route('login')
-                ->with('success', 'Sign in to complete your order — your cart has been saved.');
+                ->with('status', 'Sign in to complete your order — your cart has been saved.'); // the login page shows 'status'
         }
 
         $grouped = $this->sourcing->groupCart($cart, $store);

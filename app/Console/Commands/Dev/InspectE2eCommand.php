@@ -20,13 +20,14 @@ use Illuminate\Console\Command;
  *   php artisan e2e:inspect item 9            pieces of item 9 (every variant, cartons opened up)
  *   php artisan e2e:inspect sale SALE-…       stage, payments and stock holds
  *   php artisan e2e:inspect transfer TRF-…    status, counts, times
+ *   php artisan e2e:inspect store 'Name'      a store's id and the stock locations it got
  *
  * Like e2e:prepare it refuses any database not named *_e2e.
  */
 final class InspectE2eCommand extends Command
 {
     /** @var string */
-    protected $signature = 'e2e:inspect {what : stock, item, sale or transfer} {key : a variant id or a reference}';
+    protected $signature = 'e2e:inspect {what : stock, item, sale, transfer or store} {key : a variant id or a reference}';
 
     /** @var string */
     protected $description = 'Print ledger facts from the *_e2e database for the Playwright specs';
@@ -48,6 +49,7 @@ final class InspectE2eCommand extends Command
             'item' => $this->pieces((int) $key),
             'sale' => $this->sale($key),
             'transfer' => $this->transfer($key),
+            'store' => $this->store($key),
             default => null,
         };
 
@@ -126,6 +128,18 @@ final class InspectE2eCommand extends Command
                     'status' => (string) $r->status,
                     'location' => $r->stock_location_id === null ? null : (int) $r->stock_location_id,
                 ])->values()->all(),
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function store(string $name): ?array
+    {
+        $store = \App\Models\Store\Store::query()->where('name', $name)->first();
+
+        return $store === null ? null : [
+            'id' => (int) $store->id,
+            'status' => (string) $store->status,
+            'locations' => StockLocation::query()->where('store_id', $store->id)->pluck('kind')->map(fn ($kind): string => (string) $kind)->sort()->values()->all(),
         ];
     }
 

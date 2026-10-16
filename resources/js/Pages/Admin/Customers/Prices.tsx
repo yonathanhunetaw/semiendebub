@@ -149,7 +149,7 @@ export default function CustomerPrices({ customer, rows = [] }: Props) {
                 <Alert severity="info">This customer has no store, or their store sells nothing yet.</Alert>
             ) : (
                 <>
-                    <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 3 }}>
+                    <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
                         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }}>
                             <TextField
                                 size="small"
@@ -172,7 +172,7 @@ export default function CustomerPrices({ customer, rows = [] }: Props) {
                         </Stack>
                     </Paper>
 
-                    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3 }}>
+                    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                         <Table size="small">
                             <TableHead>
                                 <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgb(var(--surface-container-low))" } }}>

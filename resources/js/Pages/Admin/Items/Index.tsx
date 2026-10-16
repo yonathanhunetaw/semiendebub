@@ -49,6 +49,7 @@ import {
     useTheme,
 } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 interface Props {
     items: ItemPage;
@@ -278,7 +279,7 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
         );
 
     return (
-        <Box sx={{ p: { xs: 2, md: 3 }, pb: { xs: 12, md: 4 }, maxWidth: 1440, mx: "auto" }}>
+        <Box sx={{ ...ROOT, pb: { xs: 10, md: 0 } }}>
             <Head title="Items" />
 
             <PageHeader
@@ -300,7 +301,7 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
             />
 
             {/* ── Status tabs + filters ───────────────────────────────── */}
-            <Paper variant="outlined" sx={{ borderRadius: "16px", mb: 2, overflow: "hidden" }}>
+            <Paper variant="outlined" sx={{ borderRadius: 2, mb: 2, overflow: "hidden" }}>
                 <Tabs
                     value={filters.status}
                     onChange={(_event, status: ItemFilters["status"]) => go({ status }, { toTop: true })}
@@ -564,7 +565,7 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
 
             {/* ── Results ─────────────────────────────────────────────── */}
             {shownView === "table" ? (
-                <Paper variant="outlined" sx={{ borderRadius: "16px", overflow: "hidden", position: "relative" }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", position: "relative" }}>
                     {loading ? <LinearProgress sx={{ position: "absolute", inset: "0 0 auto 0", height: 2, zIndex: 3 }} /> : null}
 
                     {rows.length === 0 ? (
@@ -723,7 +724,7 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
                     {loading ? <LinearProgress sx={{ position: "absolute", inset: "-8px 0 auto 0", height: 2, borderRadius: 999 }} /> : null}
 
                     {rows.length === 0 ? (
-                        <Paper variant="outlined" sx={{ borderRadius: "16px" }}>
+                        <Paper variant="outlined" sx={{ borderRadius: 2 }}>
                             {empty}
                         </Paper>
                     ) : (
@@ -745,7 +746,7 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
                                     <ItemCard key={item.id} item={item} selected={selected.has(item.id)} onToggle={() => toggle(item.id)} />
                                 ))}
                             </Box>
-                            <Paper variant="outlined" sx={{ borderRadius: "16px", mt: 2, overflow: "hidden", "& .MuiTablePagination-root": { borderTop: 0 } }}>
+                            <Paper variant="outlined" sx={{ borderRadius: 2, mt: 2, overflow: "hidden", "& .MuiTablePagination-root": { borderTop: 0 } }}>
                                 {pagination}
                             </Paper>
                         </>

@@ -13,6 +13,7 @@
 import type { SvgIconComponent } from "@mui/icons-material";
 import AccountTree from "@mui/icons-material/AccountTree";
 import AirportShuttle from "@mui/icons-material/AirportShuttle";
+import CalendarMonth from "@mui/icons-material/CalendarMonth";
 import Dashboard from "@mui/icons-material/Dashboard";
 import Draw from "@mui/icons-material/Draw";
 import Layers from "@mui/icons-material/Layers";
@@ -85,7 +86,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
     // Accounts and seller balances are tabs of Payments.
     { key: "payments", label: "Payments", icon: Payments, route: "admin.payments.index", scope: "store", match: ["/payments", "/payment-accounts", "/balances"] },
     { key: "deliveries", label: "Delivery", icon: LocalShipping, route: "admin.deliveries.index", scope: "store", match: ["/deliveries"], badge: "deliveries" },
-    { key: "purchase-orders", label: "Purchase Orders", icon: ReceiptLong, route: "procurement.purchase_orders.index", scope: "store", match: [], external: true },
+    { key: "calendar", label: "Calendar", icon: CalendarMonth, route: "admin.calendar", scope: "store", match: ["/calendar"] },
+    { key: "purchase-orders", label: "Purchase Orders", icon: ReceiptLong, route: "admin.purchase_orders.index", scope: "global", match: ["/purchase-orders"] },
+    { key: "supplier-payments", label: "Supplier Payments", icon: PendingActions, route: "admin.supplier_payments.index", scope: "global", match: ["/supplier-payments"] },
     { key: "canvas", label: "White Board", icon: Draw, route: "admin.canvas.index", scope: "store", match: ["/canvas"], external: true, newTab: true },
     { key: "items", label: "Items", icon: Layers, route: "admin.items.index", scope: "global", match: ["/items"] },
     { key: "stores", label: "All stores", icon: Store, route: "admin.inventory.stores", scope: "global", match: ["/inventory/stores", "/stores"], excludePattern: /^\/stores\/\d+/ },

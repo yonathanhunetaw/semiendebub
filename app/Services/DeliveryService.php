@@ -184,8 +184,10 @@ class DeliveryService
 
         $this->applySearch($query, $search);
 
+        // Latest closed first, whichever way it closed: a failed or returned run has no
+        // delivered_at, and sorting on that alone sank it below every delivered run.
         return $query
-            ->orderByDesc('delivered_at')
+            ->orderByRaw('COALESCE(delivered_at, failed_at, updated_at) DESC')
             ->orderByDesc('id')
             ->paginate($perPage ?? 20)
             ->withQueryString();
@@ -365,6 +367,8 @@ class DeliveryService
             'delivered_at' => $delivery->delivered_at?->toIso8601String(),
             'failed_at' => $delivery->failed_at?->toIso8601String(),
             'created_at' => $delivery->created_at?->toIso8601String(),
+            // A returned run has no stamp of its own; returning it is its last change.
+            'closed_at' => $delivery->status === self::STATUS_RETURNED ? $delivery->updated_at?->toIso8601String() : null,
             'allowed_transitions' => $this->allowedTransitions($delivery),
         ];
     }
@@ -384,7 +388,9 @@ class DeliveryService
             $q->where('tracking_number', 'LIKE', $term)
                 ->orWhere('recipient_name', 'LIKE', $term)
                 ->orWhere('recipient_phone', 'LIKE', $term)
-                ->orWhere('delivery_address', 'LIKE', $term);
+                ->orWhere('delivery_address', 'LIKE', $term)
+                // The order's reference, the number the run card leads with.
+                ->orWhereHas('sale', fn (Builder $sale) => $sale->where('reference_number', 'LIKE', $term));
         });
     }
 }

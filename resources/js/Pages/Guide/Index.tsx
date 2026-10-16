@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { Head, Link, usePage } from "@inertiajs/react";
 import { Box, Button, Chip, CircularProgress, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
@@ -109,6 +109,7 @@ export default function GuideIndex({ app, chapter, step }: Props) {
         setIndex(0);
         setPlaying(true);
     };
+    const closeWorld = useCallback(() => setView("story"), []);
     const openChapterFromWorld = (key: string) => {
         chooseChapter(key);
         setView("story");
@@ -147,8 +148,8 @@ export default function GuideIndex({ app, chapter, step }: Props) {
             </Stack>
 
             {view === "world" && (
-                <Suspense fallback={<Box sx={{ height: { xs: 520, md: 640 }, display: "grid", placeItems: "center" }}><CircularProgress /></Box>}>
-                    <DukaWorld onOpenChapter={openChapterFromWorld} />
+                <Suspense fallback={<Box sx={{ position: "fixed", inset: 0, zIndex: theme.zIndex.modal, bgcolor: "background.default", display: "grid", placeItems: "center" }}><CircularProgress /></Box>}>
+                    <DukaWorld app={app} onOpenChapter={openChapterFromWorld} onClose={closeWorld} />
                 </Suspense>
             )}
 

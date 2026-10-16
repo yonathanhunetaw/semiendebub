@@ -42,6 +42,10 @@ Route::domain("delivery.{$baseDomain}")
                 'step' => $request->query('step'),
 
             ]))->name('guide');
+            // The shipments the Guide's 3D world replays (JSON).
+            Route::get('/guide/world', \App\Http\Controllers\Shared\GuideWorldController::class)->name('guide.world');
+            // The calendar: module dates + reminders and bills (shared with the other apps).
+            require base_path('routes/web/partials/calendar.php');
 
             // --- SESSION ROUTES ---
             Route::prefix('sessions')->group(function () {

@@ -41,6 +41,19 @@ class StoreVariant extends Model
     ];
 
     /**
+     * The item follows from the variant. Most callers give only the variant,
+     * which left item_id empty and every `->item` of a store listing null.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (StoreVariant $storeVariant): void {
+            if ($storeVariant->item_id === null && $storeVariant->item_variant_id !== null) {
+                $storeVariant->item_id = ItemVariant::query()->whereKey($storeVariant->item_variant_id)->value('item_id');
+            }
+        });
+    }
+
+    /**
      * Fix for BadMethodCallException: sellerPrices()
      * This allows PriceProvider to calculate the price ladder tiers.
      */

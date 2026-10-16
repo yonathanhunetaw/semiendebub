@@ -87,4 +87,47 @@ class SubdomainGateLoginTest extends TestCase
         $this->actingAs($manager)->get("http://seller.{$base}/dashboard")->assertOk();
         $this->actingAs($manager)->get("http://stockkeeper.{$base}/dashboard")->assertForbidden();
     }
+
+    #[Test]
+    public function a_signed_in_user_opening_login_on_their_own_app_goes_to_the_dashboard(): void
+    {
+        $base = config('app.system_domain');
+        $seller = User::factory()->create(['role' => 'seller']);
+        $seller->assignRole('seller');
+
+        $this->actingAs($seller)->get("http://seller.{$base}/login")
+            ->assertRedirect('/dashboard');
+    }
+
+    #[Test]
+    public function a_signed_in_store_manager_opening_login_in_the_seller_app_goes_to_the_dashboard(): void
+    {
+        $base = config('app.system_domain');
+        $manager = User::factory()->create(['role' => 'store_manager']);
+        $manager->assignRole('store_manager');
+
+        $this->actingAs($manager)->get("http://seller.{$base}/login")
+            ->assertRedirect('/dashboard');
+    }
+
+    #[Test]
+    public function a_signed_in_user_opening_login_on_the_root_domain_is_sent_home(): void
+    {
+        $base = config('app.system_domain');
+        $manager = User::factory()->create(['role' => 'store_manager']);
+        $manager->assignRole('store_manager');
+
+        $this->actingAs($manager)->get("http://{$base}/login")->assertRedirect('/');
+        $this->actingAs($manager)->get("http://{$base}/register")->assertRedirect('/');
+    }
+
+    #[Test]
+    public function a_signed_in_user_can_still_open_the_login_form_of_another_roles_app(): void
+    {
+        $base = config('app.system_domain');
+        $seller = User::factory()->create(['role' => 'seller']);
+        $seller->assignRole('seller');
+
+        $this->actingAs($seller)->get("http://finance.{$base}/login")->assertOk();
+    }
 }

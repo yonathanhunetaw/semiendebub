@@ -53,17 +53,17 @@ export default function Index({ configured = false, status = null, error = null 
                 </Box>
 
                 {!configured && (
-                    <Alert severity="info" variant="outlined" sx={{ borderRadius: 3 }}>
+                    <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
                         This server has no backup-bucket credentials (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT), so it cannot read the status.
                     </Alert>
                 )}
                 {error && (
-                    <Alert severity="error" variant="outlined" sx={{ borderRadius: 3 }}>
+                    <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
                         {error}
                     </Alert>
                 )}
                 {configured && !error && status?.empty && (
-                    <Alert severity="warning" variant="outlined" sx={{ borderRadius: 3 }}>
+                    <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
                         The backup bucket answered but holds no status files yet. They appear after the backup and sync jobs run once on each server.
                     </Alert>
                 )}

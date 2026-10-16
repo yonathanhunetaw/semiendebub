@@ -121,7 +121,7 @@ export default function ReplenishIndex({ scheduled_transfers = [] }: Props) {
                     <TransferCard key={t.id} t={t} onEditRoute={setEditTarget} />
                 ))}
                 {displayedTransfers.length === 0 && (
-                    <Paper elevation={0} sx={{ p: 4, textAlign: "center", borderRadius: "16px", border: "1px solid", borderColor: "divider" }}>
+                    <Paper elevation={0} sx={{ p: 4, textAlign: "center", borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
                         <InboxIcon sx={{ fontSize: 36, color: "text.disabled", mb: 1 }} />
                         <Typography color="text.secondary" fontWeight={700}>No shipments found</Typography>
                         <Typography variant="caption" color="text.disabled">Change the filter or create a new shipment.</Typography>

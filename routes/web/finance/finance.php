@@ -32,6 +32,14 @@ Route::domain("finance.{$baseDomain}")
                 return Inertia::render('Finance/Reports/index');
             })->name('reports.index');
 
+            // Supplier payments procurement recorded, waiting for a second person.
+            Route::controller(\App\Http\Controllers\Shared\SupplierPaymentInboxController::class)
+                ->prefix('supplier-payments')->name('supplier_payments.')->group(function () {
+                    Route::get('/', 'index')->name('index');
+                    Route::post('/{payment}/confirm', 'confirm')->name('confirm');
+                    Route::post('/{payment}/reject', 'reject')->name('reject');
+                });
+
             Route::prefix('sessions')->group(function () {
                 Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
                 Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');

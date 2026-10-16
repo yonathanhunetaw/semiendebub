@@ -13,7 +13,7 @@
 .DEFAULT_GOAL := help
 ARGS ?=
 
-.PHONY: help setup dev stop status test e2e e2e-ui artisan deploy-dev prod restore prod-stop prod-status logs backup sync
+.PHONY: help setup dev stop status test e2e e2e-ui artisan deploy-dev prod restore prod-stop prod-status logs backup sync tunnel
 
 # --- Deploy options -> flags of deploy/deploy-with-options.sh ---------------------------------
 DEPLOY_FLAGS = $(if $(FORCE_BUILD),-f) $(if $(NO_CACHE),--no-cache) $(if $(OBSERVABILITY),-o) \
@@ -76,7 +76,8 @@ restore: ## Deploy production AND replace the database with the newest R2 backup
 deploy-dev: ## Deploy the Docker DEV stack (only to test Docker changes; everyday work is `make dev`)
 	DUKA_NO_BAR=$(NO_BAR) ./deploy/deploy-with-options.sh -e dev $(DEPLOY_FLAGS) $(ARGS)
 
-prod-stop: ## Stop production on THIS node cleanly: last backup, hand the lease back, stop the containers
+prod-stop: ## Stop production on THIS node cleanly: tunnel off, last backup, hand the lease back, stop the containers
+	./docker/tunnel-guard.sh --stop
 	./docker/backup-db.sh --release
 	docker compose --env-file .env.production -f docker/docker-compose.yml -f docker/docker-compose.prod.yml down
 
@@ -106,6 +107,9 @@ backup: ## Back up the database to R2 now. ARGS="--adopt" (this DB is the truth)
 
 sync: ## Run the standby sync now: follow the newest backup, or catch up after a takeover
 	./docker/sync-db.sh $(ARGS)
+
+tunnel: ## Only the live server keeps its Cloudflare tunnel up: run the guard now. ARGS="--dry-run" (just say), "--status"
+	./docker/tunnel-guard.sh $(ARGS)
 
 ##@ EXAMPLES
 #> make prod                                  deploy after git pull; the database is kept

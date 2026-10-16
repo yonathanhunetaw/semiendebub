@@ -33,7 +33,7 @@ import Store from "@mui/icons-material/Store";
 import Storefront from "@mui/icons-material/Storefront";
 import Tune from "@mui/icons-material/Tune";
 import Warehouse from "@mui/icons-material/Warehouse";
-import { ThemeContext } from "@/app";
+import { ThemeContext } from '@/theme/ThemeContext';
 import { useAdminScope } from "@/Components/Navigation/Admin/useAdminScope";
 import StoreScopeSelect from "@/Components/Navigation/Admin/StoreScopeSelect";
 
@@ -46,7 +46,7 @@ interface SettingLink {
     href: string;
 }
 
-const cardSx = { borderRadius: 3, border: "1px solid", borderColor: "divider", boxShadow: "none" } as const;
+const cardSx = { borderRadius: 2, border: "1px solid", borderColor: "divider", boxShadow: "none" } as const;
 
 function SettingsCard({ title, caption, links }: { title: string; caption?: string; links: SettingLink[] }) {
     return (

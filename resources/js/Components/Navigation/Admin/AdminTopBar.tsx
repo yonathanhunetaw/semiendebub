@@ -11,7 +11,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import { Link, router, usePage } from "@inertiajs/react";
 import { AppBar, Box, ButtonBase, Dialog, Divider, IconButton, ListItemIcon, Menu, MenuItem, Switch, Toolbar, Tooltip, Typography, useTheme } from "@mui/material";
 import SearchRounded from "@mui/icons-material/SearchRounded";
-import { ThemeContext } from "@/app";
+import { ThemeContext } from '@/theme/ThemeContext';
 import type { RoleKey } from "@/theme";
 import RoleAvatar from "@/Components/Visual/RoleAvatar";
 import NotificationsBell from "./NotificationsBell";

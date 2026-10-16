@@ -1,0 +1,162 @@
+/*
+ * react-big-calendar, dressed in the theme tokens (tokens.css) so it follows
+ * the app's role colour and light/dark mode. Scoped to .duka-calendar.
+ * Event colours: .tone-* (the source) and .state-* (done, late, past).
+ */
+.duka-calendar {
+    --cal-line: rgb(var(--outline-variant));
+    --cal-muted: rgb(var(--on-surface-variant));
+    color: rgb(var(--on-surface));
+    font-size: 13px;
+}
+
+.duka-calendar .rbc-month-view,
+.duka-calendar .rbc-time-view,
+.duka-calendar .rbc-agenda-view {
+    border-color: var(--cal-line);
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgb(var(--surface-container-lowest));
+}
+
+.duka-calendar .rbc-header,
+.duka-calendar .rbc-month-row + .rbc-month-row,
+.duka-calendar .rbc-day-bg + .rbc-day-bg,
+.duka-calendar .rbc-header + .rbc-header,
+.duka-calendar .rbc-time-header-content,
+.duka-calendar .rbc-time-content,
+.duka-calendar .rbc-time-content > * + * > *,
+.duka-calendar .rbc-timeslot-group,
+.duka-calendar .rbc-day-slot .rbc-time-slot,
+.duka-calendar .rbc-time-header.rbc-overflowing,
+.duka-calendar .rbc-agenda-view table.rbc-agenda-table,
+.duka-calendar .rbc-agenda-view table.rbc-agenda-table tbody > tr > td + td,
+.duka-calendar .rbc-agenda-view table.rbc-agenda-table tbody > tr + tr,
+.duka-calendar .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+    border-color: var(--cal-line);
+}
+
+.duka-calendar .rbc-day-slot .rbc-time-slot {
+    border-top-color: rgb(var(--outline-variant) / 0.4);
+}
+
+.duka-calendar .rbc-header {
+    padding: 8px 4px;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--cal-muted);
+}
+
+.duka-calendar .rbc-off-range-bg {
+    background: rgb(var(--surface-container-low));
+}
+
+.duka-calendar .rbc-off-range {
+    color: rgb(var(--on-surface-variant) / 0.55);
+}
+
+.duka-calendar .rbc-today {
+    background: rgb(var(--primary-container) / 0.45);
+}
+
+.duka-calendar .rbc-date-cell {
+    padding: 4px 6px 0;
+    font-weight: 700;
+}
+
+.duka-calendar .rbc-date-cell.rbc-now > button {
+    display: inline-flex;
+    min-width: 24px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgb(var(--primary));
+    color: rgb(var(--on-primary));
+}
+
+.duka-calendar .rbc-button-link {
+    color: inherit;
+    font-weight: inherit;
+}
+
+.duka-calendar .rbc-show-more {
+    background: transparent;
+    color: rgb(var(--primary));
+    font-weight: 800;
+    font-size: 12px;
+}
+
+.duka-calendar .rbc-time-gutter,
+.duka-calendar .rbc-label {
+    color: var(--cal-muted);
+    font-size: 12px;
+}
+
+.duka-calendar .rbc-current-time-indicator {
+    background: rgb(var(--error));
+    height: 2px;
+}
+
+.duka-calendar .rbc-slot-selection,
+.duka-calendar .rbc-selected-cell {
+    background: rgb(var(--primary) / 0.12);
+}
+
+.duka-calendar .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--cal-muted);
+}
+
+.duka-calendar .rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+    padding: 8px 10px;
+    vertical-align: top;
+}
+
+.duka-calendar .rbc-agenda-empty {
+    padding: 24px;
+    color: var(--cal-muted);
+}
+
+/* Events: soft container fill, a solid bar on the left in the tone. */
+.duka-calendar .rbc-event,
+.duka-calendar .rbc-day-slot .rbc-background-event {
+    border: 0;
+    border-left: 3px solid var(--ev-bar);
+    border-radius: 6px;
+    padding: 1px 6px;
+    background: var(--ev-fill);
+    color: var(--ev-ink);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.duka-calendar .rbc-event.rbc-selected,
+.duka-calendar .rbc-event:focus {
+    outline: 2px solid var(--ev-bar);
+    outline-offset: 1px;
+}
+
+.duka-calendar .rbc-day-slot .rbc-event {
+    border: 1px solid rgb(var(--surface-container-lowest));
+    border-left: 3px solid var(--ev-bar);
+}
+
+.duka-calendar .rbc-agenda-event-cell .duka-agenda-dot {
+    background: var(--ev-bar);
+}
+
+.duka-calendar .tone-primary { --ev-bar: rgb(var(--primary)); --ev-fill: rgb(var(--primary-container)); --ev-ink: rgb(var(--on-primary-container)); }
+.duka-calendar .tone-tertiary { --ev-bar: rgb(var(--tertiary)); --ev-fill: rgb(var(--tertiary-container)); --ev-ink: rgb(var(--on-tertiary-container)); }
+.duka-calendar .tone-info { --ev-bar: rgb(var(--info)); --ev-fill: rgb(var(--info-container)); --ev-ink: rgb(var(--on-info-container)); }
+.duka-calendar .tone-success { --ev-bar: rgb(var(--success)); --ev-fill: rgb(var(--success-container)); --ev-ink: rgb(var(--on-success-container)); }
+.duka-calendar .tone-warning { --ev-bar: rgb(var(--warning)); --ev-fill: rgb(var(--warning-container)); --ev-ink: rgb(var(--on-warning-container)); }
+.duka-calendar .tone-error { --ev-bar: rgb(var(--error)); --ev-fill: rgb(var(--error-container)); --ev-ink: rgb(var(--on-error-container)); }
+
+/* Done: faded and struck through. Late: a red ring. Past: faded. */
+.duka-calendar .rbc-event.state-done { opacity: 0.6; text-decoration: line-through; }
+.duka-calendar .rbc-event.state-past { opacity: 0.7; }
+.duka-calendar .rbc-event.state-late { box-shadow: inset 0 0 0 1.5px rgb(var(--error)); }

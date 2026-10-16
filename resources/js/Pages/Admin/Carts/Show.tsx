@@ -49,7 +49,7 @@ export default function CartShow({ cart }: Props): React.ReactElement {
     return (
         <>
             <Head title={`Cart #${cart.id}`} />
-            <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1000, mx: "auto" }}>
+            <Box sx={{ maxWidth: 1000, mx: "auto" }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                     <Box>
                         <Typography variant="h5" sx={{ fontWeight: 800 }}>
@@ -67,7 +67,7 @@ export default function CartShow({ cart }: Props): React.ReactElement {
                     </Stack>
                 </Stack>
 
-                <Paper variant="outlined" sx={{ borderRadius: 3 }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2 }}>
                     <Table size="small">
                         <TableHead>
                             <TableRow>

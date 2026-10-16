@@ -159,11 +159,14 @@ class FloorPlan
             throw new InvalidArgumentException("There is already an area {$code} here.");
         }
 
+        // No kind (or an unknown one) is a storage area.
+        $kind = (string) ($data['kind'] ?? 'storage');
+
         $attributes = [
             'stock_location_id' => $location->id,
             'code' => $code,
             'name' => $data['name'] ?? null,
-            'kind' => in_array($data['kind'] ?? 'storage', FloorArea::KINDS, true) ? $data['kind'] : 'storage',
+            'kind' => in_array($kind, FloorArea::KINDS, true) ? $kind : 'storage',
             'x_m' => $x,
             'y_m' => $y,
             'width_m' => $w,

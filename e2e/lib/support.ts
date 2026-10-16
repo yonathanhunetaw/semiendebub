@@ -25,11 +25,13 @@ export interface Fixture {
     /** Priced in the store, but nothing on its shelf, floor or Remote Hub. */
     noStockItem: { item_id: number; name: string; variants: number };
     /** Everyone else, one per user type (see PrepareE2eCommand). */
-    people: Record<'seller2' | 'admin' | 'storeAdmin' | 'hubKeeper' | 'finance' | 'procurement' | 'marketing' | 'vendor' | 'dev' | 'shared' | 'manager2', Person>;
+    people: Record<'seller2' | 'admin' | 'storeAdmin' | 'hubKeeper' | 'finance' | 'procurement' | 'marketing' | 'vendor' | 'dev' | 'shared' | 'manager2' | 'keeper2' | 'procurement2', Person>;
     hub: { id: number; name: string };
     remoteHub: { id: number; name: string };
-    /** Ten units seeded in the Remote Hub for the refill transfer. */
+    /** Twenty units seeded in the Remote Hub: the transfer, receiving and stocktake specs all draw on them. */
     remoteVariant: { id: number; sku: string; item: string; quantity: number };
+    /** No stock on the shelf or floor, at least 5 in the Remote Hub; its empty shelf bin wants 2. */
+    refillItem: { item_id: number; name: string; variant: number; sku: string };
     /** A variant the main hub holds; label is what the admin's manifest picker shows. */
     hubVariant: { id: number; quantity: number; label: string; sku: string };
     /** individual has a TIN; priced is a business with its own customer price; business has none. */
@@ -37,6 +39,8 @@ export interface Fixture {
     /** Store price with a discount still running (running) or already over (expired); no other levels. */
     discounts: Record<'running' | 'expired', { item_id: number; name: string; price: number; discount_price: number; discount_ends_at: string }>;
     /** A stocked item with a known price at every level of the ladder. */
+    /** Only a store price (30); the admin pricing spec sets the other levels. */
+    adminPriced: { item_id: number; name: string; price: number; variants: Array<{ id: number; sku: string }> };
     priceItem: { item_id: number; name: string; variants: number; prices: Record<'store' | 'individual' | 'sellerIndividual' | 'sellerBusiness' | 'customer', number> };
 }
 
@@ -61,6 +65,8 @@ export async function signIn(browser: Browser, subdomain: Subdomain, email: stri
     // first fill and wipe it. Retry the whole sign-in until the app takes us past /login.
     await expect(async () => {
         await page.goto(app(subdomain, '/login'));
+        // A slow first login can finish between retries; /login then sends a signed-in user on.
+        if (!/\/login/.test(page.url())) return;
         await page.locator('input[type="email"]').fill(email);
         await page.locator('input[type="password"]').fill(fixture.password);
         await page.getByRole('button', { name: 'Log in' }).click();

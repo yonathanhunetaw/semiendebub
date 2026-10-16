@@ -5,6 +5,7 @@ import AccountBalanceIcon from '@mui/icons-material/AccountBalance'; // For Dash
 import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange'; // For ROI/Crypto
 import AssessmentIcon from '@mui/icons-material/Assessment'; // For Reports
 import SavingsIcon from '@mui/icons-material/Savings'; // For Gold tracking
+import PendingActionsIcon from '@mui/icons-material/PendingActions';
 
 export default function FinanceSidebar({ variant, open, onClose, sx }: any) {
     const { url } = usePage();
@@ -14,6 +15,7 @@ export default function FinanceSidebar({ variant, open, onClose, sx }: any) {
         { label: 'ROI & Analytics', icon: <CurrencyExchangeIcon />, href: '/finance/analytics' },
         { label: 'Gold & Crypto', icon: <SavingsIcon />, href: '/finance/assets' },
         { label: 'Reports', icon: <AssessmentIcon />, href: '/finance/reports' },
+        { label: 'Supplier payments', icon: <PendingActionsIcon />, href: '/supplier-payments' },
     ];
 
     return (

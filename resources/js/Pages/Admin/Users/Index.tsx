@@ -20,6 +20,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 interface User {
     id: number;
@@ -65,7 +66,7 @@ export default function UsersIndex({ users }: Props) {
     };
 
     return (
-        <Box sx={{ p: 3 }}>
+        <Box sx={ROOT}>
             <Head title="Users Management" />
 
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>

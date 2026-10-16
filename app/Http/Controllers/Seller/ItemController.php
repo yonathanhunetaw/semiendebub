@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Admin\Controller;
 use App\Models\Auth\Customer;
-use App\Models\Auth\User;
 use App\Models\Item\Item;
 use App\Models\Seller\Cart;
 use App\Services\PriceProvider;
@@ -162,14 +161,8 @@ class ItemController extends Controller
 
         $paginator = $query->orderBy('product_name')->paginate($perPage, ['*'], 'page', $page);
 
-        $topCart = \App\Models\Seller\Cart::with('customer')
-            ->where('seller_id', Auth::id())
-            ->where('status', 'open')
-            ->orderBy('priority', 'asc')
-            ->first();
-
-        $cart = $cartId ? \App\Models\Seller\Cart::with('customer')->find($cartId) : $topCart;
-        $customer = $cart ? $cart->customer : null;
+        // Only an open cart in the seller's own store prices the page.
+        $customer = app(SellerCatalog::class)->cartContext($user, $cartId)['customer'];
         // No cart or a walk-in prices as individual, VAT included (SellerCatalog::cartContext).
         $hasTinCart = $customer === null || ! empty($customer->tin_number);
 
@@ -201,19 +194,15 @@ class ItemController extends Controller
         $store = Auth::user()->store;
         $storeId = $store?->id;
 
-        $sellerId = request('seller_id') ?? Auth::id();
-        $selectedCartId = request('cart_id');
+        // Another seller's price tier is theirs to see; only an admin may look through it.
+        $sellerId = Auth::user()->isRole('admin') && request()->filled('seller_id')
+            ? (int) request('seller_id')
+            : Auth::id();
 
-        // Resolve customer from cart (matching index/dashboard logic)
-        $topCart = \App\Models\Seller\Cart::with('customer')
-            ->where('seller_id', Auth::id())
-            ->where('status', 'open')
-            ->orderBy('priority', 'asc')
-            ->first();
-
-        $cart = $selectedCartId
-            ? \App\Models\Seller\Cart::with('customer')->find($selectedCartId)
-            : $topCart;
+        // The same cart the Store page prices by: an open cart in the seller's
+        // own store, so a cart_id from elsewhere cannot reveal its customer's prices.
+        $cart = app(SellerCatalog::class)->cartContext(Auth::user(), request()->integer('cart_id') ?: null)['cart'];
+        $selectedCartId = $cart !== null && (int) $cart->id === request()->integer('cart_id') ? (int) $cart->id : null;
 
         $customer = $cart?->customer;
         $customerId = $customer?->id;
@@ -402,8 +391,6 @@ class ItemController extends Controller
 
             return $payload;
         })->filter(fn($variant) => $variant['store_active'])->values();
-        // ... (Your existing Cart/Seller retrieval logic)
-        $sellers = User::where('role', 'seller')->get();
         $customersWithOpenCarts = Customer::where('store_id', $storeId)
             ->whereHas('carts', fn($q) => $q->visibleTo(auth()->user())->open())
             ->with(['carts' => fn($q) => $q->visibleTo(auth()->user())->open()])
@@ -421,7 +408,6 @@ class ItemController extends Controller
 
         return Inertia::render('Seller/Items/Show', compact(
             'item',
-            'sellers',
             'customersWithOpenCarts',
             'openCarts',
             'allImages',

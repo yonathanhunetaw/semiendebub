@@ -32,7 +32,7 @@ export default function ShowUser({ user }: Props): React.ReactElement {
     ];
 
     return (
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ maxWidth: 800, mx: "auto" }}>
             <Head title={`${user.first_name} ${user.last_name ?? ""}`.trim()} />
 
             <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between" mb={3}>
@@ -49,7 +49,7 @@ export default function ShowUser({ user }: Props): React.ReactElement {
                 </Button>
             </Stack>
 
-            <Paper variant="outlined" sx={{ p: 3, maxWidth: 640, borderRadius: 3 }}>
+            <Paper variant="outlined" sx={{ p: 3, maxWidth: 640, borderRadius: 2 }}>
                 <Stack spacing={1.5}>
                     {rows.map(([label, value]) => (
                         <Stack key={label} direction="row" justifyContent="space-between" spacing={2}>

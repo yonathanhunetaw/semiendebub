@@ -157,6 +157,28 @@ class ShelfRefillFlowsTest extends TestCase
     }
 
     #[Test]
+    public function the_hub_side_accepts_from_the_seller_app_too_and_only_once(): void
+    {
+        $this->stock->receive($this->variant->id, $this->remote, 100);
+        $this->stock->receive($this->variant->id, $this->shelf, 30);
+        $this->stock->adjust($this->variant->id, $this->shelf, -30);
+
+        $leg = $this->leg(ItemRefillRoute::SOURCE_REMOTE_HUB);
+        $this->as($this->manager, 'seller')->post(route('seller.refills.remote', $leg))->assertSessionHas('success');
+
+        // A seller with no say over the Remote Hub cannot accept for it.
+        $this->as($this->user('seller'), 'seller')->post(route('seller.refills.accept', $leg))->assertForbidden();
+
+        $this->as($this->manager, 'seller')->post(route('seller.refills.accept', $leg))
+            ->assertSessionHas('success', "{$leg->reference} accepted: it is waiting for a courier.");
+        $this->assertNotNull($leg->fresh()->transfer_id);
+
+        // Accepted legs no longer wait at the hub.
+        $this->as($this->manager, 'seller')->post(route('seller.refills.accept', $leg->fresh()))->assertForbidden();
+        $this->assertSame(1, Transfer::query()->where('source_location_id', $this->remote->id)->count());
+    }
+
+    #[Test]
     public function only_a_store_manager_with_the_tick_acts_on_a_suggestion(): void
     {
         $leg = $this->pendingRemoteLeg();
@@ -176,6 +198,29 @@ class ShelfRefillFlowsTest extends TestCase
         // Another store's stock keeper cannot accept for this hub.
         $this->as($this->user('stock_keeper', Store::factory()->create()->id), 'stockkeeper')
             ->post(route('stock_keeper.refills.accept', $leg))->assertForbidden();
+    }
+
+    #[Test]
+    public function adding_suggestions_to_a_manifest_needs_the_tick_and_changing_the_amount_needs_adjust(): void
+    {
+        $line = $this->shipmentSuggestion();
+        $manifest = app(ShipmentWorkflowService::class)->createBetween($this->hubA, $this->floor, [], $this->manager->id);
+
+        $this->as($this->user('seller'), 'seller')
+            ->post(route('seller.refills.manifest', $manifest), ['lines' => [['id' => $line->id, 'quantity' => null]]])
+            ->assertForbidden();
+
+        $limited = $this->user('seller', null);
+        $this->storeNode()->syncManagers([$limited->id], null, [$limited->id => [FacilityManager::ADD_TO_MANIFEST]]);
+        $this->as($limited, 'seller')
+            ->post(route('seller.refills.manifest', $manifest), ['lines' => [['id' => $line->id, 'quantity' => $line->quantity + 5]]])
+            ->assertForbidden();
+        $this->assertSame(RefillRequest::STATUS_PENDING, $line->fresh()->status);
+
+        $this->as($limited, 'seller')
+            ->post(route('seller.refills.manifest', $manifest), ['lines' => [['id' => $line->id, 'quantity' => $line->quantity]]])
+            ->assertSessionHas('success');
+        $this->assertSame((int) $manifest->id, (int) $line->fresh()->shipment_id);
     }
 
     #[Test]
@@ -361,6 +406,21 @@ class ShelfRefillFlowsTest extends TestCase
         $this->as($this->user('stock_keeper', Store::factory()->create()->id), 'stockkeeper')
             ->post(route('stock_keeper.shelves.refill', ['location' => $this->shelf, 'item' => $this->item]))
             ->assertForbidden();
+    }
+
+    #[Test]
+    public function a_keeper_raising_a_refill_the_engine_refuses_is_told_why(): void
+    {
+        // A full shelf needs nothing.
+        $this->stock->receive($this->variant->id, $this->shelf, 50);
+        $this->as($this->keeper, 'stockkeeper')
+            ->post(route('stock_keeper.shelves.refill', [$this->shelf, $this->item]))
+            ->assertSessionHas('error', 'Bic Pen is already full.');
+
+        // The Remote Hub has no line for it.
+        $this->as($this->keeper, 'stockkeeper')->post(route('stock_keeper.shelves.refill', [$this->remote, $this->item]))
+            ->assertSessionHas('error', "Bic Pen has no line at {$this->remote->name}. A manager has to set one first.");
+        $this->assertSame(0, RefillRequest::query()->count());
     }
 
     #[Test]

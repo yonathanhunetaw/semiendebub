@@ -87,7 +87,9 @@ class DiscordVisitNotificationService
             if (is_array($geo) && ($geo['status'] ?? null) === 'success') {
                 $flag = $this->flagEmoji((string) ($geo['countryCode'] ?? ''));
 
-                return trim("{$flag} ".($geo['city'] ?? '').', '.($geo['country'] ?? ''), ' ,');
+                $place = implode(', ', array_filter([(string) ($geo['city'] ?? ''), (string) ($geo['country'] ?? '')]));
+
+                return trim("{$flag} {$place}");
             }
         } catch (\Throwable $e) {
             Log::warning('Discord visit geolocation lookup failed', [
@@ -191,7 +193,8 @@ class DiscordVisitNotificationService
             return;
         }
 
-        if (now()->diffInHours($lastSentAt) < 24) {
+        // Carbon 3 signs the difference: now()->diffInHours($past) is negative.
+        if (\Illuminate\Support\Carbon::parse($lastSentAt)->diffInHours(now()) < 24) {
             return;
         }
 
@@ -265,8 +268,10 @@ class DiscordVisitNotificationService
             return '🏳️';
         }
 
-        return implode('', array_map(function ($char) {
-            return mb_convert_encoding('&#'.(127397 + ord($char)).';', 'UTF-8', 'HTML-ENTITIES');
-        }, str_split(strtoupper($countryCode))));
+        // Each letter maps onto its regional indicator symbol.
+        return implode('', array_map(
+            fn (string $char): string => mb_chr(127397 + ord($char), 'UTF-8'),
+            str_split(strtoupper($countryCode)),
+        ));
     }
 }

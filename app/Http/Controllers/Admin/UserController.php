@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Events\UserCreated;
 use App\Models\Auth\User;
 use App\Services\Admin\ActiveStore;
 use App\Services\TelegramService;
@@ -74,8 +73,6 @@ class UserController extends Controller
 
         $user = User::create($validatedData);
         $user->syncRoles([$validatedData['role']]);
-
-        event(new UserCreated($user));
 
         return redirect()->route('admin.users.index')->with('success', 'User created successfully.');
     }

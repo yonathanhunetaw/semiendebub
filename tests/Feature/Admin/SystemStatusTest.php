@@ -239,6 +239,34 @@ class SystemStatusTest extends TestCase
     }
 
     #[Test]
+    public function two_nodes_with_their_tunnel_up_raise_an_error_first(): void
+    {
+        $this->store('primary.json', ['node' => 'ubuntu', 'ts' => self::NOW - 5, 'ttl' => 900, 'pinned' => false]);
+        foreach (['ubuntu' => 'primary', 'pi' => 'standby'] as $node => $role) {
+            $this->store("nodes/{$node}.json", ['ts' => self::NOW - 10, 'node' => $node, 'role' => $role, 'on_demand' => false, 'commit' => 'x', 'last_sha' => 'a', 'in_sync' => true, 'db_up' => true, 'tunnel' => 'on', 'app_up' => true]);
+        }
+
+        $snapshot = $this->snapshot();
+
+        $this->assertSame('error', $snapshot['alerts'][0]['level']);
+        $this->assertStringContainsString('both have their Cloudflare tunnel up', $snapshot['alerts'][0]['message']);
+        $this->assertSame('on', $snapshot['nodes'][0]['tunnel']);
+    }
+
+    #[Test]
+    public function one_tunnel_up_and_old_heartbeats_without_the_field_raise_nothing(): void
+    {
+        $this->store('primary.json', ['node' => 'ubuntu', 'ts' => self::NOW - 5, 'ttl' => 900, 'pinned' => false]);
+        $this->store('nodes/ubuntu.json', ['ts' => self::NOW - 10, 'node' => 'ubuntu', 'role' => 'primary', 'on_demand' => false, 'commit' => 'x', 'last_sha' => 'a', 'in_sync' => true, 'db_up' => true, 'tunnel' => 'on', 'app_up' => true]);
+        $this->store('nodes/pi.json', ['ts' => self::NOW - 10, 'node' => 'pi', 'role' => 'standby', 'on_demand' => false, 'commit' => 'x', 'last_sha' => 'a', 'in_sync' => true, 'db_up' => true]);
+
+        $snapshot = $this->snapshot();
+
+        $this->assertSame([], $snapshot['alerts']);
+        $this->assertSame('', collect($snapshot['nodes'])->firstWhere('name', 'pi')['tunnel']);
+    }
+
+    #[Test]
     public function an_empty_bucket_and_broken_files_do_not_break_the_page(): void
     {
         $this->assertTrue($this->snapshot()['empty']);

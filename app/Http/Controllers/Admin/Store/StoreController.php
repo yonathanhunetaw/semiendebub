@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Store;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Store\StoreFacilityRequest;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Models\Store\StoreVariantCustomerPrice;
@@ -90,12 +91,20 @@ class StoreController extends Controller
     public function show(Request $request, Store $store)
     {
         $filter = in_array($request->query('filter'), ['active', 'low', 'out'], true) ? (string) $request->query('filter') : 'all';
+        // Searched here, not in the browser: the list is paged, so a page-only search
+        // missed every item past the first 25.
+        $search = trim((string) $request->query('search', ''));
+        $like = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $search).'%';
         $health = $this->storeHealth($store);
 
         $paginatedItems = \App\Models\Item\Item::whereHas('variants.storeVariants', function ($q) use ($store) {
             $q->where('store_id', $store->id);
         })
             ->when($filter !== 'all', fn ($q) => $q->whereKey($health['items'][$filter] ?: [0]))
+            ->when($search !== '', fn ($q) => $q->where(fn ($match) => $match
+                ->where('product_name', 'like', $like)
+                ->orWhereHas('variants', fn ($variant) => $variant->where('sku', 'like', $like))
+                ->orWhereHas('category', fn ($category) => $category->where('category_name', 'like', $like))))
             ->with([
                 'category',
                 'variants' => function ($q) use ($store) {
@@ -182,6 +191,14 @@ class StoreController extends Controller
                     'multiplier' => $multiplier,
                     'status' => $sv->active ? 'active' : 'inactive',
                     'price_ladder' => $priceLadder,
+                    // Stock kept for Business customers, and the two pools now: the
+                    // price editor's Stock pools box starts from these.
+                    'business_pool' => $sv->business_pool,
+                    'pools' => app(\App\Services\Inventory\StockPools::class)->present(
+                        (int) $sv->item_variant_id,
+                        (int) $store->id,
+                        app(\App\Services\StockService::class)->availableAtStore((int) $sv->item_variant_id, (int) $store->id),
+                    ),
 
                     'customer_prices' => $sv->customerPrices->map(fn($cp) => [
                         'id' => $cp->id,
@@ -315,6 +332,7 @@ class StoreController extends Controller
         return Inertia::render('Admin/Inventory/Stores/StoreInventory', [
             'store' => $store,
             'filter' => $filter,
+            'search' => $search,
             // Whole-store figures for the filter chips and tiles (not just
             // this page of items).
             'summary' => [
@@ -383,16 +401,9 @@ class StoreController extends Controller
         ];
     }
 
-    public function store(Request $request)
+    public function store(StoreFacilityRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:stores,name',
-            'location' => 'nullable|string|max:255',
-            'manager' => 'nullable|string|max:255',
-            'status' => 'in:active,inactive',
-        ]);
-
-        Store::create($validated);
+        Store::create($request->validated());
 
         return redirect()->route('store.index')->with('success', 'Store created successfully.');
     }
@@ -400,20 +411,13 @@ class StoreController extends Controller
     public function edit(Store $store)
     {
         return Inertia::render('Admin/Inventory/Stores/Edit', [
-            'store' => $store,
+            'store' => $store->only(['id', 'name', 'location', 'manager', 'status']),
         ]);
     }
 
-    public function update(Request $request, Store $store)
+    public function update(StoreFacilityRequest $request, Store $store)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:stores,name,' . $store->id,
-            'location' => 'nullable|string|max:255',
-            'manager' => 'nullable|string|max:255',
-            'status' => 'in:active,inactive',
-        ]);
-
-        $store->update($validated);
+        $store->update($request->validated());
 
         return redirect()->route('store.index')->with('success', 'Store updated.');
     }
@@ -669,7 +673,10 @@ class StoreController extends Controller
                 'pricing_matrix' => [
                     'price' => (float) $validated['price'],
                     'discount_price' => isset($validated['discount_price']) ? (float) $validated['discount_price'] : null,
-                    'discount_ends_at' => $businessMatrix['discount_ends_at'] ?? null,
+                    // The date the admin picked; the business price's date only when none was sent.
+                    'discount_ends_at' => array_key_exists('discount_ends_at', $validated)
+                        ? $validated['discount_ends_at']
+                        : ($businessMatrix['discount_ends_at'] ?? null),
                     'auto_from_business' => false,
                 ],
                 'active' => $validated['active'] ?? true,
@@ -701,6 +708,8 @@ class StoreController extends Controller
     public function replenish(Store $store)
     {
         $transfers = Transfer::with([
+                'sourceLocation',
+                'destinationLocation',
                 'fromLocation:id,name',
                 'toLocation:id,name',
                 'fromStore:id,name',
@@ -805,8 +814,9 @@ class StoreController extends Controller
             $iv?->itemPackagingType?->name,
         ])) ?: ($iv?->sku ?? '—');
 
-        $sourceLabel = $t->fromLocation?->name ?? $t->fromStore?->name ?? 'Warehouse';
-        $destLabel = $t->toLocation?->name ?? $t->toStore?->name ?? 'Store';
+        // The endpoints the workflow writes; the legacy location ids only on old rows.
+        $sourceLabel = $t->sourceLocation?->name ?? $t->fromLocation?->name ?? $t->fromStore?->name ?? 'Warehouse';
+        $destLabel = $t->destinationLocation?->name ?? $t->toLocation?->name ?? $t->toStore?->name ?? 'Store';
 
         return [
             'id' => $t->id,
@@ -1314,7 +1324,8 @@ class StoreController extends Controller
         match ($source) {
             'b2b' => $this->clearB2bDiscount($id),
             'individual' => $this->clearMatrixDiscount(StoreVariantIndividualPrice::findOrFail($id)),
-            'customer' => StoreVariantCustomerPrice::findOrFail($id)->delete(),
+            // Only the discount goes; the customer's own price stays.
+            'customer' => $this->clearMatrixDiscount(StoreVariantCustomerPrice::findOrFail($id)),
             'seller' => $this->clearSellerDiscount($id),
             default => abort(422, 'Unknown source.'),
         };

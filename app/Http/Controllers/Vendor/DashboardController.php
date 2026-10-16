@@ -25,8 +25,7 @@ class DashboardController extends Controller
     {
         $vendor = Auth::user();
 
-        $recentOrders = Purchase::query()
-            ->forVendor((int) $vendor->id)
+        $recentOrders = $this->vendors->visibleOrders($vendor)
             ->with(['store', 'warehouse', 'user'])
             ->orderByDesc('id')
             ->limit(6)

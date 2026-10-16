@@ -32,6 +32,7 @@ const MAP: Record<GuideApp, StepRef[]> = {
         [/^\/(users|sessions)/, "admin", "people"],
         [/^\/settings/, "admin", "store"],
         [/^\/dashboard/, "admin", "dashboard"],
+        [/^\/calendar/, "admin", "calendar"],
     ],
     seller: [
         [/^\/items\/\d+/, "seller", "variant"],
@@ -44,6 +45,7 @@ const MAP: Record<GuideApp, StepRef[]> = {
         [/^\/customers/, "seller", "cart"],
         [/^\/refills/, "stock_keeper", "alerts"],
         [/^\/shipments/, "moving", "ship-agree"],
+        [/^\/calendar/, "admin", "calendar"],
     ],
     stock_keeper: [
         [/^\/shipments/, "stock_keeper", "receive"],
@@ -52,6 +54,7 @@ const MAP: Record<GuideApp, StepRef[]> = {
         [/^\/orders/, "stock_keeper", "pack"],
         [/^\/transfers/, "stock_keeper", "send"],
         [/^\/inventory/, "stock_keeper", "count"],
+        [/^\/calendar/, "admin", "calendar"],
     ],
     delivery: [
         [/^\/delivery/, "delivery", "claim"],
@@ -59,6 +62,7 @@ const MAP: Record<GuideApp, StepRef[]> = {
         [/^\/shipments/, "delivery", "freight"],
         [/^\/transfers/, "moving", "tr-road"],
         [/^\/dashboard/, "delivery", "runs"],
+        [/^\/calendar/, "admin", "calendar"],
     ],
 };
 

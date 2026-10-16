@@ -1,4 +1,5 @@
 import NotificationsBell from "@/Components/Navigation/Admin/NotificationsBell";
+import ShareCartPanel, { type CartShareInfo } from "@/Components/Seller/ShareCartPanel";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { ABOVE_NAV } from "@/Data/sellerOrderFlow";
 import { Head, Link, router } from "@inertiajs/react";
@@ -46,6 +47,8 @@ interface CartSummary {
     lines: CartLine[];
     /** Its seller, a store manager or an admin may delete it. */
     can_delete?: boolean;
+    /** The live customer link, if the cart was shared. */
+    share?: CartShareInfo | null;
 }
 
 interface Props {
@@ -506,6 +509,7 @@ export default function CartsIndex({ carts = [], home_store, focus_cart = null }
                             </div>
                             <DeleteCartButton key={active.id} cart={active} />
                         </div>
+                        <ShareCartPanel cartId={active.id} share={active.share} hasCustomer={active.customer !== null} customerName={active.customer?.name} />
 
                         {groups.map(([key, lines], groupIndex) => {
                             const meta = FULFILLMENT[key];

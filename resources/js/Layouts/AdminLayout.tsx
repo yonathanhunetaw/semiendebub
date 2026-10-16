@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Breadcrumbs, CssBaseline, Link as MuiLink, Toolbar, Typography, useTheme } from "@mui/material";
+import { ThemeProvider } from "@mui/material/styles";
 import { Head, Link, usePage } from "@inertiajs/react";
 import FlashToast from "@/Components/Shared/FlashToast";
 import AdminSidebar, { ADMIN_SIDEBAR_WIDTH } from "@/Components/Navigation/Admin/AdminSidebar";
@@ -9,6 +10,7 @@ import GuideButton from "@/Components/Guide/GuideButton";
 import { stackedTableSx, useStackedTableLabels } from "@/Components/Shared/stackedTables";
 import { arrive, motionSafe } from "@/Components/Visual/motion";
 import { getRole, useRole } from "@/theme";
+import { adminDenseTheme } from "@/theme/adminDense";
 
 interface Props {
     children: React.ReactNode;
@@ -34,7 +36,7 @@ function PathBreadcrumbs() {
     const segments = typeof window !== "undefined" ? window.location.pathname.split("/").filter(Boolean) : [];
 
     return (
-        <Breadcrumbs aria-label="breadcrumb" sx={{ fontSize: "0.8rem", mb: 2 }}>
+        <Breadcrumbs aria-label="breadcrumb" sx={{ fontSize: "0.6875rem", mb: 1 }}>
             <MuiLink component={Link} underline="hover" color="inherit" href={route("admin.dashboard")}>
                 Admin
             </MuiLink>
@@ -44,11 +46,11 @@ function PathBreadcrumbs() {
                 const label = raw.charAt(0).toUpperCase() + raw.slice(1);
 
                 return index === segments.length - 1 ? (
-                    <Typography key={href} color="text.primary" sx={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                    <Typography key={href} color="text.primary" sx={{ fontSize: "0.6875rem", fontWeight: 700 }}>
                         {label}
                     </Typography>
                 ) : (
-                    <MuiLink key={href} component={Link} underline="hover" color="inherit" href={href} sx={{ fontSize: "0.8rem" }}>
+                    <MuiLink key={href} component={Link} underline="hover" color="inherit" href={href} sx={{ fontSize: "0.6875rem" }}>
                         {label}
                     </MuiLink>
                 );
@@ -73,6 +75,8 @@ export default function AdminLayout({ children, breadcrumbs = false, flashToast 
     // A visit (a link, or a store picked in the drawer) closes the drawer.
     useEffect(() => setMobileOpen(false), [url]);
     const theme = useTheme();
+    // The dashboard's sizing for the page area (not the shell around it).
+    const pageTheme = useMemo(() => adminDenseTheme(theme), [theme]);
     const role = useRole();
     const config = getRole(role);
 
@@ -123,15 +127,16 @@ export default function AdminLayout({ children, breadcrumbs = false, flashToast 
                 {flashToast && <FlashToast bottomClass="bottom-6" />}
                 <Toolbar sx={{ minHeight: { xs: 64 } }} />
                 {/* One narrow gutter on a phone; pages add their own padding. */}
-                <Box ref={contentRef} sx={(t) => ({ px: { xs: 1, sm: 3 }, py: { xs: 1.5, sm: 3 }, flexGrow: 1, minWidth: 0, ...stackedTableSx(t) })}>
+                <Box ref={contentRef} sx={(t) => ({ px: { xs: 1, sm: 2 }, py: { xs: 1, sm: 1.5 }, flexGrow: 1, minWidth: 0, ...stackedTableSx(t) })}>
                     {breadcrumbs && <PathBreadcrumbs />}
                     {/* Payments, Customers and Settings group several screens under tabs. */}
                     <SectionTabs />
                     {/* The page's step in the guide, one tap away. */}
-                    <GuideButton app="admin" />
+                    {/* Only the dashboard links to the guide. */}
+                    {url.split("?")[0] === "/dashboard" && <GuideButton app="admin" />}
                     {/* Keyed by path, so a new page rises in; filters on the same page don't replay it. */}
                     <Box key={url.split("?")[0]} sx={{ animation: `${arrive} .32s ease-out both`, ...motionSafe }}>
-                        {children}
+                        <ThemeProvider theme={pageTheme}>{children}</ThemeProvider>
                     </Box>
                 </Box>
             </Box>

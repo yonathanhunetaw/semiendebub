@@ -203,7 +203,30 @@ class PaymentService
      */
     public function claim(Payment $payment, User $by): Payment
     {
-        return DB::transaction(function () use ($payment, $by): Payment {
+        return $this->markClaimed($payment, $by, $by);
+    }
+
+    /**
+     * The customer, on a shared cart link, says they sent this transfer.
+     * Nobody is named as claimer (a customer has no login), so whoever owns
+     * the account, or the store's manager, confirms it as with any claim;
+     * the customer can never be the second person. Stock holds are booked to
+     * $seller, the cart's seller.
+     *
+     * @throws PaymentException
+     */
+    public function claimByCustomer(Payment $payment, User $seller, ?string $reference = null): Payment
+    {
+        if ($payment->payment_account_id === null) {
+            throw new PaymentException('Only a bank or wallet transfer can be marked as sent here.');
+        }
+
+        return $this->markClaimed($payment, null, $seller, $reference);
+    }
+
+    private function markClaimed(Payment $payment, ?User $claimer, User $holdsBy, ?string $reference = null): Payment
+    {
+        return DB::transaction(function () use ($payment, $claimer, $holdsBy, $reference): Payment {
             $sale = $this->lockFor($payment);
             $payment = $this->fresh($payment);
 
@@ -214,14 +237,16 @@ class PaymentService
             }
 
             if ($sale !== null) {
-                $this->keepHolds($sale, $by);
+                $this->keepHolds($sale, $holdsBy);
             }
 
-            $payment->update([
+            $payment->update(array_filter([
                 'status' => Payment::STATUS_CLAIMED,
                 'claimed_at' => now(),
-                'claimed_by' => $by->id,
-            ]);
+                'claimed_by' => $claimer?->id,
+                'claimed_via' => $claimer === null ? Payment::CLAIMED_VIA_CUSTOMER : null,
+                'transaction_reference' => $reference !== null && $reference !== '' ? $reference : null,
+            ], fn ($value) => $value !== null) + ['claimed_by' => $claimer?->id]);
 
             return $payment;
         });

@@ -36,7 +36,7 @@ export default function CreateUser({ roles = [], stores = [], can_assign_any_sto
     };
 
     return (
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ maxWidth: 800, mx: "auto" }}>
             <Head title="Create User" />
 
             <Stack direction="row" spacing={2} alignItems="center" mb={4}>

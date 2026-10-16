@@ -88,6 +88,10 @@ final class PrepareE2eCommand extends Command
             'dev' => $this->user('dev', 'dev', 'E2E', 'Dev', '0999000013', null),
             'shared' => $this->user('shared', 'shared', 'E2E', 'Shared', '0999000014', $store),
             'manager2' => $this->user('store_manager', 'store-manager-2', 'E2E', 'Manager Two', '0999000015', $store),
+            // A second keeper on the same posts: a stocktake is approved by someone other than its counter.
+            'keeper2' => $this->user('stock_keeper', 'stock-keeper-2', 'E2E', 'Keeper Two', '0999000016', $store),
+            // A second buyer: a purchase order is approved by someone other than whoever raised it.
+            'procurement2' => $this->user('procurement', 'procurement-2', 'E2E', 'Procurement Two', '0999000017', null),
         ];
 
         $hub = StockLocation::query()->where('kind', StockLocation::KIND_MAIN_HUB)->orderBy('id')->first();
@@ -99,10 +103,12 @@ final class PrepareE2eCommand extends Command
         if ($hub !== null) {
             LocationStaff::query()->firstOrCreate(['stock_location_id' => $hub->id, 'user_id' => $people['hubKeeper']->id]);
         }
-        // The store keeper staffs the whole store: its floor, its shelf and its Remote Hub.
+        // The store keepers staff the whole store: its floor, its shelf and its Remote Hub.
         $storeNode = StockLocation::query()->where('store_id', $store->id)->where('kind', StockLocation::KIND_STORE)->first();
         foreach (array_filter([$storeNode, $remoteHub]) as $location) {
-            LocationStaff::query()->firstOrCreate(['stock_location_id' => $location->id, 'user_id' => $keeper->id]);
+            foreach ([$keeper, $people['keeper2']] as $staff) {
+                LocationStaff::query()->firstOrCreate(['stock_location_id' => $location->id, 'user_id' => $staff->id]);
+            }
         }
 
         // Something the main hub can ship, as the admin's manifest picker lists it.
@@ -116,17 +122,17 @@ final class PrepareE2eCommand extends Command
             ->firstWhere('id', (int) $hubVariant->item_variant_id);
 
         // Stock waiting in the Remote Hub, for the refill transfer to the store floor:
-        // ten of the second stocked item's first variant.
+        // twenty of the second stocked item's first variant.
         $remoteVariant = null;
         if ($remoteHub !== null && isset($items[1])) {
             $variant = ItemVariant::query()->where('item_id', $items[1]['item_id'])->orderBy('id')->first();
             if ($variant !== null) {
-                // Through the ledger, topped up to exactly ten so reruns do not pile up.
+                // Through the ledger, topped up to twenty so reruns do not pile up.
                 $held = (int) ItemStock::query()->where('item_variant_id', $variant->id)->where('stock_location_id', $remoteHub->id)->sum('quantity');
-                if ($held < 10) {
-                    app(\App\Services\StockService::class)->receive((int) $variant->id, $remoteHub, 10 - $held, ['reason' => 'E2E fixture']);
+                if ($held < 20) {
+                    app(\App\Services\StockService::class)->receive((int) $variant->id, $remoteHub, 20 - $held, ['reason' => 'E2E fixture']);
                 }
-                $remoteVariant = ['id' => (int) $variant->id, 'sku' => (string) $variant->sku, 'item' => $items[1]['name'], 'quantity' => 10];
+                $remoteVariant = ['id' => (int) $variant->id, 'sku' => (string) $variant->sku, 'item' => $items[1]['name'], 'quantity' => 20];
             }
         }
 
@@ -154,7 +160,10 @@ final class PrepareE2eCommand extends Command
 
         $customers = $this->customers($store, $seller);
         $discounts = $this->discounts($store, [...$items, $priceItem, $noStockItem]);
+        $adminPriced = $discounts['plain'] ?? null;
+        unset($discounts['plain']);
         $prices = $priceItem === null ? null : $this->setPrices($store, (int) $priceItem['item_id'], $seller, $customers['priced']);
+        $refillItem = $this->refillItem($catalog, $store, $shelf, $remoteHub, [...$items, $priceItem, $noStockItem, ...array_values($discounts), $adminPriced], $manager);
 
         $account = PaymentAccount::query()->updateOrCreate(
             ['account_number' => 'E2E-0001'],
@@ -220,6 +229,7 @@ final class PrepareE2eCommand extends Command
             ],
             'remoteVariant' => $remoteVariant,
             'remoteHub' => $remoteHub === null ? null : ['id' => $remoteHub->id, 'name' => $remoteHub->name],
+            'refillItem' => $refillItem,
             'customers' => collect($customers)->map(fn (Customer $customer): array => [
                 'id' => $customer->id,
                 'name' => trim($customer->first_name.' '.$customer->last_name),
@@ -228,6 +238,14 @@ final class PrepareE2eCommand extends Command
             ])->all(),
             'discounts' => $discounts,
             'priceItem' => $priceItem === null ? null : [...$priceItem, 'prices' => $prices],
+            // Only a store price of 30; Admin → Stores sets the rest in admin/pricing.
+            'adminPriced' => $adminPriced === null ? null : [
+                'item_id' => $adminPriced['item_id'],
+                'name' => $adminPriced['name'],
+                'price' => $adminPriced['price'],
+                'variants' => ItemVariant::query()->where('item_id', $adminPriced['item_id'])->orderBy('id')->get(['id', 'sku'])
+                    ->map(fn (ItemVariant $variant): array => ['id' => (int) $variant->id, 'sku' => (string) $variant->sku])->all(),
+            ],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
         return self::SUCCESS;
@@ -424,9 +442,9 @@ final class PrepareE2eCommand extends Command
     }
 
     /**
-     * Two items with only a store price and a discount: one still running (50 → 40 until
-     * tomorrow), one over (60 → 45, ended yesterday). Every other level of the ladder is
-     * cleared for them, so the cart shows exactly the store tier.
+     * Items with only a store price: one discount still running (50 → 40 until tomorrow),
+     * one over (60 → 45, ended yesterday), and a plain 30 for the admin pricing spec. Every
+     * other level of the ladder is cleared for them, so the cart shows exactly the store tier.
      *
      * @param  array<int, array<string, mixed>|null>  $taken
      * @return array<string, array<string, mixed>>
@@ -436,6 +454,8 @@ final class PrepareE2eCommand extends Command
         $plans = [
             'running' => ['price' => 50.0, 'discount_price' => 40.0, 'discount_ends_at' => now()->addDay()->toDateTimeString()],
             'expired' => ['price' => 60.0, 'discount_price' => 45.0, 'discount_ends_at' => now()->subDay()->toDateTimeString()],
+            // No discount and no other level: the admin pricing spec sets them through the UI.
+            'plain' => ['price' => 30.0, 'discount_price' => null, 'discount_ends_at' => null],
         ];
         $exclude = array_column(array_filter($taken), 'item_id');
         $out = [];
@@ -468,6 +488,59 @@ final class PrepareE2eCommand extends Command
         }
 
         return $out;
+    }
+
+    /**
+     * An item for the Remote Hub refill: none on the shelf or floor, 5 in the Remote
+     * Hub, and a bin on the Store Shelf of 2 (in the variant's own pack) with its
+     * refill line at 1. The bin is empty, so the keeper sees it under "Needs a refill"
+     * and the floor cannot cover it: the refill goes to the Remote Hub for 2.
+     *
+     * @param  array<int, array<string, mixed>|null>  $taken
+     * @return ?array{item_id: int, name: string, variant: int, sku: string}
+     */
+    private function refillItem(SellerCatalog $catalog, Store $store, ?StockLocation $shelf, ?StockLocation $remoteHub, array $taken, User $manager): ?array
+    {
+        if ($shelf === null || $remoteHub === null) {
+            return null;
+        }
+
+        $item = Item::query()
+            ->whereNotIn('id', array_column(array_filter($taken), 'item_id'))
+            ->whereHas('variants')
+            ->orderBy('id')
+            ->with(['variants' => fn ($q) => $q->orderBy('id')])
+            ->get()
+            ->first(fn (Item $item): bool => StoreVariant::query()
+                ->where('store_id', $store->id)
+                ->where('active', true)
+                ->where('item_variant_id', $item->variants->first()->id)
+                ->exists());
+
+        if ($item === null) {
+            return null;
+        }
+
+        $variant = $item->variants->first();
+        $leaves = $catalog->storeLeaves((int) $store->id);
+
+        // Nothing in the store but this variant in the Remote Hub; no refill left from an earlier run.
+        ItemStock::query()->whereIn('item_variant_id', $item->variants->pluck('id'))->whereIn('stock_location_id', [...$leaves['shelf'], ...$leaves['floor'], $remoteHub->id])
+            ->where(fn ($q) => $q->where('item_variant_id', '!=', $variant->id)->orWhere('stock_location_id', '!=', $remoteHub->id))
+            ->update(['quantity' => 0]);
+        $held = (int) ItemStock::query()->where('item_variant_id', $variant->id)->where('stock_location_id', $remoteHub->id)->sum('quantity');
+        if ($held < 5) {
+            app(\App\Services\StockService::class)->receive((int) $variant->id, $remoteHub, 5 - $held, ['reason' => 'E2E fixture']);
+        }
+        \App\Models\Inventory\RefillRequest::query()->where('item_id', $item->id)->where('store_id', $store->id)->open()
+            ->update(['status' => \App\Models\Inventory\RefillRequest::STATUS_CANCELLED, 'cancel_reason' => 'E2E fixture', 'cancelled_at' => now()]);
+        \App\Models\Inventory\ItemRefillRoute::query()->where('store_id', $store->id)->where('item_id', $item->id)->delete();
+        \App\Models\Inventory\ShelfItemBand::query()->updateOrCreate(
+            ['stock_location_id' => $shelf->id, 'item_id' => $item->id],
+            ['item_packaging_type_id' => $variant->item_packaging_type_id, 'max_units' => 2, 'refill_units' => 1, 'critical_units' => 1, 'updated_by' => $manager->id],
+        );
+
+        return ['item_id' => (int) $item->id, 'name' => (string) $item->product_name, 'variant' => (int) $variant->id, 'sku' => (string) $variant->sku];
     }
 
     private function user(string $role, string $key, string $first, string $last, string $phone, ?Store $store): User

@@ -365,6 +365,53 @@ class CapacityReplenishmentTest extends TestCase
     }
 
     #[Test]
+    public function the_freight_list_shows_warehouse_shortfalls_only_without_writing_anything(): void
+    {
+        $remote = Store::factory()->create(['name' => 'Kality Depot', 'type' => Store::TYPE_REMOTE_WAREHOUSE]);
+        $hubVariant = StoreVariant::factory()->create(['store_id' => $remote->id, 'item_variant_id' => $this->variant->id]);
+        $this->stockAt(Store::class, (int) $this->hub->id, 500);
+        $this->capacity()->setBand($hubVariant, Store::class, (int) $remote->id, 50, 200);
+
+        // A store shelf short too: that is a transfer, not freight.
+        $this->stockAt(Store::class, (int) $this->store->id, 100);
+        $this->capacity()->setBand($this->storeVariant, ItemInventoryLocation::class, (int) $this->shelf()->id, 5, 20);
+
+        $candidates = $this->planner()->shipmentCandidates();
+
+        $this->assertCount(1, $candidates);
+        $this->assertSame(200, $candidates[0]['shortfall']);
+        $this->assertSame('Both ends are warehouses — this must be raised as a Shipment.', $candidates[0]['reason']);
+        $this->assertSame(0, Transfer::query()->autoProposed()->where('to_store_id', $remote->id)->count(), 'a screen never creates records');
+    }
+
+    #[Test]
+    public function a_band_at_its_ceiling_or_a_detached_variant_is_skipped(): void
+    {
+        $band = $this->capacity()->setBand($this->storeVariant, ItemInventoryLocation::class, (int) $this->shelf()->id, 5, 20);
+
+        $full = $this->planner()->propose($band, 20);
+        $this->assertSame(['skipped', 'Already at or above its ceiling.'], [$full['result'], $full['reason']]);
+
+        // A band whose store variant has gone (deleted under it).
+        $detached = $this->planner()->propose($band->fresh()->setRelation('storeVariant', null), 0);
+        $this->assertSame(['skipped', 'The variant is no longer attached to a store.'], [$detached['result'], $detached['reason']]);
+    }
+
+    #[Test]
+    public function only_a_proposal_awaiting_approval_can_be_rejected(): void
+    {
+        $manual = Transfer::query()->create([
+            'reference' => 'TRF-MANUAL', 'item_variant_id' => $this->variant->id, 'from_store_id' => $this->store->id, 'to_store_id' => $this->store->id,
+            'source_location_type' => Store::class, 'source_location_id' => $this->store->id,
+            'destination_location_type' => Store::class, 'destination_location_id' => $this->store->id,
+            'quantity' => 1, 'status' => 'pending', 'origin' => Transfer::ORIGIN_MANUAL, 'approval_state' => Transfer::APPROVAL_NOT_REQUIRED,
+        ]);
+
+        $this->assertFalse($this->planner()->reject($manual, $this->userWithRole('admin'), 'no'));
+        $this->assertSame(Transfer::APPROVAL_NOT_REQUIRED, $manual->fresh()->approval_state);
+    }
+
+    #[Test]
     public function the_transfer_domain_refuses_a_leg_between_two_warehouses(): void
     {
         $this->expectException(MovementDomainException::class);

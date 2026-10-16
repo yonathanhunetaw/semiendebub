@@ -11,15 +11,12 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
+import { ThemeContext } from './theme/ThemeContext';
 import { getDesignTokens, resolveRole, RoleContext, RoleFavicon, THEME_STORAGE_KEY, DEFAULT_THEME_SETTING } from './theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
-// 1. Create a Context so child pages (like Profile) can change the theme
-export const ThemeContext = React.createContext({
-    toggleTheme: (newMode: 'light' | 'dark' | 'system') => {},
-    currentSetting: 'light'
-});
+
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,

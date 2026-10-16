@@ -43,7 +43,10 @@ class AdminUserRolesTest extends TestCase
         $this->post(route('admin.users.store'), [
             'first_name' => 'Chala', 'last_name' => 'M', 'email' => 'chala@example.com',
             'role' => 'delivery', 'password' => 'secret-pass', 'password_confirmation' => 'secret-pass',
-        ])->assertSessionHasNoErrors();
+        ])->assertSessionHasNoErrors()
+            // The user row is written before anything else runs, so only the redirect proves
+            // the request finished (it used to 500 on a missing UserCreated event class).
+            ->assertRedirect(route('admin.users.index'));
 
         $courier = User::query()->where('email', 'chala@example.com')->sole();
         $this->assertSame('delivery', $courier->roleKey());

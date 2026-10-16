@@ -33,6 +33,8 @@ export interface DeliveryRun {
     delivered_at: string | null;
     failed_at: string | null;
     created_at: string | null;
+    /** When a returned run was brought back to the depot. */
+    closed_at?: string | null;
     /** Statuses this run may legally move to next, straight from the server. */
     allowed_transitions: DeliveryStatus[];
     vehicle?: string | null;

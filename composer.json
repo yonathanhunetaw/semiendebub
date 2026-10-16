@@ -10,6 +10,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "anthropic-ai/sdk": "^0.59.0",
         "fakerphp/faker": "^1.23",
         "felipeteko/monolog-loki": "^1.0",
         "inertiajs/inertia-laravel": "^2.0",

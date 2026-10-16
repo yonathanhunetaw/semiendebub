@@ -15,6 +15,7 @@ import {
     Chip,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 interface InventoryItem {
     id: number;
@@ -43,7 +44,7 @@ export default function InventoryShow({
     const safeItems = Array.isArray(inventory) ? inventory : [];
 
     return (
-        <Box p={3}>
+        <Box sx={ROOT}>
             <Head title={`${store?.name || "Store"} Inventory`} />
 
             <Stack direction="row" spacing={2} alignItems="center" mb={3}>

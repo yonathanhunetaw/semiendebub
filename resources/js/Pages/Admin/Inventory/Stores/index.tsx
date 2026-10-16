@@ -106,7 +106,7 @@ export default function StoresIndex({ stores }: Props) {
                     sx={{
                         p: 6,
                         textAlign: "center",
-                        borderRadius: "16px",
+                        borderRadius: 2,
                         border: "1px solid",
                         borderColor: "divider",
                     }}
@@ -134,7 +134,7 @@ export default function StoresIndex({ stores }: Props) {
                                 elevation={0}
                                 sx={{
                                     p: 2.5,
-                                    borderRadius: "16px",
+                                    borderRadius: 2,
                                     border: "1px solid",
                                     borderColor: "divider",
                                     display: "flex",
@@ -206,7 +206,7 @@ export default function StoresIndex({ stores }: Props) {
                         elevation={0}
                         sx={{
                             display: { xs: "none", md: "block" },
-                            borderRadius: "16px",
+                            borderRadius: 2,
                             border: "1px solid",
                             borderColor: "divider",
                             mb: 3,

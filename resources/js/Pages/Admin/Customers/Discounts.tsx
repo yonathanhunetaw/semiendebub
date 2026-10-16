@@ -16,6 +16,7 @@ import {
     Typography,
 } from "@mui/material";
 import OpenInNew from "@mui/icons-material/OpenInNew";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 type Status = "active" | "expired" | "price";
 
@@ -74,7 +75,7 @@ function endsLabel(row: CustomerDiscount): { label: string; color: "success" | "
  */
 export default function CustomerDiscounts({ discounts = [], counts = { active: 0, expired: 0, price: 0, all: 0 }, filters = { status: "active" } }: Props) {
     return (
-        <Box sx={{ maxWidth: 1200, mx: "auto" }}>
+        <Box sx={ROOT}>
             <Head title="Customer prices & discounts" />
 
             <Typography variant="h5" sx={{ fontWeight: 800 }}>
@@ -99,11 +100,11 @@ export default function CustomerDiscounts({ discounts = [], counts = { active: 0
             </Stack>
 
             {discounts.length === 0 ? (
-                <Paper variant="outlined" sx={{ p: 4, textAlign: "center", borderRadius: 3 }}>
+                <Paper variant="outlined" sx={{ p: 4, textAlign: "center", borderRadius: 2 }}>
                     <Typography color="text.secondary">Nothing here for this store.</Typography>
                 </Paper>
             ) : (
-                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3 }}>
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                     <Table size="small">
                         <TableHead>
                             <TableRow>

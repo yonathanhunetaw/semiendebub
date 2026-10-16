@@ -429,7 +429,11 @@ class AdminStoreScopeTest extends TestCase
     public function customer_discounts_follow_the_active_store_and_say_when_they_end(): void
     {
         $item = Item::factory()->create(['status' => 'active', 'product_name' => 'Pens']);
+        // Saved with only its variant, as most callers do: the listing finds its item from it.
         $ownVariant = $this->storeVariant($this->own, $item);
+        $ownVariant->forceFill(['item_id' => null])->saveQuietly();
+        $ownVariant->save();
+        $this->assertSame($item->id, (int) $ownVariant->fresh()->item_id);
         $otherVariant = $this->storeVariant($this->other, $item);
         $mine = $this->customer($this->own, 'Mine');
 
@@ -445,6 +449,7 @@ class AdminStoreScopeTest extends TestCase
             ->component('Admin/Customers/Discounts')
             ->has('discounts', 1)
             ->where('discounts.0.customer', 'Mine')
+            ->where('discounts.0.item', 'Pens')
             ->where('discounts.0.discount_price', 80)
             ->where('discounts.0.days_left', 3)
             ->where('counts.expired', 1)

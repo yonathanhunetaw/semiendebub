@@ -136,6 +136,9 @@ class SystemStatus
                 'commit' => (string) ($beat['commit'] ?? ''),
                 'in_sync' => (bool) ($beat['in_sync'] ?? false),
                 'db_up' => $dbUp,
+                // From docker/tunnel-guard.sh: 'on' / 'off', '' when the guard does not run there.
+                'tunnel' => in_array($beat['tunnel'] ?? '', ['on', 'off'], true) ? (string) $beat['tunnel'] : '',
+                'app_up' => (bool) ($beat['app_up'] ?? true),
                 'last_seen_age' => $age,
                 'status' => $status,
                 'is_live' => $lease !== null && $lease['fresh'] && $lease['node'] === $name,
@@ -216,6 +219,20 @@ class SystemStatus
                 $alerts[] = ['level' => 'warn', 'message' => "{$node['name']} has not reported for over ".intdiv(self::STALE_SECONDS, 60).' minutes.'];
             } elseif ($node['status'] === 'online' && ! $node['in_sync'] && ! $node['is_live']) {
                 $alerts[] = ['level' => 'warn', 'message' => "{$node['name']} is online but its data does not match the newest backup yet."];
+            }
+        }
+
+        // Cloudflare spreads visitors over every connected tunnel replica: two up at
+        // once means random sign-outs and writes lost on the next sync.
+        $tunnels = array_column(array_filter($nodes, static fn (array $n): bool => $n['status'] === 'online' && $n['tunnel'] === 'on'), 'name');
+
+        if (count($tunnels) > 1) {
+            array_unshift($alerts, ['level' => 'error', 'message' => implode(' and ', $tunnels).' both have their Cloudflare tunnel up: visitors are split between them (random sign-outs, writes lost on the next sync).']);
+        }
+
+        foreach ($nodes as $node) {
+            if ($node['status'] === 'online' && ! $node['app_up']) {
+                $alerts[] = ['level' => 'error', 'message' => "{$node['name']}'s app does not answer on its port."];
             }
         }
 

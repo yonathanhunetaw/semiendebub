@@ -135,10 +135,16 @@ for b in sorted(beats, key=lambda b: (not (fresh and lease and lease.get("node")
     dot = {"online": green("●"), "stale": yellow("●"), "offline": red("●"), "off": dim("○")}[status]
     live = bold(green(" LIVE")) if fresh and lease and lease.get("node") == b["node"] else "     "
     sync = green("data matches backup") if b.get("in_sync") else yellow("data differs from backup")
-    print(f"   {dot} {b['node']:<8}{b.get('role', ''):<9}{live}  {status:<8} seen {ago(age):<10} code {b.get('commit', '?'):<9} {sync}")
+    tun = b.get("tunnel") or ""
+    tunnel = (green("tunnel on ") if tun == "on" else dim("tunnel off")) if tun else dim("tunnel ?  ")
+    print(f"   {dot} {b['node']:<8}{b.get('role', ''):<9}{live}  {status:<8} seen {ago(age):<10} code {b.get('commit', '?'):<9} {tunnel} {sync}")
+    if status == "online" and b.get("app_up") is False: alerts.append((red, f"{b['node']}'s app does not answer on its port"))
     if status == "offline": alerts.append((yellow, f"{b['node']} has not reported for over 15 minutes"))
     if status == "online" and not b.get("in_sync") and not (fresh and lease and lease.get("node") == b["node"]):
         alerts.append((yellow, f"{b['node']} is online but its data does not match the newest backup yet"))
+on = [b["node"] for b in beats if b.get("tunnel") == "on" and max(0, NOW - int(b.get("ts", 0))) < ONLINE]
+if len(on) > 1:
+    alerts.append((red, f"{' and '.join(on)} both have their tunnel up: Cloudflare splits visitors between them (random sign-outs, lost writes)"))
 if any((e.get("data", {}).get("verdict") == "rows_missing") for e in loss):
     alerts.append((red, "a hand-over replaced a server's data with a backup that had fewer rows (see below)"))
 rule()

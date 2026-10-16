@@ -47,8 +47,8 @@ class ShipmentBoardsAreReachableTest extends TestCase
                 'resources/js/Layouts/DeliveryLayout.tsx',
                 'delivery.shipments.index',
             ],
-            'stock keeper sidebar' => [
-                'resources/js/Components/Navigation/StockKeeper/StockKeeperSidebar.tsx',
+            'stock keeper nav' => [
+                'resources/js/Components/Navigation/StockKeeper/stockKeeperNav.ts',
                 'stock_keeper.shipments.index',
             ],
             // The seller reaches it from the "More" menu rather than the bottom

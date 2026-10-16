@@ -43,6 +43,9 @@ class Payment extends Model
 
     public const STATUS_CLAIMED = 'claimed';
 
+    /** claimed_via: the customer said they sent it, on a shared cart link. */
+    public const CLAIMED_VIA_CUSTOMER = 'customer';
+
     public const STATUS_CONFIRMED = 'confirmed';
 
     /** A part of an order that was cancelled before its money arrived. */
@@ -64,6 +67,7 @@ class Payment extends Model
         'paid_at',
         'claimed_at',
         'claimed_by',
+        'claimed_via',
         'confirmed_at',
         'confirmed_by',
         'rejected_at',

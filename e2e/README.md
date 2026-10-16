@@ -26,28 +26,48 @@ After a run: `npx playwright show-report` for the HTML report, or
 e2e/
   smoke.spec.ts                 the login page loads
   access/roles.spec.ts          every user type: its own app, refused (sent home) from the others
+  <module>/pages.spec.ts        every page of that app opens clean: no error status, no JS error,
+                                no console error, no 500 behind it; also the first record a list links to
+  admin/
+    settings/                   adding and renaming a store, taking on a seller who signs straight in
+    pricing/                    business / individual / seller / customer prices set in Admin → Stores,
+                                then the seller's cart charging each; stock pools (set aside for Business)
   seller/
     checkout/                   paying (cash, bank, pay later), delivery methods, no-stock items
-    orders/                     whole journeys, in-store hand-over, cancel, failed and returned deliveries
+    orders/                     whole journeys, in-store hand-over, cancel, failed and returned deliveries,
+                                and the courier's History
     payments/                   the two-person rule, split payments, "not received yet"
     pricing/                    the price ladder (store → individual → seller → customer), discounts
     customers/                  credit from the admin, selling on it, repayments
     balance/                    a seller handing cash over to a settlement account
-    refills/                    a shelf refill raised by the manager, shelved by the keeper
+    refills/                    a shelf refill the floor covers; one it cannot, sent on via the Remote Hub list
   stock/                        shipments (hub → Remote Hub) and transfers / shelving
+  stockkeeper/                  stocktakes: approved by a second keeper, or by the manager in Admin → Counts;
+                                receiving short and damaged, the shortfall settled by a second keeper
+  delivery/, vendor/            editing one's own profile
+  storefront/                   the public shop as a guest: cart, quantities, checkout → sign in
+  calendar/                     /calendar opens clean on all five apps; a monthly bill marked paid today
+                                is due next month, ticked paid there, and seen by a colleague
+  dev/, finance/, marketing/, procurement/, shared/   page sweeps only (most are placeholders)
   lib/
     support.ts                  signIn(), app(), the fixture and its types
     flows.ts                    the steps specs share: carts, checkout, confirming, pick & pack, delivery
-    inspect.ts                  ledger facts (stock per location, an order's stage and holds)
+    inspect.ts                  ledger facts (stock per location, an order's stage and holds, a store)
+    pages.ts                    sweep() and pagesTest(): open a list of pages and collect every fault
+    profile.ts                  profileTest(): edit a phone number on /profile and see it kept
+    transfers.ts                raise, claim, hand to the courier, hand over, receive (with counts)
 ```
 
 ## Adding a test
+
+A new page? Add its path to that app's `pages.spec.ts` and the sweep covers it.
+
 
 1. Put it in the module folder it belongs to (make a new folder for a new module).
 2. Sign people in with `signIn(browser, 'seller', fixture.seller.email)`; each person gets their
    own browser session, so a test can be the seller, the manager and the courier at once.
 3. Reuse `lib/flows.ts` for the usual steps; add a new step there if two specs need it.
-4. Check amounts with `lib/inspect.ts` (`unitsAt`, `itemStockOf`, `saleOf`, `transferOf`): it
+4. Check amounts with `lib/inspect.ts` (`unitsAt`, `itemStockOf`, `saleOf`, `transferOf`, `storeNamed`): it
    reads the ledger through `php artisan e2e:inspect`, which refuses any database but `*_e2e`.
 5. Need different people, customers, prices or stock? Add them in
    `app/Console/Commands/Dev/PrepareE2eCommand.php` and the `Fixture` type in `lib/support.ts`.
@@ -61,6 +81,7 @@ e2e/
 | Store manager | e2e.store-manager@duka.test | seller; owns the bank and settlement accounts |
 | Second manager | e2e.store-manager-2@duka.test | seller |
 | Stock keeper | e2e.stock-keeper@duka.test | stockkeeper; staff of the store and its Remote Hub |
+| Keeper Two | e2e.stock-keeper-2@duka.test | stockkeeper; the same posts, to approve the first keeper's counts |
 | Hub keeper | e2e.hub-keeper@duka.test | stockkeeper; staff of Main Distribution Hub A |
 | Courier | e2e.delivery@duka.test | delivery (a driver) |
 | Global admin / store admin | e2e.admin@ / e2e.store-admin@duka.test | admin |

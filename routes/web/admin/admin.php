@@ -30,7 +30,7 @@ Route::domain("admin.{$baseDomain}")
             Route::get('/login', fn() => Inertia::render('Admin/Login/index'))->name('login');
         });
 
-        // The replenishment approvals queue is also the store manager's: it is
+        // The replenishment approvals queue (and the stocktake counts) are also the store manager's: it is
         // where a manager rules on the transfers their store's capacity bands
         // propose (TransferPolicy decides which). Locked to their store by
         // ActiveStore like a store admin.
@@ -41,6 +41,11 @@ Route::domain("admin.{$baseDomain}")
                     ->name('replenishment.approve');
                 Route::post('/replenishment/{transfer}/reject', [ReplenishmentController::class, 'reject'])
                     ->name('replenishment.reject');
+
+                // Stocktakes a keeper submitted, approved by someone else (StocktakeService).
+                Route::get('/counts', [\App\Http\Controllers\Admin\Inventory\StocktakeApprovalController::class, 'index'])->name('counts.index');
+                Route::post('/counts/{stocktake}/approve', [\App\Http\Controllers\Admin\Inventory\StocktakeApprovalController::class, 'approve'])
+                    ->name('counts.approve');
             });
 
         // Authenticated Admin routes. `admin.store` settles the active store
@@ -58,6 +63,10 @@ Route::domain("admin.{$baseDomain}")
                 'chapter' => $request->query('chapter'),
                 'step' => $request->query('step'),
             ]))->name('guide');
+            // The shipments the Guide's 3D world replays (JSON).
+            Route::get('/guide/world', \App\Http\Controllers\Shared\GuideWorldController::class)->name('guide.world');
+            // The calendar: module dates + reminders and bills (shared with the other apps).
+            require base_path('routes/web/partials/calendar.php');
             Route::redirect('/how-it-works', '/guide')->name('flow');
             Route::get('/settings', fn() => Inertia::render('Admin/Settings/Index'))->name('settings');
 
@@ -74,6 +83,19 @@ Route::domain("admin.{$baseDomain}")
 
             // ── Global zone: the catalogue, stores, warehouses, fleet, sessions ──
             Route::middleware('admin.global')->group(function () {
+            // ── Purchase orders: approvals (orders are central, so global admins only) ──
+            Route::controller(\App\Http\Controllers\Admin\PurchaseOrderApprovalController::class)
+                ->prefix('purchase-orders')->name('purchase_orders.')->group(function () {
+                    Route::get('/', 'index')->name('index');
+                    Route::post('/{purchase}/approve', 'approve')->name('approve');
+                    Route::post('/{purchase}/send-back', 'sendBack')->name('send_back');
+                });
+            Route::controller(\App\Http\Controllers\Shared\SupplierPaymentInboxController::class)
+                ->prefix('supplier-payments')->name('supplier_payments.')->group(function () {
+                    Route::get('/', 'index')->name('index');
+                    Route::post('/{payment}/confirm', 'confirm')->name('confirm');
+                    Route::post('/{payment}/reject', 'reject')->name('reject');
+                });
             // ── Items ──
             Route::post('items/inline-options', [ItemController::class, 'storeInlineOption'])->name('items.inline-options');
             // ItemController::updateStatus() had no route at all, so the only

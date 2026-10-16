@@ -34,9 +34,26 @@ class LogViewerTest extends TestCase
         return 'dev.'.config('app.system_domain');
     }
 
+    /** @var array<string, string|null> what each seeded file held before (null = it did not exist) */
+    private array $originals = [];
+
+    protected function tearDown(): void
+    {
+        // These are the real dev logs; put back what the test overwrote.
+        foreach ($this->originals as $path => $contents) {
+            $contents === null ? @unlink($path) : file_put_contents($path, $contents);
+        }
+
+        parent::tearDown();
+    }
+
     private function seedLogFile(string $name, string $contents): string
     {
         $path = storage_path('logs/'.$name);
+
+        if (! array_key_exists($path, $this->originals)) {
+            $this->originals[$path] = is_file($path) ? (string) file_get_contents($path) : null;
+        }
 
         file_put_contents($path, $contents);
 

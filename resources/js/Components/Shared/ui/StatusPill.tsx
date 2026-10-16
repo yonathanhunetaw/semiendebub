@@ -36,6 +36,8 @@ export const STATUS_TONES: Readonly<Record<string, Tone>> = {
     ready: "warning",
     rescheduled: "warning",
     partial: "warning",
+    submitted: "warning",
+    partially_received: "warning",
     low: "warning",
     low_stock: "warning",
 
@@ -53,6 +55,7 @@ export const STATUS_TONES: Readonly<Record<string, Tone>> = {
     en_route: "primary",
     to_deliver: "primary",
     out_for_delivery: "primary",
+    ordered: "primary",
 
     // Done
     delivered: "success",
@@ -87,6 +90,8 @@ const STATUS_LABELS: Readonly<Record<string, string>> = {
     to_deliver: "To deliver",
     en_route: "En route",
     oos: "Out of stock",
+    submitted: "Awaiting approval",
+    partially_received: "Part received",
     ok: "In stock",
 };
 

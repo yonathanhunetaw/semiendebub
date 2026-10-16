@@ -24,8 +24,19 @@ class VendorService
 
     public const STATUS_RECEIVED = 'received';
 
-    /** Note the single-l spelling: it mirrors the `purchases.status` ENUM. */
+    /** The vendor app's spelling; the order itself says `cancelled`. */
     public const STATUS_CANCELED = 'canceled';
+
+    /**
+     * The vendor app's three buckets over the purchase order workflow. Drafts
+     * and orders still waiting for approval are internal: a vendor never
+     * sees them.
+     */
+    public const BUCKETS = [
+        self::STATUS_PENDING => Purchase::OPEN,
+        self::STATUS_RECEIVED => [Purchase::STATUS_RECEIVED, Purchase::STATUS_CLOSED],
+        self::STATUS_CANCELED => [Purchase::STATUS_CANCELLED],
+    ];
 
     /**
      * Headline counters for the vendor dashboard.
@@ -34,7 +45,7 @@ class VendorService
      */
     public function metrics(User $vendor): array
     {
-        $orders = fn (): Builder => Purchase::query()->forVendor((int) $vendor->id);
+        $orders = fn (): Builder => $this->visibleOrders($vendor);
 
         $variantIds = $this->variantIds($vendor);
 
@@ -44,14 +55,14 @@ class VendorService
                 ->whereIn('item_variant_id', $variantIds)
                 ->sum('quantity'),
             'orders_total' => (int) $orders()->count(),
-            'orders_pending' => (int) $orders()->where('status', self::STATUS_PENDING)->count(),
-            'orders_received' => (int) $orders()->where('status', self::STATUS_RECEIVED)->count(),
-            'orders_canceled' => (int) $orders()->where('status', self::STATUS_CANCELED)->count(),
+            'orders_pending' => (int) $orders()->whereIn('status', self::BUCKETS[self::STATUS_PENDING])->count(),
+            'orders_received' => (int) $orders()->whereIn('status', self::BUCKETS[self::STATUS_RECEIVED])->count(),
+            'orders_canceled' => (int) $orders()->whereIn('status', self::BUCKETS[self::STATUS_CANCELED])->count(),
             'revenue_received' => (float) $orders()
-                ->where('status', self::STATUS_RECEIVED)
+                ->whereIn('status', self::BUCKETS[self::STATUS_RECEIVED])
                 ->sum('total_amount'),
             'revenue_pending' => (float) $orders()
-                ->where('status', self::STATUS_PENDING)
+                ->whereIn('status', self::BUCKETS[self::STATUS_PENDING])
                 ->sum('total_amount'),
         ];
     }
@@ -92,12 +103,11 @@ class VendorService
         ?string $search = null,
         ?int $perPage = null
     ): LengthAwarePaginator {
-        $query = Purchase::query()
-            ->forVendor((int) $vendor->id)
+        $query = $this->visibleOrders($vendor)
             ->with(['store', 'warehouse', 'user']);
 
-        if ($status !== null && $status !== 'all') {
-            $query->where('status', $status);
+        if ($status !== null && isset(self::BUCKETS[$status])) {
+            $query->whereIn('status', self::BUCKETS[$status]);
         }
 
         if ($search !== null && $search !== '') {
@@ -115,17 +125,18 @@ class VendorService
      */
     public function orderStatusCounts(User $vendor): array
     {
-        $counts = Purchase::query()
-            ->forVendor((int) $vendor->id)
+        $counts = $this->visibleOrders($vendor)
             ->selectRaw('status, COUNT(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');
 
+        $bucket = fn (string $name): int => (int) $counts->only(self::BUCKETS[$name])->sum();
+
         return [
             'all' => (int) $counts->sum(),
-            self::STATUS_PENDING => (int) ($counts[self::STATUS_PENDING] ?? 0),
-            self::STATUS_RECEIVED => (int) ($counts[self::STATUS_RECEIVED] ?? 0),
-            self::STATUS_CANCELED => (int) ($counts[self::STATUS_CANCELED] ?? 0),
+            self::STATUS_PENDING => $bucket(self::STATUS_PENDING),
+            self::STATUS_RECEIVED => $bucket(self::STATUS_RECEIVED),
+            self::STATUS_CANCELED => $bucket(self::STATUS_CANCELED),
         ];
     }
 
@@ -161,7 +172,7 @@ class VendorService
         return [
             'id' => (int) $purchase->id,
             'reference_number' => (string) $purchase->reference_number,
-            'status' => (string) $purchase->status,
+            'status' => self::bucketOf((string) $purchase->status),
             'total_amount' => (float) $purchase->total_amount,
             'store' => $purchase->store?->name,
             'warehouse' => $purchase->warehouse?->name,
@@ -192,6 +203,26 @@ class VendorService
             ->pluck('units', 'item_variant_id')
             ->map(fn ($units) => (int) $units)
             ->all();
+    }
+
+    /** The vendor app's bucket for an order status. */
+    public static function bucketOf(string $status): string
+    {
+        foreach (self::BUCKETS as $bucket => $statuses) {
+            if (in_array($status, $statuses, true)) {
+                return $bucket;
+            }
+        }
+
+        return self::STATUS_PENDING;
+    }
+
+    /** This vendor's orders, from the moment they were approved. */
+    public function visibleOrders(User $vendor): Builder
+    {
+        return Purchase::query()
+            ->forVendor((int) $vendor->id)
+            ->whereIn('status', array_merge(...array_values(self::BUCKETS)));
     }
 
     /**

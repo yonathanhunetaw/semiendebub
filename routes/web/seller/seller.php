@@ -45,6 +45,10 @@ Route::domain("seller.$baseDomain")
                 'chapter' => $request->query('chapter'),
                 'step' => $request->query('step'),
             ]))->name('guide');
+            // The shipments the Guide's 3D world replays (JSON).
+            Route::get('/guide/world', \App\Http\Controllers\Shared\GuideWorldController::class)->name('guide.world');
+            // The calendar: module dates + reminders and bills (shared with the other apps).
+            require base_path('routes/web/partials/calendar.php');
             Route::get('/menu', [MenuController::class, 'index'])->name('menu.index');
             /*
              * The seller order pipeline (to pay → paid → pick & pack → to
@@ -127,6 +131,9 @@ Route::domain("seller.$baseDomain")
             Route::resource('carts', CartController::class)->only(['create', 'store', 'show', 'edit', 'update', 'destroy']);
             Route::post('/carts/{cart}/items', [CartController::class, 'storeItem'])->name('carts.items.store');
             Route::delete('/carts/{cart}/items/{variant}', [CartController::class, 'destroyItem'])->name('carts.items.destroy');
+            // A secret link the customer opens on shared.<domain> (CartShareService).
+            Route::post('/carts/{cart}/share', [\App\Http\Controllers\Seller\CartShareController::class, 'store'])->name('carts.share.store');
+            Route::delete('/carts/{cart}/share', [\App\Http\Controllers\Seller\CartShareController::class, 'destroy'])->name('carts.share.destroy');
             Route::get('/settings', [SellerSettingsController::class, 'index'])->name('settings.index');
             Route::patch('/settings', [SellerSettingsController::class, 'update'])->name('settings.update');
             // ── Shipments: 3-phase UI over the shared shipments domain ──

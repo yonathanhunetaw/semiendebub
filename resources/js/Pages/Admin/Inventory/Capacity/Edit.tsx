@@ -81,7 +81,7 @@ export default function CapacityEdit({ variant, bands = [], can_edit }: Props) {
         <>
             <Head title={`Capacity · ${variant.product_name}`} />
 
-            <Box sx={{ p: { xs: 2, md: 3 } }} component="form" onSubmit={submit}>
+            <Box component="form" onSubmit={submit}>
                 <Button
                     component={Link}
                     href={route("admin.inventory.capacity.index")}

@@ -88,7 +88,7 @@ export default function EditWarehouse({ warehouse, stores = [] }: Props) {
                 </Button>
             </Stack>
 
-            <Card elevation={0} sx={{ borderRadius: "16px", border: "1px solid", borderColor: "divider" }}>
+            <Card elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
                 <CardContent sx={{ p: 4 }}>
                     <form onSubmit={submit}>
                         <Grid container spacing={3}>

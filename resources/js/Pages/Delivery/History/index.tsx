@@ -109,7 +109,7 @@ export default function DeliveryHistory({
                                             ? `Delivered ${formatMoment(run.delivered_at)}`
                                             : run.status === "failed"
                                               ? `Failed ${formatMoment(run.failed_at)}`
-                                              : `Closed ${formatMoment(run.created_at)}`}
+                                              : `Returned to the depot ${formatMoment(run.closed_at ?? run.created_at)}`}
                                     </Typography>
                                 }
                             />

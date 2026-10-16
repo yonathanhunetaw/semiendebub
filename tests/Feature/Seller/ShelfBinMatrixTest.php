@@ -75,6 +75,26 @@ class ShelfBinMatrixTest extends TestCase
     }
 
     #[Test]
+    public function removing_a_bin_the_shelf_does_not_have_says_so(): void
+    {
+        $this->asSeller($this->seller)
+            ->delete(route('seller.locations.bands.destroy', ['location' => $this->shelf, 'item' => $this->pen]))
+            ->assertSessionHas('error', 'Bic Pen had no bin on this shelf.');
+    }
+
+    #[Test]
+    public function a_refill_cannot_be_raised_by_hand_for_the_floor(): void
+    {
+        $this->floor->syncManagers([$this->seller->id]);
+
+        $response = $this->asSeller($this->seller)
+            ->post(route('seller.locations.bands.refill', ['location' => $this->floor, 'item' => $this->pen]));
+
+        $response->assertForbidden();
+        $this->assertSame(0, \App\Models\Inventory\RefillRequest::query()->count());
+    }
+
+    #[Test]
     public function the_shelf_shows_one_bin_per_item_across_its_pack_variants(): void
     {
         $this->asSeller($this->seller)

@@ -25,6 +25,7 @@ import {
     Typography,
 } from "@mui/material";
 import React, { useState } from "react";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 interface Props {
     store: CapacityStoreOption | null;
@@ -66,7 +67,7 @@ export default function CapacityIndex({
         <>
             <Head title="Variant capacity" />
 
-            <Box sx={{ p: { xs: 2, md: 3 } }}>
+            <Box sx={ROOT}>
                 <Stack
                     direction={{ xs: "column", md: "row" }}
                     spacing={2}

@@ -2,10 +2,11 @@
 import AdminLayout from "@/Layouts/AppLayout";
 import {Head} from "@inertiajs/react";
 import {Box, Paper, Typography} from "@mui/material";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 export default function Stores() {
     return (
-        <Box sx={{p: 3}}>
+        <Box sx={ROOT}>
             <Typography variant="h4" gutterBottom>
                 Stores Dashboard
             </Typography>

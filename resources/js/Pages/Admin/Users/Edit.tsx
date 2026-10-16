@@ -47,7 +47,7 @@ export default function EditUser({ user, roles = [], stores = [], can_assign_any
     };
 
     return (
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ maxWidth: 800, mx: "auto" }}>
             <Head title={`Edit ${user.first_name}`} />
 
             <Stack direction="row" spacing={2} alignItems="center" mb={4}>

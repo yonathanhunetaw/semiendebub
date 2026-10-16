@@ -140,7 +140,7 @@ function Confetti() {
  |----------------------------------------------------------*/
 function PhaseStepper() {
     return (
-        <Paper elevation={0} sx={{ p: 1.5, borderRadius: "12px", bgcolor: "action.hover", border: "1px solid", borderColor: "divider", mb: 2 }}>
+        <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, bgcolor: "action.hover", border: "1px solid", borderColor: "divider", mb: 2 }}>
             <Stack direction="row" alignItems="center">
                 {["Manifest", "Review", "Dispatched"].map((label, i) => (
                     <React.Fragment key={label}>
@@ -182,11 +182,11 @@ export default function ReplenishDispatched({
             <PhaseStepper />
 
             {/* ── Success Hero ── */}
-            <Paper elevation={0} sx={{ p: 3, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2, position: "relative", overflow: "hidden" }}>
+            <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2, position: "relative", overflow: "hidden" }}>
                 <Box sx={{ position: "absolute", top: -20, right: -20, width: 150, height: 150, bgcolor: "primary.light", opacity: 0.1, borderRadius: "50%" }} />
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                     <Stack direction="row" spacing={2} alignItems="center">
-                        <Box sx={{ width: 56, height: 56, borderRadius: "16px", bgcolor: "primary.main", color: "primary.contrastText", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgb(var(--primary) / 0.2)" }}>
+                        <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: "primary.main", color: "primary.contrastText", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgb(var(--primary) / 0.2)" }}>
                             <CheckCircleIcon sx={{ fontSize: 32 }} />
                         </Box>
                         <Box>
@@ -209,7 +209,7 @@ export default function ReplenishDispatched({
             </Paper>
 
             {/* ── Gate Pass ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
                     <Stack direction="row" alignItems="center" spacing={1}>
                         <BadgeIcon color="primary" sx={{ fontSize: 20 }} />
@@ -237,7 +237,7 @@ export default function ReplenishDispatched({
             </Paper>
 
             {/* ── Live Transit ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
                     <Stack direction="row" alignItems="center" spacing={1}>
                         <RouteIcon color="primary" sx={{ fontSize: 20 }} />
@@ -269,7 +269,7 @@ export default function ReplenishDispatched({
             </Paper>
 
             {/* ── Driver Info ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
                     <Typography variant="subtitle1" fontWeight={700}>Carrier &amp; Logistics Unit</Typography>
                     <Chip label="FLEET ID #TRK-109" size="small" sx={{ fontWeight: 700, fontSize: 10 }} />
@@ -302,7 +302,7 @@ export default function ReplenishDispatched({
             </Paper>
 
             {/* ── Manifest Accordion ── */}
-            <Paper elevation={0} sx={{ borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 3, overflow: "hidden" }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 3, overflow: "hidden" }}>
                 <Accordion disableGutters elevation={0} sx={{ "&:before": { display: "none" } }}>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 2.5, py: 1 }}>
                         <Stack direction="row" alignItems="center" spacing={1.5}>

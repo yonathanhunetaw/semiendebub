@@ -30,6 +30,7 @@ import {
     Typography,
 } from "@mui/material";
 import React, { useState } from "react";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 interface Props {
     proposals?: ReplenishmentProposal[];
@@ -117,7 +118,7 @@ export default function ReplenishmentProposals({
         <>
             <Head title="Replenishment approvals" />
 
-            <Box sx={{ p: { xs: 2, md: 3 } }}>
+            <Box sx={ROOT}>
                 <Stack
                     direction={{ xs: "column", md: "row" }}
                     justifyContent="space-between"

@@ -14,6 +14,7 @@ import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -245,7 +246,7 @@ export default function Replenish({ store, transfers = [] }: Props) {
     );
 
     return (
-        <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 }, maxWidth: "100%" }}>
+        <Box sx={ROOT}>
             <Head title={`${store?.name} — Replenishment`} />
 
             {/* Header */}
@@ -299,7 +300,7 @@ export default function Replenish({ store, transfers = [] }: Props) {
                 <Box>{rows.map(t => <TransferCard key={t.id} t={t} />)}</Box>
             ) : (
                 <TableContainer component={Paper} elevation={0}
-                    sx={{ border: "1px solid rgb(var(--outline-variant))", borderRadius: 3 }}>
+                    sx={{ border: "1px solid rgb(var(--outline-variant))", borderRadius: 2 }}>
                     <Table size="small">
                         <TableHead sx={{ bgcolor: "rgb(var(--surface-container-low))" }}>
                             <TableRow>

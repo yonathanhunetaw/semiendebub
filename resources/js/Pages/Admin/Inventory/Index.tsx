@@ -227,7 +227,7 @@ export default function InventoryHub({
             <Head title="Inventory" />
 
             <div className="min-h-screen bg-background">
-                <div className="mx-auto w-full max-w-[1100px] px-3.5 pb-12">
+                <div className="mx-auto w-full max-w-[1600px] pb-12">
                     {/* ── Identity header ── */}
                     <section className="pb-3 pt-4">
                         <div className="flex items-center justify-between gap-3">

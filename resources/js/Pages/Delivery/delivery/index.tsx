@@ -150,7 +150,7 @@ export default function Runs({
                     size="small"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search name, phone, address or tracking…"
+                    placeholder="Search order, name, phone, address or tracking…"
                     sx={{
                         mt: 1.5,
                         "& .MuiOutlinedInput-root": {

@@ -66,11 +66,11 @@ export default function TransferCreate({ locations = [], variants = [], couriers
     return (
         <>
             <Head title="New transfer" />
-            <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: "auto" }}>
+            <Box sx={{ maxWidth: 720, mx: "auto" }}>
                 <Typography variant="h5" sx={{ fontWeight: 800, mb: 2 }}>
                     New transfer
                 </Typography>
-                <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
+                <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
                     <Stack
                         component="form"
                         spacing={2.5}

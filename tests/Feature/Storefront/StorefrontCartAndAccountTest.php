@@ -315,20 +315,10 @@ class StorefrontCartAndAccountTest extends TestCase
         ]);
         $this->signedIn();
 
-        $listed = $this->get(route('sessions.index'));
-        $this->delete(route('sessions.destroy', 'someone-else'));
+        // The root-domain session list is for admin and dev only (role:admin|dev).
+        $this->get(route('sessions.index'))->assertForbidden();
+        $this->delete(route('sessions.destroy', 'someone-else'))->assertForbidden();
 
-        $leaks = $listed->getStatusCode() === 200;
-        $deleted = DB::table('sessions')->where('id', 'someone-else')->doesntExist();
-
-        if ($leaks || $deleted) {
-            $this->markTestSkipped(
-                'KNOWN GAP: /sessions on the root domain is guarded only by auth + verified, and uses the Admin session '
-                .'controller, so any signed-in shopper can '.($leaks ? 'list every session' : '').($leaks && $deleted ? ' and ' : '')
-                .($deleted ? 'end other users\' sessions' : '').'. Restrict it to admin and this test passes.'
-            );
-        }
-
-        $this->assertTrue(true);
+        $this->assertTrue(DB::table('sessions')->where('id', 'someone-else')->exists(), 'another user\'s session survives');
     }
 }

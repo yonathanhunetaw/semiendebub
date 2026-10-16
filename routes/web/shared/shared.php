@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Shared\SharedCartController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -21,6 +22,17 @@ Route::domain("shared.$baseDomain")
         });
 
 
+
+        // A seller's cart shared with its customer. No login: the link is the
+        // key, opens that one cart only, and expires (CartShareService).
+        Route::middleware('throttle:60,1')->prefix('c/{token}')->name('cart.')->controller(SharedCartController::class)->group(function () {
+            Route::get('/', 'show')->name('show');
+            Route::get('/catalogue', 'catalogue')->name('catalogue');
+            Route::post('/items', 'add')->name('items.store');
+            Route::patch('/items/{variant}', 'update')->whereNumber('variant')->name('items.update');
+            Route::post('/checkout', 'checkout')->name('checkout');
+            Route::post('/payments/{payment}/claim', 'claim')->whereNumber('payment')->name('payments.claim');
+        });
 
         Route::middleware(['auth', 'verified', 'role.subdomain:shared'])->group(function () {
             Route::get('/dashboard', function () {

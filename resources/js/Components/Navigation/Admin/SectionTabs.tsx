@@ -28,14 +28,14 @@ export default function SectionTabs() {
     const value = tabs.some((tab) => tab.route === current.tab.route) ? current.tab.route : false;
 
     return (
-        <Box sx={{ mb: { xs: 2, sm: 3 } }}>
+        <Box sx={{ mb: 1.5 }}>
             {current.section.title === "store" && (
-                <Typography sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" }, fontWeight: 800, mb: 0.5 }}>
+                <Typography sx={{ fontSize: "1.125rem", fontWeight: 800, mb: 0.25 }}>
                     {activeStore.id === "all" ? "All stores" : activeStore.name}
                 </Typography>
             )}
             <Box sx={{ borderBottom: "1px solid", borderColor: "divider" }}>
-                <Tabs value={value} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile>
+                <Tabs value={value} sx={{ minHeight: 36 }} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile>
                     {tabs.map((tab) => (
                         <Tab
                             key={tab.route}
@@ -43,7 +43,7 @@ export default function SectionTabs() {
                             label={tab.label}
                             component={Link}
                             href={sectionTabHref(tab, activeStore.id)}
-                            sx={{ fontWeight: 700, minHeight: 44 }}
+                            sx={{ fontWeight: 700, fontSize: "0.75rem", minHeight: 36, py: 0.5, px: 1.5 }}
                         />
                     ))}
                 </Tabs>

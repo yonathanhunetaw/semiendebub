@@ -21,6 +21,9 @@ export interface SystemNode {
     commit: string;
     in_sync: boolean;
     db_up: boolean;
+    /** Its Cloudflare tunnel connector (docker/tunnel-guard.sh); "" = the guard does not run there. */
+    tunnel: "on" | "off" | "";
+    app_up: boolean;
     last_seen_age: number;
     status: NodeStatus;
     is_live: boolean;

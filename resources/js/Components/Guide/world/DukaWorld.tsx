@@ -1,51 +1,172 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Box, Button, Chip, Paper, Stack, Typography } from "@mui/material";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Box, Button, IconButton, Paper, Stack, Typography } from "@mui/material";
+import CenterFocusStrongRounded from "@mui/icons-material/CenterFocusStrongRounded";
+import CloseRounded from "@mui/icons-material/CloseRounded";
 import { alpha, useTheme, type Theme } from "@mui/material/styles";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { identityFor } from "@/Components/Visual/identities";
+import type { GuideApp } from "@/Components/Guide/chapters";
+import BinCard, { type ShelfBin } from "./BinCard";
+import EventLog from "./EventLog";
+import JourneyCard from "./JourneyCard";
 import PlaceCard from "./PlaceCard";
-import { COMPOUND, FLOWS, PLACES, STORE, placeFor, pointOf, type FlowKey, type Place, type PlaceKey } from "./places";
+import ShipmentCard from "./ShipmentCard";
+import Timeline, { PACE_MS, dayStart, isoDay, type Pace } from "./Timeline";
+import { KIND_COLOR, buildEvents, hhmm, lastBefore, type EventKind, type WorldEvent } from "./events";
+import {
+    COMPOUND, DROP, NEIGHBOUR, PARKING, PLACES, PLATFORM_BERTH, ROADS, SHELF_TIERS, STORE,
+    doorPosition, hubLayout, placeFor, vanRoute, type Place, type PlaceKey,
+} from "./places";
+import {
+    ORDER_PHASE_LABEL, REFILL_PHASE_LABEL, orderStateAt, refillStateAt, stateAt,
+    type WorldOrder, type WorldRefill, type WorldShipment,
+} from "./replay";
+import { binWorldPosition } from "./shelfGeometry";
 
 /**
- * How Duka works, to scale (one unit is one metre): the Main Hub compound far
- * to the west, the Main Store with its shelves and floor, the Remote Hub
- * behind it, the delivery bay and the customers (places.ts). Roads carry the
- * three flows, parcels travel them, and the people who work at each place
- * stand there. Drag to turn, scroll or pinch to zoom, tap a place to read
- * about it.
+ * Live Operations: the business as a working model, to scale (one unit is one
+ * metre). The Main Hub compound from the site photo, its two hubs floored in
+ * named 1 m cells, the platform between their doors, the Main Store with the
+ * Remote Hub behind it, and the day replayed from real timestamps: vans for
+ * shipments, parcels and couriers for orders, cartons carried to the shelf
+ * for refills.
  *
- * Built once per colour mode; React state (the open place, the flows shown)
- * reaches the scene through the small `api` the build hands back. Everything
- * is disposed on unmount, so switching views does not leak WebGL contexts.
- * Motion stops under prefers-reduced-motion: parcels stand still and the
- * camera jumps instead of flying.
+ * The timeline is driven by events: every timestamp the day left is one
+ * event (events.ts). Stepping to an event moves the clock to just after it,
+ * so the vans drive the time in between, lights up where it happened and,
+ * while the camera follows, flies there. Play walks the events one by one;
+ * Live sits on the latest event and moves with the real clock.
+ *
+ * The scene is built once per colour mode; React state reaches it through the
+ * small `api` the build hands back. Everything is disposed on unmount.
  */
+
+/** The event the world lights up: where, and the words floating over it. */
+interface Highlight {
+    kind: EventKind;
+    subject: number;
+    where: PlaceKey | null;
+    text: string;
+    tone: string;
+}
 
 interface SceneApi {
     select: (key: PlaceKey | null) => void;
-    showFlows: (hidden: Set<FlowKey>) => void;
+    home: () => void;
+    setShipments: (shipments: WorldShipment[]) => void;
+    setOrders: (orders: WorldOrder[]) => void;
+    setRefills: (refills: WorldRefill[]) => void;
+    setTime: (t: number) => void;
+    /** The Main Store's 200 bins as they stand now, in ShelfMatrix order. */
+    setShelf: (bins: ShelfBin[]) => void;
+    /** Light up an event; `fly` takes the camera there. */
+    highlight: (h: Highlight | null, fly: boolean) => void;
 }
 
-const HOME_TARGET = new THREE.Vector3(-4, 0, 2);
-const HOME_CAMERA = new THREE.Vector3(-4, 78, 92);
+type Subject = { kind: EventKind; id: number };
 
-export default function DukaWorld({ onOpenChapter }: { onOpenChapter: (key: string) => void }) {
+const ALL_KINDS: EventKind[] = ["shipment", "order", "refill"];
+const SITE_CENTER = new THREE.Vector3(-14, 0, 3);
+const SITE_BOUNDS = new THREE.Box3(new THREE.Vector3(-95, 0, -16), new THREE.Vector3(69, 8, 26));
+
+/** Where things wait on the store floor (west of the counter) and at the delivery bay, [x, z]. */
+const FLOOR_SPOT: [number, number] = [STORE.position[0] - 4.75, STORE.position[1] - 0.8];
+const BAY_SPOT: [number, number] = [36, 0.5];
+/** A courier's ride from the delivery bay along the main road to the customers. */
+const ORDER_RIDE: Array<[number, number]> = [BAY_SPOT, [37, -3], [44, -2], [52, 2], [58, 4], [60, 6.5]];
+/** A refill carried from the Remote Hub's door, round the east side, in at the store's front door. */
+const REMOTE_CARRY: Array<[number, number]> = [[23, -2.5], [24.5, -0.8], [29, 0.5], [29.5, 8], [28.5, 14], [18, 14.5], [18, 11]];
+
+/** Story time per ms of animation when moving between events, and its bounds. */
+const TWEEN_MIN_MS = 500;
+const TWEEN_MAX_MS = 2400;
+
+/** `?day=2026-10-14&event=shipment-12-signed`: a link to one moment of one day. */
+function linkedMoment(): { day: string | null; event: string | null } {
+    if (typeof window === "undefined") return { day: null, event: null };
+    const params = new URLSearchParams(window.location.search);
+    const day = params.get("day");
+    const valid = day !== null && /^\d{4}-\d{2}-\d{2}$/.test(day) && day <= isoDay(new Date());
+    return { day: valid ? day : null, event: valid ? params.get("event") : null };
+}
+
+export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideApp; onOpenChapter: (key: string) => void; onClose: () => void }) {
     const theme = useTheme();
+    const [linked] = useState(linkedMoment);
     const mountRef = useRef<HTMLDivElement>(null);
     const apiRef = useRef<SceneApi | null>(null);
     const [selected, setSelected] = useState<PlaceKey | null>(null);
-    const [hidden, setHidden] = useState<Set<FlowKey>>(new Set());
     const [failed, setFailed] = useState(false);
 
-    // Build the world. Rebuilt when the colour mode flips, since every
-    // material takes its colour from the theme.
+    // What the day holds.
+    const [day, setDay] = useState(() => linked.day ?? isoDay(new Date()));
+    const [loadedDay, setLoadedDay] = useState<string | null>(null);
+    const [shipments, setShipments] = useState<WorldShipment[]>([]);
+    const [orders, setOrders] = useState<WorldOrder[]>([]);
+    const [refills, setRefills] = useState<WorldRefill[]>([]);
+    const [busyDays, setBusyDays] = useState<string[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [shelf, setShelf] = useState<ShelfBin[]>([]);
+
+    // The replay: the moment shown, the event it belongs to, and how we move.
+    const [time, setTime] = useState(() => (linked.day && linked.day !== isoDay(new Date()) ? dayStart(linked.day) : Date.now()));
+    const [cursor, setCursor] = useState<number | null>(null);
+    const [playing, setPlaying] = useState(false);
+    const [pace, setPace] = useState<Pace>("normal");
+    const [live, setLive] = useState(() => !linked.day || linked.day === isoDay(new Date()));
+    const [follow, setFollow] = useState(true);
+    const [kinds, setKinds] = useState<EventKind[]>(ALL_KINDS);
+    const [arrivals, setArrivals] = useState(0);
+
+    // What is open: a bin, a shipment/order/refill, or a place; and the list.
+    const [bin, setBin] = useState<number | null>(null);
+    const [focused, setFocused] = useState<Subject | null>(null);
+    const [logOpen, setLogOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 900);
+
+    const isToday = day === isoDay(new Date());
+    const start = dayStart(day);
+
+    const allEvents = useMemo(() => buildEvents(shipments, orders, refills), [shipments, orders, refills]);
+    const dayEvents = useMemo(() => allEvents.filter((e) => e.at >= start && e.at < start + 86_400_000), [allEvents, start]);
+    const events = useMemo(() => dayEvents.filter((e) => kinds.includes(e.kind)), [dayEvents, kinds]);
+    const counts = useMemo(() => {
+        const c: Record<EventKind, number> = { shipment: 0, order: 0, refill: 0 };
+        dayEvents.forEach((e) => c[e.kind]++);
+        return c;
+    }, [dayEvents]);
+    const current: WorldEvent | null = cursor !== null ? events[cursor] ?? null : null;
+    /** The last event that has happened by the moment shown: what the list and strip dim after. */
+    const reached = useMemo(() => lastBefore(events, time), [events, time]);
+
+    // Refs for the clock loop and the callbacks it runs.
+    const timeRef = useRef(time);
+    timeRef.current = time;
+    const eventsRef = useRef(events);
+    eventsRef.current = events;
+    const liveRef = useRef(live);
+    liveRef.current = live;
+    const tween = useRef<{ from: number; to: number; start: number; ms: number } | null>(null);
+    const reducedMotion = useMemo(() => typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false), []);
+
     useEffect(() => {
         const mount = mountRef.current;
         if (!mount) return;
-
-        const built = buildWorld(mount, theme, (key) => setSelected(key));
+        const built = buildWorld(mount, theme, (key) => {
+            setFocused(null);
+            setBin(null);
+            setSelected(key);
+        }, (index) => {
+            setFocused(null);
+            setSelected(null);
+            setBin(index);
+        }, () => setFollow(false), (kind, id) => {
+            setSelected(null);
+            setBin(null);
+            setFocused({ kind, id });
+        });
         if (!built) {
             setFailed(true);
             return;
@@ -59,49 +180,302 @@ export default function DukaWorld({ onOpenChapter }: { onOpenChapter: (key: stri
     }, [theme.palette.mode]);
 
     useEffect(() => apiRef.current?.select(selected), [selected, theme.palette.mode]);
-    useEffect(() => apiRef.current?.showFlows(hidden), [hidden, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setShipments(shipments), [shipments, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setOrders(orders), [orders, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setRefills(refills), [refills, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setShelf(shelf), [shelf, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setTime(time), [time, shipments, orders, refills, shelf, theme.palette.mode]);
 
-    const toggleFlow = (key: FlowKey) =>
-        setHidden((current) => {
-            const next = new Set(current);
-            if (next.has(key)) next.delete(key);
-            else next.add(key);
-            return next;
-        });
+    // Light up the current event; fly there while the camera follows.
+    useEffect(() => {
+        const tone = current ? (current.bad ? theme.palette.error.main : theme.palette[KIND_COLOR[current.kind]].main) : "";
+        apiRef.current?.highlight(
+            current ? { kind: current.kind, subject: current.subject, where: current.where, text: `${hhmm(current.at)} · ${current.what}`, tone } : null,
+            follow && current !== null,
+        );
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [current?.key, follow, theme.palette.mode]);
+
+    // An open shipment/order/refill card follows the event being shown.
+    useEffect(() => {
+        if (current) setFocused((f) => (f ? { kind: current.kind, id: current.subject } : f));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [current?.key]);
+
+    // Load the day; today's again every 30 s.
+    const load = useCallback(async (which: string) => {
+        setLoading(true);
+        try {
+            const url = route(`${app}.guide.world`, { from: which, to: which, shelf: 1 });
+            const response = await fetch(url, { headers: { Accept: "application/json" }, credentials: "same-origin" });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = (await response.json()) as { shipments: WorldShipment[]; orders?: WorldOrder[]; refills?: WorldRefill[]; days: string[]; shelf?: ShelfBin[] };
+            setShipments(data.shipments);
+            setOrders(data.orders ?? []);
+            setRefills(data.refills ?? []);
+            setBusyDays(data.days);
+            setShelf(data.shelf ?? []);
+            setLoadedDay(which);
+        } catch (error) {
+            console.warn("Live Operations: could not load the day.", error);
+        } finally {
+            setLoading(false);
+        }
+    }, [app]);
+
+    useEffect(() => {
+        void load(day);
+    }, [day, load]);
+
+    useEffect(() => {
+        if (!isToday) return;
+        const timer = window.setInterval(() => void load(day), 30_000);
+        return () => window.clearInterval(timer);
+    }, [isToday, day, load]);
+
+    // Step to an event: the clock runs (quickly) to just after it.
+    const goTo = useCallback((index: number) => {
+        const event = eventsRef.current[index];
+        if (!event) return;
+        setLive(false);
+        setCursor(index);
+        const from = timeRef.current;
+        const to = event.at + 1000;
+        const ms = reducedMotion ? 0 : Math.max(TWEEN_MIN_MS, Math.min(TWEEN_MAX_MS, Math.abs(to - from) / 1000));
+        if (ms === 0) {
+            tween.current = null;
+            setTime(to);
+            setArrivals((a) => a + 1);
+            return;
+        }
+        tween.current = { from, to, start: performance.now(), ms };
+    }, [reducedMotion]);
+
+    const goLive = useCallback(() => {
+        tween.current = null;
+        setDay(isoDay(new Date()));
+        setLive(true);
+        setPlaying(false);
+        setTime(Date.now());
+    }, []);
+
+    // The clock: runs a step's tween, or follows the real clock while live.
+    useEffect(() => {
+        let frame = 0;
+        let lastLive = 0;
+        const loop = (now: number) => {
+            const tw = tween.current;
+            if (tw) {
+                const k = Math.min(1, (now - tw.start) / tw.ms);
+                const eased = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+                setTime(tw.from + (tw.to - tw.from) * eased);
+                if (k >= 1) {
+                    tween.current = null;
+                    setArrivals((a) => a + 1);
+                }
+            } else if (liveRef.current && now - lastLive > 500) {
+                lastLive = now;
+                setTime(Date.now());
+            }
+            frame = requestAnimationFrame(loop);
+        };
+        frame = requestAnimationFrame(loop);
+        return () => cancelAnimationFrame(frame);
+    }, []);
+
+    // A link to one event: go there once its day has loaded.
+    const pendingEvent = useRef(linked.event);
+    useEffect(() => {
+        const key = pendingEvent.current;
+        if (!key || loadedDay !== day) return;
+        pendingEvent.current = null;
+        const index = events.findIndex((e) => e.key === key);
+        if (index >= 0) goTo(index);
+    }, [events, loadedDay, day, goTo]);
+
+    // The address names the day and event on screen, so it can be shared; live needs neither.
+    useEffect(() => {
+        const url = new URL(window.location.href);
+        if (live && isToday) {
+            url.searchParams.delete("day");
+            url.searchParams.delete("event");
+        } else {
+            url.searchParams.set("day", day);
+            if (current) url.searchParams.set("event", current.key);
+            else url.searchParams.delete("event");
+        }
+        window.history.replaceState(window.history.state, "", url.toString());
+    }, [live, isToday, day, current]);
+    useEffect(() => () => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("day");
+        url.searchParams.delete("event");
+        window.history.replaceState(window.history.state, "", url.toString());
+    }, []);
+
+    // Live sits on the latest event, and picks up new ones as they come in.
+    useEffect(() => {
+        if (!live) return;
+        const latest = lastBefore(events, time);
+        if (latest !== cursor) setCursor(latest);
+    }, [live, events, time, cursor]);
+
+    // Playing: hold each event, then step to the next; at the end, go live (today) or stop.
+    useEffect(() => {
+        if (!playing || tween.current || events.length === 0) return;
+        const next = cursor === null ? 0 : cursor + 1;
+        const timer = window.setTimeout(() => {
+            if (next < events.length) goTo(next);
+            else if (isToday) goLive();
+            else setPlaying(false);
+        }, cursor === null ? 400 : PACE_MS[pace]);
+        return () => window.clearTimeout(timer);
+    }, [playing, arrivals, cursor, pace, events.length, isToday, goTo, goLive]);
+
+    const play = (on: boolean) => {
+        // Play from live, or from the end, starts the day over.
+        if (on && (live || cursor === events.length - 1)) {
+            setTime(start);
+            setCursor(null);
+            setLive(false);
+        }
+        setPlaying(on);
+    };
+
+    const chooseDay = (next: string) => {
+        tween.current = null;
+        setFocused(null);
+        setCursor(null);
+        if (next === isoDay(new Date())) {
+            goLive();
+            return;
+        }
+        setDay(next);
+        setLive(false);
+        setTime(dayStart(next));
+        setPlaying(true);
+    };
+
+    const chooseKinds = useCallback((next: EventKind[]) => {
+        setKinds(next);
+        // Stay at the same moment: on the last event of the new list before it.
+        const list = dayEvents.filter((e) => next.includes(e.kind));
+        setCursor(liveRef.current ? lastBefore(list, Date.now()) : lastBefore(list, timeRef.current));
+    }, [dayEvents]);
+    const closeLog = useCallback(() => setLogOpen(false), []);
+
+    const jumpTo = (event: WorldEvent) => {
+        let index = events.findIndex((e) => e.key === event.key);
+        if (index < 0 && dayEvents.some((e) => e.key === event.key)) {
+            // Filtered out: show its kind again, then go there.
+            const list = dayEvents.filter((e) => kinds.includes(e.kind) || e.kind === event.kind);
+            setKinds([...kinds, event.kind]);
+            eventsRef.current = list;
+            index = list.findIndex((e) => e.key === event.key);
+        }
+        if (index >= 0) goTo(index);
+    };
+
+    const openSubject = (event: WorldEvent) => {
+        setSelected(null);
+        setBin(null);
+        setFocused({ kind: event.kind, id: event.subject });
+    };
+
+    const cursorRef = useRef(cursor);
+    cursorRef.current = cursor;
+    const playRef = useRef(() => {});
+    playRef.current = () => play(!playing);
+
+    // Full screen: the page behind must not scroll. Escape closes; ← → step; space plays.
+    useEffect(() => {
+        const previous = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        const onKey = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement | null;
+            if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+            if (event.key === "Escape") onClose();
+            else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                const list = eventsRef.current;
+                const at = liveRef.current ? lastBefore(list, Date.now()) : cursorRef.current;
+                goTo(at === null ? 0 : Math.min(list.length - 1, at + 1));
+            } else if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                const at = cursorRef.current;
+                goTo(at === null ? 0 : Math.max(0, at - 1));
+            } else if (event.key === " ") {
+                event.preventDefault();
+                playRef.current();
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => {
+            document.body.style.overflow = previous;
+            window.removeEventListener("keydown", onKey);
+        };
+    }, [onClose, goTo]);
 
     const place = selected ? placeFor(selected) : null;
+    const placeEvents = useMemo(
+        () => (selected ? events.map((event, index) => ({ event, index })).filter(({ event }) => event.where === selected) : []),
+        [events, selected],
+    );
+    const subjectEvents = useMemo(
+        () => (focused ? allEvents.filter((e) => e.kind === focused.kind && e.subject === focused.id) : []),
+        [allEvents, focused],
+    );
+    const focusedShipment = focused?.kind === "shipment" ? shipments.find((s) => s.id === focused.id) ?? null : null;
+    const focusedOrder = focused?.kind === "order" ? orders.find((o) => o.id === focused.id) ?? null : null;
+    const focusedRefill = focused?.kind === "refill" ? refills.find((r) => r.id === focused.id) ?? null : null;
+    const glass = alpha(theme.palette.background.paper, 0.92);
+    const currentKey = current?.key ?? null;
 
-    if (failed) {
-        return (
-            <Paper elevation={0} sx={{ p: 4, borderRadius: 5, border: "1px solid", borderColor: "divider", textAlign: "center" }}>
-                <Typography sx={{ fontWeight: 800, mb: 1 }}>This device can't draw the 3D world.</Typography>
-                <Typography color="text.secondary" sx={{ mb: 2 }}>Its browser has 3D graphics (WebGL) turned off. The step-by-step story tells the same thing.</Typography>
-                <Button variant="contained" onClick={() => onOpenChapter("seller")} sx={{ borderRadius: 999, fontWeight: 800 }}>Open the story</Button>
-            </Paper>
+    let card: React.ReactNode = null;
+    if (bin !== null) {
+        card = <BinCard index={bin} bin={shelf[bin] ?? null} onClose={() => setBin(null)} />;
+    } else if (focusedShipment) {
+        card = <ShipmentCard shipment={focusedShipment} time={time} events={subjectEvents} currentKey={currentKey} onEvent={jumpTo} onClose={() => setFocused(null)} />;
+    } else if (focusedOrder) {
+        const st = orderStateAt(focusedOrder, time);
+        card = (
+            <JourneyCard kind="order" reference={focusedOrder.reference} title={focusedOrder.delivery?.method === "store" ? "Collected at the counter" : "Delivered by courier"}
+                phase={ORDER_PHASE_LABEL[st.phase]} chips={[`${focusedOrder.items} lines`, focusedOrder.total.toLocaleString(), `Payment ticks ${st.ticks}/2`]}
+                events={subjectEvents} currentKey={currentKey} time={time} onEvent={jumpTo} onClose={() => setFocused(null)} />
         );
+    } else if (focusedRefill) {
+        const st = refillStateAt(focusedRefill, time);
+        card = (
+            <JourneyCard kind="refill" reference={focusedRefill.reference} title={`${focusedRefill.quantity} × ${focusedRefill.item ?? "item"}`}
+                phase={REFILL_PHASE_LABEL[st.phase]} chips={[focusedRefill.source === "remote_hub" ? "From the Remote Hub" : focusedRefill.source === "shipment" ? "From a shipment" : "From the floor"]}
+                events={subjectEvents} currentKey={currentKey} time={time} onEvent={jumpTo} onClose={() => setFocused(null)} />
+        );
+    } else if (place) {
+        card = <PlaceCard place={place} onClose={() => setSelected(null)} onOpenChapter={onOpenChapter} events={placeEvents} time={time} currentKey={currentKey} onEvent={goTo} />;
     }
 
-    return (
+    // On document.body: a layout's page transition leaves a transform on the
+    // page wrapper, which would pin a fixed box inside it instead of the screen.
+    // (createPortal, not MUI's Portal: that mounts a render late, after the scene looked for its mount.)
+    return createPortal(
         <Box
             sx={{
-                position: "relative",
-                height: { xs: 520, md: 640 },
-                borderRadius: 5,
+                position: "fixed",
+                inset: 0,
+                height: "100dvh",
+                zIndex: theme.zIndex.modal,
                 overflow: "hidden",
-                border: "1px solid",
-                borderColor: "divider",
                 background: `linear-gradient(180deg, ${alpha(theme.palette.info.main, theme.palette.mode === "dark" ? 0.18 : 0.12)} 0%, ${theme.palette.background.default} 100%)`,
                 touchAction: "none",
-                // The HTML labels the scene draws over its places.
                 "& .world-label": {
-                    px: 1,
+                    px: { xs: 0.75, sm: 1 },
                     py: 0.25,
                     borderRadius: 999,
                     fontFamily: theme.typography.fontFamily,
                     fontWeight: 800,
-                    fontSize: "0.75rem",
+                    fontSize: { xs: "0.68rem", sm: "0.75rem" },
                     whiteSpace: "nowrap",
-                    bgcolor: alpha(theme.palette.background.paper, 0.92),
+                    bgcolor: glass,
                     color: "text.primary",
                     border: "2px solid",
                     borderColor: "var(--tone)",
@@ -109,56 +483,126 @@ export default function DukaWorld({ onOpenChapter }: { onOpenChapter: (key: stri
                     cursor: "pointer",
                     pointerEvents: "auto",
                     userSelect: "none",
-                    transition: "transform .15s",
+                    transition: "transform .15s, opacity .2s",
                     "&:hover, &.is-selected": { transform: "scale(1.08)", bgcolor: "var(--tone)", color: "common.white" },
+                    "&.is-covered": { opacity: 0, pointerEvents: "none" },
                 },
-                // Scenery names (the store building, the hub compound): not clickable.
                 "& .world-label--fixed": {
-                    fontSize: "0.7rem",
+                    fontSize: { xs: "0.6rem", sm: "0.68rem" },
                     textTransform: "uppercase",
                     letterSpacing: 0.6,
                     borderColor: "divider",
                     color: "text.secondary",
+                    boxShadow: 0,
                     cursor: "default",
                     pointerEvents: "none",
-                    "&:hover": { transform: "none", bgcolor: alpha(theme.palette.background.paper, 0.92), color: "text.secondary" },
+                    "&:hover": { transform: "none", bgcolor: glass, color: "text.secondary" },
                 },
+                // Small signs: a shipment collecting its ticks, a bin waiting for its refill.
+                "& .world-badge": {
+                    px: 0.75,
+                    borderRadius: 999,
+                    fontFamily: theme.typography.fontFamily,
+                    fontWeight: 800,
+                    fontSize: "0.65rem",
+                    whiteSpace: "nowrap",
+                    bgcolor: "warning.main",
+                    color: "warning.contrastText",
+                    boxShadow: 2,
+                    pointerEvents: "none",
+                },
+                "& .world-badge--refill": { bgcolor: "info.main", color: "info.contrastText" },
+                // What just happened, floating over where it happened.
+                "& .world-callout > div": {
+                    maxWidth: { xs: 200, sm: 280 },
+                    px: 1.25,
+                    py: 0.5,
+                    borderRadius: 2,
+                    fontFamily: theme.typography.fontFamily,
+                    fontWeight: 800,
+                    fontSize: { xs: "0.72rem", sm: "0.8rem" },
+                    lineHeight: 1.25,
+                    textAlign: "center",
+                    bgcolor: "var(--tone)",
+                    color: "common.white",
+                    boxShadow: 6,
+                    pointerEvents: "none",
+                    "@media (prefers-reduced-motion: no-preference)": { animation: "world-callout-in .35s ease-out both" },
+                },
+                "@keyframes world-callout-in": { from: { opacity: 0, transform: "translateY(8px) scale(.92)" }, to: { opacity: 1, transform: "none" } },
             }}
         >
             <Box ref={mountRef} sx={{ position: "absolute", inset: 0 }} />
 
-            {/* Which flows are drawn */}
-            <Paper elevation={0} sx={{ position: "absolute", top: 12, left: 12, p: 1, borderRadius: 3, bgcolor: alpha(theme.palette.background.paper, 0.9), maxWidth: { xs: "calc(100% - 24px)", sm: 360 } }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800, display: "block", px: 0.5, mb: 0.5 }}>WHAT MOVES · tap to hide</Typography>
-                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                    {FLOWS.map((flow) => {
-                        const on = !hidden.has(flow.key);
-                        const tone = theme.palette[flow.color].main;
-                        return (
-                            <Chip key={flow.key} size="small" label={flow.label} title={flow.does} onClick={() => toggleFlow(flow.key)}
-                                sx={{ fontWeight: 800, bgcolor: on ? tone : "transparent", color: on ? theme.palette[flow.color].contrastText : "text.secondary",
-                                    border: "2px solid", borderColor: tone, "&:hover": { bgcolor: on ? tone : alpha(tone, 0.12) } }} />
-                        );
-                    })}
-                </Stack>
-            </Paper>
-
-            {!place && (
-                <Typography variant="caption" color="text.secondary"
-                    sx={{ position: "absolute", left: 0, right: 0, bottom: 12, textAlign: "center", fontWeight: 700, pointerEvents: "none" }}>
-                    Drag to turn · scroll or pinch to zoom · tap a place to see what happens there
-                </Typography>
-            )}
-
-            {place && (
-                <Box sx={{ position: "absolute", right: { xs: 12, sm: 16 }, left: { xs: 12, sm: "auto" }, top: { xs: "auto", sm: 16 }, bottom: { xs: 12, sm: "auto" }, display: "flex", flexDirection: "column", maxHeight: "calc(100% - 24px)" }}>
-                    <PlaceCard place={place} onClose={() => setSelected(null)} onOpenChapter={onOpenChapter} />
+            {failed && (
+                <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", p: 3 }}>
+                    <Paper elevation={0} sx={{ p: 4, borderRadius: 5, border: "1px solid", borderColor: "divider", textAlign: "center", maxWidth: 420 }}>
+                        <Typography sx={{ fontWeight: 800, mb: 1 }}>This device can't draw the 3D world.</Typography>
+                        <Typography color="text.secondary" sx={{ mb: 2 }}>Its browser has 3D graphics (WebGL) turned off.</Typography>
+                        <Button variant="contained" onClick={onClose} sx={{ borderRadius: 999, fontWeight: 800 }}>Back</Button>
+                    </Paper>
                 </Box>
             )}
-        </Box>
+
+            {/* The overlay: top bar; the list and the open card; the timeline. */}
+            <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 1, p: 1, pt: "max(8px, env(safe-area-inset-top))", pb: "max(8px, env(safe-area-inset-bottom))", pointerEvents: "none" }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <IconButton onClick={onClose} aria-label="Close" sx={{ pointerEvents: "auto", bgcolor: glass, boxShadow: 2, "&:hover": { bgcolor: "background.paper" } }}>
+                        <CloseRounded />
+                    </IconButton>
+                    <Typography sx={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: { xs: "1rem", sm: "1.15rem" }, textShadow: `0 1px 0 ${theme.palette.background.paper}` }} noWrap>
+                        Live Operations
+                    </Typography>
+                    <IconButton onClick={() => { setSelected(null); setFocused(null); setFollow(false); apiRef.current?.home(); }} aria-label="See the whole site" title="See the whole site"
+                        sx={{ pointerEvents: "auto", bgcolor: glass, boxShadow: 2, "&:hover": { bgcolor: "background.paper" } }}>
+                        <CenterFocusStrongRounded />
+                    </IconButton>
+                </Stack>
+
+                <Box sx={{ flex: 1, minHeight: 0, display: "flex", gap: 1, alignItems: { xs: "flex-end", sm: "stretch" } }}>
+                    {logOpen && (
+                        <Box sx={{ pointerEvents: "auto", width: { xs: "100%", sm: 340 }, height: { xs: "45dvh", sm: "auto" }, display: card ? { xs: "none", sm: "flex" } : "flex", flexDirection: "column", minHeight: 0 }}>
+                            <EventLog events={events} counts={counts} kinds={kinds} onKinds={chooseKinds} cursor={cursor} reached={reached} onCursor={goTo} onClose={closeLog} />
+                        </Box>
+                    )}
+                    <Box sx={{ flex: 1, display: { xs: logOpen && !card ? "none" : "block", sm: "block" } }} />
+                    {card && (
+                        <Box sx={{ pointerEvents: "auto", width: { xs: "100%", sm: 360 }, maxHeight: { xs: "40dvh", sm: "100%" }, alignSelf: "flex-end", display: "flex", minHeight: 0 }}>
+                            {card}
+                        </Box>
+                    )}
+                </Box>
+
+                <Box sx={{ pointerEvents: "auto" }}>
+                    <Timeline
+                        day={day}
+                        onDay={chooseDay}
+                        busyDays={busyDays}
+                        loading={loading}
+                        events={events}
+                        cursor={cursor}
+                        onCursor={goTo}
+                        time={time}
+                        reached={reached}
+                        playing={playing}
+                        onPlaying={play}
+                        pace={pace}
+                        onPace={setPace}
+                        live={live && isToday}
+                        isToday={isToday}
+                        onLive={goLive}
+                        follow={follow}
+                        onFollow={setFollow}
+                        logOpen={logOpen}
+                        onLog={setLogOpen}
+                        onDetails={openSubject}
+                    />
+                </Box>
+            </Box>
+        </Box>,
+        document.body,
     );
 }
-
 
 /* ------------------------------------------------------------------------ */
 /* The scene                                                                 */
@@ -172,22 +616,33 @@ interface PlaceNode {
     tone: THREE.Color;
 }
 
-interface Traveller {
-    mesh: THREE.Mesh;
-    path: THREE.CurvePath<THREE.Vector3>;
-    offset: number;
-    speed: number;
+/** A pair of swing leaves; `open` (0–1) eases towards `target` each frame. */
+interface Swing {
+    leaves: Array<{ pivot: THREE.Object3D; closed: number; opened: number }>;
+    open: number;
+    target: number;
 }
 
-/** Metres a parcel travels per second. */
-const PARCEL_SPEED = 9;
+interface VanRig {
+    van: THREE.Group;
+    cartons: THREE.Mesh[];
+    badge: CSS2DObject;
+    badgeEl: HTMLDivElement;
+}
 
-function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKey | null) => void): { api: SceneApi; dispose: () => void } | null {
+function buildWorld(
+    mount: HTMLDivElement,
+    theme: Theme,
+    onSelect: (key: PlaceKey | null) => void,
+    onBin: (index: number) => void,
+    onUserMove: () => void,
+    onSubject: (kind: EventKind, id: number) => void,
+): { api: SceneApi; dispose: () => void } | null {
     let renderer: THREE.WebGLRenderer;
     try {
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     } catch (error) {
-        console.warn("DukaWorld: WebGL unavailable.", error);
+        console.warn("Live Operations: WebGL unavailable.", error);
         return null;
     }
 
@@ -202,57 +657,81 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     mount.appendChild(renderer.domElement);
 
     const labels = new CSS2DRenderer();
     labels.setSize(width, height);
-    // The label layer covers the canvas; only the labels themselves take clicks.
     labels.domElement.style.position = "absolute";
     labels.domElement.style.inset = "0";
     labels.domElement.style.pointerEvents = "none";
     mount.appendChild(labels.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 600);
-    camera.position.copy(HOME_CAMERA);
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 900);
+    let home = homeView(width / height);
+    camera.position.copy(home.camera);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.target.copy(HOME_TARGET);
-    controls.minDistance = 12;
-    controls.maxDistance = 220;
-    controls.maxPolarAngle = 1.3;
+    controls.target.copy(home.target);
+    controls.minDistance = 6;
+    controls.maxDistance = Math.max(260, home.distance * 1.5);
+    controls.maxPolarAngle = 1.35;
     controls.screenSpacePanning = false;
+    let userMoved = false;
+    // Only a person's drag fires "start"; our own flights don't.
+    controls.addEventListener("start", () => {
+        userMoved = true;
+        onUserMove();
+    });
 
-    // Light: a soft sky, and a sun that throws shadows over the whole site.
     scene.add(new THREE.HemisphereLight(0xffffff, dark ? 0x202830 : 0xb9c4b0, dark ? 1.3 : 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, dark ? 1.4 : 2.2);
-    sun.position.set(-40, 80, 40);
+    sun.position.set(-40, 90, 50);
     sun.castShadow = true;
     sun.shadow.mapSize.set(4096, 4096);
-    Object.assign(sun.shadow.camera, { left: -100, right: 100, top: 50, bottom: -50, near: 1, far: 260 });
+    Object.assign(sun.shadow.camera, { left: -110, right: 90, top: 50, bottom: -50, near: 1, far: 280 });
     scene.add(sun);
 
-    // The ground.
     const groundTone = color(theme.palette.background.paper).lerp(color(theme.palette.success.main), dark ? 0.18 : 0.28);
-    const ground = new THREE.Mesh(new THREE.BoxGeometry(170, 1, 72), new THREE.MeshStandardMaterial({ color: groundTone, roughness: 1 }));
-    ground.position.set(-4, -0.5, 2);
+    const ground = new THREE.Mesh(new THREE.BoxGeometry(180, 1, 72), new THREE.MeshStandardMaterial({ color: groundTone, roughness: 1 }));
+    ground.position.set(-14, -0.5, 3);
     ground.receiveShadow = true;
     scene.add(ground);
 
     const wallTone = color(theme.palette.background.paper).lerp(color(theme.palette.text.primary), dark ? 0.12 : 0.06);
     const padTone = color(theme.palette.background.paper).lerp(color(theme.palette.text.primary), 0.1);
     const darkTone = color(theme.palette.text.primary).lerp(wallTone, 0.4);
+    const asphalt = color(theme.palette.text.primary).lerp(color(theme.palette.background.paper), dark ? 0.55 : 0.62);
+    const keeperTone = toneOf("stock_keeper");
+    const driverTone = toneOf("delivery");
 
-    // Fixed scenery: the hub compound and the store's shell.
-    addCompound(scene, wallTone, darkTone, padTone);
+    // Scenery: the compound with its gate, the neighbour, the road, the store's shell.
+    const gate = addCompound(scene, wallTone, darkTone, padTone);
+    scene.add(mesh(new THREE.BoxGeometry(NEIGHBOUR.size[0], NEIGHBOUR.height, NEIGHBOUR.size[1]), wallTone.clone().lerp(darkTone, 0.35), NEIGHBOUR.position[0], NEIGHBOUR.height / 2, NEIGHBOUR.position[1]));
+    addRoads(scene, asphalt);
     addStoreShell(scene, wallTone, toneOf("seller"), padTone);
-    scene.add(fixedLabel(COMPOUND.label, COMPOUND.position[0], 3, COMPOUND.position[1] - COMPOUND.size[1] / 2));
-    scene.add(fixedLabel(STORE.label, STORE.position[0], STORE.wall + 2.5, STORE.position[1] - STORE.size[1] / 2));
+    const statusTone = {
+        ok: theme.palette.success.main,
+        refill: theme.palette.warning.main,
+        critical: theme.palette.error.main,
+        empty: alpha(theme.palette.text.primary, 0.18),
+        none: alpha(theme.palette.text.primary, 0.06),
+        text: theme.palette.text.primary,
+        paper: theme.palette.background.paper,
+    };
+    const shelfFaces: ShelfFace[] = [];
+    const fixedLabels = [
+        fixedLabel(COMPOUND.label, -62, 3, -15),
+        fixedLabel(STORE.label, STORE.position[0], STORE.wall + 2.5, STORE.position[1] - STORE.size[1] / 2),
+    ];
+    fixedLabels.forEach((label) => scene.add(label.object));
 
     // Places.
     const nodes = new Map<PlaceKey, PlaceNode>();
+    const doors = new Map<PlaceKey, Swing>();
+    const roofs: THREE.Object3D[] = [];
     const pickables: THREE.Object3D[] = [];
     const people: Array<{ mesh: THREE.Object3D; phase: number; base: number }> = [];
 
@@ -262,28 +741,57 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
         const group = new THREE.Group();
         group.position.set(place.position[0], 0, place.position[1]);
 
-        // Its ground: a slab outside, a tinted patch of floor inside the store.
-        const pad = new THREE.Mesh(new THREE.BoxGeometry(w + (place.indoor ? 0 : 2), 0.12, d + (place.indoor ? 0 : 2)), new THREE.MeshStandardMaterial({ color: padTone, roughness: 0.9 }));
-        pad.position.y = place.indoor ? 0.13 : 0.06;
+        const outdoorPad = place.shape !== "hub" && place.shape !== "platform" && !place.indoor;
+        const pad = new THREE.Mesh(new THREE.BoxGeometry(w + (outdoorPad ? 2 : 0), 0.12, d + (outdoorPad ? 2 : 0)), new THREE.MeshStandardMaterial({ color: padTone, roughness: 0.9 }));
+        pad.position.y = place.indoor ? 0.13 : 0.07;
         pad.receiveShadow = true;
+        // The shelf and the floor wrap the whole room; their places are marked by their own meshes.
+        pad.visible = place.shape !== "shelves" && place.shape !== "floor";
         group.add(pad);
 
-        group.add(makeBuilding(place, tone, wallTone, darkTone));
+        if (place.shape === "hub") {
+            const built = makeHub(place, tone, wallTone, darkTone, padTone);
+            group.add(built.group);
+            roofs.push(built.roof);
+            if (built.swing) doors.set(place.key, built.swing);
+        } else if (place.shape === "shelves") {
+            const built = makeShelves(wallTone, darkTone, tone);
+            group.add(built.group);
+            shelfFaces.push(...built.faces);
+        } else {
+            group.add(makeBuilding(place, toneOf(place.shape === "platform" ? "store_manager" : place.roles[0]), wallTone, darkTone));
+        }
 
-        // The people who work here: inside the area if indoors, else at the front.
+        const door = doorPosition(place);
         place.roles.forEach((role, index) => {
             const person = makePerson(toneOf(role));
             const spread = (index - (place.roles.length - 1) / 2) * 1.2;
             const base = place.indoor ? 0.19 : 0.12;
-            person.position.set(spread, base, place.indoor ? d / 2 - 1 : d / 2 + 2);
+            if (place.shape === "hub" && door) {
+                // Stock keepers stand just outside their hub's door.
+                const [ox, oz] = door.out;
+                person.position.set(door.at[0] - place.position[0] + ox * 1.8 + oz * (spread + 2), base, door.at[1] - place.position[1] + oz * 1.8 + ox * (spread + 2));
+            } else if (place.shape === "platform") {
+                person.position.set(spread, base + 0.3, d / 2 - 0.6);
+            } else if (place.shape === "shelves") {
+                // Behind the counter, between it and the back shelves.
+                person.position.set(1.5 + spread, base, -2.6);
+            } else if (place.shape === "floor") {
+                person.position.set(-4.8, base, -2.4 + index);
+            } else if (place.shape === "counter") {
+                // The seller behind the counter, the customer in front of it.
+                person.position.set(0, base, index === 0 ? -0.9 : 1.4);
+            } else {
+                person.position.set(spread, base, place.indoor ? d / 2 - 1 : d / 2 + 2);
+            }
             group.add(person);
-            people.push({ mesh: person, phase: Math.random() * Math.PI * 2, base });
+            people.push({ mesh: person, phase: Math.random() * Math.PI * 2, base: person.position.y });
         });
 
         group.traverse((object) => {
             object.userData.placeKey = place.key;
             if ((object as THREE.Mesh).isMesh) {
-                object.castShadow = object !== pad;
+                if (object !== pad) object.castShadow = true;
                 pickables.push(object);
             }
         });
@@ -298,98 +806,404 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
             onSelect(place.key);
         });
         const labelObject = new CSS2DObject(label);
-        labelObject.position.set(0, labelHeight(place), 0);
+        if (place.labelAt) labelObject.position.set(...place.labelAt);
+        else labelObject.position.set(0, labelHeight(place), 0);
         group.add(labelObject);
 
         scene.add(group);
         nodes.set(place.key, { place, group, pad, label, tone });
     }
 
-    // Roads and the parcels travelling them, one group per flow.
-    const flowGroups = new Map<FlowKey, THREE.Group>();
-    const travellers: Traveller[] = [];
+    /** Vans, parcels, couriers and cartons: a tap opens the shipment, order or refill they carry. */
+    const tappable = (object: THREE.Object3D, kind: EventKind, id: number) => {
+        object.traverse((o) => {
+            o.userData.subject = { kind, id };
+            if ((o as THREE.Mesh).isMesh) pickables.push(o);
+        });
+    };
+    const untappable = (...objects: THREE.Object3D[]) => {
+        const gone = new Set<THREE.Object3D>();
+        objects.forEach((object) => object.traverse((o) => gone.add(o)));
+        for (let i = pickables.length - 1; i >= 0; i--) if (gone.has(pickables[i])) pickables.splice(i, 1);
+    };
 
-    FLOWS.forEach((flow, flowIndex) => {
-        const group = new THREE.Group();
-        const tone = color(theme.palette[flow.color].main);
-        const lane = (flowIndex - (FLOWS.length - 1) / 2) * 0.8;
-        const roadMaterial = new THREE.MeshStandardMaterial({ color: tone, roughness: 0.6, transparent: true, opacity: 0.85 });
-        const parcelMaterial = new THREE.MeshStandardMaterial({ color: tone, roughness: 0.4, emissive: tone, emissiveIntensity: 0.25 });
+    // Vans, one per shipment, made on first sight; and the routes they drive.
+    const routes = new Map<PlaceKey, THREE.CatmullRomCurve3>();
+    const routeFor = (destination: PlaceKey) => {
+        let curve = routes.get(destination);
+        if (!curve) {
+            curve = new THREE.CatmullRomCurve3(vanRoute(destination).map(([x, z]) => new THREE.Vector3(x, 0, z)), false, "catmullrom", 0.2);
+            routes.set(destination, curve);
+        }
+        return curve;
+    };
+    const rigs = new Map<number, VanRig>();
+    const cartonMaterial = new THREE.MeshStandardMaterial({ color: keeperTone.clone().lerp(new THREE.Color(0x8b5a2b), 0.6), roughness: 0.8, flatShading: true });
+    const cartonGeometry = new THREE.BoxGeometry(0.8, 0.6, 0.8);
+    const rigFor = (s: WorldShipment): VanRig => {
+        const existing = rigs.get(s.id);
+        if (existing) return existing;
+        const van = makeVan(driverTone, wallTone, darkTone);
+        van.visible = false;
+        scene.add(van);
+        const cartons: THREE.Mesh[] = [];
+        const count = Math.min(8, Math.max(2, Math.ceil(s.cbm || s.items || 2)));
+        for (let i = 0; i < count; i++) {
+            const c = new THREE.Mesh(cartonGeometry, cartonMaterial);
+            c.castShadow = true;
+            c.visible = false;
+            scene.add(c);
+            cartons.push(c);
+        }
+        const badgeEl = document.createElement("div");
+        badgeEl.className = "world-badge";
+        const badge = new CSS2DObject(badgeEl);
+        badge.visible = false;
+        scene.add(badge);
+        const rig = { van, cartons, badge, badgeEl };
+        [van, ...cartons].forEach((o) => tappable(o, "shipment", s.id));
+        rigs.set(s.id, rig);
+        return rig;
+    };
 
-        for (const waypoints of flow.paths) {
-            const path = new THREE.CurvePath<THREE.Vector3>();
+    let shipments: WorldShipment[] = [];
+    let now = Date.now();
+    /** The camera went to an event, so deselecting a place should not fly home. */
+    let awayFromHome = false;
+    const platformAt = placeFor("platform").position;
 
-            for (let i = 0; i < waypoints.length - 1; i++) {
-                const a = pointOf(waypoints[i]);
-                const b = pointOf(waypoints[i + 1]);
-                const start = new THREE.Vector3(a[0], 0, a[1]);
-                const end = new THREE.Vector3(b[0], 0, b[1]);
-                const across = new THREE.Vector3(-(end.z - start.z), 0, end.x - start.x).normalize();
-                const shift = across.clone().multiplyScalar(lane);
-                // Long roads bow a little; short hops inside the store stay straight.
-                const bow = Math.min(4, start.distanceTo(end) * 0.06);
-                const middle = start.clone().lerp(end, 0.5).add(across.clone().multiplyScalar(bow + lane)).setY(0.4);
-                path.add(new THREE.QuadraticBezierCurve3(start.add(shift).setY(0.4), middle, end.add(shift).setY(0.4)));
-            }
+    const placeShipments = () => {
+        // Two shipments at the same spot stand side by side.
+        const slots = new Map<string, number>();
+        const slot = (key: string) => {
+            const n = slots.get(key) ?? 0;
+            slots.set(key, n + 1);
+            return n;
+        };
+        const openDoors = new Set<PlaceKey>();
+        let gateWanted = false;
 
-            const length = path.getLength();
-            const road = new THREE.Mesh(new THREE.TubeGeometry(path, Math.max(32, Math.round(length * 1.5)), 0.22, 6, false), roadMaterial);
-            road.receiveShadow = true;
-            group.add(road);
+        for (const s of shipments) {
+            const rig = rigFor(s);
+            rig.van.visible = false;
+            rig.badge.visible = false;
+            rig.cartons.forEach((c) => (c.visible = false));
 
-            const count = Math.max(2, Math.round(length / 14));
-            for (let i = 0; i < count; i++) {
-                const parcel = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.9), parcelMaterial);
-                parcel.castShadow = true;
-                group.add(parcel);
-                travellers.push({ mesh: parcel, path, offset: i / count, speed: PARCEL_SPEED / length });
+            const origin = s.origin.place;
+            const destination = s.destination.place;
+            if (!origin || !destination) continue;
+
+            const st = stateAt(s, now);
+            const door = doorPosition(placeFor(origin));
+            const stack = (x: number, z: number, count = rig.cartons.length) => {
+                rig.cartons.forEach((c, i) => {
+                    if (i >= count) return;
+                    c.visible = true;
+                    c.position.set(x + (i % 2) * 0.85 - 0.42, 0.45 + Math.floor(i / 4) * 0.62, z + (Math.floor(i / 2) % 2) * 0.85 - 0.42);
+                });
+            };
+
+            switch (st.phase) {
+                case "ticking":
+                    if (door) {
+                        rig.badge.visible = true;
+                        rig.badgeEl.textContent = `${s.reference} · ${st.ticks}/4 ticks`;
+                        rig.badge.position.set(door.at[0] + door.out[0] * 2, 4.5 + slot(`badge-${origin}`) * 0.9, door.at[1] + door.out[1] * 2);
+                    }
+                    break;
+                case "picking":
+                    openDoors.add(origin);
+                    if (door) {
+                        // In the walkway, just inside the door.
+                        const n = slot(`pick-${origin}`);
+                        stack(door.at[0] - door.out[0] * (2 + n * 2), door.at[1] - door.out[1] * (2 + n * 2));
+                    }
+                    break;
+                case "prepared": {
+                    openDoors.add(origin);
+                    const n = slot("platform");
+                    stack(platformAt[0] - 0.9 + (n % 2) * 1.8, platformAt[1] - 0.9 + (Math.floor(n / 2) % 2) * 1.8);
+                    break;
+                }
+                case "loading": {
+                    const n = slot("berth");
+                    stack(platformAt[0] + 0.9, platformAt[1] - 0.9 + n * 1.8, Math.round(rig.cartons.length * (1 - st.progress)));
+                    rig.van.visible = true;
+                    // Back doors to the platform, nose to the gate.
+                    rig.van.position.set(PLATFORM_BERTH[0], 0, PLATFORM_BERTH[1] + n * 2.6);
+                    rig.van.rotation.y = 0;
+                    break;
+                }
+                case "driving": {
+                    const curve = routeFor(destination);
+                    const u = Math.min(0.999, Math.max(0.001, st.progress));
+                    const at = curve.getPointAt(u);
+                    const tangent = curve.getTangentAt(u);
+                    rig.van.visible = true;
+                    rig.van.position.set(at.x, 0, at.z);
+                    rig.van.rotation.y = Math.atan2(-tangent.z, tangent.x);
+                    if (Math.hypot(at.x - COMPOUND.gate.at[0], at.z - COMPOUND.gate.at[1]) < 14) gateWanted = true;
+                    break;
+                }
+                case "arrived": {
+                    const stop = PARKING[destination];
+                    if (!stop) break;
+                    const n = slot(`park-${destination}`);
+                    rig.van.visible = true;
+                    rig.van.position.set(stop[0] - n * 6, 0, stop[1]);
+                    rig.van.rotation.y = 0;
+                    // Unloaded at the goods door it goes in by.
+                    const drop = DROP[destination] ?? stop;
+                    stack(drop[0] - n * 2, drop[1]);
+                    break;
+                }
+                default:
+                    break;
             }
         }
 
-        scene.add(group);
-        flowGroups.set(flow.key, group);
-    });
+        doors.forEach((swing, key) => (swing.target = openDoors.has(key) ? 1 : 0));
+        gate.target = gateWanted ? 1 : 0;
+    };
 
-    const placeTravellers = (time: number) => {
-        for (const t of travellers) {
-            const along = reducedMotion ? t.offset : (t.offset + time * t.speed) % 1;
-            const point = t.path.getPointAt(along);
-            t.mesh.position.set(point.x, 0.85, point.z);
-            const ahead = t.path.getPointAt(Math.min(0.999, along + 0.002));
-            t.mesh.lookAt(ahead.x, 0.85, ahead.z);
+    // Orders: a parcel that goes counter → picking → packed, then a courier's motorbike to the customers.
+    const orderTone = color(theme.palette.success.main);
+    const parcelMaterial = new THREE.MeshStandardMaterial({ color: orderTone.clone().lerp(new THREE.Color(0x8b5a2b), 0.65), roughness: 0.8, flatShading: true });
+    const parcelGeometry = new THREE.BoxGeometry(0.45, 0.35, 0.45);
+    const rideCurve = new THREE.CatmullRomCurve3(ORDER_RIDE.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, "catmullrom", 0.2);
+    const orderRigs = new Map<number, { parcel: THREE.Mesh; bike: THREE.Group }>();
+    let orders: WorldOrder[] = [];
+    const orderRigFor = (o: WorldOrder) => {
+        let rig = orderRigs.get(o.id);
+        if (!rig) {
+            const parcel = new THREE.Mesh(parcelGeometry, parcelMaterial);
+            parcel.castShadow = true;
+            const bike = makeBike(driverTone, darkTone, parcelMaterial);
+            parcel.visible = bike.visible = false;
+            scene.add(parcel, bike);
+            rig = { parcel, bike };
+            tappable(parcel, "order", o.id);
+            tappable(bike, "order", o.id);
+            orderRigs.set(o.id, rig);
+        }
+        return rig;
+    };
+    const remoteDoor = doorPosition(placeFor("remote_hub"))!;
+
+    const placeOrders = () => {
+        const slots = new Map<string, number>();
+        const slot = (key: string) => {
+            const n = slots.get(key) ?? 0;
+            slots.set(key, n + 1);
+            return n;
+        };
+        const onCounter = (rig: { parcel: THREE.Mesh }) => {
+            const n = slot("counter");
+            if (n >= 12) return;
+            const { width, height } = STORE.counter;
+            rig.parcel.visible = true;
+            rig.parcel.position.set(placeFor("store_counter").position[0] - width / 2 + 0.4 + (n % 6) * 0.64, height + 0.33, STORE.position[1] - 0.15 + (Math.floor(n / 6) % 2) * 0.3);
+        };
+        for (const o of orders) {
+            const rig = orderRigFor(o);
+            rig.parcel.visible = rig.bike.visible = false;
+            const st = orderStateAt(o, now);
+            const fromRemote = o.delivery?.source === "remote_hub";
+            const inStore = o.delivery?.method === "store";
+            switch (st.phase) {
+                case "cart":
+                case "paying":
+                case "paid":
+                    onCounter(rig);
+                    break;
+                case "picking": {
+                    const n = slot(fromRemote ? "pick-remote" : "pick-floor");
+                    rig.parcel.visible = true;
+                    if (fromRemote) rig.parcel.position.set(remoteDoor.at[0] - 1 + (n % 3) * 0.6, 0.3, remoteDoor.at[1] - 1.5 - Math.floor(n / 3) * 0.6);
+                    else rig.parcel.position.set(FLOOR_SPOT[0] + (n % 2) * 0.55, 0.32, FLOOR_SPOT[1] + 1.8 + Math.floor(n / 2) * 0.55);
+                    break;
+                }
+                case "packed":
+                    if (inStore) onCounter(rig);
+                    else {
+                        const n = slot("bay");
+                        rig.parcel.visible = true;
+                        rig.parcel.position.set(BAY_SPOT[0] - 2 + (n % 6) * 0.7, 0.3, BAY_SPOT[1] + 1.5 + Math.floor(n / 6) * 0.7);
+                    }
+                    break;
+                case "out": {
+                    if (inStore) {
+                        onCounter(rig);
+                        break;
+                    }
+                    const u = Math.min(0.999, Math.max(0.001, st.progress));
+                    const at = rideCurve.getPointAt(u);
+                    const tangent = rideCurve.getTangentAt(u);
+                    rig.bike.visible = true;
+                    rig.bike.position.set(at.x, 0, at.z + slot("ride") * 0.2);
+                    rig.bike.rotation.y = Math.atan2(-tangent.z, tangent.x);
+                    break;
+                }
+                default:
+                    break;
+            }
         }
     };
-    placeTravellers(0);
+
+    // Refills: a sign on the bin while it waits, then a stock keeper carrying the carton to it.
+    const refillTone = color(theme.palette.info.main);
+    const refillRigs = new Map<number, { carton: THREE.Mesh; walker: THREE.Group; badge: CSS2DObject; badgeEl: HTMLDivElement; path: THREE.CatmullRomCurve3 | null }>();
+    let refills: WorldRefill[] = [];
+    const binOfItem = new Map<number, number>();
+    const binSpot = (itemId: number) => {
+        const index = binOfItem.get(itemId);
+        return index === undefined ? { x: STORE.position[0], y: 2, z: STORE.position[1] - STORE.size[1] / 2 + 1 } : binWorldPosition(index);
+    };
+    const refillRigFor = (r: WorldRefill) => {
+        let rig = refillRigs.get(r.id);
+        if (!rig) {
+            const carton = new THREE.Mesh(cartonGeometry, cartonMaterial);
+            carton.scale.setScalar(0.6);
+            carton.castShadow = true;
+            const walker = makePerson(keeperTone);
+            const badgeEl = document.createElement("div");
+            badgeEl.className = "world-badge world-badge--refill";
+            const badge = new CSS2DObject(badgeEl);
+            carton.visible = walker.visible = badge.visible = false;
+            scene.add(carton, walker, badge);
+            rig = { carton, walker, badge, badgeEl, path: null };
+            tappable(carton, "refill", r.id);
+            tappable(walker, "refill", r.id);
+            refillRigs.set(r.id, rig);
+        }
+        return rig;
+    };
+
+    const placeRefills = () => {
+        let waiting = 0;
+        for (const r of refills) {
+            const rig = refillRigFor(r);
+            rig.carton.visible = rig.walker.visible = rig.badge.visible = false;
+            const st = refillStateAt(r, now);
+            const spot = binSpot(r.item_id);
+            if (st.phase === "raised") {
+                if (waiting++ >= 8) continue;
+                rig.badge.visible = true;
+                rig.badgeEl.textContent = `Refill · ${r.item ?? r.reference}`;
+                rig.badge.position.set(spot.x, spot.y + 0.35, spot.z);
+            } else if (st.phase === "moving") {
+                if (!rig.path) {
+                    const points = (r.source === "remote_hub" ? REMOTE_CARRY : [FLOOR_SPOT]).map(([x, z]) => new THREE.Vector3(x, 0, z));
+                    points.push(new THREE.Vector3(spot.x, 0, spot.z));
+                    rig.path = new THREE.CatmullRomCurve3(points, false, "catmullrom", 0.2);
+                }
+                const u = Math.min(1, Math.max(0, st.progress));
+                const at = rig.path.getPointAt(u);
+                const ahead = rig.path.getPointAt(Math.min(1, u + 0.01));
+                rig.walker.visible = rig.carton.visible = true;
+                rig.walker.position.set(at.x, STORE.plinth > 0 ? 0.12 : 0, at.z);
+                rig.walker.rotation.y = Math.atan2(ahead.x - at.x, ahead.z - at.z);
+                // Carried at chest height, lifted into the bin over the last stretch.
+                const lift = Math.max(0, (u - 0.85) / 0.15);
+                rig.carton.position.set(at.x, 1.05 + (spot.y - 1.05) * lift, at.z);
+            }
+        }
+    };
+
+    // The event being shown: a pulsing ring with a beam, and what happened floating above.
+    const markerMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide });
+    const beamMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28, depthWrite: false });
+    const marker = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.5, 48), markerMaterial);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.25;
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 10), beamMaterial);
+    beam.position.y = 2.3;
+    marker.add(ring, beam);
+    marker.visible = false;
+    scene.add(marker);
+    // The renderer moves the outer element with a transform; the inner one carries the look and the entrance.
+    const calloutEl = document.createElement("div");
+    calloutEl.className = "world-callout";
+    const calloutText = document.createElement("div");
+    calloutEl.appendChild(calloutText);
+    const callout = new CSS2DObject(calloutEl);
+    callout.visible = false;
+    scene.add(callout);
+    let lit: Highlight | null = null;
+
+    /** Where an event at a place is shown: in front of a hub's door, on the store floor, at the counter… */
+    const placeAnchor = (key: PlaceKey): THREE.Vector3 => {
+        const p = placeFor(key);
+        const door = doorPosition(p);
+        if (door) return new THREE.Vector3(door.at[0] + door.out[0] * 2.5, 0, door.at[1] + door.out[1] * 2.5);
+        if (key === "store_floor") return new THREE.Vector3(FLOOR_SPOT[0], 0, FLOOR_SPOT[1]);
+        if (key === "store_shelf") return new THREE.Vector3(STORE.position[0], 0, STORE.position[1] - 1.5);
+        if (key === "loading_bay") return new THREE.Vector3(BAY_SPOT[0], 0, BAY_SPOT[1]);
+        // A tall building: in front of it, so it doesn't hide the spot.
+        if (p.shape === "tower") return new THREE.Vector3(p.position[0], 0, p.position[1] + p.size[1] / 2 + 2);
+        return new THREE.Vector3(p.position[0], 0, p.position[1]);
+    };
+    /** The thing the event is about, where it is right now, if it is on screen. */
+    const subjectAnchor = (h: Highlight): THREE.Vector3 | null => {
+        if (h.kind === "shipment") {
+            const rig = rigs.get(h.subject);
+            if (rig?.van.visible) return rig.van.position.clone().setY(0);
+            const carton = rig?.cartons.find((c) => c.visible);
+            return carton ? carton.position.clone().setY(0) : null;
+        }
+        if (h.kind === "order") {
+            const rig = orderRigs.get(h.subject);
+            if (rig?.bike.visible) return rig.bike.position.clone().setY(0);
+            return rig?.parcel.visible ? rig.parcel.position.clone().setY(0) : null;
+        }
+        const rig = refillRigs.get(h.subject);
+        if (rig?.walker.visible) return rig.walker.position.clone().setY(0);
+        return rig?.badge.visible ? rig.badge.position.clone().setY(0) : null;
+    };
+    const anchorOf = (h: Highlight): THREE.Vector3 | null => subjectAnchor(h) ?? (h.where ? placeAnchor(h.where) : null);
+
+    const placeActors = () => {
+        placeShipments();
+        placeOrders();
+        placeRefills();
+    };
 
     // Picking: hover highlights a place, a tap (not a drag) opens it.
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let hovered: PlaceKey | null = null;
+    let hoveringSubject = false;
     let selectedKey: PlaceKey | null = null;
     let downAt: { x: number; y: number } | null = null;
 
-    const pick = (event: PointerEvent): PlaceKey | null => {
+    const isShown = (object: THREE.Object3D) => {
+        for (let o: THREE.Object3D | null = object; o; o = o.parent) if (!o.visible) return false;
+        return true;
+    };
+    const hitAt = (event: PointerEvent) => {
         const rect = renderer.domElement.getBoundingClientRect();
         pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
         raycaster.setFromCamera(pointer, camera);
-        const hit = raycaster.intersectObjects(pickables, false)[0];
-        return (hit?.object.userData.placeKey as PlaceKey | undefined) ?? null;
+        return raycaster.intersectObjects(pickables, false).find((h) => isShown(h.object)) ?? null;
     };
-
     const paint = () => {
         nodes.forEach((node, key) => {
             const isSelected = key === selectedKey;
             node.pad.material.color.copy(isSelected ? node.tone : key === hovered ? padTone.clone().lerp(node.tone, 0.35) : padTone);
             node.label.classList.toggle("is-selected", isSelected);
         });
-        renderer.domElement.style.cursor = hovered ? "pointer" : "grab";
+        renderer.domElement.style.cursor = hovered || hoveringSubject ? "pointer" : "grab";
     };
 
     const onMove = (event: PointerEvent) => {
         if (event.pointerType !== "mouse" || event.buttons !== 0) return;
-        const key = pick(event);
-        if (key !== hovered) {
+        const hit = hitAt(event);
+        const key = (hit?.object.userData.placeKey as PlaceKey | undefined) ?? null;
+        const onSubject = Boolean(hit?.object.userData.subject);
+        if (key !== hovered || onSubject !== hoveringSubject) {
             hovered = key;
+            hoveringSubject = onSubject;
             paint();
         }
     };
@@ -400,11 +1214,41 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
         if (!downAt) return;
         const moved = Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y);
         downAt = null;
-        if (moved < 6) onSelect(pick(event));
+        if (moved >= 6) return;
+        // A tap on a van, parcel or carton opens what it carries; on a shelf face, that bin; anywhere else, the place.
+        const hit = hitAt(event);
+        const subject = hit?.object.userData.subject as { kind: EventKind; id: number } | undefined;
+        if (subject) {
+            onSubject(subject.kind, subject.id);
+            return;
+        }
+        const face = hit?.object.userData.shelfFace as ShelfFace | undefined;
+        if (face && hit?.uv) {
+            const index = face.binAt(hit.uv.x, hit.uv.y);
+            if (index !== null) {
+                onBin(index);
+                return;
+            }
+        }
+        onSelect((hit?.object.userData.placeKey as PlaceKey | undefined) ?? null);
     };
     renderer.domElement.addEventListener("pointermove", onMove);
     renderer.domElement.addEventListener("pointerdown", onDown);
     renderer.domElement.addEventListener("pointerup", onUp);
+
+    // Labels: when two would overlap, the less important one steps aside.
+    const labelOrder = [...[...nodes.values()].map((n) => n.label), ...fixedLabels];
+    const declutter = () => {
+        const shown: DOMRect[] = [];
+        if (callout.visible) shown.push(calloutEl.getBoundingClientRect());
+        const ordered = [...labelOrder].sort((a, b) => Number(b.classList.contains("is-selected")) - Number(a.classList.contains("is-selected")));
+        for (const el of ordered) {
+            const r = el.getBoundingClientRect();
+            const overlaps = shown.some((o) => r.left < o.right + 4 && r.right > o.left - 4 && r.top < o.bottom + 2 && r.bottom > o.top - 2);
+            el.classList.toggle("is-covered", overlaps);
+            if (!overlaps) shown.push(r);
+        }
+    };
 
     // Camera flights.
     let flight: { fromCam: THREE.Vector3; toCam: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3; start: number } | null = null;
@@ -416,6 +1260,11 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
         }
         flight = { fromCam: camera.position.clone(), toCam: cam, fromTarget: controls.target.clone(), toTarget: target, start: performance.now() };
     };
+    const flyClose = (x: number, z: number, span: number) => {
+        const at = new THREE.Vector3(x, 0, z);
+        const from = camera.position.clone().sub(controls.target).setY(0).normalize();
+        flyTo(at, at.clone().add(from.multiplyScalar(span * 1.2 + 8)).setY(span * 1.1 + 8));
+    };
 
     const api: SceneApi = {
         select: (key) => {
@@ -424,21 +1273,85 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
             paint();
             if (key) {
                 const node = nodes.get(key)!;
-                const at = node.group.position;
-                const span = Math.max(...node.place.size, 8);
-                flyTo(new THREE.Vector3(at.x, 0, at.z), new THREE.Vector3(at.x, span * 1.3 + 8, at.z + span * 1.5 + 10));
-            } else {
-                flyTo(HOME_TARGET.clone(), HOME_CAMERA.clone());
+                flyClose(node.group.position.x, node.group.position.z, Math.max(...node.place.size, 6));
+            } else if (!awayFromHome) {
+                flyTo(home.target.clone(), home.camera.clone());
             }
         },
-        showFlows: (hiddenFlows) => {
-            flowGroups.forEach((group, key) => {
-                group.visible = !hiddenFlows.has(key);
+        home: () => {
+            userMoved = false;
+            awayFromHome = false;
+            flyTo(home.target.clone(), home.camera.clone());
+        },
+        setShipments: (next) => {
+            shipments = next;
+            const keep = new Set(next.map((s) => s.id));
+            rigs.forEach((rig, id) => {
+                if (keep.has(id)) return;
+                scene.remove(rig.van, rig.badge, ...rig.cartons);
+                untappable(rig.van, ...rig.cartons);
+                rig.badgeEl.remove();
+                rigs.delete(id);
             });
+            placeShipments();
+        },
+        setOrders: (next) => {
+            orders = next;
+            const keep = new Set(next.map((o) => o.id));
+            orderRigs.forEach((rig, id) => {
+                if (keep.has(id)) return;
+                scene.remove(rig.parcel, rig.bike);
+                untappable(rig.parcel, rig.bike);
+                orderRigs.delete(id);
+            });
+            placeOrders();
+        },
+        setRefills: (next) => {
+            refills = next;
+            const keep = new Set(next.map((r) => r.id));
+            refillRigs.forEach((rig, id) => {
+                if (keep.has(id)) return;
+                scene.remove(rig.carton, rig.walker, rig.badge);
+                untappable(rig.carton, rig.walker);
+                rig.badgeEl.remove();
+                refillRigs.delete(id);
+            });
+            placeRefills();
+        },
+        setTime: (t) => {
+            now = t;
+            placeActors();
+        },
+        setShelf: (bins) => {
+            shelfFaces.forEach((face) => face.paint(bins, statusTone));
+            binOfItem.clear();
+            bins.forEach((b, i) => b && b.assigned && !binOfItem.has(b.item_id) && binOfItem.set(b.item_id, i));
+            refillRigs.forEach((rig) => (rig.path = null));
+            placeRefills();
+        },
+        highlight: (h, fly) => {
+            lit = h;
+            marker.visible = callout.visible = h !== null;
+            if (!h) return;
+            markerMaterial.color.set(h.tone);
+            beamMaterial.color.set(h.tone);
+            calloutText.style.setProperty("--tone", h.tone);
+            calloutText.textContent = h.text;
+            // Re-run the entrance animation for each new event.
+            calloutText.style.animation = "none";
+            void calloutText.offsetWidth;
+            calloutText.style.animation = "";
+            if (fly) {
+                const at = (h.where ? placeAnchor(h.where) : null) ?? anchorOf(h);
+                if (at) {
+                    awayFromHome = true;
+                    const where = h.where ? placeFor(h.where) : null;
+                    flyClose(at.x, at.z, where?.indoor ? 7 : where?.shape === "tower" ? 18 : 12);
+                }
+            }
         },
     };
 
-    // Size follows the container, not the window.
     const resize = new ResizeObserver(() => {
         width = mount.clientWidth;
         height = mount.clientHeight;
@@ -447,12 +1360,22 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
         labels.setSize(width, height);
+        home = homeView(width / height);
+        controls.maxDistance = Math.max(260, home.distance * 1.5);
+        if (!userMoved && !selectedKey && !awayFromHome) {
+            camera.position.copy(home.camera);
+            controls.target.copy(home.target);
+        }
     });
     resize.observe(mount);
 
     // The loop.
     const startedAt = performance.now();
     let frame = 0;
+    const easeSwing = (swing: Swing) => {
+        swing.open += (swing.target - swing.open) * (reducedMotion ? 1 : 0.08);
+        for (const leaf of swing.leaves) leaf.pivot.rotation.y = leaf.closed + (leaf.opened - leaf.closed) * swing.open;
+    };
     const animate = () => {
         frame = requestAnimationFrame(animate);
         const time = (performance.now() - startedAt) / 1000;
@@ -465,14 +1388,30 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
             if (k >= 1) flight = null;
         }
 
-        if (!reducedMotion) {
-            placeTravellers(time);
-            for (const p of people) p.mesh.position.y = p.base + Math.max(0, Math.sin(time * 3 + p.phase)) * 0.15;
+        // Roofs lift off once you come close, to show the cells inside.
+        const close = camera.position.distanceTo(controls.target) < 75;
+        roofs.forEach((r) => (r.visible = !close));
+
+        doors.forEach(easeSwing);
+        easeSwing(gate);
+
+        if (lit) {
+            const at = anchorOf(lit);
+            marker.visible = callout.visible = at !== null;
+            if (at) {
+                marker.position.copy(at);
+                callout.position.set(at.x, 5, at.z);
+                ring.scale.setScalar(reducedMotion ? 1 : 1 + 0.25 * Math.sin(time * 4));
+                markerMaterial.opacity = reducedMotion ? 0.9 : 0.65 + 0.3 * Math.sin(time * 4);
+            }
         }
+
+        if (!reducedMotion) for (const p of people) p.mesh.position.y = p.base + Math.max(0, Math.sin(time * 3 + p.phase)) * 0.12;
 
         controls.update();
         renderer.render(scene, camera);
         labels.render(scene, camera);
+        declutter();
     };
     animate();
 
@@ -487,13 +1426,16 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
         const geometries = new Set<THREE.BufferGeometry>();
         const materials = new Set<THREE.Material>();
         scene.traverse((object) => {
-            const mesh = object as THREE.Mesh;
-            if (!mesh.isMesh) return;
-            geometries.add(mesh.geometry);
-            (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => materials.add(m));
+            const m = object as THREE.Mesh;
+            if (!m.isMesh) return;
+            geometries.add(m.geometry);
+            (Array.isArray(m.material) ? m.material : [m.material]).forEach((x) => materials.add(x));
         });
         geometries.forEach((g) => g.dispose());
-        materials.forEach((m) => m.dispose());
+        materials.forEach((m) => {
+            (m as THREE.MeshStandardMaterial).map?.dispose();
+            m.dispose();
+        });
 
         renderer.dispose();
         renderer.forceContextLoss();
@@ -505,7 +1447,50 @@ function buildWorld(mount: HTMLDivElement, theme: Theme, onSelect: (key: PlaceKe
 }
 
 /* ------------------------------------------------------------------------ */
-/* Scenery, buildings and people: boxes, cylinders and cones, in metres      */
+/* Framing                                                                   */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * The view of the whole site, framed to fill the screen: from the south on a
+ * wide screen, from the east on a tall one (so the long site runs top to
+ * bottom on a phone, hubs at the top). The distance is the closest at which
+ * every corner of the site stays on screen, clear of the top bar and of the
+ * timeline at the bottom.
+ */
+function homeView(aspect: number): { target: THREE.Vector3; camera: THREE.Vector3; distance: number } {
+    const portrait = aspect < 0.9;
+    const elevation = portrait ? 1.05 : 0.85;
+    const along = portrait ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+    const direction = along.multiplyScalar(Math.cos(elevation)).setY(Math.sin(elevation)).normalize();
+    const bottom = portrait ? -0.25 : -0.4;
+    const top = portrait ? 0.82 : 0.8;
+
+    const probe = new THREE.PerspectiveCamera(40, aspect, 0.5, 900);
+    const corners: THREE.Vector3[] = [];
+    for (const x of [SITE_BOUNDS.min.x, SITE_BOUNDS.max.x]) for (const y of [SITE_BOUNDS.min.y, SITE_BOUNDS.max.y]) for (const z of [SITE_BOUNDS.min.z, SITE_BOUNDS.max.z]) corners.push(new THREE.Vector3(x, y, z));
+
+    // Aim a little towards the camera, so the site rides up into the free band.
+    const lift = new THREE.Vector3().copy(direction).setY(0).normalize();
+    let distance = 30;
+    let target = SITE_CENTER.clone();
+    for (let i = 0; i < 120; i++) {
+        target = SITE_CENTER.clone().addScaledVector(lift, distance * (portrait ? 0.14 : 0.1));
+        probe.position.copy(target).addScaledVector(direction, distance);
+        probe.lookAt(target);
+        probe.updateMatrixWorld();
+        const fits = corners.every((c) => {
+            const p = c.clone().project(probe);
+            return Math.abs(p.x) < 0.92 && p.y > bottom && p.y < top;
+        });
+        if (fits) break;
+        distance *= 1.04;
+    }
+
+    return { target, camera: target.clone().addScaledVector(direction, distance), distance };
+}
+
+/* ------------------------------------------------------------------------ */
+/* Scenery, buildings, vans and people: in metres                            */
 /* ------------------------------------------------------------------------ */
 
 function mesh(geometry: THREE.BufferGeometry, color: THREE.Color, x = 0, y = 0, z = 0): THREE.Mesh {
@@ -516,28 +1501,27 @@ function mesh(geometry: THREE.BufferGeometry, color: THREE.Color, x = 0, y = 0, 
     return m;
 }
 
-/** A plain label for scenery that can't be clicked (the compound, the store). */
-function fixedLabel(text: string, x: number, y: number, z: number): CSS2DObject {
-    const el = document.createElement("div");
+function fixedLabel(text: string, x: number, y: number, z: number): HTMLDivElement & { object: CSS2DObject } {
+    const el = document.createElement("div") as HTMLDivElement & { object: CSS2DObject };
     el.className = "world-label world-label--fixed";
     el.textContent = text;
-    const object = new CSS2DObject(el);
-    object.position.set(x, y, z);
-    return object;
+    el.object = new CSS2DObject(el);
+    el.object.position.set(x, y, z);
+    return el;
 }
 
 function labelHeight(place: Place): number {
     if (place.indoor) return 3.4;
     switch (place.shape) {
-        case "hub": return (place.height ?? 6) + Math.min(place.size[0], place.size[1]) * 0.22 + 2;
+        case "hub": return (place.height ?? 6) + Math.min(place.size[0], place.size[1]) * 0.18 + 2;
         case "tower": return (place.height ?? 8) + 2;
-        case "houses": return 5;
+        case "platform": return 2.4;
         default: return 5;
     }
 }
 
-/** A pitched roof whose ridge runs along x: a triangle extruded across the width. */
-function roof(width: number, depth: number, rise: number, color: THREE.Color, y: number, x = 0, z = 0, ridgeAlongZ = false): THREE.Mesh {
+/** A pitched roof whose ridge runs along x (or z): a triangle extruded across the width. */
+function roof(width: number, depth: number, rise: number, color: THREE.Color, y: number, ridgeAlongZ = false): THREE.Mesh {
     const shape = new THREE.Shape();
     shape.moveTo(-depth / 2, 0);
     shape.lineTo(depth / 2, 0);
@@ -545,57 +1529,388 @@ function roof(width: number, depth: number, rise: number, color: THREE.Color, y:
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: false });
     geometry.translate(0, 0, -width / 2);
-    const r = mesh(geometry, color, x, y, z);
+    const r = mesh(geometry, color, 0, y, 0);
     if (!ridgeAlongZ) r.rotation.y = Math.PI / 2;
     return r;
 }
 
-/** The fenced yard both Main Hubs stand in, with a gate on the east side. */
-function addCompound(scene: THREE.Scene, wall: THREE.Color, dark: THREE.Color, yard: THREE.Color): void {
-    const [cx, cz] = COMPOUND.position;
-    const [w, d] = COMPOUND.size;
-    const slab = mesh(new THREE.BoxGeometry(w, 0.08, d), yard.clone().lerp(dark, 0.15), cx, 0.04, cz);
-    slab.castShadow = false;
-    scene.add(slab);
-
-    const post = new THREE.CylinderGeometry(0.08, 0.08, 1.8, 6);
-    const railTone = dark.clone().lerp(wall, 0.3);
-    const fence = (x1: number, z1: number, x2: number, z2: number) => {
-        const length = Math.hypot(x2 - x1, z2 - z1);
-        for (let s = 0; s <= length; s += 2.5) {
-            const t = s / length;
-            scene.add(mesh(post, railTone, x1 + (x2 - x1) * t, 0.9, z1 + (z2 - z1) * t));
-        }
-        const rail = mesh(new THREE.BoxGeometry(length, 0.08, 0.08), railTone, (x1 + x2) / 2, 1.6, (z1 + z2) / 2);
-        rail.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
-        scene.add(rail);
-    };
-    const [x0, x1, z0, z1] = [cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2];
-    const gate = 3;
-    fence(x0, z0, x1, z0);
-    fence(x0, z1, x1, z1);
-    fence(x0, z0, x0, z1);
-    fence(x1, z0, x1, cz - gate);
-    fence(x1, cz + gate, x1, z1);
+/** Wraps an angle into (-π, π]. */
+function wrap(angle: number): number {
+    let a = angle;
+    while (a > Math.PI) a -= Math.PI * 2;
+    while (a <= -Math.PI) a += Math.PI * 2;
+    return a;
 }
 
-/** The Main Store's walls: no roof, so the shelves and floor inside show. Glass along the front. */
+/**
+ * A pair of swing leaves filling the opening from (x1, z1) to (x2, z2), each
+ * hinged at its own end, opening 90° towards `out` ([x, z], a unit vector).
+ */
+function swingPair(x1: number, z1: number, x2: number, z2: number, height: number, out: [number, number], color: THREE.Color): { group: THREE.Group; swing: Swing } {
+    const group = new THREE.Group();
+    const span = Math.hypot(x2 - x1, z2 - z1);
+    const leafWidth = span / 2 - 0.04;
+    // A pivot's rotation.y = θ points its +x at (cos θ, −sin θ) in (x, z).
+    const toward = (dx: number, dz: number) => Math.atan2(-dz, dx);
+    const outAngle = toward(out[0], out[1]);
+    const leaves: Swing["leaves"] = [];
+
+    for (const [hx, hz, fx, fz] of [[x1, z1, x2, z2], [x2, z2, x1, z1]] as Array<[number, number, number, number]>) {
+        const pivot = new THREE.Group();
+        pivot.position.set(hx, 0, hz);
+        pivot.add(mesh(new THREE.BoxGeometry(leafWidth, height, 0.08), color, leafWidth / 2, height / 2, 0));
+        const closed = toward(fx - hx, fz - hz);
+        const opened = closed + wrap(outAngle - closed);
+        pivot.rotation.y = closed;
+        leaves.push({ pivot, closed, opened });
+        group.add(pivot);
+    }
+
+    return { group, swing: { leaves, open: 0, target: 0 } };
+}
+
+/** The fenced yard, laid out from the site photo, with its two-leaf swing gate. Returns the gate. */
+function addCompound(scene: THREE.Scene, wall: THREE.Color, dark: THREE.Color, yard: THREE.Color): Swing {
+    const shape = new THREE.Shape();
+    COMPOUND.corners.forEach(([x, z], i) => (i === 0 ? shape.moveTo(x, -z) : shape.lineTo(x, -z)));
+    shape.closePath();
+    const slab = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshStandardMaterial({ color: yard.clone().lerp(dark, 0.18), roughness: 1 }));
+    slab.rotation.x = -Math.PI / 2;
+    slab.position.y = 0.03;
+    slab.receiveShadow = true;
+    scene.add(slab);
+
+    const railTone = dark.clone().lerp(wall, 0.3);
+    const post = new THREE.CylinderGeometry(0.08, 0.08, 2, 6);
+    const [gx, gz] = COMPOUND.gate.at;
+    const half = COMPOUND.gate.width / 2;
+
+    const fence = (x1: number, z1: number, x2: number, z2: number) => {
+        const length = Math.hypot(x2 - x1, z2 - z1);
+        if (length < 0.1) return;
+        for (let s = 0; s <= length + 0.01; s += 2.5) {
+            const t = Math.min(1, s / length);
+            scene.add(mesh(post, railTone, x1 + (x2 - x1) * t, 1, z1 + (z2 - z1) * t));
+        }
+        for (const y of [0.6, 1.8]) {
+            const rail = mesh(new THREE.BoxGeometry(length, 0.08, 0.08), railTone, (x1 + x2) / 2, y, (z1 + z2) / 2);
+            rail.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
+            scene.add(rail);
+        }
+    };
+
+    const corners = COMPOUND.corners;
+    for (let i = 0; i < corners.length; i++) {
+        const [x1, z1] = corners[i];
+        const [x2, z2] = corners[(i + 1) % corners.length];
+        if (x1 === gx && x2 === gx) {
+            // The east fence, with the gate in it.
+            const [lo, hi] = [Math.min(z1, z2), Math.max(z1, z2)];
+            fence(gx, lo, gx, gz - half);
+            fence(gx, gz + half, gx, hi);
+        } else {
+            fence(x1, z1, x2, z2);
+        }
+    }
+
+    for (const z of [gz - half, gz + half]) scene.add(mesh(new THREE.BoxGeometry(0.3, 2.4, 0.3), dark, gx, 1.2, z));
+    const { group, swing } = swingPair(gx, gz - half, gx, gz + half, 2, [1, 0], railTone);
+    scene.add(group);
+    return swing;
+}
+
+/** The roads (places.ts ROADS), each a flat asphalt ribbon 4.5 m wide. */
+function addRoads(scene: THREE.Scene, asphalt: THREE.Color): void {
+    const material = new THREE.MeshStandardMaterial({ color: asphalt, roughness: 1, side: THREE.DoubleSide });
+    ROADS.forEach((points, r) => {
+        const curve = new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, "catmullrom", 0.2);
+        const samples = curve.getSpacedPoints(Math.round(curve.getLength()));
+        const positions: number[] = [];
+        samples.forEach((p, i) => {
+            const t = curve.getTangentAt(i / (samples.length - 1));
+            const y = 0.05 + r * 0.004;
+            positions.push(p.x - t.z * 2.25, y, p.z + t.x * 2.25, p.x + t.z * 2.25, y, p.z - t.x * 2.25);
+        });
+        const indices: number[] = [];
+        for (let i = 0; i < samples.length - 1; i++) {
+            const a = i * 2;
+            indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        const road = new THREE.Mesh(geometry, material);
+        road.receiveShadow = true;
+        scene.add(road);
+    });
+}
+
+/** The store's four walls, open-topped, with the 2 m main door in the south wall and a sign over it. */
 function addStoreShell(scene: THREE.Scene, wall: THREE.Color, tone: THREE.Color, floor: THREE.Color): void {
     const [cx, cz] = STORE.position;
     const [w, d] = STORE.size;
     const h = STORE.wall;
-    const t = 0.3;
+    const t = 0.2;
+    const doorX = cx - w / 2 + STORE.door.at;
+    const half = STORE.door.width / 2;
 
     scene.add(mesh(new THREE.BoxGeometry(w, 0.1, d), floor.clone().lerp(wall, 0.5), cx, 0.05, cz));
-    scene.add(mesh(new THREE.BoxGeometry(w, h, t), wall, cx, h / 2, cz - d / 2));
-    scene.add(mesh(new THREE.BoxGeometry(t, h, d), wall, cx - w / 2, h / 2, cz));
-    scene.add(mesh(new THREE.BoxGeometry(t, h, d), wall, cx + w / 2, h / 2, cz));
-    // Front: low wall, glass above it, a door in the middle, a coloured fascia.
-    const glass = new THREE.Mesh(new THREE.BoxGeometry(w, h - 0.8, 0.08), new THREE.MeshStandardMaterial({ color: 0x9fc3d6, transparent: true, opacity: 0.25 }));
-    glass.position.set(cx, 0.8 + (h - 0.8) / 2, cz + d / 2);
-    scene.add(glass);
-    for (const side of [-1, 1]) scene.add(mesh(new THREE.BoxGeometry(w / 2 - 1.2, 0.8, t), wall, cx + side * (w / 4 + 0.6), 0.4, cz + d / 2));
-    scene.add(mesh(new THREE.BoxGeometry(w + 0.4, 0.5, t + 0.1), tone, cx, h + 0.25, cz + d / 2));
+    scene.add(mesh(new THREE.BoxGeometry(w + t, h, t), wall, cx, h / 2, cz - d / 2 - t / 2));
+    scene.add(mesh(new THREE.BoxGeometry(t, h, d), wall, cx - w / 2 - t / 2, h / 2, cz));
+    scene.add(mesh(new THREE.BoxGeometry(t, h, d), wall, cx + w / 2 + t / 2, h / 2, cz));
+    // South wall: either side of the door, and above it.
+    const leftLength = doorX - half - (cx - w / 2);
+    const rightLength = cx + w / 2 - (doorX + half);
+    scene.add(mesh(new THREE.BoxGeometry(leftLength, h, t), wall, cx - w / 2 + leftLength / 2, h / 2, cz + d / 2 + t / 2));
+    scene.add(mesh(new THREE.BoxGeometry(rightLength, h, t), wall, cx + w / 2 - rightLength / 2, h / 2, cz + d / 2 + t / 2));
+    scene.add(mesh(new THREE.BoxGeometry(STORE.door.width, h - STORE.door.height, t), wall, doorX, (h + STORE.door.height) / 2, cz + d / 2 + t / 2));
+    scene.add(mesh(new THREE.BoxGeometry(5, 0.6, 0.15), tone, doorX, h + 0.35, cz + d / 2 + t + 0.05));
+}
+
+/** One wall of shelving's face: a picture of its bins, repainted when the shelf data arrives. */
+interface ShelfFace {
+    tier: number;
+    paint: (bins: ShelfBin[], tones: Record<"ok" | "refill" | "critical" | "empty" | "none" | "text" | "paper", string>) => void;
+    /** The bin index (0–199) under a point on the face, from its uv. */
+    binAt: (u: number, v: number) => number | null;
+}
+
+/**
+ * The 200 bins: floor-to-ceiling shelving on the west, north and east walls
+ * (5 across × 10 down each, above a 0.5 m floor strip) and a two-row band
+ * across the south wall over the door. See SHELF_TIERS for the reading order.
+ */
+function makeShelves(wall: THREE.Color, dark: THREE.Color, tone: THREE.Color): { group: THREE.Group; faces: ShelfFace[] } {
+    const g = new THREE.Group();
+    const [w, d] = STORE.size;
+    const h = STORE.wall;
+    const dep = STORE.shelfDepth;
+    const plinth = STORE.plinth;
+    const frameTone = wall.clone().lerp(dark, 0.3);
+    const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.6);
+    const faces: ShelfFace[] = [];
+
+    SHELF_TIERS.forEach(({ wall: side }, tier) => {
+        const south = side === "south";
+        const span = (side === "west" || side === "east" ? d : w) - 2 * dep;
+        const cols = south ? 25 : 5;
+        const rows = south ? 2 : 10;
+        const faceHeight = south ? 0.6 : h - plinth;
+        const faceY = south ? h - 0.3 : plinth + faceHeight / 2;
+
+        // The frame against the wall.
+        const frameHeight = south ? 0.6 : h;
+        const frame = mesh(new THREE.BoxGeometry(side === "west" || side === "east" ? dep : w, frameHeight, side === "west" || side === "east" ? d : dep), frameTone,
+            side === "west" ? -w / 2 + dep / 2 : side === "east" ? w / 2 - dep / 2 : 0,
+            south ? h - 0.3 : h / 2,
+            side === "north" ? -d / 2 + dep / 2 : side === "south" ? d / 2 - dep / 2 : 0);
+        g.add(frame);
+
+        // Cartons on the floor strip under the lowest shelf: that strip is Store Floor.
+        if (!south) {
+            for (let i = 0; i < 4; i++) {
+                const along = -span / 2 + span * (0.15 + i * 0.24);
+                const c = mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), carton, 0, 0.2, 0);
+                if (side === "west") c.position.set(-w / 2 + dep + 0.25, 0.2, along);
+                if (side === "east") c.position.set(w / 2 - dep - 0.25, 0.2, along);
+                if (side === "north") c.position.set(along, 0.2, -d / 2 + dep + 0.25);
+                g.add(c);
+            }
+        }
+
+        // The face: a canvas of bins on a plane facing into the room.
+        const canvas = document.createElement("canvas");
+        canvas.width = cols * 96;
+        canvas.height = rows * 48;
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = 4;
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(span, faceHeight), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9 }));
+        const inset = 0.006;
+        switch (side) {
+            case "west": plane.position.set(-w / 2 + dep + inset, faceY, 0); plane.rotation.y = Math.PI / 2; break;
+            case "north": plane.position.set(0, faceY, -d / 2 + dep + inset); break;
+            case "east": plane.position.set(w / 2 - dep - inset, faceY, 0); plane.rotation.y = -Math.PI / 2; break;
+            case "south": plane.position.set(0, faceY, d / 2 - dep - inset); plane.rotation.y = Math.PI; break;
+        }
+        g.add(plane);
+
+        // Physical [col, row] of logical bin j (0–49) on this face, and back.
+        const place = (j: number): [number, number] => {
+            const row = Math.floor(j / 5);
+            const col = j % 5;
+            return south ? [Math.floor(row % 5) * 5 + col, row < 5 ? 0 : 1] : [col, row];
+        };
+        const logical = (col: number, row: number): number => (south ? (row * 5 + Math.floor(col / 5)) * 5 + (col % 5) : row * 5 + col);
+
+        const face: ShelfFace = {
+            tier,
+            binAt: (u, v) => {
+                const col = Math.min(cols - 1, Math.max(0, Math.floor(u * cols)));
+                const row = Math.min(rows - 1, Math.max(0, Math.floor((1 - v) * rows)));
+                return tier * 50 + logical(col, row);
+            },
+            paint: (bins, tones) => {
+                const ctx = canvas.getContext("2d")!;
+                const bw = canvas.width / cols;
+                const bh = canvas.height / rows;
+                ctx.fillStyle = `#${frameTone.getHexString()}`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                for (let j = 0; j < 50; j++) {
+                    const [col, row] = place(j);
+                    const b = bins[tier * 50 + j];
+                    const x = col * bw;
+                    const y = row * bh;
+                    ctx.fillStyle = tones.paper;
+                    ctx.fillRect(x + 3, y + 3, bw - 6, bh - 6);
+                    if (b) {
+                        const status = b.assigned ? b.status : "empty";
+                        ctx.fillStyle = tones[status as "ok" | "refill" | "critical" | "empty"] ?? tones.none;
+                        ctx.globalAlpha = 0.35;
+                        ctx.fillRect(x + 3, y + 3, bw - 6, bh - 6);
+                        ctx.globalAlpha = 1;
+                        // How full: a bar along the bottom of the bin.
+                        ctx.fillRect(x + 3, y + bh - 12, (bw - 6) * Math.max(0, Math.min(1, b.fill)), 9);
+                    } else {
+                        ctx.fillStyle = tones.none;
+                        ctx.fillRect(x + 3, y + 3, bw - 6, bh - 6);
+                    }
+                    ctx.fillStyle = tones.text;
+                    ctx.textAlign = "left";
+                    ctx.textBaseline = "top";
+                    ctx.font = "800 15px system-ui, sans-serif";
+                    ctx.fillText(`${"ABCDE"[j % 5]}${Math.floor(j / 5) + 1}`, x + 7, y + 6);
+                    if (b) {
+                        ctx.font = "600 12px system-ui, sans-serif";
+                        ctx.fillText(b.name.slice(0, 12), x + 7, y + 23, bw - 12);
+                    }
+                }
+                texture.needsUpdate = true;
+            },
+        };
+        plane.userData.shelfFace = face;
+        face.paint([], { ok: "#2e7d32", refill: "#ed6c02", critical: "#d32f2f", empty: "#9e9e9e", none: "#e0e0e0", text: "#222222", paper: "#ffffff" });
+        faces.push(face);
+    });
+
+    return { group: g, faces };
+}
+
+/**
+ * A hub: four walls you can see into once the roof lifts, a double swing door,
+ * and (for the Main Hubs) a floor of named 1 m cells with the walkway marked.
+ */
+function makeHub(place: Place, tone: THREE.Color, wall: THREE.Color, dark: THREE.Color, floor: THREE.Color): { group: THREE.Group; roof: THREE.Object3D; swing: Swing | null } {
+    const g = new THREE.Group();
+    const [w, d] = place.size;
+    const h = place.height ?? 5;
+    const t = 0.25;
+    const doorHeight = 3.2;
+    const door = place.door;
+
+    const sides: Record<string, [number, number, number, number]> = {
+        north: [-w / 2, -d / 2, w / 2, -d / 2],
+        south: [-w / 2, d / 2, w / 2, d / 2],
+        west: [-w / 2, -d / 2, -w / 2, d / 2],
+        east: [w / 2, -d / 2, w / 2, d / 2],
+    };
+    const wallSegment = (x1: number, z1: number, x2: number, z2: number, y0: number, y1: number) => {
+        const length = Math.hypot(x2 - x1, z2 - z1);
+        if (length < 0.05 || y1 <= y0) return;
+        const m = mesh(new THREE.BoxGeometry(length, y1 - y0, t), wall, (x1 + x2) / 2, (y0 + y1) / 2, (z1 + z2) / 2);
+        m.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
+        g.add(m);
+    };
+
+    let swing: Swing | null = null;
+    for (const [name, [x1, z1, x2, z2]] of Object.entries(sides)) {
+        if (!door || door.wall !== name) {
+            wallSegment(x1, z1, x2, z2, 0, h);
+            continue;
+        }
+        // Split around the door; a lintel above it.
+        const length = Math.hypot(x2 - x1, z2 - z1);
+        const a = (door.at - door.width / 2) / length;
+        const b = (door.at + door.width / 2) / length;
+        const [ax, az] = [x1 + (x2 - x1) * a, z1 + (z2 - z1) * a];
+        const [bx, bz] = [x1 + (x2 - x1) * b, z1 + (z2 - z1) * b];
+        wallSegment(x1, z1, ax, az, 0, h);
+        wallSegment(bx, bz, x2, z2, 0, h);
+        wallSegment(ax, az, bx, bz, doorHeight, h);
+        const pair = swingPair(ax, az, bx, bz, doorHeight, doorPosition(place)!.out, dark.clone().lerp(tone, 0.35));
+        g.add(pair.group);
+        swing = pair.swing;
+    }
+
+    if (place.cells) {
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: cellTexture(place, floor, dark, tone), roughness: 0.95 }));
+        plane.rotation.x = -Math.PI / 2;
+        plane.position.y = 0.14;
+        plane.receiveShadow = true;
+        g.add(plane);
+    }
+
+    const alongZ = d > w;
+    const roofMesh = roof(alongZ ? d + 0.4 : w + 0.4, alongZ ? w + 0.6 : d + 0.6, Math.min(w, d) * 0.18, tone, h, alongZ);
+    g.add(roofMesh);
+
+    return { group: g, roof: roofMesh, swing };
+}
+
+/** A hub floor as a picture: each 1 m cell outlined and named, the walkway hatched. */
+function cellTexture(place: Place, floor: THREE.Color, dark: THREE.Color, tone: THREE.Color): THREE.CanvasTexture {
+    const [w, d] = place.size;
+    const px = 48;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(w * px);
+    canvas.height = Math.round(d * px);
+    const ctx = canvas.getContext("2d")!;
+    const hex = (c: THREE.Color) => `#${c.getHexString()}`;
+    const white = new THREE.Color(0xffffff);
+
+    ctx.fillStyle = hex(floor.clone().lerp(white, 0.35));
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const { cells, aisles } = hubLayout(place);
+    const toPx = (x: number, z: number): [number, number] => [(x + w / 2) * px, (z + d / 2) * px];
+
+    for (const [x0, z0, x1, z1] of aisles) {
+        const [ax, az] = toPx(x0, z0);
+        const [bx, bz] = toPx(x1, z1);
+        ctx.fillStyle = hex(tone.clone().lerp(white, 0.65));
+        ctx.fillRect(ax, az, bx - ax, bz - az);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(ax, az, bx - ax, bz - az);
+        ctx.clip();
+        ctx.strokeStyle = hex(tone.clone().lerp(white, 0.35));
+        ctx.lineWidth = 6;
+        for (let s = 0; s < canvas.width + canvas.height; s += 24) {
+            ctx.beginPath();
+            ctx.moveTo(s, 0);
+            ctx.lineTo(s - canvas.height, canvas.height);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    ctx.strokeStyle = hex(dark.clone().lerp(floor, 0.45));
+    ctx.lineWidth = 2;
+    ctx.fillStyle = hex(dark);
+    ctx.font = `700 ${Math.round(px * 0.3)}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const cell of cells) {
+        const [cx, cz] = toPx(cell.x, cell.z);
+        ctx.strokeRect(cx - px / 2 + 2, cz - px / 2 + 2, px - 4, px - 4);
+        ctx.fillText(cell.name, cx, cz);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    return texture;
 }
 
 function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: THREE.Color): THREE.Group {
@@ -605,59 +1920,43 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
     const glass = new THREE.Color(0x9fc3d6);
 
     switch (place.shape) {
-        case "hub": {
-            g.add(mesh(new THREE.BoxGeometry(w, h, d), wall, 0, h / 2, 0));
-            // The ridge runs along the longer side.
-            const alongZ = d > w;
-            g.add(roof(alongZ ? d + 0.4 : w + 0.4, alongZ ? w + 0.6 : d + 0.6, Math.min(w, d) * 0.22, tone, h, 0, 0, alongZ));
-            // Roller doors on the side the roads leave from (+x for the hubs, +z for the Remote Hub).
-            const doors = Math.max(1, Math.floor((place.position[0] < 0 ? d : w) / 5));
-            for (let i = 0; i < doors; i++) {
-                const offset = (i - (doors - 1) / 2) * 4.5;
-                const door = place.position[0] < 0
-                    ? mesh(new THREE.BoxGeometry(0.15, 3.2, 3), dark, w / 2 + 0.05, 1.6, offset)
-                    : mesh(new THREE.BoxGeometry(3.2, 3.2, 0.15), dark, offset, 1.6, d / 2 + 0.05);
-                g.add(door);
-            }
-            break;
-        }
-        case "shelves": {
-            // Rows of shelving running across, goods on every level.
-            const goods = [tone, tone.clone().lerp(wall, 0.4), dark.clone().lerp(tone, 0.5)];
-            for (let row = 0; row < 3; row++) {
-                const z = -d / 2 + 1.2 + row * 2.2;
-                g.add(mesh(new THREE.BoxGeometry(w - 1, 1.9, 0.5), wall.clone().lerp(dark, 0.25), 0, 0.95 + 0.13, z));
-                for (let level = 0; level < 3; level++) {
-                    for (let slot = 0; slot < 5; slot++) {
-                        g.add(mesh(new THREE.BoxGeometry(0.7, 0.35, 0.45), goods[(row + level + slot) % goods.length],
-                            -w / 2 + 1.1 + slot * ((w - 2.2) / 4), 0.45 + level * 0.6 + 0.13, z + 0.3));
-                    }
-                }
+        case "platform": {
+            g.add(mesh(new THREE.BoxGeometry(w, 0.3, d), wall.clone().lerp(dark, 0.2), 0, 0.15, 0));
+            // Painted edging, so it reads as a marked area.
+            for (const [x, z, sx, sz] of [[0, -d / 2, w, 0.25], [0, d / 2, w, 0.25], [-w / 2, 0, 0.25, d], [w / 2, 0, 0.25, d]] as Array<[number, number, number, number]>) {
+                g.add(mesh(new THREE.BoxGeometry(sx, 0.32, sz), tone, x, 0.16, z));
             }
             break;
         }
         case "floor": {
-            // Pallets of cartons waiting to go on the shelf or out to customers.
+            // The open floor either side of the counter, relative to the store's centre:
+            // more on the west, a little on the east. Each patch tinted, with pallets on it.
             const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.55);
-            [[-1.5, -2], [1.5, -2], [-1.5, 1], [1.5, 1]].forEach(([x, z], i) => {
-                g.add(mesh(new THREE.BoxGeometry(1.8, 0.15, 1.8), dark, x, 0.2, z));
-                const layers = 1 + (i % 3);
-                for (let y = 0; y < layers; y++) g.add(mesh(new THREE.BoxGeometry(1.6, 0.7, 1.6), carton, x, 0.63 + y * 0.72, z));
-            });
+            const patch = tone.clone().lerp(wall, 0.75);
+            const zones: Array<[number, number, number, number, number]> = [
+                // x, z, width, depth, pallets
+                [-4.75, -0.8, 1.5, 5.4, 3],
+                [4.5, -2.5, 2.1, 2, 1],
+            ];
+            for (const [x, z, zw, zd, pallets] of zones) {
+                g.add(mesh(new THREE.BoxGeometry(zw, 0.04, zd), patch, x, 0.13, z));
+                for (let i = 0; i < pallets; i++) {
+                    const pz = z - zd / 2 + 0.9 + i * 1.7;
+                    g.add(mesh(new THREE.BoxGeometry(1.2, 0.12, 1.2), dark, x, 0.2, pz));
+                    for (let y = 0; y < 1 + (i % 2); y++) g.add(mesh(new THREE.BoxGeometry(1.1, 0.6, 1.1), carton, x, 0.56 + y * 0.62, pz));
+                }
+            }
+            break;
+        }
+        case "counter": {
+            const { width: cw, depth: cd, height: ch } = STORE.counter;
+            g.add(mesh(new THREE.BoxGeometry(cw, ch, cd), wall.clone().lerp(dark, 0.15), 0, ch / 2 + 0.1, 0));
+            g.add(mesh(new THREE.BoxGeometry(cw + 0.1, 0.06, cd + 0.1), tone, 0, ch + 0.13, 0));
             break;
         }
         case "bay": {
             g.add(mesh(new THREE.BoxGeometry(w, 0.2, d), tone, 0, 4, 0));
             for (const x of [-w / 2 + 0.3, w / 2 - 0.3]) for (const z of [-d / 2 + 0.3, d / 2 - 0.3]) g.add(mesh(new THREE.BoxGeometry(0.25, 4, 0.25), dark, x, 2, z));
-            for (const z of [-1.8, 1.8]) {
-                g.add(mesh(new THREE.BoxGeometry(4, 2.2, 2), wall, -0.6, 1.5, z));
-                g.add(mesh(new THREE.BoxGeometry(1.4, 1.7, 1.9), tone, 2.1, 1.25, z));
-                for (const x of [-1.9, 1.9]) for (const side of [-0.95, 0.95]) {
-                    const wheel = mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.3, 12), dark, x, 0.4, z + side);
-                    wheel.rotation.x = Math.PI / 2;
-                    g.add(wheel);
-                }
-            }
             break;
         }
         case "houses": {
@@ -676,15 +1975,50 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
             for (let y = 1.4; y < h - 0.5; y += 1.6) g.add(mesh(new THREE.BoxGeometry(w - 1, 0.7, 0.1), glass, 0, y, d / 2 + 0.03));
             break;
         }
+        default:
+            break;
     }
 
     return g;
 }
 
+/** A box van, 5.2 × 2 m, nose along +x: cab in the driver's colour, white body. */
+function makeVan(tone: THREE.Color, body: THREE.Color, dark: THREE.Color): THREE.Group {
+    const van = new THREE.Group();
+    van.add(mesh(new THREE.BoxGeometry(3.6, 2.2, 2), body.clone().lerp(new THREE.Color(0xffffff), 0.6), -0.8, 1.5, 0));
+    van.add(mesh(new THREE.BoxGeometry(1.5, 1.6, 1.9), tone, 1.75, 1.2, 0));
+    van.add(mesh(new THREE.BoxGeometry(0.05, 0.7, 1.6), new THREE.Color(0x9fc3d6), 2.5, 1.55, 0));
+    for (const x of [-1.8, 1.6]) for (const z of [-0.95, 0.95]) {
+        const wheel = mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.3, 14), dark, x, 0.4, z);
+        wheel.rotation.x = Math.PI / 2;
+        van.add(wheel);
+    }
+    return van;
+}
+
+/** A courier's motorbike, nose along +x, with its rider and the parcel box on the back. */
+function makeBike(tone: THREE.Color, dark: THREE.Color, boxMaterial: THREE.Material): THREE.Group {
+    const bike = new THREE.Group();
+    bike.add(mesh(new THREE.BoxGeometry(1.5, 0.35, 0.3), tone, 0, 0.65, 0));
+    for (const x of [-0.6, 0.6]) {
+        const wheel = mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 14), dark, x, 0.32, 0);
+        wheel.rotation.x = Math.PI / 2;
+        bike.add(wheel);
+    }
+    const rider = makePerson(tone);
+    rider.scale.setScalar(0.85);
+    rider.position.set(-0.05, 0.4, 0);
+    bike.add(rider);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.5), boxMaterial);
+    box.position.set(-0.65, 1.0, 0);
+    box.castShadow = true;
+    bike.add(box);
+    return bike;
+}
+
 function makePerson(tone: THREE.Color): THREE.Group {
     const person = new THREE.Group();
-    const body = mesh(new THREE.CapsuleGeometry(0.3, 0.7, 4, 10), tone, 0, 0.65, 0);
-    const head = mesh(new THREE.SphereGeometry(0.25, 14, 10), new THREE.Color(0xb07a4b), 0, 1.45, 0);
-    person.add(body, head);
+    person.add(mesh(new THREE.CapsuleGeometry(0.3, 0.7, 4, 10), tone, 0, 0.65, 0));
+    person.add(mesh(new THREE.SphereGeometry(0.25, 14, 10), new THREE.Color(0xb07a4b), 0, 1.45, 0));
     return person;
 }

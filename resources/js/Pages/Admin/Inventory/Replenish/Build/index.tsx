@@ -163,7 +163,7 @@ function PhaseStepper({ active }: { active: 1 | 2 | 3 }) {
         { label: "Dispatched", sublabel: active === 3 ? "Active" : "Pending", done: false },
     ];
     return (
-        <Paper elevation={0} sx={{ p: 1.5, borderRadius: "12px", bgcolor: "action.hover", border: "1px solid", borderColor: "divider", mb: 2 }}>
+        <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, bgcolor: "action.hover", border: "1px solid", borderColor: "divider", mb: 2 }}>
             <Stack direction="row" alignItems="center">
                 {steps.map((step, i) => (
                     <React.Fragment key={step.label}>
@@ -570,7 +570,7 @@ export default function ReplenishBuild({
             <PhaseStepper active={1} />
 
             {/* ── Route Matrix Card ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
                     <Typography variant="overline" color="text.secondary">Replenishment Corridor</Typography>
                     <Stack direction="row" alignItems="center" spacing={0.5}>
@@ -663,7 +663,7 @@ export default function ReplenishBuild({
             </Paper>
 
             {/* ── 4-Party Inbound Agreement Gate ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
                     <Box>
                         <Typography variant="subtitle1" fontWeight={700}>4-Party Inbound Agreement Gate</Typography>
@@ -724,7 +724,7 @@ export default function ReplenishBuild({
                         const isSelected = selectedVehicle === v.id;
                         return (
                             <Paper key={v.id} elevation={0} onClick={() => setSelectedVehicle(v.id)}
-                                sx={{ p: 2, borderRadius: "16px", border: "2px solid", borderColor: isSelected ? "primary.main" : "divider", bgcolor: isSelected ? "action.selected" : "background.paper", cursor: "pointer", opacity: isSelected ? 1 : 0.75, transition: "all 0.2s ease", position: "relative", overflow: "hidden", "&:hover": { opacity: 1, borderColor: "primary.light" } }}>
+                                sx={{ p: 2, borderRadius: 2, border: "2px solid", borderColor: isSelected ? "primary.main" : "divider", bgcolor: isSelected ? "action.selected" : "background.paper", cursor: "pointer", opacity: isSelected ? 1 : 0.75, transition: "all 0.2s ease", position: "relative", overflow: "hidden", "&:hover": { opacity: 1, borderColor: "primary.light" } }}>
                                 {isSelected && <Box sx={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 5, bgcolor: "primary.main" }} />}
                                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5}>
                                     <Stack direction="row" spacing={1.5} sx={{ minWidth: 0 }}>
@@ -772,7 +772,7 @@ export default function ReplenishBuild({
             </Box>
 
             {/* ── Volumetric Telemetry ── */}
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: "1px solid", borderColor: "divider", mb: 2 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider", mb: 2 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
                     <Stack direction="row" alignItems="center" spacing={1}>
                         <ViewInArIcon color="primary" sx={{ fontSize: 20 }} />
@@ -848,7 +848,7 @@ export default function ReplenishBuild({
                     {items.map((item) => {
                         const cfg = statusColors[item.status];
                         return (
-                            <Paper key={item.id} elevation={0} sx={{ p: 2, borderRadius: "16px", border: "1px solid", borderColor: "divider" }}>
+                            <Paper key={item.id} elevation={0} sx={{ p: 2, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
                                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5} mb={1.5}>
                                     <Stack direction="row" spacing={1.5} sx={{ minWidth: 0 }}>
                                         <Box sx={{ width: 40, height: 40, borderRadius: 1.5, bgcolor: cfg.bg, color: cfg.text, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -921,7 +921,7 @@ export default function ReplenishBuild({
             </Box>
 
             {/* ── Sticky Execution Bar ── */}
-            <Paper elevation={4} sx={{ position: "sticky", bottom: 16, borderRadius: "16px", p: 2, border: "1px solid", borderColor: "divider", backdropFilter: "blur(12px)", bgcolor: "background.paper", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2 }}>
+            <Paper elevation={4} sx={{ position: "sticky", bottom: 16, borderRadius: 2, p: 2, border: "1px solid", borderColor: "divider", backdropFilter: "blur(12px)", bgcolor: "background.paper", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2 }}>
                 <Box>
                     <Stack direction="row" alignItems="baseline" spacing={0.75}>
                         <Typography variant="h6" fontWeight={800} color="primary.main">{totalCbm.toFixed(1)} CBM</Typography>

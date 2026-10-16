@@ -107,6 +107,12 @@ export function NodeCards({ nodes, youAre }: { nodes: SystemNode[]; youAre: stri
                         <Typography variant="body2" color={n.in_sync ? "success.main" : "warning.main"}>
                             {n.in_sync ? "Data matches the newest backup" : "Data differs from the newest backup"}
                         </Typography>
+                        <Typography variant="body2" color={n.tunnel === "on" ? "success.main" : "text.secondary"}>
+                            {n.tunnel === "" ? "Tunnel: not guarded" : n.tunnel === "on" ? "Tunnel: on (takes visitors)" : "Tunnel: off"}
+                        </Typography>
+                        {!n.app_up && (
+                            <Typography variant="body2" color="error.main">App not answering</Typography>
+                        )}
                     </Stack>
                 </Card>
             ))}

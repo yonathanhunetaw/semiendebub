@@ -136,11 +136,46 @@ class StockPoolsTest extends TestCase
             ->assertOk()
             ->assertJson(['business_pool' => 20, 'pools' => ['business' => 20, 'individual' => 80]]);
 
+        // The store page hands the price editor the pool as it stands, so it can be seen and cleared.
+        $this->actingAs($global)->get('http://admin.'.config('app.system_domain').'/stores/'.$this->store->id)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('inventory.data.0.variants.0.business_pool', 20)
+                ->where('inventory.data.0.variants.0.pools', ['set_aside' => 20, 'business' => 20, 'individual' => 80]));
+
         $this->actingAs($global)->patchJson($url, ['business_pool' => null])->assertOk()->assertJson(['pools' => null]);
         $this->assertNull($this->storeVariant->fresh()->business_pool);
     }
 
+    #[Test]
+    public function the_order_confirmation_counts_stock_within_the_customers_pool(): void
+    {
+        // 100 on hand, 40 set aside for Business: an Individual has 60, a Business 40.
+        $inStore = function (int $quantity, bool $business): bool {
+            $cart = $this->cart($quantity, $business);
+
+            $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')])->actingAs($this->seller)
+                ->get(route('seller.orders.confirmation', ['cart' => $cart->id]))
+                ->assertOk()
+                ->assertInertia(function ($page) use (&$result): void {
+                    $result = $page->toArray()['props']['order']['lines'][0]['inStore'];
+                });
+
+            return $result;
+        };
+
+        $this->assertTrue($inStore(60, business: false));
+        $this->assertFalse($inStore(61, business: false));
+        $this->assertTrue($inStore(40, business: true));
+        $this->assertFalse($inStore(41, business: true));
+    }
+
     private function checkout(int $quantity, bool $business): Sale
+    {
+        return app(CheckoutService::class)->checkout($this->cart($quantity, $business), [], $this->seller->id);
+    }
+
+    private function cart(int $quantity, bool $business): Cart
     {
         $customer = Customer::factory()->create([
             'created_by' => $this->seller->id,
@@ -156,7 +191,7 @@ class StockPoolsTest extends TestCase
         ]);
         $cart->variants()->attach($this->variantId(), ['quantity' => $quantity, 'price' => 10, 'store_id' => $this->store->id]);
 
-        return app(CheckoutService::class)->checkout($cart, [], $this->seller->id);
+        return $cart;
     }
 
     private function variantId(): int

@@ -85,11 +85,38 @@ class AdminStorePricingTransfersTest extends TestCase
     public function the_store_list_and_forms_open(): void
     {
         $this->get(route('store.index'))->assertOk();
-        $this->get(route('store.create'))->assertOk();
-        // NOTE: neither Stores/Create.tsx nor Stores/Edit.tsx exists under resources/js/Pages/Admin/Inventory,
-        // so these answer 200 with a component name the browser cannot load. Asserting only the data.
-        $response = $this->get(route('store.edit', $this->store))->assertOk();
-        $this->assertSame($this->store->id, $response->viewData('page')['props']['store']['id']);
+        $this->get(route('store.create'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Admin/Inventory/Stores/Create'));
+        $this->get(route('store.edit', $this->store))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Admin/Inventory/Stores/Edit')->where('store.id', $this->store->id));
+    }
+
+    #[Test]
+    public function a_store_is_renamed_and_its_manager_is_kept(): void
+    {
+        $this->patch(route('store.update', $this->store), ['name' => 'Main Store Bole', 'location' => 'Bole', 'manager' => 'Almaz', 'status' => 'inactive'])
+            ->assertRedirect(route('store.index'));
+
+        $this->assertSame(['Main Store Bole', 'Bole', 'Almaz', 'inactive'], array_values($this->store->fresh()->only(['name', 'location', 'manager', 'status'])));
+    }
+
+    #[Test]
+    public function the_catalogue_search_finds_an_item_past_the_first_page(): void
+    {
+        // 30 items fill more than the first page of 25; the one searched for is made last.
+        foreach (range(1, 30) as $n) {
+            $variant = ItemVariant::factory()->create(['item_id' => Item::factory()->create(['product_name' => "Filler {$n}"])->id]);
+            StoreVariant::factory()->create(['store_id' => $this->store->id, 'item_id' => $variant->item_id, 'item_variant_id' => $variant->id]);
+        }
+        $glue = Item::factory()->create(['product_name' => 'Zebra Glue']);
+        $glueVariant = ItemVariant::factory()->create(['item_id' => $glue->id]);
+        StoreVariant::factory()->create(['store_id' => $this->store->id, 'item_id' => $glue->id, 'item_variant_id' => $glueVariant->id]);
+
+        $this->get(route('store.show', [$this->store, 'search' => 'zebra']))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('search', 'zebra')->has('inventory.data', 1)->where('inventory.data.0.item_id', $glue->id));
+
+        $this->get(route('store.show', [$this->store, 'search' => $glueVariant->fresh()->sku]))->assertOk()
+            ->assertInertia(fn ($page) => $page->has('inventory.data', 1));
     }
 
     #[Test]
@@ -314,7 +341,8 @@ class AdminStorePricingTransfersTest extends TestCase
         $this->delete(route('store-price-override.destroy', ['seller', $sellerPrice->id]));
         $this->assertNull($sellerPrice->fresh()->pricing_matrix['business']['discount_price']);
         $this->delete(route('store-price-override.destroy', ['customer', $customerPrice->id]))->assertRedirect();
-        $this->assertSame(0, StoreVariantCustomerPrice::query()->count(), 'clearing a customer override removes the record');
+        $this->assertNull($customerPrice->fresh()->pricing_matrix['discount_price'], 'clearing a customer discount keeps the customer price');
+        $this->assertSame(90.0, (float) $customerPrice->fresh()->pricing_matrix['price']);
     }
 
     #[Test]

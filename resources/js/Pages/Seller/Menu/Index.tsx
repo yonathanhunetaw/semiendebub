@@ -170,9 +170,9 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
         },
         {
             label: "Calendar",
-            caption: "Schedules & shifts",
+            caption: "Deliveries, credit due, bills",
             icon: "calendar_today",
-            route: null,
+            route: "seller.calendar",
             tone: "warning",
             surface: "border-warning/30 bg-gradient-to-br from-warning-container/60 to-surface-container-lowest",
         },

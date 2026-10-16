@@ -52,4 +52,17 @@ return [
         'analytics_id' => env('GOOGLE_ANALYTICS_ID'),
     ],
 
+    // Reads uploaded receipts for the calendar (App\Services\Documents\ClaudeReceiptReader).
+    // No key: uploads still work, and the person fills the bill in by hand.
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-opus-5-5'),
+    ],
+
+    // Where uploaded documents (receipts) are kept, privately. Use a disk all
+    // nodes share in production (e.g. r2); files are written without public access.
+    'documents' => [
+        'disk' => env('DOCUMENTS_DISK', 'local'),
+    ],
+
 ];

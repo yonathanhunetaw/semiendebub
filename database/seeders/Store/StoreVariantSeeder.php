@@ -88,6 +88,7 @@ class StoreVariantSeeder extends Seeder
                 // Prepare store variant data
                 $storeVariantsData[] = [
                     'store_id' => $store->id,
+                    'item_id' => $variant->item_id,
                     'item_variant_id' => $variant->id,
                     'pricing_matrix' => json_encode([
                         'price' => $price,

@@ -60,6 +60,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
             { label: "Transfers", route: "admin.inventory.transfers", match: ["/inventory/transfers"] },
             { label: "Capacity", route: "admin.inventory.capacity.index", match: ["/inventory/capacity"] },
             { label: "Approvals", route: "admin.inventory.replenishment.index", match: ["/inventory/replenishment"], roles: ["admin", "store_manager"] },
+            { label: "Counts", route: "admin.inventory.counts.index", match: ["/inventory/counts"], roles: ["admin", "store_manager"] },
             { label: "Shipments", route: "admin.inventory.shipments.index", match: ["/inventory/shipments"] },
         ],
     },

@@ -90,10 +90,24 @@ test('seller → payment → pick & pack → delivery, for an individual and a b
     }
 
     const courier = await signIn(browser, 'delivery', fixture.courier.email);
+    const delivered = async () => {
+        await courier.goto(app('delivery', '/history'));
+        return Number(await courier.getByText('Delivered', { exact: true }).first().locator('xpath=following::*[1]').innerText());
+    };
+    const deliveredBefore = await delivered();
 
     for (const kind of ['individual', 'business'] as const) {
         await test.step(`courier collects and delivers the ${kind} order`, () => deliver(courier, refs[kind]));
     }
+
+    await test.step("the courier's History counts both and finds each by its reference", async () => {
+        expect(await delivered()).toBe(deliveredBefore + 2);
+        for (const kind of ['individual', 'business'] as const) {
+            await courier.getByPlaceholder('Search past runs…').fill(refs[kind]);
+            await expect(courier.getByText(refs[kind]).first()).toBeVisible();
+            await expect(courier.getByText(/^Delivered /)).toHaveCount(1);
+        }
+    });
 
     await test.step('both orders show as delivered to the seller', async () => {
         await seller.goto(app('seller', '/orders?tab=delivered'));

@@ -441,6 +441,98 @@ class PaymentConfirmationTest extends TestCase
             ->assertNotFound();
     }
 
+    #[Test]
+    public function a_store_admin_marks_a_managers_cash_not_received_from_the_admin_app(): void
+    {
+        $this->seller = $this->manager();
+        $this->place(1, [['amount' => 250]]);
+        $cash = Payment::query()->sole();
+
+        $elsewhere = $this->admin(Store::factory()->create(['type' => Store::TYPE_RETAIL, 'status' => 'active'])->id);
+        $this->asAdmin($elsewhere)->post(route('admin.payments.reject', $cash))->assertForbidden();
+        $this->assertSame(Payment::STATUS_CLAIMED, $cash->fresh()->status);
+
+        $admin = $this->admin($this->store->id);
+        $this->asAdmin($admin)->post(route('admin.payments.reject', $cash))
+            ->assertSessionHas('success', 'Marked as not received yet. The seller will see it on the order.');
+
+        $cash->refresh();
+        $this->assertSame(Payment::STATUS_PENDING, $cash->status);
+        $this->assertSame($admin->id, (int) $cash->rejected_by);
+        $this->assertNull($cash->claimed_by);
+    }
+
+    #[Test]
+    public function a_part_already_settled_cannot_be_confirmed_or_rejected_again(): void
+    {
+        $this->seller = $this->manager();
+        $this->place(1, [['amount' => 250]]);
+        $cash = Payment::query()->sole();
+        $admin = $this->admin($this->store->id);
+
+        $this->asAdmin($admin)->post(route('admin.payments.confirm', $cash))->assertSessionHas('success');
+        $this->asAdmin($admin)->post(route('admin.payments.confirm', $cash))->assertSessionHas('error');
+        $this->asAdmin($admin)->post(route('admin.payments.reject', $cash))->assertSessionHas('error');
+        $this->assertSame(Payment::STATUS_CONFIRMED, $cash->fresh()->status);
+    }
+
+    #[Test]
+    public function the_owner_cannot_mark_a_settled_deposit_not_received(): void
+    {
+        $this->place(4, [['payment_account_id' => $this->cbeOne->id, 'amount' => 1000]]);
+        $sale = Sale::query()->sole();
+        $part = $sale->payments()->sole();
+        $this->claim($sale, $part);
+
+        $this->asOwner()->post(route('seller.payments.confirm', $part))->assertSessionHas('success');
+        $this->asOwner()->post(route('seller.payments.reject', $part))->assertSessionHas('error');
+        $this->assertSame(Payment::STATUS_CONFIRMED, $part->fresh()->status);
+    }
+
+    #[Test]
+    public function a_payment_part_is_labelled_by_its_account_or_method(): void
+    {
+        $this->place(2, [['payment_account_id' => $this->cbeOne->id, 'amount' => 300], ['amount' => 200]]);
+        [$deposit, $cash] = Sale::query()->sole()->payments()->orderBy('id')->get()->all();
+
+        $this->assertSame($this->cbeOne->label(), $deposit->label());
+        $this->assertSame(ucfirst(str_replace('_', ' ', (string) $cash->payment_method)), $cash->label());
+        $this->assertSame('On credit', (new Payment(['payment_method' => Payment::METHOD_CREDIT]))->label());
+        $this->assertFalse($cash->isConfirmed());
+    }
+
+    #[Test]
+    public function a_part_already_marked_paid_cannot_be_marked_again(): void
+    {
+        $this->place(1, [['payment_account_id' => $this->cbeOne->id, 'amount' => 250]]);
+        $sale = Sale::query()->sole();
+        $part = $sale->payments()->sole();
+
+        $this->claim($sale, $part)->assertSessionHas('success');
+        $this->claim($sale, $part->fresh())->assertSessionHas('error', 'Only a payment still waiting for the customer can be marked as paid.');
+    }
+
+    #[Test]
+    public function the_split_cannot_change_once_the_order_has_left_pick_and_pack(): void
+    {
+        $this->place(1, [['payment_account_id' => $this->cbeOne->id, 'amount' => 250]]);
+        $sale = Sale::query()->sole();
+        $sale->update(['fulfillment_stage' => Sale::STAGE_TO_DELIVER]);
+
+        $this->asSeller()
+            ->put(route('seller.orders.payments.update', ['reference' => $sale->reference_number]), ['parts' => [['amount' => 250]]])
+            ->assertSessionHas('error', "Order {$sale->reference_number} has left Pick & pack; its payment can no longer change.");
+        $this->assertSame($this->cbeOne->id, (int) $sale->payments()->sole()->payment_account_id);
+    }
+
+    #[Test]
+    public function every_part_needs_an_amount_above_zero(): void
+    {
+        $this->place(1, [['payment_account_id' => $this->cbeOne->id, 'amount' => 250], ['amount' => 0]]);
+
+        $this->assertSame(0, Sale::query()->count());
+    }
+
     private function place(int $quantity, array $parts): \Illuminate\Testing\TestResponse
     {
         return $this->asSeller()->post(route('seller.orders.store'), ['cart_id' => $this->cart($quantity)->id, 'parts' => $parts]);

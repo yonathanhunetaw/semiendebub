@@ -1,4 +1,4 @@
-import { Head, Link, useForm } from "@inertiajs/react";
+import { Head, Link, router, useForm } from "@inertiajs/react";
 import DevicesRoundedIcon from "@mui/icons-material/DevicesRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import {
@@ -166,10 +166,7 @@ export default function Profile({
                     </Button>
                     <Divider />
                     <Button
-                        component={Link}
-                        href={route("logout")}
-                        method="post"
-                        as="button"
+                        onClick={() => router.post(route("logout"))}
                         color="error"
                         startIcon={<LogoutRoundedIcon />}
                         fullWidth

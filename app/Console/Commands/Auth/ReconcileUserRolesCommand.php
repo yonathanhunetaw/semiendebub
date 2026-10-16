@@ -77,9 +77,14 @@ class ReconcileUserRolesCommand extends Command
                     continue;
                 }
 
-                // Write the column directly and let the model's saved hook mirror
-                // it onto the assignment, so there is one code path doing this.
+                // Write each side that is off. The model's saved hook only
+                // mirrors a column that changed, so a column that was already
+                // right but never assigned would otherwise stay unassigned.
                 $user->forceFill(['role' => $target])->save();
+
+                if ($assigned->count() !== 1 || $assigned->first() !== $target) {
+                    $user->syncRoles([$target]);
+                }
             }
         });
 

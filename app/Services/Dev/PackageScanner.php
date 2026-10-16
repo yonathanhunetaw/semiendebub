@@ -126,9 +126,10 @@ final class PackageScanner
 
         $packages = [];
 
+        // A package in both sections is installed for runtime; list it once, there.
         foreach (['require' => false, 'require-dev' => true] as $section => $isDev) {
             foreach ($manifest[$section] ?? [] as $name => $constraint) {
-                $packages[] = [
+                $packages[$name] ??= [
                     'name' => $name,
                     'constraint' => $constraint,
                     'version' => $resolved[$name] ?? null,
@@ -142,7 +143,7 @@ final class PackageScanner
             }
         }
 
-        return $packages;
+        return array_values($packages);
     }
 
     /**
@@ -157,7 +158,7 @@ final class PackageScanner
 
         foreach (['dependencies' => false, 'devDependencies' => true] as $section => $isDev) {
             foreach ($manifest[$section] ?? [] as $name => $constraint) {
-                $packages[] = [
+                $packages[$name] ??= [
                     'name' => $name,
                     'constraint' => $constraint,
                     'version' => $lock['packages']['node_modules/'.$name]['version'] ?? null,
@@ -169,7 +170,7 @@ final class PackageScanner
             }
         }
 
-        return $packages;
+        return array_values($packages);
     }
 
     private function groupFor(string $name, bool $isDev, string $registry): string

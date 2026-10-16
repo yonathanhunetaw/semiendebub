@@ -12,7 +12,7 @@ export default function AdminOrderCustody(props: CustodyProps): React.ReactEleme
 
     return (
         <>
-            <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderRadius: 4, border: "1px solid", borderColor: "divider", maxWidth: 1200, mx: "auto" }}>
+            <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderRadius: 2, border: "1px solid", borderColor: "divider", maxWidth: 1200, mx: "auto" }}>
                 <Typography sx={{ fontWeight: 800, mb: 2 }}>
                     Where {props.log?.reference ?? "this order"} is
                 </Typography>

@@ -103,7 +103,9 @@ class PaymentBoard
                 'order_total' => (float) ($payment->sale?->total_amount ?? $payment->amount),
                 'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? 'Walk-in customer',
                 'store' => $payment->sale?->store?->name ?? $payment->account?->store?->name,
-                'claimed_by' => $payment->claimer ? trim($payment->claimer->first_name.' '.$payment->claimer->last_name) : null,
+                'claimed_by' => $payment->claimer
+                    ? trim($payment->claimer->first_name.' '.$payment->claimer->last_name)
+                    : ($payment->claimed_via === Payment::CLAIMED_VIA_CUSTOMER ? 'The customer (shared cart)' : null),
             ])
             ->values()
             ->all();

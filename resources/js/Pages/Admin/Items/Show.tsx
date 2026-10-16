@@ -33,6 +33,7 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import KeyboardArrowLeftIcon from "@mui/icons-material/KeyboardArrowLeft";
 import StorefrontIcon from "@mui/icons-material/Storefront";
 import CloseIcon from "@mui/icons-material/Close";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 interface PackagingItem {
     name: string;
@@ -325,7 +326,7 @@ export default function Show({
     );
 
     return (
-        <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: "1440px", margin: "0 auto" }}>
+        <Box sx={ROOT}>
             <Head title={`Catalog: ${item.product_name}`} />
 
             <Stack

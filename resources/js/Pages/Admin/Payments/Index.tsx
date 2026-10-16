@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 import React from "react";
 import { dayDateTime } from "@/utils/dates";
+import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 
 interface PaymentRow {
     id: number;
@@ -84,7 +85,7 @@ export default function PaymentsIndex({ to_confirm = [], payments = [], today = 
     return (
         <>
             <Head title="Payments" />
-            <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1100, mx: "auto" }}>
+            <Box sx={ROOT}>
                 <Typography variant="h5" sx={{ fontWeight: 800 }}>
                     Payments
                 </Typography>
@@ -108,7 +109,7 @@ export default function PaymentsIndex({ to_confirm = [], payments = [], today = 
                     ))}
                 </Stack>
 
-                <Paper variant="outlined" sx={{ borderRadius: 3, overflowX: "auto" }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
                     <Table size="small">
                         <TableHead>
                             <TableRow>
@@ -212,7 +213,7 @@ function ConfirmInbox({ parts }: { parts: ToConfirm[] }): React.ReactElement | n
     };
 
     return (
-        <Paper variant="outlined" sx={{ borderRadius: 3, p: 2, mb: 3, borderColor: "warning.light" }}>
+        <Paper variant="outlined" sx={{ borderRadius: 2, p: 2, mb: 3, borderColor: "warning.light" }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
                 Waiting for you to confirm ({parts.length})
             </Typography>

@@ -88,4 +88,11 @@ test('refused at the door: returned to the depot, the order is cancelled and the
     await test.step('the unit is back in the store, nothing left with the courier', () => {
         expect(storeUnits()).toEqual(before);
     });
+
+    await test.step("it tops the courier's History as returned to the depot", async () => {
+        await courier.goto(app('delivery', '/history'));
+        const first = courier.getByText(/^(Delivered|Failed|Returned to the depot) /).first();
+        await expect(first).toHaveText(/^Returned to the depot /);
+        await expect(courier.getByText(reference).first()).toBeVisible();
+    });
 });

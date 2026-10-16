@@ -56,11 +56,12 @@ for (const manager of [fixture.manager.email, people.manager2.email]) {
     test(`store manager ${manager}: the seller app and the admin refill approvals, nothing else`, async () => {
         for (const app of apps) {
             const { to, client } = await login(app, manager);
-            // No app of their own: they stay where they signed in.
-            expect(to).toContain(`${host(app)}:${port}/dashboard`);
+            // No app of their own: they stay where they signed in; on admin, at the approvals.
+            expect(to).toContain(`${host(app)}:${port}${app === 'admin' ? '/inventory/replenishment' : '/dashboard'}`);
             expect((await client.get('/dashboard')).status(), `manager's dashboard on ${app}`).toBe(app === 'seller' ? 200 : 403);
             if (app === 'admin') {
                 expect((await client.get('/inventory/replenishment')).status(), 'refill approvals on admin').toBe(200);
+                expect((await client.get('/inventory/counts')).status(), 'count approvals on admin').toBe(200);
             }
             await client.dispose();
         }
