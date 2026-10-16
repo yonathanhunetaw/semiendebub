@@ -323,10 +323,30 @@ heartbeat_write() {
     # tunnel = the guard does not run on this node.
     local tunnel app; tunnel="$(state_get tunnel)"; app="$(state_get app_up)"
     [ "$app" = false ] || app=true
-    printf '{"ts":%s,"node":"%s","role":"%s","on_demand":%s,"commit":"%s","last_sha":"%s","in_sync":%s,"db_up":%s,"tunnel":"%s","app_up":%s}' \
-        "$(now_epoch)" "$NODE_NAME" "${NODE_ROLE:-}" "$ON_DEMAND" "$commit" "${mine:0:8}" "$insync" "$up" "$tunnel" "$app" \
+    # deploying = epoch the running deploy started (0 = none), see deploy_mark_start
+    printf '{"ts":%s,"node":"%s","role":"%s","on_demand":%s,"commit":"%s","last_sha":"%s","in_sync":%s,"db_up":%s,"tunnel":"%s","app_up":%s,"deploying":%s}' \
+        "$(now_epoch)" "$NODE_NAME" "${NODE_ROLE:-}" "$ON_DEMAND" "$commit" "${mine:0:8}" "$insync" "$up" "$tunnel" "$app" "$(deploying_since)" \
         | "$MC" pipe "$R2/nodes/${NODE_NAME}.json" >/dev/null 2>&1 || true
     return 0
+}
+
+# A deploy takes the app down for a minute or two. deploy.sh marks it, the heartbeat
+# carries it, and the tunnel guards do not count that downtime as "the node is down".
+# A mark older than DEPLOY_GRACE_SEC (default 1200) is ignored: a deploy that hangs or
+# dies without clearing it can only delay a failover by that long.
+deploying_since() {
+    local since; since="$(state_get deploying)"
+    case "$since" in ''|*[!0-9]*) echo 0; return 0 ;; esac
+    if [ $(( $(now_epoch) - since )) -lt "$(db_env DEPLOY_GRACE_SEC 1200)" ]; then echo "$since"; else echo 0; fi
+}
+
+# deploy_mark_start / deploy_mark_end: set or clear the mark and publish a heartbeat now,
+# so the other nodes see it at once (not at this node's next sync run)
+deploy_mark_start() { state_set deploying "$(now_epoch)"; deploy_mark_publish; }
+deploy_mark_end()   { state_set deploying ""; deploy_mark_publish; }
+deploy_mark_publish() {
+    [ -n "${MC:-}" ] || find_mc || return 0
+    heartbeat_write "$(json_get "$(r2_latest_info)" sha256)"
 }
 
 # db_table_counts: "table<TAB>rows" for every table (volatile ones excluded), for

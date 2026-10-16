@@ -111,6 +111,8 @@ heartbeat_of() {
     [ -n "$j" ] || return 0
     ts="$(json_get "$j" ts)"; case "$ts" in ''|*[!0-9]*) ts=0 ;; esac
     [ "$(json_get "$j" app_up)" = false ] && healthy=0
+    # a node in the middle of a deploy is not down, its app is restarting
+    case "$(json_get "$j" deploying)" in ''|0|*[!0-9]*) ;; *) healthy=1 ;; esac
     [ "$(json_get "$j" on_demand)" = true ] && [ "$(json_get "$j" db_up)" = false ] && healthy=0
     printf '%s %s %s' "$(( $(now_epoch) - ts ))" "$healthy" "$(json_get "$j" role)"
 }
@@ -132,7 +134,10 @@ esac
 find_mc || { log_every nomc 600 "mc (MinIO client) not found: changing nothing"; exit 0; }
 
 # Record the local app's health for the heartbeat: false only after two failed checks in a row.
-if app_answers; then state_set app_fail 0; state_set app_up true
+# During a deploy of this node the app is meant to be down: keep the last value.
+if [ "$(deploying_since)" != 0 ]; then
+    log_every deploying 300 "a deploy is running here: not counting the app as down"
+elif app_answers; then state_set app_fail 0; state_set app_up true
 else
     fails="$(state_get app_fail)"; fails=$(( ${fails:-0} + 1 )); state_set app_fail "$fails"
     [ "$fails" -ge 2 ] && state_set app_up false

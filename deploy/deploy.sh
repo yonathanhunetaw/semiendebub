@@ -743,8 +743,10 @@ compose_rm_services() {
 
 install_node_dependencies() {
     log_step "Installing Node dependencies from lock file..."
-    if ! run_logged exec_in_app npm install --no-audit --no-fund --loglevel=warn; then
-        log_error "npm install failed"
+    # npm ci installs exactly what package-lock.json says and never rewrites it. npm install
+    # rewrote it on the Pi, and that local change then blocked auto-deploy's fast-forward.
+    if ! run_logged exec_in_app npm ci --no-audit --no-fund --loglevel=warn; then
+        log_error "npm ci failed"
         return 1
     fi
 
@@ -853,6 +855,13 @@ run_migration_with_retry() {
 
 event_emit deploy_started info "$NODE_NAME started a deploy of $(git rev-parse --short HEAD 2>/dev/null)" \
     "{\"commit\":\"$(git rev-parse --short HEAD 2>/dev/null)\",\"env\":\"${APP_ENV:-}\"}"
+# While this deploy runs the app is down for a minute or two. Say so in the heartbeat,
+# so the tunnel guards do not read it as "this node is down" and fail over to a standby.
+if [ "$APP_ENV" = "production" ]; then
+    deploy_mark_start
+    # keep the exit code for on_exit, which reads it from \$?
+    trap 'rc=$?; deploy_mark_end; (exit $rc); on_exit' EXIT
+fi
 log_info "Options: force-build=$FORCE_BUILD  reset-db=$((1 - SKIP_DB_RESET))  restore-db=$RESTORE_DB  observability=$ENABLE_OBSERVABILITY"
 
 # =================================================================================================
@@ -1101,7 +1110,7 @@ fi
 
 if [ "$node_changes" -eq 1 ] || ! exec_in_app test -d node_modules; then
     if ! install_node_dependencies; then
-        step_failed 4 "npm install failed"
+        step_failed 4 "npm ci failed"
         exit 1
     fi
 else
