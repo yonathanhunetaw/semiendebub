@@ -267,6 +267,33 @@ class SystemStatusTest extends TestCase
     }
 
     #[Test]
+    public function a_node_that_is_deploying_is_marked_and_its_restarting_app_raises_no_error(): void
+    {
+        $this->store('primary.json', ['node' => 'ubuntu', 'ts' => self::NOW - 5, 'ttl' => 900, 'pinned' => false]);
+        $this->store('nodes/ubuntu.json', ['ts' => self::NOW - 10, 'node' => 'ubuntu', 'role' => 'primary', 'on_demand' => false, 'commit' => 'x', 'last_sha' => 'a', 'in_sync' => true, 'db_up' => true, 'tunnel' => 'on', 'app_up' => false, 'deploying' => self::NOW - 70]);
+
+        $snapshot = $this->snapshot();
+
+        $this->assertTrue($snapshot['nodes'][0]['deploying']);
+        $this->assertSame(70, $snapshot['nodes'][0]['deploying_age']);
+        $this->assertSame([], $snapshot['alerts']);
+    }
+
+    #[Test]
+    public function a_stale_deploy_mark_is_ignored_and_a_down_app_is_an_error_again(): void
+    {
+        $this->store('primary.json', ['node' => 'ubuntu', 'ts' => self::NOW - 5, 'ttl' => 900, 'pinned' => false]);
+        $this->store('nodes/ubuntu.json', ['ts' => self::NOW - 10, 'node' => 'ubuntu', 'role' => 'primary', 'on_demand' => false, 'commit' => 'x', 'last_sha' => 'a', 'in_sync' => true, 'db_up' => true, 'tunnel' => 'on', 'app_up' => false, 'deploying' => self::NOW - 5000]);
+        $this->store('nodes/pi.json', ['ts' => self::NOW - 10, 'node' => 'pi', 'role' => 'standby', 'on_demand' => false, 'commit' => 'x', 'last_sha' => 'a', 'in_sync' => true, 'db_up' => true, 'tunnel' => 'off', 'app_up' => true, 'deploying' => 0]);
+
+        $byName = collect($this->snapshot()['nodes'])->keyBy('name');
+
+        $this->assertFalse($byName['ubuntu']['deploying']);
+        $this->assertNull($byName['pi']['deploying_age']);
+        $this->assertStringContainsString("ubuntu's app does not answer", $this->snapshot()['alerts'][0]['message']);
+    }
+
+    #[Test]
     public function an_empty_bucket_and_broken_files_do_not_break_the_page(): void
     {
         $this->assertTrue($this->snapshot()['empty']);

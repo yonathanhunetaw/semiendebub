@@ -4,6 +4,7 @@ import { Alert, Box, Stack, Typography } from "@mui/material";
 
 import AdminLayout from "@/Layouts/AdminLayout";
 import { AlertList, DataLossPanel, LiveBanner, NodeCards, Timeline } from "@/Components/Admin/System/SystemParts";
+import HowItWorks from "@/Components/Admin/System/HowItWorks";
 import type { SystemStatusSnapshot } from "@/types/systemStatus";
 
 interface SystemStatusProps {
@@ -73,8 +74,10 @@ export default function Index({ configured = false, status = null, error = null 
                         <LiveBanner status={status} />
                         <AlertList alerts={status.alerts} />
 
+                        <HowItWorks status={status} />
+
                         <Section title="Servers" hint="Each server reports once a minute. A server that is off or on demand is not a problem.">
-                            <NodeCards nodes={status.nodes} youAre={status.this_node.name} />
+                            <NodeCards nodes={status.nodes} youAre={status.this_node.name} status={status} />
                         </Section>
 
                         <Section

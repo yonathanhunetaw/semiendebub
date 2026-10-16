@@ -1072,7 +1072,7 @@ if ! run_logged_quiet '(\.{5,} DONE$|looking for funding|composer fund)' exec_in
 fi
 
 # Sanity check: the S3 storage driver must be in vendor/ after the install above
-S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/src/PortableVisibilityConverter.php"
+S3_CONVERTER_FILE="vendor/league/flysystem-aws-s3-v3/PortableVisibilityConverter.php"
 if ! exec_in_app test -f "$S3_CONVERTER_FILE"; then
     log_warning "league/flysystem-aws-s3-v3 is not in vendor/: S3/R2 storage will not work"
 fi

@@ -25,6 +25,9 @@ class SystemStatus
 
     public const STALE_SECONDS = 900;
 
+    /** A deploy mark older than this is ignored, as the scripts do (DEPLOY_GRACE_SEC in deploy/db-lib.sh). */
+    public const DEPLOY_GRACE_SECONDS = 1200;
+
     public const EVENT_LIMIT = 80;
 
     private const DAYS_LISTED = 3;
@@ -129,6 +132,13 @@ class SystemStatus
 
             $name = (string) $beat['node'];
 
+            // From deploy/deploy.sh: the epoch its running deploy started, 0 = none.
+            $deploying = (int) ($beat['deploying'] ?? 0);
+            $deployingAge = $deploying > 0 ? max(0, $now - $deploying) : null;
+            if ($deployingAge !== null && $deployingAge >= self::DEPLOY_GRACE_SECONDS) {
+                $deployingAge = null;
+            }
+
             $out[] = [
                 'name' => $name,
                 'role' => (string) ($beat['role'] ?? ''),
@@ -139,6 +149,8 @@ class SystemStatus
                 // From docker/tunnel-guard.sh: 'on' / 'off', '' when the guard does not run there.
                 'tunnel' => in_array($beat['tunnel'] ?? '', ['on', 'off'], true) ? (string) $beat['tunnel'] : '',
                 'app_up' => (bool) ($beat['app_up'] ?? true),
+                'deploying' => $deployingAge !== null,
+                'deploying_age' => $deployingAge,
                 'last_seen_age' => $age,
                 'status' => $status,
                 'is_live' => $lease !== null && $lease['fresh'] && $lease['node'] === $name,
@@ -231,7 +243,8 @@ class SystemStatus
         }
 
         foreach ($nodes as $node) {
-            if ($node['status'] === 'online' && ! $node['app_up']) {
+            // A deploy restarts the app on purpose; the guards do not count that as down either.
+            if ($node['status'] === 'online' && ! $node['app_up'] && ! $node['deploying']) {
                 $alerts[] = ['level' => 'error', 'message' => "{$node['name']}'s app does not answer on its port."];
             }
         }

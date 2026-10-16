@@ -7,7 +7,7 @@ import InfoOutlined from "@mui/icons-material/InfoOutlined";
 import WarningAmberRounded from "@mui/icons-material/WarningAmberRounded";
 
 import type { DataReplacedData, EventLevel, NodeStatus, SystemEvent, SystemNode, SystemStatusSnapshot } from "@/types/systemStatus";
-import { EVENT_LABELS, ago, bytes, localTime } from "@/Components/Admin/System/systemFormat";
+import { EVENT_LABELS, ago, bytes, explainNode, localTime } from "@/Components/Admin/System/systemFormat";
 
 export const cardSx = { borderRadius: 3, border: "1px solid", borderColor: "divider", boxShadow: "none", p: 2 } as const;
 
@@ -81,7 +81,9 @@ export function AlertList({ alerts }: { alerts: SystemStatusSnapshot["alerts"] }
     );
 }
 
-export function NodeCards({ nodes, youAre }: { nodes: SystemNode[]; youAre: string }) {
+const explainColor = { ok: "text.primary", info: "info.main", warn: "warning.main", error: "error.main" } as const;
+
+export function NodeCards({ nodes, youAre, status }: { nodes: SystemNode[]; youAre: string; status: SystemStatusSnapshot }) {
     if (nodes.length === 0) {
         return <Typography color="text.secondary">No node has reported yet. Heartbeats appear once the sync job runs on each server.</Typography>;
     }
@@ -95,6 +97,7 @@ export function NodeCards({ nodes, youAre }: { nodes: SystemNode[]; youAre: stri
                         {n.is_live && <Chip size="small" color="success" label="LIVE" />}
                         {n.name === youAre && <Chip size="small" variant="outlined" label="you are here" />}
                         <Chip size="small" color={statusColor[n.status]} variant={n.status === "off" ? "outlined" : "filled"} label={statusLabel[n.status]} />
+                        {n.deploying && <Chip size="small" color="info" label="Deploying" />}
                     </Stack>
                     <Typography variant="body2" color="text.secondary">
                         {n.role || "no role"}
@@ -110,9 +113,19 @@ export function NodeCards({ nodes, youAre }: { nodes: SystemNode[]; youAre: stri
                         <Typography variant="body2" color={n.tunnel === "on" ? "success.main" : "text.secondary"}>
                             {n.tunnel === "" ? "Tunnel: not guarded" : n.tunnel === "on" ? "Tunnel: on (takes visitors)" : "Tunnel: off"}
                         </Typography>
-                        {!n.app_up && (
+                        {!n.app_up && !n.deploying && (
                             <Typography variant="body2" color="error.main">App not answering</Typography>
                         )}
+                    </Stack>
+                    <Stack spacing={0.5} sx={{ mt: 1.5, pt: 1.5, borderTop: "1px dashed", borderColor: "divider" }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.5 }}>
+                            RIGHT NOW
+                        </Typography>
+                        {explainNode(n, status).map((e, i) => (
+                            <Typography key={i} variant="body2" color={explainColor[e.level]}>
+                                {e.text}
+                            </Typography>
+                        ))}
                     </Stack>
                 </Card>
             ))}

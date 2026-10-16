@@ -24,6 +24,10 @@ export interface SystemNode {
     /** Its Cloudflare tunnel connector (docker/tunnel-guard.sh); "" = the guard does not run there. */
     tunnel: "on" | "off" | "";
     app_up: boolean;
+    /** A deploy is running there (deploy/deploy.sh marks it); the other servers will not take over. */
+    deploying: boolean;
+    /** Seconds since that deploy started, null when none. */
+    deploying_age: number | null;
     last_seen_age: number;
     status: NodeStatus;
     is_live: boolean;
