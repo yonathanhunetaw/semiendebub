@@ -7,6 +7,8 @@ namespace App\Http\Controllers\Admin\Inventory;
 use App\Http\Controllers\Controller;
 use App\Models\Fulfillment\Vehicle;
 use App\Services\ShipmentWorkflowService;
+use App\Services\Workforce\KeyCustodyService;
+use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use App\Http\Requests\Fleet\SaveVehicleRequest;
 use Inertia\Inertia;
@@ -21,7 +23,7 @@ use Inertia\Response;
  */
 class FleetController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request, KeyCustodyService $keys): Response
     {
         $open = [
             ShipmentWorkflowService::DRAFT,
@@ -47,6 +49,8 @@ class FleetController extends Controller
                     'status' => $v->status,
                     'notes' => $v->notes,
                     'open_runs' => (int) $v->open_runs,
+                    // The car's one key: who holds it, hand-over or give it (Work).
+                    'key' => $keys->present($key = $keys->keyFor($v), $request->user(), true) + ['receivers' => $keys->receivers($key)],
                 ])->values(),
         ]);
     }

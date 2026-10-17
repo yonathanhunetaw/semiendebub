@@ -46,15 +46,24 @@ class CanvasController extends Controller
             $canvases->push($canvas);
         }
 
-        // 1. Fetch the latest snapshot for the selected canvas
+        // 1. Fetch the latest saved version for the selected canvas
         $latestVersion = CanvasVersion::with('user:id,first_name,last_name')
             ->where('canvas_id', $canvas->id)
+            ->where('is_draft', false)
             ->orderByDesc('id')
             ->first();
+
+        // Your own autosave wins when it is newer than the last saved version.
+        $draft = CanvasVersion::where('canvas_id', $canvas->id)
+            ->where('user_id', $user->id)
+            ->where('is_draft', true)
+            ->first();
+        $draftIsAhead = $draft && (! $latestVersion || $draft->updated_at->gt($latestVersion->created_at));
 
         // 2. Fetch all historical metadata so the user can see a list of their saves
         $history = CanvasVersion::with('user:id,first_name,last_name')
             ->where('canvas_id', $canvas->id)
+            ->where('is_draft', false)
             ->orderByDesc('id')
             ->get(['id', 'user_id', 'comment', 'created_at']);
 
@@ -67,12 +76,14 @@ class CanvasController extends Controller
             'currentUserId' => $user->id,
             'allUsers' => $allUsers,
             'sharedUsers' => $sharedUsers,
-            'latestSnapshot' => $latestVersion ? $latestVersion->snapshot_json : null,
+            'latestSnapshot' => $draftIsAhead ? $draft->snapshot_json : $latestVersion?->snapshot_json,
             'latestVersionInfo' => $latestVersion ? [
                 'id' => $latestVersion->id,
                 'user' => $latestVersion->user,
                 'created_at' => $latestVersion->created_at,
             ] : null,
+            'draftSavedAt' => $draftIsAhead ? $draft->updated_at : null,
+            'canEdit' => $this->canEdit($canvas),
             'history' => $history
         ]);
     }
@@ -122,7 +133,7 @@ class CanvasController extends Controller
 
     public function getVersion($id)
     {
-        $version = CanvasVersion::findOrFail($id);
+        $version = CanvasVersion::where('is_draft', false)->findOrFail($id);
         abort_unless($this->visibleCanvases()->whereKey($version->canvas_id)->exists(), 404);
 
         return response()->json($version->snapshot_json);
@@ -133,23 +144,94 @@ class CanvasController extends Controller
         $request->validate([
             'canvas_id' => 'required|exists:canvases,id',
             'snapshot_json' => 'required|array',
-            'comment' => 'nullable|string|max:255',
+            'comment' => 'required|string|max:60',
         ]);
 
-        abort_unless($this->visibleCanvases()->whereKey($request->canvas_id)->exists(), 404);
+        $canvas = $this->editableCanvas((int) $request->canvas_id);
 
         $version = CanvasVersion::create([
-            'canvas_id' => $request->canvas_id,
+            'canvas_id' => $canvas->id,
             'user_id' => Auth::id(),
             'snapshot_json' => $request->snapshot_json,
             'status' => 'pending',
-            'comment' => $request->input('comment', 'Submitted for review'),
+            'comment' => $request->comment,
         ]);
+
+        // The version now holds everything the draft did.
+        $this->draftsOf($canvas)->delete();
 
         return response()->json([
             'message' => 'Canvas saved for review!',
             'version_id' => $version->id
         ]);
+    }
+
+    /** Rewrites the caller's one draft row for this canvas; never touches the history. */
+    public function autosave(Request $request)
+    {
+        $request->validate([
+            'canvas_id' => 'required|exists:canvases,id',
+            'snapshot_json' => 'required|array',
+        ]);
+
+        $canvas = $this->editableCanvas((int) $request->canvas_id);
+
+        $draft = $this->draftsOf($canvas)->first() ?? new CanvasVersion([
+            'canvas_id' => $canvas->id,
+            'user_id' => Auth::id(),
+            'status' => 'draft',
+            'comment' => 'Autosave',
+            'is_draft' => true,
+        ]);
+        $draft->snapshot_json = $request->snapshot_json;
+        $draft->save();
+        $draft->touch();
+
+        return response()->json(['saved_at' => $draft->updated_at]);
+    }
+
+    /** Puts an older version back as a new one on top, so nothing is lost. */
+    public function restore($id)
+    {
+        $old = CanvasVersion::where('is_draft', false)->findOrFail($id);
+        $canvas = $this->editableCanvas((int) $old->canvas_id);
+
+        $version = CanvasVersion::create([
+            'canvas_id' => $canvas->id,
+            'user_id' => Auth::id(),
+            'snapshot_json' => $old->snapshot_json,
+            'status' => 'pending',
+            'comment' => mb_substr('Restored: ' . ($old->comment ?: 'earlier version'), 0, 60),
+        ]);
+        $this->draftsOf($canvas)->delete();
+
+        return response()->json([
+            'version_id' => $version->id,
+            'comment' => $version->comment,
+            'snapshot_json' => $version->snapshot_json,
+        ]);
+    }
+
+    private function draftsOf(Canvas $canvas)
+    {
+        return CanvasVersion::where('canvas_id', $canvas->id)
+            ->where('user_id', Auth::id())
+            ->where('is_draft', true);
+    }
+
+    /** The owner, or someone it was shared with as an editor. */
+    private function canEdit(Canvas $canvas): bool
+    {
+        return (int) $canvas->user_id === (int) Auth::id()
+            || $canvas->shares()->where('users.id', Auth::id())->wherePivot('permission', 'edit')->exists();
+    }
+
+    private function editableCanvas(int $id): Canvas
+    {
+        $canvas = $this->visibleCanvases()->findOrFail($id);
+        abort_unless($this->canEdit($canvas), 403, 'This canvas is view only for you.');
+
+        return $canvas;
     }
 
     /** The user's own and shared canvases, inside the stores they reach. */

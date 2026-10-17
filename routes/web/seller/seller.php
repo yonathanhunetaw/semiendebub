@@ -49,6 +49,8 @@ Route::domain("seller.$baseDomain")
             Route::get('/guide/world', \App\Http\Controllers\Shared\GuideWorldController::class)->name('guide.world');
             // The calendar: module dates + reminders and bills (shared with the other apps).
             require base_path('routes/web/partials/calendar.php');
+            // Keys, sites, opening/closing, shifts and clock-in (shared with the other apps).
+            require base_path('routes/web/partials/work.php');
             Route::get('/menu', [MenuController::class, 'index'])->name('menu.index');
             /*
              * The seller order pipeline (to pay → paid → pick & pack → to

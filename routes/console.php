@@ -42,3 +42,18 @@ Schedule::command('stock:release-stale-reservations')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->onOneServer();
+
+/*
+|--------------------------------------------------------------------------
+| Sites: opening on time
+|--------------------------------------------------------------------------
+|
+| Openings not done by the opening time plus the site's grace are marked
+| missed, for the managers' bell. See App\Services\Workforce\SiteDayService.
+|
+*/
+
+Schedule::command('sites:sweep')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();

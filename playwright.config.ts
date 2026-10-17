@@ -9,6 +9,8 @@ const port = process.env.E2E_PORT ?? '8096';
 
 export default defineConfig({
     testDir: './e2e',
+    // make walkthrough runs these on the real dev database, never with make e2e.
+    testIgnore: 'walkthrough/**',
     // Vite dev compiles on first hit; a cold page can take 30s+.
     timeout: 90_000,
     expect: { timeout: 15_000 },

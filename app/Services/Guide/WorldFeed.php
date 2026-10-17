@@ -10,6 +10,8 @@ use App\Models\Finance\Sale;
 use App\Models\Inventory\RefillRequest;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Inventory\StockLocation;
+use App\Models\Inventory\Stocktake;
+use App\Models\StockKeeper\Transfer;
 use App\Services\Inventory\ShelfMatrix;
 use App\Services\Inventory\StockLocationTree;
 use App\Services\ShipmentWorkflowService;
@@ -137,6 +139,130 @@ class WorldFeed
             ->map(fn (Sale $sale): array => $this->presentOrder($sale))
             ->values()
             ->all();
+    }
+
+    /**
+     * Things that happened in the Main Store's places that are not a shipment,
+     * a refill or an order, as ready-made events (no card of their own):
+     * transfers a keeper raised by hand, and stocktakes.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function events(CarbonImmutable $from, CarbonImmutable $to, User $viewer): array
+    {
+        if ($this->mainStoreFor($viewer) === null) {
+            return [];
+        }
+
+        return array_values(array_merge($this->transferEvents($from, $to), $this->countEvents($from, $to)));
+    }
+
+    /**
+     * Transfers not tied to a refill (those replay as the refill): raised,
+     * handed to the courier, handed over, received.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function transferEvents(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $refillTransfers = RefillRequest::query()->whereNotNull('transfer_id')->select('transfer_id');
+        $mainStoreId = $this->mainStoreId();
+        $out = [];
+
+        Transfer::query()
+            ->with(['itemVariant.item:id,product_name', 'initiator:id,first_name,last_name', 'courier:id,first_name,last_name'])
+            ->whereNotIn('id', $refillTransfers)
+            ->where('created_at', '<=', $to)
+            ->where(fn ($q) => $q->whereNull('completed_at')->orWhere('completed_at', '>=', $from))
+            ->where(fn ($q) => $q->whereNull('cancelled_at')->orWhere('cancelled_at', '>=', $from))
+            ->orderBy('created_at')
+            ->limit(300)
+            ->get()
+            ->each(function (Transfer $t) use (&$out, $mainStoreId): void {
+                $origin = $this->transferPlace($t->source_location_type, $t->source_location_id, $mainStoreId);
+                $destination = $this->transferPlace($t->destination_location_type, $t->destination_location_id, $mainStoreId);
+                if ($origin === null && $destination === null) {
+                    return;
+                }
+
+                $detail = $t->quantity.' × '.($t->itemVariant?->item?->product_name ?? 'item');
+                $emit = function (string $step, mixed $at, string $what, ?string $where, string $who, array $extra = []) use (&$out, $t, $detail): void {
+                    if ($at !== null) {
+                        $out[] = ['key' => "transfer-{$t->id}-{$step}", 'at' => $at->toIso8601String(), 'kind' => 'transfer', 'subject' => (int) $t->id,
+                            'reference' => (string) $t->reference, 'what' => $what, 'detail' => $detail, 'where' => $where, 'who' => $who] + $extra;
+                    }
+                };
+
+                $emit('raised', $t->created_at, 'A transfer is raised'.($t->initiator ? ' by '.trim($t->initiator->first_name.' '.$t->initiator->last_name) : ''), $origin, 'stock_keeper');
+                $emit('dispatched', $t->dispatched_at, $t->courier_id !== null ? 'Handed to the courier' : 'Sent', $origin, 'stock_keeper');
+                $emit('handed', $t->handed_over_at, 'The courier hands it over', $destination, 'delivery');
+                $emit('completed', $t->completed_at, 'Received: it lands', $destination, 'stock_keeper', ['final' => true]);
+                $emit('cancelled', $t->cancelled_at, 'Transfer cancelled', $origin, 'stock_keeper', ['final' => true, 'bad' => true]);
+            });
+
+        return $out;
+    }
+
+    /**
+     * Stocktakes of the Main Store's places: submitted, then posted (adjustments
+     * booked by someone else) or voided.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function countEvents(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $mainStoreId = $this->mainStoreId();
+        $out = [];
+
+        Stocktake::query()
+            ->with('location')
+            ->withCount('lines')
+            ->where('created_at', '<=', $to)
+            ->where(fn ($q) => $q->whereNull('posted_at')->orWhere('posted_at', '>=', $from))
+            ->where(fn ($q) => $q->whereNull('voided_at')->orWhere('voided_at', '>=', $from))
+            ->orderBy('created_at')
+            ->limit(300)
+            ->get()
+            ->each(function (Stocktake $s) use (&$out, $mainStoreId): void {
+                $where = $this->placeKey($s->location, $mainStoreId);
+                if ($where === null) {
+                    return;
+                }
+
+                $detail = ($s->location?->name ?? 'A place').' · '.$s->lines_count.' '.($s->lines_count === 1 ? 'line' : 'lines');
+                $emit = function (string $step, mixed $at, string $what, string $who, array $extra = []) use (&$out, $s, $where, $detail): void {
+                    if ($at !== null) {
+                        $out[] = ['key' => "count-{$s->id}-{$step}", 'at' => $at->toIso8601String(), 'kind' => 'count', 'subject' => (int) $s->id,
+                            'reference' => (string) $s->reference, 'what' => $what, 'detail' => $detail, 'where' => $where, 'who' => $who] + $extra;
+                    }
+                };
+
+                $emit('started', $s->created_at, 'A count starts', 'stock_keeper');
+                $emit('submitted', $s->submitted_at, 'The count is submitted for approval', 'stock_keeper');
+                $emit('posted', $s->posted_at, 'Approved by a second person: adjustments booked', 'store_manager', ['final' => true]);
+                $emit('voided', $s->voided_at, 'The count is voided', 'store_manager', ['final' => true, 'bad' => true]);
+            });
+
+        return $out;
+    }
+
+    private function mainStoreId(): ?int
+    {
+        $id = StockLocation::query()->where('kind', StockLocation::KIND_STORE)->where('name', self::MAIN_STORE)->value('store_id');
+
+        return $id === null ? null : (int) $id;
+    }
+
+    /** The world place a transfer endpoint (legacy morph or location id) stands for. */
+    private function transferPlace(?string $type, ?int $id, ?int $mainStoreId): ?string
+    {
+        if ($type === null || $id === null) {
+            return null;
+        }
+
+        $leaf = $this->tree->leafIdFor($type, $id);
+
+        return $leaf === null ? null : $this->placeKey(StockLocation::query()->find($leaf), $mainStoreId);
     }
 
     /** @return array<string, mixed> */

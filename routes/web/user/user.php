@@ -118,3 +118,11 @@ Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
         Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
     });
 });
+/*
+ * The counter QR's URL (App\Services\Workforce\CounterQr::url). It is on the
+ * root domain because sellers and stock keepers sign in to different apps;
+ * the page sends the phone on to `{app}.work.clock` and remembers the choice.
+ */
+Route::get('/clock/{site}/{token}', \App\Http\Controllers\Shared\Work\ClockRelayController::class)
+    ->whereNumber('site')
+    ->name('clock.relay');

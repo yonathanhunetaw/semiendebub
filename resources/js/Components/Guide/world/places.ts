@@ -49,37 +49,26 @@ export interface Place {
 }
 
 /**
- * The Main Store, 12 × 8 m and 3.5 m high, open-topped so you can see in. The
- * 2 m main door is in the south wall, 4 m from the west wall, and the 4 m
- * counter stands straight in from it. Shelving runs floor to ceiling along the
- * west, north and east walls and two rows high along the south wall, over the
- * door: 200 bins, 4 tiers of 50. The strip under the lowest shelf, and the
- * open floor either side of the counter, are the Store Floor.
+ * The Main Store, 6 × 6 m and 3.5 m high (the real shop measures about 6.05 ×
+ * 6.8 m), open-topped so you can see in. The 2 m main door is in the south
+ * wall, 3.6 m from the west wall, 2.1 m high. The counter stands on the right
+ * as you walk in, against the east wall, 3.2 m long; a metal divider is fixed to
+ * the front wall at the door's west edge. The racking is in storeLayout.ts:
+ * floor to ceiling on the left and back walls, hanging from the ceiling on the
+ * right wall and over the door, all 50 cm deep. The open floor between the
+ * racks and the counter is the Store Floor.
  */
 export const STORE = {
     label: "Main Store",
-    position: [20, 8] as [number, number],
-    size: [12, 8] as [number, number],
+    position: [20, 9] as [number, number],
+    size: [6, 6] as [number, number],
     wall: 3.5,
-    door: { at: 4, width: 2, height: 2.8 },
-    shelfDepth: 0.45,
+    door: { at: 3.6, width: 2, height: 2.1 },
+    shelfDepth: 0.5,
     /** Height of the floor strip under the lowest shelf. */
     plinth: 0.5,
-    counter: { width: 4, depth: 0.8, height: 1, z: 0 },
+    counter: { width: 3.2, depth: 0.8, height: 1, z: 0 },
 };
-
-/**
- * The shelf's four tiers, in order: which wall, and how its 50 bins lie. Seen
- * from inside, facing the wall, A is on the left and 1 at the top. The south
- * tier is two rows over the door: rows 1–5 in the top band, 6–10 below, each
- * row's A–E side by side.
- */
-export const SHELF_TIERS: Array<{ wall: "west" | "north" | "east" | "south"; label: string }> = [
-    { wall: "west", label: "Tier 1 · west wall" },
-    { wall: "north", label: "Tier 2 · back wall" },
-    { wall: "east", label: "Tier 3 · east wall" },
-    { wall: "south", label: "Tier 4 · over the door" },
-];
 
 /** The fenced yard, as a polygon of [x, z] corners, and the double swing gate in its east fence. */
 export const COMPOUND = {
@@ -134,36 +123,36 @@ export const PLACES: Place[] = [
     {
         key: "store_shelf",
         label: "Store Shelf",
-        does: "200 bins on the walls, floor to ceiling: 4 tiers of 50, A–E across, 1–10 down.",
-        happens: ["Each item has its own bin, with a max, a refill line and a critical line", "A bin at the refill line raises a refill from the floor", "Tap a bin to see what is in it and how full it is"],
-        position: [20, 8],
-        size: [12, 8],
+        does: "The steel racking, 50 cm deep. Left wall a–c and back wall d–h, six rows from the floor up; right wall i–k and front wall l–o, three rows hanging from the ceiling.",
+        happens: ["Each physical spot (like f6) carries up to four spots of the seller's shelf, named f6a to f6d once placed", "A seller-shelf spot at its refill line raises a refill from the floor", "Tap a spot to see what is on it"],
+        position: [20, 9],
+        size: [6, 6],
         shape: "shelves",
         indoor: true,
-        labelAt: [0, 4.6, -3.6],
+        labelAt: [0, 4.6, -2.6],
         roles: ["stock_keeper", "store_manager"],
         chapters: ["stock_keeper", "seller"],
     },
     {
         key: "store_floor",
         label: "Store Floor",
-        does: "The floor under the lowest shelves and either side of the counter: boxes and cartons not yet on a shelf.",
+        does: "The open floor between the racks and the counter: boxes and cartons not yet on a shelf.",
         happens: ["Receive shipments and transfers", "Refill the shelf: no approval needed", "Pick & pack orders for delivery"],
-        position: [20, 8],
-        size: [12, 8],
+        position: [20, 9],
+        size: [6, 6],
         shape: "floor",
         indoor: true,
-        labelAt: [-5, 2.6, -1],
+        labelAt: [-2, 2.6, -0.5],
         roles: ["stock_keeper"],
         chapters: ["stock_keeper"],
     },
     {
         key: "store_counter",
         label: "Counter",
-        does: "The 4 m counter straight in from the door. Sales happen here.",
+        does: "The 3.2 m counter on the right as you walk in, against the east wall. Sales happen here.",
         happens: ["The customer asks; the seller finds the item on the shelf", "The seller builds the cart and checks out", "Payment is confirmed by a second person", "In-store orders are handed over here"],
-        position: [18, 8],
-        size: [4, 0.8],
+        position: [20.9, 9],
+        size: [3.2, 0.8],
         shape: "counter",
         indoor: true,
         roles: ["seller", "customer"],
@@ -227,7 +216,7 @@ export const PARKING: Partial<Record<PlaceKey, [number, number]>> = {
 
 /** Where unloaded goods are set down: just outside the door they go in by. */
 export const DROP: Partial<Record<PlaceKey, [number, number]>> = {
-    store_floor: [18, 13],
+    store_floor: [20.6, 13],
     remote_hub: [22, -2.1],
 };
 

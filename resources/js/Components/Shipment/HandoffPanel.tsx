@@ -286,6 +286,13 @@ export default function HandoffPanel({
                             </Alert>
                         ) : null}
 
+                        {can("courier_start") && handoff.vehicle_key && !handoff.vehicle_key.driver_holds ? (
+                            <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                                {handoff.vehicle_key.holder
+                                    ? `${handoff.vehicle_key.holder} holds the ${handoff.vehicle_key.label}. Get it handed to you in Keys first.`
+                                    : `Nobody holds the ${handoff.vehicle_key.label} yet. Ask an admin to give it to you.`}
+                            </Alert>
+                        ) : null}
                         {can("courier_start") ? (
                             <Button
                                 variant="contained"

@@ -29,6 +29,7 @@ import Store from "@mui/icons-material/Store";
 import Storefront from "@mui/icons-material/Storefront";
 import SwapHoriz from "@mui/icons-material/SwapHoriz";
 import Tune from "@mui/icons-material/Tune";
+import VpnKey from "@mui/icons-material/VpnKey";
 import Warehouse from "@mui/icons-material/Warehouse";
 import type { AdminNavCounts } from "@/types/adminScope";
 
@@ -87,6 +88,8 @@ export const ADMIN_NAV: AdminNavItem[] = [
     { key: "payments", label: "Payments", icon: Payments, route: "admin.payments.index", scope: "store", match: ["/payments", "/payment-accounts", "/balances"] },
     { key: "deliveries", label: "Delivery", icon: LocalShipping, route: "admin.deliveries.index", scope: "store", match: ["/deliveries"], badge: "deliveries" },
     { key: "calendar", label: "Calendar", icon: CalendarMonth, route: "admin.calendar", scope: "store", match: ["/calendar"] },
+    // Sites: hours, keys, opening/closing, shifts and clock-in (Pages/Work/*).
+    { key: "work", label: "Sites & keys", icon: VpnKey, route: "admin.work.sites.index", scope: "store", match: ["/work"] },
     { key: "purchase-orders", label: "Purchase Orders", icon: ReceiptLong, route: "admin.purchase_orders.index", scope: "global", match: ["/purchase-orders"] },
     { key: "supplier-payments", label: "Supplier Payments", icon: PendingActions, route: "admin.supplier_payments.index", scope: "global", match: ["/supplier-payments"] },
     { key: "canvas", label: "White Board", icon: Draw, route: "admin.canvas.index", scope: "store", match: ["/canvas"], external: true, newTab: true },

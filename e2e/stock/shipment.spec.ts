@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { unitsAt } from '../lib/inspect';
+import { checkAll, sign, tomorrowAtTen } from '../lib/shipments';
 import { app, fixture, signIn } from '../lib/support';
 
 /**
@@ -14,39 +15,6 @@ import { app, fixture, signIn } from '../lib/support';
  *   store keeper    checks the goods and signs them in  → received
  */
 const quantity = 3;
-
-/** Tomorrow at 10:00, as the datetime-local input wants it. */
-function tomorrowAtTen(): string {
-    const d = new Date(Date.now() + 24 * 3600 * 1000);
-    const pad = (n: number) => String(n).padStart(2, '0');
-
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00`;
-}
-
-/** The signature dialogs: scribble on the canvas, then confirm. */
-async function sign(page: Page, confirm: RegExp): Promise<void> {
-    const dialog = page.getByRole('dialog');
-    const pad = dialog.locator('canvas');
-    await expect(pad).toBeVisible();
-    const box = (await pad.boundingBox())!;
-    await page.mouse.move(box.x + 20, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2, box.y + 15, { steps: 8 });
-    await page.mouse.move(box.x + box.width - 20, box.y + box.height - 15, { steps: 8 });
-    await page.mouse.up();
-    await dialog.getByRole('button', { name: confirm }).click();
-    await expect(dialog).toBeHidden();
-}
-
-/** The "check" dialogs: tick every line, then confirm it is all there. */
-async function checkAll(page: Page): Promise<void> {
-    const dialog = page.getByRole('dialog');
-    for (const line of await dialog.getByRole('checkbox').all()) {
-        await line.click();
-    }
-    await dialog.getByRole('button', { name: 'All counted' }).click();
-    await expect(dialog).toBeHidden();
-}
 
 test('shipment Hub A → Remote Hub: agreed by all four, picked, carried and signed in', async ({ browser }) => {
     test.setTimeout(180_000);

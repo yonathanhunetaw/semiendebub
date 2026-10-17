@@ -9,7 +9,10 @@ import type { WorldOrder, WorldRefill, WorldShipment } from "./replay";
  * these one at a time; the world flies to each and lights the spot up.
  */
 
-export type EventKind = "shipment" | "order" | "refill";
+export type EventKind = "shipment" | "order" | "refill" | "transfer" | "count";
+
+/** The kinds with a card of their own (the rest are events only). */
+export const CARD_KINDS: EventKind[] = ["shipment", "order", "refill"];
 
 export interface WorldEvent {
     /** Unique within a day's list: kind, subject and step. */
@@ -34,19 +37,25 @@ export const KIND_LABEL: Record<EventKind, string> = {
     shipment: "Shipment",
     order: "Order",
     refill: "Refill",
+    transfer: "Transfer",
+    count: "Count",
 };
 
 export const KIND_PLURAL: Record<EventKind, string> = {
     shipment: "Shipments",
     order: "Orders",
     refill: "Refills",
+    transfer: "Transfers",
+    count: "Counts",
 };
 
 /** The palette colour each kind of event wears. */
-export const KIND_COLOR: Record<EventKind, "warning" | "success" | "info"> = {
+export const KIND_COLOR: Record<EventKind, "warning" | "success" | "info" | "primary" | "secondary"> = {
     shipment: "warning",
     order: "success",
     refill: "info",
+    transfer: "primary",
+    count: "secondary",
 };
 
 const ms = (iso: string | null | undefined): number | null => (iso ? Date.parse(iso) : null);
@@ -135,11 +144,14 @@ function refillEventsOf(r: WorldRefill): WorldEvent[] {
     return out;
 }
 
-const KIND_ORDER: Record<EventKind, number> = { shipment: 0, refill: 1, order: 2 };
+const KIND_ORDER: Record<EventKind, number> = { shipment: 0, transfer: 1, refill: 2, count: 3, order: 4 };
 
-/** Every event of the day's shipments, orders and refills, oldest first. */
-export function buildEvents(shipments: WorldShipment[], orders: WorldOrder[], refills: WorldRefill[]): WorldEvent[] {
-    return [...shipments.flatMap(shipmentEvents), ...orders.flatMap(orderEventsOf), ...refills.flatMap(refillEventsOf)]
+/** An event the server already built (transfers, counts): `at` arrives as an ISO time. */
+export type FeedEvent = Omit<WorldEvent, "at"> & { at: string };
+
+/** Every event of the day's shipments, orders, refills and server-built events, oldest first. */
+export function buildEvents(shipments: WorldShipment[], orders: WorldOrder[], refills: WorldRefill[], fed: FeedEvent[] = []): WorldEvent[] {
+    return [...shipments.flatMap(shipmentEvents), ...orders.flatMap(orderEventsOf), ...refills.flatMap(refillEventsOf), ...fed.map((e) => ({ ...e, at: Date.parse(e.at) }))]
         .sort((a, b) => a.at - b.at || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
 }
 

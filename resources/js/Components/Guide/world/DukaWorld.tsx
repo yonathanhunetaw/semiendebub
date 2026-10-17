@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Box, Button, IconButton, Paper, Stack, Typography } from "@mui/material";
+import { Box, Button, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import CenterFocusStrongRounded from "@mui/icons-material/CenterFocusStrongRounded";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import { alpha, useTheme, type Theme } from "@mui/material/styles";
@@ -9,22 +9,22 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { identityFor } from "@/Components/Visual/identities";
 import type { GuideApp } from "@/Components/Guide/chapters";
-import BinCard, { type ShelfBin } from "./BinCard";
 import EventLog from "./EventLog";
 import JourneyCard from "./JourneyCard";
 import PlaceCard from "./PlaceCard";
+import SpotCard from "./SpotCard";
 import ShipmentCard from "./ShipmentCard";
 import Timeline, { PACE_MS, dayStart, isoDay, type Pace } from "./Timeline";
-import { KIND_COLOR, buildEvents, hhmm, lastBefore, type EventKind, type WorldEvent } from "./events";
+import { CARD_KINDS, KIND_COLOR, buildEvents, hhmm, lastBefore, type EventKind, type FeedEvent, type WorldEvent } from "./events";
 import {
-    COMPOUND, DROP, NEIGHBOUR, PARKING, PLACES, PLATFORM_BERTH, ROADS, SHELF_TIERS, STORE,
+    COMPOUND, DROP, NEIGHBOUR, PARKING, PLACES, PLATFORM_BERTH, ROADS, STORE,
     doorPosition, hubLayout, placeFor, vanRoute, type Place, type PlaceKey,
 } from "./places";
 import {
     ORDER_PHASE_LABEL, REFILL_PHASE_LABEL, orderStateAt, refillStateAt, stateAt,
     type WorldOrder, type WorldRefill, type WorldShipment,
 } from "./replay";
-import { binWorldPosition } from "./shelfGeometry";
+import { RACKS, rackFace, spotAt, type RackWall } from "./storeLayout";
 
 /**
  * Live Operations: the business as a working model, to scale (one unit is one
@@ -60,25 +60,29 @@ interface SceneApi {
     setOrders: (orders: WorldOrder[]) => void;
     setRefills: (refills: WorldRefill[]) => void;
     setTime: (t: number) => void;
-    /** The Main Store's 200 bins as they stand now, in ShelfMatrix order. */
-    setShelf: (bins: ShelfBin[]) => void;
+    /** Mark one spot of the racking ("f6"), or none. */
+    setSpot: (code: string | null) => void;
+    /** Stand inside the shop facing one wall of racking, as the seller does. */
+    viewWall: (wall: RackWall) => void;
+    /** Fly to the shop, the walls faded so you can see in. */
+    viewStore: () => void;
     /** Light up an event; `fly` takes the camera there. */
     highlight: (h: Highlight | null, fly: boolean) => void;
 }
 
 type Subject = { kind: EventKind; id: number };
 
-const ALL_KINDS: EventKind[] = ["shipment", "order", "refill"];
+const ALL_KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order"];
 const SITE_CENTER = new THREE.Vector3(-14, 0, 3);
 const SITE_BOUNDS = new THREE.Box3(new THREE.Vector3(-95, 0, -16), new THREE.Vector3(69, 8, 26));
 
 /** Where things wait on the store floor (west of the counter) and at the delivery bay, [x, z]. */
-const FLOOR_SPOT: [number, number] = [STORE.position[0] - 4.75, STORE.position[1] - 0.8];
+const FLOOR_SPOT: [number, number] = [STORE.position[0] - 0.9, STORE.position[1] - 0.8];
 const BAY_SPOT: [number, number] = [36, 0.5];
 /** A courier's ride from the delivery bay along the main road to the customers. */
 const ORDER_RIDE: Array<[number, number]> = [BAY_SPOT, [37, -3], [44, -2], [52, 2], [58, 4], [60, 6.5]];
 /** A refill carried from the Remote Hub's door, round the east side, in at the store's front door. */
-const REMOTE_CARRY: Array<[number, number]> = [[23, -2.5], [24.5, -0.8], [29, 0.5], [29.5, 8], [28.5, 14], [18, 14.5], [18, 11]];
+const REMOTE_CARRY: Array<[number, number]> = [[23, -2.5], [24.5, -0.8], [29, 0.5], [29.5, 8], [28.5, 14], [20.6, 14.5], [20.6, 11.5]];
 
 /** Story time per ms of animation when moving between events, and its bounds. */
 const TWEEN_MIN_MS = 500;
@@ -107,9 +111,9 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const [shipments, setShipments] = useState<WorldShipment[]>([]);
     const [orders, setOrders] = useState<WorldOrder[]>([]);
     const [refills, setRefills] = useState<WorldRefill[]>([]);
+    const [fed, setFed] = useState<FeedEvent[]>([]);
     const [busyDays, setBusyDays] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
-    const [shelf, setShelf] = useState<ShelfBin[]>([]);
 
     // The replay: the moment shown, the event it belongs to, and how we move.
     const [time, setTime] = useState(() => (linked.day && linked.day !== isoDay(new Date()) ? dayStart(linked.day) : Date.now()));
@@ -122,18 +126,19 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const [arrivals, setArrivals] = useState(0);
 
     // What is open: a bin, a shipment/order/refill, or a place; and the list.
-    const [bin, setBin] = useState<number | null>(null);
+    const [spot, setSpot] = useState<string | null>(null);
+    const [wallView, setWallView] = useState<RackWall | null>(null);
     const [focused, setFocused] = useState<Subject | null>(null);
     const [logOpen, setLogOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 900);
 
     const isToday = day === isoDay(new Date());
     const start = dayStart(day);
 
-    const allEvents = useMemo(() => buildEvents(shipments, orders, refills), [shipments, orders, refills]);
+    const allEvents = useMemo(() => buildEvents(shipments, orders, refills, fed), [shipments, orders, refills, fed]);
     const dayEvents = useMemo(() => allEvents.filter((e) => e.at >= start && e.at < start + 86_400_000), [allEvents, start]);
     const events = useMemo(() => dayEvents.filter((e) => kinds.includes(e.kind)), [dayEvents, kinds]);
     const counts = useMemo(() => {
-        const c: Record<EventKind, number> = { shipment: 0, order: 0, refill: 0 };
+        const c: Record<EventKind, number> = { shipment: 0, order: 0, refill: 0, transfer: 0, count: 0 };
         dayEvents.forEach((e) => c[e.kind]++);
         return c;
     }, [dayEvents]);
@@ -156,15 +161,19 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         if (!mount) return;
         const built = buildWorld(mount, theme, (key) => {
             setFocused(null);
-            setBin(null);
+            setSpot(null);
+            setWallView(null);
             setSelected(key);
-        }, (index) => {
+        }, (code) => {
             setFocused(null);
             setSelected(null);
-            setBin(index);
-        }, () => setFollow(false), (kind, id) => {
+            setSpot(code);
+        }, () => {
+            setFollow(false);
+            setWallView(null);
+        }, (kind, id) => {
             setSelected(null);
-            setBin(null);
+            setSpot(null);
             setFocused({ kind, id });
         });
         if (!built) {
@@ -183,8 +192,9 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     useEffect(() => apiRef.current?.setShipments(shipments), [shipments, theme.palette.mode]);
     useEffect(() => apiRef.current?.setOrders(orders), [orders, theme.palette.mode]);
     useEffect(() => apiRef.current?.setRefills(refills), [refills, theme.palette.mode]);
-    useEffect(() => apiRef.current?.setShelf(shelf), [shelf, theme.palette.mode]);
-    useEffect(() => apiRef.current?.setTime(time), [time, shipments, orders, refills, shelf, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setSpot(spot), [spot, theme.palette.mode]);
+    useEffect(() => { if (wallView) apiRef.current?.viewWall(wallView); }, [wallView, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setTime(time), [time, shipments, orders, refills, theme.palette.mode]);
 
     // Light up the current event; fly there while the camera follows.
     useEffect(() => {
@@ -206,15 +216,15 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const load = useCallback(async (which: string) => {
         setLoading(true);
         try {
-            const url = route(`${app}.guide.world`, { from: which, to: which, shelf: 1 });
+            const url = route(`${app}.guide.world`, { from: which, to: which });
             const response = await fetch(url, { headers: { Accept: "application/json" }, credentials: "same-origin" });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = (await response.json()) as { shipments: WorldShipment[]; orders?: WorldOrder[]; refills?: WorldRefill[]; days: string[]; shelf?: ShelfBin[] };
+            const data = (await response.json()) as { shipments: WorldShipment[]; orders?: WorldOrder[]; refills?: WorldRefill[]; events?: FeedEvent[]; days: string[] };
             setShipments(data.shipments);
             setOrders(data.orders ?? []);
             setRefills(data.refills ?? []);
+            setFed(data.events ?? []);
             setBusyDays(data.days);
-            setShelf(data.shelf ?? []);
             setLoadedDay(which);
         } catch (error) {
             console.warn("Live Operations: could not load the day.", error);
@@ -377,8 +387,10 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     };
 
     const openSubject = (event: WorldEvent) => {
+        // Transfers and counts have no card: they light up their place on the timeline only.
+        if (!CARD_KINDS.includes(event.kind)) return;
         setSelected(null);
-        setBin(null);
+        setSpot(null);
         setFocused({ kind: event.kind, id: event.subject });
     };
 
@@ -432,8 +444,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const currentKey = current?.key ?? null;
 
     let card: React.ReactNode = null;
-    if (bin !== null) {
-        card = <BinCard index={bin} bin={shelf[bin] ?? null} onClose={() => setBin(null)} />;
+    if (spot !== null) {
+        card = <SpotCard code={spot} onClose={() => setSpot(null)} />;
     } else if (focusedShipment) {
         card = <ShipmentCard shipment={focusedShipment} time={time} events={subjectEvents} currentKey={currentKey} onEvent={jumpTo} onClose={() => setFocused(null)} />;
     } else if (focusedOrder) {
@@ -451,7 +463,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                 events={subjectEvents} currentKey={currentKey} time={time} onEvent={jumpTo} onClose={() => setFocused(null)} />
         );
     } else if (place) {
-        card = <PlaceCard place={place} onClose={() => setSelected(null)} onOpenChapter={onOpenChapter} events={placeEvents} time={time} currentKey={currentKey} onEvent={goTo} />;
+        card = <PlaceCard place={place} onClose={() => { setSelected(null); setWallView(null); }} onOpenChapter={onOpenChapter} events={placeEvents} time={time} currentKey={currentKey} onEvent={goTo} />;
     }
 
     // On document.body: a layout's page transition leaves a transform on the
@@ -553,11 +565,26 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     <Typography sx={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: { xs: "1rem", sm: "1.15rem" }, textShadow: `0 1px 0 ${theme.palette.background.paper}` }} noWrap>
                         Live Operations
                     </Typography>
-                    <IconButton onClick={() => { setSelected(null); setFocused(null); setFollow(false); apiRef.current?.home(); }} aria-label="See the whole site" title="See the whole site"
+                    <IconButton onClick={() => { setSelected(null); setFocused(null); setFollow(false); setWallView(null); apiRef.current?.home(); }} aria-label="See the whole site" title="See the whole site"
                         sx={{ pointerEvents: "auto", bgcolor: glass, boxShadow: 2, "&:hover": { bgcolor: "background.paper" } }}>
                         <CenterFocusStrongRounded />
                     </IconButton>
                 </Stack>
+
+                {/* In the shop: look at each wall of racks from where the seller stands. */}
+                {(wallView !== null || selected === "store_shelf" || selected === "store_floor" || selected === "store_counter") && (
+                    <Box sx={{ position: "absolute", top: { xs: 60, sm: 10 }, left: { xs: 8, sm: 230 }, maxWidth: "calc(100% - 16px)", flexWrap: "wrap", pointerEvents: "auto", display: "flex", alignItems: "center", gap: 1, p: 0.5, borderRadius: 999, bgcolor: glass, boxShadow: 3 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 800, pl: 1, display: { xs: "none", md: "block" } }}>See the racks from the seller's side</Typography>
+                        <ToggleButtonGroup size="small" exclusive value={wallView} onChange={(_, next: RackWall | null) => next && setWallView(next)} aria-label="Wall of racks">
+                            {RACKS.map((run) => (
+                                <ToggleButton key={run.wall} value={run.wall} sx={{ fontWeight: 800, px: 1.25, textTransform: "none" }} title={`${run.label}: ${run.columns[0]}–${run.columns[run.columns.length - 1]}`}>
+                                    {{ west: "Left", north: "Back", east: "Right", south: "Front" }[run.wall]} · {run.columns[0]}–{run.columns[run.columns.length - 1]}
+                                </ToggleButton>
+                            ))}
+                        </ToggleButtonGroup>
+                        <Button size="small" onClick={() => { setWallView(null); apiRef.current?.viewStore(); }} sx={{ borderRadius: 999, fontWeight: 800, textTransform: "none" }}>Whole shop</Button>
+                    </Box>
+                )}
 
                 <Box sx={{ flex: 1, minHeight: 0, display: "flex", gap: 1, alignItems: { xs: "flex-end", sm: "stretch" } }}>
                     {logOpen && (
@@ -634,7 +661,7 @@ function buildWorld(
     mount: HTMLDivElement,
     theme: Theme,
     onSelect: (key: PlaceKey | null) => void,
-    onBin: (index: number) => void,
+    onSpot: (code: string) => void,
     onUserMove: () => void,
     onSubject: (kind: EventKind, id: number) => void,
 ): { api: SceneApi; dispose: () => void } | null {
@@ -711,17 +738,11 @@ function buildWorld(
     const gate = addCompound(scene, wallTone, darkTone, padTone);
     scene.add(mesh(new THREE.BoxGeometry(NEIGHBOUR.size[0], NEIGHBOUR.height, NEIGHBOUR.size[1]), wallTone.clone().lerp(darkTone, 0.35), NEIGHBOUR.position[0], NEIGHBOUR.height / 2, NEIGHBOUR.position[1]));
     addRoads(scene, asphalt);
-    addStoreShell(scene, wallTone, toneOf("seller"), padTone);
-    const statusTone = {
-        ok: theme.palette.success.main,
-        refill: theme.palette.warning.main,
-        critical: theme.palette.error.main,
-        empty: alpha(theme.palette.text.primary, 0.18),
-        none: alpha(theme.palette.text.primary, 0.06),
-        text: theme.palette.text.primary,
-        paper: theme.palette.background.paper,
-    };
+    const store = addStoreShell(scene, wallTone, toneOf("seller"), padTone);
     const shelfFaces: ShelfFace[] = [];
+    /** The racks' steel, shared so pressing Store Shelf can tint it all at once. */
+    let steel: THREE.MeshStandardMaterial | null = null;
+    const steelBase = new THREE.Color();
     const fixedLabels = [
         fixedLabel(COMPOUND.label, -62, 3, -15),
         fixedLabel(STORE.label, STORE.position[0], STORE.wall + 2.5, STORE.position[1] - STORE.size[1] / 2),
@@ -733,6 +754,9 @@ function buildWorld(
     const doors = new Map<PlaceKey, Swing>();
     const roofs: THREE.Object3D[] = [];
     const pickables: THREE.Object3D[] = [];
+    // The shop's floor is the Store Floor: tapping it selects that place.
+    store.floor.userData.placeKey = "store_floor";
+    pickables.push(store.floor);
     const people: Array<{ mesh: THREE.Object3D; phase: number; base: number }> = [];
 
     for (const place of PLACES) {
@@ -755,9 +779,11 @@ function buildWorld(
             roofs.push(built.roof);
             if (built.swing) doors.set(place.key, built.swing);
         } else if (place.shape === "shelves") {
-            const built = makeShelves(wallTone, darkTone, tone);
+            const built = makeShelves(wallTone, darkTone);
             group.add(built.group);
             shelfFaces.push(...built.faces);
+            steel = built.steel;
+            steelBase.copy(built.steel.color);
         } else {
             group.add(makeBuilding(place, toneOf(place.shape === "platform" ? "store_manager" : place.roles[0]), wallTone, darkTone));
         }
@@ -774,10 +800,10 @@ function buildWorld(
             } else if (place.shape === "platform") {
                 person.position.set(spread, base + 0.3, d / 2 - 0.6);
             } else if (place.shape === "shelves") {
-                // Behind the counter, between it and the back shelves.
-                person.position.set(1.5 + spread, base, -2.6);
+                // Behind the counter, between it and the back shelves (their front edge is 2.5 m north of the middle).
+                person.position.set(1.5 + spread, base, -1.9);
             } else if (place.shape === "floor") {
-                person.position.set(-4.8, base, -2.4 + index);
+                person.position.set(-0.8, base, -2 + index * 0.9);
             } else if (place.shape === "counter") {
                 // The seller behind the counter, the customer in front of it.
                 person.position.set(0, base, index === 0 ? -0.9 : 1.4);
@@ -953,6 +979,13 @@ function buildWorld(
                     rig.van.position.set(stop[0] - n * 6, 0, stop[1]);
                     rig.van.rotation.y = 0;
                     // Unloaded at the goods door it goes in by.
+                    if (destination === "store_floor") {
+                        // Unloaded inside the shop, on the floor clear of the pallets, the counter and the door; a third waiting is not drawn.
+                        const [sx, sz] = STORE.position;
+                        const spots: Array<[number, number]> = [[sx + 1.65, sz - 1.6], [sx + 1.65, sz + 1.9]];
+                        if (spots[n]) stack(spots[n][0], spots[n][1]);
+                        break;
+                    }
                     const drop = DROP[destination] ?? stop;
                     stack(drop[0] - n * 2, drop[1]);
                     break;
@@ -999,10 +1032,10 @@ function buildWorld(
         };
         const onCounter = (rig: { parcel: THREE.Mesh }) => {
             const n = slot("counter");
-            if (n >= 12) return;
+            if (n >= 10) return;
             const { width, height } = STORE.counter;
             rig.parcel.visible = true;
-            rig.parcel.position.set(placeFor("store_counter").position[0] - width / 2 + 0.4 + (n % 6) * 0.64, height + 0.33, STORE.position[1] - 0.15 + (Math.floor(n / 6) % 2) * 0.3);
+            rig.parcel.position.set(placeFor("store_counter").position[0] - width / 2 + 0.4 + (n % 5) * 0.6, height + 0.33, STORE.position[1] - 0.15 + (Math.floor(n / 5) % 2) * 0.3);
         };
         for (const o of orders) {
             const rig = orderRigFor(o);
@@ -1054,11 +1087,8 @@ function buildWorld(
     const refillTone = color(theme.palette.info.main);
     const refillRigs = new Map<number, { carton: THREE.Mesh; walker: THREE.Group; badge: CSS2DObject; badgeEl: HTMLDivElement; path: THREE.CatmullRomCurve3 | null }>();
     let refills: WorldRefill[] = [];
-    const binOfItem = new Map<number, number>();
-    const binSpot = (itemId: number) => {
-        const index = binOfItem.get(itemId);
-        return index === undefined ? { x: STORE.position[0], y: 2, z: STORE.position[1] - STORE.size[1] / 2 + 1 } : binWorldPosition(index);
-    };
+    // Which physical spot an item's shelf spot is placed on is not recorded yet, so a refill goes to the middle of the back wall.
+    const binSpot = (_itemId: number) => ({ x: STORE.position[0], y: 1.6, z: STORE.position[1] - STORE.size[1] / 2 + STORE.shelfDepth + 0.7 });
     const refillRigFor = (r: WorldRefill) => {
         let rig = refillRigs.get(r.id);
         if (!rig) {
@@ -1193,6 +1223,12 @@ function buildWorld(
             node.pad.material.color.copy(isSelected ? node.tone : key === hovered ? padTone.clone().lerp(node.tone, 0.35) : padTone);
             node.label.classList.toggle("is-selected", isSelected);
         });
+        // Pressing the Store Floor or the Store Shelf tints it, so it stands out from the rest of the shop.
+        const tint = (key: PlaceKey) => (selectedKey === key ? 0.75 : hovered === key ? 0.3 : 0);
+        const floorNode = nodes.get("store_floor");
+        if (floorNode) store.floorMaterial.color.copy(store.floorBase).lerp(floorNode.tone, tint("store_floor"));
+        const shelfNode = nodes.get("store_shelf");
+        if (steel && shelfNode) steel.color.copy(steelBase).lerp(shelfNode.tone, tint("store_shelf"));
         renderer.domElement.style.cursor = hovered || hoveringSubject ? "pointer" : "grab";
     };
 
@@ -1215,7 +1251,7 @@ function buildWorld(
         const moved = Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y);
         downAt = null;
         if (moved >= 6) return;
-        // A tap on a van, parcel or carton opens what it carries; on a shelf face, that bin; anywhere else, the place.
+        // A tap on a van, parcel or carton opens what it carries; on the racking, that spot; anywhere else, the place.
         const hit = hitAt(event);
         const subject = hit?.object.userData.subject as { kind: EventKind; id: number } | undefined;
         if (subject) {
@@ -1224,11 +1260,8 @@ function buildWorld(
         }
         const face = hit?.object.userData.shelfFace as ShelfFace | undefined;
         if (face && hit?.uv) {
-            const index = face.binAt(hit.uv.x, hit.uv.y);
-            if (index !== null) {
-                onBin(index);
-                return;
-            }
+            onSpot(face.spotAt(hit.uv.x, hit.uv.y));
+            return;
         }
         onSelect((hit?.object.userData.placeKey as PlaceKey | undefined) ?? null);
     };
@@ -1251,14 +1284,26 @@ function buildWorld(
     };
 
     // Camera flights.
-    let flight: { fromCam: THREE.Vector3; toCam: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3; start: number } | null = null;
-    const flyTo = (target: THREE.Vector3, cam: THREE.Vector3) => {
+    let flight: { fromCam: THREE.Vector3; toCam: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3; start: number; eye: boolean } | null = null;
+    /** Standing inside the shop at eye level (a wall view): the camera may come close and look level. */
+    let eyeLevel = false;
+    /** 0 (walls solid) to 1 (walls faded), eased each frame. */
+    let wallFade = 0;
+    const setLimits = (eye: boolean) => {
+        controls.minDistance = eye ? 1 : 6;
+        controls.maxPolarAngle = eye ? Math.PI / 2 + 0.05 : 1.35;
+    };
+    const flyTo = (target: THREE.Vector3, cam: THREE.Vector3, eye = false) => {
+        eyeLevel = eye;
+        // Coming close needs the limits eased first; going back out, they tighten once we are there.
+        if (eye) setLimits(true);
         if (reducedMotion) {
+            setLimits(eye);
             controls.target.copy(target);
             camera.position.copy(cam);
             return;
         }
-        flight = { fromCam: camera.position.clone(), toCam: cam, fromTarget: controls.target.clone(), toTarget: target, start: performance.now() };
+        flight = { fromCam: camera.position.clone(), toCam: cam, fromTarget: controls.target.clone(), toTarget: target, start: performance.now(), eye };
     };
     const flyClose = (x: number, z: number, span: number) => {
         const at = new THREE.Vector3(x, 0, z);
@@ -1322,12 +1367,25 @@ function buildWorld(
             now = t;
             placeActors();
         },
-        setShelf: (bins) => {
-            shelfFaces.forEach((face) => face.paint(bins, statusTone));
-            binOfItem.clear();
-            bins.forEach((b, i) => b && b.assigned && !binOfItem.has(b.item_id) && binOfItem.set(b.item_id, i));
-            refillRigs.forEach((rig) => (rig.path = null));
-            placeRefills();
+        setSpot: (code) => shelfFaces.forEach((face) => face.paint(code)),
+        viewStore: () => {
+            userMoved = true;
+            awayFromHome = true;
+            flyClose(STORE.position[0], STORE.position[1], 6);
+        },
+        viewWall: (side) => {
+            userMoved = true;
+            awayFromHome = true;
+            const run = RACKS.find((r) => r.wall === side)!;
+            const toward: Record<RackWall, [number, number]> = { west: [-1, 0], east: [1, 0], north: [0, -1], south: [0, 1] };
+            const [dx, dz] = toward[side];
+            const [cx, cz] = STORE.position;
+            const reach = (side === "west" || side === "east" ? STORE.size[0] : STORE.size[1]) / 2 - STORE.shelfDepth;
+            // The seller's side: stand at the opposite side of the shop, at eye height, and look at the racks.
+            // Stand right back against the far wall, unless racks stand on the floor there: then in front of them.
+            const behind = RACKS.find((r) => r.wall === ({ west: "east", east: "west", north: "south", south: "north" } as Record<RackWall, RackWall>)[side])!;
+            const stand = behind.suspended ? 2.75 : 2.2;
+            flyTo(new THREE.Vector3(cx + dx * reach, run.suspended ? 2.5 : 1.7, cz + dz * reach), new THREE.Vector3(cx - dx * stand, 1.65, cz - dz * stand), true);
         },
         highlight: (h, fly) => {
             lit = h;
@@ -1385,12 +1443,32 @@ function buildWorld(
             const eased = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
             camera.position.lerpVectors(flight.fromCam, flight.toCam, eased);
             controls.target.lerpVectors(flight.fromTarget, flight.toTarget, eased);
-            if (k >= 1) flight = null;
+            if (k >= 1) {
+                setLimits(flight.eye);
+                flight = null;
+            }
         }
 
         // Roofs lift off once you come close, to show the cells inside.
         const close = camera.position.distanceTo(controls.target) < 75;
         roofs.forEach((r) => (r.visible = !close));
+
+        // The shop's walls fade away when you are inside it, near it, looking at a wall of racks,
+        // or have pressed one of its places: they would only be in the way.
+        const [storeX, storeZ] = STORE.position;
+        const nearStore = Math.hypot(camera.position.x - storeX, camera.position.z - storeZ) < 26 && camera.position.y < 40;
+        const wantFade = eyeLevel || nearStore || selectedKey === "store_shelf" || selectedKey === "store_floor" || selectedKey === "store_counter";
+        wallFade += ((wantFade ? 1 : 0) - wallFade) * (reducedMotion ? 1 : 0.12);
+        const faded = wallFade > 0.02;
+        if (store.wallMaterial.transparent !== faded) {
+            store.wallMaterial.transparent = faded;
+            store.wallMaterial.needsUpdate = true;
+        }
+        store.wallMaterial.opacity = 1 - 0.88 * wallFade;
+        store.wallMaterial.depthWrite = wallFade < 0.5;
+        fixedLabels[1].style.visibility = wantFade ? "hidden" : "";
+        // A faded wall would still throw a solid shadow into the shop.
+        store.walls.forEach((wallMesh) => (wallMesh.castShadow = wallFade < 0.5));
 
         doors.forEach(easeSwing);
         easeSwing(gate);
@@ -1646,8 +1724,17 @@ function addRoads(scene: THREE.Scene, asphalt: THREE.Color): void {
     });
 }
 
-/** The store's four walls, open-topped, with the 2 m main door in the south wall and a sign over it. */
-function addStoreShell(scene: THREE.Scene, wall: THREE.Color, tone: THREE.Color, floor: THREE.Color): void {
+/** What the scene keeps of the shop's shell: its floor to tint, and its walls to fade. */
+interface StoreShell {
+    floor: THREE.Mesh;
+    floorMaterial: THREE.MeshStandardMaterial;
+    floorBase: THREE.Color;
+    wallMaterial: THREE.MeshStandardMaterial;
+    walls: THREE.Mesh[];
+}
+
+/** The store's four walls, open-topped, with the 2 m main door in the south wall, a sign over it and the metal divider inside. */
+function addStoreShell(scene: THREE.Scene, wall: THREE.Color, tone: THREE.Color, floor: THREE.Color): StoreShell {
     const [cx, cz] = STORE.position;
     const [w, d] = STORE.size;
     const h = STORE.wall;
@@ -1655,146 +1742,149 @@ function addStoreShell(scene: THREE.Scene, wall: THREE.Color, tone: THREE.Color,
     const doorX = cx - w / 2 + STORE.door.at;
     const half = STORE.door.width / 2;
 
-    scene.add(mesh(new THREE.BoxGeometry(w, 0.1, d), floor.clone().lerp(wall, 0.5), cx, 0.05, cz));
-    scene.add(mesh(new THREE.BoxGeometry(w + t, h, t), wall, cx, h / 2, cz - d / 2 - t / 2));
-    scene.add(mesh(new THREE.BoxGeometry(t, h, d), wall, cx - w / 2 - t / 2, h / 2, cz));
-    scene.add(mesh(new THREE.BoxGeometry(t, h, d), wall, cx + w / 2 + t / 2, h / 2, cz));
+    // One material for every wall, so they all fade together.
+    const wallMaterial = new THREE.MeshStandardMaterial({ color: wall, roughness: 0.75, flatShading: true });
+    const walls: THREE.Mesh[] = [];
+    const piece = (geometry: THREE.BoxGeometry, x: number, y: number, z: number) => {
+        const m = new THREE.Mesh(geometry, wallMaterial);
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        walls.push(m);
+        scene.add(m);
+    };
+
+    const floorBase = floor.clone().lerp(wall, 0.5);
+    const slab = mesh(new THREE.BoxGeometry(w, 0.1, d), floorBase.clone(), cx, 0.05, cz);
+    scene.add(slab);
+
+    piece(new THREE.BoxGeometry(w + t, h, t), cx, h / 2, cz - d / 2 - t / 2);
+    piece(new THREE.BoxGeometry(t, h, d), cx - w / 2 - t / 2, h / 2, cz);
+    piece(new THREE.BoxGeometry(t, h, d), cx + w / 2 + t / 2, h / 2, cz);
     // South wall: either side of the door, and above it.
     const leftLength = doorX - half - (cx - w / 2);
     const rightLength = cx + w / 2 - (doorX + half);
-    scene.add(mesh(new THREE.BoxGeometry(leftLength, h, t), wall, cx - w / 2 + leftLength / 2, h / 2, cz + d / 2 + t / 2));
-    scene.add(mesh(new THREE.BoxGeometry(rightLength, h, t), wall, cx + w / 2 - rightLength / 2, h / 2, cz + d / 2 + t / 2));
-    scene.add(mesh(new THREE.BoxGeometry(STORE.door.width, h - STORE.door.height, t), wall, doorX, (h + STORE.door.height) / 2, cz + d / 2 + t / 2));
+    piece(new THREE.BoxGeometry(leftLength, h, t), cx - w / 2 + leftLength / 2, h / 2, cz + d / 2 + t / 2);
+    piece(new THREE.BoxGeometry(rightLength, h, t), cx + w / 2 - rightLength / 2, h / 2, cz + d / 2 + t / 2);
+    piece(new THREE.BoxGeometry(STORE.door.width, h - STORE.door.height, t), doorX, (h + STORE.door.height) / 2, cz + d / 2 + t / 2);
     scene.add(mesh(new THREE.BoxGeometry(5, 0.6, 0.15), tone, doorX, h + 0.35, cz + d / 2 + t + 0.05));
+    // The metal divider fixed to the front wall at the door's west jamb, 1.2 m into the shop.
+    scene.add(mesh(new THREE.BoxGeometry(0.06, 2, 1.2), wall.clone().lerp(new THREE.Color(0x56697a), 0.75), doorX - half - 0.03, 1.1, cz + d / 2 - 0.6));
+
+    return { floor: slab, floorMaterial: slab.material as THREE.MeshStandardMaterial, floorBase, wallMaterial, walls };
 }
 
-/** One wall of shelving's face: a picture of its bins, repainted when the shelf data arrives. */
+/** One wall of racks: a picture of its spots (a1, a2 …), repainted when one is marked. */
 interface ShelfFace {
-    tier: number;
-    paint: (bins: ShelfBin[], tones: Record<"ok" | "refill" | "critical" | "empty" | "none" | "text" | "paper", string>) => void;
-    /** The bin index (0–199) under a point on the face, from its uv. */
-    binAt: (u: number, v: number) => number | null;
+    paint: (selected: string | null) => void;
+    /** The spot ("f6") under a point on the face, from its uv. */
+    spotAt: (u: number, v: number) => string;
 }
 
 /**
- * The 200 bins: floor-to-ceiling shelving on the west, north and east walls
- * (5 across × 10 down each, above a 0.5 m floor strip) and a two-row band
- * across the south wall over the door. See SHELF_TIERS for the reading order.
+ * The Main Store's physical racking (see storeLayout.ts): open steel racks 50 cm
+ * deep, standing from the floor on the left and back walls and hanging from the
+ * ceiling on the right wall and over the door. Each run is a board under every
+ * row and an upright between every column, with the spots' labels on the back
+ * against the wall. The boards are not tappable, so a tap goes through to the
+ * spot behind them.
  */
-function makeShelves(wall: THREE.Color, dark: THREE.Color, tone: THREE.Color): { group: THREE.Group; faces: ShelfFace[] } {
+function makeShelves(wall: THREE.Color, dark: THREE.Color): { group: THREE.Group; faces: ShelfFace[]; steel: THREE.MeshStandardMaterial } {
     const g = new THREE.Group();
     const [w, d] = STORE.size;
-    const h = STORE.wall;
     const dep = STORE.shelfDepth;
-    const plinth = STORE.plinth;
-    const frameTone = wall.clone().lerp(dark, 0.3);
-    const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.6);
+    const backTone = wall.clone().lerp(dark, 0.3);
+    const steel = new THREE.MeshStandardMaterial({ color: backTone.clone().lerp(new THREE.Color(0x6b4423), 0.55), roughness: 0.75, flatShading: true });
     const faces: ShelfFace[] = [];
 
-    SHELF_TIERS.forEach(({ wall: side }, tier) => {
-        const south = side === "south";
-        const span = (side === "west" || side === "east" ? d : w) - 2 * dep;
-        const cols = south ? 25 : 5;
-        const rows = south ? 2 : 10;
-        const faceHeight = south ? 0.6 : h - plinth;
-        const faceY = south ? h - 0.3 : plinth + faceHeight / 2;
+    for (const run of RACKS) {
+        const side = run.wall;
+        const cols = run.columns.length;
+        const rows = run.rows;
+        const alongX = side === "north" || side === "south";
+        const span = (alongX ? w : d) - 2 * dep;
+        const { height, centerY, rowHeight } = rackFace(run);
 
-        // The frame against the wall.
-        const frameHeight = south ? 0.6 : h;
-        const frame = mesh(new THREE.BoxGeometry(side === "west" || side === "east" ? dep : w, frameHeight, side === "west" || side === "east" ? d : dep), frameTone,
-            side === "west" ? -w / 2 + dep / 2 : side === "east" ? w / 2 - dep / 2 : 0,
-            south ? h - 0.3 : h / 2,
-            side === "north" ? -d / 2 + dep / 2 : side === "south" ? d / 2 - dep / 2 : 0);
-        g.add(frame);
+        // Where a point a fraction u along the face (read from inside the shop, left to right), e metres out from the wall, stands.
+        const pos = (u: number, e: number): [number, number] => {
+            const along = (u - 0.5) * span;
+            switch (side) {
+                case "west": return [-w / 2 + e, -along];
+                case "east": return [w / 2 - e, along];
+                case "north": return [along, -d / 2 + e];
+                case "south": return [-along, d / 2 - e];
+            }
+        };
 
-        // Cartons on the floor strip under the lowest shelf: that strip is Store Floor.
-        if (!south) {
-            for (let i = 0; i < 4; i++) {
-                const along = -span / 2 + span * (0.15 + i * 0.24);
-                const c = mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), carton, 0, 0.2, 0);
-                if (side === "west") c.position.set(-w / 2 + dep + 0.25, 0.2, along);
-                if (side === "east") c.position.set(w / 2 - dep - 0.25, 0.2, along);
-                if (side === "north") c.position.set(along, 0.2, -d / 2 + dep + 0.25);
-                g.add(c);
+        const addPart = (geometry: THREE.BoxGeometry, u: number, y: number): void => {
+            const [x, z] = pos(u, dep / 2);
+            const part = new THREE.Mesh(geometry, steel);
+            part.position.set(x, y, z);
+            part.castShadow = true;
+            part.raycast = () => {};
+            g.add(part);
+        };
+        for (let k = 0; k <= rows; k++) {
+            addPart(new THREE.BoxGeometry(alongX ? span : dep, 0.04, alongX ? dep : span), 0.5, centerY + height / 2 - k * rowHeight);
+        }
+        for (let j = 0; j <= cols; j++) {
+            addPart(new THREE.BoxGeometry(alongX ? 0.05 : dep, height, alongX ? dep : 0.05), j / cols, centerY);
+        }
+        // A suspended run hangs from the ceiling on two rods at each end.
+        if (run.suspended) {
+            for (const u of [0, 1]) {
+                const [x, z] = pos(u, dep / 2);
+                const rod = new THREE.Mesh(new THREE.BoxGeometry(0.04, STORE.wall - (centerY + height / 2) + 0.01, 0.04), steel);
+                rod.position.set(x, (STORE.wall + centerY + height / 2) / 2, z);
+                rod.raycast = () => {};
+                g.add(rod);
             }
         }
 
-        // The face: a canvas of bins on a plane facing into the room.
+        // The face: a canvas of spots on a plane against the wall, facing into the shop.
         const canvas = document.createElement("canvas");
-        canvas.width = cols * 96;
-        canvas.height = rows * 48;
+        canvas.width = cols * 128;
+        canvas.height = rows * 96;
         const texture = new THREE.CanvasTexture(canvas);
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.anisotropy = 4;
-        const plane = new THREE.Mesh(new THREE.PlaneGeometry(span, faceHeight), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9 }));
-        const inset = 0.006;
-        switch (side) {
-            case "west": plane.position.set(-w / 2 + dep + inset, faceY, 0); plane.rotation.y = Math.PI / 2; break;
-            case "north": plane.position.set(0, faceY, -d / 2 + dep + inset); break;
-            case "east": plane.position.set(w / 2 - dep - inset, faceY, 0); plane.rotation.y = -Math.PI / 2; break;
-            case "south": plane.position.set(0, faceY, d / 2 - dep - inset); plane.rotation.y = Math.PI; break;
-        }
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(span, height), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9 }));
+        const [backX, backZ] = pos(0.5, 0.04);
+        plane.position.set(backX, centerY, backZ);
+        plane.rotation.y = side === "west" ? Math.PI / 2 : side === "east" ? -Math.PI / 2 : side === "south" ? Math.PI : 0;
         g.add(plane);
 
-        // Physical [col, row] of logical bin j (0–49) on this face, and back.
-        const place = (j: number): [number, number] => {
-            const row = Math.floor(j / 5);
-            const col = j % 5;
-            return south ? [Math.floor(row % 5) * 5 + col, row < 5 ? 0 : 1] : [col, row];
-        };
-        const logical = (col: number, row: number): number => (south ? (row * 5 + Math.floor(col / 5)) * 5 + (col % 5) : row * 5 + col);
-
         const face: ShelfFace = {
-            tier,
-            binAt: (u, v) => {
-                const col = Math.min(cols - 1, Math.max(0, Math.floor(u * cols)));
-                const row = Math.min(rows - 1, Math.max(0, Math.floor((1 - v) * rows)));
-                return tier * 50 + logical(col, row);
-            },
-            paint: (bins, tones) => {
+            spotAt: (u, v) => spotAt(run, u, v),
+            paint: (selected) => {
                 const ctx = canvas.getContext("2d")!;
-                const bw = canvas.width / cols;
-                const bh = canvas.height / rows;
-                ctx.fillStyle = `#${frameTone.getHexString()}`;
+                const cw = canvas.width / cols;
+                const ch = canvas.height / rows;
+                ctx.fillStyle = `#${backTone.getHexString()}`;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-                for (let j = 0; j < 50; j++) {
-                    const [col, row] = place(j);
-                    const b = bins[tier * 50 + j];
-                    const x = col * bw;
-                    const y = row * bh;
-                    ctx.fillStyle = tones.paper;
-                    ctx.fillRect(x + 3, y + 3, bw - 6, bh - 6);
-                    if (b) {
-                        const status = b.assigned ? b.status : "empty";
-                        ctx.fillStyle = tones[status as "ok" | "refill" | "critical" | "empty"] ?? tones.none;
-                        ctx.globalAlpha = 0.35;
-                        ctx.fillRect(x + 3, y + 3, bw - 6, bh - 6);
-                        ctx.globalAlpha = 1;
-                        // How full: a bar along the bottom of the bin.
-                        ctx.fillRect(x + 3, y + bh - 12, (bw - 6) * Math.max(0, Math.min(1, b.fill)), 9);
-                    } else {
-                        ctx.fillStyle = tones.none;
-                        ctx.fillRect(x + 3, y + 3, bw - 6, bh - 6);
-                    }
-                    ctx.fillStyle = tones.text;
-                    ctx.textAlign = "left";
-                    ctx.textBaseline = "top";
-                    ctx.font = "800 15px system-ui, sans-serif";
-                    ctx.fillText(`${"ABCDE"[j % 5]}${Math.floor(j / 5) + 1}`, x + 7, y + 6);
-                    if (b) {
-                        ctx.font = "600 12px system-ui, sans-serif";
-                        ctx.fillText(b.name.slice(0, 12), x + 7, y + 23, bw - 12);
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < cols; col++) {
+                        const code = `${run.columns[col]}${row + 1}`;
+                        const x = col * cw;
+                        const y = row * ch;
+                        ctx.fillStyle = code === selected ? "#ffd54f" : "#f5f1ea";
+                        ctx.fillRect(x + 4, y + 4, cw - 8, ch - 8);
+                        ctx.fillStyle = "#3b2a1a";
+                        ctx.font = "800 34px system-ui, sans-serif";
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        ctx.fillText(code, x + cw / 2, y + ch / 2);
                     }
                 }
                 texture.needsUpdate = true;
             },
         };
         plane.userData.shelfFace = face;
-        face.paint([], { ok: "#2e7d32", refill: "#ed6c02", critical: "#d32f2f", empty: "#9e9e9e", none: "#e0e0e0", text: "#222222", paper: "#ffffff" });
+        face.paint(null);
         faces.push(face);
-    });
+    }
 
-    return { group: g, faces };
+    return { group: g, faces, steel };
 }
 
 /**
@@ -1929,14 +2019,14 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
             break;
         }
         case "floor": {
-            // The open floor either side of the counter, relative to the store's centre:
-            // more on the west, a little on the east. Each patch tinted, with pallets on it.
+            // The open floor beside the counter, relative to the store's centre (6 × 6 m, racks 50 cm deep on the
+            // walls, the counter on the east side): a strip on the west with three pallets, and one north of the counter.
             const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.55);
             const patch = tone.clone().lerp(wall, 0.75);
             const zones: Array<[number, number, number, number, number]> = [
                 // x, z, width, depth, pallets
-                [-4.75, -0.8, 1.5, 5.4, 3],
-                [4.5, -2.5, 2.1, 2, 1],
+                [-1.7, -0.4, 1.3, 4.4, 3],
+                [0.2, -1.6, 1.3, 1.4, 1],
             ];
             for (const [x, z, zw, zd, pallets] of zones) {
                 g.add(mesh(new THREE.BoxGeometry(zw, 0.04, zd), patch, x, 0.13, z));

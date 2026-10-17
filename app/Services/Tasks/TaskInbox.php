@@ -16,6 +16,7 @@ use App\Models\StockKeeper\Transfer;
 use App\Services\Finance\PaymentBoard;
 use App\Services\Inventory\StockPermissions;
 use App\Services\TransferWorkflowService;
+use App\Services\Workforce\WorkTasks;
 use Illuminate\Support\Facades\Route;
 use Throwable;
 
@@ -31,7 +32,7 @@ use Throwable;
  */
 class TaskInbox
 {
-    public function __construct(private readonly PaymentBoard $payments)
+    public function __construct(private readonly PaymentBoard $payments, private readonly WorkTasks $work)
     {
     }
 
@@ -125,6 +126,11 @@ class TaskInbox
 
             $pool = Delivery::query()->unassigned()->readyToCollect()->where('status', 'pending')->count();
             $this->push($tasks, 'pool', 'truck', 'Runs nobody has claimed', "{$pool} packed order(s) waiting for a courier.", $pool, $this->url('delivery.delivery.index'));
+        }
+
+        // ── Keys, opening and closing, shifts, clock-in (WorkTasks) ──
+        foreach ($this->work->for($user) as $task) {
+            $this->push($tasks, $task['id'], $task['kind'], $task['title'], $task['detail'], $task['count'], $task['href'], $task['urgent']);
         }
 
         return $tasks;

@@ -29,7 +29,9 @@ import {
 } from "@mui/material";
 import React from "react";
 
+import KeyCard from "@/Components/Work/KeyCard";
 import AdminLayout from "@/Layouts/AdminLayout";
+import type { CustodyKeyView } from "@/types/work";
 import type { SharedProps } from "@/types/shipment";
 
 /** One car in the fleet. */
@@ -43,6 +45,8 @@ interface Vehicle {
     notes: string | null;
     /** Runs not yet received or cancelled that use this car. */
     open_runs: number;
+    /** The car's one key (KeyCustodyService). */
+    key: CustodyKeyView;
 }
 
 interface Props extends SharedProps {
@@ -87,6 +91,7 @@ export default function FleetIndex({ vehicles = [], flash }: Props): React.React
                             <TableCell sx={{ fontWeight: 800 }}>Capacity</TableCell>
                             <TableCell sx={{ fontWeight: 800 }}>Payload</TableCell>
                             <TableCell sx={{ fontWeight: 800 }}>Open runs</TableCell>
+                            <TableCell sx={{ fontWeight: 800 }}>Key with</TableCell>
                             <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
                             <TableCell align="right" sx={{ fontWeight: 800 }}>Actions</TableCell>
                         </TableRow>
@@ -99,6 +104,7 @@ export default function FleetIndex({ vehicles = [], flash }: Props): React.React
                                 <TableCell>{v.max_cbm} CBM</TableCell>
                                 <TableCell>{v.payload_kg ? `${v.payload_kg.toLocaleString()} kg` : "—"}</TableCell>
                                 <TableCell>{v.open_runs}</TableCell>
+                                <TableCell>{v.key.holder?.name ?? "—"}</TableCell>
                                 <TableCell>
                                     <Chip
                                         size="small"
@@ -134,7 +140,7 @@ export default function FleetIndex({ vehicles = [], flash }: Props): React.React
                         ))}
                         {vehicles.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                                <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
                                     <Typography color="text.secondary">
                                         No cars yet. Add one so shipments can pick it.
                                     </Typography>
@@ -144,6 +150,20 @@ export default function FleetIndex({ vehicles = [], flash }: Props): React.React
                     </TableBody>
                 </Table>
             </TableContainer>
+
+            {vehicles.length > 0 && (
+                <Box mt={3}>
+                    <Typography variant="h6" fontWeight={800}>Car keys</Typography>
+                    <Typography variant="body2" color="text.secondary" mb={1.5}>
+                        One key per car. Drivers hand it on in their app; give it directly here when the holder is away.
+                    </Typography>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {vehicles.map((v) => (
+                            <KeyCard key={v.id} app="admin" keyView={v.key} showLog />
+                        ))}
+                    </div>
+                </Box>
+            )}
 
             {editing !== null && (
                 <VehicleDialog vehicle={editing === "new" ? null : editing} onClose={() => setEditing(null)} />

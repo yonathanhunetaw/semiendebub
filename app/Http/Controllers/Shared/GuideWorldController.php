@@ -23,6 +23,7 @@ class GuideWorldController extends Controller
         $payload = $feed->between($request->from(), $request->to(), $request->user());
         $payload['refills'] = $feed->refills($request->from(), $request->to(), $request->user());
         $payload['orders'] = $feed->orders($request->from(), $request->to(), $request->user());
+        $payload['events'] = $feed->events($request->from(), $request->to(), $request->user());
 
         // The shelf is always as it stands now; only fetched when asked for.
         if ($request->boolean('shelf')) {

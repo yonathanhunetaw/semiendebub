@@ -1,3 +1,4 @@
+import BadgeRoundedIcon from "@mui/icons-material/BadgeRounded";
 import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
 import CategoryRoundedIcon from "@mui/icons-material/CategoryRounded";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
@@ -29,6 +30,7 @@ export default function SellerSidebar({ variant, open, onClose, sx }: any) {
         { label: "Orders", icon: <ShoppingCartRoundedIcon />, href: "/orders" },
         { label: "Customers", icon: <PeopleRoundedIcon />, href: "/customers" },
         { label: "Calendar", icon: <CalendarMonthRoundedIcon />, href: "/calendar" },
+        { label: "My work", icon: <BadgeRoundedIcon />, href: "/work" },
         { label: "Categories", icon: <CategoryRoundedIcon />, href: "/categories" },
         { label: "Settings", icon: <SettingsRoundedIcon />, href: "/settings" },
     ];

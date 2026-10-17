@@ -12,6 +12,9 @@ import WarehouseOutlined from "@mui/icons-material/WarehouseOutlined";
 import AutorenewOutlined from "@mui/icons-material/AutorenewOutlined";
 import LocalShippingOutlined from "@mui/icons-material/LocalShippingOutlined";
 import ChevronRight from "@mui/icons-material/ChevronRight";
+import VpnKeyOutlined from "@mui/icons-material/VpnKeyOutlined";
+import ScheduleOutlined from "@mui/icons-material/ScheduleOutlined";
+import StorefrontOutlined from "@mui/icons-material/StorefrontOutlined";
 import { Badge, Box, ButtonBase, IconButton, Popover, Tooltip, Typography } from "@mui/material";
 import type { SxProps, Theme } from "@mui/material";
 import type { UserTask } from "@/types/tasks";
@@ -26,6 +29,9 @@ const ICONS: Record<string, React.ElementType> = {
     hub: WarehouseOutlined,
     refill: AutorenewOutlined,
     truck: LocalShippingOutlined,
+    key: VpnKeyOutlined,
+    shift: ScheduleOutlined,
+    site: StorefrontOutlined,
 };
 
 /**

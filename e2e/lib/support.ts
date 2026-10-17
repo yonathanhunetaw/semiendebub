@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, type Browser, type Page } from '@playwright/test';
+import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 export interface Person {
     id: number;
@@ -44,7 +44,9 @@ export interface Fixture {
     priceItem: { item_id: number; name: string; variants: number; prices: Record<'store' | 'individual' | 'sellerIndividual' | 'sellerBusiness' | 'customer', number> };
 }
 
-export const fixture: Fixture = JSON.parse(readFileSync(new URL('../.fixture/fixture.json', import.meta.url), 'utf8'));
+// E2E_FIXTURE: another fixture file, e.g. make walkthrough's demo staff on dev (e2e/.fixture/demo.json).
+const fixtureFile = process.env.E2E_FIXTURE ? new URL(`file://${process.env.E2E_FIXTURE}`) : new URL('../.fixture/fixture.json', import.meta.url);
+export const fixture: Fixture = JSON.parse(readFileSync(fixtureFile, 'utf8'));
 
 const port = process.env.E2E_PORT ?? '8096';
 
@@ -57,8 +59,34 @@ export const app = (subdomain: Subdomain, path = '/'): string => `http://${subdo
  * A signed-in page on a role app, in its own browser context so each person
  * (seller, manager, courier, stock keeper) keeps their own session.
  */
+/** Every window signIn or labelWindow opened, so closeWindows() can shut them all. */
+const opened = new Set<BrowserContext>();
+
+/**
+ * Closes every window this file's tests opened. The browser lives for the whole run, so
+ * windows left open pile up from one test file to the next (make walkthrough: dozens of
+ * windows, each recording a replay, and the Mac runs out of memory).
+ */
+export async function closeWindows(): Promise<void> {
+    await Promise.all([...opened].map((context) => context.close().catch(() => undefined)));
+    opened.clear();
+}
+
 export async function signIn(browser: Browser, subdomain: Subdomain, email: string): Promise<Page> {
     const context = await browser.newContext({ baseURL: app(subdomain) });
+    opened.add(context);
+    // The dev server (make walkthrough) shows Laravel Debugbar pinned to the bottom, over a
+    // phone's sheet buttons; clicks there would wait forever. The e2e copy has no bar.
+    await context.addInitScript(() => {
+        document.addEventListener('DOMContentLoaded', () => {
+            const style = document.createElement('style');
+            style.textContent = '.phpdebugbar { display: none !important; }';
+            document.head.append(style);
+        });
+    });
+    if (process.env.WALKTHROUGH === '1') {
+        await labelWindow(context, `${personNamed(email)} · ${APP_NAMES[subdomain]}`, APP_COLOURS[subdomain]);
+    }
     const page = await context.newPage();
 
     // Vite compiles a role's login page on first hit, so a cold page can hydrate after the
@@ -74,6 +102,59 @@ export async function signIn(browser: Browser, subdomain: Subdomain, email: stri
     }).toPass({ timeout: 60_000 });
 
     return page;
+}
+
+const APP_NAMES: Record<Subdomain, string> = {
+    admin: 'Admin app', seller: 'Seller app', delivery: 'Delivery app', stockkeeper: 'Stock keeper app', finance: 'Finance app',
+    procurement: 'Procurement app', marketing: 'Marketing app', vendor: 'Vendor app', dev: 'Dev app', shared: 'Shared app',
+};
+const APP_COLOURS: Record<Subdomain, string> = {
+    admin: '#1e3a8a', seller: '#b45309', delivery: '#6d28d9', stockkeeper: '#047857', finance: '#0e7490',
+    procurement: '#9d174d', marketing: '#be123c', vendor: '#4d7c0f', dev: '#374151', shared: '#0f766e',
+};
+
+/** The fixture person with this email ("Demo Courier"), or the email itself. */
+function personNamed(email: string): string {
+    const people = [fixture.seller, fixture.manager, fixture.keeper, fixture.courier, ...Object.values(fixture.people ?? {})];
+
+    return people.find((person) => person?.email === email)?.name ?? email;
+}
+
+/**
+ * make walkthrough: a band across the top of every page in this window, and the tab title,
+ * saying whose screen it is ("Demo Courier · Delivery app"). It ignores the mouse, so it never
+ * gets in the way of a click; it shows in the live windows, the UI mode and the replays.
+ */
+export async function labelWindow(context: BrowserContext, label: string, colour = '#111827'): Promise<void> {
+    opened.add(context);
+    await context.addInitScript(({ label, colour }) => {
+        const put = () => {
+            if (!document.body || document.getElementById('walkthrough-label')) return;
+            const band = document.createElement('div');
+            band.id = 'walkthrough-label';
+            band.textContent = label;
+            band.setAttribute('aria-hidden', 'true');
+            band.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:2147483647;pointer-events:none;background:${colour};color:#fff;font:600 13px/22px system-ui,sans-serif;text-align:center;opacity:.92`;
+            document.body.append(band);
+        };
+        const title = () => {
+            if (!document.title.startsWith(label)) document.title = `${label} — ${document.title}`;
+        };
+        document.addEventListener('DOMContentLoaded', () => {
+            // A guest or customer window does not come through signIn, which hides the dev
+            // server's Debugbar: hide it here too, or it covers the page's buttons.
+            const style = document.createElement('style');
+            style.textContent = '.phpdebugbar { display: none !important; }';
+            document.head.append(style);
+            put();
+            title();
+            // Inertia swaps the page and its title without a reload.
+            new MutationObserver(() => {
+                put();
+                title();
+            }).observe(document.documentElement, { childList: true, subtree: true });
+        });
+    }, { label, colour });
 }
 
 /** Inertia's flash message, wherever the layout shows it. */

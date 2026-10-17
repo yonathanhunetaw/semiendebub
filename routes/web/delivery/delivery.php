@@ -46,6 +46,8 @@ Route::domain("delivery.{$baseDomain}")
             Route::get('/guide/world', \App\Http\Controllers\Shared\GuideWorldController::class)->name('guide.world');
             // The calendar: module dates + reminders and bills (shared with the other apps).
             require base_path('routes/web/partials/calendar.php');
+            // Keys, sites, opening/closing, shifts and clock-in (shared with the other apps).
+            require base_path('routes/web/partials/work.php');
 
             // --- SESSION ROUTES ---
             Route::prefix('sessions')->group(function () {

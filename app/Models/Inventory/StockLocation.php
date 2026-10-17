@@ -232,6 +232,12 @@ class StockLocation extends Model
         return ! $assigned;
     }
 
+    /** The site's one key (a store, Remote Hub or Main Hub node; KeyCustodyService). */
+    public function custodyKey(): \Illuminate\Database\Eloquent\Relations\MorphOne
+    {
+        return $this->morphOne(\App\Models\Workforce\CustodyKey::class, 'keyable');
+    }
+
     /** The stock keepers assigned here. */
     public function staffAssignments(): HasMany
     {

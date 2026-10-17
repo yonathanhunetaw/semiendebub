@@ -6,6 +6,7 @@ import ErrorRoundedIcon from "@mui/icons-material/ErrorRounded";
 import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import PendingActionsRoundedIcon from "@mui/icons-material/PendingActionsRounded";
 import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
+import VpnKeyRoundedIcon from "@mui/icons-material/VpnKeyRounded";
 import WarehouseRoundedIcon from "@mui/icons-material/WarehouseRounded";
 import {
     Avatar,
@@ -98,6 +99,7 @@ export default function Dashboard({
         { label: "Freight", hint: "Hub → store runs", icon: <WarehouseRoundedIcon />, href: route("delivery.shipments.index"), color: theme.palette.info.main },
         { label: "Transfers", hint: "Site to site", icon: <SwapHorizRoundedIcon />, href: route("delivery.transfers.index"), color: theme.palette.success.main },
         { label: "Calendar", hint: "Your runs by day", icon: <CalendarMonthRoundedIcon />, href: route("delivery.calendar"), color: theme.palette.warning.main },
+        { label: "Keys", hint: "Car keys you hold", icon: <VpnKeyRoundedIcon />, href: route("delivery.work"), color: theme.palette.secondary.main },
     ];
 
     return (

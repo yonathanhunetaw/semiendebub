@@ -13,7 +13,7 @@
 .DEFAULT_GOAL := help
 ARGS ?=
 
-.PHONY: help setup dev stop status test e2e e2e-ui artisan dev-from-prod compare-prod deploy-dev prod restore prod-stop prod-status logs backup sync tunnel env-keys
+.PHONY: help setup dev stop status test e2e e2e-ui artisan dev-from-prod compare-prod walkthrough walkthrough-ui walkthrough-report deploy-dev prod restore prod-stop prod-status logs backup sync tunnel env-keys
 
 # --- Deploy options -> flags of deploy/deploy-with-options.sh ---------------------------------
 DEPLOY_FLAGS = $(if $(FORCE_BUILD),-f) $(if $(NO_CACHE),--no-cache) $(if $(OBSERVABILITY),-o) \
@@ -60,6 +60,17 @@ dev-from-prod: ## Replace the dev database with prod's newest backup (a safety d
 
 compare-prod: ## How dev differs from prod: code, migrations, settings (names only), PHP/Node/MySQL versions
 	./deploy/dev.sh compare
+
+walkthrough: ## Watch every business journey on the DEV database (kept, not a copy). One: ARGS=shipment. Needs `make dev`
+	./deploy/dev.sh artisan dev:demo-staff
+	npx playwright test -c playwright.walkthrough.config.ts $(ARGS)
+
+walkthrough-ui: ## The walkthroughs in Playwright's window: numbered steps on the left, each person's screen at every step
+	./deploy/dev.sh artisan dev:demo-staff
+	npx playwright test -c playwright.walkthrough.config.ts --ui $(ARGS)
+
+walkthrough-report: ## Replay the last walkthrough run: every step, screenshot and trace (kept on this Mac only)
+	npx playwright show-report playwright-report/walkthrough
 
 e2e: ## Browser tests (Playwright) on a throwaway copy of the database. Needs `make dev` running
 	./deploy/dev.sh e2e $(if $(T),e2e/$(T)) $(ARGS)

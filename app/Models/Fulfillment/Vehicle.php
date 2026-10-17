@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Models\Fulfillment;
 
+use App\Models\Workforce\CustodyKey;
 use Database\Factories\Fulfillment\VehicleFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 /**
  * One car in the fleet. A shipment's creator picks one to carry the run.
@@ -50,6 +52,12 @@ class Vehicle extends Model
     public function shipments(): HasMany
     {
         return $this->hasMany(Shipment::class);
+    }
+
+    /** The car's one key and who holds it (KeyCustodyService). */
+    public function custodyKey(): MorphOne
+    {
+        return $this->morphOne(CustodyKey::class, 'keyable');
     }
 
     /** @param Builder<Vehicle> $query */

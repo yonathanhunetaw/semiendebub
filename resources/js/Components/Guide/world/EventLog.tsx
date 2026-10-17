@@ -6,7 +6,7 @@ import RoleAvatar from "@/Components/Visual/RoleAvatar";
 import { placeFor } from "./places";
 import { KIND_COLOR, KIND_PLURAL, hhmm, type EventKind, type WorldEvent } from "./events";
 
-const KINDS: EventKind[] = ["shipment", "order", "refill"];
+const KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order"];
 
 /**
  * Everything that happened in the day, as a list: grouped by hour, each line

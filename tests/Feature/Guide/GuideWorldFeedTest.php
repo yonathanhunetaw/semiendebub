@@ -162,9 +162,90 @@ class GuideWorldFeedTest extends TestCase
             ->assertJsonFragment(['days' => [$day->toDateString()]]);
     }
 
+    #[Test]
+    public function a_transfer_raised_by_hand_comes_back_as_events_but_one_tied_to_a_refill_does_not(): void
+    {
+        $day = CarbonImmutable::parse('2026-10-14 00:00');
+        $variant = \App\Models\Item\ItemVariant::factory()->create();
+        $floor = $this->floor();
+
+        $manual = $this->transfer($variant, $floor, ['reference' => 'TRF-HAND', 'created_at' => $day->setTime(9, 0), 'dispatched_at' => $day->setTime(9, 30), 'completed_at' => $day->setTime(10, 0)]);
+        $tied = $this->transfer($variant, $floor, ['reference' => 'TRF-REFILL', 'created_at' => $day->setTime(9, 0)]);
+        \App\Models\Inventory\RefillRequest::query()->create([
+            'reference' => 'RF-1', 'store_id' => $this->mainStore->id, 'item_id' => $variant->item_id, 'item_variant_id' => $variant->id,
+            'source' => 'remote_hub', 'quantity' => 4, 'status' => 'pending', 'transfer_id' => $tied->id,
+        ]);
+
+        $response = $this->asRole($this->user('admin', null), 'admin')
+            ->getJson(route('admin.guide.world', ['from' => $day->toDateString()]))
+            ->assertOk();
+
+        $events = collect($response->json('events'))->where('kind', 'transfer');
+        $this->assertSame(['transfer-'.$manual->id.'-raised', 'transfer-'.$manual->id.'-dispatched', 'transfer-'.$manual->id.'-completed'], $events->pluck('key')->all());
+        $this->assertSame(['remote_hub', 'remote_hub', 'store_floor'], $events->pluck('where')->all());
+        $this->assertTrue((bool) $events->last()['final']);
+    }
+
+    #[Test]
+    public function a_stocktake_of_the_main_stores_floor_comes_back_as_count_events(): void
+    {
+        $day = CarbonImmutable::parse('2026-10-14 00:00');
+        $floor = $this->floor();
+        $keeper = $this->user('admin', null);
+
+        $count = \App\Models\Inventory\Stocktake::query()->create(['reference' => 'CNT-1', 'stock_location_id' => $floor->id, 'status' => 'posted', 'started_by' => $keeper->id]);
+        $count->forceFill(['created_at' => $day->setTime(8, 0), 'submitted_at' => $day->setTime(8, 30), 'posted_at' => $day->setTime(9, 0)])->save();
+
+        $events = collect($this->asRole($keeper, 'admin')
+            ->getJson(route('admin.guide.world', ['from' => $day->toDateString()]))
+            ->assertOk()
+            ->json('events'))->where('kind', 'count');
+
+        $this->assertSame(['count-'.$count->id.'-started', 'count-'.$count->id.'-submitted', 'count-'.$count->id.'-posted'], $events->pluck('key')->all());
+        $this->assertSame(['store_floor'], $events->pluck('where')->unique()->values()->all());
+    }
+
+    #[Test]
+    public function a_user_tied_to_another_store_gets_no_transfer_or_count_events(): void
+    {
+        $this->transfer(\App\Models\Item\ItemVariant::factory()->create(), $this->floor(), ['reference' => 'TRF-X', 'created_at' => CarbonImmutable::parse('2026-10-14 09:00')]);
+        $elsewhere = Store::factory()->create(['name' => 'Second Store']);
+
+        $this->asRole($this->user('seller', $elsewhere->id), 'seller')
+            ->getJson(route('seller.guide.world', ['from' => '2026-10-14']))
+            ->assertOk()
+            ->assertJsonCount(0, 'events');
+    }
+
     /* ---------------------------------------------------------------------
      | Helpers
      |--------------------------------------------------------------------*/
+
+    private function floor(): StockLocation
+    {
+        return StockLocation::query()->where('store_id', $this->mainStore->id)->where('kind', StockLocation::KIND_BACKROOM)->first()
+            ?? StockLocation::query()->create([
+                'parent_id' => StockLocation::query()->where('store_id', $this->mainStore->id)->where('kind', StockLocation::KIND_STORE)->value('id'),
+                'kind' => StockLocation::KIND_BACKROOM, 'name' => 'Store Floor', 'code' => 'T-FLOOR', 'status' => 'active',
+                'store_id' => $this->mainStore->id, 'is_stockable' => true,
+            ]);
+    }
+
+    /** A transfer from the Remote Hub to the floor; `created_at` is set apart, as it is not fillable. */
+    private function transfer(\App\Models\Item\ItemVariant $variant, StockLocation $floor, array $attributes): \App\Models\StockKeeper\Transfer
+    {
+        $transfer = new \App\Models\StockKeeper\Transfer(array_diff_key($attributes, ['created_at' => true]) + [
+            'item_variant_id' => $variant->id, 'from_store_id' => $this->mainStore->id, 'to_store_id' => $this->mainStore->id,
+            'source_location_type' => StockLocation::class, 'source_location_id' => $this->remoteHub->id,
+            'destination_location_type' => StockLocation::class, 'destination_location_id' => $floor->id,
+            'quantity' => 4, 'status' => 'pending', 'origin' => \App\Models\StockKeeper\Transfer::ORIGIN_MANUAL,
+            'approval_state' => \App\Models\StockKeeper\Transfer::APPROVAL_NOT_REQUIRED,
+        ]);
+        $transfer->created_at = $attributes['created_at'];
+        $transfer->save();
+
+        return $transfer;
+    }
 
     /** @param array<string, mixed> $attributes */
     private function shipment(array $attributes): Shipment

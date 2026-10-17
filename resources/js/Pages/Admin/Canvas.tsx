@@ -107,6 +107,9 @@ function timeAgo(dateStr: string, now: number): string {
     return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+const SAVE_COMMENT_MAX = 60;
+const SAVE_TAGS = ['#milestone', '#review-ready', '#wip', '#layout-fix'];
+
 type StatusTone = 'ok' | 'busy' | 'warn' | 'error';
 
 interface StatusBarProps {
@@ -243,9 +246,10 @@ interface CanvasProps {
         created_at: string;
     };
     history: HistoryItem[];
+    draftSavedAt?: string | null;
 }
 
-export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId, currentUserId, allUsers, sharedUsers: initialSharedUsers, latestSnapshot, latestVersionInfo, history: initialHistory }: CanvasProps) {
+export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId, currentUserId, allUsers, sharedUsers: initialSharedUsers, latestSnapshot, latestVersionInfo, history: initialHistory, draftSavedAt }: CanvasProps) {
 
     // Helper: Format date strings for history list
     const formatDate = (dateStr: string) => {
@@ -495,11 +499,10 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
 
     const [unsavedChangesCount, setUnsavedChangesCount] = useState(0);
     const [canvasSizeWarning, setCanvasSizeWarning] = useState<string | null>(null);
-    const lastSaveTime = useRef<number>(Date.now());
-    const [snapshotReminder, setSnapshotReminder] = useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
     const [saveComment, setSaveComment] = useState('Updated canvas blueprint');
-    const [saveAnimKey, setSaveAnimKey] = useState(0);
+    // Autosave keeps one draft behind the scenes; only "Save version" adds to the history.
+    const [lastAutosaved, setLastAutosaved] = useState<string | null>(draftSavedAt ?? null);
 
     const authUser = (usePage().props as any).auth?.user;
     const [isSaving, setIsSaving] = useState(false);
@@ -538,32 +541,6 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             window.removeEventListener('canvas-upload-error', handleError);
         };
     }, []);
-
-    useEffect(() => {
-        if (!hasUnsavedChanges) {
-            setSnapshotReminder(false);
-            return;
-        }
-
-        const interval = setInterval(() => {
-            if (hasUnsavedChanges && Date.now() - lastSaveTime.current >= 3 * 60 * 1000) {
-                setSnapshotReminder(prev => {
-                    if (!prev) setSaveAnimKey(k => k + 1);
-                    return true;
-                });
-            }
-        }, 30000);
-
-        if (unsavedChangesCount >= 20) {
-            setSnapshotReminder(prev => {
-                if (!prev) setSaveAnimKey(k => k + 1);
-                return true;
-            });
-            setUnsavedChangesCount(0);
-        }
-
-        return () => clearInterval(interval);
-    }, [hasUnsavedChanges, unsavedChangesCount]);
 
     const isFirstMount = useRef(true);
     useEffect(() => {
@@ -610,6 +587,13 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         });
     };
 
+    const changePermission = (user: any, permission: 'view' | 'edit') => {
+        router.post('/canvas/share', { canvas_id: initialActiveCanvasId, user_id: user.id, permission }, {
+            preserveScroll: true,
+            onSuccess: () => setSharedUsers(prev => prev.map(u => u.id === user.id ? { ...u, pivot: { ...u.pivot, permission } } : u)),
+        });
+    };
+
     const handleConfirmUnshare = () => {
         if (!userToDelete) return;
         router.post('/canvas/unshare', {
@@ -628,6 +612,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         return getSanitizedSnapshot(latestSnapshot);
     }, [latestSnapshot]);
 
+    const changeSeq = useRef(0);
     const sizeCheckTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleMount = (editor: Editor) => {
@@ -648,6 +633,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             );
 
             if (isSignificantChange) {
+                changeSeq.current += 1;
                 setHasUnsavedChanges(true);
                 setUnsavedChangesCount(prev => prev + 1);
 
@@ -698,8 +684,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 setIsDrawerOpen(false);
                 setHasUnsavedChanges(false);
                 setUnsavedChangesCount(0);
-                lastSaveTime.current = Date.now();
-                setSnapshotReminder(false);
+                setLastAutosaved(null);
 
                 const newVersionId = response.data.version_id;
                 setHistory(prev => [
@@ -744,6 +729,34 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         }
     };
 
+    const handleRestoreVersion = async (id: number) => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        try {
+            const response = await axios.post(route('admin.canvas.restore', id));
+            const sanitized = getSanitizedSnapshot(response.data.snapshot_json);
+            if (sanitized) {
+                editor.loadSnapshot(sanitized);
+                setTimeout(() => editor.zoomToFit({ animation: { duration: 200 } }), 100);
+            }
+            setHistory(prev => [
+                { id: response.data.version_id, comment: response.data.comment, created_at: new Date().toISOString(), user: authUser ? { id: authUser.id, first_name: authUser.first_name, last_name: authUser.last_name } : undefined },
+                ...prev,
+            ]);
+            setActiveVersionId(response.data.version_id);
+            setLastSaved({ at: new Date().toISOString(), by: authUser?.first_name });
+            setLastAutosaved(null);
+            setHasUnsavedChanges(false);
+            setProblem(null);
+            setIsDrawerOpen(false);
+            setSnackbar({ open: true, message: 'Version restored', severity: 'success' });
+        } catch (error) {
+            const why = describeError(error, 'open');
+            setProblem(why);
+            setSnackbar({ open: true, message: why.message, severity: 'error' });
+        }
+    };
+
     const activeCanvas = canvases.find(c => c.id === initialActiveCanvasId);
     const isOwner = activeCanvas?.user_id === currentUserId;
     const currentUserShare = sharedUsers.find((u: any) => String(u.id) === String(currentUserId));
@@ -755,6 +768,29 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         }
     }, [isViewer]);
 
+    // Autosave: a few seconds after the last change, rewrite the one draft row.
+    useEffect(() => {
+        if (!hasUnsavedChanges || isViewer || isSaving) return;
+        const timer = setTimeout(async () => {
+            const editor = editorRef.current;
+            if (!editor) return;
+            const seq = changeSeq.current;
+            try {
+                const response = await axios.post(route('admin.canvas.autosave'), {
+                    canvas_id: initialActiveCanvasId,
+                    snapshot_json: getSanitizedSnapshot(editor.getSnapshot()),
+                });
+                setLastAutosaved(response.data.saved_at);
+                setProblem(null);
+                // Edits made while the request was out are still unsaved.
+                if (changeSeq.current === seq) setHasUnsavedChanges(false);
+            } catch (error) {
+                setProblem(describeError(error, 'save'));
+            }
+        }, 5000);
+        return () => clearTimeout(timer);
+    }, [hasUnsavedChanges, unsavedChangesCount, isViewer, isSaving, initialActiveCanvasId]);
+
     // What the status bar says, most urgent first.
     const latestVersionId = history[0]?.id ?? null;
     const viewedVersion = activeVersionId !== null && activeVersionId !== latestVersionId
@@ -765,6 +801,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         : isSaving ? ['busy', 'Saving…']
         : viewedVersion && !hasUnsavedChanges ? ['warn', `Viewing an older version (${formatDate(viewedVersion.created_at)})`]
         : hasUnsavedChanges ? ['warn', isViewer ? 'Changes here are not saved (view only)' : 'Unsaved changes']
+        : lastAutosaved && (!lastSaved || lastAutosaved > lastSaved.at) ? ['ok', `Saved ${timeAgo(lastAutosaved, now)} · autosave`]
         : lastSaved ? ['ok', `Saved ${timeAgo(lastSaved.at, now)}${lastSaved.by ? ` by ${lastSaved.by}` : ''}`]
         : ['ok', 'Nothing saved yet'];
 
@@ -834,6 +871,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     <Box sx={{ mb: 3 }}>
                         <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontWeight: 600 }}>
                             Switch Canvas Blueprint
+                            <Chip size="small" label={`${canvases.length} ${canvases.length === 1 ? 'blueprint' : 'blueprints'}`} sx={{ ml: 1, height: 18, fontSize: '10px' }} />
                         </Typography>
                         <FormControl fullWidth size="small">
                             <Select
@@ -844,6 +882,9 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                 {canvases.map((c) => (
                                     <MenuItem key={c.id} value={c.id}>
                                         {c.title} {c.user_id !== currentUserId ? '(Shared)' : ''}
+                                        {c.id === initialActiveCanvasId && (
+                                            <Chip size="small" color="primary" variant="outlined" label="Active" sx={{ ml: 1, height: 18, fontSize: '10px' }} />
+                                        )}
                                     </MenuItem>
                                 ))}
                             </Select>
@@ -897,7 +938,18 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                             </ListItemAvatar>
                                             <ListItemText
                                                 primary={`${u.first_name} ${u.last_name || ''}`}
-                                                secondary={`Permission: ${u.pivot?.permission || 'view'}`}
+                                                secondary={
+                                                    <Select
+                                                        variant="standard"
+                                                        disableUnderline
+                                                        value={u.pivot?.permission || 'view'}
+                                                        onChange={(e: any) => changePermission(u, e.target.value)}
+                                                        sx={{ fontSize: '12px' }}
+                                                    >
+                                                        <MenuItem value="view">Can view</MenuItem>
+                                                        <MenuItem value="edit">Can edit</MenuItem>
+                                                    </Select>
+                                                }
                                                 primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
                                                 secondaryTypographyProps={{ variant: 'caption' }}
                                             />
@@ -949,6 +1001,9 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                         <ListItemText
                                             primary={
                                                 <Typography variant="body2" fontWeight="600" noWrap>
+                                                    {item.id === latestVersionId && (
+                                                        <Chip size="small" label="Current" sx={{ mr: 0.75, height: 16, fontSize: '9px', fontWeight: 700 }} />
+                                                    )}
                                                     {item.comment || 'Blueprint Update'}
                                                 </Typography>
                                             }
@@ -958,11 +1013,25 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                                                 </Typography>
                                             }
                                         />
+                                        {!isViewer && item.id !== latestVersionId && (
+                                            <Button
+                                                size="small"
+                                                color="inherit"
+                                                onClick={(e) => { e.stopPropagation(); handleRestoreVersion(item.id); }}
+                                                sx={{ textTransform: 'none', fontSize: '12px', ml: 1, flexShrink: 0 }}
+                                            >
+                                                Restore
+                                            </Button>
+                                        )}
                                     </ListItem>
                                 );
                             })
                         )}
                     </List>
+
+                    <Typography variant="caption" color={hasUnsavedChanges ? 'warning.main' : 'success.main'} sx={{ mt: 2 }}>
+                        {hasUnsavedChanges ? 'Saving changes…' : 'All changes synced'}
+                    </Typography>
                 </Drawer>
 
                 {/* Dialogs */}
@@ -1039,20 +1108,38 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                 <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="xs" fullWidth>
                     <DialogTitle sx={{ fontWeight: 'bold' }}>Save a version</DialogTitle>
                     <DialogContent>
+                        <Typography variant="body2" color="text.secondary">
+                            Name this milestone so you can restore it later.
+                        </Typography>
                         <TextField
                             autoFocus
                             margin="dense"
-                            label="What changed?"
+                            label="What changed? (required)"
                             fullWidth
                             variant="outlined"
                             value={saveComment}
-                            onChange={(e) => setSaveComment(e.target.value)}
+                            onChange={(e) => setSaveComment(e.target.value.slice(0, SAVE_COMMENT_MAX))}
+                            helperText={`${saveComment.length}/${SAVE_COMMENT_MAX}`}
+                            FormHelperTextProps={{ sx: { textAlign: 'right' } }}
                             sx={{ mt: 1 }}
                         />
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+                            {SAVE_TAGS.map((tag) => (
+                                <Chip
+                                    key={tag}
+                                    size="small"
+                                    label={tag}
+                                    onClick={() => setSaveComment((c) => (c.includes(tag) ? c : `${c.trim()} ${tag}`.trim()).slice(0, SAVE_COMMENT_MAX))}
+                                />
+                            ))}
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                            Will be saved under {authUser?.first_name} · {formatDate(new Date().toISOString())}
+                        </Typography>
                     </DialogContent>
                     <DialogActions sx={{ px: 3, pb: 2 }}>
                         <Button onClick={() => setSaveDialogOpen(false)} color="inherit">Cancel</Button>
-                        <Button onClick={() => performSave(saveComment)} variant="contained">Save version</Button>
+                        <Button onClick={() => performSave(saveComment.trim())} variant="contained" disabled={!saveComment.trim()}>Save version</Button>
                     </DialogActions>
                 </Dialog>
 

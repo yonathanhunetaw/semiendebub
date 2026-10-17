@@ -7,7 +7,9 @@ namespace App\Services\Fulfillment;
 use App\Models\Auth\User;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Fulfillment\ShipmentItem;
+use App\Models\Fulfillment\Vehicle;
 use App\Models\Inventory\StockLocation;
+use App\Models\Workforce\CustodyKey;
 use App\Services\ShipmentWorkflowService as Workflow;
 use Illuminate\Support\Facades\DB;
 
@@ -245,6 +247,31 @@ class ShipmentHandoffService
             ],
             'available_steps' => $this->stepsFor($shipment, $viewer),
             'labels' => self::LABELS,
+            'vehicle_key' => $this->vehicleKey($shipment),
+        ];
+    }
+
+    /**
+     * Who holds the run's car key, and whether that is the driver — shown as
+     * a warning before the trip starts (a warning only, for now).
+     *
+     * @return array{label: string, holder: string|null, driver_holds: bool}|null
+     */
+    private function vehicleKey(Shipment $shipment): ?array
+    {
+        if ($shipment->vehicle_id === null) {
+            return null;
+        }
+
+        $key = CustodyKey::query()->with(['holder', 'keyable'])
+            ->where('keyable_type', Vehicle::class)
+            ->where('keyable_id', $shipment->vehicle_id)
+            ->first();
+
+        return [
+            'label' => $key?->label() ?? trim(($shipment->vehicle_name ?? 'Car').' key'),
+            'holder' => $key?->holder ? trim($key->holder->first_name.' '.$key->holder->last_name) : null,
+            'driver_holds' => $key !== null && $shipment->courier_id !== null && (int) $key->holder_id === (int) $shipment->courier_id,
         ];
     }
 

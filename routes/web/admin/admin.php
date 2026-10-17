@@ -67,6 +67,8 @@ Route::domain("admin.{$baseDomain}")
             Route::get('/guide/world', \App\Http\Controllers\Shared\GuideWorldController::class)->name('guide.world');
             // The calendar: module dates + reminders and bills (shared with the other apps).
             require base_path('routes/web/partials/calendar.php');
+            // Keys, sites, opening/closing, shifts and clock-in (shared with the other apps).
+            require base_path('routes/web/partials/work.php');
             Route::redirect('/how-it-works', '/guide')->name('flow');
             Route::get('/settings', fn() => Inertia::render('Admin/Settings/Index'))->name('settings');
 
@@ -77,7 +79,9 @@ Route::domain("admin.{$baseDomain}")
                 Route::post('/share', [CanvasController::class, 'share'])->name('share');
                 Route::post('/unshare', [CanvasController::class, 'unshare'])->name('unshare');
                 Route::post('/save', [CanvasController::class, 'save'])->name('save');
+                Route::post('/autosave', [CanvasController::class, 'autosave'])->name('autosave');
                 Route::get('/version/{id}', [CanvasController::class, 'getVersion'])->name('version');
+                Route::post('/version/{id}/restore', [CanvasController::class, 'restore'])->name('restore');
                 Route::post('/upload-asset', [CanvasController::class, 'uploadAsset'])->name('upload-asset');
             });
 

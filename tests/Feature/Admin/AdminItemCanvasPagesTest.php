@@ -224,6 +224,64 @@ class AdminItemCanvasPagesTest extends TestCase
         $this->assertSame(0, $mine->shares()->count());
     }
 
+    #[Test]
+    public function a_version_needs_a_comment_of_at_most_60_characters(): void
+    {
+        $canvas = Canvas::query()->create(['user_id' => $this->admin->id, 'title' => 'Plan']);
+        $body = ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => []]];
+
+        $this->postJson(route('admin.canvas.save'), $body)->assertJsonValidationErrors('comment');
+        $this->postJson(route('admin.canvas.save'), $body + ['comment' => str_repeat('a', 61)])->assertJsonValidationErrors('comment');
+        $this->postJson(route('admin.canvas.save'), $body + ['comment' => str_repeat('a', 60)])->assertOk();
+    }
+
+    #[Test]
+    public function autosave_rewrites_one_draft_that_never_enters_the_history_and_a_save_clears_it(): void
+    {
+        $canvas = Canvas::query()->create(['user_id' => $this->admin->id, 'title' => 'Plan']);
+        $this->postJson(route('admin.canvas.save'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => [1]], 'comment' => 'base'])->assertOk();
+
+        $this->travel(1)->minutes();
+        $this->postJson(route('admin.canvas.autosave'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => [1, 2]]])->assertOk()->assertJsonStructure(['saved_at']);
+        $this->postJson(route('admin.canvas.autosave'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => [1, 2, 3]]])->assertOk();
+
+        $this->assertSame(1, CanvasVersion::query()->where('is_draft', true)->count());
+        $this->get(route('admin.canvas.index', ['canvas_id' => $canvas->id]))->assertInertia(fn ($page) => $page
+            ->where('latestSnapshot.shapes', [1, 2, 3])
+            ->has('history', 1)
+            ->whereNot('draftSavedAt', null));
+
+        $this->postJson(route('admin.canvas.save'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => [9]], 'comment' => 'next'])->assertOk();
+        $this->assertSame(0, CanvasVersion::query()->where('is_draft', true)->count());
+    }
+
+    #[Test]
+    public function a_view_only_user_cannot_save_or_autosave(): void
+    {
+        $canvas = Canvas::query()->create(['user_id' => $this->admin->id, 'title' => 'Plan']);
+        $viewer = $this->user('admin');
+        $canvas->shares()->attach($viewer->id, ['permission' => 'view']);
+
+        $this->actingAs($viewer);
+        $body = ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => []]];
+        $this->postJson(route('admin.canvas.save'), $body + ['comment' => 'x'])->assertForbidden();
+        $this->postJson(route('admin.canvas.autosave'), $body)->assertForbidden();
+    }
+
+    #[Test]
+    public function restoring_a_version_adds_it_on_top_and_keeps_the_old_ones(): void
+    {
+        $canvas = Canvas::query()->create(['user_id' => $this->admin->id, 'title' => 'Plan']);
+        $first = $this->postJson(route('admin.canvas.save'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => [1]], 'comment' => 'one'])->json('version_id');
+        $this->postJson(route('admin.canvas.save'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => [2]], 'comment' => 'two'])->assertOk();
+
+        $this->postJson(route('admin.canvas.restore', $first))->assertOk()
+            ->assertJsonPath('comment', 'Restored: one')
+            ->assertJsonPath('snapshot_json.shapes', [1]);
+
+        $this->assertSame(3, CanvasVersion::query()->where('canvas_id', $canvas->id)->count());
+    }
+
     // ---- Settings and the sign-in page -------------------------------------
 
     #[Test]

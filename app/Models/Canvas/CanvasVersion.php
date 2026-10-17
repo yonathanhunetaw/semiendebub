@@ -18,7 +18,8 @@ class CanvasVersion extends Model
         'user_id', 
         'snapshot_json', 
         'status', 
-        'comment'
+        'comment',
+        'is_draft',
     ];
 
     /**
@@ -28,6 +29,7 @@ class CanvasVersion extends Model
      */
     protected $casts = [
         'snapshot_json' => 'array',
+        'is_draft' => 'boolean',
     ];
 
     /**

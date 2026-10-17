@@ -177,6 +177,13 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
             surface: "border-warning/30 bg-gradient-to-br from-warning-container/60 to-surface-container-lowest",
         },
         {
+            label: "My work",
+            caption: "Keys, shifts, clock in",
+            icon: "badge",
+            route: "seller.work",
+            tone: "primary",
+        },
+        {
             label: "Customers",
             caption: catalogue.customers ? `${catalogue.customers} Accounts & directory` : "Accounts & directory",
             icon: "group",

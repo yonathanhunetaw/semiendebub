@@ -144,6 +144,8 @@ export interface ShipmentHandoff {
     /** Steps the viewer can take right now. */
     available_steps: HandoffStep[];
     labels: Record<HandoffStep, string>;
+    /** Who holds the run's car key (Work); null when no car is set. */
+    vehicle_key?: { label: string; holder: string | null; driver_holds: boolean } | null;
 }
 
 /** A manifest line as the hand-off panel needs it. */

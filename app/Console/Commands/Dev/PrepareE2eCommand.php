@@ -9,13 +9,13 @@ use App\Models\Auth\User;
 use App\Models\Inventory\LocationStaff;
 use App\Models\Inventory\StockLocation;
 use App\Models\Finance\PaymentAccount;
-use App\Models\Inventory\StockReservation;
 use App\Models\Item\Item;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Services\PriceProvider;
+use App\Services\Dev\SellablePicks;
 use App\Services\Seller\SellerCatalog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -52,7 +52,7 @@ final class PrepareE2eCommand extends Command
 
         $wanted = max(1, (int) $this->option('items'));
         // One extra stocked item carries the known prices for the pricing specs.
-        [$store, $picked] = $this->pickStore($catalog, $wanted + 1);
+        [$store, $picked] = app(SellablePicks::class)->pick($wanted + 1);
         $priceItem = $picked === [] ? null : array_pop($picked);
         $items = $picked;
 
@@ -249,73 +249,6 @@ final class PrepareE2eCommand extends Command
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
         return self::SUCCESS;
-    }
-
-    /**
-     * The first store that can sell $wanted items whose every variant is
-     * priced and has free stock on its shelf or floor, so whichever variant
-     * the add-to-cart sheet starts on can be sold and picked. Items with the
-     * fewest variants come first.
-     *
-     * @return array{0: ?Store, 1: array<int, array<string, mixed>>}
-     */
-    private function pickStore(SellerCatalog $catalog, int $wanted): array
-    {
-        foreach (Store::query()->orderBy('id')->get() as $store) {
-            $leaves = $catalog->storeLeaves((int) $store->id);
-            $locations = [...$leaves['shelf'], ...$leaves['floor']];
-
-            if ($locations === []) {
-                continue;
-            }
-
-            $held = StockReservation::query()
-                ->where('store_id', $store->id)
-                ->where('status', StockReservation::STATUS_OPEN)
-                ->whereIn('stock_location_id', $locations)
-                ->groupBy('item_variant_id')
-                ->selectRaw('item_variant_id, SUM(quantity) AS quantity')
-                ->pluck('quantity', 'item_variant_id');
-
-            $picks = Item::query()
-                ->withCount('variants')
-                ->having('variants_count', '>', 0)
-                ->orderBy('variants_count')
-                ->orderBy('id')
-                ->with('variants')
-                ->get()
-                // Lazy, so the per-item checks stop once enough items pass.
-                ->lazy()
-                ->filter(function (Item $item) use ($store, $locations, $held): bool {
-                    $storeVariants = StoreVariant::query()
-                        ->where('store_id', $store->id)
-                        ->where('active', true)
-                        ->whereIn('item_variant_id', $item->variants->pluck('id'))
-                        ->with(['stocks' => fn ($stock) => $stock->whereIn('stock_location_id', $locations)])
-                        ->get();
-
-                    if ($storeVariants->count() !== $item->variants->count()) {
-                        return false;
-                    }
-
-                    return $storeVariants->every(fn (StoreVariant $storeVariant): bool =>
-                        (int) $storeVariant->stocks->sum('quantity') - (int) ($held[$storeVariant->item_variant_id] ?? 0) >= 10
-                        && PriceProvider::getPriceLadder((int) $storeVariant->id, (int) $store->id) !== []);
-                })
-                ->take($wanted)
-                ->map(fn (Item $item): array => [
-                    'item_id' => (int) $item->id,
-                    'name' => (string) $item->product_name,
-                    'variants' => (int) $item->variants_count,
-                ])
-                ->values();
-
-            if ($picks->count() === $wanted) {
-                return [$store, $picks->all()];
-            }
-        }
-
-        return [null, []];
     }
 
     /**
