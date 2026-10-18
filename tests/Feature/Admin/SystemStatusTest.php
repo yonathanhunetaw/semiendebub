@@ -306,4 +306,83 @@ class SystemStatusTest extends TestCase
         $this->assertNull($s['lease']);
         $this->assertSame([], $s['events']);
     }
+    // ---- sync (Ubuntu -> Pi) ----------------------------------------------
+
+    /** @param array<string, mixed> $extra */
+    private function beat(string $node, string $role, array $extra = []): void
+    {
+        $this->store("nodes/{$node}.json", $extra + [
+            'ts' => self::NOW - 20, 'node' => $node, 'role' => $role, 'on_demand' => false, 'commit' => 'abc1234',
+            'in_sync' => true, 'db_up' => true, 'tunnel' => '', 'app_up' => true, 'deploying' => 0,
+        ]);
+    }
+
+    private function node(array $snapshot, string $name): array
+    {
+        return array_values(array_filter($snapshot['nodes'], static fn (array $n): bool => $n['name'] === $name))[0];
+    }
+
+    #[Test]
+    public function a_heartbeat_with_sync_fields_becomes_ages_and_a_table_list(): void
+    {
+        $this->beat('pi', 'standby', [
+            'in_sync' => false, 'behind_since' => self::NOW - 900, 'last_restore_ok' => self::NOW - 4000,
+            'restore_failures' => 1, 'last_backup_ts' => 0, 'baseline_ts' => self::NOW - 300,
+            'tables_changed' => ['count' => 2, 'names' => ['orders', 'item_stocks']],
+        ]);
+
+        $pi = $this->node($this->snapshot(), 'pi');
+
+        $this->assertSame(900, $pi['behind_for']);
+        $this->assertSame(4000, $pi['last_restore_age']);
+        $this->assertSame(1, $pi['restore_failures']);
+        $this->assertNull($pi['last_backup_age'], '0 means never');
+        $this->assertSame(300, $pi['dump_age']);
+        $this->assertSame(['count' => 2, 'names' => ['orders', 'item_stocks']], $pi['tables_changed']);
+    }
+
+    #[Test]
+    public function an_old_heartbeat_without_sync_fields_reads_as_unknown_not_as_zero_changes(): void
+    {
+        $this->beat('pi', 'standby');
+
+        $pi = $this->node($this->snapshot(), 'pi');
+
+        $this->assertNull($pi['behind_for']);
+        $this->assertNull($pi['tables_changed']);
+        $this->assertSame(0, $pi['restore_failures']);
+    }
+
+    #[Test]
+    public function a_standby_that_stays_behind_raises_a_timed_alert_and_repeated_failures_an_error(): void
+    {
+        $this->beat('pi', 'standby', ['in_sync' => false, 'behind_since' => self::NOW - 1200]);
+        $messages = array_column($this->snapshot()['alerts'], 'message');
+        $this->assertContains('pi has been behind the newest backup for 20 minutes.', $messages);
+
+        $this->beat('pi', 'standby', ['in_sync' => false, 'behind_since' => self::NOW - 1200, 'restore_failures' => 3]);
+        $failed = array_values(array_filter($this->snapshot()['alerts'], static fn (array $a): bool => str_contains($a['message'], 'failed to restore the newest backup 3 times')));
+        $this->assertCount(1, $failed);
+        $this->assertSame('error', $failed[0]['level']);
+    }
+
+    #[Test]
+    public function writes_missing_from_every_backup_for_a_long_time_warn_on_the_live_node(): void
+    {
+        $this->store('primary.json', ['node' => 'ubuntu', 'ts' => self::NOW - 30, 'ttl' => 900, 'pinned' => false]);
+        $this->beat('ubuntu', 'primary', ['baseline_ts' => self::NOW - 1800, 'tables_changed' => ['count' => 4, 'names' => ['orders']]]);
+
+        $messages = array_column($this->snapshot()['alerts'], 'message');
+
+        $this->assertContains('ubuntu has written to 4 table(s) since its last dump 30 minutes ago: those changes are in no backup yet.', $messages);
+    }
+
+    #[Test]
+    public function a_few_fresh_writes_after_a_recent_dump_are_not_an_alert(): void
+    {
+        $this->store('primary.json', ['node' => 'ubuntu', 'ts' => self::NOW - 30, 'ttl' => 900, 'pinned' => false]);
+        $this->beat('ubuntu', 'primary', ['baseline_ts' => self::NOW - 120, 'tables_changed' => ['count' => 4, 'names' => []]]);
+
+        $this->assertSame([], $this->snapshot()['alerts']);
+    }
 }

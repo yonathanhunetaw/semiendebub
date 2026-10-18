@@ -176,6 +176,7 @@ r2_publish() {
         "$name" "$sha" "$NODE_NAME" "$(date -u +%FT%TZ)" "$(wc -c < "$file" | tr -d ' ')" \
         | "$MC" pipe "$R2/latest.json" >/dev/null
     state_set last_sha "$sha"
+    state_set last_backup_ts "$(now_epoch)"
     printf '%s' "$name"
 }
 
@@ -214,6 +215,7 @@ r2_prune() {
         [ "$age" -gt 2592000 ] && "$MC" rm "$R2/$name" >/dev/null 2>&1 || true
     done
     events_prune
+    uptime_prune
     return 0
 }
 
@@ -324,9 +326,101 @@ heartbeat_write() {
     local tunnel app; tunnel="$(state_get tunnel)"; app="$(state_get app_up)"
     [ "$app" = false ] || app=true
     # deploying = epoch the running deploy started (0 = none), see deploy_mark_start
-    printf '{"ts":%s,"node":"%s","role":"%s","on_demand":%s,"commit":"%s","last_sha":"%s","in_sync":%s,"db_up":%s,"tunnel":"%s","app_up":%s,"deploying":%s}' \
+    # Sync fields for the System page (all additive; old readers ignore them):
+    #   behind_since / last_restore_ok / last_backup_ts / baseline_ts = epochs (0 = never/not behind)
+    #   restore_failures = failed restores in a row
+    #   tables_changed = tables written since the last dump or restore (null = could not ask the DB)
+    local changed="null"
+    if [ "$up" = true ] && [ -n "$(state_get baseline_ts)" ]; then changed="$(tables_changed_json "$(state_get baseline_ts)")"; fi
+    printf '{"ts":%s,"node":"%s","role":"%s","on_demand":%s,"commit":"%s","last_sha":"%s","in_sync":%s,"db_up":%s,"tunnel":"%s","app_up":%s,"deploying":%s,"behind_since":%s,"last_restore_ok":%s,"restore_failures":%s,"last_backup_ts":%s,"baseline_ts":%s,"tables_changed":%s}' \
         "$(now_epoch)" "$NODE_NAME" "${NODE_ROLE:-}" "$ON_DEMAND" "$commit" "${mine:0:8}" "$insync" "$up" "$tunnel" "$app" "$(deploying_since)" \
+        "$(state_num behind_since)" "$(state_num last_restore_ok)" "$(state_num restore_failures)" "$(state_num last_backup_ts)" "$(state_num baseline_ts)" "$changed" \
         | "$MC" pipe "$R2/nodes/${NODE_NAME}.json" >/dev/null 2>&1 || true
+    uptime_log "$insync" "$up" "$tunnel" "$app" "$commit"
+    uptime_publish
+    node_stats_publish
+    return 0
+}
+
+# state_num <key>: a state value that must be a whole number (0 when empty or odd)
+state_num() {
+    local v; v="$(state_get "$1")"
+    case "$v" in ''|*[!0-9]*) echo 0 ;; *) echo "$v" ;; esac
+}
+
+# db_tables_changed <epoch>: names of tables written since that time (volatile ones
+# excluded), one per line, after a first line "ok". No "ok" = the DB could not be asked.
+# MySQL caches information_schema stats for a day, hence stats_expiry=0. UPDATE_TIME
+# is kept in memory, so a MySQL restart forgets older writes: treat the answer as a
+# lower bound, never as proof that nothing changed.
+db_tables_changed() {
+    ${DB_DOCKER:-docker} exec -i -e SINCE="$1" -e EXCLUDE="$EXCLUDE_DATA" "$DB_CONTAINER" sh -s 2>/dev/null <<'EOS' || true
+export MYSQL_PWD="$MYSQL_PASSWORD"
+case "$SINCE" in ''|*[!0-9]*) exit 1 ;; esac
+mysql -u"$MYSQL_USER" -N -B -e "SET SESSION information_schema_stats_expiry=0; SELECT 'ok'; SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE' AND update_time IS NOT NULL AND update_time > FROM_UNIXTIME($SINCE) ORDER BY 1" "$MYSQL_DATABASE" \
+    | grep -v -x -E "$(echo "$EXCLUDE" | tr ' ' '|')" || true
+EOS
+}
+
+# tables_changed_json <epoch>: {"count":N,"names":["a","b"]} (first 8 names) or null
+tables_changed_json() {
+    local out count names
+    out="$(db_tables_changed "$1")"
+    [ "$(printf '%s\n' "$out" | head -n 1)" = ok ] || { echo null; return 0; }
+    names="$(printf '%s\n' "$out" | tail -n +2 | grep -E '^[A-Za-z0-9_]+$' || true)"
+    count=0; [ -z "$names" ] || count="$(printf '%s\n' "$names" | wc -l | tr -d ' ')"
+    names="$(printf '%s\n' "$names" | head -n 8 | grep . | sed 's/.*/"&"/' | paste -sd, - || true)"
+    printf '{"count":%s,"names":[%s]}' "$count" "$names"
+}
+
+# ---------------------------------------------------------------------------
+# Uptime history for the System page. Every heartbeat adds at most one line a minute
+# to a local file; about every 10 minutes the current hour is uploaded as one small
+# object (uptime/<node>/<YYYYMMDDTHH>.json, rewritten until the hour is over), so R2
+# sees ~150 writes a day per node, not 1440. Pruned after 30 days.
+# ---------------------------------------------------------------------------
+UPTIME_PUBLISH_EVERY=600
+
+# hour_stamp <epoch>: 20261018T07 (UTC; GNU and BSD date)
+hour_stamp() {
+    if date -u -d "@0" >/dev/null 2>&1; then date -u -d "@$1" +%Y%m%dT%H
+    else date -u -r "$1" +%Y%m%dT%H; fi
+}
+
+# uptime_log <insync> <db_up> <tunnel> <app_up> <commit>: one line per minute
+uptime_log() {
+    local now minute; now="$(now_epoch)"; minute=$(( now / 60 ))
+    [ "$(state_get uptime_last_min)" = "$minute" ] && return 0
+    state_set uptime_last_min "$minute"
+    printf '%s %s %s %s %s %s %s\n' "$now" "$1" "$2" "${3:--}" "$4" "$(deploying_since)" "${5:--}" >> "$STATE_DIR/uptime.log" 2>/dev/null || true
+    return 0
+}
+
+# _uptime_put <hour_start_epoch>: upload that hour's lines. Returns non-zero if the upload failed.
+_uptime_put() {
+    local hs="$1" rows
+    [ -s "$STATE_DIR/uptime.log" ] || return 0
+    rows="$(awk -v a="$hs" -v b="$((hs + 3600))" '$1 >= a && $1 < b {
+        printf "%s[%s,%s,%s,\"%s\",%s,%s,\"%s\"]", (n++ ? "," : ""), $1, $2, $3, ($4 == "-" ? "" : $4), $5, $6, ($7 == "-" ? "" : $7) }' "$STATE_DIR/uptime.log")"
+    [ -n "$rows" ] || return 0
+    printf '{"node":"%s","hour":"%s","from":%s,"rows":[%s]}' "$NODE_NAME" "$(hour_stamp "$hs")" "$hs" "$rows" \
+        | "$MC" pipe "$R2/uptime/${NODE_NAME}/$(hour_stamp "$hs").json" >/dev/null 2>&1
+}
+
+# uptime_publish: throttled; also closes the previous hour once it is over
+uptime_publish() {
+    [ -n "${MC:-}" ] || return 0
+    local now hs last; now="$(now_epoch)"; hs=$(( now / 3600 * 3600 )); last="$(state_num uptime_pub)"
+    [ $(( now - last )) -ge "$UPTIME_PUBLISH_EVERY" ] || return 0
+    if [ "$last" -gt 0 ] && [ "$last" -lt "$hs" ]; then _uptime_put $(( last / 3600 * 3600 )) || return 0; fi
+    _uptime_put "$hs" || return 0
+    state_set uptime_pub "$now"
+    # keep two days locally, trimmed once an hour
+    if [ "$(state_num uptime_trim)" -lt "$hs" ]; then
+        awk -v c="$(( now - 172800 ))" '$1 >= c' "$STATE_DIR/uptime.log" > "$STATE_DIR/uptime.log.tmp" 2>/dev/null \
+            && mv "$STATE_DIR/uptime.log.tmp" "$STATE_DIR/uptime.log" || true
+        state_set uptime_trim "$hs"
+    fi
     return 0
 }
 
@@ -392,3 +486,19 @@ events_prune() {
     done
     return 0
 }
+
+# uptime_prune: delete uptime/<node>/<YYYYMMDDTHH>.json objects older than 30 days
+uptime_prune() {
+    local now name hour age
+    now="$(now_epoch)"
+    "$MC" ls -r "$R2/uptime/" 2>/dev/null | awk '{print $NF}' | grep -E '[0-9]{8}T[0-9]{2}\.json$' | while read -r name; do
+        hour="$(basename "$name" .json)"
+        age=$(( now - $(epoch_of_stamp "${hour}0000Z") ))
+        [ "$age" -gt 2592000 ] && "$MC" rm "$R2/uptime/$name" >/dev/null 2>&1 || true
+    done
+    return 0
+}
+
+# Read-only node snapshot for the System page (containers, memory, disk, temperature).
+# shellcheck source=node-stats.sh
+. "$(dirname "${BASH_SOURCE[0]}")/node-stats.sh"

@@ -14,6 +14,8 @@ use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\Shift;
 use App\Models\Workforce\StaffingRule;
+use App\Models\Workforce\LeaveRequest;
+use App\Services\Workforce\LeaveService;
 use App\Services\Workforce\RotaService;
 use App\Services\Workforce\Sites;
 use Illuminate\Http\RedirectResponse;
@@ -30,7 +32,7 @@ class RotaController extends Controller
 {
     use ReadsWorkApp;
 
-    public function __construct(private readonly Sites $sites, private readonly RotaService $rota)
+    public function __construct(private readonly Sites $sites, private readonly RotaService $rota, private readonly LeaveService $leave)
     {
     }
 
@@ -56,6 +58,7 @@ class RotaController extends Controller
             'shifts' => $this->rota->between($site, $start, $start->addWeek())
                 ->map(fn (Shift $shift): array => $this->rota->present($shift))->values()->all(),
             'gaps' => $this->rota->coverage($site, $start, $end),
+            'leave' => $this->leave->atSite($site, $start, $end)->map(fn (LeaveRequest $leave): array => $this->leave->present($leave))->values()->all(),
             'rules' => StaffingRule::query()->where('stock_location_id', $site->id)->get()
                 ->map(fn (StaffingRule $rule): array => [
                     'weekdays' => array_map('intval', $rule->weekdays ?? []),

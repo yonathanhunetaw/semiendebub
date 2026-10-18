@@ -55,12 +55,26 @@ trap 'rm -f "${TMP:-}"; lock_release db' EXIT
 
 info="$(r2_latest_info)"
 remote_sha="$(json_get "$info" sha256)"
+my_sha="$(state_get last_sha)"
+# behind_since: when R2 first had newer data than this node (cleared once it matches again)
+if [ -n "$remote_sha" ] && [ "$remote_sha" != "$my_sha" ]; then
+    [ -n "$(state_get behind_since)" ] || state_set behind_since "$(now_epoch)"
+else
+    state_set behind_since ""
+fi
 heartbeat_write "$remote_sha"                       # "I am alive, this is my state" (one tiny object per node)
 [ -n "$remote_sha" ] || exit 0                      # nothing published yet
-my_sha="$(state_get last_sha)"
 
 lease_load
 holder="$LEASE_HOLDER"; lease_age="$LEASE_AGE"; lease_fresh="$LEASE_FRESH"
+
+# note_restore_failure <why>: count it, tell the System page now, rate-limit the event
+note_restore_failure() {
+    local n; n="$(state_get restore_failures)"; case "$n" in ''|*[!0-9]*) n=0 ;; esac
+    n=$(( n + 1 )); state_set restore_failures "$n"
+    event_emit_every restore_failed 600 restore_failed error "$NODE_NAME could not restore the backup from R2: $1 ($n in a row)" "{\"failures\":$n}"
+    heartbeat_write "$remote_sha"
+}
 
 # restore_latest <safety:0|1>: fetch + verify + (optional safety dump) + restore
 restore_latest() {
@@ -71,7 +85,7 @@ restore_latest() {
     TMP="$(mktemp "${TMPDIR:-/tmp}/duka_sync.XXXXXX")"
     r2_fetch_latest "$TMP" "$remote_sha" || rc=$?
     if [ "$rc" = 2 ]; then log_every mismatch 300 "latest.sql.gz does not match latest.json yet (upload in progress?): retrying next run"; return 1; fi
-    [ "$rc" = 0 ] || fail "could not download a valid latest.sql.gz from $R2"
+    [ "$rc" = 0 ] || { note_restore_failure "download failed"; fail "could not download a valid latest.sql.gz from $R2"; }
     if [ "$safety" = 1 ]; then
         local safe="$STATE_DIR/pre-catchup_$(utc_stamp).sql.gz"
         db_dump "$safe" || { rm -f "$safe"; fail "could not take a safety dump of this node's database: not touching it"; }
@@ -85,8 +99,9 @@ restore_latest() {
         db_table_counts > "$before"
     fi
     log "restoring '$(json_get "$info" file)' made by '$(json_get "$info" node)' at $(json_get "$info" time)"
-    db_restore_file "$TMP" || fail "restore failed; this node's last_sha is unchanged, so it will retry (database may be partly loaded)"
+    db_restore_file "$TMP" || { note_restore_failure "restore failed"; fail "restore failed; this node's last_sha is unchanged, so it will retry (database may be partly loaded)"; }
     state_set last_sha "$remote_sha"
+    state_set last_restore_ok "$(now_epoch)"; state_set restore_failures 0; state_set behind_since ""; state_set baseline_ts "$(now_epoch)"
     heartbeat_write "$remote_sha"                    # report "in sync" now, not at the next run
     log "restored: now matches the newest backup (${remote_sha:0:12})"
     local from; from="$(json_get "$info" node)"

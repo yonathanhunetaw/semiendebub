@@ -23,6 +23,9 @@ use Illuminate\Support\Facades\DB;
  * and floor are one building), remote_hub or main_hub. Stores and Remote Hubs
  * have shifts; Main Hubs have a key and open/close only.
  *
+ * Dates are the shops' dates and opening times the shops' clock (LocalTime);
+ * opensAt / closesAt give UTC instants.
+ *
  * Who manages a site: a global admin; the admin or store manager of its store;
  * a facility manager of the site (or of its store). Who works at it: its
  * managers, the store's sellers / stock keepers / store managers, and anyone
@@ -163,11 +166,11 @@ class Sites
      *
      * @return array{closed: bool, opens_at: string|null, closes_at: string|null, note: string|null, exception: bool}|null
      */
-    public function hoursOn(StockLocation $site, CarbonInterface $date): ?array
+    public function hoursOn(StockLocation $site, CarbonInterface|string $date): ?array
     {
         $exception = SiteHourException::query()
             ->where('stock_location_id', $site->id)
-            ->whereDate('date', $date->toDateString())
+            ->whereDate('date', LocalTime::dateText($date))
             ->first();
 
         if ($exception !== null) {
@@ -180,7 +183,7 @@ class Sites
             ];
         }
 
-        $row = SiteHour::query()->where('stock_location_id', $site->id)->where('weekday', $date->dayOfWeek)->first();
+        $row = SiteHour::query()->where('stock_location_id', $site->id)->where('weekday', LocalTime::day($date)->dayOfWeek)->first();
 
         if ($row === null) {
             return null;
@@ -195,13 +198,13 @@ class Sites
         ];
     }
 
-    /** Opening time on a date as a moment, or null when closed / unknown. */
-    public function opensAt(StockLocation $site, CarbonInterface $date): ?CarbonImmutable
+    /** Opening time on a (shops') date as a UTC instant, or null when closed / unknown. */
+    public function opensAt(StockLocation $site, CarbonInterface|string $date): ?CarbonImmutable
     {
         return $this->moment($date, $this->hoursOn($site, $date)['opens_at'] ?? null);
     }
 
-    public function closesAt(StockLocation $site, CarbonInterface $date): ?CarbonImmutable
+    public function closesAt(StockLocation $site, CarbonInterface|string $date): ?CarbonImmutable
     {
         return $this->moment($date, $this->hoursOn($site, $date)['closes_at'] ?? null);
     }
@@ -246,9 +249,9 @@ class Sites
         });
     }
 
-    private function moment(CarbonInterface $date, ?string $time): ?CarbonImmutable
+    private function moment(CarbonInterface|string $date, ?string $time): ?CarbonImmutable
     {
-        return $time === null ? null : CarbonImmutable::parse($date->toDateString().' '.$time);
+        return $time === null ? null : LocalTime::at($date, $time);
     }
 
     private function hm(mixed $time): ?string

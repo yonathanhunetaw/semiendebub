@@ -1,6 +1,6 @@
 import { cardCls, clockTime, duration, FLAG_CHIP, ghostBtn, inputCls, primaryBtn, workLayout, wr } from "@/Components/Work/workUi";
 import { dayDate } from "@/utils/dates";
-import type { Person, TimeEntryView, WorkApp } from "@/types/work";
+import type { OvertimeDay, Person, TimeEntryView, WorkApp } from "@/types/work";
 import { Head, Link, router } from "@inertiajs/react";
 import React, { useState } from "react";
 
@@ -16,6 +16,66 @@ interface Props {
     here?: TimeEntryView[];
     entries?: TimeEntryView[];
     people?: Person[];
+    overtime?: OvertimeDay[];
+    needsApproval?: boolean;
+}
+
+const hours = (minutes: number): string => `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`;
+
+/** One person-day of overtime: its kinds, its pay hours, and the manager's yes or no. */
+function OvertimeRow({ app, day }: { app: WorkApp; day: OvertimeDay }): React.ReactElement {
+    const [note, setNote] = useState("");
+    const kinds = [
+        ["day", day.minutes.day],
+        ["night", day.minutes.night],
+        ["rest day", day.minutes.rest_day],
+        ["holiday", day.minutes.holiday],
+    ].filter(([, m]) => (m as number) > 0);
+    const decide = (name: string) =>
+        router.post(wr(app, name), { user_id: day.user_id, date: day.date, note: note || null }, { preserveScroll: true, onSuccess: () => setNote("") });
+
+    return (
+        <li className="py-2.5">
+            <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-on-surface">
+                        {day.name} · {dayDate(day.date)} · {hours(day.overtime)} overtime
+                    </p>
+                    <p className="text-[11px] text-on-surface-variant">
+                        {kinds.map(([k, m]) => `${hours(m as number)} ${k}`).join(" · ")} · paid as {day.weighted_hours} h
+                        {day.holiday ? ` · ${day.holiday}` : ""}
+                        {day.decided_by ? ` · ${day.decided_by}${day.note ? `: “${day.note}”` : ""}` : ""}
+                    </p>
+                </div>
+                <span
+                    className={`shrink-0 rounded-[999px] border px-2 py-0.5 text-[10px] font-bold ${
+                        day.status === "approved" || day.status === "not_needed"
+                            ? "border-success/30 bg-success-container/60 text-on-success-container"
+                            : day.status === "rejected"
+                              ? "border-error/30 bg-error-container/60 text-on-error-container"
+                              : "border-warning/30 bg-warning-container/60 text-on-warning-container"
+                    }`}
+                >
+                    {day.status === "pending" ? "To approve" : day.status === "not_needed" ? "Paid" : day.status === "approved" ? "Approved" : "Not paid"}
+                </span>
+            </div>
+            {day.can_decide && day.status !== "not_needed" ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                    <input className={`${inputCls} flex-1`} placeholder="Note (needed to turn it down)" value={note} onChange={(e) => setNote(e.target.value)} />
+                    {day.status !== "approved" ? (
+                        <button type="button" className={primaryBtn} onClick={() => decide("work.overtime.approve")}>
+                            Approve
+                        </button>
+                    ) : null}
+                    {day.status !== "rejected" ? (
+                        <button type="button" className={ghostBtn} disabled={note.trim() === ""} onClick={() => decide("work.overtime.reject")}>
+                            Don’t pay
+                        </button>
+                    ) : null}
+                </div>
+            ) : null}
+        </li>
+    );
 }
 
 /** An ISO instant → the value of a datetime-local input, in the browser's time. */
@@ -46,7 +106,9 @@ function EntryRow({ app, entry }: { app: WorkApp; entry: TimeEntryView }): React
                         {entry.user?.name} · {clockTime(entry.clock_in_at)}–{clockTime(entry.clock_out_at)}
                     </p>
                     <p className="text-[11px] text-on-surface-variant">
-                        {duration(entry.minutes)}
+                        {entry.worked_minutes !== null ? `${duration(entry.worked_minutes)} worked` : "still in"}
+                        {entry.break_minutes > 0 ? ` · ${entry.break_minutes} min break` : ""}
+                        {entry.on_break ? " · on a break" : ""}
                         {entry.shift ? ` · shift ${entry.shift.starts_at.slice(11, 16)}–${entry.shift.ends_at.slice(11, 16)}` : ""}
                         {entry.note ? ` · ${entry.note}` : ""}
                     </p>
@@ -105,14 +167,14 @@ function EntryRow({ app, entry }: { app: WorkApp; entry: TimeEntryView }): React
     );
 }
 
-export default function Attendance({ app, site, week, here = [], entries = [], people = [] }: Props): React.ReactElement {
+export default function Attendance({ app, site, week, here = [], entries = [], people = [], overtime = [], needsApproval = true }: Props): React.ReactElement {
     const [who, setWho] = useState("");
     const [note, setNote] = useState("");
     const go = (date: string) => router.get(wr(app, "work.attendance", { site: site.id, week: date }), {}, { preserveScroll: true });
     const dates = Array.from(new Set(entries.map((e) => local(e.clock_in_at).slice(0, 10))));
     const totals = entries.reduce<Record<string, { name: string; minutes: number }>>((acc, e) => {
-        if (!e.user || e.minutes === null) return acc;
-        acc[e.user.id] = { name: e.user.name, minutes: (acc[e.user.id]?.minutes ?? 0) + e.minutes };
+        if (!e.user || e.worked_minutes === null) return acc;
+        acc[e.user.id] = { name: e.user.name, minutes: (acc[e.user.id]?.minutes ?? 0) + e.worked_minutes };
         return acc;
     }, {});
 
@@ -213,13 +275,40 @@ export default function Attendance({ app, site, week, here = [], entries = [], p
 
                     {Object.keys(totals).length > 0 ? (
                         <section className={cardCls}>
-                            <h2 className="text-[13px] font-bold text-on-surface">Hours this week</h2>
+                            <div className="flex items-center justify-between gap-2">
+                                <h2 className="text-[13px] font-bold text-on-surface">Hours worked this week</h2>
+                                <span className="flex gap-3">
+                                    <a href={wr(app, "work.hours.site", { site: site.id, from: week, to: addDays(week, 6) })} className="text-[11px] font-bold text-primary">
+                                        Download (CSV)
+                                    </a>
+                                    <a href={wr(app, "work.hours.site", { site: site.id, from: week, to: addDays(week, 6), detail: 1 })} className="text-[11px] font-bold text-primary">
+                                        Every clock-in
+                                    </a>
+                                </span>
+                            </div>
                             <ul className="mt-1 space-y-0.5">
                                 {Object.entries(totals).map(([id, t]) => (
                                     <li key={id} className="flex justify-between text-[12px] text-on-surface">
                                         <span>{t.name}</span>
                                         <span className="font-semibold">{duration(t.minutes)}</span>
                                     </li>
+                                ))}
+                            </ul>
+                        </section>
+                    ) : null}
+
+                    {overtime.length > 0 ? (
+                        <section className={cardCls}>
+                            <div className="flex items-center justify-between gap-2">
+                                <h2 className="text-[13px] font-bold text-on-surface">Overtime this week</h2>
+                                <Link href={wr(app, "work.overtime")} className="text-[11px] font-bold text-primary">
+                                    Rules
+                                </Link>
+                            </div>
+                            {!needsApproval ? <p className="text-[11px] text-on-surface-variant">Overtime is paid without approval (see the rules).</p> : null}
+                            <ul className="divide-y divide-outline-variant/40">
+                                {overtime.map((day) => (
+                                    <OvertimeRow key={`${day.user_id}-${day.date}`} app={app} day={day} />
                                 ))}
                             </ul>
                         </section>

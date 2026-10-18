@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\Admin\SystemStatus;
+use App\Services\Admin\UptimeHistory;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -29,10 +30,59 @@ class SystemStatusController extends Controller
             // Closures so the page's polling reload (only: ['status', 'error']) is cheap to ask for.
             'status' => fn () => $configured ? $this->snapshot() : null,
             'error' => fn () => $this->error,
+            // Deferred: the page renders at once and the 24-hour strips arrive a moment later.
+            'history' => Inertia::defer(fn () => $configured ? $this->history() : null),
+            'links' => $this->links(),
         ]);
     }
 
     private ?string $error = null;
+
+    /**
+     * The 24-hour strips per node, built from the nodes the status snapshot knows.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function history(): ?array
+    {
+        $nodes = $this->snapshot()['nodes'] ?? [];
+
+        if ($nodes === []) {
+            return null;
+        }
+
+        $ttl = (int) config('system_status.history_cache_seconds', 60);
+        $build = static fn (): array => (new UptimeHistory(Storage::disk('backup_r2')))->build($nodes);
+
+        try {
+            return $ttl > 0 ? Cache::remember('admin.system-history', $ttl, $build) : $build();
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /**
+     * Related tools configured in SYSTEM_STATUS_LINKS; anything that is not a plain http(s) link is dropped.
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function links(): array
+    {
+        $out = [];
+
+        foreach ((array) config('system_status.links', []) as $link) {
+            $label = is_array($link) ? ($link['label'] ?? null) : null;
+            $url = is_array($link) ? ($link['url'] ?? null) : null;
+
+            if (is_string($label) && is_string($url) && preg_match('#^https?://#i', $url) === 1) {
+                $out[] = ['label' => $label, 'url' => $url];
+            }
+        }
+
+        return $out;
+    }
 
     /**
      * @return array<string, mixed>|null

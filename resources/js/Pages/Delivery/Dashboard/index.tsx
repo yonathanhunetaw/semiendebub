@@ -1,4 +1,5 @@
 import { Head, Link, router, usePoll } from "@inertiajs/react";
+import AirportShuttleRoundedIcon from "@mui/icons-material/AirportShuttleRounded";
 import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
@@ -100,6 +101,7 @@ export default function Dashboard({
         { label: "Transfers", hint: "Site to site", icon: <SwapHorizRoundedIcon />, href: route("delivery.transfers.index"), color: theme.palette.success.main },
         { label: "Calendar", hint: "Your runs by day", icon: <CalendarMonthRoundedIcon />, href: route("delivery.calendar"), color: theme.palette.warning.main },
         { label: "Keys", hint: "Car keys you hold", icon: <VpnKeyRoundedIcon />, href: route("delivery.work"), color: theme.palette.secondary.main },
+        { label: "Staff rides", hint: "Take staff home", icon: <AirportShuttleRoundedIcon />, href: route("delivery.work.rides"), color: theme.palette.info.main },
     ];
 
     return (

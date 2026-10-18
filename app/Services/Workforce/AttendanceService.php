@@ -9,6 +9,7 @@ use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\Shift;
 use App\Models\Workforce\SiteDay;
+use App\Models\Workforce\TimeBreak;
 use App\Models\Workforce\TimeEntry;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -25,6 +26,9 @@ use Illuminate\Support\Facades\DB;
  *   manager   a manager clocks someone in or out, or fixes a row, with a note.
  *   autoClose the sweep closes clock-ins nobody closed (two hours after the
  *             site's closing time, or after 16 hours) and flags them.
+ *   breaks    while clocked in, start and end a break (from My work; you are
+ *             already at the site). Clocking out ends an open break. Worked
+ *             time leaves breaks out.
  *
  * A row is linked to the shift it covers and flagged late, early_leave or
  * unscheduled against it. One open row per person at a time.
@@ -148,8 +152,8 @@ class AttendanceService
         }
 
         $entry->update([
-            'clock_in_at' => $in,
-            'clock_out_at' => $out,
+            'clock_in_at' => CarbonImmutable::instance($in)->utc(),
+            'clock_out_at' => $out !== null ? CarbonImmutable::instance($out)->utc() : null,
             'out_method' => $out !== null ? ($entry->out_method ?? TimeEntry::METHOD_MANAGER) : null,
             'flags' => $this->flags($entry->shift, CarbonImmutable::instance($in), $out ? CarbonImmutable::instance($out) : null, [TimeEntry::FLAG_FIXED]),
             'note' => trim(($entry->note ? $entry->note.' · ' : '').trim($note)),
@@ -172,7 +176,7 @@ class AttendanceService
     /** Close clock-ins nobody closed. Returns how many it closed. */
     public function autoClose(?CarbonInterface $now = null): int
     {
-        $now = CarbonImmutable::parse(($now ?? now())->toDateTimeString());
+        $now = CarbonImmutable::instance($now ?? now())->utc();
         $closed = 0;
 
         foreach (TimeEntry::query()->open()->with(['site', 'shift'])->get() as $entry) {
@@ -192,6 +196,7 @@ class AttendanceService
                 continue;
             }
 
+            $entry->breaks()->whereNull('ended_at')->update(['ended_at' => $at, 'updated_at' => now()]);
             $entry->update([
                 'clock_out_at' => $at,
                 'out_method' => TimeEntry::METHOD_AUTO,
@@ -201,6 +206,38 @@ class AttendanceService
         }
 
         return $closed;
+    }
+
+    /** @throws WorkforceException */
+    public function startBreak(User $user): TimeBreak
+    {
+        return DB::transaction(function () use ($user): TimeBreak {
+            $entry = $this->openEntry($user);
+
+            if ($entry === null) {
+                throw new WorkforceException('Clock in first.');
+            }
+
+            if ($entry->breaks()->whereNull('ended_at')->exists()) {
+                throw new WorkforceException('You are already on a break.');
+            }
+
+            return $entry->breaks()->create(['started_at' => now()]);
+        });
+    }
+
+    /** @throws WorkforceException */
+    public function endBreak(User $user): TimeBreak
+    {
+        $break = $this->openEntry($user)?->breaks()->whereNull('ended_at')->first();
+
+        if ($break === null) {
+            throw new WorkforceException('You are not on a break.');
+        }
+
+        $break->update(['ended_at' => now()]);
+
+        return $break;
     }
 
     public function openEntry(User $user): ?TimeEntry
@@ -215,10 +252,10 @@ class AttendanceService
      */
     public function between(StockLocation $site, CarbonInterface $from, CarbonInterface $to): Collection
     {
-        return TimeEntry::query()->with(['user', 'shift'])
+        return TimeEntry::query()->with(['user', 'shift', 'breaks'])
             ->where('stock_location_id', $site->id)
-            ->where('clock_in_at', '>=', $from)
-            ->where('clock_in_at', '<', $to)
+            ->where('clock_in_at', '>=', CarbonImmutable::instance($from)->utc())
+            ->where('clock_in_at', '<', CarbonImmutable::instance($to)->utc())
             ->orderBy('clock_in_at')
             ->get();
     }
@@ -226,7 +263,7 @@ class AttendanceService
     /** @return array<string, mixed> */
     public function present(TimeEntry $entry): array
     {
-        $entry->loadMissing(['user', 'shift', 'site']);
+        $entry->loadMissing(['user', 'shift', 'site', 'breaks']);
 
         return [
             'id' => (int) $entry->id,
@@ -237,12 +274,15 @@ class AttendanceService
             'in_method' => $entry->in_method,
             'out_method' => $entry->out_method,
             'minutes' => $entry->minutes(),
+            'break_minutes' => $entry->breakMinutes(),
+            'worked_minutes' => $entry->workedMinutes(),
+            'on_break' => $entry->breaks->contains(fn (TimeBreak $break): bool => $break->ended_at === null),
             'flags' => $entry->flags ?? [],
             'note' => $entry->note,
             'reviewed' => $entry->reviewed_at !== null,
             'shift' => $entry->shift ? [
-                'starts_at' => $entry->shift->starts_at->format('Y-m-d\TH:i'),
-                'ends_at' => $entry->shift->ends_at->format('Y-m-d\TH:i'),
+                'starts_at' => LocalTime::wall($entry->shift->starts_at),
+                'ends_at' => LocalTime::wall($entry->shift->ends_at),
             ] : null,
         ];
     }
@@ -258,10 +298,10 @@ class AttendanceService
             throw new WorkforceException(sprintf('%s does not work at this site.', $user->first_name), 403);
         }
 
-        $at = CarbonImmutable::parse(($at ?? now())->toDateTimeString());
+        $at = CarbonImmutable::instance($at ?? now())->utc();
 
         if ($mustBeOpen) {
-            $open = SiteDay::query()->where('stock_location_id', $site->id)->whereDate('date', $at->toDateString())->value('status') === SiteDay::STATUS_OPEN;
+            $open = SiteDay::query()->where('stock_location_id', $site->id)->whereDate('date', LocalTime::dateOf($at))->value('status') === SiteDay::STATUS_OPEN;
             if (! $open) {
                 throw new WorkforceException(sprintf('%s is not open yet. Whoever holds the key opens it first.', $site->name));
             }
@@ -276,7 +316,7 @@ class AttendanceService
                     '%s is already clocked in at %s since %s.',
                     $user->first_name,
                     $already->site?->name ?? 'a site',
-                    $already->clock_in_at->format('H:i'),
+                    LocalTime::wall($already->clock_in_at, 'H:i'),
                 ));
             }
 
@@ -296,8 +336,9 @@ class AttendanceService
 
     private function finish(TimeEntry $entry, string $method, User $by, ?string $note = null, ?CarbonInterface $at = null): TimeEntry
     {
-        $at = CarbonImmutable::parse(($at ?? now())->toDateTimeString());
+        $at = CarbonImmutable::instance($at ?? now())->utc();
         $entry->loadMissing('shift');
+        $entry->breaks()->whereNull('ended_at')->update(['ended_at' => $at, 'updated_at' => now()]);
 
         $entry->update([
             'clock_out_at' => $at,

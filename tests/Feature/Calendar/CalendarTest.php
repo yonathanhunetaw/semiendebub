@@ -55,10 +55,10 @@ class CalendarTest extends TestCase
     public function every_app_with_a_calendar_opens_the_page_with_its_own_sources(): void
     {
         $cases = [
-            'admin' => ['entries', 'deliveries', 'shipments', 'transfers', 'purchases', 'credit', 'site_days', 'shifts'],
-            'seller' => ['entries', 'deliveries', 'shipments', 'credit', 'site_days', 'shifts'],
-            'stock_keeper' => ['entries', 'shipments', 'transfers', 'purchases', 'site_days', 'shifts'],
-            'delivery' => ['entries', 'deliveries', 'shipments', 'transfers'],
+            'admin' => ['entries', 'deliveries', 'shipments', 'transfers', 'purchases', 'credit', 'site_days', 'shifts', 'staff_rides'],
+            'seller' => ['entries', 'deliveries', 'shipments', 'credit', 'site_days', 'shifts', 'staff_rides'],
+            'stock_keeper' => ['entries', 'shipments', 'transfers', 'purchases', 'site_days', 'shifts', 'staff_rides'],
+            'delivery' => ['entries', 'deliveries', 'shipments', 'transfers', 'staff_rides'],
             'procurement' => ['entries', 'purchases'],
         ];
 

@@ -1,6 +1,6 @@
-import { cardCls, DUTY_LABEL, ghostBtn, hm, inputCls, primaryBtn, ROLE_LABEL, SHIFT_CHIP, WEEKDAYS, workLayout, wr } from "@/Components/Work/workUi";
+import { cardCls, DUTY_LABEL, ghostBtn, hm, inputCls, LEAVE_LABEL, primaryBtn, ROLE_LABEL, SHIFT_CHIP, WEEKDAYS, workLayout, wr } from "@/Components/Work/workUi";
 import { dayDate } from "@/utils/dates";
-import type { CoverageGap, DayHours, ShiftDuty, ShiftView, StaffingRuleRow, WorkApp } from "@/types/work";
+import type { CoverageGap, DayHours, LeaveView, ShiftDuty, ShiftView, StaffingRuleRow, WorkApp } from "@/types/work";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import React, { useState } from "react";
 
@@ -21,6 +21,8 @@ interface Props {
     shifts?: ShiftView[];
     gaps?: CoverageGap[];
     rules?: StaffingRuleRow[];
+    /** Approved leave of this site's people this week. */
+    leave?: LeaveView[];
 }
 
 const addDays = (date: string, days: number): string => {
@@ -41,11 +43,23 @@ interface Draft {
 function ShiftForm({ app, siteId, draft, people, onDone }: { app: WorkApp; siteId: number; draft: Draft; people: Props["people"]; onDone: () => void }): React.ReactElement {
     const [form, setForm] = useState<Draft>(draft);
     const [busy, setBusy] = useState(false);
+    const [problem, setProblem] = useState<string | null>(null);
 
     const save = () => {
         setBusy(true);
+        setProblem(null);
         const data = { user_id: Number(form.user_id), starts_at: `${form.date}T${form.starts}`, ends_at: `${form.date}T${form.ends}`, duty: form.duty };
-        const options = { preserveScroll: true, onFinish: () => setBusy(false), onSuccess: onDone };
+        const options = {
+            preserveScroll: true,
+            onFinish: () => setBusy(false),
+            // The service refuses with a flash error (a clash, leave…): keep the form open and say why.
+            onSuccess: (page: { props: unknown }) => {
+                const error = (page.props as { flash?: { error?: string | null } }).flash?.error;
+                if (error) setProblem(error);
+                else onDone();
+            },
+            onError: (errors: Record<string, string>) => setProblem(Object.values(errors)[0] ?? "Check the times."),
+        };
         if (form.id === null) router.post(wr(app, "work.shifts.store", siteId), data, options);
         else router.put(wr(app, "work.shifts.update", form.id), data, options);
     };
@@ -67,6 +81,7 @@ function ShiftForm({ app, siteId, draft, people, onDone }: { app: WorkApp; siteI
                 <option value="opener">Opens the site</option>
                 <option value="closer">Closes the site</option>
             </select>
+            {problem ? <p className="col-span-2 text-[11px] text-error">{problem}</p> : null}
             <div className="col-span-2 flex gap-2">
                 <button type="button" className={primaryBtn} disabled={busy || !form.user_id || !form.starts || !form.ends} onClick={save}>
                     {form.id === null ? "Add shift" : "Save"}
@@ -165,7 +180,7 @@ function RulesForm({ app, siteId, rules }: { app: WorkApp; siteId: number; rules
     );
 }
 
-export default function Rota({ app, site, week, days = [], people = [], shifts = [], gaps = [], rules = [] }: Props): React.ReactElement {
+export default function Rota({ app, site, week, days = [], people = [], shifts = [], gaps = [], rules = [], leave = [] }: Props): React.ReactElement {
     const [editing, setEditing] = useState<Draft | null>(null);
     const drafts = shifts.filter((s) => s.status === "draft").length;
     const go = (date: string) => router.get(wr(app, "work.rota", { site: site.id, week: date }), {}, { preserveScroll: true });
@@ -229,10 +244,11 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
 
                     {days.map(({ date, hours }) => {
                         const dayShifts = shifts.filter((s) => s.date === date);
+                        const away = leave.filter((l) => l.starts_on <= date && l.ends_on >= date);
                         const closed = hours?.closed ?? false;
 
                         return (
-                            <section key={date} className={cardCls}>
+                            <section key={date} className={cardCls} data-date={date}>
                                 <div className="flex items-center justify-between gap-2">
                                     <p className="text-[13px] font-bold text-on-surface">
                                         {WEEKDAYS[new Date(`${date}T12:00:00`).getDay()]} <span className="font-normal text-on-surface-variant">{dayDate(date)}</span>
@@ -241,6 +257,12 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
                                         {hours === null ? "Hours not set" : closed ? "Closed" : `${hours.opens_at}–${hours.closes_at}`}
                                     </span>
                                 </div>
+
+                                {away.length > 0 ? (
+                                    <p className="mt-1 text-[11px] text-on-surface-variant">
+                                        On leave: {away.map((l) => `${l.user?.name} (${LEAVE_LABEL[l.type].toLowerCase()})`).join(", ")}
+                                    </p>
+                                ) : null}
 
                                 <ul className="mt-2 divide-y divide-outline-variant/40">
                                     {dayShifts.map((shift) =>

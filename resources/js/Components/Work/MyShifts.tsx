@@ -1,12 +1,26 @@
 import { dayDate } from "@/utils/dates";
-import type { ShiftView, WorkApp } from "@/types/work";
+import type { Person, ShiftView, SwapView, WorkApp } from "@/types/work";
 import { router } from "@inertiajs/react";
 import React, { useState } from "react";
 import { cardCls, DUTY_LABEL, ghostBtn, hm, inputCls, primaryBtn, SHIFT_CHIP, wr } from "./workUi";
 
-/** My shifts for the next two weeks: accept, or ask the manager for a change. */
-export default function MyShifts({ app, shifts }: { app: WorkApp; shifts: ShiftView[] }): React.ReactElement {
+interface Props {
+    app: WorkApp;
+    shifts: ShiftView[];
+    /** My open offers, by shift. */
+    offered?: SwapView[];
+    /** Colleagues per site id, to offer a shift to. */
+    colleagues?: Record<number, Person[]>;
+}
+
+/**
+ * My shifts for the next two weeks: accept, ask the manager for a change, or
+ * offer one to a colleague (they take it, then a manager approves).
+ */
+export default function MyShifts({ app, shifts, offered = [], colleagues = {} }: Props): React.ReactElement {
     const [asking, setAsking] = useState<number | null>(null);
+    const [giving, setGiving] = useState<number | null>(null);
+    const [to, setTo] = useState("");
     const [note, setNote] = useState("");
 
     if (shifts.length === 0) {
@@ -16,7 +30,7 @@ export default function MyShifts({ app, shifts }: { app: WorkApp; shifts: ShiftV
     return (
         <section className={`${cardCls} divide-y divide-outline-variant/40 py-1`}>
             {shifts.map((shift) => (
-                <div key={shift.id} className="py-2.5">
+                <div key={shift.id} className="py-2.5" data-shift={shift.id}>
                     <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                             <p className="text-[13px] font-bold text-on-surface">
@@ -33,7 +47,50 @@ export default function MyShifts({ app, shifts }: { app: WorkApp; shifts: ShiftV
                         </span>
                     </div>
 
-                    {asking === shift.id ? (
+                    {offered.filter((swap) => swap.shift?.id === shift.id).map((swap) => (
+                        <div key={swap.id} className="mt-2 flex items-center justify-between gap-2 rounded-[10px] border border-info/30 bg-info-container/40 px-2.5 py-1.5">
+                            <span className="text-[11px] text-on-info-container">
+                                Offered to {swap.to?.name}: {swap.status === "taken" ? "they took it, a manager approves" : "waiting for them"}
+                            </span>
+                            <button
+                                type="button"
+                                className="text-[11px] font-bold text-primary"
+                                onClick={() => router.post(wr(app, "work.swaps.cancel", swap.id), {}, { preserveScroll: true })}
+                            >
+                                Take back
+                            </button>
+                        </div>
+                    ))}
+
+                    {giving === shift.id ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <select className={`${inputCls} flex-1`} value={to} onChange={(e) => setTo(e.target.value)}>
+                                <option value="">Give it to…</option>
+                                {(colleagues[shift.site?.id ?? 0] ?? []).map((person) => (
+                                    <option key={person.id} value={person.id}>
+                                        {person.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                type="button"
+                                className={primaryBtn}
+                                disabled={!to}
+                                onClick={() =>
+                                    router.post(
+                                        wr(app, "work.shifts.offer", shift.id),
+                                        { to_id: Number(to), note: note || null },
+                                        { preserveScroll: true, onSuccess: () => { setGiving(null); setTo(""); setNote(""); } },
+                                    )
+                                }
+                            >
+                                Offer
+                            </button>
+                            <button type="button" className={ghostBtn} onClick={() => setGiving(null)}>
+                                Back
+                            </button>
+                        </div>
+                    ) : asking === shift.id ? (
                         <div className="mt-2 flex gap-2">
                             <input className={inputCls} placeholder="What does not work?" value={note} onChange={(e) => setNote(e.target.value)} />
                             <button
@@ -57,6 +114,11 @@ export default function MyShifts({ app, shifts }: { app: WorkApp; shifts: ShiftV
                             {shift.status === "published" || shift.status === "accepted" ? (
                                 <button type="button" className={ghostBtn} onClick={() => setAsking(shift.id)}>
                                     Ask for a change
+                                </button>
+                            ) : null}
+                            {(shift.status === "published" || shift.status === "accepted") && !offered.some((swap) => swap.shift?.id === shift.id) ? (
+                                <button type="button" className={ghostBtn} onClick={() => setGiving(shift.id)}>
+                                    Give to a colleague
                                 </button>
                             ) : null}
                         </div>

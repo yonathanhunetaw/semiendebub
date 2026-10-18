@@ -9,6 +9,7 @@ use App\Models\Inventory\StockLocation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * One stretch at work: clocked in at a site, and out again. Only
@@ -80,8 +81,30 @@ class TimeEntry extends Model
         return in_array($flag, $this->flags ?? [], true);
     }
 
+    public function breaks(): HasMany
+    {
+        return $this->hasMany(TimeBreak::class)->orderBy('started_at');
+    }
+
+    /** Clocked-in minutes, breaks included; null while still in. */
     public function minutes(): ?int
     {
         return $this->clock_out_at === null ? null : (int) $this->clock_in_at->diffInMinutes($this->clock_out_at);
+    }
+
+    /** Minutes on break (an open break counts up to clock-out, or now). */
+    public function breakMinutes(): int
+    {
+        $end = $this->clock_out_at ?? now();
+
+        return (int) $this->breaks->sum(fn (TimeBreak $break): int => (int) $break->started_at->diffInMinutes($break->ended_at ?? $end));
+    }
+
+    /** Minutes worked: clocked-in minutes less breaks; null while still in. */
+    public function workedMinutes(): ?int
+    {
+        $minutes = $this->minutes();
+
+        return $minutes === null ? null : max(0, $minutes - $this->breakMinutes());
     }
 }

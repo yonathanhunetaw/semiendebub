@@ -13,6 +13,8 @@ use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\TimeEntry;
 use App\Services\Workforce\AttendanceService;
+use App\Services\Workforce\LocalTime;
+use App\Services\Workforce\OvertimeService;
 use App\Services\Workforce\Sites;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -28,7 +30,7 @@ class AttendanceController extends Controller
 {
     use ReadsWorkApp;
 
-    public function __construct(private readonly Sites $sites, private readonly AttendanceService $attendance)
+    public function __construct(private readonly Sites $sites, private readonly AttendanceService $attendance, private readonly OvertimeService $overtime)
     {
     }
 
@@ -44,6 +46,11 @@ class AttendanceController extends Controller
             'here' => $this->attendance->stillIn($site)->map(fn (TimeEntry $entry): array => $this->attendance->present($entry))->values()->all(),
             'entries' => $this->attendance->between($site, $start, $start->addWeek())
                 ->map(fn (TimeEntry $entry): array => $this->attendance->present($entry))->values()->all(),
+            // Overtime of the people who worked here this week, with the manager's decision.
+            'overtime' => collect($this->overtime->forSites(collect([$site]), $start, $start->addDays(6)))
+                ->map(fn (array $day): array => $day + ['can_decide' => $this->overtime->mayDecide($request->user(), (int) $day['user_id'], (string) $day['date'])])
+                ->values()->all(),
+            'needsApproval' => $this->overtime->settings()->needs_approval,
             'people' => $this->sites->people($site)->map(fn (User $person): array => [
                 'id' => (int) $person->id,
                 'name' => trim($person->first_name.' '.$person->last_name),
@@ -75,8 +82,8 @@ class AttendanceController extends Controller
         return $this->attempt(fn () => $this->attendance->fix(
             $request->user(),
             $entry,
-            CarbonImmutable::parse($request->validated('clock_in_at')),
-            $request->validated('clock_out_at') ? CarbonImmutable::parse($request->validated('clock_out_at')) : null,
+            LocalTime::parse((string) $request->validated('clock_in_at')),
+            $request->validated('clock_out_at') ? LocalTime::parse((string) $request->validated('clock_out_at')) : null,
             (string) $request->validated('note'),
         ), 'Times fixed.');
     }
@@ -88,7 +95,7 @@ class AttendanceController extends Controller
 
     private function at(?string $value): ?CarbonImmutable
     {
-        return $value ? CarbonImmutable::parse($value) : null;
+        return $value ? LocalTime::parse($value) : null;
     }
 
     private function authorizeSite(?User $user, StockLocation $site): void

@@ -355,6 +355,9 @@ export default function Show({
                     </Stack>
                 </Box>
                 <Stack direction="row" spacing={1.5}>
+                    <Button variant="contained" component={Link} href={route("admin.items.setup", item.id)} sx={{ borderRadius: 2, fontWeight: "bold", textTransform: "none" }}>
+                        Set up
+                    </Button>
                     <Button
                         variant="outlined"
                         startIcon={<EditIcon />}

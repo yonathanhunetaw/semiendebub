@@ -44,15 +44,16 @@ class SiteDayService
     /** The site's row for a date, made on first use from its hours. */
     public function day(StockLocation $site, CarbonInterface $date): SiteDay
     {
-        $date = CarbonImmutable::parse($date->toDateString());
+        // The shops' date (now() is read on the shops' clock).
+        $date = LocalTime::dateText($date);
 
         $expected = ($this->sites->hoursOn($site, $date)['closed'] ?? false) ? SiteDay::STATUS_CLOSED_DAY : SiteDay::STATUS_PLANNED;
-        $day = SiteDay::query()->where('stock_location_id', $site->id)->whereDate('date', $date->toDateString())->first();
+        $day = SiteDay::query()->where('stock_location_id', $site->id)->whereDate('date', $date)->first();
 
         if ($day === null) {
             return SiteDay::query()->create([
                 'stock_location_id' => $site->id,
-                'date' => $date->toDateString(),
+                'date' => $date,
                 'status' => $expected,
             ]);
         }
@@ -195,7 +196,7 @@ class SiteDayService
      */
     public function sweep(?CarbonInterface $now = null): int
     {
-        $now = CarbonImmutable::parse(($now ?? now())->toDateTimeString());
+        $now = CarbonImmutable::instance($now ?? now())->utc();
         $marked = 0;
 
         foreach ($this->sites->query()->get() as $site) {
@@ -226,8 +227,8 @@ class SiteDayService
     {
         return SiteDay::query()->with('opener')
             ->where('stock_location_id', $site->id)
-            ->whereDate('date', '>', $after->toDateString())
-            ->whereDate('date', '<=', $after->copy()->addDays(7)->toDateString())
+            ->whereDate('date', '>', LocalTime::dateText($after))
+            ->whereDate('date', '<=', LocalTime::day($after)->addDays(7)->toDateString())
             ->whereNotNull('opener_id')
             ->whereIn('status', [SiteDay::STATUS_PLANNED])
             ->orderBy('date')

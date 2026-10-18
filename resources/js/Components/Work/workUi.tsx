@@ -1,3 +1,4 @@
+import FlashToast from "@/Components/Shared/FlashToast";
 import AdminLayout from "@/Layouts/AdminLayout";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
 import SellerLayout from "@/Layouts/SellerLayout";
@@ -10,7 +11,13 @@ export const WORK_LAYOUTS: Record<WorkApp, React.ComponentType<{ children: React
     admin: ({ children }) => <AdminLayout flashToast>{children}</AdminLayout>,
     seller: SellerLayout,
     stock_keeper: StockKeeperLayout,
-    delivery: DeliveryLayout,
+    // The delivery layout shows no flash of its own (Calendar does the same).
+    delivery: ({ children }) => (
+        <DeliveryLayout>
+            {children}
+            <FlashToast />
+        </DeliveryLayout>
+    ),
 };
 
 export function workLayout<P extends { app: WorkApp }>(page: React.ReactElement<P>): React.ReactElement {
@@ -94,3 +101,41 @@ export const duration = (minutes: number | null): string =>
 /** An ISO instant → "HH:mm" in the browser's time. */
 export const clockTime = (iso: string | null): string =>
     iso === null ? "—" : new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+
+export const LEAVE_LABEL: Record<string, string> = { annual: "Annual leave", sick: "Sick", unpaid: "Unpaid leave", other: "Other leave" };
+
+export const STATUS_CHIP: Record<string, string> = {
+    requested: "border-info/30 bg-info-container/60 text-on-info-container",
+    offered: "border-info/30 bg-info-container/60 text-on-info-container",
+    taken: "border-warning/30 bg-warning-container/60 text-on-warning-container",
+    claimed: "border-info/30 bg-info-container/60 text-on-info-container",
+    departed: "border-warning/30 bg-warning-container/60 text-on-warning-container",
+    approved: "border-success/30 bg-success-container/60 text-on-success-container",
+    done: "border-success/30 bg-success-container/60 text-on-success-container",
+    rejected: "border-error/30 bg-error-container/60 text-on-error-container",
+    declined: "border-error/30 bg-error-container/60 text-on-error-container",
+    cancelled: "border-outline-variant bg-surface-container text-on-surface-variant",
+};
+
+export const STATUS_LABEL: Record<string, string> = {
+    requested: "Waiting",
+    offered: "Offered",
+    taken: "Taken, manager to approve",
+    claimed: "Driver found",
+    departed: "On the way",
+    approved: "Approved",
+    done: "Done",
+    rejected: "Turned down",
+    declined: "Declined",
+    cancelled: "Cancelled",
+};
+
+export function Chip({ status }: { status: string }): React.ReactElement {
+    return (
+        <span className={`shrink-0 rounded-[999px] border px-2 py-0.5 text-[10px] font-bold ${STATUS_CHIP[status] ?? STATUS_CHIP.cancelled}`}>
+            {STATUS_LABEL[status] ?? status}
+        </span>
+    );
+}
+
+export const sectionTitle = "px-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant";

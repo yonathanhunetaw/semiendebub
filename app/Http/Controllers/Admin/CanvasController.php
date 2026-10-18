@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Canvas\Canvas;
+use App\Models\Canvas\CanvasGroup;
 use App\Models\Canvas\CanvasVersion;
+use App\Http\Requests\Admin\Canvas\CanvasGroupRequest;
+use App\Http\Requests\Admin\Canvas\MoveCanvasRequest;
 use App\Models\Auth\User;
 use App\Services\Admin\ActiveStore;
 use Illuminate\Database\Eloquent\Builder;
@@ -82,6 +85,7 @@ class CanvasController extends Controller
                 'user' => $latestVersion->user,
                 'created_at' => $latestVersion->created_at,
             ] : null,
+            'groups' => CanvasGroup::where('user_id', $user->id)->orderBy('position')->orderBy('id')->get(['id', 'name']),
             'draftSavedAt' => $draftIsAhead ? $draft->updated_at : null,
             'canEdit' => $this->canEdit($canvas),
             'history' => $history
@@ -92,10 +96,55 @@ class CanvasController extends Controller
     {
         $request->validate([
             'title' => 'required|string|max:255',
+            'group_id' => 'nullable|integer',
         ]);
 
-        $canvas = Canvas::create(['user_id' => Auth::id(), 'store_id' => $this->storeForNewCanvas(), 'title' => $request->title]);
+        $canvas = Canvas::create([
+            'user_id' => Auth::id(),
+            'store_id' => $this->storeForNewCanvas(),
+            'canvas_group_id' => $this->ownGroup($request->input('group_id'))?->id,
+            'title' => $request->title,
+        ]);
         return redirect('/canvas?canvas_id=' . $canvas->id)->with('success', 'Canvas created successfully!');
+    }
+
+    public function createGroup(CanvasGroupRequest $request)
+    {
+        $next = (int) CanvasGroup::where('user_id', Auth::id())->max('position') + 1;
+        CanvasGroup::create(['user_id' => Auth::id(), 'name' => trim($request->name), 'position' => $next]);
+
+        return back()->with('success', 'Group created.');
+    }
+
+    public function renameGroup(CanvasGroupRequest $request, int $id)
+    {
+        CanvasGroup::where('user_id', Auth::id())->findOrFail($id)->update(['name' => trim($request->name)]);
+
+        return back()->with('success', 'Group renamed.');
+    }
+
+    /** Its canvases fall back to General (the foreign key nulls them). */
+    public function deleteGroup(int $id)
+    {
+        CanvasGroup::where('user_id', Auth::id())->findOrFail($id)->delete();
+
+        return back()->with('success', 'Group deleted. Its canvases are in General.');
+    }
+
+    public function move(MoveCanvasRequest $request, int $id)
+    {
+        $canvas = $this->visibleCanvases()->where('canvases.user_id', Auth::id())->findOrFail($id);
+        $group = $this->ownGroup($request->input('group_id'));
+        abort_if($request->filled('group_id') && ! $group, 404);
+
+        $canvas->update(['canvas_group_id' => $group?->id]);
+
+        return back()->with('success', 'Canvas moved.');
+    }
+
+    private function ownGroup(mixed $id): ?CanvasGroup
+    {
+        return $id ? CanvasGroup::where('user_id', Auth::id())->find($id) : null;
     }
 
     public function share(Request $request)

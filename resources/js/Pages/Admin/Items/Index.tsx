@@ -770,6 +770,12 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
                         </ListItemIcon>
                         <ListItemText>Open</ListItemText>
                     </MenuItem>,
+                    <MenuItem key="setup" component={Link} href={route("admin.items.setup", rowMenu.item.id)}>
+                        <ListItemIcon>
+                            <Icon name="checklist" />
+                        </ListItemIcon>
+                        <ListItemText>Set up (readiness)</ListItemText>
+                    </MenuItem>,
                     <MenuItem key="edit" component={Link} href={route("admin.items.edit", rowMenu.item.id)}>
                         <ListItemIcon>
                             <Icon name="edit" />

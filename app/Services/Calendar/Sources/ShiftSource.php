@@ -5,17 +5,20 @@ declare(strict_types=1);
 namespace App\Services\Calendar\Sources;
 
 use App\Models\Inventory\StockLocation;
+use App\Models\Workforce\LeaveRequest;
 use App\Models\Workforce\Shift;
 use App\Services\Calendar\CalendarItem;
 use App\Services\Calendar\CalendarScope;
 use App\Services\Calendar\CalendarSource;
+use App\Services\Workforce\LocalTime;
 use App\Services\Workforce\Sites;
 use Carbon\CarbonImmutable;
 
 /**
  * Shifts from the rota: your own on the seller and stock keeper apps (and
  * everyone's at the sites you manage); on admin, the shifts of the stores in
- * view. Drafts show only to managers.
+ * view. Drafts show only to managers. Approved leave shows as whole days,
+ * yours and (for managers) your people's.
  */
 class ShiftSource implements CalendarSource
 {
@@ -62,7 +65,27 @@ class ShiftSource implements CalendarSource
             ->limit(1000)
             ->get();
 
-        return $shifts->map(function (Shift $shift) use ($scope, $viewer): array {
+        $people = collect($managed)->flatMap(fn (int $id) => $this->sites->people(StockLocation::query()->find($id)))->pluck('id')->push($viewer->id)->unique()->all();
+        $leave = LeaveRequest::query()->with('user')
+            ->whereIn('user_id', $people)
+            ->where('status', LeaveRequest::STATUS_APPROVED)
+            ->overlapping($from->toDateString(), $to->toDateString())
+            ->get()
+            ->map(fn (LeaveRequest $request): array => CalendarItem::make(
+                id: "leave:{$request->id}",
+                source: $this->key(),
+                kind: 'leave',
+                title: ((int) $request->user_id === (int) $viewer->id ? 'My leave' : ($request->user?->first_name ?? 'Leave').' on leave'),
+                start: CarbonImmutable::parse($request->starts_on->toDateString()),
+                end: CarbonImmutable::parse($request->ends_on->toDateString())->addDay(),
+                allDay: true,
+                state: CalendarItem::UPCOMING,
+                status: $request->type,
+                subtitle: ucfirst($request->type).' leave',
+                url: CalendarItem::url("{$scope->app}.work"),
+            ))->all();
+
+        return [...$leave, ...$shifts->map(function (Shift $shift) use ($scope, $viewer): array {
             $mine = (int) $shift->user_id === (int) $viewer->id;
             $start = CarbonImmutable::instance($shift->starts_at);
             $end = CarbonImmutable::instance($shift->ends_at);
@@ -76,7 +99,7 @@ class ShiftSource implements CalendarSource
                 id: "shift:{$shift->id}",
                 source: $this->key(),
                 kind: 'shift',
-                title: ($mine ? 'My shift' : ($shift->user?->first_name ?? 'Shift')).' '.$start->format('H:i').'–'.$end->format('H:i'),
+                title: ($mine ? 'My shift' : ($shift->user?->first_name ?? 'Shift')).' '.LocalTime::wall($start, 'H:i').'–'.LocalTime::wall($end, 'H:i'),
                 start: $start,
                 end: $end,
                 allDay: false,
@@ -88,8 +111,8 @@ class ShiftSource implements CalendarSource
                     Shift::STATUS_CHANGE_REQUESTED => ' · change asked',
                     default => '',
                 },
-                url: $mine ? CalendarItem::url("{$scope->app}.work") : CalendarItem::url("{$scope->app}.work.rota", ['site' => $shift->stock_location_id, 'week' => $start->toDateString()]),
+                url: $mine ? CalendarItem::url("{$scope->app}.work") : CalendarItem::url("{$scope->app}.work.rota", ['site' => $shift->stock_location_id, 'week' => LocalTime::dateOf($start)]),
             );
-        })->values()->all();
+        })->values()->all()];
     }
 }

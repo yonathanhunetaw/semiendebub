@@ -31,6 +31,16 @@ export interface SystemNode {
     last_seen_age: number;
     status: NodeStatus;
     is_live: boolean;
+    /** Seconds this node has been behind the newest backup; null = not behind or an old heartbeat. */
+    behind_for: number | null;
+    last_restore_age: number | null;
+    /** Failed restores in a row. */
+    restore_failures: number;
+    last_backup_age: number | null;
+    /** Age of the dump or restore the node last started from: writes after it are in no backup yet. */
+    dump_age: number | null;
+    /** Tables written since then; null = the node could not ask its database. */
+    tables_changed: { count: number; names: string[] } | null;
 }
 
 export interface SystemEvent {
@@ -73,4 +83,83 @@ export interface SystemStatusSnapshot {
     alerts: SystemAlert[];
     data_events: SystemEvent[];
     events: SystemEvent[];
+    resources: NodeResources[];
 }
+
+/** One 5-minute cell of a node's day (App\\Services\\Admin\\UptimeHistory). */
+export type CellState = "up" | "degraded" | "down" | "deploying" | "off" | "pending" | "unknown";
+
+export interface UptimeOutage {
+    from: number;
+    minutes: number;
+    ongoing: boolean;
+}
+
+export interface UptimeNode {
+    name: string;
+    role: string;
+    on_demand: boolean;
+    cells: CellState[];
+    /** Share of recorded cells that were up; null = nothing recorded or an on-demand node. */
+    uptime_pct: number | null;
+    outages: UptimeOutage[];
+    commits: { ts: number; from: string; to: string }[];
+    samples: number;
+}
+
+export interface UptimeHistoryData {
+    generated_at: number;
+    /** Epoch of the first cell. */
+    from: number;
+    /** Seconds per cell. */
+    step: number;
+    /** Per cell: the node whose tunnel was up, "multiple" when two were, null when none reported one. */
+    live: (string | null)[];
+    nodes: UptimeNode[];
+}
+
+export interface RelatedLink {
+    label: string;
+    url: string;
+}
+
+/** One container on one node (App\\Services\\Admin\\NodeStats, from deploy/node-stats.sh). */
+export interface ContainerInfo {
+    name: string;
+    image: string;
+    state: string;
+    status: string;
+    health: "healthy" | "unhealthy" | "starting" | "";
+    restarts: number;
+    /** Seconds since it started; null when it is not running. */
+    uptime: number | null;
+    /** Percent of one core; null when no stats (stopped). */
+    cpu: number | null;
+    /** Bytes of memory in use; null when no stats. */
+    mem: number | null;
+}
+
+export interface DiskInfo {
+    mount: string;
+    total: number;
+    used: number;
+    pct: number;
+}
+
+export interface HostInfo {
+    cpus: number;
+    /** 1, 5 and 15 minute load averages. */
+    load: [number, number, number];
+    /** 1-minute load as a percent of all cores. */
+    load_pct: number;
+    mem_total: number;
+    mem_used: number;
+    mem_pct: number | null;
+    uptime: number;
+    temp_c: number | null;
+    disks: DiskInfo[];
+}
+
+export type NodeResources =
+    | { name: string; reported: false }
+    | { name: string; reported: true; age: number; stale: boolean; docker_ok: boolean; host: HostInfo; containers: ContainerInfo[] };

@@ -18,10 +18,10 @@ use App\Services\Admin\ActiveStore;
 use App\Services\Workforce\CounterQr;
 use App\Services\Workforce\KeyCustodyService;
 use App\Services\Workforce\SiteDayService;
+use App\Services\Workforce\LocalTime;
 use App\Services\Workforce\Sites;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -83,7 +83,7 @@ class SiteController extends Controller
             'week' => $this->sites->week($site),
             'exceptions' => SiteHourException::query()
                 ->where('stock_location_id', $site->id)
-                ->whereDate('date', '>=', now()->subDays(7)->toDateString())
+                ->whereDate('date', '>=', LocalTime::today()->subDays(7)->toDateString())
                 ->orderBy('date')
                 ->get()
                 ->map(fn (SiteHourException $exception): array => [
@@ -94,10 +94,11 @@ class SiteController extends Controller
                     'closes_at' => $exception->closes_at ? substr((string) $exception->closes_at, 0, 5) : null,
                     'note' => $exception->note,
                 ])->all(),
-            'key' => $this->keys->present($key, $user, true) + ['receivers' => $this->keys->receivers($key)],
+            // Not `key`: React keeps that prop name for itself.
+            'siteKey' => $this->keys->present($key, $user, true) + ['receivers' => $this->keys->receivers($key)],
             'today' => $this->days->present($site, $this->days->day($site, now()), $user),
             'plan' => collect(range(0, 6))->map(function (int $offset) use ($site): array {
-                $date = CarbonImmutable::today()->addDays($offset);
+                $date = LocalTime::today()->addDays($offset);
                 $day = $this->days->day($site, $date);
 
                 return [
@@ -137,7 +138,7 @@ class SiteController extends Controller
             foreach ($request->validated('days') as $day) {
                 $this->days->plan(
                     $site,
-                    CarbonImmutable::parse($day['date']),
+                    LocalTime::day($day['date']),
                     $request->user(),
                     isset($day['opener_id']) ? (int) $day['opener_id'] : null,
                     isset($day['closer_id']) ? (int) $day['closer_id'] : null,

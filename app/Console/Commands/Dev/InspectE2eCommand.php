@@ -21,13 +21,15 @@ use Illuminate\Console\Command;
  *   php artisan e2e:inspect sale SALE-…       stage, payments and stock holds
  *   php artisan e2e:inspect transfer TRF-…    status, counts, times
  *   php artisan e2e:inspect store 'Name'      a store's id and the stock locations it got
+ *   php artisan e2e:inspect site 12           store 12's site: its QR codes (what a phone camera
+ *                                             reads off the counter), key holder, today's status
  *
  * Like e2e:prepare it refuses any database not named *_e2e.
  */
 final class InspectE2eCommand extends Command
 {
     /** @var string */
-    protected $signature = 'e2e:inspect {what : stock, item, sale, transfer or store} {key : a variant id or a reference}';
+    protected $signature = 'e2e:inspect {what : stock, item, sale, transfer, store or site} {key : a variant id or a reference}';
 
     /** @var string */
     protected $description = 'Print ledger facts from the *_e2e database for the Playwright specs';
@@ -50,6 +52,7 @@ final class InspectE2eCommand extends Command
             'sale' => $this->sale($key),
             'transfer' => $this->transfer($key),
             'store' => $this->store($key),
+            'site' => $this->site((int) $key),
             default => null,
         };
 
@@ -132,6 +135,28 @@ final class InspectE2eCommand extends Command
     }
 
     /** @return array<string, mixed>|null */
+    /** @return array<string, mixed>|null a store's site node, its QR paths and today */
+    private function site(int $storeId): ?array
+    {
+        $site = StockLocation::query()->where('store_id', $storeId)->where('kind', StockLocation::KIND_STORE)->first();
+        if ($site === null) {
+            return null;
+        }
+
+        $qr = app(\App\Services\Workforce\CounterQr::class);
+        $day = app(\App\Services\Workforce\SiteDayService::class)->day($site, now());
+        $key = app(\App\Services\Workforce\KeyCustodyService::class)->keyFor($site);
+
+        return [
+            'id' => (int) $site->id,
+            'printed' => "/work/clock/{$site->id}/".$qr->printedToken($site),
+            'live' => "/work/clock/{$site->id}/".$qr->liveToken($site),
+            'key_holder' => $key->holder_id,
+            'status' => $day->status,
+            'clocked_in' => \App\Models\Workforce\TimeEntry::query()->open()->where('stock_location_id', $site->id)->pluck('user_id')->map(fn ($id): int => (int) $id)->all(),
+        ];
+    }
+
     private function store(string $name): ?array
     {
         $store = \App\Models\Store\Store::query()->where('name', $name)->first();

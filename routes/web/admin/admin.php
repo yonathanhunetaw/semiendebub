@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\ItemDeployController;
 use App\Http\Controllers\Admin\ItemController;
+use App\Http\Controllers\Admin\ItemSetupController;
 use App\Http\Controllers\Admin\SessionController;
 use App\Http\Controllers\Admin\SystemStatusController;
 use App\Http\Controllers\Admin\Store\StoreController;
@@ -76,6 +77,10 @@ Route::domain("admin.{$baseDomain}")
             Route::prefix('canvas')->name('canvas.')->group(function () {
                 Route::get('/', [CanvasController::class, 'index'])->name('index');
                 Route::post('/create', [CanvasController::class, 'create'])->name('create');
+                Route::post('/groups', [CanvasController::class, 'createGroup'])->name('groups.create');
+                Route::post('/groups/{id}', [CanvasController::class, 'renameGroup'])->name('groups.rename');
+                Route::delete('/groups/{id}', [CanvasController::class, 'deleteGroup'])->name('groups.delete');
+                Route::post('/{id}/move', [CanvasController::class, 'move'])->name('move')->whereNumber('id');
                 Route::post('/share', [CanvasController::class, 'share'])->name('share');
                 Route::post('/unshare', [CanvasController::class, 'unshare'])->name('unshare');
                 Route::post('/save', [CanvasController::class, 'save'])->name('save');
@@ -87,6 +92,8 @@ Route::domain("admin.{$baseDomain}")
 
             // ── Global zone: the catalogue, stores, warehouses, fleet, sessions ──
             Route::middleware('admin.global')->group(function () {
+            // ── Expenses: fuel for staff rides, rent, salaries (second person confirms) ──
+            require base_path('routes/web/partials/expenses.php');
             // ── Purchase orders: approvals (orders are central, so global admins only) ──
             Route::controller(\App\Http\Controllers\Admin\PurchaseOrderApprovalController::class)
                 ->prefix('purchase-orders')->name('purchase_orders.')->group(function () {
@@ -118,6 +125,11 @@ Route::domain("admin.{$baseDomain}")
              */
             Route::delete('items/{item}/variants/{variant}', [ItemController::class, 'destroyVariant'])->name('items.variants.destroy');
             Route::post('items/{item}/deploy', [ItemDeployController::class, 'deploy'])->name('items.deploy');
+            // The item setup page: one place to make an item ready, each part saved on its own.
+            Route::get('items/{item}/setup', [ItemSetupController::class, 'show'])->name('items.setup');
+            Route::put('items/{item}/setup/stores/{store}/prices', [ItemSetupController::class, 'savePrices'])->name('items.setup.prices');
+            Route::put('items/{item}/setup/locations/{location}/bin', [ItemSetupController::class, 'saveBin'])->name('items.setup.bin');
+            Route::delete('items/{item}/setup/locations/{location}/bin', [ItemSetupController::class, 'removeBin'])->name('items.setup.bin.destroy');
             Route::resource('items', ItemController::class);
 
             // Users, sessions and the system status live under Settings, for global admins only.

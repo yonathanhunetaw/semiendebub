@@ -92,6 +92,8 @@ export const ADMIN_NAV: AdminNavItem[] = [
     { key: "work", label: "Sites & keys", icon: VpnKey, route: "admin.work.sites.index", scope: "store", match: ["/work"] },
     { key: "purchase-orders", label: "Purchase Orders", icon: ReceiptLong, route: "admin.purchase_orders.index", scope: "global", match: ["/purchase-orders"] },
     { key: "supplier-payments", label: "Supplier Payments", icon: PendingActions, route: "admin.supplier_payments.index", scope: "global", match: ["/supplier-payments"] },
+    // Fuel for staff rides, rent, salaries: a second person confirms each (ExpenseService).
+    { key: "expenses", label: "Expenses", icon: ReceiptLong, route: "admin.expenses.index", scope: "global", match: ["/expenses"] },
     { key: "canvas", label: "White Board", icon: Draw, route: "admin.canvas.index", scope: "store", match: ["/canvas"], external: true, newTab: true },
     { key: "items", label: "Items", icon: Layers, route: "admin.items.index", scope: "global", match: ["/items"] },
     { key: "stores", label: "All stores", icon: Store, route: "admin.inventory.stores", scope: "global", match: ["/inventory/stores", "/stores"], excludePattern: /^\/stores\/\d+/ },

@@ -11,6 +11,7 @@ use App\Services\Calendar\Sources\PurchaseSource;
 use App\Services\Calendar\Sources\ShiftSource;
 use App\Services\Calendar\Sources\ShipmentSource;
 use App\Services\Calendar\Sources\SiteDaySource;
+use App\Services\Calendar\Sources\StaffRideSource;
 use App\Services\Calendar\Sources\TransferSource;
 use Carbon\CarbonImmutable;
 
@@ -35,8 +36,9 @@ class CalendarFeed
         CreditSource $credit,
         SiteDaySource $siteDays,
         ShiftSource $shifts,
+        StaffRideSource $rides,
     ) {
-        $this->sources = [$entries, $deliveries, $shipments, $transfers, $purchases, $credit, $siteDays, $shifts];
+        $this->sources = [$entries, $deliveries, $shipments, $transfers, $purchases, $credit, $siteDays, $shifts, $rides];
     }
 
     /** @return array<int, CalendarSource> */

@@ -16,7 +16,7 @@ interface Props {
     site: { id: number; name: string; kind: SiteKind; kind_label: string; address: string | null; has_shifts: boolean };
     week?: WeekdayHours[];
     exceptions?: SiteHourExceptionRow[];
-    key: CustodyKeyView;
+    siteKey: CustodyKeyView;
     people?: { id: number; name: string; role: string }[];
     today: SiteDayView;
     /** The next 7 days: who opens and closes. */
@@ -30,7 +30,7 @@ const lines = (text: string): string[] =>
         .map((line) => line.trim())
         .filter(Boolean);
 
-export default function SiteShow({ app, site, week = [], exceptions = [], key, people = [], today, plan = [], settings }: Props): React.ReactElement {
+export default function SiteShow({ app, site, week = [], exceptions = [], siteKey, people = [], today, plan = [], settings }: Props): React.ReactElement {
     const hours = useForm<{ days: WeekdayHours[] }>({ days: week });
     const exception = useForm({ date: "", closed: true, opens_at: "", closes_at: "", note: "" });
 
@@ -123,7 +123,7 @@ export default function SiteShow({ app, site, week = [], exceptions = [], key, p
                         </div>
                     </SiteDayCard>
 
-                    <KeyCard app={app} keyView={key} showLog />
+                    <KeyCard app={app} keyView={siteKey} showLog />
 
                     <form
                         onSubmit={(e) => {

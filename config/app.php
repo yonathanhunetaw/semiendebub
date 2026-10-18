@@ -68,6 +68,15 @@ return [
     'timezone' => 'UTC',
 
     /*
+    | The shops' own clock. Opening hours, shift times and ride times are typed
+    | in this zone and shown in it; the database keeps UTC instants
+    | (App\Services\Workforce\LocalTime). The tests run it in UTC; one test
+    | class checks it in Addis Ababa.
+    */
+
+    'business_timezone' => env('BUSINESS_TIMEZONE', 'Africa/Addis_Ababa'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------

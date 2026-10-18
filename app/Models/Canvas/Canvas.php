@@ -18,12 +18,19 @@ class Canvas extends Model
     protected $fillable = [
         'user_id',
         'store_id',
+        'canvas_group_id',
         'title'
     ];
 
     protected $casts = [
         'store_id' => 'integer',
     ];
+
+    /** The owner's folder; null means General. */
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(CanvasGroup::class, 'canvas_group_id');
+    }
 
     /** The store this canvas belongs to; null for a global admin's own. */
     public function store(): BelongsTo

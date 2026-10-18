@@ -34,6 +34,7 @@ class User extends Authenticatable
         'is_driver',
         'password',
         'store_id',
+        'home_area',
         'inventory_location_id',
         'created_by',
         'active_pricing_customer_type',

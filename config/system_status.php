@@ -15,4 +15,11 @@ return [
 
     // The page reads the bucket at most once per this many seconds (0 = every load).
     'cache_seconds' => (int) env('SYSTEM_STATUS_CACHE_SECONDS', 15),
+
+    // The 24-hour history reads up to 25 small objects per node, so it is cached longer.
+    'history_cache_seconds' => (int) env('SYSTEM_STATUS_HISTORY_CACHE_SECONDS', 60),
+
+    // Links shown on the page as "Related tools": [['label' => 'Ops Console', 'url' => 'http://...'], ...].
+    // Empty by default; set SYSTEM_STATUS_LINKS to a JSON array to show them.
+    'links' => (array) json_decode((string) env('SYSTEM_STATUS_LINKS', '[]'), true),
 ];

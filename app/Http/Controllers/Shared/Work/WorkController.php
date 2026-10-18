@@ -8,16 +8,24 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Shared\Work\Concerns\ReadsWorkApp;
 use App\Http\Requests\Workforce\ForceKeyRequest;
 use App\Http\Requests\Workforce\HandOverKeyRequest;
+use App\Http\Requests\Workforce\HomeAreaRequest;
 use App\Http\Requests\Workforce\RejectKeyRequest;
 use App\Models\Auth\User;
+use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\CustodyKey;
 use App\Models\Workforce\KeyHandover;
+use App\Models\Workforce\LeaveRequest;
 use App\Models\Workforce\Shift;
+use App\Models\Workforce\ShiftSwap;
+use App\Models\Workforce\StaffRide;
 use App\Services\Workforce\AttendanceService;
 use App\Services\Workforce\KeyCustodyService;
+use App\Services\Workforce\LeaveService;
 use App\Services\Workforce\RotaService;
 use App\Services\Workforce\SiteDayService;
 use App\Services\Workforce\Sites;
+use App\Services\Workforce\StaffRideService;
+use App\Services\Workforce\SwapService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -37,6 +45,9 @@ class WorkController extends Controller
         private readonly SiteDayService $days,
         private readonly RotaService $rota,
         private readonly AttendanceService $attendance,
+        private readonly LeaveService $leave,
+        private readonly SwapService $swaps,
+        private readonly StaffRideService $rides,
     ) {
     }
 
@@ -57,9 +68,44 @@ class WorkController extends Controller
             'shifts' => $this->rota->upcomingFor($user)->map(fn (Shift $shift): array => $this->rota->present($shift))->values()->all(),
             // Where I am clocked in now, if anywhere.
             'clock' => ($entry = $this->attendance->openEntry($user)) ? $this->attendance->present($entry) : null,
+            'leave' => $this->leave->mine($user)->map(fn (LeaveRequest $leave): array => $this->leave->present($leave))->values()->all(),
+            'leaveTypes' => LeaveRequest::TYPES,
+            // Shifts offered to me, and mine I offered.
+            'offers' => $this->swaps->offersFor($user)->map(fn (ShiftSwap $swap): array => $this->swaps->present($swap))->values()->all(),
+            'offered' => $this->swaps->openFrom($user)->map(fn (ShiftSwap $swap): array => $this->swaps->present($swap))->values()->all(),
+            // Who I could offer a shift to, per site.
+            'colleagues' => $this->sites->workedAtBy($user)
+                ->filter(fn (StockLocation $site): bool => $this->sites->hasShifts($site))
+                ->mapWithKeys(fn (StockLocation $site): array => [$site->id => $this->sites->people($site)
+                    ->reject(fn (User $person): bool => (int) $person->id === (int) $user->id)
+                    ->map(fn (User $person): array => ['id' => (int) $person->id, 'name' => trim($person->first_name.' '.$person->last_name)])
+                    ->values()->all()])
+                ->all(),
+            'rides' => $this->rides->forStaff($user)
+                ->filter(fn (StaffRide $ride): bool => $ride->riders->contains('user_id', $user->id))
+                ->map(fn (StaffRide $ride): array => $this->rides->present($ride, $user))->values()->all(),
+            'homeArea' => $user->home_area,
             'managesSites' => $this->sites->managedBy($user)->isNotEmpty(),
             'reasons' => KeyHandover::REASONS,
         ]);
+    }
+
+    public function startBreak(Request $request): RedirectResponse
+    {
+        return $this->attempt(fn () => $this->attendance->startBreak($request->user()), 'On a break. End it in My work.');
+    }
+
+    public function endBreak(Request $request): RedirectResponse
+    {
+        return $this->attempt(fn () => $this->attendance->endBreak($request->user()), 'Back from the break.');
+    }
+
+    public function homeArea(HomeAreaRequest $request): RedirectResponse
+    {
+        $area = trim((string) $request->validated('home_area'));
+        $request->user()->update(['home_area' => $area !== '' ? $area : null]);
+
+        return back()->with('success', 'Saved. Staff transport drops you there.');
     }
 
     public function handOver(HandOverKeyRequest $request, CustodyKey $key): RedirectResponse

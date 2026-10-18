@@ -9,6 +9,7 @@ use App\Models\Workforce\SiteDay;
 use App\Services\Calendar\CalendarItem;
 use App\Services\Calendar\CalendarScope;
 use App\Services\Calendar\CalendarSource;
+use App\Services\Workforce\LocalTime;
 use App\Services\Workforce\Sites;
 use Carbon\CarbonImmutable;
 
@@ -56,8 +57,9 @@ class SiteDaySource implements CalendarSource
             return [];
         }
 
-        $start = $from->startOfDay();
-        $end = $to->startOfDay();
+        // The shops' dates the range covers.
+        $start = LocalTime::day($from);
+        $end = LocalTime::day($to);
         if ($start->diffInDays($end) > self::MAX_DAYS) {
             $end = $start->addDays(self::MAX_DAYS);
         }
@@ -108,8 +110,8 @@ class SiteDaySource implements CalendarSource
             );
         }
 
-        $opens = CarbonImmutable::parse($date->toDateString().' '.$hours['opens_at']);
-        $closes = CarbonImmutable::parse($date->toDateString().' '.$hours['closes_at']);
+        $opens = LocalTime::at($date, (string) $hours['opens_at']);
+        $closes = LocalTime::at($date, (string) $hours['closes_at']);
         $status = $day?->status ?? SiteDay::STATUS_PLANNED;
         $name = fn ($user): ?string => $user ? $user->first_name : null;
         $who = array_filter([

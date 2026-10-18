@@ -9,8 +9,12 @@
 
 use App\Http\Controllers\Shared\Work\AttendanceController;
 use App\Http\Controllers\Shared\Work\ClockController;
+use App\Http\Controllers\Shared\Work\HoursController;
+use App\Http\Controllers\Shared\Work\OvertimeController;
+use App\Http\Controllers\Shared\Work\RideController;
 use App\Http\Controllers\Shared\Work\RotaController;
 use App\Http\Controllers\Shared\Work\SiteController;
+use App\Http\Controllers\Shared\Work\TeamController;
 use App\Http\Controllers\Shared\Work\WorkController;
 use Illuminate\Support\Facades\Route;
 
@@ -57,3 +61,48 @@ Route::post('/work/sites/{site}/attendance/clock-in', [AttendanceController::cla
 Route::post('/work/time-entries/{entry}/clock-out', [AttendanceController::class, 'clockOut'])->name('work.time-entries.clock-out');
 Route::put('/work/time-entries/{entry}', [AttendanceController::class, 'fix'])->name('work.time-entries.fix');
 Route::post('/work/time-entries/{entry}/review', [AttendanceController::class, 'review'])->name('work.time-entries.review');
+
+// Leave and shift swaps (asking from My work; deciding on the Team page).
+Route::get('/work/team', [TeamController::class, 'index'])->name('work.team');
+Route::post('/work/leave', [TeamController::class, 'askLeave'])->name('work.leave.store');
+Route::post('/work/leave/record', [TeamController::class, 'recordLeave'])->name('work.leave.record');
+Route::post('/work/leave/{leave}/approve', [TeamController::class, 'approveLeave'])->name('work.leave.approve');
+Route::post('/work/leave/{leave}/reject', [TeamController::class, 'rejectLeave'])->name('work.leave.reject');
+Route::post('/work/leave/{leave}/cancel', [TeamController::class, 'cancelLeave'])->name('work.leave.cancel');
+Route::post('/work/shifts/{shift}/offer', [TeamController::class, 'offer'])->name('work.shifts.offer');
+Route::post('/work/swaps/{swap}/take', [TeamController::class, 'take'])->name('work.swaps.take');
+Route::post('/work/swaps/{swap}/decline', [TeamController::class, 'decline'])->name('work.swaps.decline');
+Route::post('/work/swaps/{swap}/approve', [TeamController::class, 'approveSwap'])->name('work.swaps.approve');
+Route::post('/work/swaps/{swap}/reject', [TeamController::class, 'rejectSwap'])->name('work.swaps.reject');
+Route::post('/work/swaps/{swap}/cancel', [TeamController::class, 'cancelSwap'])->name('work.swaps.cancel');
+
+// Breaks, and where staff transport drops me.
+Route::post('/work/break/start', [WorkController::class, 'startBreak'])->name('work.break.start');
+Route::post('/work/break/end', [WorkController::class, 'endBreak'])->name('work.break.end');
+Route::put('/work/home-area', [WorkController::class, 'homeArea'])->name('work.home-area');
+
+// The hours download (CSV) for salaries.
+Route::get('/work/hours.csv', [HoursController::class, 'all'])->name('work.hours.all');
+Route::get('/work/sites/{site}/hours.csv', [HoursController::class, 'site'])->name('work.hours.site');
+
+// Staff transport.
+Route::get('/work/rides', [RideController::class, 'index'])->name('work.rides');
+Route::post('/work/sites/{site}/rides', [RideController::class, 'store'])->name('work.rides.store');
+Route::post('/work/rides/{ride}/claim', [RideController::class, 'claim'])->name('work.rides.claim');
+Route::post('/work/rides/{ride}/release', [RideController::class, 'release'])->name('work.rides.release');
+Route::post('/work/rides/{ride}/depart', [RideController::class, 'depart'])->name('work.rides.depart');
+Route::post('/work/rides/{ride}/drop', [RideController::class, 'drop'])->name('work.rides.drop');
+Route::post('/work/rides/{ride}/finish', [RideController::class, 'finish'])->name('work.rides.finish');
+Route::post('/work/rides/{ride}/cancel', [RideController::class, 'cancel'])->name('work.rides.cancel');
+Route::post('/work/rides/{ride}/opt-out', [RideController::class, 'optOut'])->name('work.rides.opt-out');
+
+// Overtime rules, public holidays, and approving a person's overtime.
+Route::get('/work/overtime', [OvertimeController::class, 'show'])->name('work.overtime');
+Route::put('/work/overtime', [OvertimeController::class, 'save'])->name('work.overtime.save');
+Route::post('/work/overtime/approve', [OvertimeController::class, 'approve'])->name('work.overtime.approve');
+Route::post('/work/overtime/reject', [OvertimeController::class, 'reject'])->name('work.overtime.reject');
+Route::post('/work/holidays', [OvertimeController::class, 'addHoliday'])->name('work.holidays.store');
+Route::delete('/work/holidays/{holiday}', [OvertimeController::class, 'removeHoliday'])->name('work.holidays.destroy');
+
+// The fuel a staff ride took: an expense for Finance to confirm.
+Route::post('/work/rides/{ride}/fuel', [RideController::class, 'fuel'])->name('work.rides.fuel');

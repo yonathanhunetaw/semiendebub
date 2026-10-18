@@ -48,11 +48,13 @@ e2e/
   storefront/                   the public shop as a guest: cart, quantities, checkout → sign in
   calendar/                     /calendar opens clean on all five apps; a monthly bill marked paid today
                                 is due next month, ticked paid there, and seen by a colleague
+  work/                         keys, opening with the printed QR, clocking in with the moving code, breaks,
+                                closing and handing the key on; shift swaps and leave; a staff ride home
   dev/, finance/, marketing/, procurement/, shared/   page sweeps only (most are placeholders)
   lib/
     support.ts                  signIn(), app(), the fixture and its types
     flows.ts                    the steps specs share: carts, checkout, confirming, pick & pack, delivery
-    inspect.ts                  ledger facts (stock per location, an order's stage and holds, a store)
+    inspect.ts                  ledger facts (stock per location, an order's stage and holds, a store, a site's QR codes)
     pages.ts                    sweep() and pagesTest(): open a list of pages and collect every fault
     profile.ts                  profileTest(): edit a phone number on /profile and see it kept
     transfers.ts                raise, claim, hand to the courier, hand over, receive (with counts)

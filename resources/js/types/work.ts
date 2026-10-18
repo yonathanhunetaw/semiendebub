@@ -136,8 +136,72 @@ export interface TimeEntryView {
     in_method: string;
     out_method: string | null;
     minutes: number | null;
+    break_minutes: number;
+    worked_minutes: number | null;
+    on_break: boolean;
     flags: TimeFlag[];
     note: string | null;
     reviewed: boolean;
     shift: { starts_at: string; ends_at: string } | null;
+}
+
+export type LeaveType = "annual" | "sick" | "unpaid" | "other";
+
+/** LeaveService::present */
+export interface LeaveView {
+    id: number;
+    user: Person | null;
+    type: LeaveType;
+    starts_on: string;
+    ends_on: string;
+    days: number;
+    note: string | null;
+    status: "requested" | "approved" | "rejected" | "cancelled";
+    decided_by: string | null;
+    decision_note: string | null;
+}
+
+/** SwapService::present */
+export interface SwapView {
+    id: number;
+    status: "offered" | "taken" | "approved" | "declined" | "rejected" | "cancelled";
+    note: string | null;
+    decision_note: string | null;
+    from: Person | null;
+    to: Person | null;
+    shift: ShiftView | null;
+}
+
+/** StaffRideService::present */
+export interface RideView {
+    id: number;
+    site: { id: number; name: string } | null;
+    departs_at: string;
+    status: "requested" | "claimed" | "departed" | "done" | "cancelled";
+    note: string | null;
+    driver: Person | null;
+    vehicle: { id: number; name: string; plate: string } | null;
+    driver_holds_key: boolean;
+    /** The fuel recorded for it: an expense finance confirms. */
+    fuel: { amount: number; litres: number | null; status: "claimed" | "confirmed" | "rejected"; reject_reason: string | null } | null;
+    riders: { id: number; name: string; drop_off: string | null; status: "riding" | "dropped" | "no_show" | "not_riding" }[];
+    can: { claim: boolean; drive: boolean; opt_out: boolean; cancel: boolean; fuel: boolean };
+}
+
+/** OvertimeService::day */
+export interface OvertimeDay {
+    user_id: number;
+    name: string;
+    date: string;
+    holiday: string | null;
+    worked: number;
+    normal: number;
+    overtime: number;
+    minutes: { day: number; night: number; rest_day: number; holiday: number };
+    weighted_hours: number;
+    status: "pending" | "approved" | "rejected" | "not_needed";
+    paid_minutes: number;
+    decided_by: string | null;
+    note: string | null;
+    can_decide?: boolean;
 }

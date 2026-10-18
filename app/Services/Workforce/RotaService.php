@@ -7,7 +7,9 @@ namespace App\Services\Workforce;
 use App\Exceptions\WorkforceException;
 use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
+use App\Models\Workforce\LeaveRequest;
 use App\Models\Workforce\Shift;
+use App\Models\Workforce\ShiftSwap;
 use App\Models\Workforce\SiteDay;
 use App\Models\Workforce\StaffingRule;
 use Carbon\CarbonImmutable;
@@ -62,8 +64,9 @@ class RotaService
             throw new WorkforceException('That person does not work at this site.');
         }
 
-        $starts = CarbonImmutable::parse($data['starts_at']);
-        $ends = CarbonImmutable::parse($data['ends_at']);
+        // Typed on the shops' clock; kept as UTC instants.
+        $starts = LocalTime::parse((string) $data['starts_at']);
+        $ends = LocalTime::parse((string) $data['ends_at']);
         $duty = in_array($data['duty'] ?? null, Shift::DUTIES, true) ? $data['duty'] : Shift::DUTY_NONE;
 
         if ($ends->lessThanOrEqualTo($starts)) {
@@ -77,23 +80,7 @@ class RotaService
         return DB::transaction(function () use ($site, $by, $person, $starts, $ends, $duty, $shift): Shift {
             User::query()->whereKey($person->id)->lockForUpdate()->first();
 
-            $clash = Shift::query()->live()
-                ->with('site')
-                ->where('user_id', $person->id)
-                ->when($shift !== null, fn ($query) => $query->whereKeyNot($shift->id))
-                ->where('starts_at', '<', $ends)
-                ->where('ends_at', '>', $starts)
-                ->first();
-
-            if ($clash !== null) {
-                throw new WorkforceException(sprintf(
-                    '%s already works %s–%s at %s then.',
-                    $person->first_name,
-                    $clash->starts_at->format('D H:i'),
-                    $clash->ends_at->format('H:i'),
-                    $clash->site?->name ?? 'another site',
-                ));
-            }
+            $this->assertFree($person, $starts, $ends, $shift);
 
             $previous = $shift?->only(['user_id', 'starts_at', 'duty']);
             $seen = $shift !== null && in_array($shift->status, [Shift::STATUS_PUBLISHED, Shift::STATUS_ACCEPTED, Shift::STATUS_CHANGE_REQUESTED], true);
@@ -120,7 +107,8 @@ class RotaService
             }
 
             if ($previous !== null) {
-                $this->releaseDuty($site, $previous['duty'], (int) $previous['user_id'], CarbonImmutable::parse($previous['starts_at']));
+                $this->dropSwaps($shift, 'The shift was changed');
+                $this->releaseDuty($site, $previous['duty'], (int) $previous['user_id'], CarbonImmutable::instance($previous['starts_at']));
             }
             $this->applyDuty($site, $shift);
 
@@ -141,8 +129,8 @@ class RotaService
             $drafts = Shift::query()
                 ->where('stock_location_id', $site->id)
                 ->where('status', Shift::STATUS_DRAFT)
-                ->where('starts_at', '>=', CarbonImmutable::parse($from->toDateString())->startOfDay())
-                ->where('starts_at', '<=', CarbonImmutable::parse($to->toDateString())->endOfDay())
+                ->where('starts_at', '>=', LocalTime::startOf($from))
+                ->where('starts_at', '<', LocalTime::startOf($to)->addDay())
                 ->get();
 
             foreach ($drafts as $shift) {
@@ -198,10 +186,85 @@ class RotaService
 
         DB::transaction(function () use ($shift, $site): void {
             $shift->update(['status' => Shift::STATUS_CANCELLED]);
-            $this->releaseDuty($site, $shift->duty, (int) $shift->user_id, CarbonImmutable::parse($shift->starts_at));
+            $this->dropSwaps($shift, 'The shift was cancelled');
+            $this->releaseDuty($site, $shift->duty, (int) $shift->user_id, CarbonImmutable::instance($shift->starts_at));
         });
 
         return $shift;
+    }
+
+    /** Approved leave cancels the person's shift (LeaveService); no manager check here. */
+    public function cancelForLeave(Shift $shift): void
+    {
+        $shift->update(['status' => Shift::STATUS_CANCELLED, 'change_note' => 'On leave']);
+        $this->dropSwaps($shift, 'On leave');
+
+        if ($shift->site !== null) {
+            $this->releaseDuty($shift->site, $shift->duty, (int) $shift->user_id, CarbonImmutable::instance($shift->starts_at));
+        }
+    }
+
+    /**
+     * Give a shift to someone else (an approved swap, SwapService): they have
+     * already agreed, so it is accepted; the duty moves with it.
+     *
+     * @throws WorkforceException
+     */
+    public function reassign(Shift $shift, User $to): Shift
+    {
+        $site = $shift->site;
+        $this->assertFree($to, CarbonImmutable::instance($shift->starts_at), CarbonImmutable::instance($shift->ends_at), $shift);
+
+        $from = (int) $shift->user_id;
+        $shift->update(['user_id' => $to->id, 'status' => Shift::STATUS_ACCEPTED, 'accepted_at' => now(), 'change_note' => null]);
+
+        if ($site !== null) {
+            $this->releaseDuty($site, $shift->duty, $from, CarbonImmutable::instance($shift->starts_at));
+            $this->applyDuty($site, $shift);
+        }
+
+        return $shift;
+    }
+
+    /**
+     * Is this person free for that time: no other live shift, no approved leave?
+     *
+     * @throws WorkforceException
+     */
+    public function assertFree(User $person, CarbonImmutable $starts, CarbonImmutable $ends, ?Shift $except = null): void
+    {
+        $onLeave = LeaveRequest::query()
+            ->where('user_id', $person->id)
+            ->where('status', LeaveRequest::STATUS_APPROVED)
+            ->overlapping(LocalTime::dateOf($starts), LocalTime::dateOf($ends))
+            ->exists();
+
+        if ($onLeave) {
+            throw new WorkforceException(sprintf('%s is on leave that day.', $person->first_name));
+        }
+
+        $clash = Shift::query()->live()->with('site')
+            ->where('user_id', $person->id)
+            ->when($except !== null, fn ($query) => $query->whereKeyNot($except->id))
+            ->where('starts_at', '<', $ends)
+            ->where('ends_at', '>', $starts)
+            ->first();
+
+        if ($clash !== null) {
+            throw new WorkforceException(sprintf(
+                '%s already works %s–%s at %s then.',
+                $person->first_name,
+                LocalTime::wall($clash->starts_at, 'D H:i'),
+                LocalTime::wall($clash->ends_at, 'H:i'),
+                $clash->site?->name ?? 'another site',
+            ));
+        }
+    }
+
+    private function dropSwaps(Shift $shift, string $why): void
+    {
+        ShiftSwap::query()->where('shift_id', $shift->id)->whereIn('status', ShiftSwap::OPEN)
+            ->update(['status' => ShiftSwap::STATUS_CANCELLED, 'decision_note' => $why, 'decided_at' => now(), 'updated_at' => now()]);
     }
 
     /**
@@ -213,7 +276,7 @@ class RotaService
     public function copyWeek(StockLocation $site, User $by, CarbonInterface $weekStart): int
     {
         $this->mustManage($by, $site);
-        $from = CarbonImmutable::parse($weekStart->toDateString())->subWeek();
+        $from = LocalTime::startOf($weekStart)->subWeek();
         $copied = 0;
 
         $shifts = Shift::query()->live()->where('stock_location_id', $site->id)
@@ -223,8 +286,8 @@ class RotaService
             try {
                 $this->save($site, $by, [
                     'user_id' => (int) $shift->user_id,
-                    'starts_at' => $shift->starts_at->copy()->addWeek()->toDateTimeString(),
-                    'ends_at' => $shift->ends_at->copy()->addWeek()->toDateTimeString(),
+                    'starts_at' => LocalTime::wall($shift->starts_at->copy()->addWeek(), 'Y-m-d H:i'),
+                    'ends_at' => LocalTime::wall($shift->ends_at->copy()->addWeek(), 'Y-m-d H:i'),
                     'duty' => $shift->duty,
                 ]);
                 $copied++;
@@ -249,13 +312,13 @@ class RotaService
             return [];
         }
 
-        $start = CarbonImmutable::parse($from->toDateString());
-        $end = CarbonImmutable::parse($to->toDateString());
+        $start = LocalTime::day($from);
+        $end = LocalTime::day($to);
 
         $shifts = Shift::query()->live()->with('user.roles')
             ->where('stock_location_id', $site->id)
-            ->where('starts_at', '<', $end->addDay())
-            ->where('ends_at', '>', $start)
+            ->where('starts_at', '<', $end->addDay()->utc())
+            ->where('ends_at', '>', $start->utc())
             ->get();
 
         $gaps = [];
@@ -269,16 +332,16 @@ class RotaService
                     continue;
                 }
 
-                $windowStart = CarbonImmutable::parse($date->toDateString().' '.$rule->starts_at);
-                $windowEnd = CarbonImmutable::parse($date->toDateString().' '.$rule->ends_at);
+                $windowStart = LocalTime::at($date, (string) $rule->starts_at);
+                $windowEnd = LocalTime::at($date, (string) $rule->ends_at);
                 $matching = $shifts->filter(fn (Shift $shift): bool => $this->counts($shift, $rule->role)
                     && $shift->starts_at->lessThan($windowEnd) && $shift->ends_at->greaterThan($windowStart));
 
                 foreach ($this->shortfalls($matching, $windowStart, $windowEnd, (int) $rule->min_people) as [$gapFrom, $gapTo, $have]) {
                     $gaps[] = [
                         'date' => $date->toDateString(),
-                        'from' => $gapFrom->format('H:i'),
-                        'to' => $gapTo->format('H:i'),
+                        'from' => LocalTime::wall($gapFrom, 'H:i'),
+                        'to' => LocalTime::wall($gapTo, 'H:i'),
                         'role' => $rule->role,
                         'have' => $have,
                         'need' => (int) $rule->min_people,
@@ -300,8 +363,8 @@ class RotaService
         return Shift::query()->with('user')
             ->where('stock_location_id', $site->id)
             ->where('status', '!=', Shift::STATUS_CANCELLED)
-            ->where('starts_at', '>=', $from)
-            ->where('starts_at', '<', $to)
+            ->where('starts_at', '>=', CarbonImmutable::instance($from)->utc())
+            ->where('starts_at', '<', CarbonImmutable::instance($to)->utc())
             ->orderBy('starts_at')
             ->get();
     }
@@ -330,10 +393,10 @@ class RotaService
             'id' => (int) $shift->id,
             'site' => $shift->site ? ['id' => (int) $shift->site->id, 'name' => $shift->site->name] : null,
             'user' => $shift->user ? ['id' => (int) $shift->user->id, 'name' => trim($shift->user->first_name.' '.$shift->user->last_name)] : null,
-            'date' => $shift->starts_at->toDateString(),
+            'date' => LocalTime::dateOf($shift->starts_at),
             // Wall-clock, no zone (like the shipment slots), so the browser does not shift it.
-            'starts_at' => $shift->starts_at->format('Y-m-d\TH:i'),
-            'ends_at' => $shift->ends_at->format('Y-m-d\TH:i'),
+            'starts_at' => LocalTime::wall($shift->starts_at),
+            'ends_at' => LocalTime::wall($shift->ends_at),
             'duty' => $shift->duty,
             'status' => $shift->status,
             'change_note' => $shift->change_note,
@@ -366,8 +429,8 @@ class RotaService
     {
         $points = collect([$from, $to]);
         foreach ($shifts as $shift) {
-            $points->push(CarbonImmutable::parse($shift->starts_at)->max($from)->min($to));
-            $points->push(CarbonImmutable::parse($shift->ends_at)->max($from)->min($to));
+            $points->push(CarbonImmutable::instance($shift->starts_at)->max($from)->min($to));
+            $points->push(CarbonImmutable::instance($shift->ends_at)->max($from)->min($to));
         }
 
         $points = $points->unique(fn (CarbonImmutable $point): int => $point->getTimestamp())
@@ -401,7 +464,7 @@ class RotaService
             return;
         }
 
-        $day = $this->days->day($site, CarbonImmutable::parse($shift->starts_at));
+        $day = $this->days->day($site, CarbonImmutable::instance($shift->starts_at));
         $day->update([$shift->duty === Shift::DUTY_OPENER ? 'opener_id' : 'closer_id' => $shift->user_id]);
     }
 
@@ -414,7 +477,7 @@ class RotaService
         $column = $duty === Shift::DUTY_OPENER ? 'opener_id' : 'closer_id';
 
         SiteDay::query()->where('stock_location_id', $site->id)
-            ->whereDate('date', $date->toDateString())
+            ->whereDate('date', LocalTime::dateOf($date))
             ->where($column, $userId)
             ->update([$column => null]);
     }

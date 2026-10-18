@@ -23,9 +23,29 @@ import Layers from '@mui/icons-material/Layers';
 import Share from '@mui/icons-material/Share';
 import Draw from '@mui/icons-material/Draw';
 import PersonAdd from '@mui/icons-material/PersonAdd';
+import CanvasWorkspacePanel from '@/Components/Canvas/CanvasWorkspacePanel';
+import { CanvasGroupRow, workspaceTheme, ws } from '@/Components/Canvas/canvasWorkspace';
+import CloudDoneIcon from '@mui/icons-material/CloudDoneOutlined';
+import CloudOffIcon from '@mui/icons-material/CloudOffOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import CircularProgress from '@mui/material/CircularProgress';
 
 // Global Ziggy route declaration
 declare function route(name?: string, params?: any, absolute?: boolean): string;
+
+/**
+ * Images uploaded before R2 point at the old site's /images/canvas-assets/ path,
+ * which is gone. The stored link is left alone (so nothing is lost); the editor
+ * is shown a clear placeholder instead of a broken picture.
+ */
+const LEGACY_IMAGE = /^https?:\/\/[^/]+\/images\/canvas-assets\//i;
+const MISSING_IMAGE = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">'
+    + '<rect width="400" height="300" fill="#f3f4f6" stroke="#9ca3af" stroke-width="4" stroke-dasharray="14 10"/>'
+    + '<text x="200" y="140" font-family="sans-serif" font-size="26" font-weight="700" text-anchor="middle" fill="#4b5563">Image missing</text>'
+    + '<text x="200" y="178" font-family="sans-serif" font-size="20" text-anchor="middle" fill="#6b7280">Upload it again</text></svg>'
+);
+let legacyImageReported = false;
 
 const customAssetStore: any = {
     async upload(_asset: any, file: File): Promise<{ src: string }> {
@@ -66,7 +86,15 @@ const customAssetStore: any = {
         }
     },
     async resolve(asset: any): Promise<string> {
-        return asset.props?.src ?? '';
+        const src: string = asset.props?.src ?? '';
+        if (LEGACY_IMAGE.test(src)) {
+            if (!legacyImageReported) {
+                legacyImageReported = true;
+                window.dispatchEvent(new CustomEvent('canvas-legacy-image'));
+            }
+            return MISSING_IMAGE;
+        }
+        return src;
     }
 };
 
@@ -137,6 +165,11 @@ const toneColor: Record<StatusTone, string> = {
  */
 const StatusBarContext = createContext<StatusBarProps | null>(null);
 
+const toneIcon = (tone: StatusTone) => tone === 'busy' ? <CircularProgress size={18} thickness={5} />
+    : tone === 'error' ? <ErrorOutlineIcon sx={{ fontSize: 20 }} />
+    : tone === 'warn' ? <CloudOffIcon sx={{ fontSize: 20 }} />
+    : <CloudDoneIcon sx={{ fontSize: 20 }} />;
+
 function CanvasStatusBar() {
     const bar = useContext(StatusBarContext);
     if (!bar) return null;
@@ -156,9 +189,21 @@ function CanvasStatusBar() {
             boxShadow: 1,
             border: '1px solid',
             borderColor: 'divider',
-            maxWidth: { xs: 'calc(100vw - 24px)', sm: 520 },
+            maxWidth: { xs: 'none', sm: 520 },
+            minWidth: 0,
         }}>
-            <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Phones: one status icon, no words. The title and status stay in its label. */}
+            <Tooltip title={`${bar.title}: ${bar.text}`} enterTouchDelay={0}>
+                <Box
+                    role="img"
+                    aria-label={`${bar.title}. ${bar.text}`}
+                    sx={{ display: { xs: 'flex', sm: 'none' }, alignItems: 'center', justifyContent: 'center', width: 28, height: 28, color: toneColor[bar.tone] }}
+                >
+                    {toneIcon(bar.tone)}
+                </Box>
+            </Tooltip>
+
+            <Box sx={{ minWidth: 0, display: { xs: 'none', sm: 'flex' }, flexDirection: 'column' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
                     <Typography variant="body2" fontWeight="bold" color="text.primary" noWrap sx={{ lineHeight: 1.3 }}>
                         {bar.title}
@@ -181,14 +226,21 @@ function CanvasStatusBar() {
                         Sign in
                     </Button>
                 ) : !bar.isViewer && (
-                    <Button variant="contained" size="small" startIcon={<SaveIcon />} onClick={bar.onSave}
-                        sx={{ textTransform: 'none', borderRadius: 2, fontSize: '12px', boxShadow: 0 }}>
-                        Save version
+                    <Button variant="contained" size="small" onClick={bar.onSave} aria-label="Save version"
+                        startIcon={<SaveIcon />}
+                        sx={{
+                            textTransform: 'none', borderRadius: 2, fontSize: '12px', boxShadow: 0, minWidth: 0,
+                            '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: { xs: 0, sm: -0.5 } },
+                        }}>
+                        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Save version</Box>
                     </Button>
                 )}
-                <Button variant="outlined" size="small" startIcon={<MenuIcon />} onClick={bar.onMenu}
-                    sx={{ textTransform: 'none', borderRadius: 2, fontSize: '12px' }}>
-                    Menu
+                <Button variant="outlined" size="small" startIcon={<MenuIcon />} onClick={bar.onMenu} aria-label="Menu"
+                    sx={{
+                        textTransform: 'none', borderRadius: 2, fontSize: '12px', minWidth: 0,
+                        '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: { xs: 0, sm: -0.5 } },
+                    }}>
+                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Menu</Box>
                 </Button>
             </Box>
         </Box>
@@ -247,9 +299,10 @@ interface CanvasProps {
     };
     history: HistoryItem[];
     draftSavedAt?: string | null;
+    groups?: CanvasGroupRow[];
 }
 
-export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId, currentUserId, allUsers, sharedUsers: initialSharedUsers, latestSnapshot, latestVersionInfo, history: initialHistory, draftSavedAt }: CanvasProps) {
+export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId, currentUserId, allUsers, sharedUsers: initialSharedUsers, latestSnapshot, latestVersionInfo, history: initialHistory, draftSavedAt, groups = [] }: CanvasProps) {
 
     // Helper: Format date strings for history list
     const formatDate = (dateStr: string) => {
@@ -490,6 +543,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
     const [newCanvasTitle, setNewCanvasTitle] = useState('');
+    const [newCanvasGroupId, setNewCanvasGroupId] = useState<number | null>(null);
     const [selectedUserToShare, setSelectedUserToShare] = useState('');
     const [selectedPermission, setSelectedPermission] = useState<'view' | 'edit'>('edit');
     const [sharedUsers, setSharedUsers] = useState<any[]>(initialSharedUsers || []);
@@ -529,12 +583,20 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
             if (e?.detail) setProblem(e.detail);
         };
 
+        const handleLegacy = () => setSnackbar({
+            open: true,
+            severity: 'error',
+            message: 'Some images come from the old storage and are gone. Upload them again where you see "Image missing".',
+        });
+
+        window.addEventListener('canvas-legacy-image', handleLegacy);
         window.addEventListener('canvas-upload-start', handleStart);
         window.addEventListener('canvas-upload-progress', handleProgress);
         window.addEventListener('canvas-upload-success', handleEnd);
         window.addEventListener('canvas-upload-error', handleError);
 
         return () => {
+            window.removeEventListener('canvas-legacy-image', handleLegacy);
             window.removeEventListener('canvas-upload-start', handleStart);
             window.removeEventListener('canvas-upload-progress', handleProgress);
             window.removeEventListener('canvas-upload-success', handleEnd);
@@ -553,7 +615,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
 
     const handleCreateCanvas = () => {
         if (!newCanvasTitle.trim()) return;
-        router.post('/canvas/create', { title: newCanvasTitle }, {
+        router.post('/canvas/create', { title: newCanvasTitle, group_id: newCanvasGroupId }, {
             onSuccess: () => {
                 setNewCanvasTitle('');
                 setIsCreateDialogOpen(false);
@@ -845,194 +907,41 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     />
                 </StatusBarContext.Provider>
 
-                {/* Main Management Drawer */}
-                <Drawer
-                    anchor="right"
-                    open={isDrawerOpen}
-                    onClose={() => setIsDrawerOpen(false)}
-                    PaperProps={{ sx: { width: { xs: '100%', sm: 400 }, p: 3, display: 'flex', flexDirection: 'column' } }}
-                >
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                        <Typography variant="h6" fontWeight="bold" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Layers color="primary" /> Canvas Workspace
-                        </Typography>
-                        <IconButton onClick={() => setIsDrawerOpen(false)} size="small">
-                            <CloseIcon />
-                        </IconButton>
-                    </Box>
-                    <Divider sx={{ mb: 3 }} />
-
-                    {canvasSizeWarning && (
-                        <Alert severity="warning" sx={{ mb: 3, fontSize: '13px' }}>
-                            {canvasSizeWarning}
-                        </Alert>
-                    )}
-
-                    <Box sx={{ mb: 3 }}>
-                        <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontWeight: 600 }}>
-                            Switch Canvas Blueprint
-                            <Chip size="small" label={`${canvases.length} ${canvases.length === 1 ? 'blueprint' : 'blueprints'}`} sx={{ ml: 1, height: 18, fontSize: '10px' }} />
-                        </Typography>
-                        <FormControl fullWidth size="small">
-                            <Select
-                                value={initialActiveCanvasId}
-                                onChange={(e) => router.get('/canvas', { canvas_id: e.target.value })}
-                                sx={{ borderRadius: 2 }}
-                            >
-                                {canvases.map((c) => (
-                                    <MenuItem key={c.id} value={c.id}>
-                                        {c.title} {c.user_id !== currentUserId ? '(Shared)' : ''}
-                                        {c.id === initialActiveCanvasId && (
-                                            <Chip size="small" color="primary" variant="outlined" label="Active" sx={{ ml: 1, height: 18, fontSize: '10px' }} />
-                                        )}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </Box>
-
-                    <Button
-                        variant="outlined"
-                        startIcon={<AddIcon />}
-                        onClick={() => setIsCreateDialogOpen(true)}
-                        fullWidth
-                        sx={{ mb: 3, textTransform: 'none', borderRadius: 2, py: 1 }}
+                {/* Workspace panel and its dialogs share one dark theme */}
+                <ThemeProvider theme={workspaceTheme}>
+                    <Drawer
+                        anchor="right"
+                        open={isDrawerOpen}
+                        onClose={() => setIsDrawerOpen(false)}
+                        PaperProps={{ sx: {
+                            width: { xs: '100%', sm: 420 }, maxWidth: '100%', p: 0, display: 'flex', flexDirection: 'column',
+                            overflow: 'hidden', bgcolor: ws.page, backgroundImage: ws.mesh, color: 'text.primary',
+                        } }}
                     >
-                        Create New Canvas
-                    </Button>
-
-                    {isOwner && (
-                        <Box sx={{ mb: 3 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                                    Collaboration & Access
-                                </Typography>
-                                <Button
-                                    size="small"
-                                    startIcon={<Share fontSize="small" />}
-                                    onClick={() => setIsShareDialogOpen(true)}
-                                    sx={{ textTransform: 'none', fontSize: '12px' }}
-                                >
-                                    Share
-                                </Button>
-                            </Box>
-                            <List dense sx={{ bgcolor: 'background.default', borderRadius: 2, maxHeight: 150, overflowY: 'auto', p: 1 }}>
-                                {sharedUsers.length === 0 ? (
-                                    <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ py: 1.5 }}>
-                                        Not shared with anyone yet.
-                                    </Typography>
-                                ) : (
-                                    sharedUsers.map((u) => (
-                                        <ListItem
-                                            key={u.id}
-                                            secondaryAction={
-                                                <IconButton edge="end" size="small" onClick={() => setUserToDelete(u)}>
-                                                    <DeleteIcon fontSize="small" color="error" />
-                                                </IconButton>
-                                            }
-                                        >
-                                            <ListItemAvatar sx={{ minWidth: 36 }}>
-                                                <Avatar sx={{ width: 26, height: 26, fontSize: '12px', bgcolor: 'primary.main' }}>
-                                                    {u.first_name?.[0] || 'U'}
-                                                </Avatar>
-                                            </ListItemAvatar>
-                                            <ListItemText
-                                                primary={`${u.first_name} ${u.last_name || ''}`}
-                                                secondary={
-                                                    <Select
-                                                        variant="standard"
-                                                        disableUnderline
-                                                        value={u.pivot?.permission || 'view'}
-                                                        onChange={(e: any) => changePermission(u, e.target.value)}
-                                                        sx={{ fontSize: '12px' }}
-                                                    >
-                                                        <MenuItem value="view">Can view</MenuItem>
-                                                        <MenuItem value="edit">Can edit</MenuItem>
-                                                    </Select>
-                                                }
-                                                primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
-                                                secondaryTypographyProps={{ variant: 'caption' }}
-                                            />
-                                        </ListItem>
-                                    ))
-                                )}
-                            </List>
-                        </Box>
-                    )}
-
-                    <Divider sx={{ mb: 3 }} />
-
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <HistoryIcon fontSize="small" /> Version History
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            {history.length} saved
-                        </Typography>
-                    </Box>
-
-                    <List sx={{ flexGrow: 1, overflowY: 'auto', maxHeight: 240, bgcolor: 'background.default', borderRadius: 2, p: 1 }}>
-                        {history.length === 0 ? (
-                            <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 3 }}>
-                                No versions saved yet.
-                            </Typography>
-                        ) : (
-                            history.map((item) => {
-                                const isActive = activeVersionId === item.id;
-                                return (
-                                    <ListItem
-                                        key={item.id}
-                                        onClick={() => handleLoadVersion(item.id)}
-                                        sx={{
-                                            borderRadius: 1.5,
-                                            mb: 1,
-                                            cursor: 'pointer',
-                                            bgcolor: isActive ? 'primary.main' : 'background.paper',
-                                            color: isActive ? 'primary.contrastText' : 'text.primary',
-                                            boxShadow: 0,
-                                            border: '1px solid',
-                                            borderColor: isActive ? 'primary.main' : 'divider',
-                                            transition: 'all 0.2s',
-                                            '&:hover': {
-                                                bgcolor: isActive ? 'primary.dark' : 'action.hover',
-                                            }
-                                        }}
-                                    >
-                                        <ListItemText
-                                            primary={
-                                                <Typography variant="body2" fontWeight="600" noWrap>
-                                                    {item.id === latestVersionId && (
-                                                        <Chip size="small" label="Current" sx={{ mr: 0.75, height: 16, fontSize: '9px', fontWeight: 700 }} />
-                                                    )}
-                                                    {item.comment || 'Blueprint Update'}
-                                                </Typography>
-                                            }
-                                            secondary={
-                                                <Typography variant="caption" sx={{ color: isActive ? 'rgba(255,255,255,0.7)' : 'text.secondary' }}>
-                                                    {formatDate(item.created_at)} {item.user ? `• ${item.user.first_name}` : ''}
-                                                </Typography>
-                                            }
-                                        />
-                                        {!isViewer && item.id !== latestVersionId && (
-                                            <Button
-                                                size="small"
-                                                color="inherit"
-                                                onClick={(e) => { e.stopPropagation(); handleRestoreVersion(item.id); }}
-                                                sx={{ textTransform: 'none', fontSize: '12px', ml: 1, flexShrink: 0 }}
-                                            >
-                                                Restore
-                                            </Button>
-                                        )}
-                                    </ListItem>
-                                );
-                            })
-                        )}
-                    </List>
-
-                    <Typography variant="caption" color={hasUnsavedChanges ? 'warning.main' : 'success.main'} sx={{ mt: 2 }}>
-                        {hasUnsavedChanges ? 'Saving changes…' : 'All changes synced'}
-                    </Typography>
-                </Drawer>
+                        <CanvasWorkspacePanel
+                            canvases={canvases}
+                            groups={groups}
+                            activeCanvasId={initialActiveCanvasId}
+                            activeTitle={activeCanvas?.title ?? 'Canvas'}
+                            currentUserId={currentUserId}
+                            isOwner={isOwner}
+                            isViewer={isViewer}
+                            history={history}
+                            activeVersionId={activeVersionId}
+                            sharedUsers={sharedUsers}
+                            syncTone={statusTone}
+                            syncText={statusText}
+                            sizeWarning={canvasSizeWarning}
+                            onClose={() => setIsDrawerOpen(false)}
+                            onCreateCanvas={(groupId) => { setNewCanvasGroupId(groupId); setIsCreateDialogOpen(true); }}
+                            onSave={handleSave}
+                            onLoadVersion={handleLoadVersion}
+                            onRestoreVersion={handleRestoreVersion}
+                            onShare={() => setIsShareDialogOpen(true)}
+                            onChangePermission={changePermission}
+                            onRemoveUser={setUserToDelete}
+                        />
+                    </Drawer>
 
                 {/* Dialogs */}
                 <Dialog open={isCreateDialogOpen} onClose={() => setIsCreateDialogOpen(false)} maxWidth="xs" fullWidth>
@@ -1142,6 +1051,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         <Button onClick={() => performSave(saveComment.trim())} variant="contained" disabled={!saveComment.trim()}>Save version</Button>
                     </DialogActions>
                 </Dialog>
+                </ThemeProvider>
 
                 <Snackbar
                     open={snackbar.open}

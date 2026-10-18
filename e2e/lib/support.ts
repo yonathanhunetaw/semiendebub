@@ -11,6 +11,8 @@ export interface Person {
 export interface Fixture {
     password: string;
     store: { id: number; name: string };
+    /** A free car for the staff transport spec. */
+    vehicle: { id: number; name: string; plate: string };
     seller: { id: number; email: string; name: string };
     manager: { id: number; email: string; name: string };
     courier: { id: number; email: string; name: string };

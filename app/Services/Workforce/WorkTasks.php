@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace App\Services\Workforce;
 
 use App\Models\Auth\User;
+use App\Models\Finance\Expense;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\CustodyKey;
 use App\Models\Workforce\KeyHandover;
 use App\Models\Workforce\Shift;
+use App\Models\Workforce\ShiftSwap;
+use App\Models\Workforce\StaffRide;
+use App\Models\Workforce\StaffRideRider;
 use App\Models\Workforce\SiteDay;
 use App\Models\Workforce\TimeEntry;
+use App\Services\Finance\ExpenseService;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -24,6 +29,9 @@ class WorkTasks
         private readonly Sites $sites,
         private readonly SiteDayService $days,
         private readonly RotaService $rota,
+        private readonly LeaveService $leave,
+        private readonly SwapService $swaps,
+        private readonly OvertimeService $overtime,
     ) {
     }
 
@@ -55,6 +63,37 @@ class WorkTasks
             ), $toAccept, $href, true);
         }
 
+        // A colleague offered me their shift.
+        $offers = ShiftSwap::query()->where('to_id', $user->id)->where('status', ShiftSwap::STATUS_OFFERED)->count();
+        if ($offers > 0) {
+            $tasks[] = $this->task('swap-offers', 'shift', 'A shift is offered to you', "{$offers} shift(s) a colleague would like you to take.", $offers, $href, true);
+        }
+
+        // My ride today.
+        $ride = StaffRide::query()->with(['vehicle', 'driver'])
+            ->whereIn('status', [StaffRide::STATUS_REQUESTED, StaffRide::STATUS_CLAIMED, StaffRide::STATUS_DEPARTED])
+            ->whereBetween('departs_at', [LocalTime::today()->utc(), LocalTime::today()->addDay()->utc()])
+            ->whereHas('riders', fn ($rider) => $rider->where('user_id', $user->id)->where('status', StaffRideRider::STATUS_RIDING))
+            ->orderBy('departs_at')->first();
+        if ($ride !== null) {
+            $tasks[] = $this->task("ride-{$ride->id}", 'truck', 'Your ride today', sprintf(
+                'Leaves at %s%s.',
+                LocalTime::wall($ride->departs_at, 'H:i'),
+                $ride->driver ? sprintf(' with %s in %s', $ride->driver->first_name, $ride->vehicle?->plate ?? 'a car') : ', no driver yet',
+            ), 1, $this->workRoute($user, 'work.rides'));
+        }
+
+        // Drivers: rides nobody has taken in the next day.
+        if ($user->isRole('delivery') && $user->is_driver) {
+            $pool = StaffRide::query()->where('status', StaffRide::STATUS_REQUESTED)
+                ->whereBetween('departs_at', [now()->subHours(3), now()->addDay()]);
+            $count = (clone $pool)->count();
+            if ($count > 0) {
+                $soon = (clone $pool)->where('departs_at', '<', now()->addHour())->exists();
+                $tasks[] = $this->task('rides-to-take', 'truck', 'Staff rides to take', "{$count} staff ride(s) waiting for a driver.", $count, $this->workRoute($user, 'work.rides'), $soon);
+            }
+        }
+
         // Managers: change requests, unaccepted shifts and coverage gaps in the next 7 days.
         $managed = $user->isRole('admin', 'dev', 'store_manager') || $user->facilityAssignments()->exists()
             ? $this->sites->managedBy($user)->filter(fn (StockLocation $site): bool => $this->sites->hasShifts($site))
@@ -75,6 +114,25 @@ class WorkTasks
                 $tasks[] = $this->task('unaccepted-shifts', 'shift', 'Shifts not accepted yet', "{$unaccepted} shift(s) in the next 7 days not accepted.", $unaccepted, $this->sitesUrl($user));
             }
 
+            $leave = $this->leave->awaiting($user)->count();
+            if ($leave > 0) {
+                $tasks[] = $this->task('leave-requests', 'shift', 'Leave to decide', "{$leave} leave request(s) waiting for you.", $leave, $this->workRoute($user, 'work.team'), true);
+            }
+
+            $swaps = $this->swaps->awaiting($user)->count();
+            if ($swaps > 0) {
+                $tasks[] = $this->task('swap-approvals', 'shift', 'Shift swaps to approve', "{$swaps} swap(s) both people agreed to.", $swaps, $this->workRoute($user, 'work.team'), true);
+            }
+
+            if ($this->overtime->settings()->needs_approval) {
+                $pending = collect($this->overtime->forSites($managed, LocalTime::today()->subDays(14), LocalTime::today()))
+                    ->filter(fn (array $day): bool => $day['status'] === 'pending' && $this->overtime->mayDecide($user, (int) $day['user_id'], (string) $day['date']))
+                    ->count();
+                if ($pending > 0) {
+                    $tasks[] = $this->task('overtime-to-approve', 'shift', 'Overtime to approve', "{$pending} day(s) of overtime in the last two weeks to approve or turn down.", $pending, $this->sitesUrl($user));
+                }
+            }
+
             $gaps = $managed->sum(fn (StockLocation $site): int => count($this->rota->coverage($site, now(), now()->addDays(6))));
             if ($gaps > 0) {
                 $tasks[] = $this->task('coverage-gaps', 'warning', 'Short of staff', "{$gaps} stretch(es) in the next 7 days below the staffing rules.", $gaps, $this->sitesUrl($user));
@@ -91,7 +149,7 @@ class WorkTasks
                 $tasks[] = $this->task('still-clocked-in', 'shift', 'Clock out', sprintf(
                     'You are still clocked in at %s since %s. Scan the counter screen to clock out.',
                     $open->site?->name ?? 'your site',
-                    $open->clock_in_at->format('H:i'),
+                    LocalTime::wall($open->clock_in_at, 'H:i'),
                 ), 1, $href, true);
             }
         }
@@ -107,15 +165,25 @@ class WorkTasks
             }
         }
 
+        // Finance and global admins: expenses (ride fuel…) someone else recorded.
+        if (ExpenseService::mayConfirm($user)) {
+            $claimed = Expense::query()->where('status', Expense::STATUS_CLAIMED)->where('recorded_by', '!=', $user->id)->count();
+            if ($claimed > 0) {
+                $app = $user->isRole('finance') ? 'finance' : 'admin';
+                $tasks[] = $this->task('expenses-to-confirm', 'payment', 'Expenses to confirm', "{$claimed} expense(s) waiting for a second person.", $claimed,
+                    Route::has("{$app}.expenses.index") ? route("{$app}.expenses.index") : null, true);
+            }
+        }
+
         // Read-only: the bell runs on every page, so it never creates site days.
-        $today = SiteDay::query()->with('site')->whereDate('date', now()->toDateString())->get();
+        $today = SiteDay::query()->with('site')->whereDate('date', LocalTime::dateOf())->get();
 
         foreach ($today->where('opener_id', $user->id)->whereIn('status', [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED]) as $day) {
             $opens = $day->site ? $this->sites->opensAt($day->site, now()) : null;
             $tasks[] = $this->task("open-site-{$day->stock_location_id}", 'site', $day->status === SiteDay::STATUS_MISSED ? 'Open the site: late' : 'You open today', sprintf(
                 '%s opens%s. Scan the QR at the counter to open it.',
                 $day->site?->name ?? 'Your site',
-                $opens ? ' at '.$opens->format('H:i') : '',
+                $opens ? ' at '.LocalTime::wall($opens, 'H:i') : '',
             ), 1, $href, $day->status === SiteDay::STATUS_MISSED);
         }
 
@@ -127,7 +195,7 @@ class WorkTasks
             $tasks[] = $this->task("close-site-{$day->stock_location_id}", 'site', 'You close today', sprintf(
                 '%s closes%s. Count the till and hand the key to the next opener.',
                 $day->site?->name ?? 'Your site',
-                $closes ? ' at '.$closes->format('H:i') : '',
+                $closes ? ' at '.LocalTime::wall($closes, 'H:i') : '',
             ), 1, $href);
         }
 
@@ -181,13 +249,17 @@ class WorkTasks
 
     private function sitesUrl(User $user): ?string
     {
-        $url = $this->workUrl($user);
-
-        return $url === null ? null : rtrim($url, '/').'/sites';
+        return $this->workRoute($user, 'work.sites.index');
     }
 
     /** The user's own app's work page (absolute, so it works from any app). */
     public function workUrl(User $user): ?string
+    {
+        return $this->workRoute($user, 'work');
+    }
+
+    /** A work route in the user's own app, e.g. work.team. */
+    private function workRoute(User $user, string $name): ?string
     {
         $app = match (true) {
             $user->isRole('seller', 'store_manager') => 'seller',
@@ -197,7 +269,7 @@ class WorkTasks
             default => null,
         };
 
-        return $app !== null && Route::has("{$app}.work") ? route("{$app}.work") : null;
+        return $app !== null && Route::has("{$app}.{$name}") ? route("{$app}.{$name}") : null;
     }
 
     /** @return array{id: string, kind: string, title: string, detail: string, count: int, href: string|null, urgent: bool} */

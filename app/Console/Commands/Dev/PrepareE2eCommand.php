@@ -193,8 +193,15 @@ final class PrepareE2eCommand extends Command
         );
         $settlement->remitters()->syncWithoutDetaching([$seller->id, $people['seller2']->id]);
 
+        // A car for the staff transport spec (work/rides), free of other runs.
+        $van = \App\Models\Fulfillment\Vehicle::query()->updateOrCreate(
+            ['plate' => 'E2E-VAN'],
+            ['name' => 'E2E Van', 'max_cbm' => 6, 'payload_kg' => 1000, 'status' => \App\Models\Fulfillment\Vehicle::STATUS_ACTIVE],
+        );
+
         $this->line((string) json_encode([
             'password' => self::PASSWORD,
+            'vehicle' => ['id' => $van->id, 'name' => $van->name, 'plate' => $van->plate],
             'store' => ['id' => $store->id, 'name' => $store->name],
             'seller' => ['id' => $seller->id, 'email' => $seller->email, 'name' => 'E2E Seller'],
             'manager' => ['id' => $manager->id, 'email' => $manager->email, 'name' => 'E2E Manager'],

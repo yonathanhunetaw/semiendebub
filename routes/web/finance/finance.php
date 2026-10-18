@@ -32,6 +32,9 @@ Route::domain("finance.{$baseDomain}")
                 return Inertia::render('Finance/Reports/index');
             })->name('reports.index');
 
+            // Expenses: fuel for staff rides, rent, salaries (second person confirms).
+            require base_path('routes/web/partials/expenses.php');
+
             // Supplier payments procurement recorded, waiting for a second person.
             Route::controller(\App\Http\Controllers\Shared\SupplierPaymentInboxController::class)
                 ->prefix('supplier-payments')->name('supplier_payments.')->group(function () {

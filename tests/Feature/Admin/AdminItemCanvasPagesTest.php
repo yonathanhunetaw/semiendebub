@@ -6,6 +6,7 @@ namespace Tests\Feature\Admin;
 
 use App\Models\Auth\User;
 use App\Models\Canvas\Canvas;
+use App\Models\Canvas\CanvasGroup;
 use App\Models\Canvas\CanvasVersion;
 use App\Models\Item\Item;
 use App\Models\Item\ItemCategory;
@@ -280,6 +281,60 @@ class AdminItemCanvasPagesTest extends TestCase
             ->assertJsonPath('snapshot_json.shapes', [1]);
 
         $this->assertSame(3, CanvasVersion::query()->where('canvas_id', $canvas->id)->count());
+    }
+
+    #[Test]
+    public function groups_are_created_renamed_and_deleted_and_deleting_returns_canvases_to_general(): void
+    {
+        $this->post(route('admin.canvas.groups.create'), ['name' => 'Floor plans'])->assertSessionHasNoErrors();
+        $group = CanvasGroup::query()->sole();
+        $this->assertSame($this->admin->id, (int) $group->user_id);
+
+        $this->post(route('admin.canvas.groups.create'), ['name' => ''])->assertSessionHasErrors('name');
+        $this->post(route('admin.canvas.groups.create'), ['name' => str_repeat('a', 41)])->assertSessionHasErrors('name');
+
+        $this->post(route('admin.canvas.groups.rename', $group->id), ['name' => 'Layouts'])->assertSessionHasNoErrors();
+        $this->assertSame('Layouts', $group->fresh()->name);
+
+        $this->post(route('admin.canvas.create'), ['title' => 'Shop', 'group_id' => $group->id])->assertSessionHasNoErrors();
+        $canvas = Canvas::query()->where('title', 'Shop')->sole();
+        $this->assertSame($group->id, (int) $canvas->canvas_group_id);
+
+        $this->get(route('admin.canvas.index', ['canvas_id' => $canvas->id]))->assertInertia(fn ($page) => $page
+            ->has('groups', 1)->where('groups.0.name', 'Layouts'));
+
+        $this->delete(route('admin.canvas.groups.delete', $group->id))->assertSessionHas('success');
+        $this->assertNull($canvas->fresh()->canvas_group_id);
+        $this->assertSame(0, CanvasGroup::query()->count());
+    }
+
+    #[Test]
+    public function a_canvas_moves_only_into_my_own_group_and_only_by_its_owner(): void
+    {
+        $mine = Canvas::query()->create(['user_id' => $this->admin->id, 'title' => 'Mine']);
+        $myGroup = CanvasGroup::query()->create(['user_id' => $this->admin->id, 'name' => 'A']);
+        $otherUser = $this->user('admin');
+        $theirGroup = CanvasGroup::query()->create(['user_id' => $otherUser->id, 'name' => 'B']);
+
+        $this->post(route('admin.canvas.move', $mine->id), ['group_id' => $myGroup->id])->assertSessionHasNoErrors();
+        $this->assertSame($myGroup->id, (int) $mine->fresh()->canvas_group_id);
+
+        $this->post(route('admin.canvas.move', $mine->id), ['group_id' => $theirGroup->id])->assertNotFound();
+        $this->assertSame($myGroup->id, (int) $mine->fresh()->canvas_group_id);
+
+        $this->post(route('admin.canvas.move', $mine->id), ['group_id' => null])->assertSessionHasNoErrors();
+        $this->assertNull($mine->fresh()->canvas_group_id);
+
+        // Not the owner: shared with me, but I cannot file it.
+        $theirs = Canvas::query()->create(['user_id' => $otherUser->id, 'title' => 'Theirs']);
+        $theirs->shares()->attach($this->admin->id, ['permission' => 'edit']);
+        $this->post(route('admin.canvas.move', $theirs->id), ['group_id' => $myGroup->id])->assertNotFound();
+
+        // Someone else's group cannot be renamed or deleted by me, nor listed.
+        $this->post(route('admin.canvas.groups.rename', $theirGroup->id), ['name' => 'X'])->assertNotFound();
+        $this->delete(route('admin.canvas.groups.delete', $theirGroup->id))->assertNotFound();
+        $this->get(route('admin.canvas.index'))->assertInertia(fn ($page) => $page
+            ->where('groups', fn ($rows) => collect($rows)->pluck('id')->all() === [$myGroup->id]));
     }
 
     // ---- Settings and the sign-in page -------------------------------------

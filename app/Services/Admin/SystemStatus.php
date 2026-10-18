@@ -14,7 +14,8 @@ use Illuminate\Contracts\Filesystem\Filesystem;
  * data. Everything is READ from the backup bucket, where the scripts in
  * docker/ and deploy/ write the lease (primary.json), the newest backup
  * (latest.json), the deployed commit (deployed.json), one heartbeat per node
- * (nodes/) and one small file per event (events/). The web app never writes.
+ * (nodes/), one small file per event (events/) and a resource snapshot per node
+ * (stats/, read by NodeStats). The web app never writes.
  *
  * A node counts as online when its heartbeat is younger than ONLINE_SECONDS
  * (the sync job writes one every minute); older than STALE_SECONDS is offline.
@@ -29,6 +30,11 @@ class SystemStatus
     public const DEPLOY_GRACE_SECONDS = 1200;
 
     public const EVENT_LIMIT = 80;
+
+    /** A standby that has been behind the newest backup this long (or failed this many restores in a row) raises an alert. */
+    public const BEHIND_ALERT_SECONDS = 600;
+
+    public const RESTORE_FAILURES_ALERT = 3;
 
     private const DAYS_LISTED = 3;
 
@@ -49,6 +55,7 @@ class SystemStatus
         $nodes = $this->nodes($now, $lease);
         $events = $this->events($now);
         $dataEvents = $this->dataReplacedEvents($now);
+        $resources = (new NodeStats($this->disk))->build($nodes, $now);
 
         return [
             'now' => $now,
@@ -72,7 +79,9 @@ class SystemStatus
                 'time' => (string) ($deployed['time'] ?? ''),
             ],
             'nodes' => $nodes,
-            'alerts' => $this->alerts($lease, $latest, $nodes, $dataEvents, $now),
+            'alerts' => [...$this->alerts($lease, $latest, $nodes, $dataEvents, $now), ...$resources['alerts']],
+            // Containers and machine resources per node (stats/<node>.json, see NodeStats).
+            'resources' => $resources['nodes'],
             'data_events' => $dataEvents,
             'events' => $events,
         ];
@@ -154,12 +163,39 @@ class SystemStatus
                 'last_seen_age' => $age,
                 'status' => $status,
                 'is_live' => $lease !== null && $lease['fresh'] && $lease['node'] === $name,
-            ];
+            ] + $this->syncFields($beat, $now);
         }
 
         usort($out, static fn (array $a, array $b): int => [! $a['is_live'], $a['name']] <=> [! $b['is_live'], $b['name']]);
 
         return $out;
+    }
+
+    /**
+     * The heartbeat's sync fields (docker/sync-db.sh, deploy/db-lib.sh heartbeat_write).
+     * Older heartbeats lack them: every field then reads as unknown (null) or zero.
+     *
+     * @param  array<string, mixed>  $beat
+     * @return array<string, mixed>
+     */
+    private function syncFields(array $beat, int $now): array
+    {
+        $since = static fn (mixed $epoch): ?int => (int) $epoch > 0 ? max(0, $now - (int) $epoch) : null;
+        $changed = $beat['tables_changed'] ?? null;
+
+        return [
+            'behind_for' => $since($beat['behind_since'] ?? 0),
+            'last_restore_age' => $since($beat['last_restore_ok'] ?? 0),
+            'restore_failures' => max(0, (int) ($beat['restore_failures'] ?? 0)),
+            'last_backup_age' => $since($beat['last_backup_ts'] ?? 0),
+            // Age of the dump or restore the node last started from: writes after it are not in any backup yet.
+            'dump_age' => $since($beat['baseline_ts'] ?? 0),
+            // null = the node could not ask its database (or runs old scripts).
+            'tables_changed' => is_array($changed) ? [
+                'count' => max(0, (int) ($changed['count'] ?? 0)),
+                'names' => array_values(array_filter((array) ($changed['names'] ?? []), 'is_string')),
+            ] : null,
+        ];
     }
 
     /**
@@ -230,7 +266,17 @@ class SystemStatus
             if ($node['status'] === 'offline') {
                 $alerts[] = ['level' => 'warn', 'message' => "{$node['name']} has not reported for over ".intdiv(self::STALE_SECONDS, 60).' minutes.'];
             } elseif ($node['status'] === 'online' && ! $node['in_sync'] && ! $node['is_live']) {
-                $alerts[] = ['level' => 'warn', 'message' => "{$node['name']} is online but its data does not match the newest backup yet."];
+                $alerts[] = match (true) {
+                    $node['restore_failures'] >= self::RESTORE_FAILURES_ALERT => ['level' => 'error', 'message' => "{$node['name']} has failed to restore the newest backup {$node['restore_failures']} times in a row: it is falling behind. Check its sync log."],
+                    ($node['behind_for'] ?? 0) >= self::BEHIND_ALERT_SECONDS => ['level' => 'warn', 'message' => "{$node['name']} has been behind the newest backup for ".intdiv($node['behind_for'], 60).' minutes.'],
+                    default => ['level' => 'warn', 'message' => "{$node['name']} is online but its data does not match the newest backup yet."],
+                };
+            }
+
+            // Writes the live node made after its last dump are in no backup. Normal for a few
+            // minutes; a long gap means backups stopped while the shop keeps writing.
+            if ($node['status'] === 'online' && $node['is_live'] && ($node['tables_changed']['count'] ?? 0) > 0 && ($node['dump_age'] ?? 0) > 900) {
+                $alerts[] = ['level' => 'warn', 'message' => "{$node['name']} has written to {$node['tables_changed']['count']} table(s) since its last dump ".intdiv($node['dump_age'], 60).' minutes ago: those changes are in no backup yet.'];
             }
         }
 

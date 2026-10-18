@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Workforce;
 
+use App\Services\Workforce\LocalTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -27,6 +28,7 @@ class RotaWeekRequest extends FormRequest
     {
         $week = $this->input('week');
 
-        return (is_string($week) && $week !== '' ? CarbonImmutable::parse($week) : CarbonImmutable::today())->startOfWeek(CarbonImmutable::MONDAY);
+        // On the shops' calendar: Monday at their midnight.
+        return (is_string($week) && $week !== '' ? LocalTime::day($week) : LocalTime::today())->startOfWeek(CarbonImmutable::MONDAY);
     }
 }

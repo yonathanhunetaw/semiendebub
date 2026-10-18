@@ -13,11 +13,26 @@ export function ago(seconds: number | null | undefined): string {
     return `${Math.round(seconds / 86400)}d ago`;
 }
 
+/** 90 -> "2 min", 5400 -> "1 h 30 min", 200 -> "3 min". For lengths of time, not ages. */
+export function duration(seconds: number): string {
+    const m = Math.round(seconds / 60);
+    if (m < 1) return "under a minute";
+    if (m < 60) return `${m} min`;
+
+    const h = Math.floor(m / 60);
+
+    if (h >= 48) return `${Math.floor(h / 24)} d ${h % 24} h`;
+
+    return m % 60 === 0 ? `${h} h` : `${h} h ${m % 60} min`;
+}
+
 export function bytes(n: number): string {
     if (n < 1024) return `${n} B`;
     if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1073741824) return `${(n / 1048576).toFixed(1)} MB`;
+    if (n < 1099511627776) return `${(n / 1073741824).toFixed(1)} GB`;
 
-    return `${(n / 1048576).toFixed(1)} MB`;
+    return `${(n / 1099511627776).toFixed(1)} TB`;
 }
 
 /** "14 Oct, 06:13" in the viewer's time zone, from an ISO string. */
@@ -38,6 +53,7 @@ export const EVENT_LABELS: Record<string, string> = {
     synced: "Followed a backup",
     data_replaced: "Data replaced by a backup",
     behind: "Behind the newest backup",
+    restore_failed: "Restore failed",
     deploy_started: "Deploy started",
     deploy_done: "Deploy finished",
     deploy_failed: "Deploy failed",

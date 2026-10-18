@@ -125,7 +125,9 @@ fi
 
 # --- dump --------------------------------------------------------------------
 TMP="$(mktemp "${TMPDIR:-/tmp}/duka_backup.XXXXXX")"
+dump_started="$(now_epoch)"
 db_dump "$TMP" || fail "mysqldump/gzip failed (is container '$DB_CONTAINER' running?)"
+state_set baseline_ts "$dump_started"          # writes after this moment are not in the dump (System page)
 sha="$(file_sha "$TMP")"
 
 # --- rule 4: changed? --------------------------------------------------------

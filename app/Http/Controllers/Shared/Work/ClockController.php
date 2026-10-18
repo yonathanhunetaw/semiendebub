@@ -16,6 +16,7 @@ use App\Models\Workforce\TimeEntry;
 use App\Services\Workforce\AttendanceService;
 use App\Services\Workforce\CounterQr;
 use App\Services\Workforce\KeyCustodyService;
+use App\Services\Workforce\LocalTime;
 use App\Services\Workforce\SiteDayService;
 use App\Services\Workforce\Sites;
 use Illuminate\Http\JsonResponse;
@@ -78,7 +79,7 @@ class ClockController extends Controller
 
         return $this->attempt(
             fn () => $this->attendance->clockIn($request->user(), $site, $token),
-            fn (TimeEntry $entry): string => sprintf('Clocked in at %s.', $entry->clock_in_at->format('H:i')),
+            fn (TimeEntry $entry): string => sprintf('Clocked in at %s.', LocalTime::wall($entry->clock_in_at, 'H:i')),
         );
     }
 
@@ -89,7 +90,7 @@ class ClockController extends Controller
 
         return $this->attempt(
             fn () => $this->attendance->clockOut($request->user(), $site, $token),
-            fn (TimeEntry $entry): string => sprintf('Clocked out at %s.', $entry->clock_out_at?->format('H:i')),
+            fn (TimeEntry $entry): string => sprintf('Clocked out at %s.', LocalTime::wall($entry->clock_out_at, 'H:i')),
         );
     }
 

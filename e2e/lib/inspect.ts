@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
  */
 const appRoot = fileURLToPath(new URL('../..', import.meta.url));
 
-function inspect<T>(what: 'stock' | 'item' | 'sale' | 'transfer' | 'store', key: string | number): T {
+function inspect<T>(what: 'stock' | 'item' | 'sale' | 'transfer' | 'store' | 'site', key: string | number): T {
     const out = execFileSync('php', ['artisan', 'e2e:inspect', what, String(key)], { cwd: appRoot, env: process.env, encoding: 'utf8' });
     // Debug logging may share stdout; the answer is the last JSON line.
     const line = out.trim().split('\n').reverse().find((l) => l.startsWith('{') || l.startsWith('['));
@@ -51,3 +51,16 @@ export const transferOf = (reference: string): TransferFacts => inspect('transfe
 
 /** A store by its name: its id, status and the kinds of stock location it has. */
 export const storeNamed = (name: string): { id: number; status: string; locations: string[] } => inspect('store', name);
+
+export interface SiteFacts {
+    id: number;
+    /** Paths on any staff app: what the printed QR and the counter screen's moving QR open. */
+    printed: string;
+    live: string;
+    key_holder: number | null;
+    status: 'planned' | 'open' | 'closed' | 'missed' | 'closed_day';
+    clocked_in: number[];
+}
+
+/** A store's site (Work): its QR codes, key holder and today's state. */
+export const siteOf = (storeId: number): SiteFacts => inspect('site', storeId);
