@@ -1,7 +1,8 @@
 import FlashToast from "@/Components/Shared/FlashToast";
 import GuideButton from "@/Components/Guide/GuideButton";
 import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
-import { Head } from "@inertiajs/react";
+import useHideChromeOnScroll from "@/hooks/useHideChromeOnScroll";
+import { Head, usePage } from "@inertiajs/react";
 import { Box, CssBaseline } from "@mui/material";
 import React from "react";
 import { FONT_SANS } from "@/theme";
@@ -11,10 +12,12 @@ export default function SellerLayout({
 }: {
     children: React.ReactNode;
 }) {
-
+    const { url } = usePage();
+    useHideChromeOnScroll(url);
 
     return (
         <Box
+            className="seller-shell"
             sx={{
                 minHeight: "100vh",
                 // The `background` token for the current mode.

@@ -16,3 +16,26 @@
         display: none;
     }
 }
+
+/* Seller app: scrolling down hides the bottom bar and the page's sticky top
+   bar; scrolling up brings them back. `useHideChromeOnScroll` toggles the
+   class on <html>. */
+.seller-bottom-nav,
+.seller-shell main .sticky.top-0 {
+    transition: transform 0.25s ease;
+}
+
+.seller-chrome-hidden .seller-bottom-nav {
+    transform: translateY(calc(100% + 16px));
+}
+
+.seller-chrome-hidden .seller-shell main .sticky.top-0 {
+    transform: translateY(-100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .seller-bottom-nav,
+    .seller-shell main .sticky.top-0 {
+        transition: none;
+    }
+}

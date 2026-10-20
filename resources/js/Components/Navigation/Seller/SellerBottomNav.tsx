@@ -38,7 +38,7 @@ export default function SellerBottomNav(): React.ReactElement {
     const cartItems = props.seller?.cart_items ?? 0;
 
     return (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[480px] px-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:max-w-full md:max-w-[1200px]">
+        <div className="seller-bottom-nav pointer-events-none fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[480px] px-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:max-w-full md:max-w-[1200px]">
             <nav
                 aria-label="Seller navigation"
                 className="pointer-events-auto mx-auto flex max-w-[456px] items-center justify-between rounded-2xl border border-outline-variant/90 bg-surface-container-lowest/95 px-3 py-1.5 shadow-xl backdrop-blur-lg"
