@@ -1,4 +1,5 @@
 import RideCard from "@/Components/Work/RideCard";
+import { calendarPrefill, type CalendarPrefill } from "@/Components/Calendar/calendarPrefill";
 import { cardCls, inputCls, primaryBtn, sectionTitle, workLayout, wr } from "@/Components/Work/workUi";
 import type { RideView, WorkApp } from "@/types/work";
 import { Head, Link, useForm, usePage } from "@inertiajs/react";
@@ -26,19 +27,36 @@ interface Props {
     sites?: RideSite[];
 }
 
+/**
+ * When the ride leaves: the site's closing time today, or (started from a day
+ * on the calendar) that day at the picked time, else at the site's closing time.
+ */
+function departsAt(site: RideSite | undefined, prefill: CalendarPrefill): string {
+    if (prefill.date === null) return site?.closes_at ?? "";
+
+    return `${prefill.date}T${prefill.time ?? site?.closes_at?.slice(11, 16) ?? "18:00"}`;
+}
+
 function RequestForm({ app, sites }: { app: WorkApp; sites: RideSite[] }): React.ReactElement {
+    const [prefill] = useState(calendarPrefill);
+    const formRef = React.useRef<HTMLFormElement>(null);
     const [siteId, setSiteId] = useState<number>(sites[0]?.id ?? 0);
     const site = sites.find((s) => s.id === siteId) ?? sites[0];
     const form = useForm<{ departs_at: string; rider_ids: number[]; note: string }>({
-        departs_at: site?.closes_at ?? "",
+        departs_at: departsAt(site, prefill),
         rider_ids: site?.in_now ?? [],
         note: "",
     });
 
+    // Started from the calendar: bring the form into view.
+    React.useEffect(() => {
+        if (prefill.open) formRef.current?.scrollIntoView({ block: "center" });
+    }, [prefill.open]);
+
     const pick = (id: number) => {
         const next = sites.find((s) => s.id === id);
         setSiteId(id);
-        form.setData({ departs_at: next?.closes_at ?? "", rider_ids: next?.in_now ?? [], note: form.data.note });
+        form.setData({ departs_at: departsAt(next, prefill), rider_ids: next?.in_now ?? [], note: form.data.note });
     };
 
     const toggle = (id: number) =>
@@ -48,6 +66,7 @@ function RequestForm({ app, sites }: { app: WorkApp; sites: RideSite[] }): React
 
     return (
         <form
+            ref={formRef}
             className={cardCls}
             onSubmit={(e) => {
                 e.preventDefault();

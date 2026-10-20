@@ -119,7 +119,7 @@ class ItemControllerTest extends TestCase
     }
 
     #[Test]
-    public function it_sends_selected_options_and_variant_keys_to_the_edit_form()
+    public function the_old_edit_address_leads_to_the_setup_page_which_carries_the_options_and_variants()
     {
         config()->set('filesystems.disks.r2.url', 'https://images.example.test');
         $item = Item::factory()->create();
@@ -139,18 +139,17 @@ class ItemControllerTest extends TestCase
             'images' => ['uploads/variants/carton.jpg'],
         ]);
 
-        $this->get(route('admin.items.edit', $item))
+        $this->get(route('admin.items.edit', $item))->assertRedirect(route('admin.items.setup', $item));
+
+        $this->get(route('admin.items.setup', $item))
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Admin/Items/Edit')
-                ->where('item.colors.0.id', $color->id)
-                ->where('item.sizes.0.id', $size->id)
-                ->where('item.packagingTypes.0.id', $packagingType->id)
-                ->where('item.packagingTypes.0.pivot.quantity', 48)
+                ->component('Admin/Items/Setup')
+                ->where('options.colors.0.id', $color->id)
+                ->where('options.sizes.0.id', $size->id)
+                ->where('options.packaging.0.id', $packagingType->id)
+                ->where('options.packaging.0.quantity', 48)
                 ->where('item.variants.0.id', $variant->id)
-                ->where('item.variants.0.item_color_id', $color->id)
-                ->where('item.variants.0.item_size_id', $size->id)
-                ->where('item.variants.0.item_packaging_type_id', $packagingType->id)
-                ->where('item.variants.0.image_urls.0', 'https://images.example.test/uploads/variants/carton.jpg')
+                ->where('item.variants.0.slots.0.url', 'https://images.example.test/uploads/variants/carton.jpg')
             );
     }
 
@@ -176,7 +175,7 @@ class ItemControllerTest extends TestCase
         $this->assertDatabaseHas('item_categories', ['category_name' => 'New Category']);
 
         $item = Item::latest()->first();
-        $response->assertRedirect(route('admin.items.show', $item));
+        $response->assertRedirect(route('admin.items.setup', $item));
     }
 
     #[Test]
@@ -196,7 +195,7 @@ class ItemControllerTest extends TestCase
 
         $response = $this->put(route('admin.items.update', $item), $payload);
 
-        $response->assertRedirect(route('admin.items.edit', $item));
+        $response->assertRedirect(route('admin.items.setup', $item));
         $this->assertDatabaseHas('items', ['product_name' => 'Updated Name']);
         $this->assertTrue($item->colors->contains($color));
     }
@@ -240,7 +239,7 @@ class ItemControllerTest extends TestCase
             ]],
             'variant_slot_keys' => [$key => 1],
             'variant_existing_images' => [$key => [0 => 'uploads/variants/slot-1.jpg']],
-        ])->assertRedirect(route('admin.items.edit', $item));
+        ])->assertRedirect(route('admin.items.setup', $item));
 
         $this->assertSame([
             'uploads/variants/slot-1.jpg',

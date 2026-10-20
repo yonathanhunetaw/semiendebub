@@ -14,7 +14,7 @@ class ItemIndexRequest extends FormRequest
 {
     public const STATUSES = ['draft', 'active', 'inactive', 'archived'];
 
-    public const SORTS = ['name', 'updated', 'created', 'variants', 'live'];
+    public const SORTS = ['name', 'updated', 'created', 'variants', 'live', 'ready'];
 
     public const PER_PAGE = [25, 50, 100];
 
@@ -35,6 +35,7 @@ class ItemIndexRequest extends FormRequest
             'filter' => 'nullable|string',
             'category' => 'nullable|integer',
             'needs_photos' => 'nullable|boolean',
+            'not_ready' => 'nullable|boolean',
             'sort' => 'nullable|string',
             'direction' => 'nullable|string',
             'per_page' => 'nullable|integer',
@@ -67,6 +68,7 @@ class ItemIndexRequest extends FormRequest
             'status' => in_array($status, self::STATUSES, true) ? $status : 'all',
             'category' => $this->filled('category') ? (int) $this->input('category') : null,
             'needs_photos' => $this->boolean('needs_photos'),
+            'not_ready' => $this->boolean('not_ready'),
             'sort' => $sort,
             'direction' => $direction,
             'per_page' => in_array($perPage, self::PER_PAGE, true) ? $perPage : self::PER_PAGE[0],

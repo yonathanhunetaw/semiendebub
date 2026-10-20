@@ -819,6 +819,17 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         }
     };
 
+    const handleDeleteVersion = async (id: number) => {
+        try {
+            await axios.delete(route('admin.canvas.version.delete', id));
+            setHistory(prev => prev.filter((h) => h.id !== id));
+            setSnackbar({ open: true, message: 'Version deleted', severity: 'success' });
+        } catch (error) {
+            const why = describeError(error, 'save');
+            setSnackbar({ open: true, message: why.message, severity: 'error' });
+        }
+    };
+
     const activeCanvas = canvases.find(c => c.id === initialActiveCanvasId);
     const isOwner = activeCanvas?.user_id === currentUserId;
     const currentUserShare = sharedUsers.find((u: any) => String(u.id) === String(currentUserId));
@@ -937,6 +948,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                             onSave={handleSave}
                             onLoadVersion={handleLoadVersion}
                             onRestoreVersion={handleRestoreVersion}
+                            onDeleteVersion={handleDeleteVersion}
                             onShare={() => setIsShareDialogOpen(true)}
                             onChangePermission={changePermission}
                             onRemoveUser={setUserToDelete}

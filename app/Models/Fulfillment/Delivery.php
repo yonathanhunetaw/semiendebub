@@ -57,6 +57,8 @@ class Delivery extends Model
         'method',
         'customer_address_id',
         'scheduled_for',
+        'scheduled_by',
+        'schedule_set_at',
         'picked_up_at',
         'shipped_at',
         'delivered_at',
@@ -69,6 +71,8 @@ class Delivery extends Model
     protected $casts = [
         'source_location_id' => 'integer',
         'scheduled_for' => 'datetime',
+        'scheduled_by' => 'integer',
+        'schedule_set_at' => 'datetime',
         'picked_up_at' => 'datetime',
         'shipped_at' => 'datetime',
         'delivered_at' => 'datetime',

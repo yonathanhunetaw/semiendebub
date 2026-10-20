@@ -14,6 +14,7 @@ use App\Services\Admin\ActiveStore;
 use App\Services\Calendar\CalendarEventService;
 use App\Services\Calendar\CalendarFeed;
 use App\Services\Calendar\CalendarScope;
+use App\Services\Calendar\CalendarStarters;
 use App\Services\Calendar\Sources\EntrySource;
 use App\Services\Documents\DocumentService;
 use Carbon\CarbonImmutable;
@@ -34,7 +35,7 @@ use Inertia\Response;
  */
 class CalendarController extends Controller
 {
-    public function index(Request $request, CalendarFeed $feed, DocumentService $documents): Response
+    public function index(Request $request, CalendarFeed $feed, DocumentService $documents, CalendarStarters $starters): Response
     {
         $app = $this->app($request);
         $day = $request->query('date');
@@ -42,6 +43,8 @@ class CalendarController extends Controller
         return Inertia::render('Calendar/Index', [
             'app' => $app,
             'sources' => $feed->legend($app),
+            // What the viewer may start from a day, besides a note.
+            'starters' => $starters->for($this->scope($request)),
             'initialDate' => is_string($day) && strtotime($day) !== false ? CarbonImmutable::parse($day)->toDateString() : null,
             'scopeLabel' => $this->scopeLabel($request, $app),
             'readerEnabled' => $documents->readerEnabled(),

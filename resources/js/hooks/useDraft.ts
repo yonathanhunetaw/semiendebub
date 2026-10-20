@@ -38,6 +38,20 @@ export function useDraft<T>(key: string, saved: T) {
 
     const dirty = JSON.stringify(value) !== JSON.stringify(saved);
 
+    // The server's copy can change under an untouched form (a generated barcode, another part's save):
+    // follow it, unless the person has typed something of their own.
+    const savedKey = JSON.stringify(saved);
+    const previousSaved = React.useRef(savedKey);
+    React.useEffect(() => {
+        if (previousSaved.current !== savedKey) {
+            if (JSON.stringify(value) === previousSaved.current) {
+                setValue(saved);
+            }
+            previousSaved.current = savedKey;
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [savedKey]);
+
     React.useEffect(() => {
         try {
             if (dirty) {

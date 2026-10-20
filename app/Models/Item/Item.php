@@ -26,6 +26,7 @@ class Item extends Model
         'status',
         'item_category_id',
         'is_incomplete',
+        'readiness_percent',
         'file_prefix',
     ];
 
@@ -43,6 +44,7 @@ class Item extends Model
     protected $casts = [
         'general_images' => 'array',
         'is_incomplete' => 'boolean',
+        'readiness_percent' => 'integer',
     ];
 
     protected static function newFactory()

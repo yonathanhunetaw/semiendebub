@@ -2,7 +2,7 @@ import { format, parseISO } from "date-fns";
 import type { CalendarEventData, CalendarState, EntryKind, EntryRepeat } from "@/types/calendar";
 
 /** The page's route names for one app: `seller.calendar.feed`… */
-export const calendarRoute = (app: string, name: "" | "feed" | "entries.store" | "entries.update" | "entries.destroy" | "entries.complete" | "documents.store" | "documents.add") =>
+export const calendarRoute = (app: string, name: "" | "feed" | "entries.store" | "entries.update" | "entries.destroy" | "entries.complete" | "documents.store" | "documents.add" | "deliveries.schedule") =>
     name === "" ? `${app}.calendar` : `${app}.calendar.${name}`;
 
 export const KIND_LABEL: Record<EntryKind, string> = {
@@ -23,6 +23,13 @@ export const KIND_ICON: Record<string, string> = {
     po_arrival: "inventory",
     supplier_payment: "payments",
     credit_due: "credit_card",
+    holiday: "celebration",
+    overtime: "more_time",
+    expense: "request_quote",
+    leave: "beach_access",
+    closed_day: "door_front",
+    site_day: "storefront",
+    staff_ride: "airport_shuttle",
 };
 
 export const STATE_LABEL: Record<CalendarState, string> = {

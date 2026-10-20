@@ -16,6 +16,7 @@ use App\Models\Store\StoreVariantCustomerPrice;
 use App\Models\Store\StoreVariantIndividualPrice;
 use App\Models\Store\StoreVariantSellerPrice;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * How ready an item is to be sold: the one definition, read by the item setup page (and, later,
@@ -78,6 +79,25 @@ final class ItemReadiness
     }
 
     /**
+     * The readiness, and its percentage remembered on the item (items.readiness_percent) so the item list
+     * can show, filter and sort by it. Written without touching updated_at.
+     *
+     * @return array{percent: int, item: array<string, mixed>, stores: array<int, array<string, mixed>>}
+     */
+    public function refresh(Item $item): array
+    {
+        $result = $this->for($item);
+
+        if ((int) $item->readiness_percent !== $result['percent'] || $item->readiness_percent === null) {
+            DB::table('items')->where('id', $item->id)->update(['readiness_percent' => $result['percent']]);
+            $item->readiness_percent = $result['percent'];
+            $item->syncOriginalAttribute('readiness_percent');
+        }
+
+        return $result;
+    }
+
+    /**
      * @param  Collection<int, mixed>  $variants
      * @param  Collection<int, StoreVariant>  $rows  the item's store variants in this store
      * @return array<string, mixed>
@@ -86,12 +106,14 @@ final class ItemReadiness
     {
         $byVariant = $rows->keyBy('item_variant_id');
         $places = StockLocation::query()->where('store_id', $store->id)->get()->groupBy('kind');
-        $shelf = $places[StockLocation::KIND_SHELF]->first() ?? null;
-        $others = collect([$places[StockLocation::KIND_BACKROOM] ?? [], $places[StockLocation::KIND_REMOTE_HUB] ?? []])->flatten(1)->pluck('id');
-        $placeIds = collect([$places[StockLocation::KIND_SHELF] ?? [], $places[StockLocation::KIND_BACKROOM] ?? [], $places[StockLocation::KIND_REMOTE_HUB] ?? []])->flatten(1)->pluck('id');
+        // A store may have no shelf (or no floor, or no Remote Hub): ->get() answers null, [] reading would throw.
+        $of = fn (string $kind): Collection => $places->get($kind, collect());
+        $shelf = $of(StockLocation::KIND_SHELF)->first();
+        $others = $of(StockLocation::KIND_BACKROOM)->merge($of(StockLocation::KIND_REMOTE_HUB))->pluck('id');
+        $placeIds = $of(StockLocation::KIND_SHELF)->pluck('id')->merge($others)->unique()->values();
         $rowIds = $rows->pluck('id');
 
-        $deployed = $variants->isNotEmpty() && $variants->every(fn ($v): bool => $byVariant->has($v->id)) && $rows->where('active', true)->isNotEmpty();
+        $deployed = $variants->isNotEmpty() && $variants->every(fn ($v): bool => $byVariant->has($v->id));
         $priced = $rows->isNotEmpty() && $rows->every(fn (StoreVariant $r): bool => $this->price($r) > 0);
 
         $checks = [

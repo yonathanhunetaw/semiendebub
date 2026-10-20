@@ -9,7 +9,11 @@ use App\Http\Requests\Admin\SaveItemBinRequest;
 use App\Http\Requests\Admin\SaveItemPricesRequest;
 use App\Models\Inventory\ShelfItemBand;
 use App\Models\Inventory\StockLocation;
+use App\Models\Auth\User;
 use App\Models\Item\Item;
+use App\Models\Item\ItemColor;
+use App\Models\Item\ItemPackagingType;
+use App\Models\Item\ItemSize;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\StockKeeper\Transfer;
 use App\Models\Store\Store;
@@ -28,6 +32,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
 /**
@@ -45,13 +50,15 @@ final class ItemSetupController extends Controller
         private readonly ShelfMatrix $matrix,
         private readonly LocationLevels $levels,
         private readonly PackagingLadder $ladder,
+        private readonly \App\Services\Item\ItemWriter $writer,
+        private readonly \App\Services\Item\ItemPlaces $places,
     ) {
     }
 
     public function show(Request $request, Item $item): Response
     {
-        $item->load(['category.parent', 'variants.itemColor', 'variants.itemSize', 'variants.itemPackagingType']);
-        $readiness = $this->readiness->for($item);
+        $item->load(['category.parent', 'colors', 'sizes', 'packagingTypes' => fn ($q) => $q->withPivot('quantity'), 'variants.itemColor', 'variants.itemSize', 'variants.itemPackagingType']);
+        $readiness = $this->readiness->refresh($item);
         $variantIds = $item->variants->pluck('id')->all();
         $places = $this->sheet->locations();
 
@@ -76,12 +83,33 @@ final class ItemSetupController extends Controller
                     'id' => $v->id,
                     'sku' => (string) $v->sku,
                     'label' => collect([$v->itemColor?->name, $v->itemSize?->name, $v->itemPackagingType?->name])->filter()->implode(' / '),
+                    'status' => (string) $v->status,
                     'barcode' => (string) ($v->barcode ?? ''),
+                    'slots' => collect($v->image_slots)->pad(5, null)->take(5)->values()->all(),
                 ])->values()->all(),
-                'edit_url' => route('admin.items.edit', $item),
+                'basics' => [
+                    'product_name' => (string) $item->product_name,
+                    'product_description' => (string) ($item->product_description ?? ''),
+                    'packaging_details' => (string) ($item->packaging_details ?? ''),
+                    'item_category_id' => $item->item_category_id,
+                    'status' => (string) $item->status,
+                    'pictures' => collect($item->general_images ?? [])->map(fn ($p): array => ['path' => (string) $p, 'url' => \App\Services\ImageResolver::resolve((string) $p)])->values()->all(),
+                ],
+            ],
+            'options' => [
+                'colors' => $item->colors->map(fn ($c): array => ['id' => $c->id, 'name' => $c->name])->values()->all(),
+                'sizes' => $item->sizes->map(fn ($c): array => ['id' => $c->id, 'name' => $c->name])->values()->all(),
+                'packaging' => $item->packagingTypes->map(fn ($p): array => ['id' => $p->id, 'name' => $p->name, 'quantity' => (int) $p->pivot->quantity])->values()->all(),
+            ],
+            'catalog' => [
+                'categories' => $this->writer->categoryOptions(),
+                'colors' => ItemColor::query()->orderBy('name')->get(['id', 'name'])->map(fn ($o): array => ['id' => $o->id, 'name' => $o->name])->all(),
+                'sizes' => ItemSize::query()->orderBy('name')->get(['id', 'name'])->map(fn ($o): array => ['id' => $o->id, 'name' => $o->name])->all(),
+                'packaging' => ItemPackagingType::query()->orderBy('name')->get(['id', 'name'])->map(fn ($o): array => ['id' => $o->id, 'name' => $o->name])->all(),
             ],
             'readiness' => $readiness,
             'stores' => $stores,
+            'warehouses' => $this->places->warehouses($item, $request->user()),
             'stock' => collect($places)->map(fn (array $p, int $id): array => ['location_id' => $id, 'place' => $p['name'], 'pieces' => $pieces[$id] ?? 0])->values()->all(),
             'history' => $this->history($item, $variantIds),
         ]);
@@ -96,7 +124,7 @@ final class ItemSetupController extends Controller
             foreach ($request->validated('variants') as $line) {
                 $row = $rows->get((int) $line['store_variant_id']);
                 if ($row === null) {
-                    throw new InvalidArgumentException('A price line does not belong to this item in this store.');
+                    throw ValidationException::withMessages(['variants' => 'A price line does not belong to this item in this store.']);
                 }
 
                 $matrix = (array) $row->pricing_matrix;
@@ -107,6 +135,24 @@ final class ItemSetupController extends Controller
                     'discount_price' => $discount === null || $discount === '' ? null : (float) $discount,
                     'discount_ends_at' => $discount === null || $discount === '' ? null : $line['discount_ends_at'],
                 ]);
+                // The "on sale" switch: off forces the variant off; on lifts a forced-off. A real price puts a
+                // variant on sale (unless it is forced off); no price takes it off.
+                $onSale = array_key_exists('on_sale', $line) && $line['on_sale'] !== null ? filter_var($line['on_sale'], FILTER_VALIDATE_BOOLEAN) : null;
+                if ($onSale === false) {
+                    $row->manual_status = 'forced';
+                    $row->forced_status = 'inactive';
+                } elseif ($onSale === true && $row->manual_status === 'forced') {
+                    $row->manual_status = 'auto';
+                    $row->forced_status = null;
+                }
+                if ((float) $line['price'] <= 0 || $row->manual_status === 'forced') {
+                    $row->active = false;
+                } else {
+                    $row->active = true;
+                }
+                if (array_key_exists('business_pool', $line)) {
+                    $row->business_pool = $line['business_pool'] === null || $line['business_pool'] === '' ? null : (int) $line['business_pool'];
+                }
                 $row->save();
 
                 $individual = $line['individual_price'] ?? null;
@@ -127,7 +173,7 @@ final class ItemSetupController extends Controller
 
     public function saveBin(SaveItemBinRequest $request, Item $item, StockLocation $location): RedirectResponse
     {
-        abort_unless($this->permissions->canEditPlanogram($request->user(), $location), 403);
+        abort_unless($this->places->canEdit($request->user(), $location), 403);
 
         try {
             $packaging = $request->validated('item_packaging_type_id') !== null ? (int) $request->validated('item_packaging_type_id') : null;
@@ -142,7 +188,7 @@ final class ItemSetupController extends Controller
 
     public function removeBin(Request $request, Item $item, StockLocation $location): RedirectResponse
     {
-        abort_unless($this->permissions->canEditPlanogram($request->user(), $location), 403);
+        abort_unless($this->places->canEdit($request->user(), $location), 403);
 
         try {
             $location->kind === StockLocation::KIND_SHELF ? $this->matrix->removeBand($location, $item) : $this->levels->removeLevel($location, $item);
@@ -176,6 +222,9 @@ final class ItemSetupController extends Controller
                 'variant' => collect([$v->itemColor?->name, $v->itemSize?->name, $v->itemPackagingType?->name])->filter()->implode(' / ') ?: (string) $v->sku,
                 'sku' => (string) $v->sku,
                 'active' => (bool) $row->active,
+                'on_sale' => (bool) $row->active,
+                'forced_off' => $row->manual_status === 'forced',
+                'business_pool' => $row->business_pool,
                 'price' => $matrix['price'] ?? null,
                 'discount_price' => $matrix['discount_price'] ?? null,
                 'discount_ends_at' => $matrix['discount_ends_at'] ?? null,
@@ -183,9 +232,7 @@ final class ItemSetupController extends Controller
             ];
         })->filter()->values()->all();
 
-        $places = StockLocation::query()->where('store_id', $store->id)->whereIn('kind', [StockLocation::KIND_SHELF, StockLocation::KIND_REMOTE_HUB])->orderBy('id')->get();
-        $bands = ShelfItemBand::query()->whereIn('stock_location_id', $places->pluck('id'))->where('item_id', $item->id)->get()->keyBy('stock_location_id');
-        $people = $this->permissions->peopleOf((int) $store->id);
+        $where = $this->places->forStore($item, $store, $request->user());
 
         return [
             'id' => (int) $store->id,
@@ -193,24 +240,77 @@ final class ItemSetupController extends Controller
             'deployed' => $readiness !== null,
             'readiness' => $readiness,
             'lines' => $lines,
-            'seller_prices' => StoreVariantSellerPrice::query()->whereIn('store_variant_id', $rows->pluck('id'))->count(),
-            'customer_prices' => StoreVariantCustomerPrice::query()->whereIn('store_variant_id', $rows->pluck('id'))->count(),
+            'seller_prices' => $this->sellerEntries($rows->pluck('id')->all(), $lines),
+            'customer_prices' => $this->customerEntries($rows->pluck('id')->all(), $lines),
+            'sellers' => User::query()->where('store_id', $store->id)->where('role', 'seller')->orderBy('first_name')->get(['id', 'first_name', 'last_name'])
+                ->map(fn (User $u): array => ['id' => (int) $u->id, 'name' => trim($u->first_name.' '.$u->last_name)])->all(),
             'prices_url' => $readiness === null ? null : route('store.item.variants', [$store->id, $item->id]),
-            'places' => $places->map(function (StockLocation $place) use ($request, $bands, $people, $pieces): array {
-                $band = $bands->get($place->id);
-
-                return [
-                    'location_id' => (int) $place->id,
-                    'name' => (string) $place->name,
-                    'kind' => (string) $place->kind,
-                    'can_edit' => $this->permissions->canEditPlanogram($request->user(), $place),
-                    'managers' => collect($people)->where('role', 'Manager')->pluck('name')->unique()->values()->all(),
-                    'pieces' => $pieces[(int) $place->id] ?? 0,
-                    'band' => $band === null ? null : ['max' => (int) $band->max_units, 'refill' => (int) $band->refill_units, 'critical' => (int) $band->critical_units],
-                ];
-            })->values()->all(),
+            'places' => $where['places'],
+            'route' => $where['route'],
             'count_url' => route('stock_keeper.stocktakes.index'),
         ];
+    }
+
+    /**
+     * One entry per seller and tier with a price on this item in the store, a line per variant.
+     *
+     * @param  list<int>  $storeVariantIds
+     * @param  list<array<string, mixed>>  $lines  the store's variants, in order
+     * @return list<array<string, mixed>>
+     */
+    private function sellerEntries(array $storeVariantIds, array $lines): array
+    {
+        $records = StoreVariantSellerPrice::query()->whereIn('store_variant_id', $storeVariantIds)->with('seller:id,first_name,last_name')->get()->groupBy('seller_id');
+        $entries = [];
+
+        foreach ($records as $sellerId => $rows) {
+            $byVariant = $rows->keyBy('store_variant_id');
+            foreach (['business', 'individual'] as $type) {
+                $tiers = $byVariant->map(function ($r) use ($type) {
+                    $m = (array) $r->pricing_matrix;
+                    $legacy = ! isset($m['business']) && ! isset($m['individual']) && $m !== [];
+
+                    return $m[$type] ?? ($legacy && $type === 'business' ? $m : null);
+                })->filter();
+                if ($tiers->isEmpty()) {
+                    continue;
+                }
+                $entries[] = [
+                    'seller_id' => (int) $sellerId,
+                    'name' => trim(($rows->first()->seller?->first_name ?? '').' '.($rows->first()->seller?->last_name ?? '')),
+                    'customer_type' => $type,
+                    'lines' => array_map(fn (array $l): array => ['store_variant_id' => $l['store_variant_id']] + $this->tierLine($tiers->get($l['store_variant_id'])), $lines),
+                ];
+            }
+        }
+
+        return $entries;
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function customerEntries(array $storeVariantIds, array $lines): array
+    {
+        $records = StoreVariantCustomerPrice::query()->whereIn('store_variant_id', $storeVariantIds)->with('customer:id,name,tin_number')->get()->groupBy('customer_id');
+
+        return $records->map(function ($rows, $customerId) use ($lines): array {
+            $byVariant = $rows->keyBy('store_variant_id');
+            $customer = $rows->first()->customer;
+
+            return [
+                'customer_id' => (int) $customerId,
+                'name' => (string) ($customer?->name ?? "Customer #{$customerId}"),
+                'customer_type' => $customer?->tin_number ? 'individual' : 'business',
+                'lines' => array_map(fn (array $l): array => ['store_variant_id' => $l['store_variant_id']] + $this->tierLine($byVariant->get($l['store_variant_id'])?->pricing_matrix), $lines),
+            ];
+        })->values()->all();
+    }
+
+    /** @return array{price: mixed, discount_price: mixed, discount_ends_at: mixed} */
+    private function tierLine(mixed $tier): array
+    {
+        $tier = (array) $tier;
+
+        return ['price' => $tier['price'] ?? null, 'discount_price' => $tier['discount_price'] ?? null, 'discount_ends_at' => $tier['discount_ends_at'] ?? null];
     }
 
     /**

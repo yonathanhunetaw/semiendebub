@@ -16,6 +16,7 @@ use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Services\Admin\ItemCatalogue;
 use App\Services\ImageResolver;
+use App\Services\Item\ItemWriter;
 use App\Services\ItemVariantGenerationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,7 +38,8 @@ use Inertia\Inertia;
 class ItemController extends Controller
 {
     public function __construct(
-        private readonly ItemVariantGenerationService $itemVariantGenerationService
+        private readonly ItemVariantGenerationService $itemVariantGenerationService,
+        private readonly ItemWriter $writer,
     ) {
     }
 
@@ -182,20 +184,6 @@ class ItemController extends Controller
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // CREATE
-    // ──────────────────────────────────────────────────────────────────────────
-
-    public function create()
-    {
-        return Inertia::render('Admin/Items/Create', [
-            'categories' => ItemCategory::all(),
-            'colors' => ItemColor::all(),
-            'sizes' => ItemSize::all(),
-            'packagingTypes' => ItemPackagingType::all(),
-        ]);
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
     // STORE  (single multi-dimensional transaction)
     // ──────────────────────────────────────────────────────────────────────────
 
@@ -228,90 +216,11 @@ class ItemController extends Controller
 
             $this->evaluateDraftStatus($item, $validated['status']);
 
-            return redirect()->route('admin.items.show', $item)
+            return redirect()->route('admin.items.setup', $item)
                 ->with('success', 'Item created successfully.');
         });
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
-    // EDIT
-    // ──────────────────────────────────────────────────────────────────────────
-
-    public function edit(Item $item)
-    {
-        // 1. Eager load everything smoothly (now including itemPackagingType)
-        $item->load([
-            'category',
-            'colors',
-            'sizes',
-            'packagingTypes' => fn($q) => $q->withPivot('quantity'),
-            // ADDED: packagingQuantities here
-            'variants' => fn($q) => $q
-                ->with(['itemColor', 'itemSize', 'itemPackagingType', 'packagingQuantities'])
-                ->orderBy('id'),
-        ]);
-
-
-
-
-        $itemData = [
-            'id' => $item->id,
-            'product_name' => $item->product_name,
-            'product_description' => $item->product_description,
-            'packaging_details' => $item->packaging_details,
-            'item_category_id' => $item->item_category_id,
-            'status' => $item->status,
-
-            // Optimized via ImageResolver (Zero r2 API network checking overhead)
-            'general_images' => $item->processed_images,
-            'raw_general_images' => $item->general_images ?? [],
-
-            'colors' => $item->colors->map(fn($color) => [
-                'id' => $color->id,
-                'name' => $color->name,
-            ])->values()->toArray(),
-            'sizes' => $item->sizes->map(fn($size) => [
-                'id' => $size->id,
-                'name' => $size->name,
-            ])->values()->toArray(),
-            'packagingTypes' => $item->packagingTypes->map(fn($packagingType) => [
-                'id' => $packagingType->id,
-                'name' => $packagingType->name,
-                'pivot' => [
-                    'quantity' => $packagingType->pivot->quantity,
-                ],
-            ])->values()->toArray(),
-
-            'variants' => $item->variants->map(function ($variant) {
-                return [
-                    'id' => $variant->id,
-                    'sku' => $variant->sku,
-                    'status' => $variant->status,
-                    'images' => $variant->images ?? [],
-                    'image_urls' => ImageResolver::resolveAll($variant->images ?? []),
-                    'item_color_id' => $variant->item_color_id,
-                    'item_size_id' => $variant->item_size_id,
-                    'item_packaging_type_id' => $variant->item_packaging_type_id,
-                    'packaging_quantities' => $variant->packagingQuantities->map(fn($pq) => [
-                        'id' => $pq->id,
-                        'quantity' => $pq->pivot->quantity,
-                        'cbm' => $pq->pivot->cbm,
-                    ]),
-                    'item_color' => $variant->itemColor,
-                    'item_size' => $variant->itemSize,
-                    'item_packaging_type' => $variant->itemPackagingType,
-                ];
-            })->toArray(),
-        ];
-
-        return Inertia::render('Admin/Items/Edit', [
-            'item' => $itemData,
-            'categories' => ItemCategory::all(),
-            'colors' => ItemColor::all(),
-            'sizes' => ItemSize::all(),
-            'packagingTypes' => ItemPackagingType::all(),
-        ]);
-    }
     // ──────────────────────────────────────────────────────────────────────────
     // UPDATE  (single multi-dimensional transaction)
     // ──────────────────────────────────────────────────────────────────────────
@@ -340,7 +249,7 @@ class ItemController extends Controller
 
             $this->evaluateDraftStatus($item, $validated['status']);
 
-            return redirect()->route('admin.items.edit', $item)
+            return redirect()->route('admin.items.setup', $item)
                 ->with('success', 'Item updated successfully.');
         });
     }
@@ -364,6 +273,8 @@ class ItemController extends Controller
         $validated = $request->validate([
             'type' => 'required|in:category,color,size,packaging',
             'name' => 'required|string|max:255',
+            // A new category can sit under an existing one.
+            'parent_id' => 'nullable|integer|exists:item_categories,id',
         ]);
 
         [$modelClass, $nameColumn] = match ($validated['type']) {
@@ -373,7 +284,9 @@ class ItemController extends Controller
             'packaging' => [ItemPackagingType::class, 'name'],
         };
 
-        $record = $modelClass::firstOrCreate([$nameColumn => trim($validated['name'])]);
+        $record = $modelClass::firstOrCreate(
+            [$nameColumn => trim($validated['name'])] + ($validated['type'] === 'category' ? ['parent_id' => $validated['parent_id'] ?? null] : []),
+        );
 
         return response()->json([
             'id' => $record->id,
@@ -451,191 +364,41 @@ class ItemController extends Controller
     // PRIVATE HELPERS
     // ──────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Persist variant images from the multi-dimensional form input.
-     *
-     * Form key format:
-     *   variant_images[colorId:sizeId:packagingId][slotIndex]  → new File
-     *   variant_existing_images[colorId:sizeId:packagingId][slotIndex] → path string
-     *
-     * Images are stored as:  uploads/variants/{sku}/{slotIndex+1}.{ext}
-     */
+    // The rules live in ItemWriter, which the item setup page uses too.
+
     private function persistVariantImages(Request $request, Item $item): void
     {
-        $item->load('variants');
-
-        $newFiles = $request->file('variant_images', []);
-        $existingPaths = $request->input('variant_existing_images', []);
-        $submittedSlotKeys = array_keys($request->input('variant_slot_keys', []));
-
-        foreach ($item->variants as $variant) {
-
-            // --- STEP 1: Direct Single Image Fast-Track ---
-            $fileKey = "variant_image_{$variant->id}";
-            if ($request->hasFile($fileKey)) {
-                $file = $request->file($fileKey);
-                $fileName = "{$variant->sku}_main." . $file->getClientOriginalExtension();
-                $path = $file->storeAs("uploads/variants/{$variant->sku}", $fileName, 'r2');
-                $variant->update(['images' => [$path]]);
-                continue;
-            }
-
-            // --- STEP 2: Multi-Slot Array Setup (Slots 0 to 4) ---
-            $slots = array_fill(0, 5, null);
-            $variantKey = implode(':', [
-                $variant->item_color_id ?? 'null',
-                $variant->item_size_id ?? 'null',
-                $variant->item_packaging_type_id ?? 'null',
-            ]);
-
-            if (!in_array($variantKey, $submittedSlotKeys, true)) {
-                continue;
-            }
-
-            $existingSlotsForKey = $existingPaths[$variantKey] ?? [];
-            foreach ($existingSlotsForKey as $slotIndex => $path) {
-                if (is_string($path) && $path !== '') {
-                    $slots[(int) $slotIndex] = ltrim($path, '/');
-                }
-            }
-
-            $newFilesForKey = $newFiles[$variantKey] ?? [];
-            foreach ($newFilesForKey as $slotIndex => $file) {
-                if ($file && $file->isValid()) {
-                    $sku = $variant->sku ?? ('variant_' . $variant->id);
-                    $ext = $file->getClientOriginalExtension() ?: 'jpg';
-                    $slotNumber = (int) $slotIndex + 1;
-
-                    $path = $file->storeAs(
-                        'uploads/variants/' . $sku,
-                        "{$sku}_{$slotNumber}.{$ext}",
-                        'r2'
-                    );
-                    $slots[(int) $slotIndex] = $path;
-                }
-            }
-
-            $variant->update(['images' => $slots]);
-        }
+        $this->writer->persistVariantImages($request, $item);
     }
 
-    /**
-     * Apply the status the admin asked for, and record whether imagery is thin.
-     *
-     * Imagery used to be a gate: any variant without two photographs (or a
-     * packaging type we could illustrate) forced the whole item back to
-     * `draft`. Draft items are excluded by `Item::where('status', 'active')`
-     * in both Seller\DashboardController and Seller\ItemController, so a
-     * single unphotographed variant took the entire item out of every seller's
-     * catalogue — the item looked deployed in admin and simply was not there.
-     *
-     * The admin's choice now stands. `is_incomplete` still records thin
-     * imagery so the admin list can flag it, and Admin/Items/Show keeps
-     * showing `proof_ok` per variant, but neither hides anything.
-     */
     private function evaluateDraftStatus(Item $item, string $requestedStatus): void
     {
-        $item->refresh()->load('variants.itemPackagingType');
-
-        $allProven = $item->variants->every(
-            fn (ItemVariant $variant): bool => $variant->hasImageProof(),
-        );
-
-        $item->update([
-            'status' => $requestedStatus,
-            // Advisory only — drives the "needs photos" hint, not visibility.
-            'is_incomplete' => ! $allProven,
-        ]);
+        $this->writer->evaluateDraftStatus($item, $requestedStatus);
     }
 
     private function validateItemPayload(Request $request): array
     {
-        $validator = Validator::make($request->all(), [
-            'product_name' => 'required|string|max:255',
-            'product_description' => 'nullable|string',
-            'packaging_details' => 'nullable|string',
-            'item_category_id' => 'required',
-            'status' => 'required|in:draft,active,inactive,archived',
-            'color_ids' => 'nullable|array',
-            'color_ids.*' => 'nullable',
-            'size_ids' => 'nullable|array',
-            'size_ids.*' => 'nullable',
-            'packaging' => 'nullable|array',
-            'packaging.*.item_packaging_type_id' => 'required',
-            'packaging.*.quantity' => 'required|integer|min:1',
-            'existing_images' => 'nullable|array|max:10',
-            'existing_images.*' => 'string',
-            'general_images' => 'nullable|array|max:10',
-            'general_images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:5120',
-            'variant_images' => 'nullable|array',
-            'variant_images.*' => 'nullable|array',
-            'variant_images.*.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
-            'variant_existing_images' => 'nullable|array',
-        ]);
-
-        $validator->after(function ($v) use ($request) {
-            $existing = count($request->input('existing_images', []));
-            $uploads = count($request->file('general_images', []));
-
-            if (($existing + $uploads) > 10) {
-                $v->errors()->add('general_images', 'Maximum 10 general images per item total.');
-            }
-        });
-
-        return $validator->validate();
+        return $this->writer->validate($request);
     }
 
     private function resolveCategoryId(mixed $value): ?int
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
-        if (is_numeric($value)) {
-            return (int) $value;
-        }
-        return ItemCategory::firstOrCreate(['category_name' => trim((string) $value)])->id;
+        return $this->writer->resolveCategoryId($value);
     }
 
     private function resolveOptionIds(array $values, string $modelClass, string $nameColumn = 'name'): array
     {
-        return collect($values)
-            ->filter(fn($v) => $v !== null && $v !== '')
-            ->map(function ($v) use ($modelClass, $nameColumn) {
-                if (is_numeric($v)) {
-                    return (int) $v;
-                }
-                return $modelClass::firstOrCreate([$nameColumn => trim((string) $v)])->id;
-            })
-            ->unique()->values()->all();
+        return $this->writer->resolveOptionIds($values, $modelClass, $nameColumn);
     }
 
     private function resolvePackagingPayload(array $packaging): array
     {
-        return collect($packaging)
-            ->filter(fn($row) => filled($row['item_packaging_type_id'] ?? null))
-            ->mapWithKeys(function ($row) {
-                $typeId = $row['item_packaging_type_id'];
-                if (!is_numeric($typeId)) {
-                    $typeId = ItemPackagingType::firstOrCreate(['name' => trim((string) $typeId)])->id;
-                }
-                return [(int) $typeId => ['quantity' => max(1, (int) ($row['quantity'] ?? 1))]];
-            })
-            ->all();
+        return $this->writer->resolvePackagingPayload($packaging);
     }
 
     private function handleUploads(Request $request, array $existingImages = []): array
     {
-        $newPaths = [];
-
-        foreach ($request->file('general_images', []) as $file) {
-            if ($file && $file->isValid()) {
-                $name = Str::slug($request->product_name) . '_' . time() . '_' . Str::random(5) . '.' . $file->getClientOriginalExtension();
-                $path = $file->storeAs('uploads/items', $name, 'r2');
-                $newPaths[] = $path;
-            }
-        }
-
-        return array_merge($existingImages, $newPaths);
+        return $this->writer->generalImages($request, $existingImages);
     }
 
     /**

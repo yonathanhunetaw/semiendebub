@@ -1,11 +1,13 @@
 import * as React from "react";
-import { Alert, Box, Button, Link as MuiLink, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Stack, Switch, TextField, Typography } from "@mui/material";
 import { router } from "@inertiajs/react";
 
 import type { PriceLine, StoreSetup } from "@/types/itemSetup";
+import PartyPrices from "@/Components/Admin/ItemSetup/PartyPrices";
+import { RELOAD } from "@/Components/Admin/ItemSetup/VariantsPart";
 import { useDraft } from "@/hooks/useDraft";
 
-type Row = { store_variant_id: number; price: string; discount_price: string; discount_ends_at: string; individual_price: string };
+type Row = { store_variant_id: number; price: string; discount_price: string; discount_ends_at: string; individual_price: string; on_sale: boolean; business_pool: string };
 
 const toRows = (lines: PriceLine[]): Row[] =>
     lines.map((l) => ({
@@ -14,6 +16,9 @@ const toRows = (lines: PriceLine[]): Row[] =>
         discount_price: l.discount_price === null ? "" : String(l.discount_price),
         discount_ends_at: l.discount_ends_at ?? "",
         individual_price: l.individual_price === null ? "" : String(l.individual_price),
+        // On unless an admin forced it off: a variant waiting for its price is not "off", it just has no price yet.
+        on_sale: !l.forced_off,
+        business_pool: l.business_pool === null ? "" : String(l.business_pool),
     }));
 
 /** One store's prices for the item: every variant's price, discount and individual price, saved together. */
@@ -23,7 +28,7 @@ export default function PricesPart({ itemId, store }: { itemId: number; store: S
     const [busy, setBusy] = React.useState(false);
     const [errors, setErrors] = React.useState<Record<string, string>>({});
 
-    const set = (i: number, field: keyof Row, value: string) => draft.setValue((rows) => rows.map((r, n) => (n === i ? { ...r, [field]: value } : r)));
+    const set = (i: number, field: keyof Row, value: string | boolean) => draft.setValue((rows) => rows.map((r, n) => (n === i ? { ...r, [field]: value } : r)));
 
     const save = () => {
         setBusy(true);
@@ -33,7 +38,7 @@ export default function PricesPart({ itemId, store }: { itemId: number; store: S
             {
                 preserveScroll: true,
                 preserveState: true,
-                only: ["readiness", "stores", "flash", "errors"],
+                only: RELOAD,
                 onSuccess: () => {
                     draft.clear();
                     setErrors({});
@@ -54,7 +59,7 @@ export default function PricesPart({ itemId, store }: { itemId: number; store: S
             {Object.values(errors).length > 0 && <Alert severity="error">{Object.values(errors).join(" ")}</Alert>}
 
             <Box sx={{ overflowX: "auto" }}>
-                <Box component="table" sx={{ width: "100%", minWidth: 640, borderCollapse: "collapse", "& td, & th": { p: 0.5, textAlign: "left" } }}>
+                <Box component="table" sx={{ width: "100%", minWidth: 900, borderCollapse: "collapse", "& td, & th": { p: 0.5, textAlign: "left" } }}>
                     <thead>
                         <tr>
                             <th><Typography variant="caption" color="text.secondary">Variant</Typography></th>
@@ -62,6 +67,8 @@ export default function PricesPart({ itemId, store }: { itemId: number; store: S
                             <th><Typography variant="caption" color="text.secondary">Discount ETB</Typography></th>
                             <th><Typography variant="caption" color="text.secondary">Discount ends</Typography></th>
                             <th><Typography variant="caption" color="text.secondary">Individual ETB (optional)</Typography></th>
+                            <th><Typography variant="caption" color="text.secondary">Kept for business (units)</Typography></th>
+                            <th><Typography variant="caption" color="text.secondary">On sale</Typography></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -76,6 +83,8 @@ export default function PricesPart({ itemId, store }: { itemId: number; store: S
                                     <td><TextField size="small" type="number" value={r.discount_price} onChange={(e) => set(i, "discount_price", e.target.value)} inputProps={{ min: 0, step: "0.01", "aria-label": `Discount ${line.variant}` }} /></td>
                                     <td><TextField size="small" type="date" value={r.discount_ends_at} onChange={(e) => set(i, "discount_ends_at", e.target.value)} InputLabelProps={{ shrink: true }} inputProps={{ "aria-label": `Discount ends ${line.variant}` }} /></td>
                                     <td><TextField size="small" type="number" value={r.individual_price} onChange={(e) => set(i, "individual_price", e.target.value)} inputProps={{ min: 0, step: "0.01", "aria-label": `Individual ${line.variant}` }} /></td>
+                                    <td><TextField size="small" type="number" value={r.business_pool} onChange={(e) => set(i, "business_pool", e.target.value)} inputProps={{ min: 0, "aria-label": `Business pool ${line.variant}` }} sx={{ width: 110 }} /></td>
+                                    <td><Switch checked={r.on_sale && r.price !== "" && Number(r.price) > 0} disabled={r.price === "" || Number(r.price) <= 0} onChange={(e) => set(i, "on_sale", e.target.checked)} slotProps={{ input: { "aria-label": `On sale ${line.variant}` } }} /></td>
                                 </tr>
                             );
                         })}
@@ -88,13 +97,11 @@ export default function PricesPart({ itemId, store }: { itemId: number; store: S
                 <Button size="small" onClick={() => draft.setValue((rows) => rows.map((r) => ({ ...r, price: rows[0]?.price ?? "" })))} disabled={draft.value.length < 2}>
                     Same price on every variant
                 </Button>
+                <Button size="small" onClick={() => draft.setValue((rows) => rows.map((r) => ({ ...r, on_sale: false })))}>Take all off sale</Button>
                 {draft.dirty && <Typography variant="caption" color="warning.main">Unsaved changes (kept if you leave)</Typography>}
             </Stack>
 
-            <Typography variant="body2" color="text.secondary">
-                Seller prices: {store.seller_prices} · customer prices: {store.customer_prices}.{" "}
-                {store.prices_url && <MuiLink href={store.prices_url}>Manage seller and customer prices in Stores</MuiLink>}
-            </Typography>
+            <PartyPrices itemId={itemId} store={store} />
         </Stack>
     );
 }

@@ -26,7 +26,6 @@ import {
 } from "@mui/material";
 import AddBusinessIcon from "@mui/icons-material/AddBusiness";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import EditIcon from "@mui/icons-material/Edit";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InventoryIcon from "@mui/icons-material/Inventory";
@@ -357,25 +356,6 @@ export default function Show({
                 <Stack direction="row" spacing={1.5}>
                     <Button variant="contained" component={Link} href={route("admin.items.setup", item.id)} sx={{ borderRadius: 2, fontWeight: "bold", textTransform: "none" }}>
                         Set up
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        startIcon={<EditIcon />}
-                        component={Link}
-                        href={route("admin.items.edit", item.id)}
-                        sx={{
-                            borderRadius: 2,
-                            fontWeight: "bold",
-                            textTransform: "none",
-                            color: "text.primary",
-                            borderColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.3)' : undefined,
-                            '&:hover': {
-                                borderColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.5)' : undefined,
-                                backgroundColor: theme.palette.mode === 'dark' ? 'rgb(var(--on-surface) / 0.08)' : undefined,
-                            }
-                        }}
-                    >
-                        Edit Item
                     </Button>
                     <Button
                         variant="contained"

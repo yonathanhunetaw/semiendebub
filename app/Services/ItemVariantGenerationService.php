@@ -10,7 +10,13 @@ use Illuminate\Support\Facades\DB;
 
 class ItemVariantGenerationService
 {
-    public function sync(Item $item, array $uploadedImages = []): void
+    /**
+     * Make the variants a colours × sizes × packaging matrix asks for.
+     *
+     * $withStoreVariants is for seeding a demo catalogue only: it also creates store variants with made-up
+     * prices. Real items are deployed and priced on the item setup page, so the default is no store variants.
+     */
+    public function sync(Item $item, array $uploadedImages = [], bool $withStoreVariants = false): void
     {
         $item->load(['colors', 'sizes', 'packagingTypes']);
 
@@ -61,7 +67,9 @@ class ItemVariantGenerationService
                     $validVariantIds[] = $variant->id;
 
                     // 3. Process Pricing/Stores
-                    $this->ensureStoreVariantRecords($item, $variant, $variantSpecificImages);
+                    if ($withStoreVariants) {
+                        $this->ensureStoreVariantRecords($item, $variant, $variantSpecificImages);
+                    }
 
                 }
             }

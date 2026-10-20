@@ -5,6 +5,7 @@ import {
     ItemCard,
     ItemThumbs,
     NeedsPhotos,
+    ReadyBadge,
     SORT_OPTIONS,
     STATUS_OPTIONS,
     timeAgo,
@@ -92,6 +93,7 @@ function toParams(query: Query): Record<string, string | number> {
     if (query.status && query.status !== "all") params.status = query.status;
     if (query.category) params.category = query.category;
     if (query.needs_photos) params.needs_photos = 1;
+    if (query.not_ready) params.not_ready = 1;
     if (sort !== "name") params.sort = sort;
     if (query.direction && query.direction !== defaultDirection(sort)) params.direction = query.direction;
     if (query.per_page && query.per_page !== 25) params.per_page = query.per_page;
@@ -138,7 +140,7 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
     const rows = items.data ?? [];
     const shownView: View = isDesktop ? view : "grid";
     const category = useMemo(() => categories.find((c) => c.id === filters.category) ?? null, [categories, filters.category]);
-    const hasFilters = filters.q !== "" || filters.status !== "all" || filters.category !== null || filters.needs_photos;
+    const hasFilters = filters.q !== "" || filters.status !== "all" || filters.category !== null || filters.needs_photos || filters.not_ready;
     const count = (key: keyof ItemCounts): number => counts[key] ?? 0;
 
     const go = (patch: Query, { toTop = false }: { toTop?: boolean } = {}): void => {
@@ -159,7 +161,7 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
 
     const clearAll = (): void => {
         setSearch("");
-        go({ q: "", status: "all", category: null, needs_photos: false });
+        go({ q: "", status: "all", category: null, needs_photos: false, not_ready: false });
     };
 
     // Search as you type, once typing pauses.
@@ -462,6 +464,15 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
                     </TextField>
 
                     <Chip
+                        icon={<Icon name="checklist" className="text-[18px]" />}
+                        label={`Not ready · ${number.format(count("not_ready"))}`}
+                        onClick={() => go({ not_ready: !filters.not_ready }, { toTop: true })}
+                        color={filters.not_ready ? "warning" : "default"}
+                        variant={filters.not_ready ? "filled" : "outlined"}
+                        sx={{ height: 40, borderRadius: "10px", fontWeight: 600, "& .MuiChip-icon": { color: "inherit", ml: 1 } }}
+                    />
+
+                    <Chip
                         icon={<Icon name="add_a_photo" className="text-[18px]" />}
                         label={`Needs photos · ${number.format(count("needs_photos"))}`}
                         onClick={() => go({ needs_photos: !filters.needs_photos }, { toTop: true })}
@@ -664,6 +675,7 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
                                                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                                                         <StatusPill status={item.status} size="sm" />
                                                         {item.is_incomplete ? <NeedsPhotos /> : null}
+                                                        <ReadyBadge percent={item.readiness_percent} />
                                                     </Box>
                                                 </TableCell>
 
@@ -775,12 +787,6 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
                             <Icon name="checklist" />
                         </ListItemIcon>
                         <ListItemText>Set up (readiness)</ListItemText>
-                    </MenuItem>,
-                    <MenuItem key="edit" component={Link} href={route("admin.items.edit", rowMenu.item.id)}>
-                        <ListItemIcon>
-                            <Icon name="edit" />
-                        </ListItemIcon>
-                        <ListItemText>Edit</ListItemText>
                     </MenuItem>,
                     <Divider key="divider" />,
                     <ListSubheader key="status" sx={{ lineHeight: "32px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>

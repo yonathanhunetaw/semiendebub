@@ -24,6 +24,8 @@ final class SaveItemPricesRequest extends FormRequest
             'variants.*.discount_price' => ['nullable', 'numeric', 'min:0', 'lte:variants.*.price'],
             'variants.*.discount_ends_at' => ['nullable', 'date', 'required_with:variants.*.discount_price'],
             'variants.*.individual_price' => ['nullable', 'numeric', 'min:0'],
+            'variants.*.on_sale' => ['nullable', 'boolean'],
+            'variants.*.business_pool' => ['nullable', 'integer', 'min:0', 'max:10000000'],
         ];
     }
 

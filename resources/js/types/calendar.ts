@@ -21,6 +21,17 @@ export interface CalendarSourceInfo {
     tone: CalendarTone;
 }
 
+/** Something the viewer may start from a day (CalendarStarters): opens the module's own form with the day in. */
+export interface CalendarStarter {
+    key: string;
+    label: string;
+    /** A Material Symbols name. */
+    icon: string;
+    url: string;
+    /** The query names that get the day ("date", and "week" for the rota). */
+    date_params: string[];
+}
+
 /** A calendar entry's own fields, on each of its occurrences. */
 export interface CalendarEntryInfo {
     id: number;
@@ -59,6 +70,8 @@ export interface CalendarEventData {
     amount: number | null;
     currency: string | null;
     entry?: CalendarEntryInfo;
+    /** Deliveries: the shops' wall-clock time, and whether this viewer may move it. */
+    delivery?: { id: number; scheduled_for: string | null; can_schedule: boolean };
 }
 
 /** What the receipt reader made of an upload (App\Services\Documents\ReceiptReading). */

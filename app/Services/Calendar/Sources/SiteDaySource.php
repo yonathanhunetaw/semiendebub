@@ -44,7 +44,7 @@ class SiteDaySource implements CalendarSource
 
     public function apps(): array
     {
-        return ['admin', 'seller', 'stock_keeper'];
+        return ['admin', 'seller', 'stock_keeper', 'delivery'];
     }
 
     public function events(CalendarScope $scope, CarbonImmutable $from, CarbonImmutable $to): array

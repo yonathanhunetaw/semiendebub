@@ -56,6 +56,8 @@ class ItemCatalogue
             'created' => 'items.created_at',
             'variants' => 'variants_count',
             'live' => 'live_variants_count',
+            // Least ready first when ascending; items never computed (null) count as not ready.
+            'ready' => 'items.readiness_percent',
             default => 'items.product_name',
         };
 
@@ -92,6 +94,10 @@ class ItemCatalogue
         }
 
         $counts['needs_photos'] = $this->filtered([...$filters, 'needs_photos' => true])
+            ->when($filters['status'] !== 'all', fn (Builder $q) => $q->where('items.status', $filters['status']))
+            ->count();
+
+        $counts['not_ready'] = $this->filtered([...$filters, 'not_ready' => true])
             ->when($filters['status'] !== 'all', fn (Builder $q) => $q->where('items.status', $filters['status']))
             ->count();
 
@@ -164,6 +170,11 @@ class ItemCatalogue
             $query->where('items.is_incomplete', true);
         }
 
+        // Not ready: below 100%, or never worked out yet (items:refresh-readiness fills it in).
+        if (! empty($filters['not_ready'])) {
+            $query->where(fn (Builder $q) => $q->whereNull('items.readiness_percent')->orWhere('items.readiness_percent', '<', 100));
+        }
+
         return $query;
     }
 
@@ -205,6 +216,7 @@ class ItemCatalogue
             'status' => $item->status,
             'category' => $item->category?->category_name,
             'is_incomplete' => (bool) $item->is_incomplete,
+            'readiness_percent' => $item->readiness_percent === null ? null : (int) $item->readiness_percent,
             'variants_count' => (int) $item->variants_count,
             'live_variants_count' => (int) $item->live_variants_count,
             'stores_count' => (int) $item->stores_count,

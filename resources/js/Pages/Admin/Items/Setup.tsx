@@ -3,13 +3,17 @@ import { Head, Link, router } from "@inertiajs/react";
 import { Alert, Box, Button, Chip, LinearProgress, Stack, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, Typography } from "@mui/material";
 
 import AdminLayout from "@/Layouts/AdminLayout";
+import StockPart from "@/Components/Admin/ItemSetup/StockPart";
 import PlacementPart from "@/Components/Admin/ItemSetup/PlacementPart";
 import PricesPart from "@/Components/Admin/ItemSetup/PricesPart";
+import BasicsPart from "@/Components/Admin/ItemSetup/BasicsPart";
+import VariantsPart, { RELOAD } from "@/Components/Admin/ItemSetup/VariantsPart";
 import { ChecksList, Section, colourOf, percentOf } from "@/Components/Admin/ItemSetup/parts";
 import type { Check, HistoryRow, ItemSetupProps, StoreSetup } from "@/types/itemSetup";
 
 const SECTIONS: Array<{ id: string; label: string }> = [
-    { id: "basics", label: "Basics & variants" },
+    { id: "basics", label: "Basics" },
+    { id: "variants", label: "Variants & barcodes" },
     { id: "stores", label: "Stores" },
     { id: "prices", label: "Prices" },
     { id: "placement", label: "Placement" },
@@ -20,7 +24,7 @@ const SECTIONS: Array<{ id: string; label: string }> = [
 const PRICE_KEYS = ["priced", "individual", "seller_prices", "customer_prices", "discount", "pool"];
 const PLACEMENT_KEYS = ["bin", "levels", "route"];
 
-export default function Setup({ item, readiness, stores, stock, history }: ItemSetupProps): React.ReactElement {
+export default function Setup({ item, options, catalog, readiness, stores, warehouses, stock, history }: ItemSetupProps): React.ReactElement {
     const storeReadiness = (id: number) => (Array.isArray(readiness.stores) ? readiness.stores.find((s) => s.store.id === id) : readiness.stores[String(id)]) ?? null;
     const [storeId, setStoreId] = React.useState<number>(() => stores.find((s) => s.deployed)?.id ?? stores[0]?.id ?? 0);
     const store: StoreSetup | undefined = stores.find((s) => s.id === storeId);
@@ -42,7 +46,7 @@ export default function Setup({ item, readiness, stores, stock, history }: ItemS
         return () => observer.disconnect();
     }, []);
 
-    const reloadOnly = ["readiness", "stores", "flash", "errors"];
+    const reloadOnly = RELOAD;
     const deploy = (id: number) => router.post(route("admin.items.deploy", item.id), { store_id: id }, { preserveScroll: true, preserveState: true, only: reloadOnly });
     const goTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -77,26 +81,17 @@ export default function Setup({ item, readiness, stores, stock, history }: ItemS
                     </Tabs>
                 </Box>
 
-                {/* 1. Basics and variants: checked here, edited in the item form for now. */}
-                <Section id="basics" title="Basics & variants" hint="Name, category, pictures, packaging and barcodes. Edited in the item form; come back here after." checks={readiness.item.checks}>
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow><TableCell>Variant</TableCell><TableCell>SKU</TableCell><TableCell>Barcode</TableCell></TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {item.variants.map((v) => (
-                                <TableRow key={v.id}>
-                                    <TableCell>{v.label || "—"}</TableCell>
-                                    <TableCell>{v.sku}</TableCell>
-                                    <TableCell>{v.barcode || <Typography variant="body2" color="error.main">missing</Typography>}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                    <Button component="a" href={item.edit_url} sx={{ mt: 1.5 }} variant="outlined">Edit in the item form</Button>
+                {/* 1. Basics */}
+                <Section id="basics" title="Basics" hint="Name, description, category, status and pictures. Saved on their own." checks={readiness.item.checks} only={["name", "category", "picture", "description"]}>
+                    <BasicsPart itemId={item.id} saved={{ product_name: item.basics.product_name, product_description: item.basics.product_description, packaging_details: item.basics.packaging_details, item_category_id: item.basics.item_category_id, status: item.basics.status }} categories={catalog.categories} pictures={item.basics.pictures} />
                 </Section>
 
-                {/* 2. Stores */}
+                {/* 2. Variants and barcodes, edited right here */}
+                <Section id="variants" title="Variants & barcodes" hint="Colours, sizes and packaging make the variants. Each variant needs its packaging and a barcode." checks={readiness.item.checks} only={["variants", "packaging", "barcode"]}>
+                    <VariantsPart itemId={item.id} item={item} options={options} catalog={catalog} />
+                </Section>
+
+                {/* 3. Stores */}
                 <Section id="stores" title="Stores" hint="Deploy the item to a store so it can be priced, shelved and sold there." checks={storeChecks} only={["deployed"]}>
                     <Stack spacing={1}>
                         {stores.map((s) => (
@@ -116,11 +111,13 @@ export default function Setup({ item, readiness, stores, stock, history }: ItemS
 
                 {/* 4. Placement */}
                 <Section id="placement" title={`Placement${store ? ` · ${store.name}` : ""}`} hint="How full its shelf bin and Remote Hub level should be. Whoever may change a place is shown; the rest is read only." checks={storeChecks} only={PLACEMENT_KEYS}>
-                    {store?.deployed ? <PlacementPart key={store.id} itemId={item.id} places={store.places} /> : <Alert severity="info" variant="outlined">Deploy the item to {store?.name ?? "a store"} first.</Alert>}
+                    {store?.deployed ? <PlacementPart key={store.id} itemId={item.id} storeId={store.id} places={store.places} refillRoute={store.route} warehouses={warehouses} /> : <Alert severity="info" variant="outlined">Deploy the item to {store?.name ?? "a store"} first.</Alert>}
                 </Section>
 
                 {/* 5. Stock */}
-                <Section id="stock" title={`Stock${store ? ` · ${store.name}` : ""}`} hint="Stock is only ever counted in. A count is done by a stock keeper and approved by a second person." checks={storeChecks} only={["count"]}>
+                <Section id="stock" title={`Stock${store ? ` · ${store.name}` : ""}`} hint="Stock only changes through a count: figures are recorded, then approved, then booked." checks={storeChecks} only={["count"]}>
+                    {store?.deployed ? <StockPart key={store.id} itemId={item.id} places={store.places} warehouses={warehouses} /> : <Alert severity="info" variant="outlined">Deploy the item to {store?.name ?? "a store"} first.</Alert>}
+                    <Typography sx={{ fontWeight: 700, mt: 2, mb: 0.5 }}>Everywhere it is held</Typography>
                     <Table size="small">
                         <TableHead><TableRow><TableCell>Place</TableCell><TableCell align="right">Pieces</TableCell></TableRow></TableHead>
                         <TableBody>
@@ -129,7 +126,6 @@ export default function Setup({ item, readiness, stores, stock, history }: ItemS
                             ))}
                         </TableBody>
                     </Table>
-                    {store && <Button component="a" href={store.count_url} target="_blank" rel="noreferrer" sx={{ mt: 1.5 }} variant="outlined">Count it (stock keeper app)</Button>}
                 </Section>
 
                 {/* 6. History */}

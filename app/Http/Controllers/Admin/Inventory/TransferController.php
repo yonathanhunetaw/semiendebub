@@ -143,6 +143,7 @@ class TransferController extends Controller
             destinationLocationType: $request->validated('destination_location_type'),
             destinationLocationId: $request->validated('destination_location_id') !== null ? (int) $request->validated('destination_location_id') : null,
             courierId: $request->validated('courier_id') !== null ? (int) $request->validated('courier_id') : null,
+            eta: $request->plannedFor(),
         );
 
         return redirect()->route('admin.inventory.transfers.show', $transfer)

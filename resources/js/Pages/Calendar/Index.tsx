@@ -1,6 +1,6 @@
 import React from "react";
 import { Head, router } from "@inertiajs/react";
-import { Calendar, dateFnsLocalizer, Views, type View, type ToolbarProps, type SlotInfo } from "react-big-calendar";
+import { Calendar, dateFnsLocalizer, Views, type View, type SlotInfo } from "react-big-calendar";
 import { addDays, endOfMonth, endOfWeek, format, getDay, parse, startOfMonth, startOfWeek } from "date-fns";
 import { enUS } from "date-fns/locale";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -11,17 +11,19 @@ import ProcurementLayout from "@/Layouts/ProcurementLayout";
 import SellerLayout from "@/Layouts/SellerLayout";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import FlashToast from "@/Components/Shared/FlashToast";
-import { SkButton, SkHeader } from "@/Components/StockKeeper/skKit";
-import { TONES } from "@/Components/Shared/ui";
+import CalendarHeader, { AGENDA_DAYS, VIEW_OPTIONS, WEEK_STARTS_ON, isView } from "@/Components/Calendar/CalendarHeader";
 import EntryForm, { type EntryFormTarget } from "@/Components/Calendar/EntryForm";
 import EventDetails from "@/Components/Calendar/EventDetails";
 import { ReceiptReview, ReceiptUpload } from "@/Components/Calendar/ReceiptSheets";
 import { KIND_ICON, calendarRoute, eventStart, money, parseDay } from "@/Components/Calendar/calendarUi";
-import type { CalendarApp, CalendarEventData, CalendarSourceInfo, PendingDocument } from "@/types/calendar";
+import NewFromDay, { type NewFromDayTarget } from "@/Components/Calendar/NewFromDay";
+import type { CalendarApp, CalendarEventData, CalendarSourceInfo, CalendarStarter, PendingDocument } from "@/types/calendar";
 
 interface Props {
     app: CalendarApp;
     sources?: CalendarSourceInfo[];
+    /** What the viewer may start from a day besides a note (transfer, shipment, shift…). */
+    starters?: CalendarStarter[];
     initialDate?: string | null;
     /** "Main Store", "All stores", "Your runs". */
     scopeLabel: string;
@@ -39,8 +41,6 @@ interface CalEvent {
     resource: CalendarEventData;
 }
 
-const WEEK_STARTS_ON = 1; // Monday
-
 const localizer = dateFnsLocalizer({
     format,
     parse,
@@ -48,16 +48,6 @@ const localizer = dateFnsLocalizer({
     getDay,
     locales: { "en-US": enUS },
 });
-
-const VIEWS: Array<{ value: View; label: string }> = [
-    { value: Views.MONTH, label: "Month" },
-    { value: Views.WEEK, label: "Week" },
-    { value: Views.DAY, label: "Day" },
-    { value: Views.AGENDA, label: "List" },
-];
-
-/** How many days the List view shows. */
-const AGENDA_DAYS = 30;
 
 /** The days a view shows around `date`, as sent to the feed. */
 function rangeFor(view: View, date: Date): { from: Date; to: Date } {
@@ -111,11 +101,11 @@ function store(key: string, value: unknown): void {
  * shifts and meetings, once or repeating, each occurrence ticked off when
  * done or paid. Backend: App\Http\Controllers\Shared\CalendarController.
  */
-export default function CalendarIndex({ app, sources = [], initialDate = null, scopeLabel, readerEnabled = false, pendingDocument = null }: Props) {
+export default function CalendarIndex({ app, sources = [], starters = [], initialDate = null, scopeLabel, readerEnabled = false, pendingDocument = null }: Props) {
     const storageKey = `duka.calendar.${app}`;
     const [date, setDate] = React.useState<Date>(() => (initialDate ? parseDay(initialDate) : new Date()));
     const [view, setView] = React.useState<View>(() =>
-        readStored<View | null>(`${storageKey}.view`, null) ?? (typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches ? Views.AGENDA : Views.MONTH),
+        [readStored<unknown>(`${storageKey}.view`, null)].find(isView) ?? (typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches ? Views.AGENDA : Views.MONTH),
     );
     const [hidden, setHidden] = React.useState<string[]>(() => readStored<string[]>(`${storageKey}.hidden`, []));
     const [events, setEvents] = React.useState<CalendarEventData[]>([]);
@@ -124,6 +114,7 @@ export default function CalendarIndex({ app, sources = [], initialDate = null, s
     const [version, setVersion] = React.useState(0);
     const [selected, setSelected] = React.useState<CalendarEventData | null>(null);
     const [formTarget, setFormTarget] = React.useState<EntryFormTarget | null>(null);
+    const [starting, setStarting] = React.useState<NewFromDayTarget | null>(null);
     const [uploading, setUploading] = React.useState(false);
     const [reviewing, setReviewing] = React.useState<PendingDocument | null>(pendingDocument);
 
@@ -184,18 +175,23 @@ export default function CalendarIndex({ app, sources = [], initialDate = null, s
         [sourceByKey],
     );
 
+    // A note straight away when there is nothing else to start; otherwise ask what.
+    const addOn = (target: NewFromDayTarget) => {
+        if (starters.length === 0) setFormTarget({ mode: "create", ...target });
+        else setStarting(target);
+    };
+
     const onSelectSlot = (slot: SlotInfo) => {
         const allDay = view === Views.MONTH || slot.slots.length <= 1 && slot.start.getHours() === 0 && slot.start.getMinutes() === 0;
-        setFormTarget({ mode: "create", start: slot.start, end: allDay ? undefined : slot.end, allDay });
+        addOn({ start: slot.start, end: allDay ? undefined : slot.end, allDay });
     };
 
     const components = React.useMemo(
         () => ({
-            toolbar: (props: ToolbarProps<CalEvent, object>) => <Toolbar {...props} loading={loading} />,
             event: ({ event }: { event: CalEvent }) => <EventChip event={event} />,
             agenda: { event: ({ event }: { event: CalEvent }) => <AgendaRow event={event} tone={sourceByKey[event.resource.source]?.tone ?? "primary"} /> },
         }),
-        [loading, sourceByKey],
+        [sourceByKey],
     );
 
     return (
@@ -203,47 +199,22 @@ export default function CalendarIndex({ app, sources = [], initialDate = null, s
             <Head title="Calendar" />
             {app === "delivery" ? <FlashToast /> : null}
 
-            <div className="mx-auto w-full max-w-[1400px] px-3 py-4 sm:px-6 lg:py-6">
-                <SkHeader
-                    title="Calendar"
-                    subtitle={
-                        <>
-                            {scopeLabel}: what is booked across Duka, with your reminders and bills. Click a day to add one.
-                            {late > 0 ? <span className="ml-1 font-bold text-error">{late} late on screen.</span> : null}
-                        </>
-                    }
-                    actions={
-                        <>
-                            <SkButton variant="outline" icon="receipt_long" onClick={() => setUploading(true)}>
-                                Upload receipt
-                            </SkButton>
-                            <SkButton icon="add" onClick={() => setFormTarget({ mode: "create", start: new Date(), allDay: true })}>
-                                Add
-                            </SkButton>
-                        </>
-                    }
+            <div className="mx-auto w-full max-w-[1400px] px-3 py-3 sm:px-6 lg:py-4">
+                <CalendarHeader
+                    scopeLabel={scopeLabel}
+                    view={view}
+                    date={date}
+                    loading={loading}
+                    late={late}
+                    sources={sources}
+                    hidden={hidden}
+                    counts={counts}
+                    onToggleSource={toggle}
+                    onNavigate={setDate}
+                    onView={setView}
+                    onUpload={() => setUploading(true)}
+                    onAdd={() => addOn({ start: new Date(), allDay: true })}
                 />
-
-                <div className="mb-3 -mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
-                    {sources.map((s) => {
-                        const on = !hidden.includes(s.key);
-                        return (
-                            <button
-                                key={s.key}
-                                type="button"
-                                aria-pressed={on}
-                                onClick={() => toggle(s.key)}
-                                className={`flex shrink-0 items-center gap-2 rounded-[999px] border px-3 py-1.5 text-[13px] font-bold transition-colors ${
-                                    on ? "border-outline-variant bg-surface-container-lowest text-on-surface" : "border-dashed border-outline-variant bg-transparent text-on-surface-variant/70"
-                                }`}
-                            >
-                                <span className={`h-2.5 w-2.5 rounded-[999px] ${on ? TONES[s.tone].badge : "bg-outline-variant"}`} />
-                                {s.label}
-                                <span className="rounded-[999px] bg-surface-container px-1.5 text-[11px] tabular-nums">{counts[s.key] ?? 0}</span>
-                            </button>
-                        );
-                    })}
-                </div>
 
                 {failed ? (
                     <div className="mb-3 flex items-center justify-between gap-3 rounded-[14px] border border-error/40 bg-error-container/50 px-4 py-2.5 text-[13px] font-bold text-on-error-container">
@@ -252,17 +223,18 @@ export default function CalendarIndex({ app, sources = [], initialDate = null, s
                     </div>
                 ) : null}
 
-                <div className="duka-calendar h-[calc(100vh-250px)] min-h-[560px]">
+                <div className="duka-calendar h-[calc(100dvh-190px)] min-h-[520px]">
                     <Calendar<CalEvent, object>
                         localizer={localizer}
                         culture="en-US"
                         events={shown}
                         date={date}
                         view={view}
-                        views={VIEWS.map((v) => v.value)}
+                        views={VIEW_OPTIONS.map((v) => v.value)}
                         onNavigate={setDate}
                         onView={setView}
                         length={AGENDA_DAYS}
+                        toolbar={false}
                         selectable
                         popup
                         onSelectSlot={onSelectSlot}
@@ -287,6 +259,16 @@ export default function CalendarIndex({ app, sources = [], initialDate = null, s
                 onChanged={reload}
             />
 
+            <NewFromDay
+                target={starting}
+                starters={starters}
+                onClose={() => setStarting(null)}
+                onNote={(target) => {
+                    setStarting(null);
+                    setFormTarget({ mode: "create", ...target });
+                }}
+            />
+
             <EntryForm app={app} scopeLabel={scopeLabel} target={formTarget} onClose={() => setFormTarget(null)} onSaved={reload} />
 
             <ReceiptUpload app={app} open={uploading} readerEnabled={readerEnabled} onClose={() => setUploading(false)} />
@@ -304,41 +286,6 @@ export default function CalendarIndex({ app, sources = [], initialDate = null, s
                 }}
             />
         </>
-    );
-}
-
-function Toolbar({ label, onNavigate, onView, view, date, loading }: ToolbarProps<CalEvent, object> & { loading: boolean }) {
-    return (
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-1.5">
-                <SkButton variant="outline" onClick={() => onNavigate("TODAY")} className="!px-3 !py-2">Today</SkButton>
-                <button type="button" aria-label="Previous" onClick={() => onNavigate("PREV")} className="rounded-[10px] p-1.5 text-on-surface-variant hover:bg-surface-container">
-                    <span className="material-symbols-outlined text-[22px]">chevron_left</span>
-                </button>
-                <button type="button" aria-label="Next" onClick={() => onNavigate("NEXT")} className="rounded-[10px] p-1.5 text-on-surface-variant hover:bg-surface-container">
-                    <span className="material-symbols-outlined text-[22px]">chevron_right</span>
-                </button>
-                <h2 className="ml-1 text-[17px] font-extrabold text-on-surface sm:text-[19px]">
-                    {view === Views.MONTH ? format(date, "MMMM yyyy") : label}
-                </h2>
-                {loading ? <span className="material-symbols-outlined ml-1 animate-spin text-[18px] text-on-surface-variant">progress_activity</span> : null}
-            </div>
-            <div className="flex rounded-[12px] border border-outline-variant bg-surface-container-lowest p-0.5">
-                {VIEWS.map((v) => (
-                    <button
-                        key={v.value}
-                        type="button"
-                        aria-pressed={view === v.value}
-                        onClick={() => onView(v.value)}
-                        className={`flex-1 rounded-[10px] px-3 py-1.5 text-[13px] font-bold sm:flex-none ${
-                            view === v.value ? "bg-primary text-on-primary" : "text-on-surface-variant hover:text-primary"
-                        }`}
-                    >
-                        {v.label}
-                    </button>
-                ))}
-            </div>
-        </div>
     );
 }
 

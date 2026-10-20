@@ -1,4 +1,5 @@
 import React from "react";
+import { calendarPrefill } from "@/Components/Calendar/calendarPrefill";
 import { Head, Link, useForm } from "@inertiajs/react";
 import ProcurementLayout from "@/Layouts/ProcurementLayout";
 import { EmptyState } from "@/Components/Shared/ui";
@@ -168,7 +169,8 @@ export default function PurchaseOrderForm({ order, preselectedSupplier, supplier
                   }))
                 : DEFAULT_SCHEDULE,
         incoterm: order?.incoterm ?? "",
-        expected_at: order?.expected_at ? order.expected_at.slice(0, 10) : "",
+        // A new order started from a day on the calendar expects its goods that day.
+        expected_at: order?.expected_at ? order.expected_at.slice(0, 10) : order ? "" : (calendarPrefill().date ?? ""),
         warehouse_id: order?.warehouse_id ? String(order.warehouse_id) : "",
         notes: order?.notes ?? "",
         lines: (order?.lines ?? [])

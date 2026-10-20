@@ -30,6 +30,9 @@ export interface AddShipmentSheetProps {
     units?: LocationOption[];
     /** Disables the confirm button while the create request is in flight. */
     submitting?: boolean;
+    /** The day (and time) to start from, e.g. picked on the calendar. */
+    initialDate?: string | null;
+    initialTime?: string | null;
 }
 
 /* ----------------------------------------------------------
@@ -42,6 +45,8 @@ export default function AddShipmentSheet({
     facilities,
     units,
     submitting = false,
+    initialDate = null,
+    initialTime = null,
 }: AddShipmentSheetProps) {
     const facilityOptions = facilities?.length ? facilities : FACILITIES;
     const unitOptions = units?.length ? units : UNITS;
@@ -51,8 +56,8 @@ export default function AddShipmentSheet({
 
     const [origin, setOrigin] = useState(facilityOptions[0].value);
     const [dest, setDest]     = useState(unitOptions[0].value);
-    const [schedDate, setSchedDate] = useState(tomorrow);
-    const [schedTime, setSchedTime] = useState("08:30");
+    const [schedDate, setSchedDate] = useState(initialDate ?? tomorrow);
+    const [schedTime, setSchedTime] = useState(initialTime ?? "08:30");
     const [altOptions, setAltOptions] = useState<NewShipmentTimeWindow[]>([]);
 
     if (!open) return null;

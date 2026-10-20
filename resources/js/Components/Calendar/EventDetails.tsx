@@ -1,7 +1,7 @@
 import React from "react";
-import { router } from "@inertiajs/react";
+import { router, useForm } from "@inertiajs/react";
 import { format, parseISO } from "date-fns";
-import { SkButton, SkSheet } from "@/Components/StockKeeper/skKit";
+import { SkButton, SkField, SkSheet, inputClass } from "@/Components/StockKeeper/skKit";
 import { TONES } from "@/Components/Shared/ui";
 import { KIND_ICON, KIND_LABEL, STATE_LABEL, calendarRoute, money, repeatLabel, sameHost, whenLabel } from "@/Components/Calendar/calendarUi";
 import type { CalendarEventData, CalendarSourceInfo, EntryKind } from "@/types/calendar";
@@ -140,8 +140,41 @@ export default function EventDetails({ app, event, source, onClose, onEdit, onCh
                 {entry && event.url ? (
                     <button type="button" onClick={open} className="text-[13px] font-bold text-primary">Open the record it came from</button>
                 ) : null}
+
+                {event.delivery?.can_schedule ? (
+                    <MoveDelivery
+                        app={app}
+                        delivery={event.delivery}
+                        onMoved={() => {
+                            onChanged();
+                            onClose();
+                        }}
+                    />
+                ) : null}
             </div>
         </SkSheet>
+    );
+}
+
+/** Move a delivery that is not on the road yet to another day or time. */
+function MoveDelivery({ app, delivery, onMoved }: { app: string; delivery: { id: number; scheduled_for: string | null }; onMoved: () => void }) {
+    const form = useForm({ scheduled_for: delivery.scheduled_for ?? "" });
+
+    return (
+        <form
+            className="rounded-[14px] border border-outline-variant p-3"
+            onSubmit={(e) => {
+                e.preventDefault();
+                form.post(route(calendarRoute(app, "deliveries.schedule"), delivery.id), { preserveScroll: true, preserveState: true, onSuccess: onMoved });
+            }}
+        >
+            <SkField label="Move to" error={form.errors.scheduled_for}>
+                <input type="datetime-local" value={form.data.scheduled_for} onChange={(e) => form.setData("scheduled_for", e.target.value)} className={inputClass} required />
+            </SkField>
+            <SkButton type="submit" variant="outline" icon="event_repeat" className="mt-2" disabled={form.processing || form.data.scheduled_for === delivery.scheduled_for}>
+                Change the day
+            </SkButton>
+        </form>
     );
 }
 

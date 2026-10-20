@@ -54,18 +54,15 @@ class AdminItemCanvasPagesTest extends TestCase
     // ---- Items -------------------------------------------------------------
 
     #[Test]
-    public function the_new_item_form_offers_every_option_list(): void
+    public function the_new_item_page_offers_the_categories(): void
     {
-        ItemCategory::factory()->create();
-        ItemColor::factory()->create();
-        ItemSize::factory()->create();
-        ItemPackagingType::factory()->create();
+        ItemCategory::factory()->create(['category_name' => 'Pens']);
 
         $this->get(route('admin.items.create'))->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('Admin/Items/Create')
-                ->has('categories', 1)->has('colors', 1)->has('sizes', 1)
-                ->where('packagingTypes', fn ($rows) => count($rows) >= 1));
+                ->component('Admin/Items/New')
+                ->has('categories', 1)
+                ->where('categories.0.path', 'Pens'));
     }
 
     #[Test]

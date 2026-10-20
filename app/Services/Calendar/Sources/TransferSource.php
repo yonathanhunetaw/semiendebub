@@ -8,10 +8,14 @@ use App\Models\StockKeeper\Transfer;
 use App\Services\Calendar\CalendarItem;
 use App\Services\Calendar\CalendarScope;
 use App\Services\Calendar\CalendarSource;
+use App\Services\Workforce\LocalTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 
-/** Transfers between two places, on their ETA. */
+/**
+ * Transfers between two places, as a whole day on the shops' day they are
+ * planned for (`eta`, stored as that day's local midnight in UTC).
+ */
 class TransferSource implements CalendarSource
 {
     public function key(): string
@@ -51,7 +55,7 @@ class TransferSource implements CalendarSource
 
         return $query->orderBy('eta')->limit(500)->get()
             ->map(function (Transfer $transfer) use ($scope): array {
-                $eta = CarbonImmutable::instance($transfer->eta);
+                $day = LocalTime::dateOf($transfer->eta);
                 $done = $transfer->status === 'completed';
                 $from = $transfer->fromStore?->name;
                 $to = $transfer->toStore?->name;
@@ -61,10 +65,14 @@ class TransferSource implements CalendarSource
                     source: $this->key(),
                     kind: 'transfer',
                     title: 'Transfer '.($transfer->reference ?: "#{$transfer->id}"),
-                    start: $eta,
-                    end: $eta->addHour(),
-                    allDay: false,
-                    state: $done ? CalendarItem::DONE : CalendarItem::openState($eta),
+                    start: CarbonImmutable::parse($day),
+                    end: null,
+                    allDay: true,
+                    state: match (true) {
+                        $done => CalendarItem::DONE,
+                        $day < LocalTime::dateOf() => CalendarItem::LATE,
+                        default => CalendarItem::UPCOMING,
+                    },
                     status: (string) $transfer->status,
                     subtitle: trim("{$transfer->quantity} units".($from || $to ? ' · '.($from ?? '?').' → '.($to ?? '?') : '')),
                     url: match ($scope->app) {

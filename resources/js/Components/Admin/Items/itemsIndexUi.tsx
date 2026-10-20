@@ -43,6 +43,7 @@ export const SORT_OPTIONS: ReadonlyArray<{ sort: ItemSort; direction: "asc" | "d
     { sort: "created", direction: "asc", label: "Oldest first" },
     { sort: "variants", direction: "desc", label: "Most variants" },
     { sort: "live", direction: "desc", label: "Most live variants" },
+    { sort: "ready", direction: "asc", label: "Least ready first" },
 ];
 
 /** Names read A-Z; dates and counts read biggest first (ItemIndexRequest). */
@@ -138,6 +139,19 @@ export function VariantMeter({ live, total, width = 112 }: { live: number; total
 }
 
 /** The amber "needs photos" hint; never blocks anything (see ItemController::applyStatus). */
+/** How ready the item is to sell (its setup page's percentage); nothing shown until it has been worked out. */
+export function ReadyBadge({ percent }: { percent: number | null }): React.ReactElement | null {
+    if (percent === null) return null;
+
+    return (
+        <Tooltip title="How ready this item is to sell. Open Set up to finish it.">
+            <span>
+                <StatusPill tone={percent >= 100 ? "success" : percent >= 50 ? "warning" : "error"} icon="checklist" label={`${percent}%`} size="xs" />
+            </span>
+        </Tooltip>
+    );
+}
+
 export function NeedsPhotos(): React.ReactElement {
     return (
         <Tooltip title="Some variants have fewer than two photos and no packaging illustration">
@@ -256,6 +270,7 @@ export function ItemCard({ item, selected, onToggle }: ItemCardProps): React.Rea
                 />
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, pointerEvents: "auto" }}>
                     {item.is_incomplete ? <NeedsPhotos /> : null}
+                    <ReadyBadge percent={item.readiness_percent} />
                     <StatusPill status={item.status} size="sm" className="shadow-sm" />
                 </Box>
             </Box>

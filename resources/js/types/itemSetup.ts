@@ -33,10 +33,52 @@ export interface PriceLine {
     variant: string;
     sku: string;
     active: boolean;
+    on_sale: boolean;
+    forced_off: boolean;
+    business_pool: number | null;
     price: number | string | null;
     discount_price: number | string | null;
     discount_ends_at: string | null;
     individual_price: number | string | null;
+}
+
+export interface TierLine {
+    store_variant_id: number;
+    price: number | string | null;
+    discount_price: number | string | null;
+    discount_ends_at: string | null;
+}
+
+export interface SellerEntry {
+    seller_id: number;
+    name: string;
+    customer_type: "business" | "individual";
+    lines: TierLine[];
+}
+
+export interface CustomerEntry {
+    customer_id: number;
+    name: string;
+    customer_type: "business" | "individual";
+    lines: TierLine[];
+}
+
+export interface CountLine {
+    variant_id: number;
+    label: string;
+    expected: number;
+    counted: number | null;
+}
+
+export interface OpenCount {
+    id: number;
+    reference: string;
+    status: "counting" | "submitted";
+    started_by: string;
+    submitted_by: string | null;
+    by_me: boolean;
+    has_this_item: boolean;
+    only_this_item: boolean;
 }
 
 export interface Place {
@@ -47,6 +89,15 @@ export interface Place {
     managers: string[];
     pieces: number;
     band: { max: number; refill: number; critical: number } | null;
+    count: { lines: CountLine[]; open: OpenCount | null };
+}
+
+export interface RefillRoute {
+    sources: string[];
+    set: boolean;
+    can_edit: boolean;
+    managers: string[];
+    available: string[];
 }
 
 export interface StoreSetup {
@@ -55,10 +106,12 @@ export interface StoreSetup {
     deployed: boolean;
     readiness: StoreReadiness | null;
     lines: PriceLine[];
-    seller_prices: number;
-    customer_prices: number;
+    seller_prices: SellerEntry[];
+    customer_prices: CustomerEntry[];
+    sellers: Array<{ id: number; name: string }>;
     prices_url: string | null;
     places: Place[];
+    route: RefillRoute;
     count_url: string;
 }
 
@@ -78,11 +131,30 @@ export interface ItemSetupProps {
         name: string;
         category: string | null;
         status: string;
-        variants: Array<{ id: number; sku: string; label: string; barcode: string }>;
-        edit_url: string;
+        variants: Array<{ id: number; sku: string; label: string; status: string; barcode: string; slots: Array<{ path: string; url: string } | null> }>;
+        basics: {
+            product_name: string;
+            product_description: string;
+            packaging_details: string;
+            item_category_id: number | null;
+            status: string;
+            pictures: Array<{ path: string; url: string }>;
+        };
+    };
+    options: {
+        colors: Array<{ id: number; name: string }>;
+        sizes: Array<{ id: number; name: string }>;
+        packaging: Array<{ id: number; name: string; quantity: number }>;
+    };
+    catalog: {
+        categories: Array<{ id: number; path: string }>;
+        colors: Array<{ id: number; name: string }>;
+        sizes: Array<{ id: number; name: string }>;
+        packaging: Array<{ id: number; name: string }>;
     };
     readiness: Readiness;
     stores: StoreSetup[];
+    warehouses: Place[];
     stock: Array<{ location_id: number; place: string; pieces: number }>;
     history: Record<"transfers" | "shipments" | "movements" | "sales", HistoryRow[]>;
 }

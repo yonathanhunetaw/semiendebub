@@ -7,6 +7,7 @@ namespace App\Services\Calendar\Sources;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\LeaveRequest;
 use App\Models\Workforce\Shift;
+use App\Models\Workforce\ShiftSwap;
 use App\Services\Calendar\CalendarItem;
 use App\Services\Calendar\CalendarScope;
 use App\Services\Calendar\CalendarSource;
@@ -15,8 +16,8 @@ use App\Services\Workforce\Sites;
 use Carbon\CarbonImmutable;
 
 /**
- * Shifts from the rota: your own on the seller and stock keeper apps (and
- * everyone's at the sites you manage); on admin, the shifts of the stores in
+ * Shifts from the rota: your own on the seller, stock keeper and delivery
+ * apps (and everyone's at the sites you manage); on admin, the shifts of the stores in
  * view. Drafts show only to managers. Approved leave shows as whole days,
  * yours and (for managers) your people's.
  */
@@ -43,16 +44,16 @@ class ShiftSource implements CalendarSource
 
     public function apps(): array
     {
-        return ['admin', 'seller', 'stock_keeper'];
+        return ['admin', 'seller', 'stock_keeper', 'delivery'];
     }
 
     public function events(CalendarScope $scope, CarbonImmutable $from, CarbonImmutable $to): array
     {
         $viewer = $scope->viewer;
-        $managed = $this->sites->managedBy($viewer)
+        $managedSites = $this->sites->managedBy($viewer)
             ->filter(fn (StockLocation $site): bool => $scope->app !== 'admin' || $site->store_id === null || $scope->covers((int) $site->store_id))
-            ->pluck('id')
-            ->all();
+            ->values();
+        $managed = $managedSites->pluck('id')->all();
 
         $shifts = Shift::query()->with(['user', 'site'])
             ->where('status', '!=', Shift::STATUS_CANCELLED)
@@ -65,7 +66,7 @@ class ShiftSource implements CalendarSource
             ->limit(1000)
             ->get();
 
-        $people = collect($managed)->flatMap(fn (int $id) => $this->sites->people(StockLocation::query()->find($id)))->pluck('id')->push($viewer->id)->unique()->all();
+        $people = $managedSites->flatMap(fn (StockLocation $site) => $this->sites->people($site))->pluck('id')->push($viewer->id)->unique()->all();
         $leave = LeaveRequest::query()->with('user')
             ->whereIn('user_id', $people)
             ->where('status', LeaveRequest::STATUS_APPROVED)
@@ -85,7 +86,15 @@ class ShiftSource implements CalendarSource
                 url: CalendarItem::url("{$scope->app}.work"),
             ))->all();
 
-        return [...$leave, ...$shifts->map(function (Shift $shift) use ($scope, $viewer): array {
+        // An open swap on a shift: offered to a colleague, or taken and waiting for a manager.
+        $swaps = ShiftSwap::query()->with('to:id,first_name')
+            ->whereIn('shift_id', $shifts->pluck('id'))
+            ->whereIn('status', ShiftSwap::OPEN)
+            ->get()
+            ->keyBy('shift_id');
+
+        return [...$leave, ...$shifts->map(function (Shift $shift) use ($scope, $viewer, $swaps): array {
+            $swap = $swaps->get($shift->id);
             $mine = (int) $shift->user_id === (int) $viewer->id;
             $start = CarbonImmutable::instance($shift->starts_at);
             $end = CarbonImmutable::instance($shift->ends_at);
@@ -109,6 +118,10 @@ class ShiftSource implements CalendarSource
                     Shift::STATUS_DRAFT => ' · draft',
                     Shift::STATUS_PUBLISHED => ' · not accepted yet',
                     Shift::STATUS_CHANGE_REQUESTED => ' · change asked',
+                    default => '',
+                }.match ($swap?->status) {
+                    ShiftSwap::STATUS_OFFERED => ' · swap offered to '.($swap->to?->first_name ?? 'a colleague'),
+                    ShiftSwap::STATUS_TAKEN => ' · swap waiting for a manager',
                     default => '',
                 },
                 url: $mine ? CalendarItem::url("{$scope->app}.work") : CalendarItem::url("{$scope->app}.work.rota", ['site' => $shift->stock_location_id, 'week' => LocalTime::dateOf($start)]),

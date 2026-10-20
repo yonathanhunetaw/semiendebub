@@ -1,4 +1,5 @@
 import { dayDate } from "@/utils/dates";
+import { calendarPrefill } from "@/Components/Calendar/calendarPrefill";
 import type { LeaveView, WorkApp } from "@/types/work";
 import { router, useForm } from "@inertiajs/react";
 import React, { useState } from "react";
@@ -6,11 +7,18 @@ import { cardCls, Chip, ghostBtn, inputCls, LEAVE_LABEL, primaryBtn, wr } from "
 
 /** My leave: ask for days off, see what was decided, cancel. */
 export default function LeavePanel({ app, leave, types }: { app: WorkApp; leave: LeaveView[]; types: string[] }): React.ReactElement {
-    const [open, setOpen] = useState(false);
-    const form = useForm({ type: "annual", starts_on: "", ends_on: "", note: "" });
+    // Started from a day on the calendar: open the form on that day.
+    const [prefill] = useState(calendarPrefill);
+    const [open, setOpen] = useState(prefill.open);
+    const panelRef = React.useRef<HTMLElement>(null);
+    const form = useForm({ type: "annual", starts_on: prefill.date ?? "", ends_on: prefill.date ?? "", note: "" });
+
+    React.useEffect(() => {
+        if (prefill.open) panelRef.current?.scrollIntoView({ block: "center" });
+    }, [prefill.open]);
 
     return (
-        <section className={cardCls}>
+        <section ref={panelRef} className={cardCls}>
             {leave.length === 0 && !open ? <p className="text-[12px] text-on-surface-variant">No leave asked for.</p> : null}
             <ul className="divide-y divide-outline-variant/40">
                 {leave.map((row) => (

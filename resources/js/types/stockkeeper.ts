@@ -184,6 +184,8 @@ export interface TransferRow {
     needs_courier?: boolean;
     initiated_by: string | null;
     notes: string | null;
+    /** The shops' day it is planned for ("2026-10-24"); it shows on the calendar then. */
+    eta?: string | null;
     dispatched_at: string | null;
     /** The courier handed it over; it lands when the keeper receives it. */
     handed_over_at: string | null;

@@ -55,11 +55,11 @@ class CalendarTest extends TestCase
     public function every_app_with_a_calendar_opens_the_page_with_its_own_sources(): void
     {
         $cases = [
-            'admin' => ['entries', 'deliveries', 'shipments', 'transfers', 'purchases', 'credit', 'site_days', 'shifts', 'staff_rides'],
-            'seller' => ['entries', 'deliveries', 'shipments', 'credit', 'site_days', 'shifts', 'staff_rides'],
-            'stock_keeper' => ['entries', 'shipments', 'transfers', 'purchases', 'site_days', 'shifts', 'staff_rides'],
-            'delivery' => ['entries', 'deliveries', 'shipments', 'transfers', 'staff_rides'],
-            'procurement' => ['entries', 'purchases'],
+            'admin' => ['entries', 'holidays', 'deliveries', 'shipments', 'transfers', 'purchases', 'credit', 'expenses', 'site_days', 'shifts', 'overtime', 'staff_rides'],
+            'seller' => ['entries', 'holidays', 'deliveries', 'shipments', 'credit', 'site_days', 'shifts', 'overtime', 'staff_rides'],
+            'stock_keeper' => ['entries', 'holidays', 'shipments', 'transfers', 'purchases', 'site_days', 'shifts', 'overtime', 'staff_rides'],
+            'delivery' => ['entries', 'holidays', 'deliveries', 'shipments', 'transfers', 'site_days', 'shifts', 'overtime', 'staff_rides'],
+            'procurement' => ['entries', 'holidays', 'purchases'],
         ];
 
         foreach ($cases as $app => $sources) {

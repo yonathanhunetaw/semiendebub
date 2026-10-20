@@ -8,6 +8,7 @@ use App\Models\Fulfillment\Shipment;
 use App\Services\Calendar\CalendarItem;
 use App\Services\Calendar\CalendarScope;
 use App\Services\Calendar\CalendarSource;
+use App\Services\Workforce\LocalTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -44,8 +45,15 @@ class ShipmentSource implements CalendarSource
         return ['admin', 'seller', 'stock_keeper', 'delivery'];
     }
 
-    public function events(CalendarScope $scope, CarbonImmutable $from, CarbonImmutable $to): array
+    /*
+     * The shipment module keeps its times as typed on the shops' clock (it
+     * saves and shows "2026-10-24T09:00" as is), so the range is compared in
+     * wall-clock terms and each time is read back on the shops' clock.
+     */
+    public function events(CalendarScope $scope, CarbonImmutable $utcFrom, CarbonImmutable $utcTo): array
     {
+        $from = LocalTime::wall($utcFrom, 'Y-m-d H:i:s');
+        $to = LocalTime::wall($utcTo, 'Y-m-d H:i:s');
         $query = Shipment::query()
             ->with(['origin:id,name', 'destination:id,name', 'originLocation:id,name', 'destinationLocation:id,name'])
             ->where('status', '!=', 'cancelled')
@@ -72,8 +80,8 @@ class ShipmentSource implements CalendarSource
                     return null;
                 }
 
-                $start = CarbonImmutable::instance($planned);
-                $eta = $shipment->eta !== null ? CarbonImmutable::instance($shipment->eta) : null;
+                $start = self::onShopsClock($planned);
+                $eta = $shipment->eta !== null ? self::onShopsClock($shipment->eta) : null;
                 $end = $eta !== null && $eta->gt($start) ? $eta : $start->addHours(2);
                 $done = in_array($shipment->status, ['delivered', 'received'], true);
                 $route = self::SHOW_ROUTES[$scope->app] ?? null;
@@ -93,5 +101,11 @@ class ShipmentSource implements CalendarSource
                     url: $route !== null ? CalendarItem::url($route, $shipment->id) : null,
                 );
             })->filter()->values()->all();
+    }
+
+    /** A shipment time (shops' wall clock, stored as typed) as a real instant. */
+    private static function onShopsClock(\DateTimeInterface $wall): CarbonImmutable
+    {
+        return LocalTime::parse($wall->format('Y-m-d H:i'));
     }
 }

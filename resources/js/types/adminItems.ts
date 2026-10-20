@@ -5,7 +5,7 @@
 
 export type ItemStatus = "draft" | "active" | "inactive" | "archived";
 
-export type ItemSort = "name" | "updated" | "created" | "variants" | "live";
+export type ItemSort = "name" | "updated" | "created" | "variants" | "live" | "ready";
 
 export interface ItemRow {
     id: number;
@@ -14,6 +14,8 @@ export interface ItemRow {
     category: string | null;
     /** Some variant still lacks image proof (see ItemVariant::hasImageProof). */
     is_incomplete: boolean;
+    /** 0-100 from App\Services\Item\ItemReadiness; null until first worked out. */
+    readiness_percent: number | null;
     variants_count: number;
     /** Active variants listed and switched on in at least one store. */
     live_variants_count: number;
@@ -29,13 +31,14 @@ export interface ItemFilters {
     status: ItemStatus | "all";
     category: number | null;
     needs_photos: boolean;
+    not_ready: boolean;
     sort: ItemSort;
     direction: "asc" | "desc";
     per_page: number;
 }
 
 /** Items per status under the other filters, plus `all` and `needs_photos`. */
-export type ItemCounts = Record<ItemStatus | "all" | "needs_photos", number>;
+export type ItemCounts = Record<ItemStatus | "all" | "needs_photos" | "not_ready", number>;
 
 export interface ItemCategoryOption {
     id: number;

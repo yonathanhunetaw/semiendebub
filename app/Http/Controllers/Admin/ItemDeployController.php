@@ -21,13 +21,9 @@ class ItemDeployController extends Controller
      * in the target store, we create one with default stock=0 and an empty
      * pricing matrix. Existing records are left untouched (idempotent).
      *
-     * Deployed variants arrive active. They used to arrive inactive, which
-     * made "deploy" a half step: `active` is what Seller\DashboardController
-     * and Seller\ItemController filter their catalogue on, so a deployed item
-     * was invisible to the store's own sellers until somebody walked the
-     * variant list and switched each row on by hand. `active` is still the
-     * admin's switch — updateVariant() turns a row back off — it just starts
-     * in the position that makes deployment mean something.
+     * Deployed variants arrive switched off and unpriced, so an item can never be
+     * sold for a price nobody chose. Saving a real price (item setup page, Prices)
+     * switches the variant on; `active` is what both seller catalogues filter on.
      */
     public function deploy(Request $request, Item $item)
     {
@@ -43,7 +39,7 @@ class ItemDeployController extends Controller
         $created = $this->deployer->deploy($item, $store);
 
         $message = $created > 0
-            ? "{$created} variant(s) deployed to {$store->name}. Set stock & price in Inventory."
+            ? "{$created} variant(s) deployed to {$store->name}. Set its price to put it on sale."
             : "All variants were already deployed to {$store->name}.";
 
         return back()->with('success', $message);

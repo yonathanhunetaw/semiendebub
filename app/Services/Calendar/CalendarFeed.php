@@ -7,6 +7,9 @@ namespace App\Services\Calendar;
 use App\Services\Calendar\Sources\CreditSource;
 use App\Services\Calendar\Sources\DeliverySource;
 use App\Services\Calendar\Sources\EntrySource;
+use App\Services\Calendar\Sources\ExpenseSource;
+use App\Services\Calendar\Sources\HolidaySource;
+use App\Services\Calendar\Sources\OvertimeSource;
 use App\Services\Calendar\Sources\PurchaseSource;
 use App\Services\Calendar\Sources\ShiftSource;
 use App\Services\Calendar\Sources\ShipmentSource;
@@ -37,8 +40,11 @@ class CalendarFeed
         SiteDaySource $siteDays,
         ShiftSource $shifts,
         StaffRideSource $rides,
+        HolidaySource $holidays,
+        OvertimeSource $overtime,
+        ExpenseSource $expenses,
     ) {
-        $this->sources = [$entries, $deliveries, $shipments, $transfers, $purchases, $credit, $siteDays, $shifts, $rides];
+        $this->sources = [$entries, $holidays, $deliveries, $shipments, $transfers, $purchases, $credit, $expenses, $siteDays, $shifts, $overtime, $rides];
     }
 
     /** @return array<int, CalendarSource> */

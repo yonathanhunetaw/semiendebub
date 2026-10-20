@@ -40,11 +40,9 @@ class ItemDeployControllerTest extends TestCase
             'item_variant_id' => $variant->id,
             'store_id' => $store->id,
             'stock' => 0,
-            // Deployed variants arrive active. They used to arrive inactive,
-            // and `active` is what both seller catalogues filter on, so
-            // "deploy" put the item in the store and left it invisible to the
-            // store's own sellers until each row was switched on by hand.
-            'active' => 1,
+            // Deployed variants arrive switched off and unpriced: nothing is invented and
+            // nothing sells for free. Saving a real price on the item setup page switches them on.
+            'active' => 0,
             'manual_status' => 'auto',
         ]);
 
@@ -81,7 +79,7 @@ class ItemDeployControllerTest extends TestCase
         $this->assertDatabaseHas('store_variants', [
             'item_variant_id' => $variant->id,
             'store_id' => $store->id,
-            'active' => 1,
+            'active' => 0,
         ]);
     }
 
@@ -99,7 +97,7 @@ class ItemDeployControllerTest extends TestCase
         $second = ItemVariant::factory()->create(['item_id' => $item->id]);
 
         $this->post(route('admin.items.deploy', $item), ['store_id' => $store->id])
-            ->assertSessionHas('success', "1 variant(s) deployed to {$store->name}. Set stock & price in Inventory.");
+            ->assertSessionHas('success', "1 variant(s) deployed to {$store->name}. Set its price to put it on sale.");
 
         $this->assertDatabaseCount('store_variants', 2);
         $this->assertDatabaseHas('store_variants', [

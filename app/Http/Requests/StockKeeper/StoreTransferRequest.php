@@ -8,6 +8,8 @@ use App\Exceptions\MovementDomainException;
 use App\Models\Store\Store;
 use App\Services\Fulfillment\MovementDomainService;
 use App\Services\Inventory\StockScope;
+use App\Services\Workforce\LocalTime;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -31,6 +33,8 @@ class StoreTransferRequest extends FormRequest
             'to_store_id' => ['nullable', 'required_without:destination_location_id', 'integer', 'exists:stores,id'],
             'quantity' => ['required', 'integer', 'min:1', 'max:1000000'],
             'notes' => ['nullable', 'string', 'max:500'],
+            // The shops' day it is planned for (the calendar shows it there).
+            'eta' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:'.LocalTime::dateOf()],
             // A delivery courier to carry it, when it leaves its site.
             'courier_id' => ['nullable', 'integer', 'exists:users,id'],
             // Optional sub-location endpoints: a transfer may name a shelf or a
@@ -40,6 +44,14 @@ class StoreTransferRequest extends FormRequest
             'destination_location_type' => ['nullable', 'string', 'max:255', 'required_with:destination_location_id'],
             'destination_location_id' => ['nullable', 'integer', 'min:1', 'required_with:destination_location_type'],
         ];
+    }
+
+    /** The planned day as the shops' midnight (stored in UTC), or null. */
+    public function plannedFor(): ?CarbonImmutable
+    {
+        $eta = $this->validated('eta');
+
+        return $eta === null ? null : LocalTime::startOf((string) $eta);
     }
 
     /**

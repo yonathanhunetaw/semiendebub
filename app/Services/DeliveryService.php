@@ -49,6 +49,9 @@ class DeliveryService
 
     public const STATUS_RETURNED = 'returned';
 
+    /** A run whose day may still be set or moved: not yet on the road. */
+    public const SCHEDULABLE = [self::STATUS_PENDING, self::STATUS_DISPATCHED];
+
     /**
      * Which status a run may move to next.
      *
@@ -216,6 +219,28 @@ class DeliveryService
         ]);
 
         return true;
+    }
+
+    /**
+     * Set or move the day (and time) a run is planned for, and who did it.
+     * Refused once it is on the road or over.
+     */
+    public function schedule(Delivery $delivery, User $by, \DateTimeInterface $when): bool
+    {
+        return DB::transaction(function () use ($delivery, $by, $when): bool {
+            $status = (string) Delivery::query()->whereKey($delivery->id)->lockForUpdate()->value('status');
+            if (! in_array($status, self::SCHEDULABLE, true)) {
+                return false;
+            }
+
+            $delivery->update([
+                'scheduled_for' => $when,
+                'scheduled_by' => $by->id,
+                'schedule_set_at' => now(),
+            ]);
+
+            return true;
+        });
     }
 
     /**

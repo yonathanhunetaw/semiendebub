@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, router } from "@inertiajs/react";
 import AddShipmentSheet from "@/Components/Seller/Shipments/AddShipmentSheet";
+import { calendarPrefill } from "@/Components/Calendar/calendarPrefill";
 import ListTopBar, { type TabSpec } from "@/Components/Seller/ListTopBar";
 import TransferCard from "@/Components/Seller/Shipments/TransferCard";
 import type { LocationOption, NewShipmentInput, ScheduledTransfer } from "@/types/shipments";
@@ -47,7 +48,9 @@ function initialTab(): string {
  | Page Component
  |----------------------------------------------------------*/
 export default function ReplenishIndex({ scheduled_transfers = [], locations }: Props) {
-    const [addOpen, setAddOpen] = useState(false);
+    // Started from a day on the calendar: open the sheet on that day.
+    const [prefill] = useState(calendarPrefill);
+    const [addOpen, setAddOpen] = useState(prefill.open);
     const [filter, setFilter] = useState<string>(initialTab);
     const [submitting, setSubmitting] = useState(false);
     const [search, setSearch] = useState("");
@@ -287,6 +290,8 @@ export default function ReplenishIndex({ scheduled_transfers = [], locations }: 
                 facilities={locations?.origins ?? []}
                 units={locations?.destinations ?? []}
                 submitting={submitting}
+                initialDate={prefill.date}
+                initialTime={prefill.time}
             />
         </>
     );

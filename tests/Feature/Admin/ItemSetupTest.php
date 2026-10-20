@@ -119,7 +119,7 @@ class ItemSetupTest extends TestCase
         $this->assertFalse($this->check($store, 'bin')['done']);
         $this->assertFalse($this->check($store, 'count')['done']);
 
-        StoreVariant::query()->update(['pricing_matrix' => ['price' => 12.5, 'discount_price' => null, 'discount_ends_at' => null]]);
+        StoreVariant::query()->update(['pricing_matrix' => ['price' => 12.5, 'discount_price' => null, 'discount_ends_at' => null], 'active' => true]);
         $shelf = StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_SHELF)->sole();
         ShelfItemBand::query()->create(['stock_location_id' => $shelf->id, 'item_id' => $this->item->id, 'max_units' => 10, 'refill_units' => 4, 'critical_units' => 1]);
 
@@ -187,6 +187,25 @@ class ItemSetupTest extends TestCase
     }
 
     #[Test]
+    public function a_real_price_switches_the_deployed_variant_on_and_no_price_switches_it_off(): void
+    {
+        app(ItemDeployer::class)->deploy($this->item, $this->store);
+        $row = StoreVariant::query()->sole();
+        $this->assertFalse((bool) $row->active, 'deploy leaves it off and unpriced');
+        $this->assertNull(((array) $row->pricing_matrix)['price']);
+
+        $this->actingAs($this->admin())->put(route('admin.items.setup.prices', [$this->item, $this->store]), ['variants' => [['store_variant_id' => $row->id, 'price' => 20]]])->assertRedirect();
+        $this->assertTrue((bool) $row->fresh()->active);
+
+        $this->actingAs($this->admin())->put(route('admin.items.setup.prices', [$this->item, $this->store]), ['variants' => [['store_variant_id' => $row->id, 'price' => 0]]])->assertRedirect();
+        $this->assertFalse((bool) $row->fresh()->active, 'a price of zero never sells');
+
+        $row->forceFill(['manual_status' => 'forced', 'forced_status' => 'inactive'])->save();
+        $this->actingAs($this->admin())->put(route('admin.items.setup.prices', [$this->item, $this->store]), ['variants' => [['store_variant_id' => $row->id, 'price' => 20]]])->assertRedirect();
+        $this->assertFalse((bool) $row->fresh()->active, 'an admin who forced it off keeps it off');
+    }
+
+    #[Test]
     public function a_discount_above_the_price_or_without_an_end_date_is_refused(): void
     {
         app(ItemDeployer::class)->deploy($this->item, $this->store);
@@ -205,11 +224,10 @@ class ItemSetupTest extends TestCase
         $otherVariant = ItemVariant::factory()->create(['item_id' => $other->id]);
         $foreign = StoreVariant::factory()->create(['store_id' => $this->store->id, 'item_id' => $other->id, 'item_variant_id' => $otherVariant->id, 'pricing_matrix' => ['price' => 5]]);
 
-        $this->withoutExceptionHandling();
-        $this->expectException(\InvalidArgumentException::class);
         $this->actingAs($this->admin())->put(route('admin.items.setup.prices', [$this->item, $this->store]), [
             'variants' => [['store_variant_id' => $foreign->id, 'price' => 1]],
-        ]);
+        ])->assertSessionHasErrors('variants');
+        $this->assertSame(5.0, (float) $foreign->fresh()->pricing_matrix['price'], 'the foreign row is untouched');
     }
 
     #[Test]

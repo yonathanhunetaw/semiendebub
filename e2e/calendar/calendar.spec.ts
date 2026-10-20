@@ -43,6 +43,8 @@ test('seller: a bill paid today is due again next month and can be ticked paid t
 
     // Material Symbols icons are text ligatures, so a button reads "add Add": match the label's end.
     await seller.getByRole('button', { name: /Add$/ }).click();
+    // A seller may also start a shipment or leave from a day: a note is the first choice.
+    await seller.getByRole('dialog', { name: 'Add to this day' }).getByRole('button', { name: /Note or reminder/ }).click();
     const sheet = seller.getByRole('dialog', { name: 'Add to the calendar' });
     await sheet.getByRole('button', { name: /Bill$/ }).click();
     await sheet.getByLabel('Title').fill(title);
@@ -105,4 +107,55 @@ test('seller: an uploaded receipt is checked, then lands on the calendar as paid
     await expect(today).toHaveClass(/state-done/);
     await today.click();
     await expect(seller.getByRole('link', { name: /See the receipt/ })).toBeVisible();
+});
+
+/** Today on this machine as yyyy-mm-dd (the shops' day in Addis). */
+const today = (): string => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+test('seller: a shipment started from a day opens its form on that day', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const seller = await signIn(browser, 'seller', fixture.seller.email);
+    await seller.goto('/calendar');
+
+    await seller.getByRole('button', { name: /Add$/ }).click();
+    await seller.getByRole('dialog', { name: 'Add to this day' }).getByRole('button', { name: /Shipment/ }).click();
+
+    await expect(seller).toHaveURL(new RegExp(`/shipments\\?.*new=1.*date=${today()}`));
+    await expect(seller.locator('input[type="date"]').first()).toHaveValue(today());
+});
+
+test('stock keeper: a transfer started from a day is raised with that planned day', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const keeper = await signIn(browser, 'stockkeeper', fixture.keeper.email);
+    await keeper.goto('/calendar');
+
+    await keeper.getByRole('button', { name: /Add$/ }).click();
+    await keeper.getByRole('dialog', { name: 'Add to this day' }).getByRole('button', { name: /Transfer/ }).click();
+
+    await expect(keeper).toHaveURL(/\/transfers\?.*new=1/);
+    const sheet = keeper.getByRole('dialog', { name: 'Raise a transfer' });
+    await expect(sheet.getByLabel('Planned for (optional)')).toHaveValue(today());
+});
+
+test('phone: the top of the calendar keeps the dates on screen', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const seller = await signIn(browser, 'seller', fixture.seller.email);
+    await seller.setViewportSize({ width: 360, height: 760 });
+    await seller.goto('/calendar');
+
+    // The view is a select on phones, so the range label keeps its room.
+    await seller.getByLabel('View').selectOption('week');
+    const label = seller.getByRole('heading', { level: 2 }).first();
+    await expect(label).toBeVisible();
+    expect((await label.boundingBox())?.width ?? 0).toBeGreaterThan(70);
+
+    // Hidden kinds live in the filter menu, which Escape closes.
+    await seller.getByRole('button', { name: 'Show or hide kinds of dates' }).click();
+    await expect(seller.getByRole('menu')).toBeVisible();
+    await seller.keyboard.press('Escape');
+    await expect(seller.getByRole('menu')).toBeHidden();
+    await seller.screenshot({ path: 'test-results/calendar-phone.png' });
 });

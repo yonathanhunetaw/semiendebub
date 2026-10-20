@@ -28,6 +28,12 @@ Schedule::command('inventory:propose-replenishment')
     ->withoutOverlapping()
     ->onOneServer();
 
+// The item list shows how ready each item is; counts, shelf bins and prices set elsewhere change it.
+Schedule::command('items:refresh-readiness')
+    ->hourly()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 /*
 |--------------------------------------------------------------------------
 | Stock reservations

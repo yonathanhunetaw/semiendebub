@@ -8,6 +8,8 @@ use App\Models\Fulfillment\Delivery;
 use App\Services\Calendar\CalendarItem;
 use App\Services\Calendar\CalendarScope;
 use App\Services\Calendar\CalendarSource;
+use App\Services\DeliveryService;
+use App\Services\Workforce\LocalTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -68,8 +70,34 @@ class DeliverySource implements CalendarSource
                     status: (string) $delivery->status,
                     subtitle: trim(($delivery->recipient_name ?? '').' · '.($delivery->delivery_address ?? ''), ' ·') ?: null,
                     url: $this->url($scope, $delivery),
+                    extra: ['delivery' => [
+                        'id' => (int) $delivery->id,
+                        // The shops' wall clock, for the "move it" field.
+                        'scheduled_for' => LocalTime::wall($delivery->scheduled_for),
+                        'can_schedule' => $this->canSchedule($scope, $delivery),
+                    ]],
                 );
             })->all();
+    }
+
+    /**
+     * May this viewer move the run to another day? Only before it is on the
+     * road: the courier carrying it, or the store's staff and admins whose
+     * view covers its store.
+     */
+    public function canSchedule(CalendarScope $scope, Delivery $delivery): bool
+    {
+        if (! in_array($scope->app, $this->apps(), true) || ! in_array($delivery->status, DeliveryService::SCHEDULABLE, true)) {
+            return false;
+        }
+
+        if ($scope->app === 'delivery') {
+            return $delivery->courier_id !== null && (int) $delivery->courier_id === (int) $scope->viewer->id;
+        }
+
+        $store = $delivery->source_store_id ?? $delivery->sale?->store_id;
+
+        return $scope->storeIds === null || ($store !== null && $scope->covers((int) $store));
     }
 
     private function url(CalendarScope $scope, Delivery $delivery): ?string

@@ -239,6 +239,18 @@ class CanvasController extends Controller
         return response()->json(['saved_at' => $draft->updated_at]);
     }
 
+    /** Only the person who saved a version can delete it. */
+    public function deleteVersion($id)
+    {
+        $version = CanvasVersion::where('is_draft', false)->findOrFail($id);
+        abort_unless($this->visibleCanvases()->whereKey($version->canvas_id)->exists(), 404);
+        abort_unless((int) $version->user_id === (int) Auth::id(), 403, 'Only the person who saved this version can delete it.');
+
+        $version->delete();
+
+        return response()->json(['deleted' => $version->id]);
+    }
+
     /** Puts an older version back as a new one on top, so nothing is lost. */
     public function restore($id)
     {

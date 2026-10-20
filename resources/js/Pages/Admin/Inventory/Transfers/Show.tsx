@@ -17,6 +17,7 @@ import {
     Typography,
 } from "@mui/material";
 import TransferJourney from "@/Components/Visual/TransferJourney";
+import { dayLabel } from "@/Components/Calendar/calendarPrefill";
 import React, { useState } from "react";
 
 interface JournalRow {
@@ -99,6 +100,11 @@ export default function TransferShow({ transfer, journal = [], couriers = [] }: 
                                 : "Leaves its site — a courier must carry it"
                             : "Within one store — staff carry it across"}
                     </Typography>
+                    {transfer.eta ? (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            Planned for <b>{dayLabel(transfer.eta)}</b>
+                        </Typography>
+                    ) : null}
 
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mt: 2 }} alignItems={{ sm: "center" }}>
                         {transfer.needs_courier && transfer.status === "pending" ? (

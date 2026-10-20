@@ -4,6 +4,7 @@ import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import { EmptyState, StatusPill, type Tone } from "@/Components/Shared/ui";
 import ItemVariantPicker from "@/Components/StockKeeper/ItemVariantPicker";
 import TransferReceiveSheet from "@/Components/StockKeeper/TransferReceiveSheet";
+import { calendarPrefill, dayLabel } from "@/Components/Calendar/calendarPrefill";
 import { KIND_LABEL, SkButton, SkCard, SkChips, SkField, SkHeader, SkPager, SkSheet, SkStats, fmt, inputClass, when } from "@/Components/StockKeeper/skKit";
 import type { StockKeeperTransfersProps, StockLocation, TransferRow, TransferStatus } from "@/types/stockkeeper";
 
@@ -26,7 +27,9 @@ const pairOf = (location: StockLocation): string => `${location.type}#${location
  * Receiving.
  */
 export default function Transfers({ transfers = [], filters, counts, locations = [], pagination }: StockKeeperTransfersProps): React.ReactElement {
-    const [createOpen, setCreateOpen] = React.useState(false);
+    // Started from a day on the calendar: open the sheet with that day in.
+    const [prefill] = React.useState(calendarPrefill);
+    const [createOpen, setCreateOpen] = React.useState(prefill.open);
     const [receiving, setReceiving] = React.useState<TransferRow | null>(null);
     const [busy, setBusy] = React.useState<number | null>(null);
     const status = (filters.status || "all") as StatusFilter;
@@ -126,6 +129,12 @@ export default function Transfers({ transfers = [], filters, counts, locations =
                                             {t.handed_over_at && t.status === "in_transit" ? " · handed over: check it and receive it" : ""}
                                         </p>
                                     )}
+                                    {t.eta && t.status === "pending" && (
+                                        <p className="mt-2 flex items-center gap-1.5 text-[13px] text-on-surface-variant">
+                                            <span className="material-symbols-outlined text-[18px]">event</span>
+                                            Planned for <b className="text-on-surface">{dayLabel(t.eta)}</b>
+                                        </p>
+                                    )}
                                     {t.notes && <p className="mt-2 rounded-[10px] bg-surface-container-low px-2.5 py-1.5 text-[13px] text-on-surface-variant">“{t.notes}”</p>}
 
                                     <p className="mt-2 text-[12px] text-on-surface-variant">
@@ -165,14 +174,21 @@ export default function Transfers({ transfers = [], filters, counts, locations =
                 <Link href={route("stock_keeper.orders.index")} className="font-bold text-primary hover:underline">deliveries</Link>.
             </p>
 
-            <RaiseSheet open={createOpen} onClose={() => setCreateOpen(false)} locations={locations} />
+            <RaiseSheet open={createOpen} onClose={() => setCreateOpen(false)} locations={locations} plannedFor={prefill.date} />
             {receiving && <TransferReceiveSheet transfer={receiving} onClose={() => setReceiving(null)} />}
         </>
     );
 }
 
-function RaiseSheet({ open, onClose, locations }: { open: boolean; onClose: () => void; locations: StockLocation[] }) {
-    const form = useForm<{ item_variant_id: number | ""; from: string; to: string; quantity: number | ""; notes: string }>({ item_variant_id: "", from: "", to: "", quantity: 1, notes: "" });
+function RaiseSheet({ open, onClose, locations, plannedFor = null }: { open: boolean; onClose: () => void; locations: StockLocation[]; plannedFor?: string | null }) {
+    const form = useForm<{ item_variant_id: number | ""; from: string; to: string; quantity: number | ""; eta: string; notes: string }>({
+        item_variant_id: "",
+        from: "",
+        to: "",
+        quantity: 1,
+        eta: plannedFor ?? "",
+        notes: "",
+    });
 
     // The pick lists carry "type#id"; the server takes the pair split out.
     form.transform((data) => {
@@ -181,6 +197,7 @@ function RaiseSheet({ open, onClose, locations }: { open: boolean; onClose: () =
         return {
             item_variant_id: data.item_variant_id,
             quantity: data.quantity,
+            eta: data.eta === "" ? null : data.eta,
             notes: data.notes,
             source_location_type: sourceType || null,
             source_location_id: sourceId ? Number(sourceId) : null,
@@ -245,6 +262,9 @@ function RaiseSheet({ open, onClose, locations }: { open: boolean; onClose: () =
                 </div>
                 <SkField label="Quantity" error={errors.quantity} hint="In the SKU's own packaging.">
                     <input type="number" min={1} inputMode="numeric" value={form.data.quantity} onChange={(e) => form.setData("quantity", e.target.value === "" ? "" : Number(e.target.value))} className={inputClass} />
+                </SkField>
+                <SkField label="Planned for (optional)" error={errors.eta} hint="Shows on the calendar on this day.">
+                    <input type="date" value={form.data.eta} onChange={(e) => form.setData("eta", e.target.value)} className={inputClass} />
                 </SkField>
                 <SkField label="Notes (optional)" error={errors.notes}>
                     <textarea rows={2} value={form.data.notes} onChange={(e) => form.setData("notes", e.target.value)} className={inputClass} />

@@ -95,6 +95,7 @@ class TransferController extends Controller
                     ? (int) $request->validated('destination_location_id')
                     : null,
                 courierId: $request->validated('courier_id') !== null ? (int) $request->validated('courier_id') : null,
+                eta: $request->plannedFor(),
             );
         } catch (\App\Exceptions\MovementDomainException $exception) {
             // The form request checks this too; this catch is what keeps an API

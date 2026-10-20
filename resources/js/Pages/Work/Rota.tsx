@@ -2,6 +2,7 @@ import { cardCls, DUTY_LABEL, ghostBtn, hm, inputCls, LEAVE_LABEL, primaryBtn, R
 import { dayDate } from "@/utils/dates";
 import type { CoverageGap, DayHours, LeaveView, ShiftDuty, ShiftView, StaffingRuleRow, WorkApp } from "@/types/work";
 import { Head, Link, router, useForm } from "@inertiajs/react";
+import { calendarPrefill } from "@/Components/Calendar/calendarPrefill";
 import React, { useState } from "react";
 
 /**
@@ -181,7 +182,14 @@ function RulesForm({ app, siteId, rules }: { app: WorkApp; siteId: number; rules
 }
 
 export default function Rota({ app, site, week, days = [], people = [], shifts = [], gaps = [], rules = [], leave = [] }: Props): React.ReactElement {
-    const [editing, setEditing] = useState<Draft | null>(null);
+    // Started from a day on the calendar: open a new shift on that day.
+    const [editing, setEditing] = useState<Draft | null>(() => {
+        const prefill = calendarPrefill();
+        const day = prefill.open ? days.find((d) => d.date === prefill.date) : undefined;
+        if (!day) return null;
+
+        return { id: null, date: day.date, user_id: "", starts: prefill.time ?? day.hours?.opens_at ?? "08:30", ends: day.hours?.closes_at ?? "17:00", duty: "none" };
+    });
     const drafts = shifts.filter((s) => s.status === "draft").length;
     const go = (date: string) => router.get(wr(app, "work.rota", { site: site.id, week: date }), {}, { preserveScroll: true });
 

@@ -76,6 +76,7 @@ class TransferWorkflowService
         ?int $destinationLocationId = null,
         ?int $storeVariantId = null,
         ?int $courierId = null,
+        ?\DateTimeInterface $eta = null,
     ): Transfer {
         $sourceLocationType ??= Store::class;
         $sourceLocationId ??= $fromStoreId;
@@ -117,6 +118,8 @@ class TransferWorkflowService
             'status' => self::STATUS_PENDING,
             'initiated_by' => $initiatedBy,
             'courier_id' => $courierId,
+            // The day it is planned for; the calendar reads it.
+            'eta' => $eta,
             'notes' => $notes,
         ]);
     }
@@ -383,6 +386,8 @@ class TransferWorkflowService
             'approved_by' => trim((string) ($transfer->approver?->first_name . ' ' . $transfer->approver?->last_name)) ?: null,
             'approved_at' => $transfer->approved_at?->toIso8601String(),
             'notes' => $transfer->notes,
+            // The shops' day it is planned for.
+            'eta' => $transfer->eta !== null ? \App\Services\Workforce\LocalTime::dateOf($transfer->eta) : null,
             'courier' => $transfer->courier_id !== null
                 ? (trim((string) ($transfer->courier?->first_name.' '.$transfer->courier?->last_name)) ?: 'Courier #'.$transfer->courier_id)
                 : null,

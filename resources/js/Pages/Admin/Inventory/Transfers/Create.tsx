@@ -1,6 +1,7 @@
 import AdminLayout from "@/Layouts/AppLayout";
 import type { StockLocation, VariantOption } from "@/types/stockkeeper";
 import { Head, Link, useForm } from "@inertiajs/react";
+import { calendarPrefill } from "@/Components/Calendar/calendarPrefill";
 import {
     Autocomplete,
     Box,
@@ -41,8 +42,9 @@ export default function TransferCreate({ locations = [], variants = [], couriers
         to: string;
         quantity: number | "";
         courier_id: number | "";
+        eta: string;
         notes: string;
-    }>({ item_variant_id: "", from: "", to: "", quantity: 1, courier_id: "", notes: "" });
+    }>({ item_variant_id: "", from: "", to: "", quantity: 1, courier_id: "", eta: calendarPrefill().date ?? "", notes: "" });
 
     transform((form) => {
         const [sourceType, sourceId] = form.from.split("#");
@@ -53,6 +55,7 @@ export default function TransferCreate({ locations = [], variants = [], couriers
             quantity: form.quantity,
             notes: form.notes,
             courier_id: form.courier_id === "" ? null : form.courier_id,
+            eta: form.eta === "" ? null : form.eta,
             source_location_type: sourceType || null,
             source_location_id: sourceId ? Number(sourceId) : null,
             destination_location_type: destinationType || null,
@@ -138,6 +141,15 @@ export default function TransferCreate({ locations = [], variants = [], couriers
                                 </MenuItem>
                             ))}
                         </TextField>
+                        <TextField
+                            type="date"
+                            label="Planned for (optional)"
+                            value={data.eta}
+                            onChange={(event) => setData("eta", event.target.value)}
+                            slotProps={{ inputLabel: { shrink: true } }}
+                            error={Boolean(serverErrors.eta)}
+                            helperText={serverErrors.eta ?? "Shows on the calendar on this day."}
+                        />
                         <TextField label="Notes" value={data.notes} onChange={(event) => setData("notes", event.target.value)} multiline rows={2} />
                         <Stack direction="row" spacing={1} justifyContent="flex-end">
                             <Button component={Link} href={route("admin.inventory.transfers")}>

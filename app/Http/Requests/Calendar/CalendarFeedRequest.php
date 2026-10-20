@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Calendar;
 
+use App\Services\Workforce\LocalTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -30,15 +31,26 @@ class CalendarFeedRequest extends FormRequest
         ];
     }
 
+    /*
+     * The page asks for the shops' days. The app runs in UTC, so the window
+     * covers both the UTC day and the shops' day at each end: a shift at
+     * 01:00 Addis (22:00 UTC the day before) is not cut off. Sources get a
+     * few extra hours at the edges, which the page never draws.
+     */
     public function from(): CarbonImmutable
     {
-        return CarbonImmutable::parse((string) $this->input('from'))->startOfDay();
+        $utc = CarbonImmutable::parse((string) $this->input('from'))->startOfDay();
+        $shops = LocalTime::startOf((string) $this->input('from'));
+
+        return $shops->lt($utc) ? $shops : $utc;
     }
 
     public function to(): CarbonImmutable
     {
-        $to = CarbonImmutable::parse((string) $this->input('to'))->endOfDay();
-        $cap = $this->from()->addDays(self::MAX_DAYS)->endOfDay();
+        $utc = CarbonImmutable::parse((string) $this->input('to'))->endOfDay();
+        $shops = LocalTime::startOf((string) $this->input('to'))->addDay()->subSecond();
+        $to = $shops->gt($utc) ? $shops : $utc;
+        $cap = $this->from()->addDays(self::MAX_DAYS + 1)->endOfDay();
 
         return $to->gt($cap) ? $cap : $to;
     }

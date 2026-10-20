@@ -21,3 +21,6 @@ Route::post('/calendar/entries/{entry}/complete', [CalendarController::class, 'c
 Route::post('/calendar/documents', [\App\Http\Controllers\Shared\CalendarDocumentController::class, 'store'])->name('calendar.documents.store');
 Route::get('/calendar/documents/{document}', [\App\Http\Controllers\Shared\CalendarDocumentController::class, 'show'])->name('calendar.documents.show');
 Route::post('/calendar/documents/{document}/add', [\App\Http\Controllers\Shared\CalendarDocumentController::class, 'add'])->name('calendar.documents.add');
+
+// Move a delivery to another day from its calendar sheet (CalendarDeliveryController).
+Route::post('/calendar/deliveries/{delivery}/schedule', [\App\Http\Controllers\Shared\CalendarDeliveryController::class, 'schedule'])->name('calendar.deliveries.schedule');

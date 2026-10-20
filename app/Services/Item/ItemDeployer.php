@@ -13,8 +13,8 @@ use App\Models\Store\StoreVariant;
  *
  * Used by the admin's Deploy button and by the item setup page, so both do the same thing.
  * Idempotent: a store variant that already exists is left as it is (its price, its switch).
- * New ones arrive active with an empty price of 0, which the item setup checks do NOT count as
- * priced; set the real price straight after (the setup page's Prices part).
+ * New ones arrive **switched off and unpriced**: nothing is invented, and nothing can be sold for
+ * free. Saving a real price on the item setup page switches the variant on.
  */
 final class ItemDeployer
 {
@@ -31,11 +31,11 @@ final class ItemDeployer
                 'store_id' => $store->id,
                 'stock' => 0,
                 'pricing_matrix' => json_encode([
-                    'price' => 0,
+                    'price' => null,
                     'discount_price' => null,
                     'discount_ends_at' => null,
                 ]),
-                'active' => true,
+                'active' => false,
                 'manual_status' => 'auto',
                 'created_at' => now(),
                 'updated_at' => now(),

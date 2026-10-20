@@ -2,7 +2,11 @@
 
 use App\Http\Controllers\Admin\ItemDeployController;
 use App\Http\Controllers\Admin\ItemController;
+use App\Http\Controllers\Admin\ItemSetupBasicsController;
 use App\Http\Controllers\Admin\ItemSetupController;
+use App\Http\Controllers\Admin\ItemSetupPricesController;
+use App\Http\Controllers\Admin\ItemSetupStockController;
+use App\Http\Controllers\Admin\ItemSetupVariantsController;
 use App\Http\Controllers\Admin\SessionController;
 use App\Http\Controllers\Admin\SystemStatusController;
 use App\Http\Controllers\Admin\Store\StoreController;
@@ -86,6 +90,7 @@ Route::domain("admin.{$baseDomain}")
                 Route::post('/save', [CanvasController::class, 'save'])->name('save');
                 Route::post('/autosave', [CanvasController::class, 'autosave'])->name('autosave');
                 Route::get('/version/{id}', [CanvasController::class, 'getVersion'])->name('version');
+                Route::delete('/version/{id}', [CanvasController::class, 'deleteVersion'])->name('version.delete');
                 Route::post('/version/{id}/restore', [CanvasController::class, 'restore'])->name('restore');
                 Route::post('/upload-asset', [CanvasController::class, 'uploadAsset'])->name('upload-asset');
             });
@@ -130,7 +135,32 @@ Route::domain("admin.{$baseDomain}")
             Route::put('items/{item}/setup/stores/{store}/prices', [ItemSetupController::class, 'savePrices'])->name('items.setup.prices');
             Route::put('items/{item}/setup/locations/{location}/bin', [ItemSetupController::class, 'saveBin'])->name('items.setup.bin');
             Route::delete('items/{item}/setup/locations/{location}/bin', [ItemSetupController::class, 'removeBin'])->name('items.setup.bin.destroy');
-            Route::resource('items', ItemController::class);
+            // Refill route and counts (stock only ever changes through a count).
+            Route::put('items/{item}/setup/stores/{store}/refill-route', [ItemSetupStockController::class, 'saveRoute'])->name('items.setup.route');
+            Route::post('items/{item}/setup/locations/{location}/count', [ItemSetupStockController::class, 'count'])->name('items.setup.count');
+            Route::post('items/{item}/setup/counts/{stocktake}/approve', [ItemSetupStockController::class, 'approve'])->name('items.setup.count.approve');
+            Route::post('items/{item}/setup/counts/{stocktake}/void', [ItemSetupStockController::class, 'void'])->name('items.setup.count.void');
+            // Seller and customer prices per store.
+            Route::put('items/{item}/setup/stores/{store}/seller-prices', [ItemSetupPricesController::class, 'saveSeller'])->name('items.setup.seller-prices');
+            Route::delete('items/{item}/setup/stores/{store}/seller-prices/{seller}', [ItemSetupPricesController::class, 'removeSeller'])->name('items.setup.seller-prices.destroy');
+            Route::put('items/{item}/setup/stores/{store}/customer-prices', [ItemSetupPricesController::class, 'saveCustomer'])->name('items.setup.customer-prices');
+            Route::delete('items/{item}/setup/stores/{store}/customer-prices/{customer}', [ItemSetupPricesController::class, 'removeCustomer'])->name('items.setup.customer-prices.destroy');
+            Route::get('items/setup/stores/{store}/customers', [ItemSetupPricesController::class, 'customers'])->name('items.setup.customers');
+            // Variants part: options (with a preview), barcodes, pictures.
+            Route::post('items/{item}/setup/options/preview', [ItemSetupVariantsController::class, 'preview'])->name('items.setup.options.preview');
+            Route::put('items/{item}/setup/options', [ItemSetupVariantsController::class, 'saveOptions'])->name('items.setup.options');
+            Route::put('items/{item}/setup/barcodes', [ItemSetupVariantsController::class, 'saveBarcodes'])->name('items.setup.barcodes');
+            Route::post('items/{item}/setup/variants/{variant}/barcode', [ItemSetupVariantsController::class, 'generateBarcode'])->name('items.setup.barcode.generate');
+            Route::post('items/{item}/setup/variants/{variant}/images/{slot}', [ItemSetupVariantsController::class, 'uploadImage'])->whereNumber('slot')->name('items.setup.image');
+            Route::delete('items/{item}/setup/variants/{variant}/images/{slot}', [ItemSetupVariantsController::class, 'removeImage'])->whereNumber('slot')->name('items.setup.image.destroy');
+            // The item pages are one page, its setup page: creating starts at its basics, editing redirects there.
+            Route::get('items/create', [ItemSetupBasicsController::class, 'create'])->name('items.create');
+            Route::get('items/{item}/edit', fn (\App\Models\Item\Item $item) => redirect()->route('admin.items.setup', $item))->name('items.edit');
+            Route::post('items/setup', [ItemSetupBasicsController::class, 'store'])->name('items.setup.store');
+            Route::put('items/{item}/setup/basics', [ItemSetupBasicsController::class, 'update'])->name('items.setup.basics');
+            Route::post('items/{item}/setup/pictures', [ItemSetupBasicsController::class, 'addPicture'])->name('items.setup.pictures.store');
+            Route::delete('items/{item}/setup/pictures', [ItemSetupBasicsController::class, 'removePicture'])->name('items.setup.pictures.destroy');
+            Route::resource('items', ItemController::class)->except(['create', 'edit']);
 
             // Users, sessions and the system status live under Settings, for global admins only.
             Route::get('system', SystemStatusController::class)->name('system.index');

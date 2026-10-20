@@ -1,4 +1,5 @@
 import { Head, Link, router, useForm } from "@inertiajs/react";
+import { calendarPrefill, prefillDateTime } from "@/Components/Calendar/calendarPrefill";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import {
@@ -45,7 +46,9 @@ export default function AdminShipments({
     pagination,
     flash,
 }: AdminShipmentIndexProps): React.ReactElement {
-    const [createOpen, setCreateOpen] = React.useState(false);
+    // Started from a day on the calendar: open the dialog on that day.
+    const [prefill] = React.useState(calendarPrefill);
+    const [createOpen, setCreateOpen] = React.useState(prefill.open);
     const [cancelling, setCancelling] = React.useState<Shipment | null>(null);
     const [notice, setNotice] = React.useState<string | null>(null);
 
@@ -197,6 +200,7 @@ export default function AdminShipments({
                 onClose={() => setCreateOpen(false)}
                 origins={origins}
                 destinations={destinations}
+                scheduledFor={prefillDateTime(prefill)}
             />
             <CancelDialog
                 shipment={cancelling}
@@ -223,9 +227,12 @@ function CreateShipmentDialog({
     onClose,
     origins,
     destinations,
+    scheduledFor = "",
 }: {
     open: boolean;
     onClose: () => void;
+    /** "2026-10-24T09:00", when started from the calendar. */
+    scheduledFor?: string;
     /** Main Hubs A/B. */
     origins: Array<{ id: number; name: string }>;
     /** Store floors and Remote Hubs. */
@@ -237,7 +244,7 @@ function CreateShipmentDialog({
         vehicle_name: "",
         vehicle_plate: "",
         vehicle_max_cbm: "",
-        scheduled_for: "",
+        scheduled_for: scheduledFor,
     });
 
     const submit = (event: React.FormEvent): void => {

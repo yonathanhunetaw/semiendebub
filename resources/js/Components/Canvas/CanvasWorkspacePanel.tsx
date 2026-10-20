@@ -10,6 +10,7 @@ import GridViewIcon from '@mui/icons-material/GridViewRounded';
 import ListIcon from '@mui/icons-material/FormatListBulleted';
 import LayersIcon from '@mui/icons-material/Layers';
 import HistoryIcon from '@mui/icons-material/History';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ShareIcon from '@mui/icons-material/IosShare';
 import SaveIcon from '@mui/icons-material/Save';
 import CloudDoneIcon from '@mui/icons-material/CloudDoneOutlined';
@@ -41,6 +42,7 @@ interface Props {
     onSave: () => void;
     onLoadVersion: (id: number) => void;
     onRestoreVersion: (id: number) => void;
+    onDeleteVersion: (id: number) => void;
     onShare: () => void;
     onChangePermission: (user: SharedUser, permission: 'view' | 'edit') => void;
     onRemoveUser: (user: SharedUser) => void;
@@ -94,6 +96,7 @@ export default function CanvasWorkspacePanel(props: Props) {
     const [sort, setSort] = useState<CanvasSort>('recent');
     const [view, setView] = useState<CanvasView>('grid');
     const [showAllVersions, setShowAllVersions] = useState(false);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
     const own = canvases.filter((c) => c.user_id === currentUserId);
     const shared = canvases.filter((c) => c.user_id !== currentUserId);
@@ -399,6 +402,31 @@ export default function CanvasWorkspacePanel(props: Props) {
                                                 >
                                                     Restore
                                                 </Button>
+                                            )}
+                                            {item.user?.id === currentUserId && (
+                                                confirmDeleteId === item.id ? (
+                                                    <Button
+                                                        size="small"
+                                                        color="error"
+                                                        onClick={() => { setConfirmDeleteId(null); props.onDeleteVersion(item.id); }}
+                                                        onBlur={() => setConfirmDeleteId(null)}
+                                                        autoFocus
+                                                        sx={{ textTransform: 'none', fontSize: 12, fontWeight: 700, minWidth: 0, flexShrink: 0 }}
+                                                    >
+                                                        Sure?
+                                                    </Button>
+                                                ) : (
+                                                    <Tooltip title="Delete this version">
+                                                        <IconButton
+                                                            size="small"
+                                                            aria-label={`Delete version: ${item.comment || 'Blueprint update'}`}
+                                                            onClick={() => setConfirmDeleteId(item.id)}
+                                                            sx={{ color: ws.faint, flexShrink: 0, '&:hover': { color: 'error.main' } }}
+                                                        >
+                                                            <DeleteOutlineIcon sx={{ fontSize: 17 }} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )
                                             )}
                                         </Box>
                                     </Box>

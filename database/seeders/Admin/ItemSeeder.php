@@ -2916,7 +2916,7 @@ class ItemSeeder extends Seeder
                 'general_images' => $images
             ]);
 
-            $generator->sync($item);
+            $generator->sync($item, [], true); // the demo catalogue gets priced store variants
 
             $this->populatePackagingQuantitiesAndCbm($item, $packaging);
             $this->evaluateDraftStatus($item, $data['status']);

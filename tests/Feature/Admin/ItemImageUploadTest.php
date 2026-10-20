@@ -77,7 +77,7 @@ class ItemImageUploadTest extends TestCase
         ]);
 
         $item = Item::query()->where('product_name', 'Garden Hose')->sole();
-        $response->assertRedirect(route('admin.items.show', $item));
+        $response->assertRedirect(route('admin.items.setup', $item));
 
         $images = $item->general_images;
         $this->assertCount(2, $images);
@@ -110,7 +110,7 @@ class ItemImageUploadTest extends TestCase
             'variant_slot_keys' => [$key => 1],
             'variant_existing_images' => [$key => [0 => 'uploads/variants/PAINT-1/old.jpg']],
             'variant_images' => [$key => [2 => UploadedFile::fake()->image('side.webp')]],
-        ])->assertRedirect(route('admin.items.edit', $item));
+        ])->assertRedirect(route('admin.items.setup', $item));
 
         $this->assertSame(
             ['uploads/variants/PAINT-1/old.jpg', null, 'uploads/variants/PAINT-1/PAINT-1_3.webp', null, null],
@@ -124,7 +124,7 @@ class ItemImageUploadTest extends TestCase
     {
         [$item, $variant, , $color, $size, $packaging] = $this->itemWithVariant();
 
-        $this->update($item, $color, $size, $packaging, [])->assertRedirect(route('admin.items.edit', $item));
+        $this->update($item, $color, $size, $packaging, [])->assertRedirect(route('admin.items.setup', $item));
 
         $this->assertSame(['uploads/variants/PAINT-1/old.jpg'], $variant->fresh()->images);
     }
@@ -136,7 +136,7 @@ class ItemImageUploadTest extends TestCase
 
         $this->update($item, $color, $size, $packaging, [
             "variant_image_{$variant->id}" => UploadedFile::fake()->image('main.png'),
-        ])->assertRedirect(route('admin.items.edit', $item));
+        ])->assertRedirect(route('admin.items.setup', $item));
 
         $this->assertSame(['uploads/variants/PAINT-1/PAINT-1_main.png'], $variant->fresh()->images);
         Storage::disk('r2')->assertExists('uploads/variants/PAINT-1/PAINT-1_main.png');
