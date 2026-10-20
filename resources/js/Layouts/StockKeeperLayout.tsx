@@ -61,7 +61,8 @@ export default function StockKeeperLayout({ children }: { children: React.ReactN
                     </div>
                 </header>
 
-                <main className="mx-auto w-full min-w-0 max-w-[1400px] px-3 pb-[calc(112px+env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:pt-6 lg:px-8 lg:pb-12">
+                {/* `nav-pad` clears the bottom nav while it is up (app.css). */}
+                <main className="nav-pad mx-auto w-full min-w-0 max-w-[1400px] px-3 pt-4 sm:px-6 sm:pt-6 lg:px-8 lg:pb-12">
                     <Box ref={contentRef} sx={(t) => ({ minWidth: 0, ...stackedTableSx(t) })}>
                         {children}
                     </Box>

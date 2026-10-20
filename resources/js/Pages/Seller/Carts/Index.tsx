@@ -1,7 +1,6 @@
 import NotificationsBell from "@/Components/Navigation/Admin/NotificationsBell";
 import ShareCartPanel, { type CartShareInfo } from "@/Components/Seller/ShareCartPanel";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { ABOVE_NAV } from "@/Data/sellerOrderFlow";
 import { Head, Link, router } from "@inertiajs/react";
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -664,12 +663,9 @@ export default function CartsIndex({ carts = [], home_store, focus_cart = null }
                 )}
             </div>
 
-            {/* ── Sticky checkout bar ── */}
+            {/* ── Sticky checkout bar: on the bottom nav, on the bottom edge while it hides ── */}
             {active && active.lines.length > 0 ? (
-                <section
-                    className="fixed inset-x-0 z-40 mx-auto flex max-w-[480px] items-center justify-between rounded-t-[16px] border-t border-outline-variant/80 bg-surface-container-lowest px-4 py-2 shadow-[0_-4px_16px_rgb(var(--on-surface)/0.08)] dark:shadow-none"
-                    style={{ bottom: ABOVE_NAV }}
-                >
+                <section className="dock-sheet fixed inset-x-0 z-40 mx-auto flex max-w-[480px] items-center justify-between rounded-t-[16px] border-t border-outline-variant/80 bg-surface-container-lowest px-4 pt-2 shadow-[0_-4px_16px_rgb(var(--on-surface)/0.08)] [--dock-pad:0.5rem] dark:shadow-none">
                     <div className="flex items-center space-x-2">
                         <SelectDot
                             checked={allSelected}

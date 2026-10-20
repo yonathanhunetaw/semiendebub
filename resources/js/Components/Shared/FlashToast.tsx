@@ -20,9 +20,9 @@ const DURATION_MS = { success: 3000, error: 4500 } as const;
  * don't need their own.
  */
 export default function FlashToast({
-    bottomClass = "bottom-[calc(96px+env(safe-area-inset-bottom))]",
+    bottomClass = "dock-float [--dock-gap:24px]",
 }: {
-    /** Tailwind `bottom-*` that clears the layout's bottom bar, if it has one. */
+    /** Where it sits. The default clears the bottom nav and follows it when it hides (app.css). */
     bottomClass?: string;
 }) {
     const flash = usePage<{ flash?: Flash }>().props.flash;

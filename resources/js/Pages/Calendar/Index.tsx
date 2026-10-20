@@ -94,6 +94,27 @@ function store(key: string, value: unknown): void {
 }
 
 /**
+ * Keeps `--cal-top` on the calendar at its distance from the top of the page,
+ * so `.duka-calendar-fill` (calendar.css) can take exactly the rest of the
+ * screen. Re-measured when the header above it wraps or the window resizes.
+ */
+function useFillToBottom(ref: React.RefObject<HTMLDivElement | null>) {
+    React.useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const measure = () => el.style.setProperty("--cal-top", `${Math.round(el.getBoundingClientRect().top + window.scrollY)}px`);
+        measure();
+        const observer = new ResizeObserver(measure);
+        if (el.parentElement) observer.observe(el.parentElement);
+        window.addEventListener("resize", measure);
+        return () => {
+            observer.disconnect();
+            window.removeEventListener("resize", measure);
+        };
+    }, [ref]);
+}
+
+/**
  * The calendar: one page for admin, seller, stock keeper, delivery and
  * procurement. It shows what each module already schedules (deliveries,
  * freight, transfers, purchase orders, credit due dates), read live for the
@@ -103,6 +124,8 @@ function store(key: string, value: unknown): void {
  */
 export default function CalendarIndex({ app, sources = [], starters = [], initialDate = null, scopeLabel, readerEnabled = false, pendingDocument = null }: Props) {
     const storageKey = `duka.calendar.${app}`;
+    const calendarRef = React.useRef<HTMLDivElement>(null);
+    useFillToBottom(calendarRef);
     const [date, setDate] = React.useState<Date>(() => (initialDate ? parseDay(initialDate) : new Date()));
     const [view, setView] = React.useState<View>(() =>
         [readStored<unknown>(`${storageKey}.view`, null)].find(isView) ?? (typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches ? Views.AGENDA : Views.MONTH),
@@ -199,7 +222,7 @@ export default function CalendarIndex({ app, sources = [], starters = [], initia
             <Head title="Calendar" />
             {app === "delivery" ? <FlashToast /> : null}
 
-            <div className="mx-auto w-full max-w-[1400px] px-3 py-3 sm:px-6 lg:py-4">
+            <div className="mx-auto w-full max-w-[1400px] px-3 pb-3 pt-3 sm:px-6 lg:pt-4">
                 <CalendarHeader
                     scopeLabel={scopeLabel}
                     view={view}
@@ -223,7 +246,8 @@ export default function CalendarIndex({ app, sources = [], starters = [], initia
                     </div>
                 ) : null}
 
-                <div className="duka-calendar h-[calc(100dvh-190px)] min-h-[520px]">
+                {/* Fills the screen down to the bottom nav, and into its place while it hides. */}
+                <div ref={calendarRef} className="duka-calendar duka-calendar-fill">
                     <Calendar<CalEvent, object>
                         localizer={localizer}
                         culture="en-US"

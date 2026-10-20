@@ -113,7 +113,6 @@ class TransferController extends Controller
     {
         return Inertia::render('Admin/Inventory/Transfers/Create', [
             'locations' => $stock->locations(),
-            'variants' => $stock->variantOptions()->all(),
             'couriers' => $this->couriers(),
         ]);
     }

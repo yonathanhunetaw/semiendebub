@@ -256,7 +256,7 @@ export interface AdminShipmentIndexProps extends SharedProps {
 
 export interface AdminShipmentShowProps extends SharedProps {
     shipment: Shipment;
-    variants: VariantOption[];
+    origin_location_id: number;
     vehicle_options?: FleetVehicle[];
     courier_options?: CourierOption[];
 }

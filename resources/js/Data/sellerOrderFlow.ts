@@ -11,15 +11,6 @@
 import type { OrderPayment, PaymentAccountOption } from "@/types/payments";
 import { statusTone, type Tone } from "@/Components/Shared/ui";
 
-/**
- * Bottom offset for a page's own sticky action bar.
- *
- * SellerLayout pins the bottom nav at `bottom: 0` with a 70px bar plus a 12px
- * inset, so anything at `bottom-0` lands underneath it. Sticky bars sit above
- * that, clearing the iOS home indicator too.
- */
-export const ABOVE_NAV = "calc(90px + env(safe-area-inset-bottom))";
-
 /** Where a line is fulfilled from. */
 export type Fulfillment = "local" | "hub";
 

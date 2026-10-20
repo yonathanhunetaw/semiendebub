@@ -228,19 +228,10 @@ export default function PriceDeviations({ store, deviations = [] }: Props) {
         <Box sx={ROOT}>
             <Head title={`${store?.name} — Price Deviations`} />
 
-            {/* Header */}
-            <Stack direction="row" spacing={2} alignItems="center" mb={2} flexWrap="wrap">
-                <Button component={Link} href={route("store.show", store.id)}
-                    startIcon={<ArrowBackIcon />} variant="outlined" size="small">
-                    Back to Inventory
-                </Button>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="h5" fontWeight={800} noWrap>Price Deviations</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                        {store?.name} • discounts ending soon & reverted prices
-                    </Typography>
-                </Box>
-            </Stack>
+            {/* The store's name and the Stock tabs are above (SectionTabs). */}
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Discounts ending soon & reverted prices
+            </Typography>
 
             <Alert severity="info" icon={<TrendingDownIcon />} sx={{ mb: 2, borderRadius: 2 }}>
                 Variants below have an active <strong>discount_price</strong> that is about to expire.

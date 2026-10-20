@@ -17,25 +17,102 @@
     }
 }
 
-/* Seller app: scrolling down hides the bottom bar and the page's sticky top
-   bar; scrolling up brings them back. `useHideChromeOnScroll` toggles the
-   class on <html>. */
-.seller-bottom-nav,
+/* Bottom navs (seller, stock keeper, delivery, shop): scrolling down hides the
+   bar, scrolling up or reaching the end brings it back. `useBottomNav` sets
+   `--nav-h` (the space the bar takes, iPhone inset included) and toggles
+   `chrome-hidden` on <html>, which flips `--nav-shown` from 1 to 0.
+   Anything that has to clear the bar uses one of the classes below instead
+   of a fixed offset, so it follows the bar down to the edge and back. */
+:root {
+    --nav-h: 0px;
+    --nav-shown: 1;
+}
+
+.chrome-hidden {
+    --nav-shown: 0;
+}
+
+.app-bottom-nav,
 .seller-shell main .sticky.top-0 {
     transition: transform 0.25s ease;
 }
 
-.seller-chrome-hidden .seller-bottom-nav {
+.chrome-hidden .app-bottom-nav {
     transform: translateY(calc(100% + 16px));
 }
 
-.seller-chrome-hidden .seller-shell main .sticky.top-0 {
+/* The seller page's sticky top bar goes with it. */
+.chrome-hidden .seller-shell main .sticky.top-0 {
     transform: translateY(-100%);
 }
 
+@layer utilities {
+    /* Page bottom padding that clears the bar while it is up. */
+    .nav-pad {
+        padding-bottom: max(calc(var(--nav-h) * var(--nav-shown)), env(safe-area-inset-bottom));
+        transition: padding-bottom 0.25s ease;
+    }
+
+    /* A full-height page (no page scroll, panes scroll inside): the screen
+       minus the bar, growing into the bar's place while it is hidden. */
+    .nav-fill {
+        height: calc(100dvh - max(calc(var(--nav-h) * var(--nav-shown)), env(safe-area-inset-bottom)));
+        transition: height 0.25s ease;
+    }
+
+    /* A full-width bar (cart total, checkout): sits on the nav, and on the
+       very bottom edge while it is hidden, padding itself clear of the iPhone
+       home indicator there. Set the bar's own bottom padding with
+       `[--dock-pad:…]`, not `pb-*`. */
+    .dock-sheet {
+        bottom: calc(var(--nav-h) * var(--nav-shown));
+        padding-bottom: calc(var(--dock-pad, 0px) + env(safe-area-inset-bottom) * (1 - var(--nav-shown)));
+        transition: bottom 0.25s ease, padding-bottom 0.25s ease;
+    }
+
+    /* A floating pill, button or toast: `--dock-gap` (12px) above the nav,
+       or above the bottom edge while it is hidden. */
+    .dock-float {
+        bottom: calc(max(calc(var(--nav-h) * var(--nav-shown)), env(safe-area-inset-bottom)) + var(--dock-gap, 12px));
+        transition: bottom 0.25s ease;
+    }
+}
+
+/* The guide's round button rides above a page's docked bar (cart total,
+   checkout) instead of covering its main button. */
+:root:has(.dock-sheet) .guide-fab {
+    --dock-gap: 92px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-    .seller-bottom-nav,
-    .seller-shell main .sticky.top-0 {
+    .app-bottom-nav,
+    .seller-shell main .sticky.top-0,
+    .nav-pad,
+    .nav-fill,
+    .dock-sheet,
+    .dock-float {
+        transition: none;
+    }
+}
+
+/* Admin Store section: scrolling down slides the sticky tabs and the top bar
+   away; `useHideChromeOnScroll(…, "admin-chrome-hidden")` toggles the class. */
+.admin-section-tabs,
+.admin-topbar {
+    transition: transform 0.25s ease;
+}
+
+.admin-chrome-hidden .admin-topbar {
+    transform: translateY(-100%);
+}
+
+.admin-chrome-hidden .admin-section-tabs {
+    transform: translateY(calc(-100% - 64px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-section-tabs,
+    .admin-topbar {
         transition: none;
     }
 }

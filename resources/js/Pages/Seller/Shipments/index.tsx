@@ -265,7 +265,7 @@ export default function ReplenishIndex({ scheduled_transfers = [], locations }: 
 
             {/* Selection bar. Clears rows from the view only — see `hidden`. */}
             {selectMode && (
-                <div className="fixed inset-x-0 bottom-[96px] z-40 mx-auto max-w-[480px] px-4">
+                <div className="dock-float fixed inset-x-0 z-40 mx-auto max-w-[480px] px-4">
                     <div className="flex items-center justify-between rounded-[999px] border border-outline-variant bg-surface-container-lowest px-4 py-2.5 shadow-lg">
                         <span className="text-[12px] font-semibold text-on-surface-variant">
                             {selected.length} selected

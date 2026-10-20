@@ -1,9 +1,9 @@
 import AdminLayout from "@/Layouts/AppLayout";
-import type { StockLocation, VariantOption } from "@/types/stockkeeper";
+import ItemVariantPicker, { type PickerSources } from "@/Components/Shared/ItemVariantPicker";
+import type { StockLocation } from "@/types/stockkeeper";
 import { Head, Link, useForm } from "@inertiajs/react";
 import { calendarPrefill } from "@/Components/Calendar/calendarPrefill";
 import {
-    Autocomplete,
     Box,
     Button,
     MenuItem,
@@ -16,9 +16,13 @@ import React from "react";
 
 interface Props {
     locations?: StockLocation[];
-    variants?: VariantOption[];
     couriers?: Array<{ id: number; name: string }>;
 }
+
+const ADMIN_PICKER: PickerSources = {
+    itemOptionsUrl: route("admin.inventory.item_options"),
+    variantOptionsUrl: (id) => route("admin.inventory.items.variant_options", id),
+};
 
 const KIND_LABEL: Record<string, string> = {
     store: "whole store",
@@ -35,7 +39,7 @@ const pairOf = (location: StockLocation): string => `${location.type}#${location
  * sites a courier carries it — pick one now or let Delivery claim it. Stock
  * leaving a Main Hub is a shipment, and the form says so if one is chosen.
  */
-export default function TransferCreate({ locations = [], variants = [], couriers = [] }: Props): React.ReactElement {
+export default function TransferCreate({ locations = [], couriers = [] }: Props): React.ReactElement {
     const { data, setData, post, processing, errors, transform } = useForm<{
         item_variant_id: number | "";
         from: string;
@@ -82,13 +86,12 @@ export default function TransferCreate({ locations = [], variants = [], couriers
                             post(route("admin.inventory.transfers.store"));
                         }}
                     >
-                        <Autocomplete
-                            options={variants}
-                            getOptionLabel={(option) => option.label}
-                            onChange={(_event, value) => setData("item_variant_id", value ? value.id : "")}
-                            renderInput={(params) => (
-                                <TextField {...params} label="Product variant" error={Boolean(errors.item_variant_id)} helperText={errors.item_variant_id} />
-                            )}
+                        <ItemVariantPicker
+                            open
+                            value={data.item_variant_id}
+                            onChange={(id) => setData("item_variant_id", id)}
+                            error={errors.item_variant_id}
+                            sources={ADMIN_PICKER}
                         />
                         <TextField
                             select

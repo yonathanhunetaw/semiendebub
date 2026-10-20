@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, router } from "@inertiajs/react";
 import PartyDetailModal from "@/Components/Seller/PartyDetailModal";
@@ -51,8 +51,8 @@ interface Props extends PartyGateProps {
     locations?: { origins: LocationOption[]; destinations: LocationOption[] };
     origin_location_id?: number | null;
     destination_location_id?: number | null;
-    /** SKUs that may go on the manifest. */
-    variants: VariantOption[];
+    /** The stock location a manifest is picked from: the Add Items sheet lists only what it holds. */
+    origin_leaf_id: number;
     /** Other open runs from this origin, for the Move Item sheet. */
     move_targets: MoveTarget[];
     /** The driver, once the fleet party has taken the run. */
@@ -229,9 +229,14 @@ function EditRouteSheet({ open, origins, destinations, originId, destId, submitt
 /* ----------------------------------------------------------
  | Add Items Bottom Sheet
  |----------------------------------------------------------*/
-function AddItemsSheet({ open, variants, existingIds, submitting, onClose, onAdd }: {
+interface PickerItem {
+    id: number;
+    name: string;
+}
+
+function AddItemsSheet({ open, locationId, existingIds, submitting, onClose, onAdd }: {
     open: boolean;
-    variants: VariantOption[];
+    locationId: number;
     existingIds: number[];
     submitting: boolean;
     onClose: () => void;
@@ -239,16 +244,52 @@ function AddItemsSheet({ open, variants, existingIds, submitting, onClose, onAdd
 }) {
     const [search, setSearch] = useState("");
     const [selected, setSelected] = useState<Record<number, { unit: string; quantity: number }>>({});
+    const [items, setItems] = useState<PickerItem[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [item, setItem] = useState<PickerItem | null>(null);
+    const [choices, setChoices] = useState<VariantOption[]>([]);
+    const [loadingChoices, setLoadingChoices] = useState(false);
 
-    const available = useMemo(() => {
-        const term = search.trim().toLowerCase();
+    // Step one: items the origin holds, searched on the server as you type.
+    useEffect(() => {
+        if (!open || item) return;
+        let cancelled = false;
+        const handle = window.setTimeout(async () => {
+            setSearching(true);
+            try {
+                const response = await fetch(`${route("seller.shipments.item_options")}?q=${encodeURIComponent(search)}&location=${locationId}`, { headers: { Accept: "application/json" } });
+                const payload = await response.json();
+                if (!cancelled) setItems(payload.items ?? []);
+            } catch {
+                if (!cancelled) setItems([]);
+            } finally {
+                if (!cancelled) setSearching(false);
+            }
+        }, 350);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(handle);
+        };
+    }, [search, open, item, locationId]);
 
-        return variants
-            .filter(v => !existingIds.includes(v.id))
-            .filter(v => term === ""
-                || v.label.toLowerCase().includes(term)
-                || (v.sku ?? "").toLowerCase().includes(term));
-    }, [variants, existingIds, search]);
+    // Step two: that item's SKUs the origin holds.
+    const chooseItem = async (next: PickerItem | null) => {
+        setItem(next);
+        setChoices([]);
+        if (!next) return;
+        setLoadingChoices(true);
+        try {
+            const response = await fetch(`${route("seller.shipments.items.variant_options", next.id)}?location=${locationId}`, { headers: { Accept: "application/json" } });
+            const payload = await response.json();
+            setChoices(payload.variants ?? []);
+        } catch {
+            setChoices([]);
+        } finally {
+            setLoadingChoices(false);
+        }
+    };
+
+    const available = choices.filter(v => !existingIds.includes(v.id));
 
     if (!open) return null;
 
@@ -286,28 +327,50 @@ function AddItemsSheet({ open, variants, existingIds, submitting, onClose, onAdd
             <div className="w-full max-w-[425px] bg-surface-container-lowest rounded-t-3xl p-5 pb-10 max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="w-10 h-1 bg-surface-container-high rounded-full mx-auto mb-4 shrink-0" />
                 <h3 className="text-[16px] font-bold text-on-surface mb-1 shrink-0">Add Items to Manifest</h3>
-                <p className="text-[11px] text-outline mb-3 shrink-0">Set a packaging unit and carton count for each SKU</p>
+                <p className="text-[11px] text-outline mb-3 shrink-0">Pick an item, then set a packaging unit and carton count for each SKU</p>
 
-                <div className="relative mb-3 shrink-0">
-                    <span className="material-symbols-outlined text-[16px] text-outline absolute left-3 top-1/2 -translate-y-1/2">search</span>
-                    <input
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Search product or SKU"
-                        className="w-full border border-outline-variant rounded-xl pl-9 pr-3 py-2.5 text-[13px] text-on-surface bg-surface-container-low focus:outline-none focus:border-primary"
-                    />
-                </div>
+                {item ? (
+                    <div className="mb-3 flex shrink-0 items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-low px-3 py-2.5">
+                        <button type="button" onClick={() => void chooseItem(null)} aria-label="Back to items" className="flex shrink-0 items-center text-primary">
+                            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+                        </button>
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-on-surface">{item.name}</span>
+                    </div>
+                ) : (
+                    <div className="relative mb-3 shrink-0">
+                        <span className="material-symbols-outlined text-[16px] text-outline absolute left-3 top-1/2 -translate-y-1/2">search</span>
+                        <input
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Search item, SKU or barcode"
+                            className="w-full border border-outline-variant rounded-xl pl-9 pr-3 py-2.5 text-[13px] text-on-surface bg-surface-container-low focus:outline-none focus:border-primary"
+                        />
+                    </div>
+                )}
 
                 <div className="overflow-y-auto flex-1 space-y-2 pr-1">
-                    {available.length === 0
-                        ? (
+                    {!item ? (
+                        searching && items.length === 0 ? (
+                            <p className="text-[13px] text-outline text-center py-6">Searching…</p>
+                        ) : items.length === 0 ? (
                             <p className="text-[13px] text-outline text-center py-6">
-                                {variants.length === 0
-                                    ? "No product variants are set up yet."
-                                    : search.trim() !== ""
-                                    ? "No SKU matches that search."
-                                    : "Every available SKU is already on the manifest."}
+                                {search.trim() !== "" ? "No item matches that search." : "The origin holds no stock to put on a manifest."}
                             </p>
+                        ) : (
+                            items.map(o => (
+                                <button key={o.id} type="button" onClick={() => void chooseItem(o)}
+                                    className="flex w-full items-center gap-2.5 rounded-xl border border-outline-variant/60 bg-surface-container-low p-3 text-left">
+                                    <ItemIcon icon="inventory" />
+                                    <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-on-surface">{o.name}</span>
+                                    <span className="material-symbols-outlined text-[18px] text-outline">chevron_right</span>
+                                </button>
+                            ))
+                        )
+                    ) : loadingChoices ? (
+                        <p className="text-[13px] text-outline text-center py-6">Loading SKUs…</p>
+                    ) : available.length === 0
+                        ? (
+                            <p className="text-[13px] text-outline text-center py-6">Every SKU of this item is already on the manifest.</p>
                         )
                         : available.map(variant => {
                             const line = selected[variant.id];
@@ -458,7 +521,7 @@ export default function SellerShipmentsIndex({
     transfer_id, reference, origin, destination,
     origin_location_id, destination_location_id, locations,
     distance_km, scheduled_run, cutoff_label, vehicles, manifest_items: items,
-    variants, move_targets, courier, can_edit_manifest,
+    origin_leaf_id, move_targets, courier, can_edit_manifest,
     replenishment = { suggestions: [], can_add: false, manifest_open: false },
     fleet = { vehicle_id: null, eligible_courier_ids: [], eligible_couriers: [] },
     vehicle_options = [], courier_options = [], handoff,
@@ -1177,8 +1240,8 @@ export default function SellerShipmentsIndex({
 
             </div>
 
-            {/* ── Fixed Bottom Actions Layer (Positioned ABOVE the SellerLayout Bottom Nav) ── */}
-            <div className="fixed left-0 right-0 z-40 bg-gradient-to-t from-surface-container-lowest via-surface-container-lowest/95 to-transparent pt-8 pb-3 px-4 pointer-events-none" style={{ bottom: "calc(85px + env(safe-area-inset-bottom, 0px))" }}>
+            {/* ── Fixed bottom actions: on the bottom nav, on the bottom edge while it hides ── */}
+            <div className="dock-sheet fixed left-0 right-0 z-40 bg-gradient-to-t from-surface-container-lowest via-surface-container-lowest/95 to-transparent pt-8 px-4 pointer-events-none [--dock-pad:0.75rem]">
                 <div className="max-w-[425px] mx-auto flex items-center justify-between gap-3 pointer-events-auto">
                     <div className="flex-1 bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-xl px-3 py-2 flex items-center justify-between gap-2 min-w-0 pointer-events-auto">
                         <div className="min-w-0">
@@ -1225,7 +1288,7 @@ export default function SellerShipmentsIndex({
             />
             <AddItemsSheet
                 open={addItemsOpen}
-                variants={variants}
+                locationId={origin_leaf_id}
                 existingIds={items.map(i => i.id)}
                 submitting={busy === "items"}
                 onClose={() => setAddItemsOpen(false)}

@@ -1,7 +1,6 @@
 import PaymentSplitEditor, { creditWithinLimit, legsBalanced, legsToParts } from "@/Components/Seller/PaymentSplitEditor";
 import SellerLayout from "@/Layouts/SellerLayout";
 import {
-    ABOVE_NAV,
     FULFILLMENT_LABELS,
     type PaymentLeg,
     type SellerOrder,
@@ -533,11 +532,8 @@ function ConfirmationForm({
                 </main>
             </div>
 
-            {/* ── Sticky action bar ── */}
-            <aside
-                className="fixed inset-x-0 z-40 mx-auto max-w-[480px] rounded-t-[16px] border-t border-outline-variant bg-surface-container-lowest p-3 shadow-[0_-4px_16px_rgb(var(--on-surface)/0.08)] dark:shadow-none"
-                style={{ bottom: ABOVE_NAV }}
-            >
+            {/* ── Sticky action bar: on the bottom nav, on the bottom edge while it hides ── */}
+            <aside className="dock-sheet fixed inset-x-0 z-40 mx-auto max-w-[480px] rounded-t-[16px] border-t border-outline-variant bg-surface-container-lowest px-3 pt-3 shadow-[0_-4px_16px_rgb(var(--on-surface)/0.08)] [--dock-pad:0.75rem] dark:shadow-none">
                 <div className="mx-auto flex max-w-md items-center justify-between gap-3">
                     <div>
                         <span className="block text-xs font-bold text-on-surface sm:inline">Total: </span>

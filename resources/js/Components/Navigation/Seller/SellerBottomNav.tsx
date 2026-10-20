@@ -1,5 +1,6 @@
 import { Link, usePage } from "@inertiajs/react";
 import React from "react";
+import useBottomNav from "@/hooks/useBottomNav";
 
 const navItems = [
     { value: "dashboard", label: "Store", icon: "storefront", href: () => route("seller.dashboard") },
@@ -30,15 +31,18 @@ interface SellerNavProps {
  * icon, bold label and an underline; the rest are `on-surface-variant`.
  * Carts carries a `primary` badge with how many items are in the seller's
  * open carts (quantities added up, not the number of carts). Positions
- * itself (fixed, centred on the 480px shell), so layouts just render it.
+ * itself (fixed, centred on the 480px shell), so layouts just render it;
+ * it hides while the user scrolls down (useBottomNav).
  */
 export default function SellerBottomNav(): React.ReactElement {
     const { url, props } = usePage<SellerNavProps>();
     const active = currentTab(url);
     const cartItems = props.seller?.cart_items ?? 0;
+    const ref = React.useRef<HTMLDivElement>(null);
+    useBottomNav(ref, 8);
 
     return (
-        <div className="seller-bottom-nav pointer-events-none fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[480px] px-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:max-w-full md:max-w-[1200px]">
+        <div ref={ref} className="app-bottom-nav pointer-events-none fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[480px] px-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:max-w-full md:max-w-[1200px]">
             <nav
                 aria-label="Seller navigation"
                 className="pointer-events-auto mx-auto flex max-w-[456px] items-center justify-between rounded-2xl border border-outline-variant/90 bg-surface-container-lowest/95 px-3 py-1.5 shadow-xl backdrop-blur-lg"

@@ -29,15 +29,21 @@ import {
     ShipmentTimeline,
     TransitionBar,
 } from "@/Components/Shipment/shipmentUi";
+import ItemVariantPicker, { type PickerSources } from "@/Components/Shared/ItemVariantPicker";
 import AdminLayout from "@/Layouts/AdminLayout";
 import type { AdminShipmentShowProps, Shipment } from "@/types/shipment";
+
+const ADMIN_PICKER: PickerSources = {
+    itemOptionsUrl: route("admin.inventory.item_options"),
+    variantOptionsUrl: (id) => route("admin.inventory.items.variant_options", id),
+};
 
 /**
  * Manifest builder and full stage control for one shipment.
  */
 export default function AdminShipmentShow({
     shipment,
-    variants,
+    origin_location_id,
     vehicle_options = [],
     courier_options = [],
     flash,
@@ -121,7 +127,7 @@ export default function AdminShipmentShow({
                             <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
                                 Add to manifest
                             </Typography>
-                            <AddLineForm shipment={shipment} variants={variants} />
+                            <AddLineForm shipment={shipment} originLocationId={origin_location_id} />
                         </ShipmentCard>
                     ) : null}
 
@@ -284,10 +290,10 @@ function FleetForm({
 
 function AddLineForm({
     shipment,
-    variants,
+    originLocationId,
 }: {
     shipment: Shipment;
-    variants: AdminShipmentShowProps["variants"];
+    originLocationId: number;
 }): React.ReactElement {
     const { data, setData, post, processing, errors, reset } = useForm({
         item_variant_id: "" as number | "",
@@ -308,19 +314,13 @@ function AddLineForm({
         <form onSubmit={submit}>
             <Grid container spacing={2}>
                 <Grid size={{ xs: 12, md: 5 }}>
-                    <Autocomplete
-                        options={variants}
-                        getOptionLabel={(o) => o.label}
-                        onChange={(_e, value) => setData("item_variant_id", value ? value.id : "")}
-                        renderInput={(params) => (
-                            <TextField
-                                {...params}
-                                label="SKU"
-                                size="small"
-                                error={Boolean(errors.item_variant_id)}
-                                helperText={errors.item_variant_id}
-                            />
-                        )}
+                    <ItemVariantPicker
+                        open
+                        value={data.item_variant_id}
+                        onChange={(id) => setData("item_variant_id", id)}
+                        error={errors.item_variant_id}
+                        locationId={originLocationId}
+                        sources={ADMIN_PICKER}
                     />
                 </Grid>
                 <Grid size={{ xs: 4, md: 2 }}>

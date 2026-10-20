@@ -15,6 +15,12 @@ interface VariantChoice {
     sku: string | null;
 }
 
+/** Where the two steps are fetched from; defaults to the stock keeper app's. */
+export interface PickerSources {
+    itemOptionsUrl: string;
+    variantOptionsUrl: (itemId: number) => string;
+}
+
 /**
  * Item first, then one of its SKUs, as when adding items to a shipment.
  * Items are searched on the server (the catalogue is too big to ship to the
@@ -26,13 +32,22 @@ export default function ItemVariantPicker({
     value,
     onChange,
     error,
+    sources,
+    locationId,
 }: {
     /** Search only while the surrounding sheet is open. */
     open: boolean;
     value: number | "";
     onChange: (variantId: number | "") => void;
     error?: string;
+    sources?: PickerSources;
+    /** Only items and SKUs this stock location holds. */
+    locationId?: number | null;
 }) {
+    const itemOptionsUrl = sources?.itemOptionsUrl ?? route("stock_keeper.inventory.item_options");
+    const variantOptionsUrl = sources?.variantOptionsUrl ?? ((id: number) => route("stock_keeper.inventory.items.variant_options", id));
+    const locationParam = locationId ? `&location=${locationId}` : "";
+
     const [query, setQuery] = React.useState("");
     const [options, setOptions] = React.useState<ItemOption[]>([]);
     const [searching, setSearching] = React.useState(false);
@@ -54,7 +69,7 @@ export default function ItemVariantPicker({
         const handle = window.setTimeout(async () => {
             setSearching(true);
             try {
-                const response = await fetch(`${route("stock_keeper.inventory.item_options")}?q=${encodeURIComponent(query)}`, { headers: { Accept: "application/json" } });
+                const response = await fetch(`${itemOptionsUrl}?q=${encodeURIComponent(query)}${locationParam}`, { headers: { Accept: "application/json" } });
                 const payload = await response.json();
                 if (!cancelled) setOptions(payload.items ?? []);
             } catch {
@@ -67,7 +82,7 @@ export default function ItemVariantPicker({
             cancelled = true;
             window.clearTimeout(handle);
         };
-    }, [query, open, item]);
+    }, [query, open, item, itemOptionsUrl, locationParam]);
 
     const chooseItem = async (next: ItemOption | null) => {
         setItem(next);
@@ -76,7 +91,7 @@ export default function ItemVariantPicker({
         if (!next) return;
         setLoadingChoices(true);
         try {
-            const response = await fetch(route("stock_keeper.inventory.items.variant_options", next.id), { headers: { Accept: "application/json" } });
+            const response = await fetch(`${variantOptionsUrl(next.id)}${locationId ? `?location=${locationId}` : ""}`, { headers: { Accept: "application/json" } });
             const payload = await response.json();
             const list: VariantChoice[] = payload.variants ?? [];
             setChoices(list);

@@ -8,6 +8,7 @@ import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
 import { Link, usePage, Head } from "@inertiajs/react";
 import { getRole, useRole } from "@/theme";
+import useBottomNav from "@/hooks/useBottomNav";
 
 /** Height of the nav bar itself, without the phone's safe area. */
 const NAV_HEIGHT = 64;
@@ -45,6 +46,10 @@ const actionSx = {
 export default function DeliveryLayout({ children }: { children: React.ReactNode }) {
     const { url } = usePage();
     const config = getRole(useRole());
+    // The bar hides while the user scrolls down; `nav-pad` and the `dock-*`
+    // classes follow it (app.css).
+    const navRef = React.useRef<HTMLDivElement>(null);
+    useBottomNav(navRef);
 
     const getActiveValue = () => {
         if (url.includes("/dashboard")) return 0;
@@ -57,9 +62,9 @@ export default function DeliveryLayout({ children }: { children: React.ReactNode
 
     return (
         <Box
+            className="nav-pad"
             sx={{
-                pb: `calc(${NAV_HEIGHT + 16}px + env(safe-area-inset-bottom, 0px))`,
-                minHeight: "100vh",
+                minHeight: "100dvh",
                 bgcolor: "background.default",
                 color: "text.primary",
             }}
@@ -68,13 +73,15 @@ export default function DeliveryLayout({ children }: { children: React.ReactNode
                 <title>{`${config.label} | Duka`}</title>
             </Head>
 
-            <Box component="main" sx={{ bgcolor: "background.default", minHeight: "100vh" }}>
+            <Box component="main" sx={{ bgcolor: "background.default" }}>
                 {children}
                 {/* The page's step in the guide (Components/Guide). */}
                 <GuideButton app="delivery" variant="fab" />
             </Box>
 
             <Paper
+                ref={navRef}
+                className="app-bottom-nav"
                 elevation={0}
                 sx={(theme) => ({
                     position: "fixed",
@@ -88,6 +95,9 @@ export default function DeliveryLayout({ children }: { children: React.ReactNode
                     borderTop: 1,
                     borderColor: "divider",
                     boxShadow: `0 -6px 24px ${alpha(theme.palette.common.black, 0.08)}`,
+                    // Paper's own transition would replace the slide in app.css.
+                    transition: "transform 0.25s ease",
+                    "@media (prefers-reduced-motion: reduce)": { transition: "none" },
                 })}
             >
                 <BottomNavigation

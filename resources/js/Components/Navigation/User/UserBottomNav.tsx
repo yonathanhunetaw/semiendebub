@@ -2,6 +2,7 @@ import { Link, router, usePage } from "@inertiajs/react";
 import React from "react";
 
 import { STOREFRONT_BRAND } from "@/Components/Storefront/storefrontConstants";
+import useBottomNav from "@/hooks/useBottomNav";
 
 export interface UserBottomNavProps {
     /** Badge count on the cart tab. */
@@ -25,8 +26,9 @@ type TabKey = "home" | "discover" | "account";
  * Hidden from `md` up. A bottom tab rail is a phone affordance, and on a wide
  * screen it strands five tiny targets along the bottom edge while the masthead
  * sits empty — so the same destinations move into the "All Categories"
- * hamburger (StorefrontMenuDrawer) there. Anything else pinned to the bottom
- * offsets by ABOVE_USER_BOTTOM_NAV while this is on screen.
+ * hamburger (StorefrontMenuDrawer) there. It hides while the user scrolls
+ * down; anything else pinned to the bottom clears it with the `dock-*`
+ * classes (useBottomNav).
  */
 export default function UserBottomNav({
     cartCount = 0,
@@ -44,11 +46,14 @@ export default function UserBottomNav({
         if (path.startsWith("/shop") || path.startsWith("/dashboard")) return "home";
         return "home";
     }, [path, query]);
+    const ref = React.useRef<HTMLElement>(null);
+    useBottomNav(ref);
 
     return (
         <nav
+            ref={ref}
             aria-label="Main"
-            className="fixed bottom-0 left-0 right-0 z-40 border-t border-outline-variant bg-surface-container-lowest md:hidden"
+            className="app-bottom-nav fixed bottom-0 left-0 right-0 z-40 border-t border-outline-variant bg-surface-container-lowest md:hidden"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
             <div className="mx-auto flex max-w-2xl items-stretch">

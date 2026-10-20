@@ -104,20 +104,3 @@ export function hasImage(url: string | null | undefined): boolean {
     return typeof url === "string" && url.trim().length > 0;
 }
 
-/**
- * Height of UserBottomNav, in pixels.
- *
- * The buyer bottom bar is `fixed bottom-0`, and so is the product page's
- * add-to-cart bar. They were both pinned to the same edge with the nav on the
- * higher z-index, so the nav sat on top of "Add to Cart" and the button could
- * not be seen or pressed. Anything else anchored to the bottom offsets by this
- * while the nav is on screen (phones and tablets; it is hidden from `md` up).
- *
- * Measured from the rendered bar rather than added up from its padding: the
- * Material Symbols glyphs make each icon span taller than its nominal 24px, so
- * the arithmetic figure (59) left the bar's last few pixels under the nav.
- */
-export const USER_BOTTOM_NAV_HEIGHT = 66;
-
-/** Bottom offset for a fixed bar that must clear the buyer nav and the home indicator. */
-export const ABOVE_USER_BOTTOM_NAV = `calc(${USER_BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px))`;

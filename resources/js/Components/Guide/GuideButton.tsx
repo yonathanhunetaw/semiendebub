@@ -22,8 +22,9 @@ export default function GuideButton({ app, variant = "chip" }: { app: GuideApp; 
     if (variant === "fab") {
         return (
             <Tooltip title="How this works" placement="left">
-                <Fab component={Link} href={href} size="small" color="primary" aria-label="How this works"
-                    sx={{ position: "fixed", right: 16, bottom: "calc(104px + env(safe-area-inset-bottom))", zIndex: (theme) => theme.zIndex.appBar - 1, boxShadow: 4 }}>
+                {/* `dock-float` keeps it above the bottom nav, and follows the nav down when it hides (app.css). */}
+                <Fab component={Link} href={href} size="small" color="primary" aria-label="How this works" className="dock-float guide-fab"
+                    sx={{ position: "fixed", right: 16, zIndex: (theme) => theme.zIndex.appBar - 1, boxShadow: 4, "--dock-gap": "14px", transition: "bottom 0.25s ease" }}>
                     <HelpOutlineRounded />
                 </Fab>
             </Tooltip>

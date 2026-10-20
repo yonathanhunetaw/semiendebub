@@ -2,7 +2,7 @@ import { Head, Link, router, useForm } from "@inertiajs/react";
 import React from "react";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import { EmptyState, StatusPill, type Tone } from "@/Components/Shared/ui";
-import ItemVariantPicker from "@/Components/StockKeeper/ItemVariantPicker";
+import ItemVariantPicker from "@/Components/Shared/ItemVariantPicker";
 import TransferReceiveSheet from "@/Components/StockKeeper/TransferReceiveSheet";
 import { calendarPrefill, dayLabel } from "@/Components/Calendar/calendarPrefill";
 import { KIND_LABEL, SkButton, SkCard, SkChips, SkField, SkHeader, SkPager, SkSheet, SkStats, fmt, inputClass, when } from "@/Components/StockKeeper/skKit";

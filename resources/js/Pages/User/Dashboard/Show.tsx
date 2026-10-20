@@ -12,7 +12,6 @@ import VariantSelector, {
     type VariantSelection,
 } from "@/Components/Storefront/VariantSelector";
 import {
-    ABOVE_USER_BOTTOM_NAV,
     STOCK_TONES,
     STOREFRONT_BG,
     STOREFRONT_BRAND,
@@ -399,14 +398,11 @@ export default function StorefrontItemShow({
                   It sits *above* UserBottomNav rather than beside it. Both were
                   pinned to `bottom-0` with the nav on the higher z-index, so on
                   a phone the nav covered this bar completely and "Add to Cart"
-                  could not be seen, let alone pressed. The nav is hidden from
-                  `md` up, so the offset is dropped there and the bar returns to
-                  the foot of the window.
+                  could not be seen, let alone pressed. `dock-sheet` (app.css)
+                  follows the nav: down to the foot of the window while it hides
+                  on scroll, and there for good from `md` up, where it is gone.
                 */}
-                <div
-                    className="fixed inset-x-0 z-30 border-t border-outline-variant bg-surface-container-lowest/95 backdrop-blur md:!bottom-0"
-                    style={{ bottom: ABOVE_USER_BOTTOM_NAV }}
-                >
+                <div className="dock-sheet fixed inset-x-0 z-30 border-t border-outline-variant bg-surface-container-lowest/95 backdrop-blur">
                     <div
                         className={`${STOREFRONT_SHELL} flex items-center justify-between gap-3 py-3`}
                     >

@@ -1,8 +1,7 @@
 import FlashToast from "@/Components/Shared/FlashToast";
 import GuideButton from "@/Components/Guide/GuideButton";
 import SellerBottomNav from "@/Components/Navigation/Seller/SellerBottomNav";
-import useHideChromeOnScroll from "@/hooks/useHideChromeOnScroll";
-import { Head, usePage } from "@inertiajs/react";
+import { Head } from "@inertiajs/react";
 import { Box, CssBaseline } from "@mui/material";
 import React from "react";
 import { FONT_SANS } from "@/theme";
@@ -12,14 +11,11 @@ export default function SellerLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { url } = usePage();
-    useHideChromeOnScroll(url);
-
     return (
         <Box
             className="seller-shell"
             sx={{
-                minHeight: "100vh",
+                minHeight: "100dvh",
                 // The `background` token for the current mode.
                 bgcolor: "background.default",
                 color: "text.primary",
@@ -33,14 +29,15 @@ export default function SellerLayout({
                 <title>Seller | Duka</title>
             </Head>
 
+            {/* `nav-pad` clears the bottom nav while it is up (app.css). */}
             <Box
+                className="nav-pad"
                 sx={{
                     width: "100%",
                     maxWidth: { xs: "480px", sm: "100%", md: "1200px" },
                     mx: "auto",
-                    minHeight: "100vh",
+                    minHeight: "100dvh",
                     position: "relative",
-                    pb: "calc(96px + env(safe-area-inset-bottom))",
                     // Removed the hardcoded light rgba background here
                     bgcolor: "transparent",
                     // Theme elevation instead of a hand-written black shadow.
@@ -50,10 +47,7 @@ export default function SellerLayout({
                 <FlashToast />
 
 
-                <Box
-                    component="main"
-                    sx={{ minHeight: "100vh", width: "100%" }}
-                >
+                <Box component="main" sx={{ width: "100%" }}>
                     {children}
                 {/* The page's step in the guide (Components/Guide). */}
                 <GuideButton app="seller" variant="fab" />

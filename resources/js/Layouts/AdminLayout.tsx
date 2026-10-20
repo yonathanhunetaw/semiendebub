@@ -125,7 +125,7 @@ export default function AdminLayout({ children, breadcrumbs = false, flashToast 
                 }}
             >
                 {flashToast && <FlashToast bottomClass="bottom-6" />}
-                <Toolbar sx={{ minHeight: { xs: 64 } }} />
+                <Toolbar sx={{ minHeight: { xs: 52, md: 64 } }} />
                 {/* One narrow gutter on a phone; pages add their own padding. */}
                 <Box ref={contentRef} sx={(t) => ({ px: { xs: 1, sm: 2 }, py: { xs: 1, sm: 1.5 }, flexGrow: 1, minWidth: 0, ...stackedTableSx(t) })}>
                     {breadcrumbs && <PathBreadcrumbs />}

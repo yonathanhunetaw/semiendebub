@@ -249,19 +249,10 @@ export default function Replenish({ store, transfers = [] }: Props) {
         <Box sx={ROOT}>
             <Head title={`${store?.name} — Replenishment`} />
 
-            {/* Header */}
-            <Stack direction="row" spacing={2} alignItems="center" mb={2} flexWrap="wrap">
-                <Button component={Link} href={route("store.show", store.id)}
-                    startIcon={<ArrowBackIcon />} variant="outlined" size="small">
-                    Back to Inventory
-                </Button>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="h5" fontWeight={800} noWrap>Replenishment</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                        {store?.name} • transfers, auto-requests & history
-                    </Typography>
-                </Box>
-            </Stack>
+            {/* The store's name and the Stock tabs are above (SectionTabs). */}
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Transfers, auto-requests & history
+            </Typography>
 
             {/* KPI strip */}
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", sm: "1fr 1fr 1fr 1fr" }, gap: 1, mb: 2 }}>

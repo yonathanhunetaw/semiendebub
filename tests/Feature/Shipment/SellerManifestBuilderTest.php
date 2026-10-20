@@ -179,12 +179,12 @@ class SellerManifestBuilderTest extends TestCase
             'The origin picker must offer real stores, not three demo slugs.'
         );
 
-        // The Add Items sheet picks from real variants.
-        $this->assertNotEmpty($props['variants']);
-        $this->assertSame(
-            [$this->variant->id, $this->otherVariant->id],
-            array_column($props['variants'], 'id'),
-        );
+        // The Add Items sheet picks item → SKU from what the origin holds.
+        $this->assertIsInt($props['origin_leaf_id']);
+        $skus = $this->asSeller()
+            ->getJson(route('seller.shipments.items.variant_options', [$this->variant->item_id, 'location' => $props['origin_leaf_id']]))
+            ->assertOk()->json('variants');
+        $this->assertContains($this->variant->id, array_column($skus, 'id'));
 
         // The gate reflects the ticks the other roles actually recorded.
         $this->assertSame('accepted', $props['agreements']['fleet']['status']);

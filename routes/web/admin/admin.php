@@ -247,6 +247,10 @@ Route::domain("admin.{$baseDomain}")
                 // Replenishment proposals (the approvals queue) are registered
                 // above, in the group store managers may enter too.
 
+                // Item → variant picker (JSON), shared by transfers and shipment lines
+                Route::get('/item-options', [\App\Http\Controllers\Shared\ItemPickerController::class, 'items'])->name('item_options');
+                Route::get('/items/{item}/variant-options', [\App\Http\Controllers\Shared\ItemPickerController::class, 'variants'])->name('items.variant_options');
+
                 // Transfers
                 Route::get('/transfers', [TransferController::class, 'index'])->name('transfers');
                 Route::get('/transfers/create', [TransferController::class, 'create'])->name('transfers.create');

@@ -22,12 +22,22 @@ export interface AdminSectionTab {
     allStoresOnly?: boolean;
     /** Who sees it; every admin when unset. */
     roles?: string[];
+    /** Which of the section's `groups` it sits under (sections with groups only). */
+    group?: string;
+}
+
+/** A first-level tab that opens a handful of related second-level tabs. */
+export interface AdminSectionGroup {
+    key: string;
+    label: string;
 }
 
 export interface AdminSection {
     key: string;
     /** A heading above the tabs; `store` shows the active store's name. */
     title?: "store";
+    /** When set, tabs show as groups (level 1) with their own tabs under them (level 2). */
+    groups?: AdminSectionGroup[];
     tabs: AdminSectionTab[];
 }
 
@@ -51,17 +61,23 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     {
         key: "store",
         title: "store",
+        groups: [
+            { key: "stock", label: "Stock" },
+            { key: "movement", label: "Movement" },
+            { key: "places", label: "Places" },
+            { key: "approvals", label: "Approvals" },
+        ],
         tabs: [
-            { label: "Items", route: "store.show", match: [/^\/stores\/\d+$/, /^\/stores\/\d+\/inventory\/items\//], storeParam: true },
-            { label: "Overview", route: "inventory.index", match: [/^\/inventory$/], allStoresOnly: true },
-            { label: "Replenish", route: "store.replenish", match: [/^\/stores\/\d+\/inventory\/replenish$/], storeParam: true },
-            { label: "Price deviations", route: "store.deviations", match: [/^\/stores\/\d+\/inventory\/deviations$/], storeParam: true },
-            { label: "Locations", route: "admin.inventory.stock-locations.index", match: ["/inventory/locations"] },
-            { label: "Transfers", route: "admin.inventory.transfers", match: ["/inventory/transfers"] },
-            { label: "Capacity", route: "admin.inventory.capacity.index", match: ["/inventory/capacity"] },
-            { label: "Approvals", route: "admin.inventory.replenishment.index", match: ["/inventory/replenishment"], roles: ["admin", "store_manager"] },
-            { label: "Counts", route: "admin.inventory.counts.index", match: ["/inventory/counts"], roles: ["admin", "store_manager"] },
-            { label: "Shipments", route: "admin.inventory.shipments.index", match: ["/inventory/shipments"] },
+            { label: "Items", route: "store.show", group: "stock", match: [/^\/stores\/\d+$/, /^\/stores\/\d+\/inventory\/items\//], storeParam: true },
+            { label: "Overview", route: "inventory.index", group: "stock", match: [/^\/inventory$/], allStoresOnly: true },
+            { label: "Replenish", route: "store.replenish", group: "stock", match: [/^\/stores\/\d+\/inventory\/replenish$/], storeParam: true },
+            { label: "Price deviations", route: "store.deviations", group: "stock", match: [/^\/stores\/\d+\/inventory\/deviations$/], storeParam: true },
+            { label: "Locations", route: "admin.inventory.stock-locations.index", group: "places", match: ["/inventory/locations"] },
+            { label: "Transfers", route: "admin.inventory.transfers", group: "movement", match: ["/inventory/transfers"] },
+            { label: "Capacity", route: "admin.inventory.capacity.index", group: "places", match: ["/inventory/capacity"] },
+            { label: "Approvals", route: "admin.inventory.replenishment.index", group: "approvals", match: ["/inventory/replenishment"], roles: ["admin", "store_manager"] },
+            { label: "Counts", route: "admin.inventory.counts.index", group: "approvals", match: ["/inventory/counts"], roles: ["admin", "store_manager"] },
+            { label: "Shipments", route: "admin.inventory.shipments.index", group: "movement", match: ["/inventory/shipments"] },
         ],
     },
     {
@@ -114,4 +130,9 @@ export function sectionTabHref(tab: AdminSectionTab, activeStoreId: number | "al
     } catch {
         return "#";
     }
+}
+
+/** The groups that have at least one of the visible tabs, in the section's order. */
+export function visibleGroups(section: AdminSection, tabs: AdminSectionTab[]): AdminSectionGroup[] {
+    return (section.groups ?? []).filter((group) => tabs.some((tab) => tab.group === group.key));
 }

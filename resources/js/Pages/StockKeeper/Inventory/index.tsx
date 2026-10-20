@@ -2,7 +2,7 @@ import { Head, Link, router, useForm } from "@inertiajs/react";
 import React from "react";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import { EmptyState, StatusPill } from "@/Components/Shared/ui";
-import ItemVariantPicker from "@/Components/StockKeeper/ItemVariantPicker";
+import ItemVariantPicker from "@/Components/Shared/ItemVariantPicker";
 import { SkButton, SkCard, SkField, SkHeader, SkPager, SkSearch, SkSheet, SkStats, STOCK_STATUS, fmt, inputClass, plural, when } from "@/Components/StockKeeper/skKit";
 import type { ItemStockRow, ItemVariantStockRow, StockKeeperInventoryProps, StockRow } from "@/types/stockkeeper";
 

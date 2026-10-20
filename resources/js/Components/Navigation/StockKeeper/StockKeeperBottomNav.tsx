@@ -1,10 +1,12 @@
 import { Link, usePage } from "@inertiajs/react";
 import React from "react";
+import useBottomNav from "@/hooks/useBottomNav";
 import { SK_BOTTOM_TABS, SK_NAV, SK_NAV_ITEMS, activeSkItem } from "./stockKeeperNav";
 
 /**
  * Phones and tablets (below lg): a floating bottom bar with four sections and
- * a "More" sheet listing every section, as in the seller app.
+ * a "More" sheet listing every section, as in the seller app. Hides while
+ * the user scrolls down (useBottomNav).
  */
 export default function StockKeeperBottomNav(): React.ReactElement {
     const { url } = usePage();
@@ -12,6 +14,8 @@ export default function StockKeeperBottomNav(): React.ReactElement {
     const active = activeSkItem(url);
     const tabs = SK_BOTTOM_TABS.map((key) => SK_NAV_ITEMS.find((item) => item.key === key)!);
     const moreActive = active !== undefined && !(SK_BOTTOM_TABS as readonly string[]).includes(active.key);
+    const ref = React.useRef<HTMLDivElement>(null);
+    useBottomNav(ref, 8);
 
     // A visit closes the sheet.
     React.useEffect(() => setMoreOpen(false), [url]);
@@ -61,7 +65,7 @@ export default function StockKeeperBottomNav(): React.ReactElement {
                 </div>
             )}
 
-            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-3 pb-[calc(12px+env(safe-area-inset-bottom))] lg:hidden">
+            <div ref={ref} className="app-bottom-nav pointer-events-none fixed inset-x-0 bottom-0 z-50 px-3 pb-[calc(12px+env(safe-area-inset-bottom))] lg:hidden">
                 <nav
                     aria-label="Stock keeper navigation"
                     className="pointer-events-auto mx-auto flex max-w-[520px] items-center justify-between gap-1 rounded-2xl border border-outline-variant/90 bg-surface-container-lowest/95 px-2 py-1.5 shadow-xl backdrop-blur-lg"

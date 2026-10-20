@@ -52,6 +52,7 @@ export default function AdminTopBar({ onMenuClick, current }: { onMenuClick: () 
 
     return (
         <AppBar
+            className="admin-topbar"
             position="fixed"
             color="inherit"
             elevation={0}
@@ -66,7 +67,7 @@ export default function AdminTopBar({ onMenuClick, current }: { onMenuClick: () 
                 borderColor: "divider",
             })}
         >
-            <Toolbar sx={{ minHeight: { xs: 64 }, gap: { xs: 1, sm: 1.5 }, px: { xs: 1, sm: 2 } }}>
+            <Toolbar sx={{ minHeight: { xs: 52, md: 64 }, gap: { xs: 1, sm: 1.5 }, px: { xs: 1, sm: 2 } }}>
                 <IconButton onClick={onMenuClick} edge="start" aria-label="Open navigation" sx={{ display: { lg: "none" } }}>
                     <MenuIcon />
                 </IconButton>

@@ -139,6 +139,8 @@ Route::domain("seller.$baseDomain")
             Route::get('/settings', [SellerSettingsController::class, 'index'])->name('settings.index');
             Route::patch('/settings', [SellerSettingsController::class, 'update'])->name('settings.update');
             // ── Shipments: 3-phase UI over the shared shipments domain ──
+            Route::get('/shipments/item-options', [\App\Http\Controllers\Shared\ItemPickerController::class, 'items'])->name('shipments.item_options');
+            Route::get('/shipments/items/{item}/variant-options', [\App\Http\Controllers\Shared\ItemPickerController::class, 'variants'])->name('shipments.items.variant_options');
             Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
             Route::post('/shipments', [ShipmentController::class, 'store'])->name('shipments.store');
             Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->name('shipments.show');

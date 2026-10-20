@@ -65,7 +65,9 @@ export default function Index({
     const tiles = subcategories.filter((s) => matches(s.category_name));
 
     return (
-        <div className="flex h-[100dvh] flex-col">
+        // `nav-fill`: the screen minus the bottom nav, growing into its place
+        // while it hides (app.css); the two panes scroll inside.
+        <div className="nav-fill flex flex-col">
             <Head title="Categories" />
 
             {/* ========== MASTER / DETAIL ========== */}
@@ -101,8 +103,7 @@ export default function Index({
                             </Link>
                         );
                     })}
-                    {/* Clears the floating bottom nav */}
-                    <div className="h-24 shrink-0" />
+                    <div className="h-3 shrink-0" />
                 </aside>
 
                 {/* Selected department */}
@@ -218,8 +219,6 @@ export default function Index({
                         <p className="pt-8 text-center text-sm text-on-surface-variant">Select a department</p>
                     )}
 
-                    {/* Clears the floating bottom nav */}
-                    <div className="h-24" />
                 </main>
             </div>
 

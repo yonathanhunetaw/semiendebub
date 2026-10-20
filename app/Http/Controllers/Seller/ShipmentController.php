@@ -126,9 +126,9 @@ class ShipmentController extends Controller
                 'locations' => $this->locationOptions(),
                 'origin_location_id' => $shipment->origin_stock_location_id !== null ? (int) $shipment->origin_stock_location_id : null,
                 'destination_location_id' => $shipment->destination_stock_location_id !== null ? (int) $shipment->destination_stock_location_id : null,
-                // The SKUs the Add Items sheet may put on the manifest.
-                // What the origin holds: that is all a manifest from it can carry.
-                'variants' => $this->stock->variantOptions(atLocationId: $this->workflow->originLeaf($shipment)->id)->all(),
+                // The Add Items sheet picks item → SKU from what the origin holds:
+                // that is all a manifest from it can carry.
+                'origin_leaf_id' => (int) $this->workflow->originLeaf($shipment)->id,
                 // Other open runs from the same dock, for the Move Item sheet.
                 'move_targets' => $this->workflow->moveTargets($shipment, Auth::user()),
                 'courier' => $this->courierProp($shipment),

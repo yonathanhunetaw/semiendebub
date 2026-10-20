@@ -59,21 +59,17 @@ export default function AccountLayout({
                 <title>Account</title>
             </Head>
 
+            {/* `nav-pad` clears whichever bar is mounted while it is up
+                (app.css); the buyer bar is hidden from `md` up, so it reserves
+                nothing there. */}
             <Box
+                className="nav-pad"
                 sx={{
                     width: "100%",
                     maxWidth: { xs: "480px", sm: "100%", md: "1200px" },
                     mx: "auto",
-                    minHeight: "100vh",
+                    minHeight: "100dvh",
                     position: "relative",
-                    // Clears whichever bar is mounted. The buyer bar is hidden
-                    // from `md` up, so the reserve is dropped there too.
-                    pb: isSellerWorkspace
-                        ? "calc(96px + env(safe-area-inset-bottom))"
-                        : {
-                              xs: "calc(88px + env(safe-area-inset-bottom))",
-                              md: 4,
-                          },
                     bgcolor: "transparent",
                     boxShadow: { md: theme.palette.mode === "dark" ? "none" : "0 28px 80px rgb(var(--on-surface) / 0.12)" },
                 }}
@@ -81,7 +77,7 @@ export default function AccountLayout({
                 <FlashToast />
 
 
-                <Box component="main" sx={{ minHeight: "100vh", width: "100%" }}>
+                <Box component="main" sx={{ width: "100%" }}>
                     {children}
                 </Box>
             </Box>

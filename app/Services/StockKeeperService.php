@@ -512,9 +512,14 @@ class StockKeeperService
      *
      * @return Collection<int, array{id: int, name: string, variant_count: int}>
      */
-    public function itemOptions(?string $search = null, int $limit = 30): Collection
+    public function itemOptions(?string $search = null, int $limit = 30, ?int $atLocationId = null): Collection
     {
         $query = Item::query()->withCount('variants')->orderBy('product_name');
+
+        // Only what a location holds (a manifest can carry nothing else).
+        if ($atLocationId !== null) {
+            $query->whereHas('variants', fn (Builder $vq) => $vq->whereIn('id', $this->stockedVariantIds($atLocationId)));
+        }
 
         if ($search !== null && $search !== '') {
             $term = '%' . $search . '%';
@@ -542,11 +547,12 @@ class StockKeeperService
      *
      * @return Collection<int, array{id: int, label: string, sku: string|null}>
      */
-    public function variantOptionsForItem(int $itemId): Collection
+    public function variantOptionsForItem(int $itemId, ?int $atLocationId = null): Collection
     {
         return ItemVariant::query()
             ->with(['itemColor', 'itemSize'])
             ->where('item_id', $itemId)
+            ->when($atLocationId !== null, fn (Builder $q) => $q->whereIn('id', $this->stockedVariantIds($atLocationId)))
             ->orderBy('id')
             ->get()
             ->map(fn (ItemVariant $variant) => [
@@ -555,6 +561,17 @@ class StockKeeperService
                 'sku' => $variant->sku,
             ])
             ->values();
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, int>
+     */
+    private function stockedVariantIds(int $locationId): \Illuminate\Support\Collection
+    {
+        return ItemStock::query()
+            ->where('stock_location_id', $locationId)
+            ->where('quantity', '>', 0)
+            ->pluck('item_variant_id');
     }
 
     /**

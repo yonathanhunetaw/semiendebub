@@ -3,7 +3,6 @@ import PickPackPanel from "@/Components/Seller/Orders/PickPackPanel";
 import type { PickPackPlan } from "@/types/sourcing";
 import SellerLayout from "@/Layouts/SellerLayout";
 import {
-    ABOVE_NAV,
     type OrderStage,
     STAGE_META,
     type SellerOrder,
@@ -489,12 +488,9 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0, plans = {}
                 </main>
             </div>
 
-            {/* Selection action bar, above the bottom nav. */}
+            {/* Selection action bar, above the bottom nav (or the edge while it hides). */}
             {selectMode ? (
-                <div
-                    className="fixed inset-x-0 z-40 mx-auto max-w-[480px] px-4"
-                    style={{ bottom: ABOVE_NAV }}
-                >
+                <div className="dock-float fixed inset-x-0 z-40 mx-auto max-w-[480px] px-4">
                     <div className="flex items-center justify-between rounded-[999px] border border-outline-variant bg-surface-container-lowest px-4 py-2.5 shadow-lg">
                         <span className="text-[12px] font-semibold text-on-surface-variant">
                             {selected.length} selected
