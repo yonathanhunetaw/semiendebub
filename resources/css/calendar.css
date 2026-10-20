@@ -11,13 +11,15 @@
 }
 
 /* The rest of the screen below the header: minus the bottom nav while it is
-   up (`--nav-h`, `--nav-shown` from app.css) and the page's 12px foot, so the
-   page itself never scrolls and nothing is left empty under the calendar.
+   up and the page's 12px foot, growing into the nav's place while it hides.
+   As with `.nav-fill` (app.css), the negative margin keeps the page itself
+   one screen tall, so it never scrolls and the nav never bounces.
    `--cal-top` is measured by the page (useFillToBottom). */
 .duka-calendar-fill {
-    height: calc(100dvh - var(--cal-top, 190px) - max(calc(var(--nav-h) * var(--nav-shown)), env(safe-area-inset-bottom)) - 12px);
+    height: calc(100dvh - var(--cal-top, 190px) - var(--nav-clear-now) - 12px);
+    margin-bottom: calc(var(--nav-clear-now) - var(--nav-clear));
     min-height: 420px;
-    transition: height 0.25s ease;
+    transition: height 0.25s ease, margin-bottom 0.25s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {

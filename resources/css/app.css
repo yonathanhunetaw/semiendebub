@@ -18,14 +18,18 @@
 }
 
 /* Bottom navs (seller, stock keeper, delivery, shop): scrolling down hides the
-   bar, scrolling up or reaching the end brings it back. `useBottomNav` sets
-   `--nav-h` (the space the bar takes, iPhone inset included) and toggles
-   `chrome-hidden` on <html>, which flips `--nav-shown` from 1 to 0.
+   bar, scrolling up brings it back. `useBottomNav` sets `--nav-h` (the space
+   the bar takes, iPhone inset included) and toggles `chrome-hidden` on <html>,
+   which flips `--nav-shown` from 1 to 0.
    Anything that has to clear the bar uses one of the classes below instead
-   of a fixed offset, so it follows the bar down to the edge and back. */
+   of a fixed offset. Hiding must never change the page's height: a page that
+   shrinks under the finger reads as scrolling back and the bar bounces. */
 :root {
     --nav-h: 0px;
     --nav-shown: 1;
+    /* The room the bar takes while it is up, and right now. */
+    --nav-clear: max(var(--nav-h), env(safe-area-inset-bottom));
+    --nav-clear-now: max(calc(var(--nav-h) * var(--nav-shown)), env(safe-area-inset-bottom));
 }
 
 .chrome-hidden {
@@ -47,17 +51,20 @@
 }
 
 @layer utilities {
-    /* Page bottom padding that clears the bar while it is up. */
+    /* Layout bottom padding that clears the bar. Fixed: it does not follow
+       the bar, so the page keeps its height (see above). */
     .nav-pad {
-        padding-bottom: max(calc(var(--nav-h) * var(--nav-shown)), env(safe-area-inset-bottom));
-        transition: padding-bottom 0.25s ease;
+        padding-bottom: var(--nav-clear);
     }
 
-    /* A full-height page (no page scroll, panes scroll inside): the screen
-       minus the bar, growing into the bar's place while it is hidden. */
+    /* A full-height page under a `nav-pad` layout (no page scroll, panes
+       scroll inside): the screen minus the bar, growing into the bar's place
+       while it is hidden. The negative margin takes the growth back out of
+       the page, so the page itself stays exactly one screen tall. */
     .nav-fill {
-        height: calc(100dvh - max(calc(var(--nav-h) * var(--nav-shown)), env(safe-area-inset-bottom)));
-        transition: height 0.25s ease;
+        height: calc(100dvh - var(--nav-clear-now));
+        margin-bottom: calc(var(--nav-clear-now) - var(--nav-clear));
+        transition: height 0.25s ease, margin-bottom 0.25s ease;
     }
 
     /* A full-width bar (cart total, checkout): sits on the nav, and on the
@@ -73,7 +80,7 @@
     /* A floating pill, button or toast: `--dock-gap` (12px) above the nav,
        or above the bottom edge while it is hidden. */
     .dock-float {
-        bottom: calc(max(calc(var(--nav-h) * var(--nav-shown)), env(safe-area-inset-bottom)) + var(--dock-gap, 12px));
+        bottom: calc(var(--nav-clear-now) + var(--dock-gap, 12px));
         transition: bottom 0.25s ease;
     }
 }
@@ -87,7 +94,6 @@
 @media (prefers-reduced-motion: reduce) {
     .app-bottom-nav,
     .seller-shell main .sticky.top-0,
-    .nav-pad,
     .nav-fill,
     .dock-sheet,
     .dock-float {
