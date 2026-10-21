@@ -151,8 +151,9 @@ export const PLACES: Place[] = [
         label: "Counter",
         does: "The 3.2 m counter on the right as you walk in, against the east wall. Sales happen here.",
         happens: ["The customer asks; the seller finds the item on the shelf", "The seller builds the cart and checks out", "Payment is confirmed by a second person", "In-store orders are handed over here"],
-        position: [20.9, 9],
-        size: [3.2, 0.8],
+        // Against the east wall (its inner face at x 23), from 0.2 m inside the front wall 3.2 m towards the back.
+        position: [22.6, 10.2],
+        size: [0.8, 3.2],
         shape: "counter",
         indoor: true,
         roles: ["seller", "customer"],
@@ -207,6 +208,27 @@ export const PLACES: Place[] = [
         chapters: ["admin", "moving"],
     },
 ];
+
+/**
+ * The Store Floor's pallet areas, relative to the store's centre: a strip on
+ * the west with three pallets, and one by the back wall. Each is
+ * [x, z, width, depth, pallets]; the pallets (1.2 × 1.2 m) are spaced 1.7 m
+ * apart from 0.9 m inside the area's north edge. The scene draws them and
+ * the worker walks round them.
+ */
+export const FLOOR_ZONES: Array<[number, number, number, number, number]> = [
+    [-1.7, -0.4, 1.3, 4.4, 3],
+    [0.2, -1.6, 1.3, 1.4, 1],
+];
+export const PALLET = 1.2;
+/** Every pallet's centre, [x, z, its number within its area]. */
+export function palletCentres(): Array<[number, number, number]> {
+    return FLOOR_ZONES.flatMap(([x, z, , depth, pallets]) => Array.from({ length: pallets }, (_, i): [number, number, number] => [x, z - depth / 2 + 0.9 + i * 1.7, i]));
+}
+
+/** The customers' houses, relative to that place's centre: [x, z, height], each 3.2 m square. */
+export const HOUSES: Array<[number, number, number]> = [[-3.5, -2, 3], [0.5, 2, 4], [3.8, -2.6, 3]];
+export const HOUSE_SIZE = 3.2;
 
 /** Where a van stops to unload at each shipment destination. */
 export const PARKING: Partial<Record<PlaceKey, [number, number]>> = {

@@ -131,6 +131,19 @@ class CanvasController extends Controller
         return back()->with('success', 'Group deleted. Its canvases are in General.');
     }
 
+    /** Only the person who made a canvas can delete it; people it is shared with cannot. */
+    public function destroy(int $id)
+    {
+        $canvas = $this->visibleCanvases()->findOrFail($id);
+        abort_unless((int) $canvas->user_id === (int) Auth::id(), 403, 'Only the owner can delete this canvas.');
+
+        $canvas->shares()->detach();
+        $canvas->versions()->delete();
+        $canvas->delete();
+
+        return redirect()->route('admin.canvas.index')->with('success', 'Canvas deleted.');
+    }
+
     public function move(MoveCanvasRequest $request, int $id)
     {
         $canvas = $this->visibleCanvases()->where('canvases.user_id', Auth::id())->findOrFail($id);

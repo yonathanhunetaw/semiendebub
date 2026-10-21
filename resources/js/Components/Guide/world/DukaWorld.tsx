@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { Box, Button, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import CenterFocusStrongRounded from "@mui/icons-material/CenterFocusStrongRounded";
 import CloseRounded from "@mui/icons-material/CloseRounded";
+import SportsEsportsRounded from "@mui/icons-material/SportsEsportsRounded";
+import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
 import { alpha, useTheme, type Theme } from "@mui/material/styles";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -17,7 +19,7 @@ import ShipmentCard from "./ShipmentCard";
 import Timeline, { PACE_MS, dayStart, isoDay, type Pace } from "./Timeline";
 import { CARD_KINDS, KIND_COLOR, buildEvents, hhmm, lastBefore, type EventKind, type FeedEvent, type WorldEvent } from "./events";
 import {
-    COMPOUND, DROP, NEIGHBOUR, PARKING, PLACES, PLATFORM_BERTH, ROADS, STORE,
+    COMPOUND, DROP, FLOOR_ZONES, HOUSES, HOUSE_SIZE, NEIGHBOUR, PALLET, PARKING, PLACES, PLATFORM_BERTH, ROADS, STORE, palletCentres,
     doorPosition, hubLayout, placeFor, vanRoute, type Place, type PlaceKey,
 } from "./places";
 import {
@@ -25,6 +27,11 @@ import {
     type WorldOrder, type WorldRefill, type WorldShipment,
 } from "./replay";
 import { RACKS, rackFace, spotAt, type RackWall } from "./storeLayout";
+import { createGameScene, type GameScene } from "./game/GameScene";
+import PlayLayer from "./game/PlayLayer";
+import { player, setGame, useGame, type GameView, type PlayerPose } from "./game/gameStore";
+import { openings } from "./game/siteBlockers";
+import { roleFor, spawnFor } from "./game/spawn";
 
 /**
  * Live Operations: the business as a working model, to scale (one unit is one
@@ -68,6 +75,12 @@ interface SceneApi {
     viewStore: () => void;
     /** Light up an event; `fly` takes the camera there. */
     highlight: (h: Highlight | null, fly: boolean) => void;
+    /** Play: put the worker in the world (game/PlayerController). Leaving puts the camera back. */
+    enterPlay: (app: GuideApp, pose: PlayerPose, view: GameView) => void;
+    exitPlay: () => void;
+    setView: (view: GameView) => void;
+    /** What Play's screen (game/PlayLayer) drives; null outside Play. */
+    game: () => GameScene | null;
 }
 
 type Subject = { kind: EventKind; id: number };
@@ -195,6 +208,24 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     useEffect(() => apiRef.current?.setSpot(spot), [spot, theme.palette.mode]);
     useEffect(() => { if (wallView) apiRef.current?.viewWall(wallView); }, [wallView, theme.palette.mode]);
     useEffect(() => apiRef.current?.setTime(time), [time, shipments, orders, refills, theme.palette.mode]);
+
+    // Play: the worker steps in (where they last stood, after a colour change), and out again.
+    const game = useGame();
+    const playing3d = game.mode === "play" && !failed;
+    useEffect(() => {
+        if (!playing3d) return;
+        setSelected(null);
+        setFocused(null);
+        setSpot(null);
+        setWallView(null);
+        setPlaying(false);
+        setFollow(false);
+        apiRef.current?.enterPlay(app, player.pose ?? spawnFor(app), game.view);
+        return () => apiRef.current?.exitPlay();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [playing3d, app, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setView(game.view), [game.view]);
+    const gameScene = useCallback(() => apiRef.current?.game() ?? null, []);
 
     // Light up the current event; fly there while the camera follows.
     useEffect(() => {
@@ -398,6 +429,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     cursorRef.current = cursor;
     const playRef = useRef(() => {});
     playRef.current = () => play(!playing);
+    const playRef3d = useRef(playing3d);
+    playRef3d.current = playing3d;
 
     // Full screen: the page behind must not scroll. Escape closes; ← → step; space plays.
     useEffect(() => {
@@ -406,6 +439,11 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         const onKey = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
             if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+            // In Play the keys walk the worker; Escape steps back out to Watch.
+            if (playRef3d.current) {
+                if (event.key === "Escape") setGame({ mode: "watch" });
+                return;
+            }
             if (event.key === "Escape") onClose();
             else if (event.key === "ArrowRight") {
                 event.preventDefault();
@@ -524,6 +562,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     pointerEvents: "none",
                 },
                 "& .world-badge--refill": { bgcolor: "info.main", color: "info.contrastText" },
+                // Play's job zones (game/zones.ts): a sign over each, brighter where the worker stands.
+                "& .world-badge--zone": { bgcolor: glass, color: "text.primary", border: "2px solid", borderColor: "divider", fontSize: "0.7rem", "&.is-active": { bgcolor: "primary.main", color: "primary.contrastText", borderColor: "primary.main" } },
                 // What just happened, floating over where it happened.
                 "& .world-callout > div": {
                     maxWidth: { xs: 200, sm: 280 },
@@ -540,6 +580,32 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     boxShadow: 6,
                     pointerEvents: "none",
                     "@media (prefers-reduced-motion: no-preference)": { animation: "world-callout-in .35s ease-out both" },
+                },
+                // Play's touch stick (game/PlayerController): a ring under the thumb, and its knob.
+                "& .world-stick": {
+                    position: "absolute",
+                    left: -48,
+                    top: -48,
+                    width: 96,
+                    height: 96,
+                    borderRadius: "50%",
+                    border: "3px solid",
+                    borderColor: alpha(theme.palette.text.primary, 0.35),
+                    bgcolor: alpha(theme.palette.background.paper, 0.35),
+                    pointerEvents: "none",
+                    opacity: 0,
+                    transition: "opacity .12s",
+                    "&.is-on": { opacity: 1 },
+                },
+                "& .world-stick-knob": {
+                    position: "absolute",
+                    left: 26,
+                    top: 26,
+                    width: 44,
+                    height: 44,
+                    borderRadius: "50%",
+                    bgcolor: "primary.main",
+                    boxShadow: 3,
                 },
                 "@keyframes world-callout-in": { from: { opacity: 0, transform: "translateY(8px) scale(.92)" }, to: { opacity: 1, transform: "none" } },
             }}
@@ -565,14 +631,22 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     <Typography sx={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: { xs: "1rem", sm: "1.15rem" }, textShadow: `0 1px 0 ${theme.palette.background.paper}` }} noWrap>
                         Live Operations
                     </Typography>
-                    <IconButton onClick={() => { setSelected(null); setFocused(null); setFollow(false); setWallView(null); apiRef.current?.home(); }} aria-label="See the whole site" title="See the whole site"
+                    {!failed && (
+                        <Button onClick={() => setGame({ mode: playing3d ? "watch" : "play" })} aria-label={playing3d ? "Back to watching" : "Play as a worker"} startIcon={playing3d ? <VisibilityRounded /> : <SportsEsportsRounded />}
+                            sx={{ pointerEvents: "auto", borderRadius: 999, fontWeight: 800, textTransform: "none", bgcolor: glass, boxShadow: 2, color: "text.primary", "&:hover": { bgcolor: "background.paper" } }}>
+                            {playing3d ? "Watch" : "Play"}
+                        </Button>
+                    )}
+                    {!playing3d && <IconButton onClick={() => { setSelected(null); setFocused(null); setFollow(false); setWallView(null); apiRef.current?.home(); }} aria-label="See the whole site" title="See the whole site"
                         sx={{ pointerEvents: "auto", bgcolor: glass, boxShadow: 2, "&:hover": { bgcolor: "background.paper" } }}>
                         <CenterFocusStrongRounded />
-                    </IconButton>
+                    </IconButton>}
                 </Stack>
 
+                {playing3d && <PlayLayer app={app} scene={gameScene} />}
+
                 {/* In the shop: look at each wall of racks from where the seller stands. */}
-                {(wallView !== null || selected === "store_shelf" || selected === "store_floor" || selected === "store_counter") && (
+                {!playing3d && (wallView !== null || selected === "store_shelf" || selected === "store_floor" || selected === "store_counter") && (
                     <Box sx={{ position: "absolute", top: { xs: 60, sm: 10 }, left: { xs: 8, sm: 230 }, maxWidth: "calc(100% - 16px)", flexWrap: "wrap", pointerEvents: "auto", display: "flex", alignItems: "center", gap: 1, p: 0.5, borderRadius: 999, bgcolor: glass, boxShadow: 3 }}>
                         <Typography variant="caption" sx={{ fontWeight: 800, pl: 1, display: { xs: "none", md: "block" } }}>See the racks from the seller's side</Typography>
                         <ToggleButtonGroup size="small" exclusive value={wallView} onChange={(_, next: RackWall | null) => next && setWallView(next)} aria-label="Wall of racks">
@@ -586,7 +660,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     </Box>
                 )}
 
-                <Box sx={{ flex: 1, minHeight: 0, display: "flex", gap: 1, alignItems: { xs: "flex-end", sm: "stretch" } }}>
+                {/* Play hides the replay: the list, the cards and the timeline. */}
+                {!playing3d && <Box sx={{ flex: 1, minHeight: 0, display: "flex", gap: 1, alignItems: { xs: "flex-end", sm: "stretch" } }}>
                     {logOpen && (
                         <Box sx={{ pointerEvents: "auto", width: { xs: "100%", sm: 340 }, height: { xs: "45dvh", sm: "auto" }, display: card ? { xs: "none", sm: "flex" } : "flex", flexDirection: "column", minHeight: 0 }}>
                             <EventLog events={events} counts={counts} kinds={kinds} onKinds={chooseKinds} cursor={cursor} reached={reached} onCursor={goTo} onClose={closeLog} />
@@ -598,9 +673,9 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                             {card}
                         </Box>
                     )}
-                </Box>
+                </Box>}
 
-                <Box sx={{ pointerEvents: "auto" }}>
+                {!playing3d && <Box sx={{ pointerEvents: "auto" }}>
                     <Timeline
                         day={day}
                         onDay={chooseDay}
@@ -624,7 +699,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                         onLog={setLogOpen}
                         onDetails={openSubject}
                     />
-                </Box>
+                </Box>}
             </Box>
         </Box>,
         document.body,
@@ -800,13 +875,13 @@ function buildWorld(
             } else if (place.shape === "platform") {
                 person.position.set(spread, base + 0.3, d / 2 - 0.6);
             } else if (place.shape === "shelves") {
-                // Behind the counter, between it and the back shelves (their front edge is 2.5 m north of the middle).
+                // In front of the back shelves (their front edge is 2.5 m north of the middle), east of the pallets.
                 person.position.set(1.5 + spread, base, -1.9);
             } else if (place.shape === "floor") {
                 person.position.set(-0.8, base, -2 + index * 0.9);
             } else if (place.shape === "counter") {
-                // The seller behind the counter, the customer in front of it.
-                person.position.set(0, base, index === 0 ? -0.9 : 1.4);
+                // The counter stands against the east wall: the seller at its back end, the customer facing it from the shop floor.
+                person.position.set(index === 0 ? -0.8 : -1.6, base, index === 0 ? -0.9 : 0.6);
             } else {
                 person.position.set(spread, base, place.indoor ? d / 2 - 1 : d / 2 + 2);
             }
@@ -1033,9 +1108,11 @@ function buildWorld(
         const onCounter = (rig: { parcel: THREE.Mesh }) => {
             const n = slot("counter");
             if (n >= 10) return;
+            // Two rows of five along the counter's length (it runs north–south against the east wall).
             const { width, height } = STORE.counter;
+            const [x, z] = placeFor("store_counter").position;
             rig.parcel.visible = true;
-            rig.parcel.position.set(placeFor("store_counter").position[0] - width / 2 + 0.4 + (n % 5) * 0.6, height + 0.33, STORE.position[1] - 0.15 + (Math.floor(n / 5) % 2) * 0.3);
+            rig.parcel.position.set(x - 0.15 + (Math.floor(n / 5) % 2) * 0.3, height + 0.33, z - width / 2 + 0.4 + (n % 5) * 0.6);
         };
         for (const o of orders) {
             const rig = orderRigFor(o);
@@ -1250,7 +1327,7 @@ function buildWorld(
         if (!downAt) return;
         const moved = Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y);
         downAt = null;
-        if (moved >= 6) return;
+        if (moved >= 6 || game) return;
         // A tap on a van, parcel or carton opens what it carries; on the racking, that spot; anywhere else, the place.
         const hit = hitAt(event);
         const subject = hit?.object.userData.subject as { kind: EventKind; id: number } | undefined;
@@ -1311,7 +1388,31 @@ function buildWorld(
         flyTo(at, at.clone().add(from.multiplyScalar(span * 1.2 + 8)).setY(span * 1.1 + 8));
     };
 
+    // Play: the worker and their jobs (game/GameScene), and where the camera was before they stepped in.
+    let game: GameScene | null = null;
+    let beforePlay: { camera: THREE.Vector3; target: THREE.Vector3 } | null = null;
+
     const api: SceneApi = {
+        enterPlay: (app, pose, view) => {
+            if (game) return;
+            flight = null;
+            beforePlay = { camera: camera.position.clone(), target: controls.target.clone() };
+            game = createGameScene({
+                scene, camera, controls, dom: renderer.domElement, overlay: mount, figure: makePerson(toneOf(roleFor(app))), tone: toneOf(roleFor(app)),
+                spawn: pose, view, reducedMotion, bounds: [SITE_BOUNDS.min.x, SITE_BOUNDS.min.z, SITE_BOUNDS.max.x, SITE_BOUNDS.max.z],
+                zoneTones: { pickup: color(theme.palette.info.main), drop: color(theme.palette.success.main) },
+                carTones: { cab: driverTone, body: wallTone.clone().lerp(color(theme.palette.background.paper), 0.5), dark: darkTone },
+                onZone: (zone) => setGame({ zone }),
+            });
+        },
+        exitPlay: () => {
+            if (!game) return;
+            game.dispose();
+            game = null;
+            if (beforePlay) flyTo(beforePlay.target, beforePlay.camera);
+        },
+        setView: (view) => game?.setView(view),
+        game: () => game,
         select: (key) => {
             if (key === selectedKey) return;
             selectedKey = key;
@@ -1434,11 +1535,24 @@ function buildWorld(
         swing.open += (swing.target - swing.open) * (reducedMotion ? 1 : 0.08);
         for (const leaf of swing.leaves) leaf.pivot.rotation.y = leaf.closed + (leaf.opened - leaf.closed) * swing.open;
     };
+    let lastFrame = performance.now();
+    const nearDoors = openings();
     const animate = () => {
         frame = requestAnimationFrame(animate);
         const time = (performance.now() - startedAt) / 1000;
+        // Seconds since the last frame, capped so a tab coming back does not teleport the worker.
+        const dt = Math.min(0.05, (performance.now() - lastFrame) / 1000);
+        lastFrame = performance.now();
+        game?.update(dt);
+        const gameCamera = game?.ownsCamera() ?? false;
+        // Doors and the gate swing open as the worker comes up to them.
+        if (game && player.pose) {
+            for (const { key, at } of nearDoors) {
+                if (Math.hypot(player.pose.x - at[0], player.pose.z - at[1]) < 4) (key === "gate" ? gate : doors.get(key as PlaceKey))!.target = 1;
+            }
+        }
 
-        if (flight) {
+        if (flight && !gameCamera) {
             const k = Math.min(1, (performance.now() - flight.start) / 900);
             const eased = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
             camera.position.lerpVectors(flight.fromCam, flight.toCam, eased);
@@ -1486,7 +1600,7 @@ function buildWorld(
 
         if (!reducedMotion) for (const p of people) p.mesh.position.y = p.base + Math.max(0, Math.sin(time * 3 + p.phase)) * 0.12;
 
-        controls.update();
+        if (!gameCamera) controls.update();
         renderer.render(scene, camera);
         labels.render(scene, camera);
         declutter();
@@ -1495,6 +1609,7 @@ function buildWorld(
 
     const dispose = () => {
         cancelAnimationFrame(frame);
+        game?.dispose();
         resize.disconnect();
         renderer.domElement.removeEventListener("pointermove", onMove);
         renderer.domElement.removeEventListener("pointerdown", onDown);
@@ -2019,29 +2134,21 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
             break;
         }
         case "floor": {
-            // The open floor beside the counter, relative to the store's centre (6 × 6 m, racks 50 cm deep on the
-            // walls, the counter on the east side): a strip on the west with three pallets, and one north of the counter.
+            // The open floor beside the counter (places.ts FLOOR_ZONES): pallet areas, with cartons stacked one or two high.
             const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.55);
             const patch = tone.clone().lerp(wall, 0.75);
-            const zones: Array<[number, number, number, number, number]> = [
-                // x, z, width, depth, pallets
-                [-1.7, -0.4, 1.3, 4.4, 3],
-                [0.2, -1.6, 1.3, 1.4, 1],
-            ];
-            for (const [x, z, zw, zd, pallets] of zones) {
-                g.add(mesh(new THREE.BoxGeometry(zw, 0.04, zd), patch, x, 0.13, z));
-                for (let i = 0; i < pallets; i++) {
-                    const pz = z - zd / 2 + 0.9 + i * 1.7;
-                    g.add(mesh(new THREE.BoxGeometry(1.2, 0.12, 1.2), dark, x, 0.2, pz));
-                    for (let y = 0; y < 1 + (i % 2); y++) g.add(mesh(new THREE.BoxGeometry(1.1, 0.6, 1.1), carton, x, 0.56 + y * 0.62, pz));
-                }
-            }
+            for (const [x, z, zw, zd] of FLOOR_ZONES) g.add(mesh(new THREE.BoxGeometry(zw, 0.04, zd), patch, x, 0.13, z));
+            palletCentres().forEach(([x, pz, i]) => {
+                g.add(mesh(new THREE.BoxGeometry(PALLET, 0.12, PALLET), dark, x, 0.2, pz));
+                for (let y = 0; y < 1 + (i % 2); y++) g.add(mesh(new THREE.BoxGeometry(1.1, 0.6, 1.1), carton, x, 0.56 + y * 0.62, pz));
+            });
             break;
         }
         case "counter": {
-            const { width: cw, depth: cd, height: ch } = STORE.counter;
-            g.add(mesh(new THREE.BoxGeometry(cw, ch, cd), wall.clone().lerp(dark, 0.15), 0, ch / 2 + 0.1, 0));
-            g.add(mesh(new THREE.BoxGeometry(cw + 0.1, 0.06, cd + 0.1), tone, 0, ch + 0.13, 0));
+            // Its footprint (place.size) runs along the east wall: 0.8 m deep in x, 3.2 m long in z.
+            const ch = STORE.counter.height;
+            g.add(mesh(new THREE.BoxGeometry(w, ch, d), wall.clone().lerp(dark, 0.15), 0, ch / 2 + 0.1, 0));
+            g.add(mesh(new THREE.BoxGeometry(w + 0.1, 0.06, d + 0.1), tone, 0, ch + 0.13, 0));
             break;
         }
         case "bay": {
@@ -2050,9 +2157,8 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
             break;
         }
         case "houses": {
-            [[-3.5, -2], [0.5, 2], [3.8, -2.6]].forEach(([x, z], i) => {
-                const hh = 3 + (i % 2);
-                g.add(mesh(new THREE.BoxGeometry(3.2, hh, 3.2), wall, x, hh / 2, z));
+            HOUSES.forEach(([x, z, hh]) => {
+                g.add(mesh(new THREE.BoxGeometry(HOUSE_SIZE, hh, HOUSE_SIZE), wall, x, hh / 2, z));
                 const top = mesh(new THREE.ConeGeometry(2.6, 1.8, 4), tone, x, hh + 0.9, z);
                 top.rotation.y = Math.PI / 4;
                 g.add(top);

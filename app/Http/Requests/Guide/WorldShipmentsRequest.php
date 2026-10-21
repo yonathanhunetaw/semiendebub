@@ -23,6 +23,7 @@ class WorldShipmentsRequest extends FormRequest
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
             'shelf' => ['nullable', 'boolean'],
+            'play' => ['nullable', 'boolean'],
         ];
     }
 

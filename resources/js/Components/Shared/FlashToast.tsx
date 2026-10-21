@@ -36,6 +36,8 @@ export default function FlashToast({
               ? { kind: "success" as const, text: flash.success }
               : null;
         if (!next) return;
+        // A full-screen surface that reports the answer itself (the Guide world's Play) marks the body; no second toast then.
+        if (document.body.dataset.ownFlash) return;
 
         setToast(next);
         setVisible(true);

@@ -95,6 +95,7 @@ Route::domain("admin.{$baseDomain}")
                 Route::post('/groups', [CanvasController::class, 'createGroup'])->name('groups.create');
                 Route::post('/groups/{id}', [CanvasController::class, 'renameGroup'])->name('groups.rename');
                 Route::delete('/groups/{id}', [CanvasController::class, 'deleteGroup'])->name('groups.delete');
+                Route::delete('/{id}', [CanvasController::class, 'destroy'])->name('destroy')->whereNumber('id');
                 Route::post('/{id}/move', [CanvasController::class, 'move'])->name('move')->whereNumber('id');
                 Route::post('/share', [CanvasController::class, 'share'])->name('share');
                 Route::post('/unshare', [CanvasController::class, 'unshare'])->name('unshare');

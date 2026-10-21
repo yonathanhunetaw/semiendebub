@@ -49,7 +49,7 @@ interface Props {
 }
 
 const sectionTitleSx = {
-    fontSize: 11, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase' as const, color: ws.muted,
+    fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: ws.muted,
 };
 
 const syncIcon = (tone: SyncTone) => tone === 'busy'
@@ -58,7 +58,7 @@ const syncIcon = (tone: SyncTone) => tone === 'busy'
     : tone === 'warn' ? <CloudOffIcon sx={{ fontSize: 18 }} />
     : <CloudDoneIcon sx={{ fontSize: 18 }} />;
 
-const toneColor: Record<SyncTone, string> = { ok: 'success.main', busy: 'primary.light', warn: 'warning.main', error: 'error.main' };
+const toneColor: Record<SyncTone, string> = { ok: 'success.main', busy: ws.muted, warn: 'warning.main', error: 'error.main' };
 const toneWord: Record<SyncTone, string> = { ok: 'All synced', busy: 'Saving…', warn: 'Unsaved changes', error: 'Needs attention' };
 
 function Segment({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
@@ -67,17 +67,16 @@ function Segment({ label, count, active, onClick }: { label: string; count: numb
             onClick={onClick}
             aria-pressed={active}
             sx={{
-                px: 1.5, py: 0.75, borderRadius: 2.5, gap: 0.75, fontSize: 12.5, fontWeight: active ? 700 : 500, flexShrink: 0,
-                color: active ? '#fff' : ws.muted, bgcolor: active ? 'primary.dark' : 'transparent',
-                boxShadow: active ? '0 6px 16px -8px rgba(79, 70, 229, 0.9)' : 'none',
+                px: 1.5, py: 0.75, borderRadius: 1.5, gap: 0.75, fontSize: 12.5, fontWeight: active ? 700 : 500, flexShrink: 0,
+                color: active ? ws.ink : ws.muted, bgcolor: active ? ws.accentSoft : 'transparent',
                 transition: 'background-color .15s, color .15s',
-                '&:hover': { color: '#fff', bgcolor: active ? 'primary.dark' : 'rgba(148, 163, 184, 0.1)' },
+                '&:hover': { color: ws.ink, bgcolor: active ? ws.accentSoft : 'rgba(255, 255, 255, 0.05)' },
             }}
         >
             {label}
             <Box component="span" sx={{
                 px: 0.75, borderRadius: 9, fontSize: 10.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                bgcolor: active ? 'rgba(15, 23, 42, 0.35)' : 'rgba(148, 163, 184, 0.14)',
+                color: ws.faint,
             }}>
                 {count}
             </Box>
@@ -115,35 +114,34 @@ export default function CanvasWorkspacePanel(props: Props) {
             {/* Header */}
             <Box component="header" sx={{
                 flex: 'none', px: 2.5, pt: 2, pb: 1.5, display: 'flex', alignItems: 'center', gap: 1.5,
-                borderBottom: `1px solid ${ws.border}`, bgcolor: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(16px)',
+                borderBottom: `1px solid ${ws.border}`, bgcolor: ws.page,
             }}>
                 <Box sx={{
-                    width: 36, height: 36, borderRadius: 3, flexShrink: 0, color: '#fff',
+                    width: 32, height: 32, borderRadius: 1.5, flexShrink: 0, color: ws.ink,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'linear-gradient(135deg, #4f46e5, #6366f1 55%, #8b5cf6)',
-                    boxShadow: '0 8px 20px -8px rgba(99, 102, 241, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.2)',
+                    bgcolor: ws.card, border: `1px solid ${ws.borderStrong}`,
                 }}>
-                    <LayersIcon sx={{ fontSize: 20 }} />
+                    <LayersIcon sx={{ fontSize: 18 }} />
                 </Box>
                 <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography noWrap sx={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', color: ws.ink }}>
+                    <Typography noWrap sx={{ fontSize: 14, fontWeight: 600, color: ws.ink }}>
                         Canvas workspace
                     </Typography>
                     <Typography noWrap sx={{ fontSize: 11.5, color: ws.muted }}>
-                        Open: <Box component="span" sx={{ color: 'primary.light', fontWeight: 600 }}>{activeTitle}</Box>
+                        Open: <Box component="span" sx={{ color: ws.ink, fontWeight: 600 }}>{activeTitle}</Box>
                     </Typography>
                 </Box>
-                <IconButton aria-label="Close workspace" onClick={props.onClose} sx={{ color: ws.muted, '&:hover': { color: '#fff' } }}>
-                    <CloseIcon />
+                <IconButton aria-label="Close workspace" onClick={props.onClose} sx={{ color: ws.muted, '&:hover': { color: ws.ink } }}>
+                    <CloseIcon fontSize="small" />
                 </IconButton>
             </Box>
 
             {/* Search and filters */}
             <Box component="section" sx={{ flex: 'none', px: 2, pt: 1.5, pb: 1, borderBottom: `1px solid ${ws.border}`, display: 'grid', gap: 1.25 }}>
                 <Box sx={{
-                    display: 'flex', alignItems: 'center', gap: 0.5, pl: 1.5, pr: 0.5, borderRadius: 3,
-                    bgcolor: 'rgba(30, 41, 59, 0.6)', border: `1px solid ${ws.border}`,
-                    '&:focus-within': { borderColor: ws.accentLine, boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.18)' },
+                    display: 'flex', alignItems: 'center', gap: 0.5, pl: 1.5, pr: 0.5, borderRadius: 2,
+                    bgcolor: ws.card, border: `1px solid ${ws.border}`,
+                    '&:focus-within': { borderColor: ws.accentLine, boxShadow: 'none' },
                 }}>
                     <SearchIcon sx={{ fontSize: 18, color: ws.faint }} />
                     <InputBase
@@ -171,7 +169,7 @@ export default function CanvasWorkspacePanel(props: Props) {
                         <Segment label="Mine" count={own.length} active={tab === 'mine'} onClick={() => setTab('mine')} />
                         <Segment label="Shared" count={shared.length} active={tab === 'shared'} onClick={() => setTab('shared')} />
                     </Box>
-                    <Box sx={{ display: 'flex', p: 0.25, borderRadius: 2.5, border: `1px solid ${ws.border}`, bgcolor: 'rgba(30, 41, 59, 0.6)', flexShrink: 0 }}>
+                    <Box sx={{ display: 'flex', p: 0.25, borderRadius: 1.5, border: `1px solid ${ws.border}`, bgcolor: ws.card, flexShrink: 0 }}>
                         {([['grid', 'Grid view', GridViewIcon], ['list', 'List view', ListIcon]] as const).map(([key, label, Icon]) => (
                             <IconButton
                                 key={key}
@@ -180,9 +178,9 @@ export default function CanvasWorkspacePanel(props: Props) {
                                 aria-pressed={view === key}
                                 onClick={() => setView(key)}
                                 sx={{
-                                    borderRadius: 2, p: 0.5, color: view === key ? '#fff' : ws.muted,
-                                    bgcolor: view === key ? 'primary.dark' : 'transparent',
-                                    '&:hover': { bgcolor: view === key ? 'primary.dark' : 'rgba(148, 163, 184, 0.1)' },
+                                    borderRadius: 2, p: 0.5, color: view === key ? ws.ink : ws.muted,
+                                    bgcolor: view === key ? ws.accentSoft : 'transparent',
+                                    '&:hover': { bgcolor: view === key ? ws.accentSoft : 'rgba(255, 255, 255, 0.05)' },
                                 }}
                             >
                                 <Icon sx={{ fontSize: 16 }} />
@@ -198,8 +196,8 @@ export default function CanvasWorkspacePanel(props: Props) {
 
                 {/* Sync status */}
                 <Box sx={{
-                    p: 1.5, borderRadius: 3, display: 'flex', alignItems: 'center', gap: 1.25,
-                    border: `1px solid ${ws.border}`, background: 'linear-gradient(90deg, rgba(30, 41, 59, 0.7), rgba(30, 41, 59, 0.35))',
+                    p: 1.5, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1.25,
+                    border: `1px solid ${ws.border}`, bgcolor: ws.card,
                 }}>
                     <Box sx={{ color: toneColor[syncTone], display: 'flex' }}>{syncIcon(syncTone)}</Box>
                     <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -229,21 +227,19 @@ export default function CanvasWorkspacePanel(props: Props) {
                                         onClick={() => { if (!active) router.get('/canvas', { canvas_id: c.id }); }}
                                         aria-current={active ? 'true' : undefined}
                                         sx={{
-                                            flex: '0 0 164px', display: 'block', textAlign: 'left', p: 1.25, borderRadius: 3.5,
+                                            flex: '0 0 164px', display: 'block', textAlign: 'left', p: 1.25, borderRadius: 2,
                                             border: '1px solid', borderColor: active ? ws.accentLine : ws.border,
-                                            background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(30, 41, 59, 0.45))',
-                                            boxShadow: active ? '0 10px 28px -14px rgba(99, 102, 241, 0.7)' : 'none',
+                                            bgcolor: active ? ws.accentSoft : ws.card,
                                             transition: 'transform .15s, border-color .15s',
-                                            '&:hover': { borderColor: ws.accentLine },
-                                            '&:active': { transform: 'scale(0.97)' },
+                                            '&:hover': { borderColor: ws.borderStrong },
                                         }}
                                     >
                                         <Box sx={{
-                                            height: 54, mb: 1.25, p: 1, borderRadius: 2.5, bgcolor: 'rgba(11, 17, 32, 0.8)',
+                                            height: 54, mb: 1.25, p: 1, borderRadius: 1.5, bgcolor: '#1b1e21',
                                             border: `1px solid ${ws.border}`, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                                         }}>
                                             <Box sx={{
-                                                width: 18, height: 18, borderRadius: 1.25, fontSize: 10, fontWeight: 800,
+                                                width: 18, height: 18, borderRadius: 1, fontSize: 10, fontWeight: 800,
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 color: tint, bgcolor: `${tint}26`,
                                             }}>
@@ -287,12 +283,12 @@ export default function CanvasWorkspacePanel(props: Props) {
                                 size="small"
                                 startIcon={<ShareIcon sx={{ fontSize: 16 }} />}
                                 onClick={props.onShare}
-                                sx={{ textTransform: 'none', fontSize: 12, fontWeight: 600, color: 'primary.light', minWidth: 0, py: 0.25 }}
+                                sx={{ textTransform: 'none', fontSize: 12, fontWeight: 600, color: ws.ink, minWidth: 0, py: 0.25 }}
                             >
                                 Share
                             </Button>
                         </Box>
-                        <Box sx={{ borderRadius: 3, border: `1px solid ${ws.border}`, bgcolor: ws.card, overflow: 'hidden' }}>
+                        <Box sx={{ borderRadius: 2, border: `1px solid ${ws.border}`, bgcolor: ws.card, overflow: 'hidden' }}>
                             {sharedUsers.length === 0 ? (
                                 <Typography sx={{ py: 2.5, textAlign: 'center', fontSize: 12.5, color: ws.faint }}>
                                     Not shared with anyone yet.
@@ -302,7 +298,7 @@ export default function CanvasWorkspacePanel(props: Props) {
                                     display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1,
                                     borderTop: i === 0 ? 0 : `1px solid ${ws.border}`,
                                 }}>
-                                    <Avatar sx={{ width: 28, height: 28, fontSize: 12, fontWeight: 700, bgcolor: tintFor(u.first_name), color: '#0b1120' }}>
+                                    <Avatar sx={{ width: 28, height: 28, fontSize: 12, fontWeight: 700, bgcolor: '#4a4f55', color: ws.ink }}>
                                         {initialOf(u.first_name)}
                                     </Avatar>
                                     <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -338,7 +334,7 @@ export default function CanvasWorkspacePanel(props: Props) {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Box sx={{
                                 width: 24, height: 24, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                bgcolor: 'rgba(148, 163, 184, 0.12)', color: 'primary.light', border: `1px solid ${ws.border}`,
+                                bgcolor: 'rgba(255, 255, 255, 0.07)', color: ws.ink, border: `1px solid ${ws.border}`,
                             }}>
                                 <HistoryIcon sx={{ fontSize: 15 }} />
                             </Box>
@@ -363,11 +359,11 @@ export default function CanvasWorkspacePanel(props: Props) {
                                     <Box key={item.id} sx={{ position: 'relative', pl: 3.5, minWidth: 0 }}>
                                         <Box sx={{
                                             position: 'absolute', left: 1, top: 17, width: 12, height: 12, borderRadius: '50%', zIndex: 1,
-                                            bgcolor: current ? 'primary.main' : open ? 'primary.light' : '#334155',
+                                            bgcolor: current ? ws.ink : open ? ws.muted : '#4a4f55',
                                             boxShadow: `0 0 0 4px ${ws.page}`,
                                         }} />
                                         <Box sx={{
-                                            display: 'flex', alignItems: 'center', gap: 1, p: 1.25, borderRadius: 3, minWidth: 0,
+                                            display: 'flex', alignItems: 'center', gap: 1, p: 1.25, borderRadius: 2, minWidth: 0,
                                             border: '1px solid', borderColor: open ? ws.accentLine : ws.border,
                                             bgcolor: open ? ws.accentSoft : ws.card, transition: 'background-color .15s, border-color .15s',
                                             '&:hover': { borderColor: open ? ws.accentLine : ws.borderStrong },
@@ -381,7 +377,7 @@ export default function CanvasWorkspacePanel(props: Props) {
                                                     {current && (
                                                         <Box component="span" sx={{
                                                             px: 0.75, borderRadius: 1, fontSize: 9, fontWeight: 800, letterSpacing: '0.04em',
-                                                            bgcolor: 'primary.main', color: '#fff', flexShrink: 0,
+                                                            bgcolor: ws.ink, color: '#16181a', flexShrink: 0,
                                                         }}>
                                                             CURRENT
                                                         </Box>
@@ -398,7 +394,7 @@ export default function CanvasWorkspacePanel(props: Props) {
                                                 <Button
                                                     size="small"
                                                     onClick={() => props.onRestoreVersion(item.id)}
-                                                    sx={{ textTransform: 'none', fontSize: 12, fontWeight: 600, color: 'primary.light', minWidth: 0, flexShrink: 0 }}
+                                                    sx={{ textTransform: 'none', fontSize: 12, fontWeight: 600, color: ws.ink, minWidth: 0, flexShrink: 0 }}
                                                 >
                                                     Restore
                                                 </Button>
@@ -451,13 +447,12 @@ export default function CanvasWorkspacePanel(props: Props) {
             {/* Footer */}
             <Box component="footer" sx={{
                 flex: 'none', px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5,
-                borderTop: `1px solid ${ws.border}`, bgcolor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(16px)',
-                boxShadow: '0 -8px 30px rgba(0, 0, 0, 0.45)', pb: 'max(12px, env(safe-area-inset-bottom))',
+                borderTop: `1px solid ${ws.border}`, bgcolor: ws.page, pb: 'max(12px, env(safe-area-inset-bottom))',
             }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                     <Box sx={{
-                        width: 30, height: 30, borderRadius: 2.5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: toneColor[syncTone], bgcolor: 'rgba(148, 163, 184, 0.1)', border: `1px solid ${ws.border}`,
+                        width: 30, height: 30, borderRadius: 1.5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: toneColor[syncTone], bgcolor: 'rgba(255, 255, 255, 0.07)', border: `1px solid ${ws.border}`,
                     }}>
                         {syncIcon(syncTone)}
                     </Box>
@@ -472,9 +467,9 @@ export default function CanvasWorkspacePanel(props: Props) {
                         startIcon={<SaveIcon sx={{ fontSize: 18 }} />}
                         onClick={props.onSave}
                         sx={{
-                            textTransform: 'none', fontWeight: 700, fontSize: 13, borderRadius: 3, px: 2, flexShrink: 0,
-                            background: 'linear-gradient(90deg, #6366f1, #4f46e5)',
-                            boxShadow: '0 10px 24px -10px rgba(99, 102, 241, 0.9)',
+                            textTransform: 'none', fontWeight: 600, fontSize: 13, borderRadius: 1.5, px: 2, flexShrink: 0,
+                            bgcolor: ws.ink, color: '#16181a', boxShadow: 'none',
+                            '&:hover': { bgcolor: '#ffffff', boxShadow: 'none' },
                         }}
                     >
                         Save version

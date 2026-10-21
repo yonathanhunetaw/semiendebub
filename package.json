@@ -8,6 +8,7 @@
         "dev": "vite",
         "test:e2e": "./deploy/dev.sh e2e",
         "test:e2e:ui": "./deploy/dev.sh e2e --ui",
+        "test:js": "node --test 'resources/js/**/*.test.ts'",
         "domain-map": "php artisan dev:generate-domain-map",
         "check:colors": "node scripts/check-colors.mjs",
         "design-md": "esbuild scripts/design-md.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=node_modules/.cache/duka/design-md.mjs && node node_modules/.cache/duka/design-md.mjs",

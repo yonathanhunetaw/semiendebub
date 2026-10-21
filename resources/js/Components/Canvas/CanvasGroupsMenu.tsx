@@ -2,13 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { router } from '@inertiajs/react';
 import {
     Box, Button, ButtonBase, Dialog, DialogActions, DialogContent, DialogTitle,
-    IconButton, Menu, MenuItem, TextField, Typography,
+    Divider, IconButton, Menu, MenuItem, TextField, Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import FolderOpenIcon from '@mui/icons-material/FolderOpenOutlined';
-import { CanvasGroupRow, CanvasRow, ago, initialOf, tintFor, ws } from './canvasWorkspace';
+import { CanvasGroupRow, CanvasRow, ago, initialOf, ws } from './canvasWorkspace';
 
 export type CanvasTab = 'all' | 'mine' | 'shared';
 export type CanvasSort = 'recent' | 'name';
@@ -35,7 +35,7 @@ type GroupKey = number | typeof GENERAL | typeof SHARED;
 const GROUP_MAX = 40;
 
 const sectionTitleSx = {
-    fontSize: 11, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase' as const, color: ws.muted,
+    fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: ws.muted,
 };
 
 function CountPill({ n, active }: { n: number; active?: boolean }) {
@@ -43,7 +43,7 @@ function CountPill({ n, active }: { n: number; active?: boolean }) {
         <Box component="span" sx={{
             px: 0.75, minWidth: 20, height: 18, borderRadius: 9, fontSize: 10.5, fontWeight: 700,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums',
-            bgcolor: active ? 'primary.main' : 'rgba(148, 163, 184, 0.16)', color: active ? '#fff' : ws.muted,
+            bgcolor: active ? ws.ink : 'rgba(255, 255, 255, 0.09)', color: active ? '#16181a' : ws.muted,
         }}>
             {n}
         </Box>
@@ -58,7 +58,7 @@ function GroupTile({ name, note, count, selected, onClick }: {
         content: '""', position: 'absolute' as const, left: inset, right: inset, bottom: -depth, height: 12,
         borderRadius: '0 0 12px 12px', border: '1px solid', borderTop: 0,
         borderColor: selected ? ws.accentLine : ws.border,
-        bgcolor: `rgba(99, 102, 241, ${alpha})`,
+        bgcolor: `rgba(255, 255, 255, ${alpha})`,
     });
 
     return (
@@ -72,27 +72,25 @@ function GroupTile({ name, note, count, selected, onClick }: {
                 aria-label={`${name}, ${count} ${count === 1 ? 'canvas' : 'canvases'}`}
                 sx={{
                     position: 'relative', zIndex: 1, width: '100%', display: 'block', textAlign: 'left',
-                    p: 1.25, borderRadius: 3, border: '1px solid',
+                    p: 1.25, borderRadius: 2, border: '1px solid',
                     borderColor: selected ? ws.accentLine : ws.border,
-                    bgcolor: selected ? ws.accentSoft : '#162033',
-                    boxShadow: selected ? '0 8px 24px -12px rgba(99, 102, 241, 0.55)' : 'none',
+                    bgcolor: selected ? ws.accentSoft : ws.card,
                     transition: 'background-color .15s, border-color .15s, transform .15s',
-                    '&:hover': { bgcolor: selected ? ws.accentSoft : '#1b273d' },
-                    '&:active': { transform: 'scale(0.97)' },
+                    '&:hover': { bgcolor: selected ? ws.accentSoft : ws.cardHover },
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                     <Box sx={{
                         width: 26, height: 26, borderRadius: 2, fontSize: 13, fontWeight: 800,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        bgcolor: selected ? 'primary.main' : 'rgba(148, 163, 184, 0.14)', color: selected ? '#fff' : 'primary.light',
+                        bgcolor: selected ? ws.ink : 'rgba(255, 255, 255, 0.09)', color: selected ? '#16181a' : ws.muted,
                     }}>
                         {initialOf(name)}
                     </Box>
                     <CountPill n={count} active={selected} />
                 </Box>
                 <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 700, color: ws.ink }}>{name}</Typography>
-                <Typography noWrap sx={{ fontSize: 10.5, color: selected ? 'primary.light' : ws.faint }}>{note}</Typography>
+                <Typography noWrap sx={{ fontSize: 10.5, color: ws.faint }}>{note}</Typography>
             </ButtonBase>
         </Box>
     );
@@ -102,13 +100,12 @@ function CanvasTile({ canvas, active, mine, list, onOpen, onMenu }: {
     canvas: CanvasRow; active: boolean; mine: boolean; list: boolean;
     onOpen: () => void; onMenu: (el: HTMLElement) => void;
 }) {
-    const tint = tintFor(canvas.title);
-    const meta = mine ? ago(canvas.updated_at) : `by ${canvas.user?.first_name ?? 'a teammate'}`;
+        const meta = mine ? ago(canvas.updated_at) : `by ${canvas.user?.first_name ?? 'a teammate'}`;
     const avatar = (
         <Box sx={{
             width: list ? 34 : 30, height: list ? 34 : 30, borderRadius: 2, fontSize: 13, fontWeight: 800, flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: tint, bgcolor: `${tint}26`, border: `1px solid ${tint}4d`,
+            color: ws.muted, bgcolor: 'rgba(255, 255, 255, 0.07)', border: `1px solid ${ws.border}`,
         }}>
             {initialOf(canvas.title)}
         </Box>
@@ -121,10 +118,9 @@ function CanvasTile({ canvas, active, mine, list, onOpen, onMenu }: {
                 aria-current={active ? 'true' : undefined}
                 aria-label={`${canvas.title}${active ? ' (open)' : ''}`}
                 sx={{
-                    width: '100%', textAlign: 'left', borderRadius: 3, border: '1px solid',
+                    width: '100%', textAlign: 'left', borderRadius: 2, border: '1px solid',
                     borderColor: active ? ws.accentLine : ws.border,
                     bgcolor: active ? ws.accentSoft : ws.card,
-                    boxShadow: active ? '0 8px 24px -12px rgba(99, 102, 241, 0.6)' : 'none',
                     transition: 'background-color .15s, border-color .15s, transform .15s',
                     '&:hover': { bgcolor: active ? ws.accentSoft : ws.cardHover, borderColor: active ? ws.accentLine : ws.borderStrong },
                     '&:active': { transform: 'scale(0.97)' },
@@ -140,7 +136,7 @@ function CanvasTile({ canvas, active, mine, list, onOpen, onMenu }: {
                             <Typography noWrap sx={{ fontSize: 13, fontWeight: 600, color: ws.ink }}>{canvas.title}</Typography>
                             <Typography noWrap sx={{ fontSize: 11, color: ws.faint }}>{meta}</Typography>
                         </Box>
-                        {active && <Typography sx={{ fontSize: 10, fontWeight: 700, color: 'primary.light' }}>OPEN</Typography>}
+                        {active && <Typography sx={{ fontSize: 10, fontWeight: 600, color: ws.muted }}>OPEN</Typography>}
                     </>
                 ) : (
                     <>
@@ -148,7 +144,7 @@ function CanvasTile({ canvas, active, mine, list, onOpen, onMenu }: {
                         <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: ws.ink }}>{canvas.title}</Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
                             {active && <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'success.main', flexShrink: 0 }} />}
-                            <Typography noWrap sx={{ fontSize: 10.5, color: active ? 'primary.light' : ws.faint }}>
+                            <Typography noWrap sx={{ fontSize: 10.5, color: active ? ws.ink : ws.faint }}>
                                 {active ? 'Open now' : meta}
                             </Typography>
                         </Box>
@@ -218,6 +214,7 @@ export default function CanvasGroupsMenu({ canvases, groups, activeCanvasId, cur
     const [groupMenu, setGroupMenu] = useState<HTMLElement | null>(null);
     const [canvasMenu, setCanvasMenu] = useState<{ el: HTMLElement; canvas: CanvasRow } | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [canvasToDelete, setCanvasToDelete] = useState<CanvasRow | null>(null);
 
     const openName = (mode: 'create' | 'rename', id?: number, current = '') => {
         setName(current);
@@ -248,6 +245,16 @@ export default function CanvasGroupsMenu({ canvases, groups, activeCanvasId, cur
         });
     };
 
+    // Only the owner's own canvases offer this; the server refuses anyone else.
+    const deleteCanvas = () => {
+        if (!canvasToDelete) return;
+        router.delete(route('admin.canvas.destroy', canvasToDelete.id), {
+            preserveScroll: true,
+            onSuccess: () => setCanvasToDelete(null),
+            onFinish: () => setCanvasToDelete(null),
+        });
+    };
+
     const switchTo = (id: number) => {
         if (id !== activeCanvasId) router.get('/canvas', { canvas_id: id });
     };
@@ -273,7 +280,7 @@ export default function CanvasGroupsMenu({ canvases, groups, activeCanvasId, cur
                                 size="small"
                                 startIcon={<AddIcon sx={{ fontSize: 16 }} />}
                                 onClick={() => openName('create')}
-                                sx={{ textTransform: 'none', fontSize: 12, fontWeight: 600, color: 'primary.light', minWidth: 0, py: 0.25 }}
+                                sx={{ textTransform: 'none', fontSize: 12, fontWeight: 600, color: ws.ink, minWidth: 0, py: 0.25 }}
                             >
                                 New group
                             </Button>
@@ -335,13 +342,12 @@ export default function CanvasGroupsMenu({ canvases, groups, activeCanvasId, cur
                                 onClick={() => onCreateCanvas(typeof shownKey === 'number' ? shownKey : null)}
                                 aria-label="New canvas"
                                 sx={{
-                                    borderRadius: 3, border: '1.5px dashed', borderColor: 'rgba(129, 140, 248, 0.45)',
-                                    bgcolor: 'rgba(99, 102, 241, 0.05)', color: 'primary.light', gap: 1,
+                                    borderRadius: 2, border: '1px dashed', borderColor: ws.borderStrong,
+                                    color: ws.muted, gap: 1,
                                     minHeight: view === 'list' ? 52 : 92,
                                     flexDirection: view === 'list' ? 'row' : 'column',
                                     transition: 'background-color .15s, transform .15s',
-                                    '&:hover': { bgcolor: 'rgba(99, 102, 241, 0.12)' },
-                                    '&:active': { transform: 'scale(0.97)' },
+                                    '&:hover': { bgcolor: ws.accentSoft, color: ws.ink },
                                 }}
                             >
                                 <AddIcon sx={{ fontSize: 20 }} />
@@ -369,6 +375,12 @@ export default function CanvasGroupsMenu({ canvases, groups, activeCanvasId, cur
                         {g.name}
                     </MenuItem>
                 ))}
+                {canvasMenu?.canvas.user_id === currentUserId && <Divider sx={{ my: 0.5 }} />}
+                {canvasMenu?.canvas.user_id === currentUserId && (
+                    <MenuItem sx={{ color: 'error.main' }} onClick={() => { setCanvasToDelete(canvasMenu.canvas); setCanvasMenu(null); }}>
+                        Delete canvas
+                    </MenuItem>
+                )}
             </Menu>
 
             <Dialog open={Boolean(nameDialog)} onClose={() => setNameDialog(null)} maxWidth="xs" fullWidth>
@@ -392,6 +404,19 @@ export default function CanvasGroupsMenu({ canvases, groups, activeCanvasId, cur
                     <Button onClick={submitName} variant="contained" disabled={!name.trim()}>
                         {nameDialog?.mode === 'rename' ? 'Rename' : 'Create'}
                     </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={Boolean(canvasToDelete)} onClose={() => setCanvasToDelete(null)} maxWidth="xs" fullWidth>
+                <DialogTitle sx={{ fontWeight: 'bold' }}>Delete canvas</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                        Delete <strong>{canvasToDelete?.title}</strong> and all of its saved versions? Anyone it is shared with loses it too. This cannot be undone.
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={() => setCanvasToDelete(null)} color="inherit">Cancel</Button>
+                    <Button onClick={deleteCanvas} variant="contained" color="error">Delete canvas</Button>
                 </DialogActions>
             </Dialog>
 

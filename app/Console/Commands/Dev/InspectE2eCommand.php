@@ -20,6 +20,7 @@ use Illuminate\Console\Command;
  *   php artisan e2e:inspect item 9            pieces of item 9 (every variant, cartons opened up)
  *   php artisan e2e:inspect sale SALE-…       stage, payments and stock holds
  *   php artisan e2e:inspect transfer TRF-…    status, counts, times
+ *   php artisan e2e:inspect shipment SHP-…    status, and each line's quantity and what is picked
  *   php artisan e2e:inspect store 'Name'      a store's id and the stock locations it got
  *   php artisan e2e:inspect site 12           store 12's site: its QR codes (what a phone camera
  *                                             reads off the counter), key holder, today's status
@@ -29,7 +30,7 @@ use Illuminate\Console\Command;
 final class InspectE2eCommand extends Command
 {
     /** @var string */
-    protected $signature = 'e2e:inspect {what : stock, item, sale, transfer, store or site} {key : a variant id or a reference}';
+    protected $signature = 'e2e:inspect {what : stock, item, sale, transfer, shipment, store or site} {key : a variant id or a reference}';
 
     /** @var string */
     protected $description = 'Print ledger facts from the *_e2e database for the Playwright specs';
@@ -51,6 +52,7 @@ final class InspectE2eCommand extends Command
             'item' => $this->pieces((int) $key),
             'sale' => $this->sale($key),
             'transfer' => $this->transfer($key),
+            'shipment' => $this->shipment($key),
             'store' => $this->store($key),
             'site' => $this->site((int) $key),
             default => null,
@@ -181,6 +183,22 @@ final class InspectE2eCommand extends Command
             'source' => $transfer->source_location_id === null ? null : (int) $transfer->source_location_id,
             'destination' => $transfer->destination_location_id === null ? null : (int) $transfer->destination_location_id,
             'transit' => (int) StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->value('id'),
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function shipment(string $reference): ?array
+    {
+        $shipment = \App\Models\Fulfillment\Shipment::query()->where('reference', $reference)->with('items')->first();
+
+        return $shipment === null ? null : [
+            'status' => (string) $shipment->status,
+            'prepared' => $shipment->prepared_at !== null,
+            'lines' => $shipment->items->map(fn ($line): array => [
+                'variant' => (int) $line->item_variant_id,
+                'quantity' => (int) $line->quantity,
+                'picked' => (int) $line->picked_quantity,
+            ])->values()->all(),
         ];
     }
 }

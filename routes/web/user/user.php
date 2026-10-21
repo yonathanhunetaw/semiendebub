@@ -1,21 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Http\Controllers\Admin\SessionController;
+use App\Http\Controllers\Storefront\CartController;
+use App\Http\Controllers\Storefront\StorefrontController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::middleware('notify.public.visit')->get('/', function () {
 
-    $user = Auth::user();
-    $host = request()->getHost();
+    $user = Auth::user();$host = request()->getHost();
 
-    $baseDomain = config('subdomains.base_domain');
-    $subdomain = str_replace('.'.$baseDomain, '', $host);
+    $baseDomain = config('subdomains.base_domain');$subdomain = str_replace('.'.$baseDomain, '',$host);
 
-    $subdomains = config('subdomains.subdomains', []);
-    $aliases = config('subdomains.aliases', []);
-    $canonicalSubdomain = $aliases[$subdomain] ?? $subdomain;
+    $subdomains = config('subdomains.subdomains', []);$aliases = config('subdomains.aliases', []);
+    $canonicalSubdomain =$aliases[$subdomain] ?? $subdomain;
 
     if (isset($subdomains[$canonicalSubdomain])) {
 
@@ -41,20 +42,17 @@ Route::middleware('notify.public.visit')->get('/', function () {
         return redirect()->route($roleDashboards[$expectedRole]);
     }
 
-    if ($user) {
-        $primaryRole = $user->roles->pluck('name')->first();
-        $targetHost = null;
-        foreach (config('subdomains.host_role_map', []) as $mappedHost => $mappedRole) {
-            if ($mappedRole === $primaryRole) {
-                $targetHost = $mappedHost;
+    if ($user) {$primaryRole = $user->roles->pluck('name')->first();$targetHost = null;
+        foreach (config('subdomains.host_role_map', []) as $mappedHost =>$mappedRole) {
+            if ($mappedRole ===$primaryRole) {
+                $targetHost =$mappedHost;
                 break;
             }
         }
         if ($targetHost) {
-            $protocol = request()->isSecure() ? 'https://' : 'http://';
-            $port = request()->getPort();
+            $protocol = request()->isSecure() ? 'https://' : 'http://';$port = request()->getPort();
             $portSuffix = ($port && !in_array($port, [80, 443])) ? ":{$port}" : "";
-            return redirect()->to($protocol . $targetHost . $portSuffix . '/dashboard');
+            return redirect()->to($protocol . $targetHost .$portSuffix . '/dashboard');
         }
     }
 
@@ -73,6 +71,34 @@ if (app()->environment('local')) {
     })->name('glitchtip.test');
 }
 
+/*
+|--------------------------------------------------------------------------
+| Public Storefront
+|--------------------------------------------------------------------------
+|
+| Deliberately unauthenticated. Shoppers browse and fill a cart as guests;
+| the cart is keyed to their session id and adopted by their account at
+| sign-in via CartService::mergeGuestCart(). Only checkout is gated.
+|
+*/
+
+Route::get('/shop', [StorefrontController::class, 'index'])
+    ->name('storefront.index');
+
+// Product detail: where the shopper picks a variant before adding to cart.
+Route::get('/shop/items/{item}', [StorefrontController::class, 'show'])
+    ->name('storefront.items.show');
+
+Route::prefix('shop/cart')->name('storefront.cart.')->group(function (): void {
+    Route::post('/items', [CartController::class, 'store'])->name('items.store');
+    Route::patch('/items/{variant}', [CartController::class, 'update'])->name('items.update');
+    Route::delete('/items/{variant}', [CartController::class, 'destroy'])->name('items.destroy');
+});
+
+Route::post('/shop/checkout', [CartController::class, 'checkout'])
+    ->name('storefront.checkout');
+
+
 Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
 
     Route::get('/home', function () {
@@ -80,7 +106,7 @@ Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
     })->name('home');
 
     Route::get('/home2', function () {
-        return Inertia::render('User/Home2/index', ['name' => 'Mike']);
+        return Inerty::render('User/Home2/index', ['name' => 'Mike']); // or Inertia::render
     })->name('home2');
 
     Route::get('/contact', function () {
@@ -95,34 +121,25 @@ Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
         return Inertia::render('User/HomePage/index');
     })->name('homepage');
 
-    // Guest/Dashboard/index is now the public storefront and needs catalogue
-    // props, so this authenticated entry point shares the storefront
-    // controller. The unauthenticated door is `storefront.index` (/shop).
-    // Named `dashboard` because that is the name the auth scaffolding
-    // (register / verify email / confirm password) and AuthenticatedLayout all
-    // resolve. It did not exist, so every one of those paths threw
-    // RouteNotFoundException and returned a 500.
-    Route::get('/dashboard', [\App\Http\Controllers\Storefront\StorefrontController::class, 'index'])
+    Route::get('/dashboard', [StorefrontController::class, 'index'])
         ->name('dashboard');
 
     // --- PROFILE (main domain) ---
-    // Shared\ProfileController existed but was routed nowhere, so account
-    // self-service was unreachable outside the delivery and vendor consoles.
     Route::get('/profile', [\App\Http\Controllers\Shared\ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [\App\Http\Controllers\Shared\ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [\App\Http\Controllers\Shared\ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Lists and ends every user's session, so global admins only (a store
-    // admin is locked to one store; dev has its own list on dev.).
+    // Lists and ends every user's session
     Route::prefix('sessions')->middleware(['role:admin', 'admin.global'])->group(function () {
         Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
         Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
     });
 });
+
 /*
- * The counter QR's URL (App\Services\Workforce\CounterQr::url). It is on the
- * root domain because sellers and stock keepers sign in to different apps;
- * the page sends the phone on to `{app}.work.clock` and remembers the choice.
+- The counter QR's URL (App\Services\Workforce\CounterQr::url). It is on the
+- root domain because sellers and stock keepers sign in to different apps;
+- the page sends the phone on to `{app}.work.clock` and remembers the choice.
  */
 Route::get('/clock/{site}/{token}', \App\Http\Controllers\Shared\Work\ClockRelayController::class)
     ->whereNumber('site')

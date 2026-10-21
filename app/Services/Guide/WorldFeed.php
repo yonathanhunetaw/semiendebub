@@ -7,11 +7,16 @@ namespace App\Services\Guide;
 use App\Models\Auth\User;
 use App\Models\Finance\Payment;
 use App\Models\Finance\Sale;
-use App\Models\Inventory\RefillRequest;
 use App\Models\Fulfillment\Shipment;
+use App\Models\Fulfillment\ShipmentItem;
+use App\Models\Inventory\FloorArea;
+use App\Models\Inventory\RefillRequest;
 use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\Stocktake;
+use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\Transfer;
+use App\Services\Fulfillment\ShipmentHandoffService;
+use App\Services\Inventory\RefillBoard;
 use App\Services\Inventory\ShelfMatrix;
 use App\Services\Inventory\StockLocationTree;
 use App\Services\ShipmentWorkflowService;
@@ -49,8 +54,8 @@ class WorldFeed
         private readonly ShipmentWorkflowService $workflow,
         private readonly ShelfMatrix $shelves,
         private readonly StockLocationTree $tree,
-    ) {
-    }
+        private readonly RefillBoard $board,
+    ) {}
 
     /** The Main Store's id, or null; a viewer tied to another store gets null too. */
     private function mainStoreFor(User $viewer): ?int
@@ -332,6 +337,173 @@ class WorldFeed
         $shipments = $query->get()->map(fn (Shipment $s): array => $this->present($s, $mainStoreId === null ? null : (int) $mainStoreId));
 
         return ['shipments' => $shipments->values()->all(), 'days' => $this->busyDays($viewer)];
+    }
+
+    /**
+     * What the Guide's Play mode can pick up and carry (`?play=1`), as it
+     * stands now. Main Store only, as the rest of the world; a viewer tied to
+     * another store gets nothing (store null), and plays Watch only.
+     *
+     * Store Floor → Store Shelf: the floor → shelf transfers waiting on the
+     * stock keeper's shelving list (RefillBoard), each with its unit and the
+     * size of one in m³ (null when the variant has none recorded); the bins
+     * at or below their refill line with nothing on its way; and whether this
+     * viewer may shelve for real.
+     *
+     * Hub → Freight Car: the shipments the freight car loads (loads()).
+     *
+     * A read only: Play writes through the normal routes.
+     *
+     * @return array{store: array{id: int, name: string}|null, shelf: array{id: int, name: string}|null, to_shelve: array<int, array<string, mixed>>, needs: array<int, array<string, mixed>>, can_shelve: bool, loads: array<int, array<string, mixed>>}
+     */
+    public function play(User $viewer): array
+    {
+        $storeId = $this->mainStoreFor($viewer);
+
+        if ($storeId === null) {
+            return ['store' => null, 'shelf' => null, 'to_shelve' => [], 'needs' => [], 'can_shelve' => false, 'loads' => []];
+        }
+
+        $list = $this->board->shelvingList($storeId, $viewer);
+        $sizes = $this->unitSizes(array_map(fn (array $row): int => (int) $row['transfer_id'], $list['to_shelve']));
+
+        return [
+            'store' => ['id' => $storeId, 'name' => self::MAIN_STORE],
+            'shelf' => $list['shelf'],
+            'to_shelve' => array_map(fn (array $row): array => $row + ($sizes[(int) $row['transfer_id']] ?? ['unit' => 'Unit', 'unit_cbm' => null]), $list['to_shelve']),
+            'needs' => $list['needs'],
+            'can_shelve' => (bool) $list['can_shelve'],
+            'loads' => $this->loads($storeId, $viewer),
+        ];
+    }
+
+    /**
+     * The freight car's jobs: shipments from Main Hub A or B to the Main
+     * Store (its floor or its Remote Hub) that are scheduled or being picked,
+     * soonest first. Loading the car is the stock keeper's pick, so each line
+     * says what is already picked, and where in its hub the item sits (the
+     * first floor area it is placed in, when the hub has a floor plan).
+     *
+     * Each line's sizes: `line_cbm` as the manifest recorded it (the whole
+     * line; often empty) and `unit_cbm`, one unit of the variant's own
+     * packaging; either may be null. The vehicle's `max_cbm` is the copy the
+     * shipment keeps, else the car's own. `can_pick`: may this viewer pick it
+     * for real (the same check the step route makes: someone who works the
+     * origin hub's dock, ShipmentHandoffService::mayAct).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function loads(int $storeId, User $viewer): array
+    {
+        $shipments = Shipment::query()
+            ->forStore($storeId)
+            ->whereIn('status', [ShipmentWorkflowService::SCHEDULED, ShipmentWorkflowService::PICKING])
+            ->with([
+                'originLocation', 'destinationLocation', 'vehicle:id,name,plate,max_cbm,payload_kg',
+                'items.itemVariant.item:id,product_name', 'items.itemVariant.itemPackagingType:id,name', 'items.itemVariant.packagingQuantities',
+            ])
+            ->orderByRaw('coalesce(agreed_scheduled_for, scheduled_for, created_at)')
+            ->orderBy('id')
+            ->limit(10)
+            ->get()
+            ->filter(fn (Shipment $s): bool => $s->originLocation?->kind === StockLocation::KIND_MAIN_HUB
+                && $this->placeKey($s->originLocation, $storeId) !== null
+                && $this->placeKey($s->destinationLocation, $storeId) !== null);
+
+        // Where each item sits in each origin hub: area codes, by location then item.
+        $areas = [];
+        FloorArea::query()
+            ->whereIn('stock_location_id', $shipments->pluck('origin_stock_location_id')->unique()->all())
+            ->with('items:id')
+            ->orderBy('code')
+            ->get()
+            ->each(function (FloorArea $area) use (&$areas): void {
+                foreach ($area->items as $item) {
+                    $areas[(int) $area->stock_location_id][(int) $item->id] ??= (string) $area->code;
+                }
+            });
+
+        $handoff = app(ShipmentHandoffService::class);
+
+        return $shipments->map(fn (Shipment $s): array => $this->presentLoad($s, $storeId, $areas) + [
+            'can_pick' => $handoff->mayAct($s, ShipmentHandoffService::PICK_LINE, $viewer),
+        ])->values()->all();
+    }
+
+    /**
+     * @param  array<int, array<int, string>>  $areas  area codes by origin location, then item
+     * @return array<string, mixed>
+     */
+    private function presentLoad(Shipment $s, int $storeId, array $areas): array
+    {
+        $maxCbm = (float) ($s->vehicle_max_cbm ?? $s->vehicle?->max_cbm ?? 0);
+
+        return [
+            'id' => (int) $s->id,
+            'reference' => (string) $s->reference,
+            'status' => (string) $s->status,
+            'origin' => $this->placeKey($s->originLocation, $storeId),
+            'destination' => $this->placeKey($s->destinationLocation, $storeId),
+            'scheduled_for' => ($s->agreed_scheduled_for ?? $s->scheduled_for)?->toIso8601String(),
+            'vehicle' => [
+                'name' => $s->vehicle?->name ?? $s->vehicle_name,
+                'plate' => $s->vehicle?->plate ?? $s->vehicle_plate,
+                'max_cbm' => $maxCbm > 0 ? $maxCbm : null,
+                'payload_kg' => $s->vehicle?->payload_kg,
+            ],
+            'lines' => $s->items->map(function (ShipmentItem $line) use ($s, $areas): array {
+                $variant = $line->itemVariant;
+
+                return [
+                    'variant_id' => (int) $line->item_variant_id,
+                    'name' => (string) ($variant?->item?->product_name ?? 'Unknown product'),
+                    'unit' => (string) ($line->unit ?: ($variant?->itemPackagingType?->name ?? 'Unit')),
+                    'quantity' => (int) $line->quantity,
+                    'picked_quantity' => (int) $line->picked_quantity,
+                    'line_cbm' => $line->cbm !== null && (float) $line->cbm > 0 ? (float) $line->cbm : null,
+                    'unit_cbm' => $this->ownUnitCbm($variant),
+                    'weight_kg' => $line->weight_kg !== null ? (float) $line->weight_kg : null,
+                    'area' => $variant !== null ? ($areas[(int) $s->origin_stock_location_id][(int) $variant->item_id] ?? null) : null,
+                ];
+            })->values()->all(),
+        ];
+    }
+
+    /** The size of one unit of the variant's own packaging, in m³ (item_variant_packaging_quantity), or null when none is recorded. */
+    private function ownUnitCbm(?ItemVariant $variant): ?float
+    {
+        $own = $variant?->packagingQuantities->firstWhere('id', $variant->item_packaging_type_id);
+        $cbm = $own?->pivot?->cbm;
+
+        return $cbm !== null && (float) $cbm > 0 ? (float) $cbm : null;
+    }
+
+    /**
+     * Each transfer's unit (its variant's own packaging: a transfer's quantity
+     * is counted in it) and the size of one, from item_variant_packaging_quantity.
+     *
+     * @param  array<int, int>  $transferIds
+     * @return array<int, array{unit: string, unit_cbm: float|null}>
+     */
+    private function unitSizes(array $transferIds): array
+    {
+        if ($transferIds === []) {
+            return [];
+        }
+
+        return Transfer::query()
+            ->whereIn('id', $transferIds)
+            ->with(['itemVariant.itemPackagingType:id,name', 'itemVariant.packagingQuantities'])
+            ->get(['id', 'item_variant_id'])
+            ->mapWithKeys(function (Transfer $transfer): array {
+                $variant = $transfer->itemVariant;
+
+                return [(int) $transfer->id => [
+                    'unit' => (string) ($variant?->itemPackagingType?->name ?? 'Unit'),
+                    'unit_cbm' => $this->ownUnitCbm($variant),
+                ]];
+            })
+            ->all();
     }
 
     /**

@@ -30,40 +30,43 @@ export interface SharedUser {
 
 export type SyncTone = 'ok' | 'busy' | 'warn' | 'error';
 
-/** The workspace panel's colours, in one place. */
+/** The workspace panel's colours: flat neutral greys, like the tldraw toolbar and style panel. */
 export const ws = {
-    page: '#0b1120',
-    ink: '#f1f5f9',
-    muted: '#94a3b8',
-    faint: '#64748b',
-    card: 'rgba(30, 41, 59, 0.55)',
-    cardHover: 'rgba(51, 65, 85, 0.6)',
-    border: 'rgba(148, 163, 184, 0.16)',
-    borderStrong: 'rgba(148, 163, 184, 0.3)',
-    accent: '#6366f1',
-    accentSoft: 'rgba(99, 102, 241, 0.16)',
-    accentLine: 'rgba(129, 140, 248, 0.55)',
-    mesh: 'radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.22) 0, transparent 50%),'
-        + ' radial-gradient(at 100% 0%, rgba(217, 70, 239, 0.12) 0, transparent 42%),'
-        + ' radial-gradient(at 50% 100%, rgba(14, 165, 233, 0.1) 0, transparent 50%)',
+    page: '#212529',
+    ink: '#f0f1f2',
+    muted: '#a4a7ac',
+    faint: '#7b7f85',
+    card: '#2a2e32',
+    cardHover: '#32373c',
+    border: 'rgba(255, 255, 255, 0.09)',
+    borderStrong: 'rgba(255, 255, 255, 0.2)',
+    accent: '#f0f1f2',
+    accentSoft: 'rgba(255, 255, 255, 0.09)',
+    accentLine: 'rgba(255, 255, 255, 0.45)',
+    mesh: 'none',
 };
 
 export const workspaceTheme = createTheme({
     palette: {
         mode: 'dark',
-        primary: { main: '#6366f1', light: '#818cf8', dark: '#4f46e5' },
-        success: { main: '#34d399' },
-        warning: { main: '#fbbf24' },
-        error: { main: '#f87171' },
-        background: { default: ws.page, paper: '#111827' },
+        primary: { main: '#f0f1f2', light: '#ffffff', dark: '#d6d8db', contrastText: '#16181a' },
+        success: { main: '#4ec98a' },
+        warning: { main: '#e0b24a' },
+        error: { main: '#f0706b' },
+        background: { default: ws.page, paper: '#2c3136' },
         text: { primary: ws.ink, secondary: ws.muted },
         divider: ws.border,
     },
-    shape: { borderRadius: 12 },
+    shape: { borderRadius: 4 },
     typography: { fontFamily: '"Inter", "Segoe UI", system-ui, -apple-system, "Helvetica", "Arial", sans-serif' },
+    components: {
+        MuiButton: { styleOverrides: { root: { textTransform: 'none', fontWeight: 600 } } },
+        MuiMenu: { styleOverrides: { paper: { border: '1px solid rgba(255, 255, 255, 0.1)', backgroundImage: 'none', boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)' } } },
+        MuiDialog: { styleOverrides: { paper: { border: '1px solid rgba(255, 255, 255, 0.1)', backgroundImage: 'none' } } },
+    },
 });
 
-const TINTS = ['#818cf8', '#c084fc', '#2dd4bf', '#38bdf8', '#f472b6', '#fb7185', '#fb923c', '#fbbf24', '#34d399', '#a78bfa'];
+const TINTS = ['#c9ccd1', '#b4b8be', '#9fa4ab', '#d6d8db'];
 
 /** The same title always gets the same colour. */
 export function tintFor(text: string): string {

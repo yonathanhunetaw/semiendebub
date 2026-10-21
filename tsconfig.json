@@ -13,6 +13,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,              // Vite handles the building, not the TS compiler
+    "allowImportingTsExtensions": true, // `node --test` unit tests import "./x.ts" (Node needs the extension)
     "jsx": "react-jsx",          // Tells TS how to handle React
     "paths": {
       "@/*": ["./resources/js/*"]   // This makes your Laravel imports work (e.g., import X from '@/Pages/...')

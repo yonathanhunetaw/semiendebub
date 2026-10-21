@@ -100,7 +100,7 @@ require __DIR__.'/web/vendor/vendor.php';                        // ['auth', 've
 | STOREFRONT -> routes/web/storefront/storefront.php
 |-------------------------------------------------------------------------------------------------------------*/
 
-require __DIR__.'/web/storefront/storefront.php';                // public - no auth
+// require __DIR__.'/web/storefront/storefront.php';                // public - no auth
 
 /*-------------------------------------------------------------------------------------------------------------
 | USER -> routes/web/user/user.php
