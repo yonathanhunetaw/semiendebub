@@ -27,13 +27,15 @@ class ShelvingController extends Controller
     {
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request, StockPermissions $permissions): Response
     {
         $user = $request->user();
         $storeId = $user?->store_id !== null ? (int) $user->store_id : null;
 
+        // An admin looks at a store by ?store=, if it is one they run.
         if (in_array($user?->roleKey(), ['admin', 'dev'], true) && $request->filled('store')) {
             $storeId = $request->integer('store');
+            abort_unless($permissions->isAdminOf($user, $storeId), 403, 'That store is not yours to look at.');
         }
 
         return Inertia::render('StockKeeper/Shelving/index', [

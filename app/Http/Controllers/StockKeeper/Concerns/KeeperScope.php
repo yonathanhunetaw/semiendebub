@@ -32,7 +32,7 @@ trait KeeperScope
 
         $permissions = app(StockPermissions::class);
 
-        if ($permissions->isAdmin($user) || $permissions->managerAllows($user, $location, FacilityManager::EDIT_PLANOGRAM)) {
+        if ($permissions->isAdminOf($user, $location->store_id !== null ? (int) $location->store_id : null) || $permissions->managerAllows($user, $location, FacilityManager::EDIT_PLANOGRAM)) {
             return true;
         }
 

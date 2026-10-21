@@ -373,6 +373,25 @@ class AdminStorePricingTransfersTest extends TestCase
         $this->assertSame(0, Transfer::query()->count());
     }
 
+    #[Test]
+    public function a_store_transfer_refuses_another_stores_variant_or_shelf(): void
+    {
+        $other = Store::factory()->create(['name' => 'Other Store', 'type' => Store::TYPE_RETAIL]);
+        $otherSv = StoreVariant::factory()->create([
+            'store_id' => $other->id, 'item_id' => $this->item->id, 'item_variant_id' => $this->variant->id,
+            'pricing_matrix' => ['price' => 100.0],
+        ]);
+        $otherShelf = $other->inventoryLocations()->shelves()->firstOrFail();
+        $url = route('store.transfer.create', $this->store);
+
+        $this->post($url, ['store_variant_id' => $otherSv->id, 'quantity' => 1, 'from_location_id' => $this->shelf()->id])
+            ->assertSessionHasErrors('store_variant_id');
+        $this->post($url, ['store_variant_id' => $this->sv->id, 'quantity' => 1, 'from_location_id' => $otherShelf->id])
+            ->assertSessionHasErrors('from_location_id');
+
+        $this->assertSame(0, Transfer::query()->count());
+    }
+
     private function remoteTransfer(): Transfer
     {
         $remote = app(StockLocationTree::class)->addRemoteHub($this->store);

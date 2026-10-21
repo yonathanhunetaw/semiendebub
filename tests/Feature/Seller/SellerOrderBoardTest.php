@@ -211,4 +211,51 @@ class SellerOrderBoardTest extends TestCase
         $shelfTile = collect(app(SellerLocationBoard::class)->strip($this->store->id))->firstWhere('key', 'shelf');
         $this->assertSame(1, $shelfTile['alert']);
     }
+
+    // ---- A seller with no store sees nothing (fails closed) ----
+
+    #[Test]
+    public function a_seller_with_no_store_sees_no_orders_and_cannot_act_on_one(): void
+    {
+        $sale = $this->sale('S-ELSEWHERE', Sale::STAGE_PICK_PACK);
+        $storeless = User::factory()->create(['role' => 'seller', 'store_id' => null]);
+        $storeless->assignRole('seller');
+        $this->actingAs($storeless, 'web')->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
+
+        $this->get(route('seller.orders.index'))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('orders', 0)->has('plans', 0));
+        $this->get(route('seller.orders.custody', 'S-ELSEWHERE'))->assertNotFound();
+        $this->post(route('seller.orders.cancel', 'S-ELSEWHERE'))->assertNotFound();
+        $this->post(route('seller.orders.sourcing.confirm', $sale), ['lines' => [[
+            'sale_item_id' => $sale->items()->value('id'), 'location_type' => 'stock_location', 'location_id' => 1,
+        ]]])->assertNotFound();
+
+        $this->assertSame(Sale::STAGE_PICK_PACK, $sale->fresh()->fulfillment_stage);
+    }
+
+    #[Test]
+    public function a_seller_with_no_store_cannot_open_a_stores_customer(): void
+    {
+        $customer = \App\Models\Auth\Customer::factory()->create(['store_id' => $this->store->id]);
+        $storeless = User::factory()->create(['role' => 'seller', 'store_id' => null]);
+        $storeless->assignRole('seller');
+
+        $this->actingAs($storeless, 'web')->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')])
+            ->get(route('seller.customers.show', $customer))
+            ->assertNotFound();
+    }
+
+    #[Test]
+    public function a_global_admin_on_the_seller_app_still_sees_every_stores_orders(): void
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+        $this->sale('S-MINE', Sale::STAGE_TO_DELIVER);
+        $this->sale('S-THEIRS', Sale::STAGE_TO_DELIVER, 'paid', 0, Store::factory()->create(['type' => Store::TYPE_RETAIL]));
+        $admin = User::factory()->create(['role' => 'admin', 'store_id' => null]);
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin, 'web')->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')])
+            ->get(route('seller.orders.index'))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('orders', 2));
+    }
 }

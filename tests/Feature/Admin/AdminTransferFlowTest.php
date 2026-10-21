@@ -75,4 +75,64 @@ class AdminTransferFlowTest extends TestCase
                 ->where('transfer.status', 'completed')
                 ->where('journal', fn ($rows) => collect($rows)->pluck('type')->all() === ['move_out', 'custody_in', 'custody_out', 'move_in']));
     }
+
+    // ---- A store admin sends stock out of their own stores only ----
+
+    /** @return array{0: User, 1: Store, 2: Store, 3: ItemVariant} */
+    private function twoStores(): array
+    {
+        Role::firstOrCreate(['name' => 'admin']);
+        $own = Store::factory()->create(['type' => Store::TYPE_RETAIL]);
+        $other = Store::factory()->create(['type' => Store::TYPE_RETAIL]);
+        $variant = ItemVariant::factory()->create();
+        app(StockService::class)->receive($variant->id, app(StockLocationTree::class)->addRemoteHub($own), 20);
+        app(StockService::class)->receive($variant->id, app(StockLocationTree::class)->addRemoteHub($other), 20);
+
+        $storeAdmin = User::factory()->create(['role' => 'admin', 'store_id' => $own->id]);
+        $storeAdmin->assignRole('admin');
+        $this->withServerVariables(['HTTP_HOST' => 'admin.'.config('app.system_domain')]);
+        $this->actingAs($storeAdmin);
+
+        return [$storeAdmin, $own, $other, $variant];
+    }
+
+    private function place(Store $store, string $kind): StockLocation
+    {
+        return StockLocation::query()->where('store_id', $store->id)->where('kind', $kind)->sole();
+    }
+
+    #[Test]
+    public function a_store_admin_cannot_pull_stock_out_of_a_store_they_do_not_run(): void
+    {
+        [, $own, $other, $variant] = $this->twoStores();
+
+        $this->post(route('admin.inventory.transfers.store'), [
+            'item_variant_id' => $variant->id, 'quantity' => 5,
+            'source_location_type' => StockLocation::class, 'source_location_id' => $this->place($other, StockLocation::KIND_REMOTE_HUB)->id,
+            'destination_location_type' => StockLocation::class, 'destination_location_id' => $this->place($own, StockLocation::KIND_BACKROOM)->id,
+        ])->assertForbidden();
+
+        // Naming their own store as the origin does not hide whose shelf it is.
+        $this->post(route('admin.inventory.transfers.store'), [
+            'item_variant_id' => $variant->id, 'quantity' => 5, 'from_store_id' => $own->id, 'to_store_id' => $own->id,
+            'source_location_type' => StockLocation::class, 'source_location_id' => $this->place($other, StockLocation::KIND_REMOTE_HUB)->id,
+            'destination_location_type' => StockLocation::class, 'destination_location_id' => $this->place($own, StockLocation::KIND_BACKROOM)->id,
+        ])->assertForbidden();
+
+        $this->assertSame(0, Transfer::query()->count());
+    }
+
+    #[Test]
+    public function a_store_admin_moves_stock_within_their_own_store(): void
+    {
+        [, $own, , $variant] = $this->twoStores();
+
+        $this->post(route('admin.inventory.transfers.store'), [
+            'item_variant_id' => $variant->id, 'quantity' => 5,
+            'source_location_type' => StockLocation::class, 'source_location_id' => $this->place($own, StockLocation::KIND_REMOTE_HUB)->id,
+            'destination_location_type' => StockLocation::class, 'destination_location_id' => $this->place($own, StockLocation::KIND_BACKROOM)->id,
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $this->assertSame(1, Transfer::query()->count());
+    }
 }

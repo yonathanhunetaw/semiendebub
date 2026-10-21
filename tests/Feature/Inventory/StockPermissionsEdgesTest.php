@@ -53,7 +53,8 @@ class StockPermissionsEdgesTest extends TestCase
         $p = $this->permissions;
         $storeId = (int) $this->store->id;
 
-        $this->assertFalse($p->isAdmin(null));
+        $this->assertFalse($p->isGlobalAdmin(null));
+        $this->assertFalse($p->isAdminOf(null, 1));
         $this->assertFalse($p->managerAllows(null, $this->shelf, FacilityManager::ABILITIES[0]));
         $this->assertFalse($p->isManagerOf(null, $this->shelf));
         $this->assertFalse($p->isStaffOf(null, $this->shelf));

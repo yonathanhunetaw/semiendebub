@@ -119,16 +119,18 @@ class TransferController extends Controller
 
     public function store(StoreTransferRequest $request): RedirectResponse
     {
-        // A store admin moves stock into or out of their own stores only.
-        $from = $request->validated('from_store_id');
-        $to = $request->validated('to_store_id');
-        abort_unless(
-            $this->activeStore->isGlobal()
-                || ($from !== null && $this->activeStore->allows((int) $from))
-                || ($to !== null && $this->activeStore->allows((int) $to)),
-            403,
-            'A transfer must start or end at one of your stores.',
-        );
+        // A store admin sends stock out of their own stores, or pulls it from
+        // a shared hub (no store) into one; never out of another store.
+        if (! $this->activeStore->isGlobal()) {
+            $from = $this->endStore($request, 'source_location', 'from_store_id');
+            $to = $this->endStore($request, 'destination_location', 'to_store_id');
+
+            abort_unless(
+                $from !== null ? $this->activeStore->allows($from) : ($to !== null && $this->activeStore->allows($to)),
+                403,
+                'A transfer must start at one of your stores, or at a shared hub into one.',
+            );
+        }
 
         $transfer = $this->workflow->create(
             variantId: (int) $request->validated('item_variant_id'),
@@ -274,5 +276,28 @@ class TransferController extends Controller
         $node = $this->domain->describe($locationType, $locationId);
 
         return $node['label'] . ' · ' . $node['name'];
+    }
+
+    /**
+     * The store one end of a new transfer really belongs to: a named location
+     * answers for itself (null for a shared hub), else the store id sent. A
+     * store id that disagrees with the location is refused.
+     */
+    private function endStore(StoreTransferRequest $request, string $location, string $storeField): ?int
+    {
+        $sent = $request->validated($storeField) !== null ? (int) $request->validated($storeField) : null;
+        $type = $request->validated($location.'_type');
+        $id = $request->validated($location.'_id');
+
+        if ($type === null || $id === null) {
+            return $sent;
+        }
+
+        $actual = $this->domain->describe((string) $type, (int) $id)['store_id'];
+        $actual = $actual !== null ? (int) $actual : null;
+
+        abort_if($sent !== null && $sent !== $actual, 403, 'That place is not in the store named.');
+
+        return $actual;
     }
 }

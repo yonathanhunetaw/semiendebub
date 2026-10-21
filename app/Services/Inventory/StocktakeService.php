@@ -119,7 +119,7 @@ class StocktakeService
     {
         $this->assertStatus($take, Stocktake::SUBMITTED, 'posted');
 
-        if (! $this->permissions->isAdmin($by) && (int) $take->submitted_by === (int) $by->id) {
+        if (! $this->permissions->isGlobalAdmin($by) && (int) $take->submitted_by === (int) $by->id) {
             throw new InvalidArgumentException('Someone other than the person who submitted the count approves it.');
         }
 
@@ -212,7 +212,7 @@ class StocktakeService
                 'short' => $counted->where('variance', '<', 0)->count(),
             ],
             'can_approve' => $viewer !== null && $take->status === Stocktake::SUBMITTED
-                && ($this->permissions->isAdmin($viewer) || (int) $take->submitted_by !== (int) $viewer->id),
+                && ($this->permissions->isGlobalAdmin($viewer) || (int) $take->submitted_by !== (int) $viewer->id),
             'lines' => $lines->all(),
         ];
     }

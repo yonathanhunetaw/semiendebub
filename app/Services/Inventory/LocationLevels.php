@@ -65,7 +65,7 @@ class LocationLevels
             return false;
         }
 
-        if ($this->permissions->isAdmin($user)
+        if ($this->permissions->isAdminOf($user, $location->store_id !== null ? (int) $location->store_id : null)
             || $this->permissions->managerAllows($user, $location, \App\Models\Inventory\FacilityManager::EDIT_PLANOGRAM)) {
             return true;
         }

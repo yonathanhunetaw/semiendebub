@@ -1229,10 +1229,12 @@ class StoreController extends Controller
      */
     public function storeTransfer(Request $request, Store $store)
     {
+        // Both the variant and the area must be this store's: the URL names
+        // the store, so another store's ids are refused, not moved.
         $validated = $request->validate([
-            'store_variant_id' => 'required|exists:store_variants,id',
+            'store_variant_id' => ['required', \Illuminate\Validation\Rule::exists('store_variants', 'id')->where('store_id', $store->id)],
             'quantity' => 'required|integer|min:1',
-            'from_location_id' => 'required|exists:item_inventory_locations,id',
+            'from_location_id' => ['required', \Illuminate\Validation\Rule::exists('item_inventory_locations', 'id')->where('store_id', $store->id)],
             'notes' => 'nullable|string|max:500',
         ]);
 

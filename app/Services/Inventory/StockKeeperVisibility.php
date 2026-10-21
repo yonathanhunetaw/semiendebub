@@ -23,6 +23,10 @@ use App\Models\Inventory\StockLocation;
  */
 class StockKeeperVisibility
 {
+    public function __construct(private readonly StockPermissions $permissions)
+    {
+    }
+
     /**
      * @return array{nodes: array<int, int>, leaves: array<int, int>}|null  null = unrestricted
      */
@@ -32,7 +36,8 @@ class StockKeeperVisibility
             return ['nodes' => [], 'leaves' => []];
         }
 
-        if ($this->isAdmin($user)) {
+        // A store admin falls through to their store's locations below.
+        if ($this->permissions->isGlobalAdmin($user)) {
             return null;
         }
 
@@ -71,7 +76,7 @@ class StockKeeperVisibility
             return false;
         }
 
-        if ($this->isAdmin($user)) {
+        if ($this->permissions->isAdminOf($user, $leaf->store_id !== null ? (int) $leaf->store_id : null)) {
             return true;
         }
 
@@ -86,10 +91,5 @@ class StockKeeperVisibility
         }
 
         return ! $managed;
-    }
-
-    private function isAdmin(User $user): bool
-    {
-        return in_array($user->roleKey(), ['admin', 'dev'], true);
     }
 }

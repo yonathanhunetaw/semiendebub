@@ -47,7 +47,7 @@ final class ItemSetupStockController extends Controller
     /** Count this item's variants at a place: join the count in progress there, or start one and submit it. */
     public function count(Request $request, Item $item, StockLocation $location): RedirectResponse
     {
-        abort_unless($this->permissions->isAdmin($request->user()), 403);
+        abort_unless($this->permissions->isGlobalAdmin($request->user()), 403);
         $data = $request->validate(['counts' => ['required', 'array', 'min:1'], 'counts.*' => ['nullable', 'integer', 'min:0', 'max:100000000']]);
 
         $variantIds = $item->variants()->pluck('id')->all();
@@ -84,7 +84,7 @@ final class ItemSetupStockController extends Controller
 
     public function approve(Request $request, Item $item, Stocktake $stocktake): RedirectResponse
     {
-        abort_unless($this->permissions->isAdmin($request->user()), 403);
+        abort_unless($this->permissions->isGlobalAdmin($request->user()), 403);
 
         if ($this->hasOtherItems($item, $stocktake)) {
             return back()->withErrors(['count' => "{$stocktake->reference} also counts other items: approve it in Admin → Counts, where all of it shows."]);
@@ -101,7 +101,7 @@ final class ItemSetupStockController extends Controller
 
     public function void(Request $request, Item $item, Stocktake $stocktake): RedirectResponse
     {
-        abort_unless($this->permissions->isAdmin($request->user()), 403);
+        abort_unless($this->permissions->isGlobalAdmin($request->user()), 403);
 
         if ($this->hasOtherItems($item, $stocktake)) {
             return back()->withErrors(['count' => "{$stocktake->reference} also counts other items: void it in Admin → Counts."]);

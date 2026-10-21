@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Seller;
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\MovementDomainException;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Seller\Concerns\SellerStore;
 use App\Http\Requests\Fulfillment\ConfirmSourcingRequest;
 use App\Models\Finance\Sale;
 use App\Services\Fulfillment\OrderSourcingService;
@@ -32,6 +33,8 @@ use RuntimeException;
  */
 class OrderController extends Controller
 {
+    use SellerStore;
+
     public function __construct(private readonly OrderSourcingService $sourcing)
     {
     }
@@ -54,10 +57,10 @@ class OrderController extends Controller
      */
     public function confirmSourcing(ConfirmSourcingRequest $request, Sale $sale): RedirectResponse
     {
-        $storeId = $request->user()?->store_id;
+        $storeId = self::sellerStoreId($request);
 
         // Another store's order is not this seller's to pick.
-        abort_if($storeId !== null && (int) $sale->store_id !== (int) $storeId, 404);
+        abort_if($storeId !== null && (int) $sale->store_id !== $storeId, 404);
 
         if (! $sale->isAwaitingSourcing()) {
             return back()->with('error', 'This order is not in Pick & Pack.');

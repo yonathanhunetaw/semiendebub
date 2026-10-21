@@ -32,7 +32,8 @@ Route::domain("marketing.$baseDomain")
                 return Inertia::render('Marketing/Campaigns/index');
             })->name('campaigns.index');
 
-            Route::prefix('sessions')->group(function () {
+            // Lists and ends every user's session: global admins only.
+            Route::prefix('sessions')->middleware('admin.global')->group(function () {
                 Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
                 Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
             });

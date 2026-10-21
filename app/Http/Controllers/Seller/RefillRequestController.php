@@ -39,14 +39,15 @@ class RefillRequestController extends Controller
      * The store's waiting list. Everyone in the store sees it; only its
      * managers act on it (each row carries what the viewer may do).
      */
-    public function index(Request $request, RefillBoard $board): Response
+    public function index(Request $request, RefillBoard $board, StockPermissions $permissions): Response
     {
         $user = $request->user();
         $storeId = $user?->store_id !== null ? (int) $user->store_id : null;
 
-        // An admin with no store of their own looks at one by ?store=.
+        // An admin looks at a store by ?store=, if it is one they run.
         if (in_array($user?->roleKey(), ['admin', 'dev'], true) && $request->filled('store')) {
             $storeId = $request->integer('store');
+            abort_unless($permissions->isAdminOf($user, $storeId), 403, 'That store is not yours to look at.');
         }
 
         abort_if($storeId === null, 404, 'You are not assigned to a store.');

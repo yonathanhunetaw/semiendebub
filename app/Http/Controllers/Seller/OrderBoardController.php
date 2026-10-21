@@ -8,6 +8,7 @@ use App\Exceptions\CartCheckoutException;
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\PaymentException;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Seller\Concerns\SellerStore;
 use App\Http\Requests\Seller\PlaceOrderRequest;
 use App\Http\Requests\Seller\SetPaymentPartsRequest;
 use App\Http\Requests\Seller\UpdateOrderAddressRequest;
@@ -39,6 +40,8 @@ use Inertia\Response;
  */
 class OrderBoardController extends Controller
 {
+    use SellerStore;
+
     public function __construct(
         private readonly SellerOrderBoard $board,
         private readonly PaymentBoard $payments,
@@ -182,7 +185,7 @@ class OrderBoardController extends Controller
     public function pay(Request $request, string $reference): Response
     {
         $customer = Sale::query()->where('reference_number', $reference)
-            ->when($this->storeId($request), fn ($query, int $storeId) => $query->where('store_id', $storeId))
+            ->when($this->storeId($request) !== null, fn ($query) => $query->where('store_id', $this->storeId($request)))
             ->first()?->customer;
 
         return Inertia::render('Seller/Orders/ToPay', [
@@ -201,7 +204,7 @@ class OrderBoardController extends Controller
     {
         $sale = Sale::query()
             ->where('reference_number', $reference)
-            ->when($this->storeId($request), fn ($query, int $storeId) => $query->where('store_id', $storeId))
+            ->when($this->storeId($request) !== null, fn ($query) => $query->where('store_id', $this->storeId($request)))
             ->firstOrFail();
 
         return Inertia::render('Seller/Orders/Custody', [
@@ -230,7 +233,7 @@ class OrderBoardController extends Controller
     {
         return Sale::query()
             ->where('reference_number', $reference)
-            ->when($this->storeId($request), fn ($query, int $storeId) => $query->where('store_id', $storeId))
+            ->when($this->storeId($request) !== null, fn ($query) => $query->where('store_id', $this->storeId($request)))
             ->firstOrFail();
     }
 
@@ -333,10 +336,9 @@ class OrderBoardController extends Controller
         ];
     }
 
+    /** The seller's store; null (every store) only for a global admin. */
     private function storeId(Request $request): ?int
     {
-        $storeId = $request->user()?->store_id;
-
-        return $storeId !== null ? (int) $storeId : null;
+        return self::sellerStoreId($request);
     }
 }

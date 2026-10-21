@@ -78,6 +78,11 @@ foreach ($aliases as $alias => $target) {
 }
 
 return [
+    // The apps a store admin (an admin with users.store_id set) may enter, by
+    // the role key their route group gates on. These apps scope everything to
+    // the user's store; the others show every store and stay global-admin only.
+    'store_admin_roles' => ['admin', 'seller', 'store_manager', 'stock_keeper'],
+
     'base_domain' => $baseDomain,
     'separated_session_hosts' => $separatedSessionHosts,
     'subdomains' => $subdomains,

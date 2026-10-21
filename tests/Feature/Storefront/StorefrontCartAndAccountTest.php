@@ -321,4 +321,25 @@ class StorefrontCartAndAccountTest extends TestCase
 
         $this->assertTrue(DB::table('sessions')->where('id', 'someone-else')->exists(), 'another user\'s session survives');
     }
+
+    #[Test]
+    public function a_store_admin_cannot_list_or_end_other_peoples_sessions_on_the_root_domain(): void
+    {
+        DB::table('sessions')->insert([
+            'id' => 'someone-else', 'user_id' => User::factory()->create()->id, 'ip_address' => '10.0.0.1', 'user_agent' => 'phpunit',
+            'payload' => base64_encode(serialize([])), 'last_activity' => now()->timestamp,
+        ]);
+        \Spatie\Permission\Models\Role::findOrCreate('admin');
+        $storeAdmin = User::factory()->create([
+            'role' => 'admin', 'email_verified_at' => now(),
+            'store_id' => \App\Models\Store\Store::factory()->create()->id,
+        ]);
+        $storeAdmin->assignRole('admin');
+        $this->actingAs($storeAdmin);
+
+        $this->get(route('sessions.index'))->assertForbidden();
+        $this->delete(route('sessions.destroy', 'someone-else'))->assertForbidden();
+
+        $this->assertTrue(DB::table('sessions')->where('id', 'someone-else')->exists(), 'another user\'s session survives');
+    }
 }

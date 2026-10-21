@@ -8,6 +8,7 @@ use App\Models\Auth\User;
 use App\Models\Inventory\FacilityManager;
 use App\Models\Inventory\StockLocation;
 use App\Models\Store\Store;
+use App\Services\Admin\ActiveStore;
 
 /**
  * Who may do what with a store's shelf and its refills — the one definition.
@@ -147,9 +148,27 @@ class StockPermissions
     |--------------------------------------------------------------------------
     */
 
-    public function isAdmin(?User $user): bool
+    /** Dev, or an admin with no store of their own: every store, every location. */
+    public function isGlobalAdmin(?User $user): bool
     {
-        return $user !== null && in_array($user->roleKey(), ['admin', 'dev'], true);
+        return $user !== null
+            && ($user->roleKey() === 'dev' || ($user->roleKey() === 'admin' && $user->store_id === null));
+    }
+
+    /**
+     * A global admin, or a store admin of this store (their own or one they
+     * manage). A location with no store belongs to global admins only.
+     */
+    public function isAdminOf(?User $user, ?int $storeId): bool
+    {
+        if ($this->isGlobalAdmin($user)) {
+            return true;
+        }
+
+        return $user !== null
+            && $storeId !== null
+            && $user->roleKey() === 'admin'
+            && in_array($storeId, ActiveStore::accessibleIdsFor($user) ?? [], true);
     }
 
     /**
@@ -162,7 +181,7 @@ class StockPermissions
             return false;
         }
 
-        if ($this->isAdmin($user)) {
+        if ($this->isAdminOf($user, $location->store_id !== null ? (int) $location->store_id : null)) {
             return true;
         }
 
@@ -239,7 +258,7 @@ class StockPermissions
             return false;
         }
 
-        return $this->isAdmin($user)
+        return $this->isAdminOf($user, $shelf->store_id !== null ? (int) $shelf->store_id : null)
             || $this->isManagerOf($user, $shelf)
             || $this->isStaffOf($user, $shelf)
             || $this->belongsToStore($user, $shelf->store_id);
@@ -267,7 +286,7 @@ class StockPermissions
             return false;
         }
 
-        return $this->isAdmin($user)
+        return $this->isAdminOf($user, $location->store_id !== null ? (int) $location->store_id : null)
             || $this->isManagerOf($user, $location)
             || $this->isStaffOf($user, $location);
     }
@@ -403,7 +422,7 @@ class StockPermissions
             return false;
         }
 
-        if ($this->isAdmin($user)) {
+        if ($this->isAdminOf($user, $storeId)) {
             return true;
         }
 

@@ -182,9 +182,11 @@ class PurchaseOrderTest extends TestCase
         $this->as($this->user('procurement'))->post(route('procurement.purchase_orders.approve', $purchase))
             ->assertSessionHas('error');
 
+        // A store admin does not get into the procurement app at all.
         $storeAdmin = $this->user('admin', ['store_id' => Store::factory()->create()->id]);
-        $this->as($storeAdmin)->post(route('procurement.purchase_orders.approve', $purchase))
-            ->assertSessionHas('error');
+        $response = $this->as($storeAdmin)->post(route('procurement.purchase_orders.approve', $purchase));
+        $this->assertContains($response->status(), [302, 403]);
+        $response->assertSessionMissing('success');
 
         $this->assertSame(Purchase::STATUS_SUBMITTED, $purchase->refresh()->status);
 

@@ -10,7 +10,8 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * The gate in front of every role subdomain's authenticated routes.
  *
- * An admin may enter any subdomain; anyone else needs one of the roles the
+ * A global admin may enter any subdomain and a store admin only the
+ * store-scoped ones (`subdomains.store_admin_roles`); anyone else needs one of the roles the
  * route group names (`role.subdomain:seller,store_manager`). What happens to a
  * user in the wrong place depends on how sessions are shared: with one session
  * per host (local multi-account testing) they get a 403, so the tab is not
@@ -34,8 +35,9 @@ class EnsureCorrectSubdomainRole
             return $next($request);
         }
 
-        // An admin may enter any subdomain.
-        if ($user->hasRole('admin')) {
+        // A global admin may enter any subdomain; a store admin only the apps
+        // that scope to their store (`subdomains.store_admin_roles`).
+        if ($user->hasRole('admin') && $this->adminMayEnter($user, $subdomainRoles)) {
             return $next($request);
         }
 
@@ -64,6 +66,18 @@ class EnsureCorrectSubdomainRole
         }
 
         abort(403, 'Unauthorized subdomain access.');
+    }
+
+    /**
+     * @param  array<int, string>  $subdomainRoles
+     */
+    private function adminMayEnter($user, array $subdomainRoles): bool
+    {
+        if ($user->store_id === null) {
+            return true;
+        }
+
+        return array_intersect($subdomainRoles, config('subdomains.store_admin_roles', [])) !== [];
     }
 
     private function separatedSessionHosts(): bool

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Seller;
 
 use App\Exceptions\PaymentException;
 use App\Http\Controllers\Admin\Controller;
+use App\Http\Controllers\Seller\Concerns\SellerStore;
 use App\Http\Requests\Customer\SellerCustomerRequest;
 use App\Http\Requests\Seller\SetPaymentPartsRequest;
 use App\Models\Auth\Customer;
@@ -17,6 +18,8 @@ use Inertia\Inertia;
 
 class CustomerController extends Controller
 {
+    use SellerStore;
+
     /**
      * Display a listing of the resource.
      */
@@ -165,15 +168,15 @@ class CustomerController extends Controller
     }
 
     /**
-     * Customers of the seller's store. A seller with no store (an admin on
-     * the seller app) sees every customer; customers saved before they had
-     * a store stay visible to all.
+     * Customers of the seller's store. A global admin on the seller app sees
+     * every customer; a seller with no store sees only customers saved before
+     * they had a store, which stay visible to all.
      *
      * @return \Illuminate\Database\Eloquent\Builder<Customer>
      */
     public static function forSeller(Request $request): \Illuminate\Database\Eloquent\Builder
     {
-        $storeId = $request->user()?->store_id;
+        $storeId = self::sellerStoreId($request);
 
         return Customer::query()->when($storeId !== null, fn ($query) => $query
             ->where(fn ($q) => $q->where('store_id', $storeId)->orWhereNull('store_id')));

@@ -104,7 +104,8 @@ class SellerOrderBoard
     /** @return Builder<Sale> */
     private function scoped(?int $storeId): Builder
     {
-        return Sale::query()->when($storeId, fn (Builder $query) => $query->forStore((int) $storeId));
+        // null = every store; 0 (a seller with no store) matches nothing.
+        return Sale::query()->when($storeId !== null, fn (Builder $query) => $query->forStore((int) $storeId));
     }
 
     /**

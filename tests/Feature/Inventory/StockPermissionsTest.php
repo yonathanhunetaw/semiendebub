@@ -231,6 +231,76 @@ class StockPermissionsTest extends TestCase
         $this->assertSame(FacilityManager::ABILITIES, array_keys(StockPermissions::TICK_LABELS));
     }
 
+    // ---- Admins: a global admin (and dev) everywhere, a store admin only at their store ----
+
+    #[Test]
+    public function a_store_admin_runs_their_own_stores_shelves_and_refills(): void
+    {
+        $storeAdmin = $this->user('admin');
+
+        $this->assertTrue($this->permissions->canEditPlanogram($storeAdmin, $this->shelf));
+        $this->assertTrue($this->permissions->canSetRefillRoute($storeAdmin, $this->store->id));
+        $this->assertTrue($this->permissions->canViewShelf($storeAdmin, $this->shelf));
+        $this->assertTrue($this->permissions->canRaiseRefill($storeAdmin, $this->shelf));
+        $this->assertTrue($this->permissions->canAddToManifest($storeAdmin, $this->store->id));
+    }
+
+    #[Test]
+    public function a_store_admin_reaches_nothing_at_another_store(): void
+    {
+        $otherAdmin = $this->user('admin', Store::factory()->create(['type' => Store::TYPE_RETAIL])->id);
+        $this->shelf->syncManagers([$this->user('seller')->id]);
+
+        $this->assertFalse($this->permissions->canEditPlanogram($otherAdmin, $this->shelf));
+        $this->assertFalse($this->permissions->canEditPlanogram($otherAdmin, $this->remote));
+        $this->assertFalse($this->permissions->canSetRefillRoute($otherAdmin, $this->store->id));
+        $this->assertFalse($this->permissions->canViewShelf($otherAdmin, $this->shelf));
+        $this->assertFalse($this->permissions->canRaiseRefill($otherAdmin, $this->shelf));
+        $this->assertFalse($this->permissions->canAddToManifest($otherAdmin, $this->store->id));
+        $this->assertFalse($this->permissions->canAdjustOrCancel($otherAdmin, $this->store->id));
+        $this->assertFalse($this->shelf->canBeOperatedBy($otherAdmin));
+    }
+
+    #[Test]
+    public function a_global_admin_and_dev_reach_every_store(): void
+    {
+        $this->shelf->syncManagers([$this->user('seller')->id]);
+
+        foreach ([$this->user('admin', null), $this->user('dev', null)] as $user) {
+            $this->assertTrue($this->permissions->canEditPlanogram($user, $this->shelf));
+            $this->assertTrue($this->permissions->canSetRefillRoute($user, $this->store->id));
+            $this->assertTrue($this->shelf->canBeOperatedBy($user));
+        }
+    }
+
+    #[Test]
+    public function a_store_admin_cannot_open_another_stores_refill_or_shelving_list_by_query(): void
+    {
+        $otherAdmin = $this->user('admin', Store::factory()->create(['type' => Store::TYPE_RETAIL])->id);
+
+        $this->actingAs($otherAdmin)
+            ->get(route('seller.refills.index', ['store' => $this->store->id]))
+            ->assertForbidden();
+        $this->actingAs($otherAdmin)
+            ->get(route('stock_keeper.shelving.index', ['store' => $this->store->id]))
+            ->assertForbidden();
+    }
+
+    #[Test]
+    public function a_global_admin_opens_any_stores_refill_and_shelving_list_by_query(): void
+    {
+        $globalAdmin = $this->user('admin', null);
+
+        $this->actingAs($globalAdmin)
+            ->get(route('seller.refills.index', ['store' => $this->store->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('storeId', $this->store->id));
+        $this->actingAs($globalAdmin)
+            ->get(route('stock_keeper.shelving.index', ['store' => $this->store->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('storeId', $this->store->id));
+    }
+
     private function at(string $kind, ?int $storeId = null): StockLocation
     {
         return StockLocation::query()->where('store_id', $storeId ?? $this->store->id)->where('kind', $kind)->sole();

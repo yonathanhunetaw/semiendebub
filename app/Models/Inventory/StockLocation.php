@@ -214,8 +214,15 @@ class StockLocation extends Model
             return false;
         }
 
-        if (in_array($user->roleKey(), ['admin', 'dev'], true)) {
+        $permissions = app(\App\Services\Inventory\StockPermissions::class);
+
+        if ($permissions->isAdminOf($user, $this->store_id !== null ? (int) $this->store_id : null)) {
             return true;
+        }
+
+        // An admin of another store never falls through to "unmanaged, so open".
+        if ($user->roleKey() === 'admin') {
+            return false;
         }
 
         $nodes = array_filter([$this, $this->storeNode()]);

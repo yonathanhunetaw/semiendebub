@@ -43,7 +43,8 @@ Route::domain("finance.{$baseDomain}")
                     Route::post('/{payment}/reject', 'reject')->name('reject');
                 });
 
-            Route::prefix('sessions')->group(function () {
+            // Lists and ends every user's session: global admins only.
+            Route::prefix('sessions')->middleware('admin.global')->group(function () {
                 Route::get('/', [SessionController::class, 'index'])->name('sessions.index');
                 Route::delete('/{id}', [SessionController::class, 'destroy'])->name('sessions.destroy');
             });

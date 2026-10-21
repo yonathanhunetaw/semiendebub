@@ -180,15 +180,15 @@ class ReceivingService
             return false;
         }
 
-        if ($this->permissions->isAdmin($user)) {
+        $location = $row->location;
+
+        if ($this->permissions->isAdminOf($user, $location?->store_id !== null ? (int) $location->store_id : null)) {
             return true;
         }
 
         if ((int) $row->recorded_by === (int) $user->id) {
             return false;
         }
-
-        $location = $row->location;
 
         return ($location !== null && $this->permissions->isManagerOf($user, $location))
             || $user->roleKey() === 'stock_keeper';

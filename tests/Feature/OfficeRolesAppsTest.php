@@ -88,7 +88,10 @@ class OfficeRolesAppsTest extends TestCase
         $this->get(route("{$role}.login"))->assertOk();
     }
 
-    // ---- Sessions (Finance and Marketing share the Admin session screen) ----
+    // ---- Sessions (the Admin session screen, global admins only) ----
+    //
+    // It lists and ends every user's session, so a finance or marketing user
+    // must not reach it from their own app.
 
     private function seedSession(string $id, ?int $userId = null): void
     {
@@ -100,9 +103,23 @@ class OfficeRolesAppsTest extends TestCase
 
     #[Test]
     #[DataProvider('sessionApps')]
-    public function the_session_list_opens_and_a_session_can_be_ended(string $role): void
+    public function the_apps_own_role_cannot_list_or_end_other_peoples_sessions(string $role): void
     {
         $this->signIn($role);
+        $this->seedSession('someone-else', User::factory()->create()->id);
+
+        $this->get(route("{$role}.sessions.index"))->assertForbidden();
+        $this->delete(route("{$role}.sessions.destroy", 'someone-else'))->assertForbidden();
+
+        $this->assertDatabaseHas('sessions', ['id' => 'someone-else']);
+    }
+
+    #[Test]
+    #[DataProvider('sessionApps')]
+    public function a_global_admin_still_opens_the_session_list_and_ends_a_session(string $role): void
+    {
+        $this->signIn('admin');
+        $this->withServerVariables(['HTTP_HOST' => $role.'.'.config('app.system_domain')]);
         $this->seedSession('to-end');
 
         $this->get(route("{$role}.sessions.index"))->assertOk()
@@ -110,14 +127,6 @@ class OfficeRolesAppsTest extends TestCase
 
         $this->delete(route("{$role}.sessions.destroy", 'to-end'))->assertSessionHas('success');
         $this->assertDatabaseMissing('sessions', ['id' => 'to-end']);
-    }
-
-    #[Test]
-    #[DataProvider('sessionApps')]
-    public function ending_a_session_that_does_not_exist_reports_an_error(string $role): void
-    {
-        $this->signIn($role);
-
         $this->delete(route("{$role}.sessions.destroy", 'nope'))->assertSessionHas('error');
     }
 
