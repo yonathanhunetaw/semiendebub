@@ -294,7 +294,7 @@ export function HubPicker({ state, hub, disabled, onTake, onTakeAll, onPutBack, 
     const holding = carried(state).units;
 
     return (
-        <Paper elevation={0} sx={{ pointerEvents: "auto", width: "100%", maxWidth: 420, maxHeight: "40dvh", display: "flex", flexDirection: "column", borderRadius: 4, boxShadow: 6, overflow: "hidden" }}>
+        <Paper elevation={0} sx={{ pointerEvents: "auto", width: "100%", maxWidth: 420, maxHeight: { xs: "34dvh", sm: "40dvh" }, display: "flex", flexDirection: "column", borderRadius: 4, boxShadow: 6, overflow: "hidden" }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
                 <Typography sx={{ fontWeight: 900, flex: 1 }} noWrap>{HUB_NAME[hub]}: for {state.load.reference}</Typography>
                 {here && <Button size="small" onClick={onTakeAll} disabled={disabled} sx={{ borderRadius: 999, fontWeight: 800, textTransform: "none" }}>Take what fits</Button>}

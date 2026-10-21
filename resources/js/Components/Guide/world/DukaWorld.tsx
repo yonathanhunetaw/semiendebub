@@ -596,6 +596,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     opacity: 0,
                     transition: "opacity .12s",
                     "&.is-on": { opacity: 1 },
+                    "@media (prefers-reduced-motion: reduce)": { transition: "none" },
                 },
                 "& .world-stick-knob": {
                     position: "absolute",
@@ -1540,8 +1541,9 @@ function buildWorld(
     const animate = () => {
         frame = requestAnimationFrame(animate);
         const time = (performance.now() - startedAt) / 1000;
-        // Seconds since the last frame, capped so a tab coming back does not teleport the worker.
-        const dt = Math.min(0.05, (performance.now() - lastFrame) / 1000);
+        // Seconds since the last frame, capped so a tab coming back does not teleport the worker; at 0.1 s
+        // the worker keeps their real pace down to 10 fps (a slow phone), and collision still steps finely (collision.move).
+        const dt = Math.min(0.1, (performance.now() - lastFrame) / 1000);
         lastFrame = performance.now();
         game?.update(dt);
         const gameCamera = game?.ownsCamera() ?? false;
@@ -1589,7 +1591,8 @@ function buildWorld(
 
         if (lit) {
             const at = anchorOf(lit);
-            marker.visible = callout.visible = at !== null;
+            // Play hides the replay's marker: it would point at old events among the worker's jobs.
+            marker.visible = callout.visible = at !== null && !game;
             if (at) {
                 marker.position.copy(at);
                 callout.position.set(at.x, 5, at.z);

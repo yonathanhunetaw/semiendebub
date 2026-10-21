@@ -7,6 +7,8 @@ import { shelveLive } from "./actions";
 import { carried as freightCarried, leftAt, startLoading, type FreightState } from "./freight";
 import { FreightGauge, HUB_OF, HubPicker, ZONE_OF, useFreightCar } from "./FreightPanel";
 import GameHud from "./GameHud";
+import { ROLE_NAME, RemotePicker, RoleChip, useRelay } from "./RelayPanel";
+import { roleNow, startRelay, type RelayState } from "./relay";
 import type { GameScene } from "./GameScene";
 import { getGame, kept, liveConfirmed, setGame, useGame } from "./gameStore";
 import { canGoLive, canLoadLive, canShelveLive } from "./permissions";
@@ -57,7 +59,13 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     // Shelving likewise: in Live only by someone who may shelve here.
     const shelfLocked = game.live && !canShelveLive(app, feed);
     const car = useFreightCar(feed?.loads ?? null, scene, setToast, app, () => readRef.current());
-    // One armload at a time: shelving jobs or freight, never both.
+    // Remote Hub → Store goes through a courier; Practice only (in Live it waits for later).
+    const relay = game.relay;
+    const relayPlayable = relay !== null && !game.live;
+    const handoff = useRelay(feed?.remote ?? null, scene, setToast);
+    const relayCarrying = relay?.carrying.length ?? 0;
+    const relayAtDoor = relay?.handedOver.length ?? 0;
+    // One armload at a time, for one job: shelving, freight or the Remote Hub's stock.
     const freightUnits = freight ? freightCarried(freight).units : 0;
 
     // The list: now, every 30 s, and when asked (after a Live put-up); merged into the running session.
@@ -103,21 +111,36 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     const floorJobs = session?.floor.length ?? 0;
     const carrying = session?.carrying.length ?? 0;
     const hubZone = freight && freightPlayable && freight.load.lines.some((l) => leftAt(freight, l.variantId) > 0) ? ZONE_OF[freight.load.origin] : null;
+    // The relay's doors, as it goes: the hub while something waits, its door for the hub keeper, the shop's door for the courier and the receiver.
+    const relayZones: ZoneKey[] | null = relay && relayPlayable ? [
+        ...(relay.waiting.length > 0 && relay.carrier !== "courier" ? (["remote"] as ZoneKey[]) : []),
+        ...(relay.carrier === "hub_keeper" ? (["remote_door"] as ZoneKey[]) : []),
+        ...(relay.carrier !== null || relay.handedOver.length > 0 ? (["store_door"] as ZoneKey[]) : []),
+    ] : null;
     useEffect(() => {
         const keys: ZoneKey[] = [];
         if (floorJobs > 0 && !shelfLocked) keys.push("floor");
         if (carrying > 0) keys.push("shelf");
         if (hubZone) keys.push(hubZone);
         if (freightUnits > 0) keys.push("truck");
+        if (relayZones) keys.push(...relayZones);
         // Kept first: on the first render the scene may not be built yet, and it reads these when it is.
         kept.zones = keys;
         scene()?.showZones(keys);
-    }, [floorJobs, carrying, hubZone, freightUnits, shelfLocked, scene, theme.palette.mode]);
+    }, [floorJobs, carrying, hubZone, freightUnits, shelfLocked, relayZones?.join(), scene, theme.palette.mode]);
+
+    /** Why your arms cannot take on `job` now (they hold another job's stock), or null. */
+    const armsBusy = (job: "shelf" | "freight" | "relay"): string | null => {
+        if (job !== "shelf" && carrying > 0) return "Your arms are full of shelving jobs. Put them up first.";
+        if (job !== "freight" && freightUnits > 0) return "Your arms are full of freight. Load it into the car first.";
+        if (job !== "relay" && relayCarrying > 0) return "Your arms are full of the Remote Hub's stock. Take it on to the shop first.";
+        return null;
+    };
 
     // Stepping onto the floor or into a hub opens its list; stepping off closes it.
     const zone = game.zone;
     const inHub = zone === "hub_a" || zone === "hub_b";
-    useEffect(() => setPickerOpen(zone === "floor" || zone === "hub_a" || zone === "hub_b"), [zone]);
+    useEffect(() => setPickerOpen(zone === "floor" || zone === "hub_a" || zone === "hub_b" || zone === "remote"), [zone]);
 
     /** The session is now `next`; the stack follows, new boxes flying in from `from`. */
     const apply = useCallback((next: PracticeState, from: ZoneKey | null) => {
@@ -129,11 +152,11 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     // Switching Practice ↔ Live starts again from the real list: practice moves must not look real, nor the other way round.
     const switchLive = useCallback((on: boolean) => {
         const load = getGame().freight?.load ?? feedRef.current?.loads[0];
-        setGame({ live: on, session: startPractice(feedRef.current?.jobs ?? []), freight: load ? startLoading(load) : null });
+        setGame({ live: on, session: startPractice(feedRef.current?.jobs ?? []), freight: load ? startLoading(load) : null, relay: startRelay(feedRef.current?.remote ?? []) });
         kept.boxes = [];
         scene()?.setCarried([], null);
         setToast(on
-            ? { tone: "error", text: "Live: putting a job up on the shelf now shelves it for real." }
+            ? { tone: "error", text: "Live: what you do now is done for real, as on your own pages." }
             : { tone: "info", text: "Practice: nothing you do is saved." });
     }, [scene]);
     const askLive = (on: boolean) => {
@@ -144,14 +167,16 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
 
     const take = (transferId: number) => {
         if (!session) return;
-        if (freightUnits > 0) return setToast({ tone: "warning", text: "Your arms are full of freight. Load it into the car first." });
+        const busy = armsBusy("shelf");
+        if (busy) return setToast({ tone: "warning", text: busy });
         const result = pickUp(session, transferId);
         if (result.ok) apply(result.state, "floor");
         else setToast({ tone: "warning", text: result.reason });
     };
     const takeAll = () => {
         if (!session) return;
-        if (freightUnits > 0) return setToast({ tone: "warning", text: "Your arms are full of freight. Load it into the car first." });
+        const busy = armsBusy("shelf");
+        if (busy) return setToast({ tone: "warning", text: busy });
         const { state, taken } = fill(session);
         if (taken === 0) setToast({ tone: "warning", text: "Nothing more fits. Put up what you carry first." });
         else apply(state, "floor");
@@ -201,14 +226,21 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
         void read();
     }, [scene, read]);
 
-    // Freight: taken in a hub, loaded at the car; not while shelving jobs are in your arms.
+    // Freight: taken in a hub, loaded at the car; not while another job's stock is in your arms.
     const takeFreight = (variantId: number, units: number) => {
-        if (carrying > 0) return setToast({ tone: "warning", text: "Your arms are full of shelving jobs. Put them up first." });
+        const busy = armsBusy("freight");
+        if (busy) return setToast({ tone: "warning", text: busy });
         car.takeLine(variantId, units, zone ?? "hub_a");
     };
     const takeAllFreight = () => {
-        if (carrying > 0) return setToast({ tone: "warning", text: "Your arms are full of shelving jobs. Put them up first." });
+        const busy = armsBusy("freight");
+        if (busy) return setToast({ tone: "warning", text: busy });
         car.takeAll(zone ?? "hub_a");
+    };
+    const takeRelay = (key: string) => {
+        const busy = armsBusy("relay");
+        if (busy) return setToast({ tone: "warning", text: busy });
+        handoff.take(key);
     };
 
     // E (or Space) does what the button says: open the list on the floor or in a hub, put up at the shelf, load at the car.
@@ -218,6 +250,10 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     loadRef.current = car.load;
     const playableRef = useRef(freightPlayable);
     playableRef.current = freightPlayable;
+    const handoffRef = useRef(handoff);
+    handoffRef.current = handoff;
+    const relayRef = useRef(relayPlayable);
+    relayRef.current = relayPlayable;
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
@@ -227,20 +263,27 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
             const here = getGame().zone;
             if (here === "shelf") void putUpRef.current();
             else if (here === "truck" && playableRef.current) void loadRef.current();
-            else if (here === "floor" || here === "hub_a" || here === "hub_b") setPickerOpen((open) => !open);
+            else if (here === "remote_door" && relayRef.current) void handoffRef.current.toCourier();
+            else if (here === "store_door" && relayRef.current) {
+                if ((getGame().relay?.carrying.length ?? 0) > 0) void handoffRef.current.atDoor();
+                else handoffRef.current.receive();
+            } else if (here === "floor" || here === "hub_a" || here === "hub_b" || here === "remote") setPickerOpen((open) => !open);
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
     }, []);
 
-    // The armload: shelving jobs or freight units, whichever is in your arms.
+    // The armload: whichever job's stock is in your arms.
     const shelfLoad = session ? load(session) : { cbm: 0, guessed: false, jobs: 0 };
     const freightLoad = freight ? freightCarried(freight) : { units: 0, cbm: 0, guessed: false };
+    const relayRole = relay ? roleNow(relay) : null;
     const carried = freightLoad.units > 0
         ? { cbm: freightLoad.cbm, guessed: freightLoad.guessed, text: `Carrying ${freightLoad.units} for ${freight!.load.reference}` }
-        : { cbm: shelfLoad.cbm, guessed: shelfLoad.guessed, text: shelfLoad.jobs === 0 ? "Hands free" : `Carrying ${shelfLoad.jobs} ${shelfLoad.jobs === 1 ? "job" : "jobs"}` };
+        : relayCarrying > 0
+            ? { cbm: relay!.carrying.reduce((n, j) => n + j.unitCbm * Math.max(1, j.quantity), 0), guessed: relay!.carrying.some((j) => j.guessed), text: `Carrying ${relayCarrying} ${relayCarrying === 1 ? "job" : "jobs"} as ${ROLE_NAME[relay!.carrier!]}` }
+            : { cbm: shelfLoad.cbm, guessed: shelfLoad.guessed, text: shelfLoad.jobs === 0 ? "Hands free" : `Carrying ${shelfLoad.jobs} ${shelfLoad.jobs === 1 ? "job" : "jobs"}` };
     const fullness = Math.min(1, carried.cbm / MAX_CBM);
-    const goals = objectives(feed, session, freight, !freightPlayable, shelfLocked, failed);
+    const goals = objectives(feed, session, freight, !freightPlayable, shelfLocked, relayPlayable ? relay : null, failed);
     const showGauge = freight !== null && (inHub || zone === "truck" || freightUnits > 0);
     const walkTo = (key: ZoneKey) => {
         const [x, z] = zoneEntrance(key);
@@ -251,12 +294,15 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
         <>
             <Stack spacing={1} sx={{ alignItems: "center", pointerEvents: "none" }}>
                 <GameHud canGoLive={liveAllowed || game.live} onLive={askLive} />
-                {goals.map((goal) => (
-                    <Button key={goal.text} onClick={goal.go ? () => walkTo(goal.go!) : undefined} disabled={!goal.go} variant="contained" color={goal.tone} size="small"
-                        sx={{ pointerEvents: "auto", borderRadius: 999, fontWeight: 800, textTransform: "none", maxWidth: "100%", boxShadow: 3, "&.Mui-disabled": { bgcolor: glass, color: "text.secondary" } }}>
-                        {goal.text}
-                    </Button>
-                ))}
+                {/* The goals: stacked on a wide screen; on a phone one row to swipe, so they don't fill the top of the world. */}
+                <Stack direction={{ xs: "row", sm: "column" }} spacing={1} sx={{ alignItems: "center", maxWidth: "100%", overflowX: { xs: "auto", sm: "visible" }, px: { xs: 0.5, sm: 0 }, pb: 0.5, scrollbarWidth: "none" }}>
+                    {goals.map((goal) => (
+                        <Button key={goal.text} onClick={goal.go ? () => walkTo(goal.go!) : undefined} disabled={!goal.go} variant="contained" color={goal.tone} size="small"
+                            sx={{ pointerEvents: "auto", flexShrink: 0, borderRadius: 999, fontWeight: 800, textTransform: "none", maxWidth: { xs: "85vw", sm: "100%" }, boxShadow: 3, "&.Mui-disabled": { bgcolor: glass, color: "text.secondary" } }}>
+                            {goal.text}
+                        </Button>
+                    ))}
+                </Stack>
             </Stack>
 
             <Box sx={{ flex: 1 }} />
@@ -266,6 +312,10 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
                 {pickerOpen && zone === "floor" && session && !shelfLocked && (
                     <Picker session={session} disabled={game.saving} onTake={take} onTakeAll={takeAll} onPutBack={giveBack} onClose={() => setPickerOpen(false)} />
                 )}
+                {pickerOpen && zone === "remote" && relay && relayPlayable && (
+                    <RemotePicker state={relay} onTake={takeRelay} onPutBack={handoff.putBack} onClose={() => setPickerOpen(false)} />
+                )}
+                {relayPlayable && relayRole && <RoleChip role={relayRole} />}
                 {pickerOpen && inHub && freight && freightPlayable && (
                     <HubPicker state={freight} hub={HUB_OF[zone as "hub_a" | "hub_b"]} disabled={game.saving} onTake={takeFreight} onTakeAll={takeAllFreight} onPutBack={car.putBack} onClose={() => setPickerOpen(false)} />
                 )}
@@ -294,7 +344,7 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
                                 {game.live ? "Shelve for real" : "Put up"} {carrying} · E
                             </Button>
                         )}
-                        {!game.saving && ((zone === "floor" && !shelfLocked) || (inHub && freightPlayable)) && !pickerOpen && (
+                        {!game.saving && ((zone === "floor" && !shelfLocked) || (inHub && freightPlayable) || (zone === "remote" && relayPlayable)) && !pickerOpen && (
                             <Button variant="contained" onClick={() => setPickerOpen(true)} sx={{ borderRadius: 999, fontWeight: 900, textTransform: "none", whiteSpace: "nowrap" }}>
                                 Pick up · E
                             </Button>
@@ -302,6 +352,21 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
                         {!game.saving && zone === "truck" && freightUnits > 0 && freightPlayable && (
                             <Button variant="contained" color={game.live ? "error" : "success"} onClick={() => void car.load()} sx={{ borderRadius: 999, fontWeight: 900, textTransform: "none", whiteSpace: "nowrap" }}>
                                 {game.live ? "Load for real" : "Load"} {freightUnits} · E
+                            </Button>
+                        )}
+                        {relayPlayable && zone === "remote_door" && relay?.carrier === "hub_keeper" && (
+                            <Button variant="contained" color="secondary" onClick={() => void handoff.toCourier()} sx={{ borderRadius: 999, fontWeight: 900, textTransform: "none", whiteSpace: "nowrap" }}>
+                                Hand to the courier · E
+                            </Button>
+                        )}
+                        {relayPlayable && zone === "store_door" && relayCarrying > 0 && (
+                            <Button variant="contained" color="secondary" onClick={() => void handoff.atDoor()} sx={{ borderRadius: 999, fontWeight: 900, textTransform: "none", whiteSpace: "nowrap" }}>
+                                Hand over · E
+                            </Button>
+                        )}
+                        {relayPlayable && zone === "store_door" && relayCarrying === 0 && relayAtDoor > 0 && (
+                            <Button variant="contained" color="success" onClick={handoff.receive} sx={{ borderRadius: 999, fontWeight: 900, textTransform: "none", whiteSpace: "nowrap" }}>
+                                Check & receive {relayAtDoor} · E
                             </Button>
                         )}
                     </Stack>
@@ -333,7 +398,8 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
                 </DialogActions>
             </Dialog>
 
-            <Snackbar open={toast !== null} autoHideDuration={toast?.tone === "error" ? 7000 : 4000} onClose={() => setToast(null)} anchorOrigin={{ vertical: "top", horizontal: "center" }}>
+            {/* A tap elsewhere does not close it: that tap is usually the next step, whose own message would be wiped. */}
+            <Snackbar open={toast !== null} autoHideDuration={toast?.tone === "error" ? 7000 : 4000} onClose={(_, reason) => reason !== "clickaway" && setToast(null)} anchorOrigin={{ vertical: "top", horizontal: "center" }}>
                 {toast ? <Alert severity={toast.tone} variant="filled" onClose={() => setToast(null)} sx={{ fontWeight: 700 }}>{toast.text}</Alert> : undefined}
             </Snackbar>
         </>
@@ -342,21 +408,33 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
 
 type Goal = { text: string; tone: "primary" | "success" | "info"; go: ZoneKey | null };
 
-/** What to do next, a line per job (shelving, the freight car), and where tapping each walks you. Carrying something, only its next step. */
-function objectives(feed: PlayFeed | null, session: PracticeState | null, freight: FreightState | null, freightLocked: boolean, shelfLocked: boolean, failed: boolean): Goal[] {
+/** What to do next, a line per job (shelving, the freight car, the Remote Hub), and where tapping each walks you. Mid-way through one, only its next step. */
+function objectives(feed: PlayFeed | null, session: PracticeState | null, freight: FreightState | null, freightLocked: boolean, shelfLocked: boolean, relay: RelayState | null, failed: boolean): Goal[] {
     if (failed && !feed) return [{ text: "Could not load what there is to do. Trying again…", tone: "info", go: null }];
     if (!feed || !session) return [{ text: "Loading what there is to do…", tone: "info", go: null }];
     if (!feed.store) return [{ text: "Play covers the Main Store, and you work at another store: nothing to pick up here.", tone: "info", go: null }];
     if (freight && freightCarried(freight).units > 0) return [{ text: "Load it into the freight car at the platform →", tone: "success", go: "truck" }];
+    const relaying = relay ? relayGoal(relay) : null;
+    if (relay && (relay.carrying.length > 0 || relay.handedOver.length > 0)) return [relaying!];
     const shelving: Goal = shelfLocked ? { text: "In Live you do not shelve here: you are not staff of this shop's shelf.", tone: "info", go: null } : objective(session, feed);
-    if (session.carrying.length > 0 || !freight || freightLocked) return [shelving];
+    if (session.carrying.length > 0) return [shelving];
+    const more = relaying && relay!.waiting.length > 0 ? [relaying] : [];
+    if (!freight || freightLocked) return [shelving, ...more];
     const left = freight.load.lines.reduce((n, l) => n + leftAt(freight, l.variantId), 0);
     const car = freight.load.lines.reduce((n, l) => n + l.picked + (freight.loaded[l.variantId] ?? 0), 0);
     const of = freight.load.lines.reduce((n, l) => n + l.quantity, 0);
     const loading: Goal = left > 0
         ? { text: `${freight.load.reference}: ${car} / ${of} in the car, ${left} to fetch from ${freight.load.origin === "main_hub_a" ? "Hub A" : "Hub B"} →`, tone: "primary", go: ZONE_OF[freight.load.origin] }
         : { text: `${freight.load.reference} is fully loaded.`, tone: "success", go: null };
-    return [shelving, loading];
+    return [shelving, loading, ...more];
+}
+
+/** The relay's next step, as whoever has it. */
+function relayGoal(relay: RelayState): Goal {
+    if (relay.carrier === "hub_keeper") return { text: "Hand it to the courier at the Remote Hub's door →", tone: "success", go: "remote_door" };
+    if (relay.carrier === "courier") return { text: "As the courier: take it round to the shop's front door →", tone: "success", go: "store_door" };
+    if (relay.handedOver.length > 0) return { text: "As the store's keeper: check and receive it at the shop door →", tone: "success", go: "store_door" };
+    return { text: `${relay.waiting.length} waiting in the Remote Hub for a courier →`, tone: "primary", go: "remote" };
 }
 
 /** The shelving job's next step. */
@@ -383,7 +461,7 @@ function Picker({ session, disabled, onTake, onTakeAll, onPutBack, onClose }: {
     const jobs = useMemo(() => [...session.floor].sort((a, b) => Number(b.urgent) - Number(a.urgent)), [session.floor]);
 
     return (
-        <Paper elevation={0} sx={{ pointerEvents: "auto", width: "100%", maxWidth: 420, maxHeight: "42dvh", display: "flex", flexDirection: "column", borderRadius: 4, boxShadow: 6, overflow: "hidden" }}>
+        <Paper elevation={0} sx={{ pointerEvents: "auto", width: "100%", maxWidth: 420, maxHeight: { xs: "34dvh", sm: "42dvh" }, display: "flex", flexDirection: "column", borderRadius: 4, boxShadow: 6, overflow: "hidden" }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
                 <Typography sx={{ fontWeight: 900, flex: 1 }}>Store Floor: to shelve</Typography>
                 <Button size="small" onClick={onTakeAll} disabled={disabled || jobs.length === 0} sx={{ borderRadius: 999, fontWeight: 800, textTransform: "none" }}>Take what fits</Button>

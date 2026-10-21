@@ -52,6 +52,8 @@ export interface Player {
     walkTo: (x: number, z: number) => void;
     /** Things that come and go in the way (the freight car): walked round from now on. */
     setObstacles: (boxes: Box[]) => void;
+    /** The vest's colour, for the role the worker plays now; null is the keeper's hi-vis yellow. */
+    setVest: (color: THREE.Color | null) => void;
     update: (dt: number) => void;
     setView: (view: GameView) => void;
     /** Does the follow camera own the camera right now (the world must not move it)? */
@@ -101,7 +103,9 @@ export function createPlayer(options: PlayerOptions): Player {
     const body = new THREE.Group();
     body.add(options.figure);
     // A hi-vis band round the middle, and a ring at their feet to find them by.
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.16, 16, 1, true), new THREE.MeshStandardMaterial({ color: 0xf5c400, emissive: 0x6b5500, roughness: 0.5, side: THREE.DoubleSide }));
+    const HI_VIS = new THREE.Color(0xf5c400);
+    const bandMaterial = new THREE.MeshStandardMaterial({ color: HI_VIS, emissive: HI_VIS.clone().multiplyScalar(0.45), roughness: 0.5, side: THREE.DoubleSide });
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.16, 16, 1, true), bandMaterial);
     band.position.y = 0.8;
     body.add(band);
     // The back faces -z (the worker faces +z): boxes stack up from just above the waist.
@@ -148,6 +152,7 @@ export function createPlayer(options: PlayerOptions): Player {
     let stick: { x: number; y: number } | null = null;
 
     // Reused every frame: no allocation in the loop.
+    const pose: PlayerPose = { x: 0, z: 0, yaw: 0 };
     const forward = new THREE.Vector3();
     const right = new THREE.Vector3();
     const heading = new THREE.Vector3();
@@ -390,7 +395,11 @@ export function createPlayer(options: PlayerOptions): Player {
 
         if (view === "follow") placeCamera(reducedMotion ? 1 : catchUp(CAMERA_CATCH, dt));
 
-        options.onPose({ x: root.position.x, z: root.position.z, yaw: root.rotation.y });
+        // One object, updated in place: nothing is made per frame.
+        pose.x = root.position.x;
+        pose.z = root.position.z;
+        pose.yaw = root.rotation.y;
+        options.onPose(pose);
     };
 
     const dispose = () => {
@@ -422,5 +431,10 @@ export function createPlayer(options: PlayerOptions): Player {
         if (path.length > 0) walkTo(...path[path.length - 1]);
     };
 
-    return { back, walkTo, setObstacles, update, setView, ownsCamera: () => view === "follow", dispose };
+    const setVest = (color: THREE.Color | null) => {
+        bandMaterial.color.copy(color ?? HI_VIS);
+        bandMaterial.emissive.copy(color ?? HI_VIS).multiplyScalar(0.45);
+    };
+
+    return { back, walkTo, setObstacles, setVest, update, setView, ownsCamera: () => view === "follow", dispose };
 }

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { shipmentOf, transferOf, unitsAt } from '../lib/inspect';
-import { app, fixture, signIn } from '../lib/support';
+import { app, closeWindows, fixture, signIn } from '../lib/support';
 import { cardOf, raiseTransfer as raise } from '../lib/transfers';
 
 /**
@@ -10,6 +10,10 @@ import { cardOf, raiseTransfer as raise } from '../lib/transfers';
  * A job the server refuses comes back down into the worker's arms.
  */
 
+// One world rendering at a time: left open, every earlier test's 3D page keeps drawing, and in a
+// headless browser (software graphics) the frame rate, and with it the worker's walking, collapses.
+test.afterEach(async () => closeWindows());
+
 /** Opens the world, steps into Play and waits for the shelving list. */
 async function play(page: Page, subdomain: 'stockkeeper' | 'seller'): Promise<void> {
     await page.goto(app(subdomain, '/guide?view=world'));
@@ -17,7 +21,8 @@ async function play(page: Page, subdomain: 'stockkeeper' | 'seller'): Promise<vo
     // drops the game back to Practice at its start. Say so plainly if it happens, rather than time out puzzled.
     page.on('load', () => console.warn(`[play.spec] the page reloaded under the test (a file in app/ changed?): ${page.url()}`));
     await page.getByRole('button', { name: 'Play as a worker' }).click();
-    await expect(page.getByText('Practice: nothing is saved')).toBeVisible();
+    // In Play: the camera switch shows (the long Practice chip is hidden on a phone).
+    await expect(page.getByRole('button', { name: 'Follow', exact: true })).toBeVisible();
 }
 
 /** Tap the line that says what to do next: the worker walks there (hurrying), and the zone's control shows. */
@@ -31,11 +36,14 @@ async function walkByObjective(page: Page, objective: RegExp, arrived: () => Pro
 const pickerOpen = (page: Page) => expect(page.getByText('Store Floor: to shelve')).toBeVisible({ timeout: 90_000 });
 const atShelf = (page: Page) => expect(page.getByRole('button', { name: /Shelve for real|Put up/ })).toBeVisible({ timeout: 90_000 });
 
+/** The Live half of the Practice / Live switch: pressed while Live is on. */
+const live = (page: Page) => page.getByRole('button', { name: 'Live', exact: true });
+
 async function goLive(page: Page): Promise<void> {
     await page.getByRole('button', { name: 'Live', exact: true }).click();
     await expect(page.getByText('Play for real?')).toBeVisible();
     await page.getByRole('button', { name: 'Go Live' }).click();
-    await expect(page.getByText('LIVE: drops make real records')).toBeVisible();
+    await expect(live(page)).toHaveAttribute('aria-pressed', 'true');
 }
 
 /** Takes the job `reference` off the floor. */
@@ -78,7 +86,7 @@ test('Live: a floor → shelf job carried across in the world is shelved for rea
         return kept !== null && kept.isConnected && document.querySelector('canvas') === kept;
     })).toBe(true);
     // Still in Live, still playing: nothing reset.
-    await expect(keeper.getByText('LIVE: drops make real records')).toBeVisible();
+    await expect(live(keeper)).toHaveAttribute('aria-pressed', 'true');
     expect(errors).toEqual([]);
 });
 
@@ -180,7 +188,43 @@ test('Live: the hub keeper loads the shipment for real and marks it prepared for
         const kept = (window as unknown as { worldCanvas: Element | null }).worldCanvas;
         return kept !== null && kept.isConnected && document.querySelector('canvas') === kept;
     })).toBe(true);
-    await expect(hubKeeper.getByText('LIVE: drops make real records')).toBeVisible();
+    await expect(live(hubKeeper)).toHaveAttribute('aria-pressed', 'true');
+    expect(errors).toEqual([]);
+});
+
+test('Practice: Remote Hub → store goes hub keeper → courier → store keeper, and nothing is saved', async ({ browser }) => {
+    test.setTimeout(300_000);
+    const keeper = await signIn(browser, 'stockkeeper', fixture.keeper.email);
+    const errors: string[] = [];
+    keeper.on('pageerror', (error) => errors.push(error.message));
+    // A real transfer waiting for its courier: what the Remote Hub's list shows in the world.
+    const reference = (await raise(keeper, /Remote Hub/, /Store Floor/, 2))!;
+    expect(reference).toBeTruthy();
+
+    await play(keeper, 'stockkeeper');
+    // As the hub keeper: into the Remote Hub, take it out.
+    await walkByObjective(keeper, /waiting in the Remote Hub for a courier/, () => expect(keeper.getByText('Remote Hub: for the store')).toBeVisible({ timeout: 90_000 }));
+    const row = keeper.locator('div').filter({ hasText: reference }).filter({ has: keeper.getByRole('button', { name: 'Take', exact: true }) }).last();
+    await row.getByRole('button', { name: 'Take', exact: true }).click();
+    await expect(keeper.getByText("You are the Remote Hub's keeper", { exact: true })).toBeVisible();
+
+    // At the hub's door it goes to the courier, who is now you.
+    await walkByObjective(keeper, /Hand it to the courier/, () => expect(keeper.getByRole('button', { name: /Hand to the courier/ })).toBeVisible({ timeout: 90_000 }));
+    await keeper.getByRole('button', { name: /Hand to the courier/ }).click();
+    await expect(keeper.getByText('You are the courier', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await keeper.waitForTimeout(800);
+    await keeper.screenshot({ path: 'test-results/play-relay-courier.png' });
+
+    // Round to the shop's front door: handed over, then received by the store's keeper.
+    await walkByObjective(keeper, /As the courier/, () => expect(keeper.getByRole('button', { name: /Hand over/ })).toBeVisible({ timeout: 90_000 }));
+    await keeper.getByRole('button', { name: /Hand over/ }).click();
+    await expect(keeper.getByText("You are the store's keeper", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await keeper.getByRole('button', { name: /Check & receive/ }).click();
+    await expect(keeper.getByText(new RegExp(`Received ${reference} onto the store floor`))).toBeVisible({ timeout: 10_000 });
+    await keeper.screenshot({ path: 'test-results/play-relay-received.png' });
+
+    // Practice: the real transfer is untouched.
+    expect(transferOf(reference).status).toBe('pending');
     expect(errors).toEqual([]);
 });
 
@@ -189,4 +233,23 @@ test('a seller practises the same job but is never offered Live', async ({ brows
     await play(seller, 'seller');
     await expect(seller.getByText(/to shelve from the Store Floor|Nothing waiting|All shelved|bins need stock/)).toBeVisible({ timeout: 15_000 });
     await expect(seller.getByRole('button', { name: 'Live', exact: true })).toHaveCount(0);
+    await seller.waitForTimeout(1500);
+    await seller.screenshot({ path: 'test-results/play-phone.png' });
+    const phone = seller.viewportSize()!;
+    await seller.setViewportSize({ width: 1440, height: 900 });
+    await seller.waitForTimeout(1500);
+    await seller.screenshot({ path: 'test-results/play-desktop.png' });
+    await seller.setViewportSize(phone);
+
+    // Stepping out to Watch and back, again and again, leaves nothing of Play behind on the page.
+    const leftovers = () => seller.evaluate(() => document.querySelectorAll('.world-stick, .world-badge--zone').length);
+    for (let i = 0; i < 3; i++) {
+        await seller.getByRole('button', { name: 'Back to watching' }).click();
+        await expect(seller.getByRole('button', { name: 'Play as a worker' })).toBeVisible();
+        expect(await leftovers()).toBe(0);
+        await seller.getByRole('button', { name: 'Play as a worker' }).click();
+        await expect(seller.getByRole('button', { name: 'Follow', exact: true })).toBeVisible();
+    }
+    // In Play there is exactly one touch stick, however often Play was entered.
+    expect(await seller.evaluate(() => document.querySelectorAll('.world-stick').length)).toBe(1);
 });

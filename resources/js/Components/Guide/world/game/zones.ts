@@ -16,9 +16,13 @@ import { PLACES, PLATFORM_BERTH, STORE, doorPosition, palletCentres } from "../p
  *   hub_a   Main Hub A, pick up: just inside its door.
  *   hub_b   Main Hub B, pick up: just inside its door.
  *   truck   the freight car, load: on the platform, behind the car's open doors.
+ *   remote       the Remote Hub, take out: just inside its door (the hub keeper).
+ *   remote_door  outside the Remote Hub's door: hand it to the courier.
+ *   store_door   outside the shop's front door: the courier hands it over, the
+ *                store keeper receives it.
  */
 
-export type ZoneKey = "floor" | "shelf" | "hub_a" | "hub_b" | "truck";
+export type ZoneKey = "floor" | "shelf" | "hub_a" | "hub_b" | "truck" | "remote" | "remote_door" | "store_door";
 
 /**
  * Where the freight car stands: its open doors face west, just off the
@@ -28,7 +32,7 @@ export type ZoneKey = "floor" | "shelf" | "hub_a" | "hub_b" | "truck";
 export const CAR = { rearX: -59.8, z: PLATFORM_BERTH[1], bed: 0.6 };
 
 /** A patch just inside a hub's door, `depth` m deep and `span` m wide, and the point behind it where its stock stands. */
-function insideDoor(key: "main_hub_a" | "main_hub_b", depth: number, span: number): { rect: [number, number, number, number]; point: [number, number, number] } {
+function insideDoor(key: "main_hub_a" | "main_hub_b" | "remote_hub", depth: number, span: number): { rect: [number, number, number, number]; point: [number, number, number] } {
     const door = doorPosition(PLACES.find((p) => p.key === key)!)!;
     const [x, z] = door.at;
     const [ox, oz] = door.out;
@@ -42,6 +46,23 @@ function insideDoor(key: "main_hub_a" | "main_hub_b", depth: number, span: numbe
 }
 const HUB_A = insideDoor("main_hub_a", 3, 3.5);
 const HUB_B = insideDoor("main_hub_b", 2.2, 3.5);
+const REMOTE = insideDoor("remote_hub", 2.4, 3.5);
+
+/** A patch just outside a door: `depth` m out, `span` m along it, and the point on the threshold where things change hands. */
+function outsideDoor(at: [number, number], out: [number, number], depth: number, span: number): { rect: [number, number, number, number]; point: [number, number, number] } {
+    const [x, z] = at;
+    const [ox, oz] = out;
+    const near = [x + ox * 0.6, z + oz * 0.6];
+    const far = [x + ox * (0.6 + depth), z + oz * (0.6 + depth)];
+    const rect: [number, number, number, number] = ox !== 0
+        ? [Math.min(near[0], far[0]), z - span / 2, Math.max(near[0], far[0]), z + span / 2]
+        : [x - span / 2, Math.min(near[1], far[1]), x + span / 2, Math.max(near[1], far[1])];
+    return { rect, point: [x + ox * 0.8, 1, z + oz * 0.8] };
+}
+const remoteDoor = doorPosition(PLACES.find((p) => p.key === "remote_hub")!)!;
+const REMOTE_DOOR = outsideDoor(remoteDoor.at, remoteDoor.out, 1.8, 3);
+// The shop's front door: in the south wall, STORE.door.at from the west wall.
+const STORE_DOOR = outsideDoor([STORE.position[0] - STORE.size[0] / 2 + STORE.door.at, STORE.position[1] + STORE.size[1] / 2 + 0.2], [0, 1], 1.8, STORE.door.width);
 
 export interface Zone {
     key: ZoneKey;
@@ -75,6 +96,9 @@ export const ZONES: Zone[] = [
         point: [21.9, 1.6, north + 0.25],
     },
     { key: "hub_a", kind: "pickup", label: "Main Hub A · pick", rects: [HUB_A.rect], point: HUB_A.point },
+    { key: "remote", kind: "pickup", label: "Remote Hub · take out", rects: [REMOTE.rect], point: REMOTE.point },
+    { key: "remote_door", kind: "drop", label: "Hand to the courier", rects: [REMOTE_DOOR.rect], point: REMOTE_DOOR.point },
+    { key: "store_door", kind: "drop", label: "Shop door · hand over", rects: [STORE_DOOR.rect], point: STORE_DOOR.point },
     { key: "hub_b", kind: "pickup", label: "Main Hub B · pick", rects: [HUB_B.rect], point: HUB_B.point },
     {
         key: "truck",

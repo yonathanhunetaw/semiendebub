@@ -20,6 +20,7 @@ use App\Services\Inventory\RefillBoard;
 use App\Services\Inventory\ShelfMatrix;
 use App\Services\Inventory\StockLocationTree;
 use App\Services\ShipmentWorkflowService;
+use App\Services\TransferWorkflowService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
@@ -352,16 +353,19 @@ class WorldFeed
      *
      * Hub → Freight Car: the shipments the freight car loads (loads()).
      *
+     * Remote Hub → Store: what waits to go from the Remote Hub to the store
+     * floor by courier (remoteJobs()); never for a seller.
+     *
      * A read only: Play writes through the normal routes.
      *
-     * @return array{store: array{id: int, name: string}|null, shelf: array{id: int, name: string}|null, to_shelve: array<int, array<string, mixed>>, needs: array<int, array<string, mixed>>, can_shelve: bool, loads: array<int, array<string, mixed>>}
+     * @return array{store: array{id: int, name: string}|null, shelf: array{id: int, name: string}|null, to_shelve: array<int, array<string, mixed>>, needs: array<int, array<string, mixed>>, can_shelve: bool, loads: array<int, array<string, mixed>>, remote: array<int, array<string, mixed>>}
      */
     public function play(User $viewer): array
     {
         $storeId = $this->mainStoreFor($viewer);
 
         if ($storeId === null) {
-            return ['store' => null, 'shelf' => null, 'to_shelve' => [], 'needs' => [], 'can_shelve' => false, 'loads' => []];
+            return ['store' => null, 'shelf' => null, 'to_shelve' => [], 'needs' => [], 'can_shelve' => false, 'loads' => [], 'remote' => []];
         }
 
         $list = $this->board->shelvingList($storeId, $viewer);
@@ -374,7 +378,75 @@ class WorldFeed
             'needs' => $list['needs'],
             'can_shelve' => (bool) $list['can_shelve'],
             'loads' => $this->loads($storeId, $viewer),
+            'remote' => $this->remoteJobs($storeId, $viewer, $list['to_accept']),
         ];
+    }
+
+    /**
+     * What waits to go from the Main Store's Remote Hub to its floor. It
+     * leaves the site, so a courier carries it (custody: In Delivery):
+     *
+     *   to_accept  a refill leg on the Remote Hub list, for the hub to accept
+     *              (the shelving list's to_accept; no transfer yet)
+     *   pending    a Remote Hub → floor transfer not yet handed to a courier
+     *
+     * Each with its unit and the size of one. Sellers get none: they may see
+     * the Remote Hub only as "stocked" or not, never quantities.
+     *
+     * @param  array<int, array<string, mixed>>  $toAccept  RefillBoard::shelvingList()['to_accept']
+     * @return array<int, array<string, mixed>>
+     */
+    private function remoteJobs(int $storeId, User $viewer, array $toAccept): array
+    {
+        if ($viewer->roleKey() === 'seller') {
+            return [];
+        }
+
+        $hub = StockLocation::query()->where('store_id', $storeId)->where('kind', StockLocation::KIND_REMOTE_HUB)->first();
+        $floor = StockLocation::query()->where('store_id', $storeId)->where('kind', StockLocation::KIND_BACKROOM)->first();
+        if ($hub === null || $floor === null) {
+            return [];
+        }
+
+        $legVariants = RefillRequest::query()
+            ->whereIn('id', array_map(fn (array $leg): int => (int) $leg['id'], $toAccept))
+            ->with('itemVariant.packagingQuantities')
+            ->get()
+            ->keyBy('id');
+        $legs = array_map(fn (array $leg): array => [
+            'key' => 'leg-'.$leg['id'],
+            'reference' => (string) $leg['reference'],
+            'stage' => 'to_accept',
+            'item_name' => (string) $leg['item_name'],
+            'quantity' => (int) $leg['quantity'],
+            'unit' => (string) $leg['unit'],
+            'unit_cbm' => $this->ownUnitCbm($legVariants->get((int) $leg['id'])?->itemVariant),
+            'urgent' => (bool) $leg['urgent'],
+        ], $toAccept);
+
+        $transfers = Transfer::query()
+            ->where('source_location_type', StockLocation::class)
+            ->where('source_location_id', $hub->id)
+            ->where('destination_location_type', StockLocation::class)
+            ->where('destination_location_id', $floor->id)
+            ->where('status', TransferWorkflowService::STATUS_PENDING)
+            ->where('approval_state', '!=', Transfer::APPROVAL_PENDING)
+            ->with(['itemVariant.item:id,product_name', 'itemVariant.itemPackagingType:id,name', 'itemVariant.packagingQuantities'])
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Transfer $t): array => [
+                'key' => 'transfer-'.$t->id,
+                'reference' => (string) $t->reference,
+                'stage' => 'pending',
+                'item_name' => (string) ($t->itemVariant?->item?->product_name ?? 'Unknown item'),
+                'quantity' => (int) $t->quantity,
+                'unit' => (string) ($t->itemVariant?->itemPackagingType?->name ?? 'Unit'),
+                'unit_cbm' => $this->ownUnitCbm($t->itemVariant),
+                'urgent' => false,
+            ])
+            ->all();
+
+        return [...$legs, ...$transfers];
     }
 
     /**

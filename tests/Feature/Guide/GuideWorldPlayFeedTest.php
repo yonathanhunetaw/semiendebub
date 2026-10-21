@@ -166,6 +166,42 @@ class GuideWorldPlayFeedTest extends TestCase
     }
 
     #[Test]
+    public function the_remote_hub_job_lists_what_waits_for_a_courier_but_never_for_a_seller(): void
+    {
+        $remoteHub = app(StockLocationTree::class)->addRemoteHub($this->mainStore);
+        $carton = ItemPackagingType::factory()->create(['name' => 'Carton']);
+        $variant = ItemVariant::factory()->create(['item_packaging_type_id' => $carton->id]);
+        $variant->packagingQuantities()->attach($carton->id, ['quantity' => 12, 'cbm' => 0.04]);
+
+        // A leg on the Remote Hub list, for the hub to accept…
+        \App\Models\Inventory\RefillRequest::query()->create([
+            'reference' => 'RF-REMOTE', 'store_id' => $this->mainStore->id, 'item_id' => $variant->item_id, 'item_variant_id' => $variant->id,
+            'source' => 'remote_hub', 'quantity' => 3, 'status' => 'in_progress',
+        ]);
+        // …a transfer waiting for its courier, and one already completed (left out).
+        $waiting = $this->fromRemoteHub($remoteHub, $variant, ['reference' => 'TRF-REMOTE', 'quantity' => 5]);
+        $this->fromRemoteHub($remoteHub, $variant, ['reference' => 'TRF-DONE', 'status' => 'completed']);
+
+        $this->asRole($this->user('stock_keeper', $this->mainStore->id), 'stockkeeper')
+            ->getJson(route('stock_keeper.guide.world', ['play' => 1]))
+            ->assertOk()
+            ->assertJsonCount(2, 'play.remote')
+            ->assertJsonPath('play.remote.0.reference', 'RF-REMOTE')
+            ->assertJsonPath('play.remote.0.stage', 'to_accept')
+            ->assertJsonPath('play.remote.0.quantity', 3)
+            ->assertJsonPath('play.remote.1.key', 'transfer-'.$waiting->id)
+            ->assertJsonPath('play.remote.1.stage', 'pending')
+            ->assertJsonPath('play.remote.1.unit', 'Carton')
+            ->assertJsonPath('play.remote.1.unit_cbm', 0.04);
+
+        // A seller may see the Remote Hub only as "stocked" or not: no quantities, so no job.
+        $this->asRole($this->user('seller', $this->mainStore->id), 'seller')
+            ->getJson(route('seller.guide.world', ['play' => 1]))
+            ->assertOk()
+            ->assertJsonCount(0, 'play.remote');
+    }
+
+    #[Test]
     public function the_replay_is_unchanged_without_play(): void
     {
         $this->asRole($this->user('admin', null), 'admin')
@@ -196,6 +232,18 @@ class GuideWorldPlayFeedTest extends TestCase
             'item_variant_id' => $variant->id, 'from_store_id' => $this->mainStore->id, 'to_store_id' => $this->mainStore->id,
             'source_location_type' => StockLocation::class, 'source_location_id' => $this->floor->id,
             'destination_location_type' => StockLocation::class, 'destination_location_id' => $this->shelf->id,
+            'quantity' => 4, 'status' => 'pending', 'origin' => Transfer::ORIGIN_MANUAL,
+            'approval_state' => Transfer::APPROVAL_NOT_REQUIRED,
+        ]);
+    }
+
+    /** @param array<string, mixed> $attributes */
+    private function fromRemoteHub(StockLocation $remoteHub, ItemVariant $variant, array $attributes): Transfer
+    {
+        return Transfer::query()->create($attributes + [
+            'item_variant_id' => $variant->id, 'from_store_id' => $this->mainStore->id, 'to_store_id' => $this->mainStore->id,
+            'source_location_type' => StockLocation::class, 'source_location_id' => $remoteHub->id,
+            'destination_location_type' => StockLocation::class, 'destination_location_id' => $this->floor->id,
             'quantity' => 4, 'status' => 'pending', 'origin' => Transfer::ORIGIN_MANUAL,
             'approval_state' => Transfer::APPROVAL_NOT_REQUIRED,
         ]);

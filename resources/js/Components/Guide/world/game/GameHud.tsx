@@ -18,7 +18,9 @@ export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onL
     return (
         <Stack spacing={1} sx={{ alignItems: "center", pointerEvents: "none" }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ pointerEvents: "auto", p: 0.5, pl: 1, borderRadius: 999, bgcolor: glass, boxShadow: 3, flexWrap: "wrap", justifyContent: "center", border: live ? "2px solid" : "none", borderColor: "error.main" }}>
-                <Chip size="small" color={live ? "error" : "info"} label={live ? "LIVE: drops make real records" : "Practice: nothing is saved"} sx={{ fontWeight: 900 }} />
+                {/* On a phone the switch beside it already says Practice or Live; only LIVE keeps a (short) chip there. */}
+                <Chip size="small" color={live ? "error" : "info"} label={live ? "LIVE: drops make real records" : "Practice: nothing is saved"} sx={{ fontWeight: 900, display: { xs: "none", sm: "inline-flex" } }} />
+                {live && <Chip size="small" color="error" label="LIVE" sx={{ fontWeight: 900, display: { xs: "inline-flex", sm: "none" } }} />}
                 {canGoLive && (
                     <ToggleButtonGroup size="small" exclusive value={live ? "live" : "practice"} disabled={game.saving} onChange={(_, next: string | null) => next && onLive(next === "live")} aria-label="Practice or Live">
                         <ToggleButton value="practice" sx={{ fontWeight: 800, px: 1.25, textTransform: "none" }}>Practice</ToggleButton>
@@ -30,13 +32,14 @@ export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onL
                     <ToggleButton value="director" sx={{ fontWeight: 800, px: 1.25, textTransform: "none" }}>Director</ToggleButton>
                 </ToggleButtonGroup>
             </Stack>
-            <Box sx={{ px: 1.5, py: 0.5, borderRadius: 999, bgcolor: glass, boxShadow: 1 }}>
+            {/* How to walk, until the worker has first walked on this device. */}
+            {!game.hinted && <Box sx={{ px: 1.5, py: 0.5, borderRadius: 999, bgcolor: glass, boxShadow: 1 }}>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
                     {coarse
                         ? "Tap the ground to walk there, or drag to steer · pinch to zoom"
                         : "Click the ground to walk there, or W A S D / arrows · Shift to hurry · scroll to zoom"}
                 </Typography>
-            </Box>
+            </Box>}
         </Stack>
     );
 }

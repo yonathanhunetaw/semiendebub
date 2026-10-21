@@ -1,6 +1,7 @@
 import type { GuideApp } from "@/Components/Guide/chapters";
 import { unitSize, type FreightLoad, type HubKey } from "./freight";
 import type { ShelveJob } from "./practice";
+import { relayUnit, type RelayJob } from "./relay";
 
 /**
  * What Play can pick up now: the Guide world route with `?play=1`
@@ -18,6 +19,19 @@ export interface PlayFeed {
     canShelve: boolean;
     /** The freight car's jobs: shipments from Hub A or B to the Main Store, scheduled or being picked, soonest first. */
     loads: FreightLoad[];
+    /** Remote Hub → Store: what waits for a courier (none for a seller). */
+    remote: RelayJob[];
+}
+
+interface RawRelay {
+    key: string;
+    reference: string;
+    stage: "to_accept" | "pending";
+    item_name: string;
+    quantity: number;
+    unit: string;
+    unit_cbm: number | null;
+    urgent: boolean;
 }
 
 interface RawLoad {
@@ -46,7 +60,7 @@ interface RawJob {
 export async function loadPlayFeed(app: GuideApp): Promise<PlayFeed> {
     const response = await fetch(route(`${app}.guide.world`, { play: 1 }), { headers: { Accept: "application/json" }, credentials: "same-origin" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const { play } = (await response.json()) as { play: { store: PlayFeed["store"]; shelf: PlayFeed["shelf"]; to_shelve: RawJob[]; needs: PlayFeed["needs"]; can_shelve: boolean; loads: RawLoad[] } };
+    const { play } = (await response.json()) as { play: { store: PlayFeed["store"]; shelf: PlayFeed["shelf"]; to_shelve: RawJob[]; needs: PlayFeed["needs"]; can_shelve: boolean; loads: RawLoad[]; remote: RawRelay[] } };
     return {
         store: play.store,
         shelf: play.shelf,
@@ -80,6 +94,16 @@ export async function loadPlayFeed(app: GuideApp): Promise<PlayFeed> {
                 ...unitSize(line.quantity, line.line_cbm, line.unit_cbm),
                 area: line.area,
             })),
+        })),
+        remote: play.remote.map((job) => ({
+            key: job.key,
+            reference: job.reference,
+            serverStage: job.stage,
+            itemName: job.item_name,
+            quantity: job.quantity,
+            unit: job.unit,
+            ...relayUnit(job.unit_cbm),
+            urgent: job.urgent,
         })),
     };
 }

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { createFreightCar } from "./FreightPacker";
 import { createStacker, type StackBox } from "./ItemStacker";
 import { createPlayer, type PlayerOptions } from "./PlayerController";
-import { kept, player as pose, type CarView, type GameView } from "./gameStore";
+import { getGame, kept, player as pose, setGame, type CarView, type GameView } from "./gameStore";
 import type { Placed } from "./packer";
 import { ZONES, drawZones, zoneAt, type ZoneKey } from "./zones";
 
@@ -37,6 +37,8 @@ export interface GameScene {
     unloadAt: (zone: ZoneKey) => Promise<void>;
     /** The freight car at the platform, and its load; `fresh` boxes drop in. Null: no car. */
     setCar: (car: CarView | null, fresh?: Placed[]) => void;
+    /** Dress the worker as the courier (the delivery colour), or back as a keeper. */
+    setCourier: (on: boolean) => void;
     dispose: () => void;
 }
 
@@ -64,9 +66,16 @@ export function createGameScene(options: GameSceneOptions): GameScene {
     stacker.set(kept.boxes, null);
     zones.show(kept.zones);
     setCar(kept.car);
+    const setCourier = (on: boolean) => {
+        kept.courier = on;
+        worker.setVest(on ? options.carTones.cab : null);
+    };
+    setCourier(kept.courier);
 
     let inZone: ZoneKey | null = null;
     const startedAt = performance.now();
+    // Where the worker started, to tell when they have first walked (and the how-to-walk hint can go).
+    const start = { x: options.spawn.x, z: options.spawn.z };
 
     const update = (dt: number) => {
         worker.update(dt);
@@ -74,6 +83,8 @@ export function createGameScene(options: GameSceneOptions): GameScene {
         stacker.update(now);
         car.update(now);
         zones.update((now - startedAt) / 1000);
+
+        if (pose.pose && !getGame().hinted && Math.hypot(pose.pose.x - start.x, pose.pose.z - start.z) > 2) setGame({ hinted: true });
 
         const here = pose.pose ? zoneAt(pose.pose.x, pose.pose.z)?.key ?? null : null;
         if (here !== inZone) {
@@ -97,6 +108,7 @@ export function createGameScene(options: GameSceneOptions): GameScene {
             stacker.set(boxes, from ? pointOf(from) : null);
         },
         setCar,
+        setCourier,
         unloadAt: (zone) => {
             kept.boxes = [];
             return stacker.unload(pointOf(zone));

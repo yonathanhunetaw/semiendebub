@@ -36,13 +36,19 @@ export function createFreightCar(scene: THREE.Scene, tones: { cab: THREE.Color; 
     scene.add(root);
     let body: THREE.Group | null = null;
     let hold: Hold | null = null;
-    const boxes = new THREE.Group();
-    root.add(boxes);
+    /** The load: one instanced mesh, so a full car is one draw call however many cartons it holds. */
+    let boxes: THREE.InstancedMesh | null = null;
+    const unitBox = new THREE.BoxGeometry(1, 1, 1);
+    const boxMaterial = new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true });
     const sign = document.createElement("div");
     sign.className = "world-badge world-badge--zone";
     const label = new CSS2DObject(sign);
     root.add(label);
-    const drops: Array<{ mesh: THREE.Mesh; y: number; start: number }> = [];
+    /** Cartons still falling into place: their instance, where they land, their size, and when they start. */
+    const drops: Array<{ index: number; at: THREE.Vector3; size: THREE.Vector3; start: number }> = [];
+    const matrix = new THREE.Matrix4();
+    const quaternion = new THREE.Quaternion();
+    const scratch = new THREE.Vector3();
 
     const mat = (color: THREE.Color, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, flatShading: true, ...extra });
     const part = (g: THREE.Group, size: [number, number, number], at: [number, number, number], material: THREE.Material) => {
@@ -117,39 +123,52 @@ export function createFreightCar(scene: THREE.Scene, tones: { cab: THREE.Color; 
     };
 
     const shade = (key: number) => new THREE.Color().setHSL(0.07 + ((key * 37) % 10) * 0.006, 0.5, 0.42 + ((key * 53) % 7) * 0.03);
+    const place = (index: number, at: THREE.Vector3, size: THREE.Vector3) => {
+        boxes!.setMatrixAt(index, matrix.compose(at, quaternion, size));
+    };
     const setBoxes = (placed: Placed[], fresh: Placed[]) => {
         drops.splice(0);
-        boxes.children.slice().forEach((child) => {
-            boxes.remove(child);
-            free(child);
-        });
+        if (boxes) {
+            root.remove(boxes);
+            boxes.dispose();
+            boxes = null;
+        }
+        if (placed.length === 0) return;
+        boxes = new THREE.InstancedMesh(unitBox, boxMaterial, placed.length);
+        boxes.castShadow = true;
+        boxes.raycast = () => {};
         const freshSet = new Set(fresh);
         const now = performance.now();
-        let i = 0;
-        for (const p of placed) {
+        let falling = 0;
+        placed.forEach((p, index) => {
+            const at = worldOf(p, new THREE.Vector3());
             // A hair smaller than its slot, so neighbours read as separate cartons.
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(p.l * 0.96, p.h * 0.96, p.w * 0.96), mat(shade(p.key)));
-            worldOf(p, mesh.position);
-            mesh.castShadow = true;
-            mesh.raycast = () => {};
-            boxes.add(mesh);
+            const size = new THREE.Vector3(p.l * 0.96, p.h * 0.96, p.w * 0.96);
+            boxes!.setColorAt(index, shade(p.key));
             if (freshSet.has(p) && !reducedMotion) {
-                drops.push({ mesh, y: mesh.position.y, start: now + i++ * 40 });
-                mesh.position.y += 0.8;
-                mesh.visible = false;
+                // Waiting its turn to fall: out of sight (no size) until it starts.
+                drops.push({ index, at, size, start: now + falling++ * 40 });
+                place(index, at, scratch.set(0, 0, 0));
+            } else {
+                place(index, at, size);
             }
-        }
+        });
+        boxes.instanceMatrix.needsUpdate = true;
+        if (boxes.instanceColor) boxes.instanceColor.needsUpdate = true;
+        root.add(boxes);
     };
 
+    const fall = new THREE.Vector3();
     const update = (now: number) => {
+        if (!boxes || drops.length === 0) return;
         for (let i = drops.length - 1; i >= 0; i--) {
             const d = drops[i];
             if (now < d.start) continue;
-            d.mesh.visible = true;
             const k = Math.min(1, (now - d.start) / DROP_MS);
-            d.mesh.position.y = d.y + 0.8 * (1 - k * k);
+            place(d.index, fall.copy(d.at).setY(d.at.y + 0.8 * (1 - k * k)), d.size);
             if (k >= 1) drops.splice(i, 1);
         }
+        boxes.instanceMatrix.needsUpdate = true;
     };
 
     return {
@@ -159,7 +178,9 @@ export function createFreightCar(scene: THREE.Scene, tones: { cab: THREE.Color; 
         update,
         dispose: () => {
             setHold(null, "");
-            boxes.children.slice().forEach(free);
+            setBoxes([], []);
+            unitBox.dispose();
+            boxMaterial.dispose();
             scene.remove(root);
             sign.remove();
         },
