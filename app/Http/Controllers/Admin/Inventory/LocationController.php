@@ -52,7 +52,7 @@ class LocationController extends Controller
 
         $nodes = StockLocation::query()
             ->with(['store', 'managerAssignments.user', 'staffAssignments.user'])
-            ->where('kind', '!=', StockLocation::KIND_TRANSIT)
+            ->whereNotIn('kind', StockLocation::OFF_NETWORK_KINDS)
             ->when($scopeIds !== null, fn ($q) => $q->whereIn('store_id', $scopeIds ?: [0]))
             ->get();
 
@@ -110,7 +110,7 @@ class LocationController extends Controller
 
     public function assignManagers(AssignLocationManagersRequest $request, StockLocation $stockLocation): RedirectResponse
     {
-        abort_if($stockLocation->kind === StockLocation::KIND_TRANSIT, 404);
+        abort_if(in_array($stockLocation->kind, StockLocation::OFF_NETWORK_KINDS, true), 404);
         $this->authorizeLocation($stockLocation, $request->managerIds());
 
         try {
@@ -124,7 +124,7 @@ class LocationController extends Controller
 
     public function assignStaff(AssignLocationStaffRequest $request, StockLocation $stockLocation): RedirectResponse
     {
-        abort_if(in_array($stockLocation->kind, [StockLocation::KIND_TRANSIT], true), 404);
+        abort_if(in_array($stockLocation->kind, StockLocation::OFF_NETWORK_KINDS, true), 404);
         $this->authorizeLocation($stockLocation, $request->staffIds());
 
         $stockLocation->syncStaff($request->staffIds(), $request->user()?->id);

@@ -70,6 +70,20 @@ class StockLocation extends Model
     /** The one custody location's code. */
     public const TRANSIT_CODE = 'IN-DELIVERY';
 
+    /**
+     * Goods we own on their way in from a supplier: at the overseas
+     * warehouse, at sea, at the sea port, at the dry port (one location per
+     * stage, StockLocationTree::inbound()). Holds ledger rows like transit,
+     * but is never sellable and belongs to no store. Procurement pipeline PP4.
+     */
+    public const KIND_INBOUND = 'inbound';
+
+    /**
+     * Kinds that hold ledger rows but are not on hand anywhere: lists of what
+     * a place holds leave them out.
+     */
+    public const OFF_NETWORK_KINDS = [self::KIND_TRANSIT, self::KIND_INBOUND];
+
     /** Kinds that may carry item_stocks rows. */
     public const STOCKABLE_KINDS = [
         self::KIND_SHELF,
@@ -87,6 +101,7 @@ class StockLocation extends Model
             self::KIND_REMOTE_HUB => 'Remote Hub',
             self::KIND_MAIN_HUB => 'Main Hub',
             self::KIND_TRANSIT => 'In Delivery',
+            self::KIND_INBOUND => 'On its way in',
             self::KIND_STORE => 'Retail Store',
         ];
     }

@@ -49,6 +49,7 @@ interface Props {
         catalogue?: { customers?: number; items?: number; carts?: number };
         /** Deposits and handovers waiting on this seller to check an account. */
         payments_to_confirm?: number;
+        price_checks?: number;
         /** Money this seller holds and has not handed over. */
         balance?: { held?: number; overdue_cash?: number } | null;
     };
@@ -182,6 +183,21 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
             icon: "badge",
             route: "seller.work",
             tone: "primary",
+        },
+        {
+            label: "Product ideas",
+            caption: "Suggest what customers ask for",
+            icon: "lightbulb",
+            route: "seller.ideas.index",
+            tone: "warning",
+        },
+        {
+            label: "Price checks",
+            caption: (stats?.price_checks ?? 0) > 0 ? "Prices to look up at other shops" : "What other shops charge",
+            icon: "price_check",
+            route: "seller.price_checks.index",
+            tone: (stats?.price_checks ?? 0) > 0 ? "warning" : "neutral",
+            count: stats?.price_checks ?? 0,
         },
         {
             label: "Customers",

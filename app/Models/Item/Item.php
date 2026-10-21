@@ -19,6 +19,8 @@ class Item extends Model
 
     protected $fillable = [
         'product_name',
+        // For the tariff (App\Models\Procurement\Tariff); digits only.
+        'hs_code',
         'description',
         'product_description',
         'packaging_details',

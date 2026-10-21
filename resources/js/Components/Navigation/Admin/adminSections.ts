@@ -51,6 +51,15 @@ export const ADMIN_SECTIONS: AdminSection[] = [
         ],
     },
     {
+        // Product ideas, the price checks they open, and the shops sellers check.
+        key: "ideas",
+        tabs: [
+            { label: "Product ideas", route: "admin.ideas.index", match: ["/ideas"] },
+            { label: "Price checks", route: "admin.price_checks.index", match: ["/price-checks"] },
+            { label: "Shops", route: "admin.shops.index", match: ["/shops"] },
+        ],
+    },
+    {
         key: "customers",
         tabs: [
             { label: "Customers", route: "admin.customers.index", match: ["/customers"] },

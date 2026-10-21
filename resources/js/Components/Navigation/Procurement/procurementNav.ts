@@ -16,9 +16,12 @@ export interface ProcurementNavItem {
 
 export const PROCUREMENT_NAV: ProcurementNavItem[] = [
     { key: "home", label: "Home", icon: "home", route: "procurement.dashboard", paths: ["/dashboard"], hint: "What waits on whom" },
+    { key: "ideas", label: "Product ideas", icon: "lightbulb", route: "procurement.ideas.index", paths: ["/ideas"], hint: "What the stores want to sell" },
     { key: "orders", label: "Purchase orders", icon: "receipt_long", route: "procurement.purchase_orders.index", paths: ["/purchase-orders"], hint: "Raise, approve, place" },
+    { key: "consignments", label: "Shipments in", icon: "sailing", route: "procurement.consignments.index", paths: ["/consignments", "/import-costs"], hint: "Goods on their way, and what they cost" },
     { key: "payables", label: "Payables", icon: "account_balance", route: "procurement.payables.index", paths: ["/payables"], hint: "What we owe, what is due" },
     { key: "suppliers", label: "Suppliers", icon: "storefront", route: "procurement.suppliers.index", paths: ["/suppliers"], hint: "The shops we buy from" },
+    { key: "costs", label: "Costs & tariffs", icon: "calculate", route: "procurement.costs.index", paths: ["/costs", "/tariffs"], hint: "Rates, routes, import taxes" },
     { key: "calendar", label: "Calendar", icon: "calendar_month", route: "procurement.calendar", paths: ["/calendar"], hint: "Arrivals and supplier payments" },
 ];
 

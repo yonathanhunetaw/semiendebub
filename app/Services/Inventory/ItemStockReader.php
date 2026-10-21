@@ -340,6 +340,12 @@ class ItemStockReader
             $query->whereIn('s.stock_location_id', $this->onlyLeafIds);
         }
 
+        // Goods still on their way in (abroad, at the port) are ours but not
+        // on hand anywhere: never in these figures.
+        if ($locationType === null && $this->onlyLeafIds === null) {
+            $query->whereNotIn('s.stock_location_id', DB::table('stock_locations')->where('kind', \App\Models\Inventory\StockLocation::KIND_INBOUND)->select('id'));
+        }
+
         return $query;
     }
 

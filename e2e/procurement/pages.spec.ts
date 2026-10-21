@@ -8,4 +8,8 @@ pagesTest('procurement', 'procurement', fixture.people.procurement.email, [
     '/payables',
     '/suppliers',
     '/suppliers/create',
+    '/ideas',
+    '/costs',
+    '/tariffs',
+    '/consignments',
 ]);

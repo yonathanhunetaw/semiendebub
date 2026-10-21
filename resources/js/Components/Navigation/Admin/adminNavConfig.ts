@@ -17,6 +17,7 @@ import CalendarMonth from "@mui/icons-material/CalendarMonth";
 import Dashboard from "@mui/icons-material/Dashboard";
 import Draw from "@mui/icons-material/Draw";
 import Layers from "@mui/icons-material/Layers";
+import Lightbulb from "@mui/icons-material/Lightbulb";
 import LocalShipping from "@mui/icons-material/LocalShipping";
 import Payments from "@mui/icons-material/Payments";
 import PendingActions from "@mui/icons-material/PendingActions";
@@ -90,7 +91,11 @@ export const ADMIN_NAV: AdminNavItem[] = [
     { key: "calendar", label: "Calendar", icon: CalendarMonth, route: "admin.calendar", scope: "store", match: ["/calendar"] },
     // Sites: hours, keys, opening/closing, shifts and clock-in (Pages/Work/*).
     { key: "work", label: "Sites & keys", icon: VpnKey, route: "admin.work.sites.index", scope: "store", match: ["/work"] },
+    // Products the stores and procurement think we should sell (ProductIdeaService).
+    { key: "ideas", label: "Product ideas", icon: Lightbulb, route: "admin.ideas.index", scope: "store", match: ["/ideas", "/price-checks", "/shops"] },
     { key: "purchase-orders", label: "Purchase Orders", icon: ReceiptLong, route: "admin.purchase_orders.index", scope: "global", match: ["/purchase-orders"] },
+    // Freight, customs and port fees procurement recorded, waiting for a second person (ConsignmentService).
+    { key: "import-costs", label: "Import Costs", icon: PendingActions, route: "admin.import_costs.index", scope: "global", match: ["/import-costs"] },
     { key: "supplier-payments", label: "Supplier Payments", icon: PendingActions, route: "admin.supplier_payments.index", scope: "global", match: ["/supplier-payments"] },
     // Fuel for staff rides, rent, salaries: a second person confirms each (ExpenseService).
     { key: "expenses", label: "Expenses", icon: ReceiptLong, route: "admin.expenses.index", scope: "global", match: ["/expenses"] },

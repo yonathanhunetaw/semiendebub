@@ -234,6 +234,36 @@ class StockLocationTree
         );
     }
 
+    /** The stages goods we bought pass through on their way in, and each one's location code and name. */
+    public const INBOUND_STAGES = [
+        'overseas_warehouse' => ['INBOUND-OVERSEAS', 'Overseas warehouse'],
+        'at_sea' => ['INBOUND-AT-SEA', 'At sea'],
+        'sea_port' => ['INBOUND-SEA-PORT', 'At the sea port'],
+        'dry_port' => ['INBOUND-DRY-PORT', 'At the dry port'],
+    ];
+
+    /**
+     * The location for one inbound stage (procurement pipeline PP4): goods we
+     * own that are not in the country yet, or not through customs. Created on
+     * first use; like "In Delivery" it belongs to no store and is never sellable.
+     */
+    public function inbound(string $stage): StockLocation
+    {
+        [$code, $name] = self::INBOUND_STAGES[$stage] ?? throw new \InvalidArgumentException("No inbound stage {$stage}.");
+
+        return StockLocation::query()->firstOrCreate(
+            ['code' => $code],
+            [
+                'kind' => StockLocation::KIND_INBOUND,
+                'name' => $name,
+                'status' => 'active',
+                'is_stockable' => true,
+                'parent_id' => null,
+                'store_id' => null,
+            ],
+        );
+    }
+
     /**
      * Give a retail store its Remote Hub — never done automatically, and at
      * most one per store, so asking twice returns the existing one.

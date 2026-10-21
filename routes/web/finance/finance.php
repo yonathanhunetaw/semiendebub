@@ -43,6 +43,9 @@ Route::domain("finance.{$baseDomain}")
                     Route::post('/{payment}/reject', 'reject')->name('reject');
                 });
 
+            // Import costs (freight, customs, port fees) waiting for their second person.
+            require base_path('routes/web/partials/import-costs.php');
+
             // Lists and ends every user's session: global admins only.
             Route::prefix('sessions')->middleware('admin.global')->group(function () {
                 Route::get('/', [SessionController::class, 'index'])->name('sessions.index');

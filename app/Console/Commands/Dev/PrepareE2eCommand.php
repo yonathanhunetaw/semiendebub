@@ -199,8 +199,31 @@ final class PrepareE2eCommand extends Command
             ['name' => 'E2E Van', 'max_cbm' => 6, 'payload_kg' => 1000, 'status' => \App\Models\Fulfillment\Vehicle::STATUS_ACTIVE],
         );
 
+        // A shipment waiting to be loaded, for the Guide world's freight car (e2e/stock/play.spec.ts):
+        // scheduled from the main hub to the store's Remote Hub on the E2E van, nothing picked.
+        // Put back to that on every run, so a spec that loads it never leaves it loaded.
+        $playLoad = null;
+        if ($hub !== null && $remoteHub !== null && $hubVariant !== null) {
+            $shipment = \App\Models\Fulfillment\Shipment::query()->updateOrCreate(['reference' => 'SHP-E2E-PLAY'], [
+                'origin_store_id' => $hub->legacy_id ?? $hub->store_id,
+                'destination_store_id' => $store->id,
+                'origin_stock_location_id' => $hub->id,
+                'destination_stock_location_id' => $remoteHub->id,
+                'vehicle_id' => $van->id,
+                'vehicle_name' => $van->name,
+                'vehicle_plate' => $van->plate,
+                'vehicle_max_cbm' => $van->max_cbm,
+                'status' => 'scheduled',
+            ]);
+            $shipment->items()->delete();
+            $quantity = min(4, (int) $hubVariant->quantity);
+            $shipment->items()->create(['item_variant_id' => (int) $hubVariant->item_variant_id, 'quantity' => $quantity, 'picked_quantity' => 0]);
+            $playLoad = ['id' => $shipment->id, 'reference' => $shipment->reference, 'variant' => (int) $hubVariant->item_variant_id, 'quantity' => $quantity];
+        }
+
         $this->line((string) json_encode([
             'password' => self::PASSWORD,
+            'playLoad' => $playLoad,
             'vehicle' => ['id' => $van->id, 'name' => $van->name, 'plate' => $van->plate],
             'store' => ['id' => $store->id, 'name' => $store->name],
             'seller' => ['id' => $seller->id, 'email' => $seller->email, 'name' => 'E2E Seller'],

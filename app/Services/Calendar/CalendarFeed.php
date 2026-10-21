@@ -10,6 +10,7 @@ use App\Services\Calendar\Sources\EntrySource;
 use App\Services\Calendar\Sources\ExpenseSource;
 use App\Services\Calendar\Sources\HolidaySource;
 use App\Services\Calendar\Sources\OvertimeSource;
+use App\Services\Calendar\Sources\PriceCheckSource;
 use App\Services\Calendar\Sources\PurchaseSource;
 use App\Services\Calendar\Sources\ShiftSource;
 use App\Services\Calendar\Sources\ShipmentSource;
@@ -43,8 +44,9 @@ class CalendarFeed
         HolidaySource $holidays,
         OvertimeSource $overtime,
         ExpenseSource $expenses,
+        PriceCheckSource $priceChecks,
     ) {
-        $this->sources = [$entries, $holidays, $deliveries, $shipments, $transfers, $purchases, $credit, $expenses, $siteDays, $shifts, $overtime, $rides];
+        $this->sources = [$entries, $holidays, $deliveries, $shipments, $transfers, $purchases, $priceChecks, $credit, $expenses, $siteDays, $shifts, $overtime, $rides];
     }
 
     /** @return array<int, CalendarSource> */

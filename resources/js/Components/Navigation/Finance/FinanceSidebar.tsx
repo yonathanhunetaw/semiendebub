@@ -17,6 +17,7 @@ export default function FinanceSidebar({ variant, open, onClose, sx }: any) {
         { label: 'Gold & Crypto', icon: <SavingsIcon />, href: '/finance/assets' },
         { label: 'Reports', icon: <AssessmentIcon />, href: '/finance/reports' },
         { label: 'Supplier payments', icon: <PendingActionsIcon />, href: '/supplier-payments' },
+        { label: 'Import costs', icon: <PendingActionsIcon />, href: '/import-costs' },
         { label: 'Expenses', icon: <ReceiptLongIcon />, href: '/expenses' },
     ];
 

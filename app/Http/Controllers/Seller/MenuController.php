@@ -50,6 +50,10 @@ class MenuController extends Controller
                 'shipments' => $this->shipmentPipeline($storeId),
                 // Deposits and handovers waiting on this seller to check an account.
                 'payments_to_confirm' => $user ? app(\App\Services\Finance\PaymentBoard::class)->inboxCount((int) $user->id) : 0,
+                // Open price checks this seller can fill in.
+                'price_checks' => app(\App\Services\Procurement\PriceCheckService::class)
+                    ->visibleTo(\App\Models\Procurement\PriceCheck::query(), $user)
+                    ->where('status', \App\Models\Procurement\PriceCheck::OPEN)->count(),
                 // Money this seller holds and has not handed over yet.
                 'balance' => $user ? [
                     'held' => app(\App\Services\Finance\BalanceLedger::class)->heldCents((int) $user->id) / 100,

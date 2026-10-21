@@ -305,7 +305,7 @@ class ItemSetupScopingTest extends TestCase
         $this->get(route('admin.items.setup', $this->item))->assertInertia(fn ($page) => $page
             // the names in RELOAD (VariantsPart.tsx) and the ItemSetupProps type must all exist
             ->has('item')->has('options')->has('catalog')->has('readiness')->has('stores')->has('warehouses')->has('stock')->has('history')
-            ->has('item.basics', fn ($b) => $b->hasAll(['product_name', 'product_description', 'packaging_details', 'item_category_id', 'status', 'pictures']))
+            ->has('item.basics', fn ($b) => $b->hasAll(['product_name', 'product_description', 'packaging_details', 'hs_code', 'item_category_id', 'status', 'pictures']))
             ->has('catalog', fn ($c) => $c->hasAll(['categories', 'colors', 'sizes', 'packaging']))
             ->has('stores.0', fn ($s) => $s->hasAll(['id', 'name', 'deployed', 'readiness', 'lines', 'seller_prices', 'customer_prices', 'sellers', 'prices_url', 'places', 'route', 'count_url']))
             ->has('stores.0.lines.0', fn ($l) => $l->hasAll(['store_variant_id', 'variant', 'sku', 'active', 'on_sale', 'forced_off', 'business_pool', 'price', 'discount_price', 'discount_ends_at', 'individual_price']))

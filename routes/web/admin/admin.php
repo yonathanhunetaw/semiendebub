@@ -74,6 +74,17 @@ Route::domain("admin.{$baseDomain}")
             require base_path('routes/web/partials/calendar.php');
             // Keys, sites, opening/closing, shifts and clock-in (shared with the other apps).
             require base_path('routes/web/partials/work.php');
+            // Product ideas: suggest, price check, send to procurement (shared with seller and procurement).
+            require base_path('routes/web/partials/ideas.php');
+            // An idea's supplier quotes and costs, read-only (procurement takes them in its app).
+            Route::get('/ideas/{idea}/quotes', [\App\Http\Controllers\Shared\SupplierQuoteController::class, 'show'])->whereNumber('idea')->name('ideas.quotes');
+            // Price checks: sellers' prices from other shops, verified by someone else.
+            require base_path('routes/web/partials/price-checks.php');
+            // The other shops in the market, and which ones each store checks.
+            Route::get('/shops', [\App\Http\Controllers\Admin\ShopController::class, 'index'])->name('shops.index');
+            Route::post('/shops', [\App\Http\Controllers\Admin\ShopController::class, 'store'])->name('shops.store');
+            Route::put('/shops/{shop}', [\App\Http\Controllers\Admin\ShopController::class, 'update'])->name('shops.update');
+            Route::put('/shops/{shop}/mode', [\App\Http\Controllers\Admin\ShopController::class, 'mode'])->name('shops.mode');
             Route::redirect('/how-it-works', '/guide')->name('flow');
             Route::get('/settings', fn() => Inertia::render('Admin/Settings/Index'))->name('settings');
 
@@ -106,6 +117,8 @@ Route::domain("admin.{$baseDomain}")
                     Route::post('/{purchase}/approve', 'approve')->name('approve');
                     Route::post('/{purchase}/send-back', 'sendBack')->name('send_back');
                 });
+            // Import costs (freight, customs, port fees) waiting for their second person.
+            require base_path('routes/web/partials/import-costs.php');
             Route::controller(\App\Http\Controllers\Shared\SupplierPaymentInboxController::class)
                 ->prefix('supplier-payments')->name('supplier_payments.')->group(function () {
                     Route::get('/', 'index')->name('index');

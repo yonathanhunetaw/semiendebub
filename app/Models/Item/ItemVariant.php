@@ -35,6 +35,10 @@ class ItemVariant extends Model
 
     protected $casts = [
         'images' => 'array',
+        // Weighted-average landed cost of one unit, ETB. Written only by
+        // App\Services\Procurement\ItemCosting (forceFill), never by a form.
+        'unit_cost' => 'decimal:4',
+        'unit_cost_at' => 'datetime',
     ];
 
     protected static function booted()

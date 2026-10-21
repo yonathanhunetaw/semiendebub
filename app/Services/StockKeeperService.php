@@ -107,7 +107,7 @@ class StockKeeperService
     {
         // Delivery's custody is not stock on a shelf; an emptied custody row
         // must not read as an out-of-stock line.
-        $base = $this->visibleOnly(ItemStock::query()->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id')));
+        $base = $this->visibleOnly(ItemStock::query()->whereNotIn('stock_location_id', StockLocation::query()->whereIn('kind', StockLocation::OFF_NETWORK_KINDS)->select('id')));
 
         /*
          * Items lead.
@@ -178,7 +178,7 @@ class StockKeeperService
     public function lowStockQuery(): Builder
     {
         return $this->visibleOnly(ItemStock::query())
-            ->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'))
+            ->whereNotIn('stock_location_id', StockLocation::query()->whereIn('kind', StockLocation::OFF_NETWORK_KINDS)->select('id'))
             ->whereColumn('quantity', '<=', 'min_stock_level')
             ->where('min_stock_level', '>', 0);
     }
@@ -226,7 +226,7 @@ class StockKeeperService
         $query = $this->visibleOnly(ItemStock::query())
             ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
             // Goods in a courier's hands are Delivery's, not a shelf to count.
-            ->whereNotIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'));
+            ->whereNotIn('stock_location_id', StockLocation::query()->whereIn('kind', StockLocation::OFF_NETWORK_KINDS)->select('id'));
 
         if ($locationType !== null) {
             $query->whereIn('stock_location_id', $locationId !== null
@@ -263,7 +263,7 @@ class StockKeeperService
             ->map(fn ($n): int => (int) $n);
 
         // "In Delivery" is the courier's custody, never a place to pick.
-        $nodes = StockLocation::query()->with('store')->where('kind', '!=', StockLocation::KIND_TRANSIT)
+        $nodes = StockLocation::query()->with('store')->whereNotIn('kind', StockLocation::OFF_NETWORK_KINDS)
             ->when($this->onlyNodeIds !== null, fn ($q) => $q->whereIn('id', $this->onlyNodeIds))
             ->get();
         $order = [

@@ -36,6 +36,8 @@ export interface Fixture {
     refillItem: { item_id: number; name: string; variant: number; sku: string };
     /** A variant the main hub holds; label is what the admin's manifest picker shows. */
     hubVariant: { id: number; quantity: number; label: string; sku: string };
+    /** A shipment scheduled from the main hub to the Remote Hub on the E2E van, nothing picked: the Guide world's freight car loads it. */
+    playLoad: { id: number; reference: string; variant: number; quantity: number } | null;
     /** individual has a TIN; priced is a business with its own customer price; business has none. */
     customers: Record<'individual' | 'priced' | 'business', { id: number; name: string; phone: string; tin: string | null }>;
     /** Store price with a discount still running (running) or already over (expired); no other levels. */

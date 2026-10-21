@@ -21,6 +21,8 @@ final class SaveItemBasicsRequest extends FormRequest
             'product_name' => ['required', 'string', 'max:255'],
             'product_description' => ['nullable', 'string'],
             'packaging_details' => ['nullable', 'string'],
+            // Its customs tariff (Procurement → Tariffs); digits, dots and spaces.
+            'hs_code' => ['nullable', 'string', 'max:20', 'regex:/^[0-9 .]+$/'],
             'item_category_id' => ['required'],
             'status' => ['required', 'in:draft,active,inactive,archived'],
         ];

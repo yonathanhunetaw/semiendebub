@@ -91,6 +91,10 @@ Route::domain("seller.$baseDomain")
             Route::put('/locations/{location}/routes/{item}', [LocationController::class, 'updateRoute'])->name('locations.routes.update');
             // The refill list: the store manager takes suggestions onto the
             // Remote Hub list or a shipment manifest, adjusts or cancels them.
+            // Product ideas: what the store thinks it should sell (shared with admin and procurement).
+            require base_path('routes/web/partials/ideas.php');
+            // Price checks: write down what other shops charge.
+            require base_path('routes/web/partials/price-checks.php');
             Route::get('/refills', [RefillRequestController::class, 'index'])->name('refills.index');
             Route::get('/refills/permissions', [RefillRequestController::class, 'permissions'])->name('refills.permissions');
             Route::post('/refills/shipments', [RefillRequestController::class, 'ship'])->name('refills.ship');

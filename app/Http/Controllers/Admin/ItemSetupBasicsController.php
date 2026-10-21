@@ -40,6 +40,7 @@ final class ItemSetupBasicsController extends Controller
             'product_name' => $request->validated('product_name'),
             'product_description' => $request->validated('product_description'),
             'packaging_details' => $request->validated('packaging_details'),
+            'hs_code' => \App\Models\Procurement\Tariff::normalise($request->validated('hs_code')),
             'item_category_id' => $this->writer->resolveCategoryId($request->validated('item_category_id')),
         ]);
         $this->writer->evaluateDraftStatus($item, $request->validated('status'));

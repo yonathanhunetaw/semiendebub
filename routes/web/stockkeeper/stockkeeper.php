@@ -62,6 +62,11 @@ Route::domain("stockkeeper.{$baseDomain}")
             Route::post('/inventory/receive', [InventoryController::class, 'receive'])->name('inventory.receive');
             Route::patch('/inventory/{stock}/adjust', [InventoryController::class, 'adjust'])->name('inventory.adjust');
 
+            // --- ARRIVALS: goods we bought, counted in at a Main Hub (procurement pipeline PP5) ---
+            Route::get('/arrivals', [\App\Http\Controllers\StockKeeper\ArrivalController::class, 'index'])->name('arrivals.index');
+            Route::post('/arrivals/{consignment}/receive', [\App\Http\Controllers\StockKeeper\ArrivalController::class, 'receive'])
+                ->whereNumber('consignment')->name('arrivals.receive');
+
             // --- TRANSFERS ---
             Route::get('/transfers', [TransferController::class, 'index'])->name('transfers.index');
             Route::post('/transfers', [TransferController::class, 'store'])->name('transfers.store');

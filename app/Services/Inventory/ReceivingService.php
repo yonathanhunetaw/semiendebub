@@ -8,7 +8,9 @@ use App\Models\Auth\User;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Inventory\ReceiptDiscrepancy;
 use App\Models\Inventory\StockLocation;
+use App\Models\Procurement\ConsignmentLine;
 use App\Models\StockKeeper\Transfer;
+use App\Services\Procurement\PurchaseReceipts;
 use App\Services\StockService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -125,6 +127,56 @@ class ReceivingService
     }
 
     /**
+     * Land one consignment line at a Main Hub, out of the inbound stage it
+     * was at (procurement pipeline PP5). Like land(), but the goods come
+     * from that stage's location rather than a courier's custody: units
+     * counted short stay there until found or lost.
+     *
+     * Called inside the consignment's receive transaction.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    public function landFromInbound(
+        Model $receivable,
+        int $itemVariantId,
+        StockLocation $from,
+        StockLocation $hub,
+        int $sent,
+        int $received,
+        int $damaged,
+        array $context,
+        ?User $by = null,
+        ?string $note = null,
+    ): void {
+        $damaged = min(max(0, $damaged), $received);
+        $landing = min($received, $sent);
+
+        if ($landing > 0) {
+            $this->stock->move($itemVariantId, $from, $hub, $landing, $context);
+        }
+
+        if ($received > $sent) {
+            $over = $received - $sent;
+            $this->stock->receive($itemVariantId, $hub, $over, $context + ['reason' => 'Over-delivery']);
+            $this->log($receivable, $itemVariantId, $hub, null, ReceiptDiscrepancy::OVER, $sent, $received, $over, $note, $by);
+        }
+
+        if ($received < $sent) {
+            $this->log($receivable, $itemVariantId, $hub, null, ReceiptDiscrepancy::SHORT, $sent, $received, $sent - $received, $note, $by);
+        }
+
+        if ($damaged > 0) {
+            $this->stock->writeOff($itemVariantId, $hub, $damaged, $context + ['reason' => 'Damaged on receipt']);
+            $this->log($receivable, $itemVariantId, $hub, null, ReceiptDiscrepancy::DAMAGED, $sent, $received, $damaged, $note, $by)->update([
+                'status' => ReceiptDiscrepancy::RESOLVED,
+                'resolution' => 'written_off',
+                'resolved_by' => $by?->id,
+                'resolved_at' => now(),
+            ]);
+        }
+    }
+
+    /**
      * Settle an open discrepancy.
      *
      *   short + found  the missing units turn up: they land at the destination
@@ -153,12 +205,28 @@ class ReceivingService
             $context = ['reason' => "Discrepancy {$row->reference}", 'reference' => $row->receivable, 'user_id' => $by->id];
             $courierId = $row->courier_id !== null ? (int) $row->courier_id : null;
 
-            if ($row->kind === ReceiptDiscrepancy::SHORT && $resolution === 'found') {
-                $this->stock->handOverFromCourier((int) $row->item_variant_id, (int) $row->stock_location_id, (int) $row->quantity, $courierId, $context);
-            }
+            $receivable = $row->receivable;
 
-            if ($row->kind === ReceiptDiscrepancy::SHORT && $resolution === 'lost') {
-                $this->stock->writeOffInCustody((int) $row->item_variant_id, (int) $row->quantity, $courierId, $context);
+            if ($receivable instanceof ConsignmentLine) {
+                // A consignment's missing units wait at the stage they were received from.
+                $left = app(StockLocationTree::class)->inbound((string) $receivable->consignment->received_from);
+
+                if ($row->kind === ReceiptDiscrepancy::SHORT && $resolution === 'found') {
+                    $this->stock->move((int) $row->item_variant_id, $left, (int) $row->stock_location_id, (int) $row->quantity, $context);
+                    PurchaseReceipts::credit($receivable, (int) $row->quantity);
+                }
+
+                if ($row->kind === ReceiptDiscrepancy::SHORT && $resolution === 'lost') {
+                    $this->stock->writeOff((int) $row->item_variant_id, $left, (int) $row->quantity, $context);
+                }
+            } else {
+                if ($row->kind === ReceiptDiscrepancy::SHORT && $resolution === 'found') {
+                    $this->stock->handOverFromCourier((int) $row->item_variant_id, (int) $row->stock_location_id, (int) $row->quantity, $courierId, $context);
+                }
+
+                if ($row->kind === ReceiptDiscrepancy::SHORT && $resolution === 'lost') {
+                    $this->stock->writeOffInCustody((int) $row->item_variant_id, (int) $row->quantity, $courierId, $context);
+                }
             }
 
             $row->update([

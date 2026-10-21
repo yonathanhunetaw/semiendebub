@@ -45,7 +45,7 @@ class StocktakeController extends Controller
         $locations = StockLocation::query()
             ->with('store:id,name')
             ->where('is_stockable', true)
-            ->where('kind', '!=', StockLocation::KIND_TRANSIT)
+            ->whereNotIn('kind', StockLocation::OFF_NETWORK_KINDS)
             ->when($scope !== null, fn ($q) => $q->whereIn('id', $scope))
             ->orderBy('name')
             ->get();

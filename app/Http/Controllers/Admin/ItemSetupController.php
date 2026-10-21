@@ -91,6 +91,7 @@ final class ItemSetupController extends Controller
                     'product_name' => (string) $item->product_name,
                     'product_description' => (string) ($item->product_description ?? ''),
                     'packaging_details' => (string) ($item->packaging_details ?? ''),
+                    'hs_code' => (string) ($item->hs_code ?? ''),
                     'item_category_id' => $item->item_category_id,
                     'status' => (string) $item->status,
                     'pictures' => collect($item->general_images ?? [])->map(fn ($p): array => ['path' => (string) $p, 'url' => \App\Services\ImageResolver::resolve((string) $p)])->values()->all(),

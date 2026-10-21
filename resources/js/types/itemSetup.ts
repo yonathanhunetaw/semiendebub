@@ -136,6 +136,7 @@ export interface ItemSetupProps {
             product_name: string;
             product_description: string;
             packaging_details: string;
+            hs_code?: string;
             item_category_id: number | null;
             status: string;
             pictures: Array<{ path: string; url: string }>;

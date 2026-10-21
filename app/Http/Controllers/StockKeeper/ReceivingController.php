@@ -120,6 +120,7 @@ class ReceivingController extends Controller
         return match (true) {
             $receivable instanceof Shipment => ['type' => 'Shipment', 'reference' => (string) $receivable->reference, 'url' => route('stock_keeper.shipments.show', $receivable->id)],
             $receivable instanceof Transfer => ['type' => 'Transfer', 'reference' => (string) $receivable->reference, 'url' => route('stock_keeper.transfers.index')],
+            $receivable instanceof \App\Models\Procurement\ConsignmentLine => ['type' => 'Arrival', 'reference' => (string) ($receivable->consignment?->reference ?? ''), 'url' => route('stock_keeper.arrivals.index')],
             default => ['type' => 'Movement', 'reference' => '', 'url' => null],
         };
     }

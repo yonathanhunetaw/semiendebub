@@ -83,7 +83,7 @@ export default function Setup({ item, options, catalog, readiness, stores, wareh
 
                 {/* 1. Basics */}
                 <Section id="basics" title="Basics" hint="Name, description, category, status and pictures. Saved on their own." checks={readiness.item.checks} only={["name", "category", "picture", "description"]}>
-                    <BasicsPart itemId={item.id} saved={{ product_name: item.basics.product_name, product_description: item.basics.product_description, packaging_details: item.basics.packaging_details, item_category_id: item.basics.item_category_id, status: item.basics.status }} categories={catalog.categories} pictures={item.basics.pictures} />
+                    <BasicsPart itemId={item.id} saved={{ product_name: item.basics.product_name, product_description: item.basics.product_description, packaging_details: item.basics.packaging_details, hs_code: item.basics.hs_code ?? "", item_category_id: item.basics.item_category_id, status: item.basics.status }} categories={catalog.categories} pictures={item.basics.pictures} />
                 </Section>
 
                 {/* 2. Variants and barcodes, edited right here */}

@@ -8,7 +8,7 @@ import Close from "@mui/icons-material/Close";
 import { useDraft } from "@/hooks/useDraft";
 
 export type CategoryOption = { id: number; path: string };
-type Fields = { product_name: string; product_description: string; packaging_details: string; item_category_id: number | string | null; status: string };
+type Fields = { product_name: string; product_description: string; packaging_details: string; hs_code?: string; item_category_id: number | string | null; status: string };
 
 const STATUSES = [
     { value: "draft", label: "Draft (not for sale yet)" },
@@ -92,6 +92,7 @@ export default function BasicsPart({
             <TextField label="Item name" size="small" required value={draft.value.product_name} onChange={(e) => set({ product_name: e.target.value })} error={Boolean(errors.product_name)} inputProps={{ "aria-label": "Item name" }} />
             <TextField label="Description" size="small" multiline minRows={2} value={draft.value.product_description ?? ""} onChange={(e) => set({ product_description: e.target.value })} inputProps={{ "aria-label": "Description" }} />
             <TextField label="Packaging notes" size="small" value={draft.value.packaging_details ?? ""} onChange={(e) => set({ packaging_details: e.target.value })} helperText="For example: 12 per box, 10 boxes per carton" inputProps={{ "aria-label": "Packaging notes" }} />
+            <TextField label="HS code" size="small" value={draft.value.hs_code ?? ""} onChange={(e) => set({ hs_code: e.target.value })} error={Boolean(errors.hs_code)} helperText="Its customs code, for the import tax estimate (Procurement → Tariffs)" inputProps={{ "aria-label": "HS code", inputMode: "numeric" }} />
 
             <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
                 <Autocomplete

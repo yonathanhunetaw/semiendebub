@@ -9,8 +9,8 @@ import { pagesTest } from '../lib/pages';
 const store = ['/dashboard', '/guide', '/settings', '/orders', '/carts', '/carts/create', '/deliveries',
     '/payments', '/payment-accounts', '/balances', '/credit', '/customers', '/customers/discounts',
     '/inventory', '/inventory/replenish', '/inventory/replenishment', '/inventory/transfers', '/inventory/transfers/create',
-    '/inventory/locations', '/inventory/capacity', '/canvas'];
-const globalOnly = ['/system', '/purchase-orders', '/supplier-payments', '/stores', '/items', '/items/create', '/stores/create', '/users', '/users/create', '/sessions',
+    '/inventory/locations', '/inventory/capacity', '/canvas', '/ideas', '/price-checks', '/shops'];
+const globalOnly = ['/system', '/purchase-orders', '/supplier-payments', '/import-costs', '/stores', '/items', '/items/create', '/stores/create', '/users', '/users/create', '/sessions',
     '/inventory/shipments', '/inventory/stores', '/inventory/fleet', '/inventory/warehouse', '/inventory/warehouse/create',
     '/inventory/warehouse/locations/create'];
 

@@ -304,6 +304,7 @@ final class ItemWriter
             'product_name' => $data['product_name'],
             'product_description' => $data['product_description'] ?? null,
             'packaging_details' => $data['packaging_details'] ?? null,
+            'hs_code' => \App\Models\Procurement\Tariff::normalise($data['hs_code'] ?? null),
             'item_category_id' => $this->resolveCategoryId($data['item_category_id']),
             // evaluateDraftStatus() writes the status asked for once variants exist.
             'status' => 'draft',

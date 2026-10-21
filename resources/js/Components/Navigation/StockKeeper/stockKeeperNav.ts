@@ -45,6 +45,7 @@ export const SK_NAV: SkNavGroup[] = [
         label: "Movements",
         items: [
             { key: "shipments", label: "Shipments", icon: "local_shipping", route: "stock_keeper.shipments.index", paths: ["/shipments"], hint: "Hub runs: pick, send, receive" },
+            { key: "arrivals", label: "Arrivals", icon: "sailing", route: "stock_keeper.arrivals.index", paths: ["/arrivals"], hint: "Bought goods to count in at a hub" },
             { key: "receiving", label: "Receiving", icon: "move_to_inbox", route: "stock_keeper.receiving.index", paths: ["/receiving"], hint: "Short, damaged and over deliveries" },
             { key: "transfers", label: "Transfers", icon: "swap_horiz", route: "stock_keeper.transfers.index", paths: ["/transfers"], hint: "One item between places" },
             { key: "orders", label: "Orders", icon: "package_2", route: "stock_keeper.orders.index", paths: ["/orders"], hint: "Pick & pack for delivery" },
