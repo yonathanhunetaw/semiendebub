@@ -250,4 +250,75 @@ class AttendanceTest extends TestCase
             ->get(route('seller.work.attendance', ['site' => $this->site]))
             ->assertForbidden();
     }
+
+    #[Test]
+    public function a_day_at_the_counter_over_http(): void
+    {
+        $host = ['HTTP_HOST' => 'seller.'.config('app.system_domain')];
+        $as = fn (User $user) => $this->actingAs($user)->withServerVariables($host);
+        $this->open();
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 10:00:00'));
+        $this->attendance->clockIn($this->second, $this->site, $this->live());
+
+        $as($this->manager)->getJson(route('seller.work.sites.counter.code', $this->site))
+            ->assertOk()->assertJsonPath('open', true)->assertJsonStructure(['url', 'seconds_left', 'open']);
+        $as($this->keeper)->getJson(route('seller.work.sites.counter.code', $this->site))->assertForbidden();
+
+        $as($this->seller)->post(route('seller.work.break.start'))->assertSessionHas('success', 'On a break. End it in My work.');
+        $as($this->seller)->post(route('seller.work.break.start'))->assertSessionHas('error', 'You are already on a break.');
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 10:30:00'));
+        $as($this->seller)->post(route('seller.work.break.end'))->assertSessionHas('success', 'Back from the break.');
+        $as($this->seller)->post(route('seller.work.break.end'))->assertSessionHas('error', 'You are not on a break.');
+        $this->actingAs($this->keeper)->withServerVariables(['HTTP_HOST' => 'stockkeeper.'.config('app.system_domain')])
+            ->post(route('stock_keeper.work.break.start'))->assertSessionHas('error', 'Clock in first.');
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 14:00:00'));
+        $as($this->seller)->post(route('seller.work.clock-out', $this->site), ['token' => $this->live()])
+            ->assertSessionHas('success', 'Clocked out at 14:00.');
+        $as($this->seller)->post(route('seller.work.clock-out', $this->site), [])->assertSessionHasErrors('token');
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 19:00:00'));
+        $as($this->second)->post(route('seller.work.sites.close', $this->site), ['token' => 'not-a-code'])->assertSessionHas('error');
+        $as($this->second)->post(route('seller.work.sites.close', $this->site), ['token' => $this->live(), 'ticked' => [], 'till_count' => 1200])
+            ->assertSessionHas('success', "{$this->site->name} is closed.");
+        $this->assertSame(0, TimeEntry::query()->open()->count());
+    }
+
+    #[Test]
+    public function a_manager_clocks_people_and_fixes_times_over_http(): void
+    {
+        $host = ['HTTP_HOST' => 'seller.'.config('app.system_domain')];
+        $as = fn (User $user) => $this->actingAs($user)->withServerVariables($host);
+        $this->open();
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 11:00:00'));
+
+        $as($this->manager)->post(route('seller.work.attendance.clock-in', $this->site), ['user_id' => $this->keeper->id])
+            ->assertSessionHasErrors('note');
+        $as($this->seller)->post(route('seller.work.attendance.clock-in', $this->site), ['user_id' => $this->keeper->id, 'note' => 'Phone dead'])
+            ->assertForbidden();
+        $as($this->manager)->post(route('seller.work.attendance.clock-in', $this->site), ['user_id' => $this->keeper->id, 'note' => 'Phone dead'])
+            ->assertSessionHas('success', "{$this->keeper->first_name} clocked in.");
+        $entry = TimeEntry::query()->where('user_id', $this->keeper->id)->sole();
+        $this->assertSame(TimeEntry::METHOD_MANAGER, $entry->in_method);
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 13:00:00'));
+        $as($this->seller)->post(route('seller.work.time-entries.clock-out', $entry), ['note' => 'Went home'])->assertForbidden();
+        $as($this->manager)->post(route('seller.work.time-entries.clock-out', $entry), ['note' => 'Went home'])
+            ->assertSessionHas('success', 'Clocked out.');
+        $as($this->manager)->post(route('seller.work.time-entries.clock-out', $entry), ['note' => 'Again'])
+            ->assertSessionHas('error', 'Already clocked out. Fix the times instead.');
+
+        $as($this->manager)->put(route('seller.work.time-entries.fix', $entry), ['clock_in_at' => '2026-10-19T12:00', 'clock_out_at' => '2026-10-19T11:00', 'note' => 'x'])
+            ->assertSessionHasErrors('clock_out_at');
+        $as($this->manager)->put(route('seller.work.time-entries.fix', $entry), ['clock_in_at' => '2026-10-19T11:00', 'clock_out_at' => '2026-10-19T12:30', 'note' => 'Right times'])
+            ->assertSessionHas('success', 'Times fixed.');
+        $entry->refresh();
+        $this->assertTrue($entry->hasFlag(TimeEntry::FLAG_FIXED));
+        $this->assertSame(90, $entry->minutes());
+
+        $as($this->seller)->post(route('seller.work.time-entries.review', $entry))->assertForbidden();
+        $entry->update(['reviewed_at' => null]);
+        $as($this->manager)->post(route('seller.work.time-entries.review', $entry))->assertSessionHas('success', 'Marked as looked at.');
+        $this->assertSame($this->manager->id, (int) $entry->fresh()->reviewed_by);
+    }
 }

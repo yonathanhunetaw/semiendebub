@@ -267,6 +267,25 @@ class AdminItemCanvasPagesTest extends TestCase
     }
 
     #[Test]
+    public function only_the_saver_deletes_a_version_and_a_draft_is_not_one(): void
+    {
+        $canvas = Canvas::query()->create(['user_id' => $this->admin->id, 'title' => 'Plan']);
+        $colleague = $this->user('admin');
+        $canvas->shares()->attach($colleague->id, ['permission' => 'edit']);
+
+        $mine = $this->postJson(route('admin.canvas.save'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => [1]], 'comment' => 'mine'])->json('version_id');
+        $this->postJson(route('admin.canvas.autosave'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['shapes' => [1, 2]]])->assertOk();
+        $draft = CanvasVersion::query()->where('is_draft', true)->sole();
+
+        $this->deleteJson(route('admin.canvas.version.delete', $draft->id))->assertNotFound();
+
+        $this->actingAs($colleague)->deleteJson(route('admin.canvas.version.delete', $mine))->assertForbidden();
+
+        $this->actingAs($this->admin)->deleteJson(route('admin.canvas.version.delete', $mine))->assertOk()->assertJsonPath('deleted', $mine);
+        $this->assertNull(CanvasVersion::query()->find($mine));
+    }
+
+    #[Test]
     public function restoring_a_version_adds_it_on_top_and_keeps_the_old_ones(): void
     {
         $canvas = Canvas::query()->create(['user_id' => $this->admin->id, 'title' => 'Plan']);

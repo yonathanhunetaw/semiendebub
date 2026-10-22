@@ -360,12 +360,12 @@ class WorldFeed
      *
      * @return array{store: array{id: int, name: string}|null, shelf: array{id: int, name: string}|null, to_shelve: array<int, array<string, mixed>>, needs: array<int, array<string, mixed>>, can_shelve: bool, loads: array<int, array<string, mixed>>, remote: array<int, array<string, mixed>>}
      */
-    public function play(User $viewer): array
+    public function play(User $viewer, string $app = ''): array
     {
         $storeId = $this->mainStoreFor($viewer);
 
         if ($storeId === null) {
-            return ['store' => null, 'shelf' => null, 'to_shelve' => [], 'needs' => [], 'can_shelve' => false, 'loads' => [], 'remote' => []];
+            return ['store' => null, 'shelf' => null, 'to_shelve' => [], 'needs' => [], 'can_shelve' => false, 'loads' => [], 'remote' => [], 'runs' => [], 'legs' => [], 'stations' => []];
         }
 
         $list = $this->board->shelvingList($storeId, $viewer);
@@ -379,7 +379,166 @@ class WorldFeed
             'can_shelve' => (bool) $list['can_shelve'],
             'loads' => $this->loads($storeId, $viewer),
             'remote' => $this->remoteJobs($storeId, $viewer, $list['to_accept']),
+            'runs' => $this->runs($storeId, $viewer),
+            'legs' => $this->legs($storeId, $viewer, $list['to_accept']),
+            'stations' => app(StationFeed::class)->for($viewer, $app, $storeId, $list),
         ];
+    }
+
+    /**
+     * Transfer legs touching the world's places: refill legs to accept, and
+     * transfers that are pending or on the road between two of them (a hub and
+     * the store, the Remote Hub and the floor). Moves inside the store (floor
+     * to shelf) are the shelving job, so they are left out. Each says where it
+     * stands (`stage`) and the steps this viewer can take now, with the same
+     * checks the routes make: claim (a courier), dispatch (the origin's people,
+     * not while an automated proposal awaits approval), handover (the courier
+     * carrying it), complete (the destination's people), cancel.
+     *
+     * @param  array<int, array<string, mixed>>  $toAccept  RefillBoard::shelvingList()['to_accept']
+     * @return array<int, array<string, mixed>>
+     */
+    private function legs(int $storeId, User $viewer, array $toAccept): array
+    {
+        // Sellers may see the Remote Hub only as stocked or not, never what moves from it.
+        if ($viewer->roleKey() === 'seller') {
+            return [];
+        }
+
+        $workflow = app(TransferWorkflowService::class);
+
+        $transfers = Transfer::query()
+            ->whereIn('status', [TransferWorkflowService::STATUS_PENDING, TransferWorkflowService::STATUS_IN_TRANSIT])
+            ->where('source_location_type', StockLocation::class)
+            ->where('destination_location_type', StockLocation::class)
+            ->with(['itemVariant.item:id,product_name', 'itemVariant.itemPackagingType:id,name', 'itemVariant.packagingQuantities', 'courier:id,first_name,last_name'])
+            ->orderBy('id')
+            ->limit(40)
+            ->get();
+
+        $places = StockLocation::query()
+            ->whereIn('id', $transfers->pluck('source_location_id')->merge($transfers->pluck('destination_location_id'))->unique()->all())
+            ->get()
+            ->keyBy('id');
+
+        $legs = $transfers
+            ->filter(function (Transfer $t) use ($places, $storeId): bool {
+                $from = $this->placeKey($places->get((int) $t->source_location_id), $storeId);
+                $to = $this->placeKey($places->get((int) $t->destination_location_id), $storeId);
+
+                return $from !== null && $to !== null && ! ($from === 'store_floor' && $to === 'store_floor');
+            })
+            ->map(function (Transfer $t) use ($places, $storeId, $viewer, $workflow): array {
+                $origin = $places->get((int) $t->source_location_id);
+                $destination = $places->get((int) $t->destination_location_id);
+                $needsCourier = $workflow->needsCourier($t);
+                $pending = $t->status === TransferWorkflowService::STATUS_PENDING;
+                $mineToCarry = $t->courier_id !== null && (int) $t->courier_id === (int) $viewer->id;
+                $atOrigin = $origin->canBeOperatedBy($viewer);
+                $atDestination = $destination->canBeOperatedBy($viewer);
+
+                $steps = array_keys(array_filter([
+                    'claim' => $pending && $needsCourier && $t->courier_id === null && $viewer->roleKey() === 'delivery',
+                    'dispatch' => $pending && ! $t->awaitsApproval() && ($t->courier_id !== null || ! $needsCourier) && $atOrigin,
+                    'handover' => ! $pending && $needsCourier && $mineToCarry && $t->handed_over_at === null,
+                    'complete' => ! $pending && $atDestination,
+                    'cancel' => $atOrigin || $atDestination,
+                ]));
+
+                return [
+                    'key' => 'transfer-'.$t->id,
+                    'kind' => 'transfer',
+                    'id' => (int) $t->id,
+                    'reference' => (string) $t->reference,
+                    'stage' => $pending ? ($t->courier_id !== null ? 'claimed' : 'waiting') : ($t->handed_over_at !== null ? 'handed_over' : 'in_transit'),
+                    'origin' => $this->placeKey($origin, $storeId),
+                    'destination' => $this->placeKey($destination, $storeId),
+                    'item_name' => (string) ($t->itemVariant?->item?->product_name ?? 'Unknown item'),
+                    'quantity' => (int) $t->quantity,
+                    'unit' => (string) ($t->itemVariant?->itemPackagingType?->name ?? 'Unit'),
+                    'unit_cbm' => $this->ownUnitCbm($t->itemVariant),
+                    'needs_courier' => $needsCourier,
+                    'courier' => $t->courier ? trim($t->courier->first_name.' '.$t->courier->last_name) : null,
+                    'awaits_approval' => $t->awaitsApproval(),
+                    'steps' => $steps,
+                ];
+            })
+            ->values()
+            ->all();
+
+        $refills = RefillRequest::query()
+            ->whereIn('id', array_map(fn (array $leg): int => (int) $leg['id'], $toAccept))
+            ->with('itemVariant.packagingQuantities')
+            ->get()
+            ->keyBy('id');
+
+        $accept = array_map(fn (array $leg): array => [
+            'key' => 'leg-'.$leg['id'],
+            'kind' => 'refill',
+            'id' => (int) $leg['id'],
+            'reference' => (string) $leg['reference'],
+            'stage' => 'to_accept',
+            'origin' => 'remote_hub',
+            'destination' => 'store_floor',
+            'item_name' => (string) $leg['item_name'],
+            'quantity' => (int) $leg['quantity'],
+            'unit' => (string) $leg['unit'],
+            'unit_cbm' => $this->ownUnitCbm($refills->get((int) $leg['id'])?->itemVariant),
+            'needs_courier' => true,
+            'courier' => null,
+            'awaits_approval' => false,
+            'steps' => $refills->get((int) $leg['id']) !== null && $viewer->can('accept', $refills->get((int) $leg['id'])) ? ['accept'] : [],
+        ], $toAccept);
+
+        return [...$accept, ...$legs];
+    }
+
+    /**
+     * The shipments after picking: prepared, on the road, or arrived and not
+     * yet signed in. The hand-off steps that follow Mark prepared: the courier
+     * starts, checks the load, signs and arrives; the receiving dock checks
+     * the goods, counts them and signs. `steps` are the ones this viewer can
+     * take now (ShipmentHandoffService::stepsFor, the check the step route
+     * makes); a count already saved is shown on its line.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function runs(int $storeId, User $viewer): array
+    {
+        $handoff = app(ShipmentHandoffService::class);
+
+        return Shipment::query()
+            ->forStore($storeId)
+            ->whereIn('status', [ShipmentWorkflowService::READY, ShipmentWorkflowService::DISPATCHED, ShipmentWorkflowService::IN_TRANSIT, ShipmentWorkflowService::DELIVERED])
+            ->with([
+                'originLocation', 'destinationLocation', 'courier:id,first_name,last_name',
+                'items.itemVariant.item:id,product_name', 'items.itemVariant.itemPackagingType:id,name', 'items.itemVariant.packagingQuantities',
+            ])
+            ->orderByRaw('coalesce(agreed_scheduled_for, scheduled_for, created_at)')
+            ->orderBy('id')
+            ->limit(10)
+            ->get()
+            ->filter(fn (Shipment $s): bool => $this->placeKey($s->originLocation, $storeId) !== null && $this->placeKey($s->destinationLocation, $storeId) !== null)
+            ->map(fn (Shipment $s): array => [
+                'id' => (int) $s->id,
+                'reference' => (string) $s->reference,
+                'status' => (string) $s->status,
+                'stage' => $handoff->stage($s),
+                'origin' => $this->placeKey($s->originLocation, $storeId),
+                'destination' => $this->placeKey($s->destinationLocation, $storeId),
+                'courier' => $s->courier ? trim($s->courier->first_name.' '.$s->courier->last_name) : null,
+                'steps' => $handoff->stepsFor($s, $viewer),
+                'lines' => $s->items->map(fn (ShipmentItem $line): array => [
+                    'variant_id' => (int) $line->item_variant_id,
+                    'name' => (string) ($line->itemVariant?->item?->product_name ?? 'Unknown product'),
+                    'unit' => (string) ($line->unit ?: ($line->itemVariant?->itemPackagingType?->name ?? 'Unit')),
+                    'quantity' => (int) $line->quantity,
+                    'received' => $line->received_quantity !== null ? (int) $line->received_quantity : null,
+                    'damaged' => $line->damaged_quantity !== null ? (int) $line->damaged_quantity : null,
+                ])->values()->all(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**

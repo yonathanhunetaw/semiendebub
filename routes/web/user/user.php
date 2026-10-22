@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Admin\SessionController;
 use App\Http\Controllers\Storefront\CartController;
+use App\Http\Controllers\Storefront\SeoController;
 use App\Http\Controllers\Storefront\StorefrontController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -82,20 +83,25 @@ if (app()->environment('local')) {
 |
 */
 
+Route::get('/sitemap.xml', [SeoController::class, 'sitemap'])->name('seo.sitemap');
+Route::get('/robots.txt', [SeoController::class, 'robots'])->name('seo.robots');
+
 Route::get('/shop', [StorefrontController::class, 'index'])
+    ->middleware('throttle:120,1')
     ->name('storefront.index');
 
 // Product detail: where the shopper picks a variant before adding to cart.
 Route::get('/shop/items/{item}', [StorefrontController::class, 'show'])
     ->name('storefront.items.show');
 
-Route::prefix('shop/cart')->name('storefront.cart.')->group(function (): void {
+Route::prefix('shop/cart')->middleware('throttle:60,1')->name('storefront.cart.')->group(function (): void {
     Route::post('/items', [CartController::class, 'store'])->name('items.store');
     Route::patch('/items/{variant}', [CartController::class, 'update'])->name('items.update');
     Route::delete('/items/{variant}', [CartController::class, 'destroy'])->name('items.destroy');
 });
 
 Route::post('/shop/checkout', [CartController::class, 'checkout'])
+    ->middleware('throttle:20,1')
     ->name('storefront.checkout');
 
 
@@ -106,7 +112,7 @@ Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
     })->name('home');
 
     Route::get('/home2', function () {
-        return Inerty::render('User/Home2/index', ['name' => 'Mike']); // or Inertia::render
+        return Inertia::render('User/Home2/index', ['name' => 'Mike']);
     })->name('home2');
 
     Route::get('/contact', function () {

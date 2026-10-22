@@ -156,6 +156,35 @@ class CalendarModulesTest extends TestCase
     }
 
     #[Test]
+    public function an_orders_arrival_and_an_old_orders_payment_day_show_for_its_store(): void
+    {
+        $buyer = $this->user('procurement', null);
+        $order = fn (array $attributes): Purchase => Purchase::query()->create($attributes + [
+            'store_id' => $this->store->id, 'user_id' => $buyer->id, 'currency' => 'ETB', 'total_amount' => 5000,
+        ]);
+
+        $order(['reference_number' => 'PO-OPEN', 'supplier_name' => 'Merkato Wholesale', 'status' => Purchase::STATUS_ORDERED, 'expected_at' => '2026-10-23']);
+        $order(['reference_number' => 'PO-IN', 'supplier_name' => 'Merkato Wholesale', 'status' => Purchase::STATUS_RECEIVED, 'expected_at' => '2026-10-22']);
+        // Approved before payables existed: due 15 days after it was bought.
+        $order(['reference_number' => 'PO-OLD', 'supplier_name' => '', 'status' => Purchase::STATUS_APPROVED, 'purchased_at' => '2026-10-10', 'payment_days' => 15]);
+        $order(['reference_number' => 'PO-DRAFT', 'supplier_name' => 'X', 'status' => Purchase::STATUS_DRAFT, 'expected_at' => '2026-10-23', 'purchased_at' => '2026-10-10', 'payment_days' => 15]);
+        $other = Store::factory()->create();
+        $order(['reference_number' => 'PO-THEIRS', 'store_id' => $other->id, 'supplier_name' => 'X', 'status' => Purchase::STATUS_ORDERED, 'expected_at' => '2026-10-23']);
+
+        $events = collect($this->asRole($this->user('admin', $this->store->id), 'admin')
+            ->getJson(route('admin.calendar.feed', ['from' => '2026-10-20', 'to' => '2026-10-31', 'sources' => ['purchases']]))
+            ->assertOk()->json('events'))->keyBy('title');
+
+        // Not the draft's arrival or payment, nor another store's order.
+        $this->assertEqualsCanonicalizing(['PO PO-OPEN arrives', 'PO PO-IN arrives', 'Pay supplier'], $events->keys()->all());
+        $this->assertSame('Merkato Wholesale', $events['PO PO-OPEN arrives']['subtitle']);
+        $this->assertSame('upcoming', $events['PO PO-OPEN arrives']['state']);
+        $this->assertSame('done', $events['PO PO-IN arrives']['state']);
+        $this->assertSame('2026-10-25', $events['Pay supplier']['start']);
+        $this->assertSame('PO PO-OLD · 15 days', $events['Pay supplier']['status']);
+    }
+
+    #[Test]
     public function a_driver_sees_their_own_shifts_on_the_delivery_calendar(): void
     {
         $driver = $this->user('delivery', null);

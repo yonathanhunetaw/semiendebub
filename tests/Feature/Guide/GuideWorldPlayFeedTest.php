@@ -166,6 +166,114 @@ class GuideWorldPlayFeedTest extends TestCase
     }
 
     #[Test]
+    public function the_runs_list_shipments_after_prepared_with_the_steps_the_viewer_may_take(): void
+    {
+        $tree = app(StockLocationTree::class);
+        $remoteHub = $tree->addRemoteHub($this->mainStore);
+        $hubA = $tree->syncStore(Store::factory()->create(['name' => 'Warehouse A', 'type' => Store::TYPE_CENTRAL_WAREHOUSE]));
+        $variant = ItemVariant::factory()->create();
+
+        $ready = $this->shipmentFrom($hubA, $remoteHub, 'ready');
+        $ready->items()->create(['item_variant_id' => $variant->id, 'quantity' => 10, 'picked_quantity' => 10]);
+        $this->shipmentFrom($hubA, $remoteHub, 'scheduled');
+        $this->shipmentFrom($hubA, $remoteHub, 'received');
+
+        // The store's keeper is not the driver and does not work the hub dock: nothing to take yet at the start.
+        $this->asRole($this->user('stock_keeper', $this->mainStore->id), 'stockkeeper')
+            ->getJson(route('stock_keeper.guide.world', ['play' => 1]))
+            ->assertOk()
+            ->assertJsonCount(1, 'play.runs')
+            ->assertJsonPath('play.runs.0.id', $ready->id)
+            ->assertJsonPath('play.runs.0.stage', 'prepared')
+            ->assertJsonPath('play.runs.0.origin', 'main_hub_a')
+            ->assertJsonPath('play.runs.0.destination', 'remote_hub')
+            ->assertJsonPath('play.runs.0.lines.0.quantity', 10)
+            ->assertJsonPath('play.runs.0.lines.0.received', null)
+            ->assertJsonPath('play.runs.0.steps', []);
+
+        // The driver on the run may start the trip.
+        $driver = $this->user('delivery', null);
+        $ready->update(['courier_id' => $driver->id]);
+        $this->asRole($driver, 'delivery')
+            ->getJson(route('delivery.guide.world', ['play' => 1]))
+            ->assertOk()
+            ->assertJsonPath('play.runs.0.courier', trim($driver->first_name.' '.$driver->last_name))
+            ->assertJsonPath('play.runs.0.steps.0', 'courier_start');
+    }
+
+    #[Test]
+    public function the_legs_list_transfers_between_sites_with_the_steps_each_viewer_may_take_but_not_the_shelving_moves(): void
+    {
+        $remoteHub = app(StockLocationTree::class)->addRemoteHub($this->mainStore);
+        $variant = ItemVariant::factory()->create();
+        $this->floorToShelf($variant, ['reference' => 'TRF-SHELVING']);
+        $leg = $this->fromRemoteHub($remoteHub, $variant, ['reference' => 'TRF-LEG']);
+
+        $keeper = $this->user('stock_keeper', $this->mainStore->id);
+        $response = $this->asRole($keeper, 'stockkeeper')->getJson(route('stock_keeper.guide.world', ['play' => 1]))->assertOk();
+        // The floor → shelf move is the shelving job, not a leg.
+        $response->assertJsonCount(1, 'play.legs')
+            ->assertJsonPath('play.legs.0.reference', 'TRF-LEG')
+            ->assertJsonPath('play.legs.0.stage', 'waiting')
+            ->assertJsonPath('play.legs.0.origin', 'remote_hub')
+            ->assertJsonPath('play.legs.0.destination', 'store_floor')
+            ->assertJsonPath('play.legs.0.needs_courier', true);
+        // No courier yet: nobody on the stock keeper side can dispatch.
+        $this->assertNotContains('dispatch', $response->json('play.legs.0.steps'));
+        $this->assertNotContains('claim', $response->json('play.legs.0.steps'));
+
+        // A courier may claim it.
+        $courier = $this->user('delivery', null);
+        $this->asRole($courier, 'delivery')
+            ->getJson(route('delivery.guide.world', ['play' => 1]))
+            ->assertOk()
+            ->assertJsonPath('play.legs.0.steps.0', 'claim');
+
+        // Once claimed it is waiting for the origin to dispatch.
+        $leg->update(['courier_id' => $courier->id]);
+        $this->asRole($keeper, 'stockkeeper')
+            ->getJson(route('stock_keeper.guide.world', ['play' => 1]))
+            ->assertJsonPath('play.legs.0.stage', 'claimed')
+            ->assertJsonPath('play.legs.0.courier', trim($courier->first_name.' '.$courier->last_name));
+
+        // A seller never sees what moves out of the Remote Hub.
+        $this->asRole($this->user('seller', $this->mainStore->id), 'seller')
+            ->getJson(route('seller.guide.world', ['play' => 1]))
+            ->assertJsonCount(0, 'play.legs');
+    }
+
+    #[Test]
+    public function the_receiving_desk_lists_open_discrepancies_and_only_offers_settling_to_someone_who_did_not_record_them(): void
+    {
+        $hub = app(StockLocationTree::class)->syncStore(Store::factory()->create(['name' => 'Warehouse A', 'type' => Store::TYPE_CENTRAL_WAREHOUSE]));
+        $variant = ItemVariant::factory()->create();
+        $recorder = $this->user('stock_keeper', $this->mainStore->id);
+        $row = \App\Models\Inventory\ReceiptDiscrepancy::query()->create([
+            'reference' => 'RD-TEST-1', 'receivable_type' => Shipment::class, 'receivable_id' => $this->shipmentFrom($hub, $this->floor, 'received')->id,
+            'item_variant_id' => $variant->id, 'stock_location_id' => $this->floor->id, 'kind' => 'short',
+            'expected' => 10, 'received' => 7, 'quantity' => 3, 'status' => 'open', 'recorded_by' => $recorder->id,
+        ]);
+
+        // Someone else settles it.
+        $other = $this->user('stock_keeper', $this->mainStore->id);
+        $station = collect($this->asRole($other, 'stockkeeper')->getJson(route('stock_keeper.guide.world', ['play' => 1]))->assertOk()->json('play.stations'))->firstWhere('key', 'receiving');
+        $this->assertSame('desk_receiving', $station['desk']);
+        $this->assertCount(1, $station['items']);
+        $this->assertSame((string) $row->id, $station['items'][0]['id']);
+        $this->assertSame(['found', 'lost', 'accepted'], array_column($station['items'][0]['actions'], 'key'));
+        $this->assertSame(route('stock_keeper.receiving.resolve', $row->id, false), $station['items'][0]['actions'][0]['url']);
+        $this->assertSame(['resolution' => 'found'], $station['items'][0]['actions'][0]['data']);
+
+        // Whoever counted it may not settle it.
+        $mine = collect($this->asRole($recorder, 'stockkeeper')->getJson(route('stock_keeper.guide.world', ['play' => 1]))->json('play.stations'))->firstWhere('key', 'receiving');
+        $this->assertSame([], $mine['items'][0]['actions']);
+
+        // Sellers and couriers have no receiving desk.
+        $keys = array_column($this->asRole($this->user('seller', $this->mainStore->id), 'seller')->getJson(route('seller.guide.world', ['play' => 1]))->json('play.stations'), 'key');
+        $this->assertNotContains('receiving', $keys);
+    }
+
+    #[Test]
     public function the_remote_hub_job_lists_what_waits_for_a_courier_but_never_for_a_seller(): void
     {
         $remoteHub = app(StockLocationTree::class)->addRemoteHub($this->mainStore);

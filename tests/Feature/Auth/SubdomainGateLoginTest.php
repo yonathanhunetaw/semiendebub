@@ -130,4 +130,28 @@ class SubdomainGateLoginTest extends TestCase
 
         $this->actingAs($seller)->get("http://finance.{$base}/login")->assertOk();
     }
+
+    #[Test]
+    public function with_one_shared_session_as_in_production_another_apps_login_sends_you_to_your_own(): void
+    {
+        // Production shares one session cookie across the subdomains (separated_session_hosts is
+        // only on for local and testing), so a signed-in user is sent to their own app instead.
+        config(['subdomains.separated_session_hosts' => false]);
+        $base = config('app.system_domain');
+        $seller = User::factory()->create(['role' => 'seller']);
+        $seller->assignRole('seller');
+
+        $this->actingAs($seller)->get("http://finance.{$base}/login")
+            ->assertRedirect("http://seller.{$base}/dashboard");
+        $this->actingAs($seller)->get("https://finance.{$base}:8443/login")
+            ->assertRedirect("https://seller.{$base}:8443/dashboard");
+
+        // Their own app's login still goes straight to its dashboard.
+        $this->actingAs($seller)->get("http://seller.{$base}/login")->assertRedirect('/dashboard');
+
+        // A role with no app of its own (a store manager works in the seller app) is not bounced around.
+        $manager = User::factory()->create(['role' => 'store_manager']);
+        $manager->assignRole('store_manager');
+        $this->actingAs($manager)->get("http://finance.{$base}/login")->assertOk();
+    }
 }

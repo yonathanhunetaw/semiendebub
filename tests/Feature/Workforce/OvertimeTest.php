@@ -196,4 +196,60 @@ class OvertimeTest extends TestCase
         $this->actingAs($this->manager)->withServerVariables($host)->get(route('seller.work.overtime'))
             ->assertInertia(fn ($page) => $page->component('Work/Overtime')->where('canEdit', false)->where('rules.daily_hours', 8));
     }
+
+    #[Test]
+    public function the_global_admin_sets_rules_and_holidays_over_http(): void
+    {
+        $admin = ['HTTP_HOST' => 'admin.'.config('app.system_domain')];
+        $seller = ['HTTP_HOST' => 'seller.'.config('app.system_domain')];
+        $rules = ['daily_hours' => 7.5, 'rate_day' => 1.5, 'rate_night' => 1.75, 'rate_rest_day' => 2, 'rate_holiday' => 2.5,
+            'night_from' => '22:00', 'night_to' => '06:00', 'rest_weekday' => 0, 'needs_approval' => true];
+
+        $this->actingAs($this->admin)->withServerVariables($admin)
+            ->put(route('admin.work.overtime.save'), ['night_to' => '22:00'] + $rules)
+            ->assertSessionHasErrors('night_to');
+        $this->actingAs($this->admin)->withServerVariables($admin)
+            ->put(route('admin.work.overtime.save'), $rules)
+            ->assertSessionHas('success', 'Overtime rules saved.');
+        $this->assertSame(450, (int) $this->overtime->settings()->daily_minutes);
+        $this->actingAs($this->manager)->withServerVariables($seller)
+            ->put(route('seller.work.overtime.save'), $rules)
+            ->assertForbidden();
+
+        $this->actingAs($this->admin)->withServerVariables($admin)
+            ->post(route('admin.work.holidays.store'), ['date' => '2026-11-01', 'name' => '  Test day '])
+            ->assertSessionHas('success', 'Holiday saved.');
+        $holiday = PublicHoliday::query()->sole();
+        $this->assertSame('Test day', $holiday->name);
+        $this->actingAs($this->manager)->withServerVariables($seller)
+            ->post(route('seller.work.holidays.store'), ['date' => '2026-11-02', 'name' => 'Mine'])
+            ->assertForbidden();
+
+        $this->actingAs($this->manager)->withServerVariables($seller)
+            ->delete(route('seller.work.holidays.destroy', $holiday))
+            ->assertForbidden();
+        $this->actingAs($this->admin)->withServerVariables($admin)
+            ->delete(route('admin.work.holidays.destroy', $holiday))
+            ->assertSessionHas('success', 'Holiday removed.');
+        $this->assertSame(0, PublicHoliday::query()->count());
+    }
+
+    #[Test]
+    public function the_manager_turns_overtime_down_over_http(): void
+    {
+        $host = ['HTTP_HOST' => 'seller.'.config('app.system_domain')];
+        $this->worked($this->seller, '2026-10-19 08:00', '2026-10-19 18:00');
+
+        $this->actingAs($this->manager)->withServerVariables($host)
+            ->post(route('seller.work.overtime.reject'), ['user_id' => $this->seller->id, 'date' => '2026-10-19'])
+            ->assertSessionHas('error');
+        $this->actingAs($this->seller)->withServerVariables($host)
+            ->post(route('seller.work.overtime.reject'), ['user_id' => $this->seller->id, 'date' => '2026-10-19', 'note' => 'No'])
+            ->assertForbidden();
+        $this->actingAs($this->manager)->withServerVariables($host)
+            ->post(route('seller.work.overtime.reject'), ['user_id' => $this->seller->id, 'date' => '2026-10-19', 'note' => 'Not asked for'])
+            ->assertSessionHas('success', 'Overtime not paid.');
+
+        $this->assertSame('rejected', $this->overtime->day($this->seller->id, '2026-10-19')['status']);
+    }
 }

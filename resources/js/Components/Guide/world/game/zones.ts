@@ -22,7 +22,35 @@ import { PLACES, PLATFORM_BERTH, STORE, doorPosition, palletCentres } from "../p
  *                store keeper receives it.
  */
 
-export type ZoneKey = "floor" | "shelf" | "hub_a" | "hub_b" | "truck" | "remote" | "remote_door" | "store_door";
+export type ZoneKey = "floor" | "shelf" | "hub_a" | "hub_b" | "truck" | "remote" | "remote_door" | "store_door" | DeskKey;
+
+/**
+ * The desks (stations.ts): each module that is not a walk-and-carry job has one.
+ * Two rows on the paved plaza south of the shop's street (clear of the van's
+ * parking), the counter inside the shop, the delivery bay's desk, and the
+ * arrivals desk on the hub platform. Each is a 3 × 2.2 m patch with a table.
+ */
+export const DESKS = [
+    { key: "desk_arrivals", label: "Arrivals desk", rect: [-63.9, -0.3, -62.4, 2.3] },
+    { key: "desk_counter", label: "Counter desk", rect: [20.7, 9.0, 22.0, 11.2] },
+    { key: "desk_bay", label: "Delivery desk", rect: [34.5, -1.4, 37.5, 0.8] },
+    { key: "desk_orders", label: "Orders desk", rect: [6, 16.6, 9, 18.8] },
+    { key: "desk_receiving", label: "Receiving desk", rect: [9.4, 16.6, 12.4, 18.8] },
+    { key: "desk_counts", label: "Counts & levels desk", rect: [12.8, 16.6, 15.8, 18.8] },
+    { key: "desk_moves", label: "Transfers desk", rect: [16.2, 16.6, 19.2, 18.8] },
+    { key: "desk_customers", label: "Customers desk", rect: [19.6, 16.6, 22.6, 18.8] },
+    { key: "desk_cash", label: "Cash & payments desk", rect: [23, 16.6, 26, 18.8] },
+    { key: "desk_shipments", label: "Shipments desk", rect: [26.4, 16.6, 29.4, 18.8] },
+    { key: "desk_purchasing", label: "Purchasing desk", rect: [6, 20.4, 9, 22.6] },
+    { key: "desk_approvals", label: "Approvals desk", rect: [9.4, 20.4, 12.4, 22.6] },
+    { key: "desk_ideas", label: "Product ideas desk", rect: [12.8, 20.4, 15.8, 22.6] },
+    { key: "desk_work", label: "Staff & keys desk", rect: [16.2, 20.4, 19.2, 22.6] },
+    { key: "desk_catalogue", label: "Catalogue desk", rect: [19.6, 20.4, 22.6, 22.6] },
+    { key: "desk_sites", label: "Stores & fleet desk", rect: [23, 20.4, 26, 22.6] },
+    { key: "desk_office", label: "Calendar & office desk", rect: [26.4, 20.4, 29.4, 22.6] },
+] as const satisfies ReadonlyArray<{ key: string; label: string; rect: [number, number, number, number] }>;
+export type DeskKey = (typeof DESKS)[number]["key"];
+export const isDesk = (key: ZoneKey | null): key is DeskKey => key !== null && DESKS.some((d) => d.key === key);
 
 /**
  * Where the freight car stands: its open doors face west, just off the
@@ -72,6 +100,8 @@ export interface Zone {
     rects: Array<[number, number, number, number]>;
     /** Where boxes fly from (a pickup) or to (a drop), [x, y, z]. */
     point: [number, number, number];
+    /** A desk (stations.ts): the scene puts a table on it. */
+    desk?: boolean;
 }
 
 const [cx, cz] = STORE.position;
@@ -107,6 +137,7 @@ export const ZONES: Zone[] = [
         rects: [[CAR.rearX - 2.4, CAR.z - 1.3, CAR.rearX - 0.35, CAR.z + 1.3]],
         point: [CAR.rearX + 0.6, CAR.bed + 0.8, CAR.z],
     },
+    ...DESKS.map((d): Zone => ({ key: d.key, kind: "pickup", label: d.label, rects: [[...d.rect] as [number, number, number, number]], point: [(d.rect[0] + d.rect[2]) / 2, 1, (d.rect[1] + d.rect[3]) / 2], desk: true })),
 ];
 
 export function zoneAt(x: number, z: number): Zone | null {
@@ -127,12 +158,15 @@ export interface ZoneMarks {
     show: (keys: ZoneKey[]) => void;
     /** Mark the zone the worker stands in. */
     setActive: (key: ZoneKey | null) => void;
-    update: (time: number) => void;
+    /** `at`: where the worker stands; a desk's sign shows only when they are near it and not on it (its card names it). */
+    update: (time: number, at?: { x: number; z: number } | null) => void;
     dispose: () => void;
 }
 
 /** The patches and signs, added to the scene. Colours come from the theme: pickup info, drop success. */
 export function drawZones(scene: THREE.Scene, tones: { pickup: THREE.Color; drop: THREE.Color }, reducedMotion: boolean): ZoneMarks {
+    const deskMaterial = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.8 });
+    const deskTopMaterial = new THREE.MeshStandardMaterial({ color: 0xe9e2d3, roughness: 0.6 });
     const marks = ZONES.map((zone) => {
         const group = new THREE.Group();
         const material = new THREE.MeshBasicMaterial({ color: zone.kind === "pickup" ? tones.pickup : tones.drop, transparent: true, opacity: 0.35, depthWrite: false });
@@ -142,6 +176,18 @@ export function drawZones(scene: THREE.Scene, tones: { pickup: THREE.Color; drop
             patch.position.set((x0 + x1) / 2, 0.16, (z0 + z1) / 2);
             patch.raycast = () => {};
             group.add(patch);
+        }
+        if (zone.desk) {
+            // A table at the back of the patch, so the desk reads as a desk.
+            const [x0, z0, x1, z1] = zone.rects[0];
+            const table = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.2, x1 - x0 - 0.4), 0.8, 0.7), deskMaterial);
+            table.position.set((x0 + x1) / 2, 0.4, z0 + 0.45);
+            table.raycast = () => {};
+            group.add(table);
+            const top = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.3, x1 - x0 - 0.3), 0.06, 0.8), deskTopMaterial);
+            top.position.set((x0 + x1) / 2, 0.83, z0 + 0.45);
+            top.raycast = () => {};
+            group.add(top);
         }
         const sign = document.createElement("div");
         sign.className = "world-badge world-badge--zone";
@@ -161,9 +207,14 @@ export function drawZones(scene: THREE.Scene, tones: { pickup: THREE.Color; drop
             m.active = m.zone.key === key;
             m.sign.classList.toggle("is-active", m.active);
         }),
-        update: (time) => {
+        update: (time, at) => {
             for (const m of marks) {
                 if (!m.group.visible) continue;
+                if (m.zone.desk && at) {
+                    const [x0, z0, x1, z1] = m.zone.rects[0];
+                    const near = Math.hypot(at.x - (x0 + x1) / 2, at.z - (z0 + z1) / 2) <= 9;
+                    m.sign.style.display = near && !m.active ? "" : "none";
+                }
                 const base = m.active ? 0.55 : 0.3;
                 m.material.opacity = reducedMotion ? base : base + 0.15 * Math.sin(time * 3);
             }
@@ -173,6 +224,8 @@ export function drawZones(scene: THREE.Scene, tones: { pickup: THREE.Color; drop
             m.sign.remove();
             m.group.traverse((o) => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.dispose());
             m.material.dispose();
+            deskMaterial.dispose();
+            deskTopMaterial.dispose();
         }),
     };
 }

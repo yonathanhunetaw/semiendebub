@@ -1,5 +1,10 @@
 import { router } from "@inertiajs/react";
+import type { VisitOptions } from "@inertiajs/core";
 import type { FreightLoad } from "./freight";
+import type { Count, RunJob, RunStep } from "./handoff";
+import type { LegJob, LegStep } from "./legs";
+import { legRoute, stepRouteName } from "./permissions";
+import type { GuideApp } from "@/Components/Guide/chapters";
 import type { ShelveJob } from "./practice";
 
 /**
@@ -11,6 +16,8 @@ import type { ShelveJob } from "./practice";
  *   start picking Shipment page, "Start picking"  stock_keeper.shipments.step  start_picking
  *   pick a line   Shipment page, ticking a line    stock_keeper.shipments.step  pick_line
  *   prepared      Shipment page, "Mark prepared"  stock_keeper.shipments.step  prepared
+ *   courier steps Shipment page (delivery app)    delivery.shipments.step      courier_start … courier_arrive
+ *   receiver      Shipment page, count + sign     stock_keeper.shipments.receipt, .step  receiver_check / receiver_sign
  *
  * It goes through Inertia's router with preserveState, so the Guide page and
  * its 3D world stay mounted while the redirect back comes in (proved by
@@ -34,7 +41,7 @@ interface Flash {
 }
 
 /** POST through Inertia and settle on what came back. `forbidden` is said for a 403. */
-function post(url: string, data: Record<string, string | number | boolean>, what: string, forbidden: string): Promise<Answer> {
+function post(url: string, data: Record<string, unknown>, what: string, forbidden: string, method: "post" | "put" | "patch" | "delete" = "post"): Promise<Answer> {
     return new Promise((resolve) => {
         let settled = false;
         const done = (answer: Answer) => {
@@ -63,7 +70,7 @@ function post(url: string, data: Record<string, string | number | boolean>, what
             done({ ok: false, message: `Could not reach the server for ${what}; nothing was changed.` });
         });
 
-        router.post(url, data, {
+        const visit: VisitOptions = {
             preserveState: true,
             preserveScroll: true,
             onSuccess: (page) => {
@@ -74,13 +81,47 @@ function post(url: string, data: Record<string, string | number | boolean>, what
             onError: (errors) => done({ ok: false, message: Object.values(errors)[0] ?? `${what} was refused.` }),
             // Ended without any of the answers above (a cancelled visit): we cannot tell, so say so; the list is read again after.
             onFinish: () => done({ ok: false, message: `No answer for ${what}. The list is read again to show whether it went through.` }),
-        });
+        };
+        // A delete carries its data in the options; the others take it as the second argument.
+        if (method === "delete") router.delete(url, { ...visit, data: data as Record<string, never> });
+        else router[method](url, data as Record<string, never>, visit);
     });
 }
 
 export function shelveLive(job: ShelveJob): Promise<Answer> {
     return post(route("stock_keeper.shelving.shelve", job.transferId), {}, job.reference,
         `You may not shelve ${job.reference}: only this shelf's managers and its stock keepers can.`);
+}
+
+/** One of the courier's or the receiver's steps on a shipment, on the viewer's own app: the same ShipmentHandoffService. */
+export function runStepLive(app: GuideApp, run: RunJob, step: RunStep, signature?: string): Promise<Answer> {
+    return post(route(stepRouteName(app), { shipment: run.shipmentId, step }), signature ? { signature } : {}, run.reference,
+        `You may not take this step on ${run.reference}: only the driver carrying it, or the people who work the receiving dock, can.`);
+}
+
+/** The receiver's count, saved before signing in (Receiving page: shipments.receipt). Stock keeper app only. */
+export function runCountLive(run: RunJob, counts: Record<number, Count>): Promise<Answer> {
+    const lines = run.lines.map((l) => ({ item_variant_id: l.variantId, received: counts[l.variantId]?.received ?? l.quantity, damaged: counts[l.variantId]?.damaged ?? 0 }));
+    return post(route("stock_keeper.shipments.receipt", run.shipmentId), { lines }, run.reference, `You may not count ${run.reference}: only the people who work the receiving dock can.`);
+}
+
+/**
+ * One step of a transfer leg, on the viewer's own app:
+ *   accept    stock_keeper.refills.accept      claim     delivery.transfers.claim
+ *   dispatch  stock_keeper.transfers.dispatch  handover  delivery.transfers.handover
+ *   complete  stock_keeper.transfers.complete  (received, damaged)
+ *   cancel    stock_keeper.transfers.cancel
+ */
+export function legStepLive(app: GuideApp, leg: LegJob, step: LegStep, count?: { received: number; damaged: number }): Promise<Answer> {
+    const target = legRoute(app, step);
+    if (!target) return Promise.resolve({ ok: false, message: `That step is not taken on your app: ${step === "claim" || step === "handover" ? "the courier does it on the delivery app" : "the keepers do it on the stock keeper app"}.` });
+    return post(route(target.name, leg.id), step === "complete" && count ? count : {}, leg.reference,
+        `You may not take this step on ${leg.reference}: it belongs to someone else on this transfer.`, target.method);
+}
+
+/** A station's action (stations.ts): the route the server named for the viewer, sent through the same visit as every other move. */
+export function stationLive(method: "post" | "put" | "patch" | "delete", url: string, data: Record<string, unknown>, what: string): Promise<Answer> {
+    return post(url, data, what, `You may not do that (${what}): the same permission that guards its own page refused it.`, method);
 }
 
 export type LoadStep = "start_picking" | "pick_line" | "prepared";

@@ -10,6 +10,8 @@ use App\Models\Store\Store;
 use App\Services\CartService;
 use App\Services\StorefrontCatalogService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\View;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -55,6 +57,14 @@ class StorefrontController extends Controller
 
         $inStock = $request->boolean('in_stock');
         $onSale = $request->boolean('on_sale');
+
+        View::share('seo', [
+            'title' => $store->name . ' — Stationery and office supplies',
+            'description' => 'Browse ' . $store->name . ': stationery, office and school supplies, with prices in ETB.',
+            'canonical' => route('storefront.index'),
+            // Search, filters and later pages are the same catalogue again.
+            'noindex' => $search !== '' || $categoryId !== null || $request->filled('page'),
+        ]);
 
         $paginator = $this->catalog->paginateItems(
             $store,
@@ -111,6 +121,8 @@ class StorefrontController extends Controller
         // An item with no active store variant is not on sale here.
         abort_if($detail['variants'] === [], 404);
 
+        View::share('seo', $this->itemSeo($detail, $store));
+
         return Inertia::render('User/Dashboard/Show', [
             'store' => $this->presentStore($store),
             'item' => $detail,
@@ -125,6 +137,61 @@ class StorefrontController extends Controller
             // somewhere to go that is not the back button.
             'related' => $this->catalog->relatedItems($item, $store),
         ]);
+    }
+
+    /**
+     * Head data for a product page: title, description, image and schema.org
+     * Product markup (price range and availability) for search and AI answers.
+     *
+     * @param  array<string, mixed>  $detail
+     * @return array<string, mixed>
+     */
+    private function itemSeo(array $detail, Store $store): array
+    {
+        $url = route('storefront.items.show', $detail['id']);
+        $description = Str::limit(trim(strip_tags((string) ($detail['description'] ?? ''))), 160)
+            ?: 'Buy ' . $detail['title'] . ' from ' . $store->name . '.';
+        $image = $detail['images'][0] ?? null;
+
+        $prices = collect($detail['variants'])->pluck('final_price')->filter(fn ($p) => $p !== null);
+
+        $product = [
+            '@context' => 'https://schema.org',
+            '@type' => 'Product',
+            'name' => $detail['title'],
+            'description' => $description,
+            'url' => $url,
+        ];
+
+        if ($image) {
+            $product['image'] = $image;
+        }
+
+        if ($detail['category']) {
+            $product['category'] = $detail['category']['name'];
+        }
+
+        if ($prices->isNotEmpty()) {
+            $product['offers'] = [
+                '@type' => 'AggregateOffer',
+                'priceCurrency' => 'ETB',
+                'lowPrice' => (float) $prices->min(),
+                'highPrice' => (float) $prices->max(),
+                'offerCount' => $prices->count(),
+                'availability' => $detail['available_stock'] > 0
+                    ? 'https://schema.org/InStock'
+                    : 'https://schema.org/OutOfStock',
+            ];
+        }
+
+        return [
+            'title' => $detail['title'] . ' — ' . $store->name,
+            'description' => $description,
+            'canonical' => $url,
+            'image' => $image ? url($image) : null,
+            'og_type' => 'product',
+            'json_ld' => $product,
+        ];
     }
 
     /**

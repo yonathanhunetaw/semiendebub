@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { FreightState } from "./freight";
+import type { RunsState } from "./handoff";
+import type { LegsState } from "./legs";
 import type { StackBox } from "./ItemStacker";
 import type { Hold, Placed } from "./packer";
 import type { PracticeState } from "./practice";
@@ -30,6 +32,10 @@ export interface GameState {
     freight: FreightState | null;
     /** The Remote Hub → Store relay (relay.ts); null until the first list arrives. */
     relay: RelayState | null;
+    /** The hand-off after Mark prepared (handoff.ts); null until the first list arrives. */
+    runs: RunsState | null;
+    /** Transfer legs (legs.ts); null until the first list arrives. */
+    legs: LegsState | null;
     /** Live: moves are sent to the real routes (actions.ts). Off every time the page loads; never remembered. */
     live: boolean;
     /** A put-up is on its way to the server. */
@@ -64,7 +70,7 @@ function storedMode(): GameMode {
     }
 }
 
-let state: GameState = { mode: typeof window === "undefined" ? "watch" : storedMode(), view: "follow", zone: null, session: null, freight: null, relay: null, live: false, saving: false, hinted: typeof window !== "undefined" && stored(HINT_KEY) === "1" };
+let state: GameState = { mode: typeof window === "undefined" ? "watch" : storedMode(), view: "follow", zone: null, session: null, freight: null, relay: null, runs: null, legs: null, live: false, saving: false, hinted: typeof window !== "undefined" && stored(HINT_KEY) === "1" };
 const listeners = new Set<() => void>();
 
 /** Where the worker stands; null until Play first places them. */

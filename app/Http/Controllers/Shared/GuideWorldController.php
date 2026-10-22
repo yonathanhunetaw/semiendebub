@@ -23,7 +23,8 @@ class GuideWorldController extends Controller
     {
         // Play asks only for what it can pick up now; the day's replay is not needed.
         if ($request->boolean('play')) {
-            return response()->json(['play' => $feed->play($request->user())]);
+            // The viewer's app is the first part of the route's name (stock_keeper.guide.world): its routes are the ones the desks call.
+            return response()->json(['play' => $feed->play($request->user(), (string) strtok((string) $request->route()?->getName(), '.'))]);
         }
 
         $payload = $feed->between($request->from(), $request->to(), $request->user());

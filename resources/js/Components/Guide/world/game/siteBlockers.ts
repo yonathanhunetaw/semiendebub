@@ -2,6 +2,7 @@ import { COMPOUND, HOUSES, HOUSE_SIZE, NEIGHBOUR, PALLET, PLACES, STORE, doorPos
 import { RACKS } from "../storeLayout";
 import { blockedAt, boxAt, type Blockers, type Box, type Wall } from "./collision";
 import { makeGrid, type Grid } from "./pathfinding";
+import { DESKS } from "./zones";
 
 /**
  * Everything on the site the worker cannot walk through, from the same
@@ -113,6 +114,8 @@ function fence(): Wall[] {
 export function siteBlockers(): Blockers {
     const store = storeBlockers();
     const boxes: Box[] = [...store.boxes, boxAt(NEIGHBOUR.position[0], NEIGHBOUR.position[1], NEIGHBOUR.size[0], NEIGHBOUR.size[1])];
+    // Each desk's table, at the back of its patch (zones.ts draws it there).
+    for (const { rect: [x0, z0, x1] } of DESKS) boxes.push(boxAt((x0 + x1) / 2, z0 + 0.45, Math.min(2.3, x1 - x0 - 0.3), 0.8));
     const walls: Wall[] = [...store.walls, ...fence()];
 
     for (const place of PLACES) {

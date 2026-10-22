@@ -303,6 +303,64 @@ class ConsoleCommandsTest extends TestCase
     }
 
     #[Test]
+    public function the_demo_staff_refuse_production_and_the_e2e_copy_and_need_a_sellable_store(): void
+    {
+        $fixture = base_path(\App\Console\Commands\Dev\DemoStaffCommand::FIXTURE);
+        $before = is_file($fixture) ? md5_file($fixture) : null;
+
+        // An empty database: no store can sell anything, so nobody is made.
+        $this->artisan('dev:demo-staff')->expectsOutputToContain('No store has enough priced items')->assertFailed();
+
+        config(['database.connections.sqlite.database' => 'duka_e2e']);
+        $this->artisan('dev:demo-staff')->expectsOutputToContain('dev only')->assertFailed();
+        config(['database.connections.sqlite.database' => ':memory:']);
+
+        $this->app['env'] = 'production';
+        try {
+            $this->artisan('dev:demo-staff')->expectsOutputToContain('dev only')->assertFailed();
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+
+        $this->assertSame(0, User::query()->count());
+        $this->assertSame($before, is_file($fixture) ? md5_file($fixture) : null, 'The dev fixture file was not touched.');
+    }
+
+    // ---- catalogue:export ----------------------------------------------------
+
+    #[Test]
+    public function the_catalogue_export_writes_the_sheets_and_the_interview(): void
+    {
+        $store = Store::factory()->create(['name' => 'Bole Store']);
+        Store::factory()->create(['name' => 'Demo Store']);
+        $item = Item::factory()->create(['product_name' => 'Thermos flask']);
+        $variant = ItemVariant::factory()->create(['item_id' => $item->id]);
+        $shelf = StockLocation::query()->where('store_id', $store->id)->where('kind', StockLocation::KIND_SHELF)->firstOrFail();
+        ItemStock::query()->create(['item_variant_id' => $variant->id, 'location_type' => StockLocation::class, 'location_id' => $shelf->id, 'stock_location_id' => $shelf->id, 'quantity' => 7, 'min_stock_level' => 0]);
+
+        $dir = sys_get_temp_dir().'/duka-catalogue-'.uniqid();
+
+        try {
+            $this->artisan('catalogue:export', ['--dir' => $dir])->expectsOutputToContain('Written to')->assertSuccessful();
+
+            foreach (['INTERVIEW.md', 'catalogue-for-ai.md', 'items.csv', 'categories.csv', 'locations.csv'] as $file) {
+                $this->assertFileExists("{$dir}/{$file}");
+            }
+
+            $items = array_map('str_getcsv', file("{$dir}/items.csv", FILE_IGNORE_NEW_LINES));
+            $header = array_shift($items);
+            $row = collect($items)->firstWhere(1, 'Thermos flask');
+            $this->assertNotNull($row);
+            $this->assertSame('7', $row[array_search('pieces: Bole Store · Store Shelf', $header, true)]);
+            $this->assertStringNotContainsString('Demo Store', (string) file_get_contents("{$dir}/locations.csv"));
+            $this->assertStringContainsString("#{$item->id} Thermos flask", (string) file_get_contents("{$dir}/catalogue-for-ai.md"));
+        } finally {
+            array_map('unlink', glob("{$dir}/*") ?: []);
+            @rmdir($dir);
+        }
+    }
+
+    #[Test]
     public function the_e2e_helpers_refuse_production_even_on_an_e2e_database(): void
     {
         config(['database.connections.sqlite.database' => 'duka_e2e']);

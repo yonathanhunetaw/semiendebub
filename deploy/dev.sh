@@ -265,7 +265,7 @@ wait_port() {
     local port=$1 i
     for i in $(seq 1 120); do
         curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$port/" && return 0
-        pgrep -f "concurrently -k -n app,queue,vite" >/dev/null 2>&1 || { echo "Services exited early:"; tail -20 "$UP_LOG"; return 1; }
+        kill -0 "$(cat /tmp/duka-native.pid 2>/dev/null)" 2>/dev/null || { echo "Services exited early:"; tail -20 "$UP_LOG"; return 1; }
         sleep 0.5
     done
     echo "Nothing answered on :$port after 60s"; tail -20 "$UP_LOG"; return 1

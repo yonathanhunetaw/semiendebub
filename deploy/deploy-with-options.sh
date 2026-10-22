@@ -175,7 +175,7 @@ if [ $FORCE_BUILD -eq 1 ]; then
         $(get_env_file_args) \
         -f docker-compose.yml \
         -f "$(basename "$COMPOSE_OVERLAY")" \
-        build $NO_CACHE_FLAG)
+        build --pull $NO_CACHE_FLAG)
     echo -e "${GREEN}✓ Images built${NC}"
 fi
 

@@ -48,6 +48,9 @@ class SupplierTest extends TestCase
     #[Test]
     public function procurement_adds_and_edits_a_supplier(): void
     {
+        $this->get(route('procurement.suppliers.create'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Procurement/Suppliers/Form')->where('supplier', null));
+
         $this->post(route('procurement.suppliers.store'), $this->payload())
             ->assertRedirect(route('procurement.suppliers.index'));
 

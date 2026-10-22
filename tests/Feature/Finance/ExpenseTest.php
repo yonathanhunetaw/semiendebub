@@ -155,4 +155,45 @@ class ExpenseTest extends TestCase
         $this->actingAs($this->finance)->withServerVariables($finance)->post(route('finance.expenses.confirm', $expense))->assertSessionHas('success');
         $this->assertSame(Expense::STATUS_CONFIRMED, $expense->fresh()->status);
     }
+
+    #[Test]
+    public function the_driver_records_fuel_with_a_receipt_and_finance_turns_it_down_over_http(): void
+    {
+        $delivery = ['HTTP_HOST' => 'delivery.'.config('app.system_domain')];
+        $finance = ['HTTP_HOST' => 'finance.'.config('app.system_domain')];
+        $ride = $this->doneRide();
+        $other = $this->user('delivery', null, true);
+
+        $this->actingAs($other)->withServerVariables($delivery)
+            ->post(route('delivery.work.rides.fuel', $ride), ['amount' => 900])
+            ->assertForbidden();
+        $this->actingAs($this->driver)->withServerVariables($delivery)
+            ->post(route('delivery.work.rides.fuel', $ride), ['amount' => 0])
+            ->assertSessionHasErrors('amount');
+        $this->actingAs($this->driver)->withServerVariables($delivery)
+            ->post(route('delivery.work.rides.fuel', $ride), ['amount' => 900, 'litres' => 7.5, 'receipt' => UploadedFile::fake()->create('fuel.pdf', 20, 'application/pdf')])
+            ->assertSessionHas('success', 'Fuel recorded. Finance confirms it.');
+        $this->actingAs($this->driver)->withServerVariables($delivery)
+            ->post(route('delivery.work.rides.fuel', $ride), ['amount' => 900])
+            ->assertSessionHas('error', 'The fuel for this ride is already recorded.');
+
+        $expense = Expense::query()->sole();
+        $this->actingAs($this->finance)->withServerVariables($finance)->get(route('finance.expenses.receipt', $expense))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        $this->actingAs($this->finance)->withServerVariables($finance)
+            ->post(route('finance.expenses.reject', $expense), ['reason' => ''])
+            ->assertSessionHasErrors('reason');
+        $this->actingAs($this->finance)->withServerVariables($finance)
+            ->post(route('finance.expenses.reject', $expense), ['reason' => 'No fuel stop on that route'])
+            ->assertSessionHas('success', 'Expense rejected: it does not count.');
+        $this->assertSame(Expense::STATUS_REJECTED, $expense->fresh()->status);
+        $this->assertSame('No fuel stop on that route', $expense->fresh()->reject_reason);
+
+        // No receipt: nothing to show.
+        $plain = $this->expenses->record($this->driver, ['category' => 'rent', 'amount' => 100, 'spent_on' => '2026-10-01']);
+        $this->actingAs($this->finance)->withServerVariables($finance)->get(route('finance.expenses.receipt', $plain))->assertNotFound();
+    }
 }

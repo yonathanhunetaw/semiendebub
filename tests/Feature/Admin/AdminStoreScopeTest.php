@@ -338,7 +338,8 @@ class AdminStoreScopeTest extends TestCase
         $this->get(route('admin.canvas.index'))->assertInertia(fn ($page) => $page
             ->where('canvases', fn ($rows) => ! collect($rows)->pluck('id')->contains($canvas->id)));
         $this->getJson(route('admin.canvas.version', $version->id))->assertNotFound();
-        $this->postJson(route('admin.canvas.save'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['b' => 2]])->assertNotFound();
+        $this->postJson(route('admin.canvas.save'), ['canvas_id' => $canvas->id, 'snapshot_json' => ['b' => 2], 'comment' => 'Mine now'])->assertNotFound();
+        $this->deleteJson(route('admin.canvas.version.delete', $version->id))->assertNotFound();
     }
 
     #[Test]

@@ -82,7 +82,7 @@ export function createGameScene(options: GameSceneOptions): GameScene {
         const now = performance.now();
         stacker.update(now);
         car.update(now);
-        zones.update((now - startedAt) / 1000);
+        zones.update((now - startedAt) / 1000, pose.pose);
 
         if (pose.pose && !getGame().hinted && Math.hypot(pose.pose.x - start.x, pose.pose.z - start.z) > 2) setGame({ hinted: true });
 

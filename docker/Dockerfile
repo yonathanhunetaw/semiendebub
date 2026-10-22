@@ -26,6 +26,7 @@ RUN { \
         echo 'upload_max_filesize = 20M'; \
         echo 'post_max_size = 25M'; \
         echo 'max_file_uploads = 20'; \
+        echo 'expose_php = Off'; \
     } > /usr/local/etc/php/conf.d/uploads.ini
 
 # 3. Install Node 22 LTS (ONLY for build step)
@@ -36,6 +37,16 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 # 4. Apache config (KEEP THIS 🔥)
 RUN a2enmod rewrite headers ssl \
     && sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
+
+# Hide the Apache version and refuse hidden files (.env, .git, .DS_Store...)
+RUN { \
+        echo 'ServerTokens Prod'; \
+        echo 'ServerSignature Off'; \
+        echo '<FilesMatch "^\.(?!well-known)">'; \
+        echo '    Require all denied'; \
+        echo '</FilesMatch>'; \
+    } > /etc/apache2/conf-available/hardening.conf \
+ && a2enconf hardening
 
 # SSL vhost setup
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' \

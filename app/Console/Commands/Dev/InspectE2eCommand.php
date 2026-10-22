@@ -194,10 +194,16 @@ final class InspectE2eCommand extends Command
         return $shipment === null ? null : [
             'status' => (string) $shipment->status,
             'prepared' => $shipment->prepared_at !== null,
+            'courier_started' => $shipment->courier_started_at !== null,
+            'courier_checked' => $shipment->courier_checked_at !== null,
+            'courier_signed' => $shipment->courier_signed_at !== null,
+            'receiver_checked' => $shipment->receiver_checked_at !== null,
             'lines' => $shipment->items->map(fn ($line): array => [
                 'variant' => (int) $line->item_variant_id,
                 'quantity' => (int) $line->quantity,
                 'picked' => (int) $line->picked_quantity,
+                'received' => $line->received_quantity !== null ? (int) $line->received_quantity : null,
+                'damaged' => $line->damaged_quantity !== null ? (int) $line->damaged_quantity : null,
             ])->values()->all(),
         ];
     }

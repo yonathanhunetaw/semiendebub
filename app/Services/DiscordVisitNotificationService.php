@@ -35,6 +35,12 @@ class DiscordVisitNotificationService
             return;
         }
 
+        // Crawlers and scanners are not visitors: a bot sweep would flood the
+        // queue and the Discord channel.
+        if (preg_match('/bot|crawl|spider|slurp|scan|curl|wget|python|httpclient|headless/i', (string) $request->userAgent())) {
+            return;
+        }
+
         // The geo lookup and Discord posts are slow external calls; queue them
         // so the visitor's page never waits on them.
         SendPublicVisitNotification::dispatch(

@@ -224,4 +224,69 @@ class LeaveAndSwapTest extends TestCase
 
         $this->actingAs($this->seller)->withServerVariables($host)->get(route('seller.work.team'))->assertForbidden();
     }
+
+    #[Test]
+    public function leave_is_recorded_turned_down_and_cancelled_over_http(): void
+    {
+        $host = ['HTTP_HOST' => 'seller.'.config('app.system_domain')];
+        $as = fn (User $user) => $this->actingAs($user)->withServerVariables($host);
+        $this->sentShift($this->seller, '2026-10-17');
+
+        $as($this->manager)->post(route('seller.work.leave.record'), ['user_id' => $this->seller->id, 'type' => 'sick', 'starts_on' => '2026-10-17', 'ends_on' => '2026-10-16'])
+            ->assertSessionHasErrors('ends_on');
+        $as($this->manager)->post(route('seller.work.leave.record'), ['user_id' => $this->seller->id, 'type' => 'sick', 'starts_on' => '2026-10-17', 'ends_on' => '2026-10-17', 'note' => 'Called in'])
+            ->assertSessionHas('success', "Leave recorded for {$this->seller->first_name}. 1 shift(s) cancelled.");
+        $as($this->seller)->post(route('seller.work.leave.record'), ['user_id' => $this->second->id, 'type' => 'sick', 'starts_on' => '2026-10-18', 'ends_on' => '2026-10-18'])
+            ->assertForbidden();
+
+        $asked = $this->leave->request($this->second, 'annual', CarbonImmutable::parse('2026-10-25'), CarbonImmutable::parse('2026-10-26'));
+        $as($this->manager)->post(route('seller.work.leave.reject', $asked), [])
+            ->assertSessionHas('error', 'Say why, so they can ask for other days.');
+        $as($this->seller)->post(route('seller.work.leave.reject', $asked), ['note' => 'No'])->assertForbidden();
+        $as($this->manager)->post(route('seller.work.leave.reject', $asked), ['note' => 'Inventory week'])
+            ->assertSessionHas('success', 'Leave turned down.');
+        $this->assertSame(LeaveRequest::STATUS_REJECTED, $asked->fresh()->status);
+
+        $again = $this->leave->request($this->second, 'annual', CarbonImmutable::parse('2026-10-27'), CarbonImmutable::parse('2026-10-28'));
+        $as($this->seller)->post(route('seller.work.leave.cancel', $again))->assertForbidden();
+        $as($this->second)->post(route('seller.work.leave.cancel', $again))->assertSessionHas('success', 'Leave cancelled.');
+        $this->assertSame(LeaveRequest::STATUS_CANCELLED, $again->fresh()->status);
+        $as($this->second)->post(route('seller.work.leave.cancel', $again))->assertSessionHas('error', 'This leave is already closed.');
+    }
+
+    #[Test]
+    public function a_swap_is_offered_taken_and_decided_over_http(): void
+    {
+        $host = ['HTTP_HOST' => 'seller.'.config('app.system_domain')];
+        $as = fn (User $user) => $this->actingAs($user)->withServerVariables($host);
+        $shift = $this->sentShift($this->seller);
+
+        $as($this->seller)->post(route('seller.work.shifts.offer', $shift), ['to_id' => $this->second->id, 'note' => 'Wedding'])
+            ->assertSessionHas('success', "Offered to {$this->second->first_name}. It stays yours until they take it and a manager agrees.");
+        $swap = ShiftSwap::query()->sole();
+
+        $as($this->manager)->post(route('seller.work.swaps.take', $swap))->assertForbidden();
+        $as($this->second)->post(route('seller.work.swaps.take', $swap))->assertSessionHas('success', 'Taken. A manager approves it, then it is yours.');
+        $as($this->second)->post(route('seller.work.swaps.approve', $swap))->assertForbidden();
+        $as($this->manager)->post(route('seller.work.swaps.approve', $swap))->assertSessionHas('success', 'Swap approved. The shift has moved.');
+        $this->assertSame($this->second->id, $shift->fresh()->user_id);
+
+        // Declined by the colleague.
+        $next = $this->sentShift($this->seller, '2026-10-21');
+        $declined = $this->swaps->offer($next, $this->seller, $this->second);
+        $as($this->seller)->post(route('seller.work.swaps.decline', $declined), [])->assertForbidden();
+        $as($this->second)->post(route('seller.work.swaps.decline', $declined), ['note' => 'Busy'])->assertSessionHas('success', 'Declined.');
+        $this->assertSame(ShiftSwap::STATUS_DECLINED, $declined->fresh()->status);
+
+        // Turned down by the manager.
+        $rejected = $this->swaps->offer($next->fresh(), $this->seller, $this->second);
+        $as($this->manager)->post(route('seller.work.swaps.reject', $rejected), ['note' => 'Need you both'])->assertSessionHas('success', 'Swap turned down.');
+        $this->assertSame(ShiftSwap::STATUS_REJECTED, $rejected->fresh()->status);
+
+        // Taken back by the one who offered it.
+        $cancelled = $this->swaps->offer($next->fresh(), $this->seller, $this->second);
+        $as($this->second)->post(route('seller.work.swaps.cancel', $cancelled))->assertForbidden();
+        $as($this->seller)->post(route('seller.work.swaps.cancel', $cancelled))->assertSessionHas('success', 'Offer taken back.');
+        $this->assertSame(ShiftSwap::STATUS_CANCELLED, $cancelled->fresh()->status);
+    }
 }

@@ -377,6 +377,23 @@ class ConsignmentTest extends TestCase
     }
 
     #[Test]
+    public function procurement_fills_in_the_shipping_papers(): void
+    {
+        $c = $this->consignment();
+
+        $this->on('procurement', $this->buyer)->put(route('procurement.consignments.update', $c), ['eta' => '30/11/2026'])->assertSessionHasErrors('eta');
+        $this->on('procurement', $this->buyer)->put(route('procurement.consignments.update', $c), [
+            'freight_route_id' => $this->route->id, 'container_number' => 'MSKU1234567', 'bill_of_lading' => 'BL-889', 'eta' => '2026-11-30', 'notes' => 'Fragile',
+        ])->assertSessionHas('success', 'Saved.');
+
+        $c->refresh();
+        $this->assertSame(['MSKU1234567', 'BL-889', '2026-11-30', 'Fragile'], [$c->container_number, $c->bill_of_lading, $c->eta->toDateString(), $c->notes]);
+
+        $this->on('finance', $this->user('finance'))->put(route('procurement.consignments.update', $c), ['notes' => 'Mine'])->assertForbidden();
+        $this->assertSame('Fragile', $c->refresh()->notes);
+    }
+
+    #[Test]
     public function the_inboxes_open_for_finance_and_a_global_admin(): void
     {
         $this->cost($this->atSea(), ['kind' => 'freight', 'amount' => 1000]);

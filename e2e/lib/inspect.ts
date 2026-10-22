@@ -52,7 +52,11 @@ export const transferOf = (reference: string): TransferFacts => inspect('transfe
 export interface ShipmentFacts {
     status: string;
     prepared: boolean;
-    lines: Array<{ variant: number; quantity: number; picked: number }>;
+    courier_started: boolean;
+    courier_checked: boolean;
+    courier_signed: boolean;
+    receiver_checked: boolean;
+    lines: Array<{ variant: number; quantity: number; picked: number; received: number | null; damaged: number | null }>;
 }
 
 export const shipmentOf = (reference: string): ShipmentFacts => inspect('shipment', reference);

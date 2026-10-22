@@ -213,7 +213,13 @@ final class PrepareE2eCommand extends Command
                 'vehicle_name' => $van->name,
                 'vehicle_plate' => $van->plate,
                 'vehicle_max_cbm' => $van->max_cbm,
+                // The courier on the run, for the hand-off steps after "prepared" (the world's courier and receiver specs).
+                'courier_id' => $courier->id,
                 'status' => 'scheduled',
+                'picked_at' => null, 'prepared_at' => null, 'prepared_by' => null,
+                'courier_started_at' => null, 'courier_checked_at' => null, 'courier_signed_at' => null, 'courier_signature' => null,
+                'dispatched_at' => null, 'in_transit_at' => null, 'delivered_at' => null,
+                'receiver_checked_at' => null, 'received_at' => null, 'received_by' => null, 'receiver_signature' => null,
             ]);
             $shipment->items()->delete();
             $quantity = min(4, (int) $hubVariant->quantity);

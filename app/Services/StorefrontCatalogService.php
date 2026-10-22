@@ -51,6 +51,21 @@ class StorefrontCatalogService
             ?? Store::query()->orderBy('id')->first();
     }
 
+    /**
+     * Every item the public item page will serve for this store, as id and
+     * last-change time. Same rule as itemQuery(), so the sitemap never lists a
+     * URL that answers 404.
+     *
+     * @return Collection<int, Item>
+     */
+    public function sitemapItems(Store $store): Collection
+    {
+        return $this->itemQuery($store)
+            ->select(['items.id', 'items.updated_at'])
+            ->orderBy('items.id')
+            ->get();
+    }
+
     /** Orderings the storefront offers. */
     public const SORT_NAME = 'name';
 

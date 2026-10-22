@@ -244,4 +244,71 @@ class RotaTest extends TestCase
             ->post(route('seller.work.rota.publish', $this->site), ['week' => '2026-10-19'])
             ->assertSessionHas('success', '1 shift(s) sent. Each person accepts theirs in My work.');
     }
+
+    #[Test]
+    public function the_rota_is_made_and_answered_over_http(): void
+    {
+        $host = ['HTTP_HOST' => 'seller.'.config('app.system_domain')];
+        $as = fn (User $user) => $this->actingAs($user)->withServerVariables($host);
+
+        $as($this->manager)->post(route('seller.work.shifts.store', $this->site), ['user_id' => $this->seller->id, 'starts_at' => '2026-10-19T08:30', 'ends_at' => '2026-10-19T14:00'])
+            ->assertSessionHas('success', 'Shift added (a draft until you publish).');
+        $shift = Shift::query()->sole();
+
+        $as($this->manager)->put(route('seller.work.shifts.update', $shift), ['user_id' => $this->seller->id, 'starts_at' => '2026-10-19T08:30', 'ends_at' => '2026-10-19T15:00'])
+            ->assertSessionHas('success', 'Shift saved.');
+        $this->assertSame('15:00', $shift->fresh()->ends_at->format('H:i'));
+
+        $as($this->manager)->post(route('seller.work.shifts.store', $this->site), ['user_id' => $this->seller->id, 'starts_at' => '2026-10-19T15:00', 'ends_at' => '2026-10-19T14:00'])
+            ->assertSessionHasErrors('ends_at');
+        $as($this->seller)->post(route('seller.work.shifts.store', $this->site), ['user_id' => $this->second->id, 'starts_at' => '2026-10-20T08:30', 'ends_at' => '2026-10-20T14:00'])
+            ->assertForbidden();
+
+        $second = $this->shift($this->second, '10:00', '19:00');
+        $this->rota->publish($this->site, $this->manager, CarbonImmutable::parse('2026-10-19'), CarbonImmutable::parse('2026-10-19'));
+
+        $as($this->seller)->post(route('seller.work.shifts.accept', $shift))->assertSessionHas('success', 'Shift accepted.');
+        $this->assertSame(Shift::STATUS_ACCEPTED, $shift->fresh()->status);
+        $as($this->seller)->post(route('seller.work.shifts.accept', $second))->assertForbidden();
+
+        $as($this->second)->post(route('seller.work.shifts.change', $second), ['note' => ''])->assertSessionHasErrors('note');
+        $as($this->second)->post(route('seller.work.shifts.change', $second), ['note' => 'Clinic in the morning'])
+            ->assertSessionHas('success', 'Sent to your manager.');
+        $this->assertSame(Shift::STATUS_CHANGE_REQUESTED, $second->fresh()->status);
+
+        $as($this->manager)->post(route('seller.work.shifts.cancel', $second))->assertSessionHas('success', 'Shift cancelled.');
+        $this->assertSame(Shift::STATUS_CANCELLED, $second->fresh()->status);
+
+        $as($this->manager)->post(route('seller.work.rota.copy', $this->site), ['week' => '2026-10-26'])
+            ->assertSessionHas('success', '1 shift(s) copied from last week as drafts.');
+        $as($this->seller)->post(route('seller.work.rota.copy', $this->site), ['week' => '2026-10-26'])->assertForbidden();
+    }
+
+    #[Test]
+    public function the_manager_saves_staffing_rules_over_http(): void
+    {
+        $host = ['HTTP_HOST' => 'seller.'.config('app.system_domain')];
+        $rule = ['weekdays' => [1, 2, 2], 'starts_at' => '08:30', 'ends_at' => '12:00', 'role' => StaffingRule::ROLES[0], 'min_people' => 2];
+
+        $this->actingAs($this->manager)->withServerVariables($host)
+            ->put(route('seller.work.staffing-rules', $this->site), ['rules' => [$rule]])
+            ->assertSessionHas('success', 'Staffing rules saved.');
+        $saved = StaffingRule::query()->sole();
+        $this->assertSame([1, 2], $saved->weekdays);
+        $this->assertSame(2, (int) $saved->min_people);
+
+        $this->actingAs($this->manager)->withServerVariables($host)
+            ->put(route('seller.work.staffing-rules', $this->site), ['rules' => [['ends_at' => '08:00'] + $rule]])
+            ->assertSessionHasErrors('rules.0.ends_at');
+
+        $this->actingAs($this->seller)->withServerVariables($host)
+            ->put(route('seller.work.staffing-rules', $this->site), ['rules' => []])
+            ->assertForbidden();
+
+        // Saving none clears them.
+        $this->actingAs($this->manager)->withServerVariables($host)
+            ->put(route('seller.work.staffing-rules', $this->site), ['rules' => []])
+            ->assertSessionHas('success');
+        $this->assertSame(0, StaffingRule::query()->count());
+    }
 }

@@ -6,7 +6,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title inertia>{{ config('app.name', 'Welcome to') }}</title>
+    @php
+        // Server-rendered SEO: the app has no SSR, so crawlers that do not run
+        // JavaScript only ever see this head. Controllers pass $seo via view()->share().
+        $seo = $seo ?? [];
+        $seoTitle = $seo['title'] ?? config('app.name', 'Welcome to');
+        $seoDescription = $seo['description'] ?? 'Mezgebe Dirijit — stationery and office supplies. Browse the catalogue and order online.';
+        $seoCanonical = $seo['canonical'] ?? url()->current();
+        $seoImage = $seo['image'] ?? null;
+    @endphp
+    <title inertia>{{ $seoTitle }}</title>
+    <meta name="description" content="{{ $seoDescription }}">
+    <link rel="canonical" href="{{ $seoCanonical }}">
+    @if (! empty($seo['noindex']))
+        <meta name="robots" content="noindex,follow">
+    @endif
+    <meta property="og:type" content="{{ $seo['og_type'] ?? 'website' }}">
+    <meta property="og:site_name" content="{{ config('app.name') }}">
+    <meta property="og:title" content="{{ $seoTitle }}">
+    <meta property="og:description" content="{{ $seoDescription }}">
+    <meta property="og:url" content="{{ $seoCanonical }}">
+    @if ($seoImage)
+        <meta property="og:image" content="{{ $seoImage }}">
+    @endif
+    <meta name="twitter:card" content="{{ $seoImage ? 'summary_large_image' : 'summary' }}">
+    <meta name="theme-color" content="#ffffff">
+    @if (! empty($seo['json_ld']))
+        <script type="application/ld+json">{!! json_encode($seo['json_ld'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
+    @endif
 
     @if (app()->environment('production') && config('services.google.analytics_id'))
         <!-- Google Analytics -->

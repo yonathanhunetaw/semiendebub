@@ -49,10 +49,8 @@ class ClaudeReceiptReader implements ReceiptReader
             throw new ReceiptReaderException('Reading documents is not set up.');
         }
 
-        $client = new Client(apiKey: (string) config('services.anthropic.key'));
-
         try {
-            $message = $client->beta->messages->create(
+            $message = $this->client()->beta->messages->create(
                 model: (string) config('services.anthropic.model', 'claude-opus-5-5'),
                 maxTokens: 8000,
                 system: self::SYSTEM,
@@ -98,6 +96,12 @@ class ClaudeReceiptReader implements ReceiptReader
         }
 
         throw new ReceiptReaderException('The reader gave no answer for this document.');
+    }
+
+    /** The API client (a test swaps in one with a fake transport). */
+    protected function client(): Client
+    {
+        return new Client(apiKey: (string) config('services.anthropic.key'));
     }
 
     /** @return array<string, mixed> */

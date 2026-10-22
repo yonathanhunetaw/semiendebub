@@ -11,7 +11,12 @@ import { ROLE_NAME, RemotePicker, RoleChip, useRelay } from "./RelayPanel";
 import { roleNow, startRelay, type RelayState } from "./relay";
 import type { GameScene } from "./GameScene";
 import { getGame, kept, liveConfirmed, setGame, useGame } from "./gameStore";
-import { canGoLive, canLoadLive, canShelveLive } from "./permissions";
+import { canGoLive, canLegLive, stationsLive, canLoadLive, canRunLive, canShelveLive } from "./permissions";
+import { startLegs } from "./legs";
+import { DeskMenu, StationCards, deskGoals, deskZones, stationsAt, useStations } from "./StationPanel";
+import { LegCards, ZONES_OF_LEGS, legGoal, legZones, legsAt, useLegs } from "./LegPanel";
+import { startRuns } from "./handoff";
+import { RunCards, ZONES_OF_RUNS, runGoal, runZones, runsAt, useRuns } from "./RunPanel";
 import { loadPlayFeed, type PlayFeed } from "./playFeed";
 import { MAX_CBM, boxesToDraw, cannotPickUp, fill, formatCbm, jobCbm, load, pickUp, putBack, refresh, shelveAll, shelveSome, startPractice, type PracticeState, type ShelveJob } from "./practice";
 import { zoneEntrance, type ZoneKey } from "./zones";
@@ -63,6 +68,16 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     const relay = game.relay;
     const relayPlayable = relay !== null && !game.live;
     const handoff = useRelay(feed?.remote ?? null, scene, setToast);
+    // The hand-off after Mark prepared: the courier's and the receiving dock's steps, at the platform and the doors.
+    const runsHook = useRuns(app, feed?.runs ?? null, scene, setToast, () => readRef.current());
+    // Transfers between sites: accept, claim, dispatch, hand over, receive (each person on their own app in Live).
+    const legsHook = useLegs(app, feed?.legs ?? null, setToast, () => readRef.current());
+    // The desks: every other module's work, listed with the actions the server offers this viewer.
+    const desks = useStations(feed?.stations ?? null, setToast, () => readRef.current());
+    const [runsOpen, setRunsOpen] = useState(true);
+    const [deskMenu, setDeskMenu] = useState(false);
+    /** How many hand-off cards (runs and transfer legs) wait at a zone. */
+    const cardsAt = (key: ZoneKey | null) => runsAt(game.runs, key, game.live).length + legsAt(game.legs, key, game.live).length + stationsAt(feed?.stations ?? null, key, desks.struck).length;
     const relayCarrying = relay?.carrying.length ?? 0;
     const relayAtDoor = relay?.handedOver.length ?? 0;
     // One armload at a time, for one job: shelving, freight or the Remote Hub's stock.
@@ -101,7 +116,7 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
 
     // Live is only for those who may: if the server stops saying so, back to Practice. Running out of
     // work is not that (the last shipment prepared leaves the list): only a job there that you may no longer do.
-    const liveRevoked = feed !== null && !canShelveLive(app, feed) && (feed.store === null || (feed.loads.length > 0 && !feed.loads.some((l) => canLoadLive(app, l))));
+    const liveRevoked = feed !== null && !canShelveLive(app, feed) && (feed.store === null || (feed.loads.length > 0 && !feed.loads.some((l) => canLoadLive(app, l))) && !feed.runs.some((r) => canRunLive(app, r)) && !feed.legs.some((l) => canLegLive(app, l)) && !stationsLive(feed));
     useEffect(() => {
         if (game.live && liveRevoked) setGame({ live: false });
     }, [game.live, liveRevoked]);
@@ -124,10 +139,11 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
         if (hubZone) keys.push(hubZone);
         if (freightUnits > 0) keys.push("truck");
         if (relayZones) keys.push(...relayZones);
+        for (const key of [...runZones(game.runs, game.live), ...legZones(game.legs, game.live), ...deskZones(feed?.stations ?? null, desks.struck)]) if (!keys.includes(key)) keys.push(key);
         // Kept first: on the first render the scene may not be built yet, and it reads these when it is.
         kept.zones = keys;
         scene()?.showZones(keys);
-    }, [floorJobs, carrying, hubZone, freightUnits, shelfLocked, relayZones?.join(), scene, theme.palette.mode]);
+    }, [floorJobs, carrying, hubZone, freightUnits, shelfLocked, relayZones?.join(), runZones(game.runs, game.live).join(), legZones(game.legs, game.live).join(), deskZones(feed?.stations ?? null, desks.struck).join(), scene, theme.palette.mode]);
 
     /** Why your arms cannot take on `job` now (they hold another job's stock), or null. */
     const armsBusy = (job: "shelf" | "freight" | "relay"): string | null => {
@@ -140,6 +156,7 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     // Stepping onto the floor or into a hub opens its list; stepping off closes it.
     const zone = game.zone;
     const inHub = zone === "hub_a" || zone === "hub_b";
+    useEffect(() => setRunsOpen(true), [zone]);
     useEffect(() => setPickerOpen(zone === "floor" || zone === "hub_a" || zone === "hub_b" || zone === "remote"), [zone]);
 
     /** The session is now `next`; the stack follows, new boxes flying in from `from`. */
@@ -152,7 +169,7 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     // Switching Practice ↔ Live starts again from the real list: practice moves must not look real, nor the other way round.
     const switchLive = useCallback((on: boolean) => {
         const load = getGame().freight?.load ?? feedRef.current?.loads[0];
-        setGame({ live: on, session: startPractice(feedRef.current?.jobs ?? []), freight: load ? startLoading(load) : null, relay: startRelay(feedRef.current?.remote ?? []) });
+        setGame({ live: on, session: startPractice(feedRef.current?.jobs ?? []), freight: load ? startLoading(load) : null, relay: startRelay(feedRef.current?.remote ?? []), runs: startRuns(feedRef.current?.runs ?? []), legs: startLegs(feedRef.current?.legs ?? []) });
         kept.boxes = [];
         scene()?.setCarried([], null);
         setToast(on
@@ -244,6 +261,8 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     };
 
     // E (or Space) does what the button says: open the list on the floor or in a hub, put up at the shelf, load at the car.
+    const cardsAtRef = useRef(cardsAt);
+    cardsAtRef.current = cardsAt;
     const putUpRef = useRef(putUp);
     putUpRef.current = putUp;
     const loadRef = useRef(car.load);
@@ -261,7 +280,11 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
             if (event.code !== "KeyE" && event.code !== "Space") return;
             event.preventDefault();
             const here = getGame().zone;
-            if (here === "shelf") void putUpRef.current();
+            const waiting = (ZONES_OF_RUNS.includes(here as ZoneKey) || ZONES_OF_LEGS.includes(here as ZoneKey) || here?.startsWith("desk_") === true) && cardsAtRef.current(here) > 0;
+            const relayBusy = (getGame().relay?.carrying.length ?? 0) > 0 || (getGame().relay?.handedOver.length ?? 0) > 0;
+            const carryingFreight = (getGame().freight && freightCarried(getGame().freight!).units > 0) ?? false;
+            if (waiting && !relayBusy && !carryingFreight) setRunsOpen((open) => !open);
+            else if (here === "shelf") void putUpRef.current();
             else if (here === "truck" && playableRef.current) void loadRef.current();
             else if (here === "remote_door" && relayRef.current) void handoffRef.current.toCourier();
             else if (here === "store_door" && relayRef.current) {
@@ -283,7 +306,10 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
             ? { cbm: relay!.carrying.reduce((n, j) => n + j.unitCbm * Math.max(1, j.quantity), 0), guessed: relay!.carrying.some((j) => j.guessed), text: `Carrying ${relayCarrying} ${relayCarrying === 1 ? "job" : "jobs"} as ${ROLE_NAME[relay!.carrier!]}` }
             : { cbm: shelfLoad.cbm, guessed: shelfLoad.guessed, text: shelfLoad.jobs === 0 ? "Hands free" : `Carrying ${shelfLoad.jobs} ${shelfLoad.jobs === 1 ? "job" : "jobs"}` };
     const fullness = Math.min(1, carried.cbm / MAX_CBM);
-    const goals = objectives(feed, session, freight, !freightPlayable, shelfLocked, relayPlayable ? relay : null, failed);
+    const runGoals = groupGoals(Object.values(game.runs ?? {}).map((r) => runGoal(r, game.live)), "shipments", game.live);
+    const legGoals = groupGoals(Object.values(game.legs ?? {}).map((l) => legGoal(l, game.live)), "transfers", game.live);
+    const stationGoals = deskGoals(feed?.stations ?? null, desks.struck).slice(0, 3);
+    const goals = [...objectives(feed, session, freight, !freightPlayable, shelfLocked, relayPlayable ? relay : null, failed), ...runGoals.map((g) => ({ ...g, tone: "primary" as const })), ...legGoals.map((g) => ({ ...g, tone: "primary" as const })), ...stationGoals.map((g) => ({ ...g, tone: "primary" as const }))];
     const showGauge = freight !== null && (inHub || zone === "truck" || freightUnits > 0);
     const walkTo = (key: ZoneKey) => {
         const [x, z] = zoneEntrance(key);
@@ -296,6 +322,12 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
                 <GameHud canGoLive={liveAllowed || game.live} onLive={askLive} />
                 {/* The goals: stacked on a wide screen; on a phone one row to swipe, so they don't fill the top of the world. */}
                 <Stack direction={{ xs: "row", sm: "column" }} spacing={1} sx={{ alignItems: "center", maxWidth: "100%", overflowX: { xs: "auto", sm: "visible" }, px: { xs: 0.5, sm: 0 }, pb: 0.5, scrollbarWidth: "none" }}>
+                    {(feed?.stations.length ?? 0) > 0 && (
+                        <Button onClick={() => setDeskMenu((open) => !open)} variant="outlined" size="small" aria-expanded={deskMenu}
+                            sx={{ pointerEvents: "auto", flexShrink: 0, borderRadius: 999, fontWeight: 800, textTransform: "none", bgcolor: glass, boxShadow: 3 }}>
+                            Desks
+                        </Button>
+                    )}
                     {goals.map((goal) => (
                         <Button key={goal.text} onClick={goal.go ? () => walkTo(goal.go!) : undefined} disabled={!goal.go} variant="contained" color={goal.tone} size="small"
                             sx={{ pointerEvents: "auto", flexShrink: 0, borderRadius: 999, fontWeight: 800, textTransform: "none", maxWidth: { xs: "85vw", sm: "100%" }, boxShadow: 3, "&.Mui-disabled": { bgcolor: glass, color: "text.secondary" } }}>
@@ -307,6 +339,12 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
 
             <Box sx={{ flex: 1 }} />
 
+            {deskMenu && (
+                <Box sx={{ position: "absolute", top: 120, left: 0, right: 0, display: "flex", justifyContent: "center", px: 1, pointerEvents: "none" }}>
+                    <DeskMenu stations={feed?.stations ?? null} struck={desks.struck} onClose={() => setDeskMenu(false)} onWalk={(desk) => { setDeskMenu(false); walkTo(desk); }} />
+                </Box>
+            )}
+
             {/* Bottom: the picker at the floor, then what you carry and the button for where you stand. */}
             <Stack spacing={1} sx={{ alignItems: "center", pointerEvents: "none", width: "100%" }}>
                 {pickerOpen && zone === "floor" && session && !shelfLocked && (
@@ -316,6 +354,17 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
                     <RemotePicker state={relay} onTake={takeRelay} onPutBack={handoff.putBack} onClose={() => setPickerOpen(false)} />
                 )}
                 {relayPlayable && relayRole && <RoleChip role={relayRole} />}
+                {runsOpen && zone && stationsAt(feed?.stations ?? null, zone, desks.struck).length > 0 && (
+                    <StationCards stations={stationsAt(feed?.stations ?? null, zone, desks.struck)} struck={desks.struck} live={game.live} saving={game.saving} onPerform={desks.perform} onClose={() => setRunsOpen(false)} />
+                )}
+                {runsOpen && zone && legsAt(game.legs, zone, game.live).length > 0 && (
+                    <LegCards legs={legsAt(game.legs, zone, game.live)} zone={zone} live={game.live} saving={game.saving}
+                        onStep={(key, step) => void legsHook.perform(key, step)} onCount={legsHook.count} onClose={() => setRunsOpen(false)} />
+                )}
+                {runsOpen && zone && ZONES_OF_RUNS.includes(zone) && runsAt(game.runs, zone, game.live).length > 0 && (
+                    <RunCards runs={runsAt(game.runs, zone, game.live)} zone={zone} live={game.live} saving={game.saving}
+                        onStep={(id, step, signature) => void runsHook.perform(id, step, signature)} onCount={runsHook.count} onSaveCount={(id) => void runsHook.saveCount(id)} onClose={() => setRunsOpen(false)} />
+                )}
                 {pickerOpen && inHub && freight && freightPlayable && (
                     <HubPicker state={freight} hub={HUB_OF[zone as "hub_a" | "hub_b"]} disabled={game.saving} onTake={takeFreight} onTakeAll={takeAllFreight} onPutBack={car.putBack} onClose={() => setPickerOpen(false)} />
                 )}
@@ -354,6 +403,11 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
                                 {game.live ? "Load for real" : "Load"} {freightUnits} · E
                             </Button>
                         )}
+                        {!game.saving && !runsOpen && zone && cardsAt(zone) > 0 && (
+                            <Button variant="contained" color="secondary" onClick={() => setRunsOpen(true)} sx={{ borderRadius: 999, fontWeight: 900, textTransform: "none", whiteSpace: "nowrap" }}>
+                                Hand-off · E
+                            </Button>
+                        )}
                         {relayPlayable && zone === "remote_door" && relay?.carrier === "hub_keeper" && (
                             <Button variant="contained" color="secondary" onClick={() => void handoff.toCourier()} sx={{ borderRadius: 999, fontWeight: 900, textTransform: "none", whiteSpace: "nowrap" }}>
                                 Hand to the courier · E
@@ -383,6 +437,9 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
                     <Typography component="ul" variant="body2" sx={{ mb: 1, pl: 2.5 }}>
                         {canShelveLive(app, feed) && <li>putting a job up on the Store Shelf shelves it: the stock moves from the floor to the shelf;</li>}
                         {(feed?.loads ?? []).some((l) => canLoadLive(app, l)) && <li>loading the freight car picks the shipment: each line is ticked picked once all of it is in, and "Mark prepared" hands it to the courier.</li>}
+                        {(feed?.runs ?? []).some((r) => canRunLive(app, r)) && <li>the courier's and the receiving dock's steps (check, sign, arrive, count) are taken for real, with your signature: signing hands the stock over or lands it.</li>}
+                        {stationsLive(feed) && <li>the desks' actions (receiving, orders, counts, approvals …) are done for real, exactly as the same buttons on their own pages do them.</li>}
+                        {(feed?.legs ?? []).some((l) => canLegLive(app, l)) && <li>your steps on transfers between sites (accept, claim, dispatch, hand over, receive or cancel) are taken for real; each person on the transfer does their own part.</li>}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                         Only do it for stock you have really moved. You can switch back to Practice at any time.
@@ -404,6 +461,13 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
             </Snackbar>
         </>
     );
+}
+
+/** One goal per zone: the step itself when one waits there, else a count (tap it to walk there). */
+function groupGoals(goals: Array<{ text: string; go: ZoneKey } | null>, noun: string, live: boolean): Array<{ text: string; go: ZoneKey }> {
+    const byZone = new Map<ZoneKey, string[]>();
+    for (const goal of goals) if (goal) byZone.set(goal.go, [...(byZone.get(goal.go) ?? []), goal.text]);
+    return [...byZone.entries()].slice(0, 3).map(([go, texts]) => ({ go, text: texts.length === 1 ? texts[0] : `${texts.length} ${noun} waiting for you${live ? " (for real)" : ""} here →` }));
 }
 
 type Goal = { text: string; tone: "primary" | "success" | "info"; go: ZoneKey | null };

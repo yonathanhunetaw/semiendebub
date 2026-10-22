@@ -270,6 +270,48 @@ class SupplierQuoteTest extends TestCase
     }
 
     #[Test]
+    public function a_tariff_is_found_edited_and_removed(): void
+    {
+        $fields = ['description' => 'Flash memory', 'duty_pct' => 1, 'excise_pct' => 0, 'vat_pct' => 15, 'surtax_pct' => 10, 'withholding_pct' => 3, 'other_pct' => 0];
+        $this->on('procurement', $this->buyer)->post(route('procurement.tariffs.store'), ['hs_code' => '8471.30.00', 'description' => 'Laptops'] + $fields)->assertSessionHas('success');
+        $flash = Tariff::forCode('85235100');
+        $laptops = Tariff::forCode('84713000');
+
+        $this->on('procurement', $this->buyer)->get(route('procurement.tariffs.index'))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('Procurement/Tariffs/Index')->has('tariffs', 2)->where('pagination.total', 2));
+        $this->on('procurement', $this->buyer)->get(route('procurement.tariffs.index', ['search' => '8471.3']))
+            ->assertInertia(fn (Assert $page) => $page->has('tariffs', 1)->where('tariffs.0.id', $laptops->id)->where('filters.search', '8471.3'));
+        $this->on('procurement', $this->buyer)->get(route('procurement.tariffs.index', ['search' => 'laptop']))
+            ->assertInertia(fn (Assert $page) => $page->has('tariffs', 1)->where('tariffs.0.hs_code', '84713000'));
+
+        $this->on('procurement', $this->buyer)->put(route('procurement.tariffs.update', $flash), ['hs_code' => '8471.30.00'] + $fields)
+            ->assertSessionHasErrors('hs_code');
+        $this->on('procurement', $this->buyer)->put(route('procurement.tariffs.update', $flash), ['hs_code' => '8523.51.00', 'duty_pct' => 30] + $fields)
+            ->assertSessionHas('success', 'HS 85235100 saved. Existing quotes keep their estimate until recalculated.');
+        $this->assertSame(30.0, (float) $flash->refresh()->duty_pct);
+        $this->assertSame($this->buyer->id, (int) $flash->updated_by);
+
+        $this->on('procurement', $this->buyer)->delete(route('procurement.tariffs.destroy', $laptops))
+            ->assertSessionHas('success', 'HS 84713000 removed.');
+        $this->assertNull(Tariff::forCode('84713000'));
+    }
+
+    #[Test]
+    public function procurement_adds_a_freight_route(): void
+    {
+        $route = ['name' => 'Yiwu → Djibouti', 'origin' => 'Yiwu', 'currency' => 'USD', 'overseas_storage_per_cbm' => 10, 'sea_freight_per_cbm' => 150, 'insurance_pct' => 0.5,
+            'port_clearing_per_cbm' => 4000, 'land_transport_per_cbm' => 2000, 'to_store_per_cbm' => 1000, 'transit_days' => 40, 'is_active' => true];
+
+        $this->on('procurement', $this->buyer)->post(route('procurement.costs.routes.store'), ['currency' => 'XYZ'] + $route)->assertSessionHasErrors('currency');
+        $this->on('procurement', $this->buyer)->post(route('procurement.costs.routes.store'), ['insurance_pct' => 101] + $route)->assertSessionHasErrors('insurance_pct');
+        $this->on('procurement', $this->buyer)->post(route('procurement.costs.routes.store'), $route)->assertSessionHas('success', 'Route Yiwu → Djibouti added.');
+
+        $saved = FreightRoute::query()->where('name', 'Yiwu → Djibouti')->sole();
+        $this->assertSame($this->buyer->id, (int) $saved->created_by);
+        $this->assertSame(150.0, (float) $saved->sea_freight_per_cbm);
+    }
+
+    #[Test]
     public function the_tariff_and_cost_pages_are_closed_to_a_store_admin(): void
     {
         $storeAdmin = $this->user('admin', $this->own);

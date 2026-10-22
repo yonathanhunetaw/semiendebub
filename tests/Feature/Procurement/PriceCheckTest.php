@@ -415,6 +415,13 @@ class PriceCheckTest extends TestCase
 
         $this->on('admin', $this->storeAdmin)->get(route('admin.shops.index'))->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('Admin/Shops/Index')->where('canSetMode', true));
+
+        $this->on('admin', $this->storeAdmin)->put(route('admin.shops.update', $shop), ['name' => '', 'is_active' => true])->assertSessionHasErrors('name');
+        $this->on('admin', $this->storeAdmin)->put(route('admin.shops.update', $shop), ['name' => 'Bole Phone House 2', 'area' => 'Bole', 'phone' => '0911', 'is_active' => false])
+            ->assertSessionHas('success', 'Bole Phone House 2 saved.');
+        $shop->refresh();
+        $this->assertSame(['Bole Phone House 2', '0911', false], [$shop->name, $shop->phone, (bool) $shop->is_active]);
+        $this->assertSame(Shop::CHECK, $shop->stores()->firstWhere('stores.id', $this->own->id)?->pivot->mode, 'Editing keeps the store’s mark.');
     }
 
     #[Test]

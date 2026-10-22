@@ -11,6 +11,8 @@ use App\Models\Inventory\StockLocation;
 use App\Models\Store\Store;
 use App\Models\Workforce\StaffRide;
 use App\Models\Workforce\StaffRideRider;
+use App\Services\Calendar\CalendarFeed;
+use App\Services\Calendar\CalendarScope;
 use App\Services\Tasks\TaskInbox;
 use App\Services\Workforce\SiteDayService;
 use App\Services\Workforce\StaffRideService;
@@ -179,5 +181,79 @@ class StaffRideTest extends TestCase
             ->put(route('seller.work.home-area'), ['home_area' => 'Megenagna'])
             ->assertSessionHas('success');
         $this->assertSame('Megenagna', $this->seller->fresh()->home_area);
+    }
+
+    #[Test]
+    public function a_ride_is_on_the_riders_the_managers_and_the_drivers_calendars(): void
+    {
+        $ride = $this->ride();
+        $range = [CarbonImmutable::parse('2026-10-19'), CarbonImmutable::parse('2026-10-19 23:59:59'), ['staff_rides']];
+        $feed = fn (string $app, User $user): array => app(CalendarFeed::class)->between(CalendarScope::for($app, $user), ...$range);
+
+        $mine = $feed('seller', $this->seller);
+        $this->assertSame(["staff-ride:{$ride->id}"], array_column($mine, 'id'));
+        $this->assertSame("Staff ride from {$this->site->name}", $mine[0]['title']);
+        $this->assertSame('No driver yet', $mine[0]['subtitle']);
+        $this->assertCount(1, $feed('seller', $this->manager));
+        $this->assertSame([], $feed('seller', $this->user('seller', Store::factory()->create()->id)));
+
+        // Every driver sees a ride waiting to be taken; once taken, only its driver.
+        $other = $this->user('delivery', null, true);
+        $this->assertCount(1, $feed('delivery', $other));
+        $this->rides->claim($ride, $this->driver, $this->car);
+        $this->assertSame([], $feed('delivery', $other));
+        $this->assertSame("{$this->driver->first_name} · {$this->car->plate}", $feed('delivery', $this->driver)[0]['subtitle']);
+
+        $this->rides->cancel($ride->fresh(), $this->manager);
+        $this->assertSame([], $feed('seller', $this->seller));
+    }
+
+    #[Test]
+    public function the_driver_drives_the_ride_over_http(): void
+    {
+        $delivery = ['HTTP_HOST' => 'delivery.'.config('app.system_domain')];
+        $as = fn (User $user) => $this->actingAs($user)->withServerVariables($delivery);
+        $ride = $this->ride();
+        $other = $this->user('delivery', null, true);
+
+        $this->rides->claim($ride, $this->driver, $this->car);
+        $as($other)->post(route('delivery.work.rides.release', $ride))->assertForbidden();
+        $as($this->driver)->post(route('delivery.work.rides.release', $ride))->assertSessionHas('success', 'Ride given back.');
+        $this->assertSame(StaffRide::STATUS_REQUESTED, $ride->fresh()->status);
+
+        $this->rides->claim($ride->fresh(), $this->driver, $this->car);
+        $as($this->driver)->post(route('delivery.work.rides.finish', $ride))->assertSessionHas('error');
+        $as($other)->post(route('delivery.work.rides.depart', $ride))->assertForbidden();
+        $as($this->driver)->post(route('delivery.work.rides.depart', $ride))->assertSessionHas('success', 'On the way.');
+
+        $as($this->driver)->post(route('delivery.work.rides.drop', $ride), ['user_id' => $this->seller->id])->assertSessionHasErrors('showed_up');
+        $as($this->driver)->post(route('delivery.work.rides.drop', $ride), ['user_id' => $this->seller->id, 'showed_up' => true])
+            ->assertSessionHas('success', 'Dropped off.');
+        $as($this->driver)->post(route('delivery.work.rides.drop', $ride), ['user_id' => $this->seller->id, 'showed_up' => true])
+            ->assertSessionHas('error', 'That person is not riding.');
+        $as($this->driver)->post(route('delivery.work.rides.finish', $ride))
+            ->assertSessionHas('error', 'Drop everyone off (or mark who did not come) first.');
+        $as($this->driver)->post(route('delivery.work.rides.drop', $ride), ['user_id' => $this->second->id, 'showed_up' => false])
+            ->assertSessionHas('success', 'Marked as not there.');
+        $as($this->driver)->post(route('delivery.work.rides.finish', $ride))->assertSessionHas('success', 'Ride done.');
+
+        $this->assertSame(StaffRide::STATUS_DONE, $ride->fresh()->status);
+        $this->assertSame(StaffRideRider::STATUS_NO_SHOW, $ride->riders()->where('user_id', $this->second->id)->value('status'));
+    }
+
+    #[Test]
+    public function a_rider_opts_out_and_the_asker_cancels_over_http(): void
+    {
+        $seller = ['HTTP_HOST' => 'seller.'.config('app.system_domain')];
+        $as = fn (User $user) => $this->actingAs($user)->withServerVariables($seller);
+        $ride = $this->ride();
+        $outsider = $this->user('seller', Store::factory()->create()->id);
+
+        $as($this->seller)->post(route('seller.work.rides.opt-out', $ride))->assertSessionHas('success', 'Noted: you do not need this ride.');
+        $as($outsider)->post(route('seller.work.rides.opt-out', $ride))->assertSessionHas('error', 'You are not on this ride.');
+
+        $as($this->second)->post(route('seller.work.rides.cancel', $ride))->assertForbidden();
+        $as($this->manager)->post(route('seller.work.rides.cancel', $ride))->assertSessionHas('success', 'Ride cancelled.');
+        $this->assertSame(StaffRide::STATUS_CANCELLED, $ride->fresh()->status);
     }
 }

@@ -221,6 +221,33 @@ class PurchaseOrderTest extends TestCase
     }
 
     #[Test]
+    public function a_global_admin_sends_one_back_from_the_admin_app(): void
+    {
+        $purchase = $this->submitted($this->user('procurement'), 4000);
+        $admin = $this->user('admin');
+        $adminHost = ['HTTP_HOST' => 'admin.'.config('app.system_domain')];
+
+        $this->withServerVariables($adminHost)->actingAs($admin)
+            ->post(route('admin.purchase_orders.send_back', $purchase), ['reason' => ''])
+            ->assertSessionHasErrors('reason');
+
+        $storeAdmin = $this->user('admin', ['store_id' => Store::factory()->create()->id]);
+        $this->withServerVariables($adminHost)->actingAs($storeAdmin)
+            ->post(route('admin.purchase_orders.send_back', $purchase), ['reason' => 'No'])->assertForbidden();
+
+        $this->withServerVariables($adminHost)->actingAs($admin)
+            ->post(route('admin.purchase_orders.send_back', $purchase), ['reason' => 'Ask for a better price'])
+            ->assertSessionHas('success', "{$purchase->reference_number} sent back to draft.");
+        $this->assertSame(Purchase::STATUS_DRAFT, $purchase->refresh()->status);
+        $this->assertSame('Ask for a better price', $purchase->review_note);
+
+        // A draft cannot be sent back again.
+        $this->withServerVariables($adminHost)->actingAs($admin)
+            ->post(route('admin.purchase_orders.send_back', $purchase), ['reason' => 'Again'])
+            ->assertSessionHas('error');
+    }
+
+    #[Test]
     public function sending_back_returns_it_to_draft_with_the_reason_and_it_can_change_again(): void
     {
         $buyer = $this->user('procurement');
@@ -341,6 +368,13 @@ class PurchaseOrderTest extends TestCase
         // A submitted order is not a draft any more: edit sends you back to it.
         $this->as($buyer)->get(route('procurement.purchase_orders.edit', $purchase))
             ->assertRedirect(route('procurement.purchase_orders.show', $purchase));
+
+        $draft = $this->draft($buyer);
+        $this->as($buyer)->get(route('procurement.purchase_orders.edit', $draft))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Procurement/PurchaseOrders/Form')
+                ->where('order.id', $draft->id)
+                ->where('preselectedSupplier', null)
+                ->where('suppliers.0.id', $this->supplier->id));
     }
 
     #[Test]
