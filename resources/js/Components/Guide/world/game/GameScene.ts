@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { createFreightCar } from "./FreightPacker";
 import { createStacker, type StackBox } from "./ItemStacker";
+import { createOfficeBoard } from "./OfficeBoard";
+import type { Station } from "./stations";
 import { createPlayer, type PlayerOptions } from "./PlayerController";
 import { getGame, kept, player as pose, setGame, type CarView, type GameView } from "./gameStore";
 import type { Placed } from "./packer";
@@ -39,6 +41,8 @@ export interface GameScene {
     setCar: (car: CarView | null, fresh?: Placed[]) => void;
     /** Dress the worker as the courier (the delivery colour), or back as a keeper. */
     setCourier: (on: boolean) => void;
+    /** What the office's staff board shows (the "board" station); null while it is being read. */
+    setBoard: (station: Station | null) => void;
     dispose: () => void;
 }
 
@@ -50,6 +54,8 @@ export function createGameScene(options: GameSceneOptions): GameScene {
     const zones = drawZones(scene, options.zoneTones, reducedMotion);
     const stacker = createStacker(scene, worker.back, reducedMotion);
     const car = createFreightCar(scene, options.carTones, reducedMotion);
+    const board = createOfficeBoard(scene);
+    board.set(kept.board);
     let carHold: CarView["hold"] | null = null;
     const setCar = (view: CarView | null, fresh: Placed[] = []) => {
         kept.car = view;
@@ -86,6 +92,9 @@ export function createGameScene(options: GameSceneOptions): GameScene {
 
         if (pose.pose && !getGame().hinted && Math.hypot(pose.pose.x - start.x, pose.pose.z - start.z) > 2) setGame({ hinted: true });
 
+        // For the browser tests (and curious developers): where the worker stands, in a dev build only.
+        if (import.meta.env.DEV) (window as unknown as { __dukaWorker?: unknown }).__dukaWorker = pose.pose;
+
         const here = pose.pose ? zoneAt(pose.pose.x, pose.pose.z)?.key ?? null : null;
         if (here !== inZone) {
             inZone = here;
@@ -109,6 +118,10 @@ export function createGameScene(options: GameSceneOptions): GameScene {
         },
         setCar,
         setCourier,
+        setBoard: (station) => {
+            kept.board = station;
+            board.set(station);
+        },
         unloadAt: (zone) => {
             kept.boxes = [];
             return stacker.unload(pointOf(zone));
@@ -116,6 +129,7 @@ export function createGameScene(options: GameSceneOptions): GameScene {
         dispose: () => {
             stacker.dispose();
             car.dispose();
+            board.dispose();
             zones.dispose();
             worker.dispose();
             options.onZone(null);

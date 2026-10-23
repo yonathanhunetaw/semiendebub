@@ -3,6 +3,7 @@ import type { FreightState } from "./freight";
 import type { RunsState } from "./handoff";
 import type { LegsState } from "./legs";
 import type { StackBox } from "./ItemStacker";
+import type { Station } from "./stations";
 import type { Hold, Placed } from "./packer";
 import type { PracticeState } from "./practice";
 import type { RelayState } from "./relay";
@@ -42,6 +43,8 @@ export interface GameState {
     saving: boolean;
     /** Has this device walked the worker before? Then the how-to-walk hint stays away. */
     hinted: boolean;
+    /** Run instead of walk (the Run button, R); Shift does the opposite while it is held. Remembered per device. */
+    run: boolean;
 }
 
 export interface PlayerPose {
@@ -53,6 +56,7 @@ export interface PlayerPose {
 
 const MODE_KEY = "duka.world.mode";
 const HINT_KEY = "duka.world.hinted";
+const RUN_KEY = "duka.world.run";
 
 function stored(key: string): string | null {
     try {
@@ -70,13 +74,13 @@ function storedMode(): GameMode {
     }
 }
 
-let state: GameState = { mode: typeof window === "undefined" ? "watch" : storedMode(), view: "follow", zone: null, session: null, freight: null, relay: null, runs: null, legs: null, live: false, saving: false, hinted: typeof window !== "undefined" && stored(HINT_KEY) === "1" };
+let state: GameState = { mode: typeof window === "undefined" ? "watch" : storedMode(), view: "follow", zone: null, session: null, freight: null, relay: null, runs: null, legs: null, live: false, saving: false, hinted: typeof window !== "undefined" && stored(HINT_KEY) === "1", run: typeof window === "undefined" || stored(RUN_KEY) !== "0" };
 const listeners = new Set<() => void>();
 
 /** Where the worker stands; null until Play first places them. */
 export const player: { pose: PlayerPose | null } = { pose: null };
 /** What the scene shows that React decided, so a rebuilt scene (after a colour change) puts it back: the boxes on the worker's back, which zones are lit, the freight car (null: none), and whether the worker wears the courier's colour. */
-export const kept: { boxes: StackBox[]; zones: ZoneKey[]; car: CarView | null; courier: boolean } = { boxes: [], zones: [], car: null, courier: false };
+export const kept: { boxes: StackBox[]; zones: ZoneKey[]; car: CarView | null; courier: boolean; board: Station | null } = { boxes: [], zones: [], car: null, courier: false, board: null };
 
 /** What the scene draws of the freight car: its hold, its sign, and the boxes packed in it. */
 export interface CarView {
@@ -96,6 +100,7 @@ export function setGame(patch: Partial<GameState>): void {
     try {
         if (patch.mode) window.localStorage.setItem(MODE_KEY, patch.mode);
         if (patch.hinted) window.localStorage.setItem(HINT_KEY, "1");
+        if (patch.run !== undefined) window.localStorage.setItem(RUN_KEY, patch.run ? "1" : "0");
     } catch {
         // Private window or blocked storage: the choice just isn't remembered.
     }

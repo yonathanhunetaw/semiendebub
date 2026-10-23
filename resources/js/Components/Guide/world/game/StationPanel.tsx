@@ -4,7 +4,7 @@ import { Box, Button, Chip, IconButton, MenuItem, Paper, Stack, TextField, Typog
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import { stationLive } from "./actions";
 import { getGame, setGame } from "./gameStore";
-import { buildPayload, initialValues, isWorthShowing, visibleItems, whatIsWrong, type Station, type StationAction, type StationItem, type Values } from "./stations";
+import { buildPayload, initialValues, isWorthShowing, visibleItems, waitingCount, whatIsWrong, type Station, type StationAction, type StationItem, type Values } from "./stations";
 import { DESKS, type ZoneKey } from "./zones";
 
 /**
@@ -33,7 +33,7 @@ export function deskGoals(stations: Station[] | null, struck: ReadonlySet<string
     if (!stations) return [];
     const byDesk = new Map<string, { label: string; n: number }>();
     for (const s of stations) {
-        const n = visibleItems(s, struck).length;
+        const n = waitingCount(s, struck);
         if (n === 0) continue;
         const entry = byDesk.get(s.desk);
         byDesk.set(s.desk, { label: entry ? `${entry.label} · ${s.label}` : s.label, n: (entry?.n ?? 0) + n });
@@ -221,7 +221,7 @@ export function DeskMenu({ stations, struck, onWalk, onClose }: { stations: Stat
         if (!isWorthShowing(station, struck)) continue;
         const entry = byDesk.get(station.desk) ?? { names: [], waiting: 0 };
         entry.names.push(station.label);
-        entry.waiting += visibleItems(station, struck).length;
+        entry.waiting += waitingCount(station, struck);
         byDesk.set(station.desk, entry);
     }
     const rows = DESKS.filter((d) => byDesk.has(d.key)).map((d) => ({ key: d.key as ZoneKey, label: d.label, ...byDesk.get(d.key)! }))

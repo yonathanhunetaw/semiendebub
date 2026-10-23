@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { PLACES, PLATFORM_BERTH, STORE, doorPosition, palletCentres } from "../places";
+import { FLOOR_ZONES, PLACES, PLATFORM_BERTH, RACK_SPAN, STORE, STORE_CORNER, doorPosition, palletCentres } from "../places";
 
 /**
  * Where Play's jobs happen: floor patches you walk onto. A pickup zone is
@@ -26,30 +26,54 @@ export type ZoneKey = "floor" | "shelf" | "hub_a" | "hub_b" | "truck" | "remote"
 
 /**
  * The desks (stations.ts): each module that is not a walk-and-carry job has one.
- * Two rows on the paved plaza south of the shop's street (clear of the van's
- * parking), the counter inside the shop, the delivery bay's desk, and the
- * arrivals desk on the hub platform. Each is a 3 × 2.2 m patch with a table.
+ * The counter desk stands by the counter in the shop, the delivery desk on the
+ * delivery platform and the arrivals desk on the hub platform; every other desk
+ * is in the Office, the room behind the shop beside the Remote Hub: three rows
+ * of five, with the staff board on the west wall. Each is a patch with a table.
  */
-export const DESKS = [
-    { key: "desk_arrivals", label: "Arrivals desk", rect: [-63.9, -0.3, -62.4, 2.3] },
-    { key: "desk_counter", label: "Counter desk", rect: [20.7, 9.0, 22.0, 11.2] },
-    { key: "desk_bay", label: "Delivery desk", rect: [34.5, -1.4, 37.5, 0.8] },
-    { key: "desk_orders", label: "Orders desk", rect: [6, 16.6, 9, 18.8] },
-    { key: "desk_receiving", label: "Receiving desk", rect: [9.4, 16.6, 12.4, 18.8] },
-    { key: "desk_counts", label: "Counts & levels desk", rect: [12.8, 16.6, 15.8, 18.8] },
-    { key: "desk_moves", label: "Transfers desk", rect: [16.2, 16.6, 19.2, 18.8] },
-    { key: "desk_customers", label: "Customers desk", rect: [19.6, 16.6, 22.6, 18.8] },
-    { key: "desk_cash", label: "Cash & payments desk", rect: [23, 16.6, 26, 18.8] },
-    { key: "desk_shipments", label: "Shipments desk", rect: [26.4, 16.6, 29.4, 18.8] },
-    { key: "desk_purchasing", label: "Purchasing desk", rect: [6, 20.4, 9, 22.6] },
-    { key: "desk_approvals", label: "Approvals desk", rect: [9.4, 20.4, 12.4, 22.6] },
-    { key: "desk_ideas", label: "Product ideas desk", rect: [12.8, 20.4, 15.8, 22.6] },
-    { key: "desk_work", label: "Staff & keys desk", rect: [16.2, 20.4, 19.2, 22.6] },
-    { key: "desk_catalogue", label: "Catalogue desk", rect: [19.6, 20.4, 22.6, 22.6] },
-    { key: "desk_sites", label: "Stores & fleet desk", rect: [23, 20.4, 26, 22.6] },
-    { key: "desk_office", label: "Calendar & office desk", rect: [26.4, 20.4, 29.4, 22.6] },
-] as const satisfies ReadonlyArray<{ key: string; label: string; rect: [number, number, number, number] }>;
-export type DeskKey = (typeof DESKS)[number]["key"];
+const OFFICE = PLACES.find((p) => p.key === "office")!;
+const [officeX, officeZ] = OFFICE.position;
+const [officeW, officeD] = OFFICE.size;
+const officeWest = officeX - officeW / 2;
+const officeNorth = officeZ - officeD / 2;
+/** A desk of the office's grid: 3 × 2.2 m, columns 3.5 m apart from 4.4 m inside the west wall (clear of the board), rows 3.3 m apart from 0.8 m inside the back wall. */
+const inOffice = (col: number, row: number): [number, number, number, number] => {
+    const x = officeWest + 4.4 + col * 3.5;
+    const z = officeNorth + 0.8 + row * 3.3;
+    return [x, z, x + 3, z + 2.2];
+};
+
+/** Where the office's desks stand: [key, sign, column, row]. */
+const OFFICE_SLOTS = [
+    ["desk_purchasing", "Purchasing desk", 0, 0], ["desk_cash", "Cash & payments desk", 1, 0], ["desk_ideas", "Product ideas desk", 2, 0], ["desk_catalogue", "Catalogue desk", 3, 0], ["desk_sites", "Stores & fleet desk", 4, 0],
+    ["desk_orders", "Orders desk", 0, 1], ["desk_receiving", "Receiving desk", 1, 1], ["desk_counts", "Counts & levels desk", 2, 1], ["desk_moves", "Transfers desk", 3, 1], ["desk_shipments", "Shipments desk", 4, 1],
+    ["desk_customers", "Customers desk", 0, 2], ["desk_work", "Staff & keys desk", 1, 2], ["desk_office", "Calendar & office desk", 2, 2],
+] as const;
+
+export type DeskKey = "desk_arrivals" | "desk_counter" | "desk_bay" | "desk_board" | (typeof OFFICE_SLOTS)[number][0];
+
+export interface Desk {
+    key: DeskKey;
+    label: string;
+    /** The patch to stand on, [minX, minZ, maxX, maxZ]. */
+    rect: [number, number, number, number];
+    /** How high its surface is: the platforms are a step up. */
+    rise: number;
+    /** Has a table at the back of its patch (the board hangs on the wall instead). */
+    table: boolean;
+}
+
+/** The counter desk: west of the counter, which stands against the east wall at the front. */
+const COUNTER = PLACES.find((p) => p.key === "store_counter")!;
+const LOADING = PLACES.find((p) => p.key === "loading_bay")!;
+
+export const DESKS: ReadonlyArray<Desk> = [
+    { key: "desk_arrivals", label: "Arrivals desk", rect: [-63.9, -0.3, -62.4, 2.3], rise: 0.3, table: true },
+    { key: "desk_counter", label: "Counter desk", rect: [COUNTER.position[0] - 2.8, COUNTER.position[1] - 1.2, COUNTER.position[0] - 0.7, COUNTER.position[1] + 1.2], rise: 0, table: true },
+    { key: "desk_bay", label: "Delivery desk", rect: [LOADING.position[0] - 1.5, LOADING.position[1] - 1.4, LOADING.position[0] + 1.5, LOADING.position[1] + 0.8], rise: 0.3, table: true },
+    { key: "desk_board", label: "Staff board", rect: [officeWest + 0.6, officeZ - 2, officeWest + 3.2, officeZ + 2], rise: 0, table: false },
+    ...OFFICE_SLOTS.map(([key, label, col, row]): Desk => ({ key, label, rect: inOffice(col, row), rise: 0, table: true })),
+];
 export const isDesk = (key: ZoneKey | null): key is DeskKey => key !== null && DESKS.some((d) => d.key === key);
 
 /**
@@ -100,8 +124,11 @@ export interface Zone {
     rects: Array<[number, number, number, number]>;
     /** Where boxes fly from (a pickup) or to (a drop), [x, y, z]. */
     point: [number, number, number];
-    /** A desk (stations.ts): the scene puts a table on it. */
+    /** A desk (stations.ts): the scene puts a table on it, unless `table` is false (the board hangs on a wall). */
     desk?: boolean;
+    table?: boolean;
+    /** How far above the ground the surface under it is (a platform is a step up); the patch lies just over it. */
+    rise?: number;
 }
 
 const [cx, cz] = STORE.position;
@@ -114,15 +141,17 @@ export const ZONES: Zone[] = [
         key: "floor",
         kind: "pickup",
         label: "Store Floor · pick up",
-        rects: [[18.6, 8.2, 20.6, 11.4]],
+        // East of the west pallets, in the shop's north-west corner (1.6 m from the west wall, 2.2 m from the back wall).
+        rects: [[STORE_CORNER.nw[0] + 1.6, STORE_CORNER.nw[1] + 2.2, STORE_CORNER.nw[0] + 3.6, STORE_CORNER.nw[1] + 5.4]],
         // The middle west pallet, where the cartons stand.
-        point: [cx + westPallet[0], 1, cz],
+        point: [cx + westPallet[0], 1, STORE_CORNER.nw[1] + 3],
     },
     {
         key: "shelf",
         kind: "drop",
         label: "Store Shelf · put up",
-        rects: [[20.9, north + 0.5, 22.9, north + 1.6], [17.5, 11.35, 19.4, 11.95]],
+        // In front of the back racks' middle, and at the front end of the west run (column a), whose run is RACK_SPAN long and centred on its wall.
+        rects: [[cx + 0.9, north + 0.5, cx + 2.9, north + 1.6], [STORE_CORNER.nw[0] + 0.5, cz + RACK_SPAN / 2 - 0.15, STORE_CORNER.nw[0] + 2.4, cz + RACK_SPAN / 2 + 0.45]],
         point: [21.9, 1.6, north + 0.25],
     },
     { key: "hub_a", kind: "pickup", label: "Main Hub A · pick", rects: [HUB_A.rect], point: HUB_A.point },
@@ -137,7 +166,7 @@ export const ZONES: Zone[] = [
         rects: [[CAR.rearX - 2.4, CAR.z - 1.3, CAR.rearX - 0.35, CAR.z + 1.3]],
         point: [CAR.rearX + 0.6, CAR.bed + 0.8, CAR.z],
     },
-    ...DESKS.map((d): Zone => ({ key: d.key, kind: "pickup", label: d.label, rects: [[...d.rect] as [number, number, number, number]], point: [(d.rect[0] + d.rect[2]) / 2, 1, (d.rect[1] + d.rect[3]) / 2], desk: true })),
+    ...DESKS.map((d): Zone => ({ key: d.key, kind: "pickup", label: d.label, rects: [[...d.rect] as [number, number, number, number]], point: [(d.rect[0] + d.rect[2]) / 2, 1, (d.rect[1] + d.rect[3]) / 2], desk: true, table: d.table, rise: d.rise })),
 ];
 
 export function zoneAt(x: number, z: number): Zone | null {
@@ -169,23 +198,29 @@ export function drawZones(scene: THREE.Scene, tones: { pickup: THREE.Color; drop
     const deskTopMaterial = new THREE.MeshStandardMaterial({ color: 0xe9e2d3, roughness: 0.6 });
     const marks = ZONES.map((zone) => {
         const group = new THREE.Group();
-        const material = new THREE.MeshBasicMaterial({ color: zone.kind === "pickup" ? tones.pickup : tones.drop, transparent: true, opacity: 0.35, depthWrite: false });
+        // polygonOffset: a decal on a floor must always win the depth test against it (it flickered, drawn 2 cm above it).
+        const material = new THREE.MeshBasicMaterial({ color: zone.kind === "pickup" ? tones.pickup : tones.drop, transparent: true, opacity: 0.35, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+        // The surface under it: a hub or shop floor is about 14 cm up, a platform 30 cm.
+        // Outside a door it lies on the street or the ground (a road is 4–6 cm up).
+        const outdoors = zone.key === "remote_door" || zone.key === "store_door";
+        const base = zone.rise !== undefined && zone.rise > 0 ? zone.rise : zone.key === "truck" ? 0.3 : outdoors ? 0.08 : 0.14;
         for (const [x0, z0, x1, z1] of zone.rects) {
             const patch = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), material);
             patch.rotation.x = -Math.PI / 2;
-            patch.position.set((x0 + x1) / 2, 0.16, (z0 + z1) / 2);
+            patch.position.set((x0 + x1) / 2, base + 0.05, (z0 + z1) / 2);
+            patch.renderOrder = 2;
             patch.raycast = () => {};
             group.add(patch);
         }
-        if (zone.desk) {
+        if (zone.desk && zone.table !== false) {
             // A table at the back of the patch, so the desk reads as a desk.
             const [x0, z0, x1, z1] = zone.rects[0];
             const table = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.2, x1 - x0 - 0.4), 0.8, 0.7), deskMaterial);
-            table.position.set((x0 + x1) / 2, 0.4, z0 + 0.45);
+            table.position.set((x0 + x1) / 2, base + 0.4, z0 + 0.45);
             table.raycast = () => {};
             group.add(table);
             const top = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.3, x1 - x0 - 0.3), 0.06, 0.8), deskTopMaterial);
-            top.position.set((x0 + x1) / 2, 0.83, z0 + 0.45);
+            top.position.set((x0 + x1) / 2, base + 0.83, z0 + 0.45);
             top.raycast = () => {};
             group.add(top);
         }

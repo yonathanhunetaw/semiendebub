@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { move, pushOut, type Box } from "./collision";
-import type { GameView, PlayerPose } from "./gameStore";
+import { getGame, setGame, type GameView, type PlayerPose } from "./gameStore";
 import { findPath, type Point } from "./pathfinding";
 import { WORKER_RADIUS, siteMap } from "./siteBlockers";
 
@@ -11,7 +11,7 @@ import { WORKER_RADIUS, siteMap } from "./siteBlockers";
  * (DukaWorld's `animate` calls update(dt) once a frame; this starts no loop).
  *
  * Walking:
- *   keys    W A S D or the arrows, Shift to hurry
+ *   keys    W A S D or the arrows; run is on by default (the Run button, R); Shift does the opposite while held
  *   tap     a tap or click on the ground walks there, round the walls
  *           (pathfinding.ts), with a ring where they are going
  *   stick   on a touch screen in Follow, press and drag anywhere: a stick
@@ -61,8 +61,8 @@ export interface Player {
     dispose: () => void;
 }
 
-const WALK = 3.2;
-const RUN = 5.5;
+const WALK = 3.4;
+const RUN = 7;
 /** Follow camera: distance from the worker and how steeply it looks down. */
 const PITCH = (55 * Math.PI) / 180;
 const DISTANCE = { min: 7, start: 14, max: 32 };
@@ -143,7 +143,9 @@ export function createPlayer(options: PlayerOptions): Player {
     let phase = 0;
     let speed = 0;
     const held = new Set<string>();
-    let running = false;
+    let shiftHeld = false;
+    /** Running now: the Run setting, turned the other way while Shift is held. */
+    const fast = () => getGame().run !== shiftHeld;
     /** The corners still to walk through after a tap; empty when not walking to one. */
     let path: Point[] = [];
     let stuckFor = 0;
@@ -192,16 +194,17 @@ export function createPlayer(options: PlayerOptions): Player {
             held.add(event.code);
             stopWalkingTo();
         }
-        if (event.key === "Shift") running = true;
+        if (event.key === "Shift") shiftHeld = true;
+        if (event.code === "KeyR" && !event.repeat && !event.metaKey && !event.ctrlKey) setGame({ run: !getGame().run });
     };
     const onKeyUp = (event: KeyboardEvent) => {
         held.delete(event.code);
-        if (event.key === "Shift") running = false;
+        if (event.key === "Shift") shiftHeld = false;
     };
     // Letting go of the window (alt-tab) must not leave a key held down.
     const onBlur = () => {
         held.clear();
-        running = false;
+        shiftHeld = false;
         stick = null;
         stickBase.classList.remove("is-on");
     };
@@ -325,24 +328,27 @@ export function createPlayer(options: PlayerOptions): Player {
         heading.set(0, 0, 0);
         if (ix !== 0 || iz !== 0) {
             heading.addScaledVector(right, ix).addScaledVector(forward, iz).normalize();
-            want = running ? RUN : WALK;
+            want = fast() ? RUN : WALK;
         } else if (stick && Math.hypot(stick.x, stick.y) > 0.15) {
             const push = Math.min(1, Math.hypot(stick.x, stick.y));
             heading.addScaledVector(right, stick.x).addScaledVector(forward, stick.y).normalize();
-            want = push > 0.95 ? RUN : WALK * Math.min(1, push / 0.6);
+            // A full push always runs; with Run on, any firm push does.
+            want = push > 0.95 ? RUN : (fast() ? RUN : WALK) * Math.min(1, push / 0.6);
         } else if (path.length > 0) {
             // Walking to a tap: head for the next corner; at the last one, arrive and stop.
             const [nx, nz] = path[0];
             const dx = nx - root.position.x;
             const dz = nz - root.position.z;
             const left = Math.hypot(dx, dz);
-            if (left < (path.length === 1 ? 0.08 : 0.3)) {
+            // A corner counts as reached within one stride of it too: at a run (7 m/s) a slow frame steps 0.7 m, and a fixed 0.3 m
+            // radius could be overshot every frame, circling the corner for ever.
+            if (left < Math.max(path.length === 1 ? 0.08 : 0.3, speed * dt)) {
                 path.shift();
                 if (path.length === 0) goal.visible = false;
             } else {
                 heading.set(dx / left, 0, dz / left);
                 // Ease in to the last corner instead of overshooting it.
-                want = (running ? RUN : WALK) * (path.length === 1 ? Math.min(1, left / 0.8 + 0.25) : 1);
+                want = (fast() ? RUN : WALK) * (path.length === 1 ? Math.min(1, left / 0.8 + 0.25) : 1);
             }
         }
 

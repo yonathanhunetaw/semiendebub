@@ -309,6 +309,9 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     const runGoals = groupGoals(Object.values(game.runs ?? {}).map((r) => runGoal(r, game.live)), "shipments", game.live);
     const legGoals = groupGoals(Object.values(game.legs ?? {}).map((l) => legGoal(l, game.live)), "transfers", game.live);
     const stationGoals = deskGoals(feed?.stations ?? null, desks.struck).slice(0, 3);
+    // The staff board on the office wall shows the board station.
+    const boardStation = feed?.stations.find((s) => s.key === "board") ?? null;
+    useEffect(() => scene()?.setBoard(feed ? boardStation : null), [boardStation, feed, scene, theme.palette.mode]);
     const goals = [...objectives(feed, session, freight, !freightPlayable, shelfLocked, relayPlayable ? relay : null, failed), ...runGoals.map((g) => ({ ...g, tone: "primary" as const })), ...legGoals.map((g) => ({ ...g, tone: "primary" as const })), ...stationGoals.map((g) => ({ ...g, tone: "primary" as const }))];
     const showGauge = freight !== null && (inHub || zone === "truck" || freightUnits > 0);
     const walkTo = (key: ZoneKey) => {
@@ -320,8 +323,8 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
         <>
             <Stack spacing={1} sx={{ alignItems: "center", pointerEvents: "none" }}>
                 <GameHud canGoLive={liveAllowed || game.live} onLive={askLive} />
-                {/* The goals: stacked on a wide screen; on a phone one row to swipe, so they don't fill the top of the world. */}
-                <Stack direction={{ xs: "row", sm: "column" }} spacing={1} sx={{ alignItems: "center", maxWidth: "100%", overflowX: { xs: "auto", sm: "visible" }, px: { xs: 0.5, sm: 0 }, pb: 0.5, scrollbarWidth: "none" }}>
+                {/* The goals: one row to swipe, so they never bury the world (the site is big, and a desk has its own goal). */}
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", maxWidth: "calc(100vw - 16px)", overflowX: "auto", px: 0.5, pb: 0.5, scrollbarWidth: "none", pointerEvents: "auto" }}>
                     {(feed?.stations.length ?? 0) > 0 && (
                         <Button onClick={() => setDeskMenu((open) => !open)} variant="outlined" size="small" aria-expanded={deskMenu}
                             sx={{ pointerEvents: "auto", flexShrink: 0, borderRadius: 999, fontWeight: 800, textTransform: "none", bgcolor: glass, boxShadow: 3 }}>

@@ -164,8 +164,8 @@ class GuideWorldStationsTest extends TestCase
     {
         $expected = [
             'stock_keeper' => ['receiving', 'arrivals', 'orders', 'counts', 'moves', 'stock_pages', 'work', 'office', 'shipments'],
-            'seller' => ['orders', 'payments', 'counter', 'customers', 'ideas', 'work', 'office'],
-            'delivery' => ['delivery', 'work', 'office', 'shipments'],
+            'seller' => ['orders', 'payments', 'counter', 'customers', 'ideas', 'work', 'office', 'board'],
+            'delivery' => ['delivery', 'work', 'office', 'shipments', 'board'],
             'admin' => ['counts', 'delivery', 'payments', 'purchase_orders', 'expenses', 'counter', 'customers', 'catalogue', 'network', 'ideas', 'work', 'office', 'proposals'],
         ];
 
@@ -239,5 +239,31 @@ class GuideWorldStationsTest extends TestCase
         $claim = $this->station($this->stations($courier, 'delivery'), 'shipments')['items'][0]['actions'][0];
         $this->assertSame('claim', $claim['key']);
         $this->assertSame(route('delivery.shipments.claim', $shipment->id, false), $claim['url']);
+    }
+
+    #[Test]
+    public function the_staff_board_lists_each_sites_shifts_and_who_holds_its_key_and_each_cars_key(): void
+    {
+        $manager = $this->user('store_manager');
+        $worker = $this->user('stock_keeper');
+        $site = StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_STORE)->first();
+        $site->managerAssignments()->create(['user_id' => $manager->id]);
+        $start = \App\Services\Workforce\LocalTime::today()->addHours(8)->utc();
+        \App\Models\Workforce\Shift::query()->create([
+            'stock_location_id' => $site->id, 'user_id' => $worker->id, 'starts_at' => $start, 'ends_at' => $start->addHours(8),
+            'duty' => 'opener', 'status' => 'accepted',
+        ]);
+        app(\App\Services\Workforce\KeyCustodyService::class)->keyFor($site)->update(['holder_id' => $worker->id, 'held_since' => now()]);
+        $car = \App\Models\Fulfillment\Vehicle::query()->create(['name' => 'Board Van', 'plate' => 'BD-1', 'max_cbm' => 5, 'payload_kg' => 500, 'status' => 'active']);
+
+        $board = $this->station($this->stations($this->user('admin', null), 'admin'), 'board');
+        $this->assertSame('desk_board', $board['desk']);
+        $ids = array_column($board['items'], 'id');
+        $this->assertContains('car-'.$car->id, $ids);
+
+        $siteItem = collect($board['items'])->firstWhere('id', 'site-'.$site->id);
+        $this->assertNotNull($siteItem, 'the site is on the board: '.json_encode($ids));
+        $this->assertStringContainsString(trim($worker->first_name.' '.$worker->last_name), $siteItem['subtitle'], 'the key holder is named');
+        $this->assertStringContainsString('opens', implode(' ', $siteItem['lines']));
     }
 }

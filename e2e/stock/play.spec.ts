@@ -31,9 +31,7 @@ async function play(page: Page, subdomain: 'stockkeeper' | 'seller' | 'delivery'
 /** Tap the line that says what to do next: the worker walks there (hurrying), and the zone's control shows. */
 async function walkByObjective(page: Page, objective: RegExp, arrived: () => Promise<void>): Promise<void> {
     await page.getByRole('button', { name: objective }).click();
-    await page.keyboard.down('Shift');
     await arrived();
-    await page.keyboard.up('Shift');
 }
 
 const pickerOpen = (page: Page) => expect(page.getByText('Store Floor: to shelve')).toBeVisible({ timeout: 90_000 });

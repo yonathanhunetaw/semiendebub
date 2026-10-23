@@ -24,7 +24,5 @@ export async function walkToDesk(page: Page, label: string | RegExp, station: st
     const menu = page.getByTestId('desk-menu');
     await expect(menu).toBeVisible();
     await menu.locator('div').filter({ hasText: label }).filter({ has: page.getByRole('button', { name: 'Go' }) }).last().getByRole('button', { name: 'Go' }).click();
-    await page.keyboard.down('Shift');
     await expect(page.getByTestId(`station-${station}`)).toBeVisible({ timeout: 120_000 });
-    await page.keyboard.up('Shift');
 }

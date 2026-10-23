@@ -19,7 +19,7 @@ import ShipmentCard from "./ShipmentCard";
 import Timeline, { PACE_MS, dayStart, isoDay, type Pace } from "./Timeline";
 import { CARD_KINDS, KIND_COLOR, buildEvents, hhmm, lastBefore, type EventKind, type FeedEvent, type WorldEvent } from "./events";
 import {
-    COMPOUND, DROP, FLOOR_ZONES, HOUSES, HOUSE_SIZE, NEIGHBOUR, PALLET, PARKING, PLACES, PLATFORM_BERTH, ROADS, STORE, palletCentres,
+    COMPOUND, DROP, FLOOR_ZONES, HOUSES, HOUSE_SIZE, NEIGHBOUR, PALLET, PARKING, PLACES, PLATFORM_BERTH, RACK_SPAN, REAL_SHOP, ROADS, STORE, STORE_CORNER, palletCentres,
     doorPosition, hubLayout, placeFor, vanRoute, type Place, type PlaceKey,
 } from "./places";
 import {
@@ -87,15 +87,16 @@ type Subject = { kind: EventKind; id: number };
 
 const ALL_KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order"];
 const SITE_CENTER = new THREE.Vector3(-14, 0, 3);
-const SITE_BOUNDS = new THREE.Box3(new THREE.Vector3(-95, 0, -16), new THREE.Vector3(69, 8, 26));
+const SITE_BOUNDS = new THREE.Box3(new THREE.Vector3(-95, 0, -26), new THREE.Vector3(69, 8, 30));
 
 /** Where things wait on the store floor (west of the counter) and at the delivery bay, [x, z]. */
-const FLOOR_SPOT: [number, number] = [STORE.position[0] - 0.9, STORE.position[1] - 0.8];
-const BAY_SPOT: [number, number] = [36, 0.5];
-/** A courier's ride from the delivery bay along the main road to the customers. */
-const ORDER_RIDE: Array<[number, number]> = [BAY_SPOT, [37, -3], [44, -2], [52, 2], [58, 4], [60, 6.5]];
+// (By the pallets in the north-west corner, where the real shop keeps them.)
+const FLOOR_SPOT: [number, number] = [STORE_CORNER.nw[0] + 2.1, STORE_CORNER.nw[1] + 2.2];
+const BAY_SPOT: [number, number] = [36, 4.5];
+/** A courier's ride from the delivery platform onto the main road and along it to the customers. */
+const ORDER_RIDE: Array<[number, number]> = [BAY_SPOT, [37, -0.6], [44, -2], [52, 2], [58, 4], [60, 6.5]];
 /** A refill carried from the Remote Hub's door, round the east side, in at the store's front door. */
-const REMOTE_CARRY: Array<[number, number]> = [[23, -2.5], [24.5, -0.8], [29, 0.5], [29.5, 8], [28.5, 14], [20.6, 14.5], [20.6, 11.5]];
+const REMOTE_CARRY: Array<[number, number]> = [[23, -2.5], [24.5, -0.8], [29, 0.5], [29.5, 8], [29, 18], [26, 21], [STORE_CORNER.sw[0] + STORE.door.at, 20.2], [STORE_CORNER.sw[0] + STORE.door.at, STORE_CORNER.sw[1] - 2]];
 
 /** Story time per ms of animation when moving between events, and its bounds. */
 const TWEEN_MIN_MS = 500;
@@ -743,7 +744,8 @@ function buildWorld(
 ): { api: SceneApi; dispose: () => void } | null {
     let renderer: THREE.WebGLRenderer;
     try {
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        // A logarithmic depth buffer: floor decals a few centimetres above a floor flickered (z-fighting) at a distance with an ordinary one.
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, logarithmicDepthBuffer: true });
     } catch (error) {
         console.warn("Live Operations: WebGL unavailable.", error);
         return null;
@@ -771,7 +773,11 @@ function buildWorld(
     mount.appendChild(labels.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 900);
+    // The ground runs on to the horizon and fades into the sky, so the site stands on the earth instead of floating on a slab.
+    const sky = color(theme.palette.background.default).lerp(color(theme.palette.info.main), dark ? 0.18 : 0.12);
+    scene.background = sky;
+    scene.fog = new THREE.Fog(sky, 260, 820);
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 1600);
     let home = homeView(width / height);
     camera.position.copy(home.camera);
 
@@ -793,13 +799,17 @@ function buildWorld(
     const sun = new THREE.DirectionalLight(0xffffff, dark ? 1.4 : 2.2);
     sun.position.set(-40, 90, 50);
     sun.castShadow = true;
+    // Without a bias the big flat floors speckled with shadow acne.
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.05;
     sun.shadow.mapSize.set(4096, 4096);
     Object.assign(sun.shadow.camera, { left: -110, right: 90, top: 50, bottom: -50, near: 1, far: 280 });
     scene.add(sun);
 
     const groundTone = color(theme.palette.background.paper).lerp(color(theme.palette.success.main), dark ? 0.18 : 0.28);
-    const ground = new THREE.Mesh(new THREE.BoxGeometry(180, 1, 72), new THREE.MeshStandardMaterial({ color: groundTone, roughness: 1 }));
-    ground.position.set(-14, -0.5, 3);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: groundTone, roughness: 1 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(-14, 0, 3);
     ground.receiveShadow = true;
     scene.add(ground);
 
@@ -846,7 +856,8 @@ function buildWorld(
         pad.position.y = place.indoor ? 0.13 : 0.07;
         pad.receiveShadow = true;
         // The shelf and the floor wrap the whole room; their places are marked by their own meshes.
-        pad.visible = place.shape !== "shelves" && place.shape !== "floor";
+        // A platform is its own slab: a pad of the same footprint under it had side faces coplanar with the slab's (they flickered).
+        pad.visible = place.shape !== "shelves" && place.shape !== "floor" && place.shape !== "platform";
         group.add(pad);
 
         if (place.shape === "hub") {
@@ -1246,7 +1257,7 @@ function buildWorld(
         const door = doorPosition(p);
         if (door) return new THREE.Vector3(door.at[0] + door.out[0] * 2.5, 0, door.at[1] + door.out[1] * 2.5);
         if (key === "store_floor") return new THREE.Vector3(FLOOR_SPOT[0], 0, FLOOR_SPOT[1]);
-        if (key === "store_shelf") return new THREE.Vector3(STORE.position[0], 0, STORE.position[1] - 1.5);
+        if (key === "store_shelf") return new THREE.Vector3(STORE.position[0], 0, STORE_CORNER.nw[1] + 1.5);
         if (key === "loading_bay") return new THREE.Vector3(BAY_SPOT[0], 0, BAY_SPOT[1]);
         // A tall building: in front of it, so it doesn't hide the spot.
         if (p.shape === "tower") return new THREE.Vector3(p.position[0], 0, p.position[1] + p.size[1] / 2 + 2);
@@ -1473,7 +1484,7 @@ function buildWorld(
         viewStore: () => {
             userMoved = true;
             awayFromHome = true;
-            flyClose(STORE.position[0], STORE.position[1], 6);
+            flyClose(STORE.position[0], STORE.position[1], 12);
         },
         viewWall: (side) => {
             userMoved = true;
@@ -1482,7 +1493,8 @@ function buildWorld(
             const toward: Record<RackWall, [number, number]> = { west: [-1, 0], east: [1, 0], north: [0, -1], south: [0, 1] };
             const [dx, dz] = toward[side];
             const [cx, cz] = STORE.position;
-            const reach = (side === "west" || side === "east" ? STORE.size[0] : STORE.size[1]) / 2 - STORE.shelfDepth;
+            // The racks keep the real shop's size, so the view does too: it is taken from the middle of the shop, not from its far walls.
+            const reach = REAL_SHOP / 2 - STORE.shelfDepth;
             // The seller's side: stand at the opposite side of the shop, at eye height, and look at the racks.
             // Stand right back against the far wall, unless racks stand on the floor there: then in front of them.
             const behind = RACKS.find((r) => r.wall === ({ west: "east", east: "west", north: "south", south: "north" } as Record<RackWall, RackWall>)[side])!;
@@ -1543,9 +1555,15 @@ function buildWorld(
         const time = (performance.now() - startedAt) / 1000;
         // Seconds since the last frame, capped so a tab coming back does not teleport the worker; at 0.1 s
         // the worker keeps their real pace down to 10 fps (a slow phone), and collision still steps finely (collision.move).
-        const dt = Math.min(0.1, (performance.now() - lastFrame) / 1000);
+        const elapsed = (performance.now() - lastFrame) / 1000;
         lastFrame = performance.now();
-        game?.update(dt);
+        // The worker keeps their real pace on a slow device: up to half a second of lag is played out in small steps
+        // (collision and the path's corners need steps under about 0.1 s).
+        for (let left = Math.min(0.5, elapsed); left > 1e-4; ) {
+            const step = Math.min(0.05, left);
+            game?.update(step);
+            left -= step;
+        }
         const gameCamera = game?.ownsCamera() ?? false;
         // Doors and the gate swing open as the worker comes up to them.
         if (game && player.pose) {
@@ -1817,14 +1835,15 @@ function addCompound(scene: THREE.Scene, wall: THREE.Color, dark: THREE.Color, y
 
 /** The roads (places.ts ROADS), each a flat asphalt ribbon 4.5 m wide. */
 function addRoads(scene: THREE.Scene, asphalt: THREE.Color): void {
-    const material = new THREE.MeshStandardMaterial({ color: asphalt, roughness: 1, side: THREE.DoubleSide });
+    // polygonOffset: where two roads cross, the later one must win the depth test outright (a few millimetres apart they flickered).
+    const material = new THREE.MeshStandardMaterial({ color: asphalt, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     ROADS.forEach((points, r) => {
         const curve = new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, "catmullrom", 0.2);
         const samples = curve.getSpacedPoints(Math.round(curve.getLength()));
         const positions: number[] = [];
         samples.forEach((p, i) => {
             const t = curve.getTangentAt(i / (samples.length - 1));
-            const y = 0.05 + r * 0.004;
+            const y = 0.04 + r * 0.02;
             positions.push(p.x - t.z * 2.25, y, p.z + t.x * 2.25, p.x + t.z * 2.25, y, p.z - t.x * 2.25);
         });
         const indices: number[] = [];
@@ -1920,7 +1939,9 @@ function makeShelves(wall: THREE.Color, dark: THREE.Color): { group: THREE.Group
         const cols = run.columns.length;
         const rows = run.rows;
         const alongX = side === "north" || side === "south";
-        const span = (alongX ? w : d) - 2 * dep;
+        // Each run keeps the real shop's wall length and is centred on its wall (the room around it is bigger).
+        void alongX;
+        const span = RACK_SPAN;
         const { height, centerY, rowHeight } = rackFace(run);
 
         // Where a point a fraction u along the face (read from inside the shop, left to right), e metres out from the wall, stands.
@@ -2023,9 +2044,11 @@ function makeHub(place: Place, tone: THREE.Color, wall: THREE.Color, dark: THREE
         west: [-w / 2, -d / 2, -w / 2, d / 2],
         east: [w / 2, -d / 2, w / 2, d / 2],
     };
-    const wallSegment = (x1: number, z1: number, x2: number, z2: number, y0: number, y1: number) => {
+    const wallSegment = (x1: number, z1: number, x2: number, z2: number, y0: number, y1: number, name = "") => {
         const length = Math.hypot(x2 - x1, z2 - z1);
         if (length < 0.05 || y1 <= y0) return;
+        // The east and west walls overlap the north and south ones at the corners: 2 cm lower, their tops are not coplanar with them (that flickered).
+        if (name === "east" || name === "west") y1 -= 0.02;
         const m = mesh(new THREE.BoxGeometry(length, y1 - y0, t), wall, (x1 + x2) / 2, (y0 + y1) / 2, (z1 + z2) / 2);
         m.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
         g.add(m);
@@ -2034,7 +2057,7 @@ function makeHub(place: Place, tone: THREE.Color, wall: THREE.Color, dark: THREE
     let swing: Swing | null = null;
     for (const [name, [x1, z1, x2, z2]] of Object.entries(sides)) {
         if (!door || door.wall !== name) {
-            wallSegment(x1, z1, x2, z2, 0, h);
+            wallSegment(x1, z1, x2, z2, 0, h, name);
             continue;
         }
         // Split around the door; a lintel above it.
@@ -2043,18 +2066,28 @@ function makeHub(place: Place, tone: THREE.Color, wall: THREE.Color, dark: THREE
         const b = (door.at + door.width / 2) / length;
         const [ax, az] = [x1 + (x2 - x1) * a, z1 + (z2 - z1) * a];
         const [bx, bz] = [x1 + (x2 - x1) * b, z1 + (z2 - z1) * b];
-        wallSegment(x1, z1, ax, az, 0, h);
-        wallSegment(bx, bz, x2, z2, 0, h);
-        wallSegment(ax, az, bx, bz, doorHeight, h);
+        wallSegment(x1, z1, ax, az, 0, h, name);
+        wallSegment(bx, bz, x2, z2, 0, h, name);
+        wallSegment(ax, az, bx, bz, doorHeight, h, name);
         const pair = swingPair(ax, az, bx, bz, doorHeight, doorPosition(place)!.out, dark.clone().lerp(tone, 0.35));
         g.add(pair.group);
         swing = pair.swing;
+
+        // A sign over the door, on the outside of the lintel, facing the way the door opens.
+        if (place.sign) {
+            const out = doorPosition(place)!.out;
+            const sign = doorSign(place.sign, tone, door.width + 1.2);
+            sign.position.set((ax + bx) / 2 + out[0] * (t / 2 + 0.04), doorHeight + (h - doorHeight) / 2, (az + bz) / 2 + out[1] * (t / 2 + 0.04));
+            sign.rotation.y = Math.atan2(out[0], out[1]);
+            g.add(sign);
+        }
     }
 
     if (place.cells) {
-        const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: cellTexture(place, floor, dark, tone), roughness: 0.95 }));
+        // Over the pad (its top is at 0.13), with a depth offset so the two never fight.
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: cellTexture(place, floor, dark, tone), roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
         plane.rotation.x = -Math.PI / 2;
-        plane.position.y = 0.14;
+        plane.position.y = 0.16;
         plane.receiveShadow = true;
         g.add(plane);
     }
@@ -2064,6 +2097,30 @@ function makeHub(place: Place, tone: THREE.Color, wall: THREE.Color, dark: THREE
     g.add(roofMesh);
 
     return { group: g, roof: roofMesh, swing };
+}
+
+/** A painted sign for over a door: white capitals on the place's colour. */
+function doorSign(text: string, tone: THREE.Color, width: number): THREE.Mesh {
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 112;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = `#${tone.getHexString()}`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "rgba(255,255,255,.85)";
+    ctx.lineWidth = 6;
+    ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+    ctx.fillStyle = "#fff";
+    ctx.font = "900 72px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 4);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(width, width * (112 / 640)), new THREE.MeshBasicMaterial({ map: texture }));
+    sign.raycast = () => {};
+    return sign;
 }
 
 /** A hub floor as a picture: each 1 m cell outlined and named, the walkway hatched. */
@@ -2152,11 +2209,6 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
             const ch = STORE.counter.height;
             g.add(mesh(new THREE.BoxGeometry(w, ch, d), wall.clone().lerp(dark, 0.15), 0, ch / 2 + 0.1, 0));
             g.add(mesh(new THREE.BoxGeometry(w + 0.1, 0.06, d + 0.1), tone, 0, ch + 0.13, 0));
-            break;
-        }
-        case "bay": {
-            g.add(mesh(new THREE.BoxGeometry(w, 0.2, d), tone, 0, 4, 0));
-            for (const x of [-w / 2 + 0.3, w / 2 - 0.3]) for (const z of [-d / 2 + 0.3, d / 2 - 0.3]) g.add(mesh(new THREE.BoxGeometry(0.25, 4, 0.25), dark, x, 2, z));
             break;
         }
         case "houses": {

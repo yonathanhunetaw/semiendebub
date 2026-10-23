@@ -1,4 +1,4 @@
-import { COMPOUND, HOUSES, HOUSE_SIZE, NEIGHBOUR, PALLET, PLACES, STORE, doorPosition, palletCentres, type Place } from "../places";
+import { COMPOUND, HOUSES, HOUSE_SIZE, NEIGHBOUR, PALLET, PLACES, RACK_SPAN, STORE, doorPosition, palletCentres, type Place } from "../places";
 import { RACKS } from "../storeLayout";
 import { blockedAt, boxAt, type Blockers, type Box, type Wall } from "./collision";
 import { makeGrid, type Grid } from "./pathfinding";
@@ -12,7 +12,6 @@ import { DESKS } from "./zones";
  *   hub walls, with their door gaps      the compound fence, with the gate gap
  *   the store's walls, with the door     the counter, the divider, the pallets
  *   the standing racks (left, back)      the neighbour, the admin tower, the houses
- *   the delivery bay's four posts
  *
  * Racks hanging from the ceiling (right wall, over the door) are above head
  * height, and the platform is a low step: neither blocks.
@@ -83,10 +82,11 @@ function storeBlockers(): Blockers {
         if (run.suspended) continue;
         const dep = STORE.shelfDepth;
         switch (run.wall) {
-            case "west": boxes.push({ minX: west, minZ: north, maxX: west + dep, maxZ: south }); break;
-            case "east": boxes.push({ minX: east - dep, minZ: north, maxX: east, maxZ: south }); break;
-            case "north": boxes.push({ minX: west, minZ: north, maxX: east, maxZ: north + dep }); break;
-            case "south": boxes.push({ minX: west, minZ: south - dep, maxX: east, maxZ: south }); break;
+            // Each run is the real shop's wall length (RACK_SPAN), centred on its wall.
+            case "west": boxes.push({ minX: west, minZ: cz - RACK_SPAN / 2, maxX: west + dep, maxZ: cz + RACK_SPAN / 2 }); break;
+            case "east": boxes.push({ minX: east - dep, minZ: cz - RACK_SPAN / 2, maxX: east, maxZ: cz + RACK_SPAN / 2 }); break;
+            case "north": boxes.push({ minX: cx - RACK_SPAN / 2, minZ: north, maxX: cx + RACK_SPAN / 2, maxZ: north + dep }); break;
+            case "south": boxes.push({ minX: cx - RACK_SPAN / 2, minZ: south - dep, maxX: cx + RACK_SPAN / 2, maxZ: south }); break;
         }
     }
     return { boxes, walls };
@@ -115,7 +115,7 @@ export function siteBlockers(): Blockers {
     const store = storeBlockers();
     const boxes: Box[] = [...store.boxes, boxAt(NEIGHBOUR.position[0], NEIGHBOUR.position[1], NEIGHBOUR.size[0], NEIGHBOUR.size[1])];
     // Each desk's table, at the back of its patch (zones.ts draws it there).
-    for (const { rect: [x0, z0, x1] } of DESKS) boxes.push(boxAt((x0 + x1) / 2, z0 + 0.45, Math.min(2.3, x1 - x0 - 0.3), 0.8));
+    for (const { rect: [x0, z0, x1] } of DESKS.filter((d) => d.table)) boxes.push(boxAt((x0 + x1) / 2, z0 + 0.45, Math.min(2.3, x1 - x0 - 0.3), 0.8));
     const walls: Wall[] = [...store.walls, ...fence()];
 
     for (const place of PLACES) {
@@ -125,9 +125,6 @@ export function siteBlockers(): Blockers {
             case "hub": walls.push(...hubWalls(place)); break;
             case "tower": boxes.push(boxAt(x, z, w, d)); break;
             case "houses": HOUSES.forEach(([hx, hz]) => boxes.push(boxAt(x + hx, z + hz, HOUSE_SIZE, HOUSE_SIZE))); break;
-            case "bay":
-                for (const px of [-w / 2 + 0.3, w / 2 - 0.3]) for (const pz of [-d / 2 + 0.3, d / 2 - 0.3]) boxes.push(boxAt(x + px, z + pz, 0.25, 0.25));
-                break;
             default: break;
         }
     }

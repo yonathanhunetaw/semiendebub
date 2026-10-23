@@ -15,9 +15,9 @@ import type { IdentityKey } from "@/Components/Visual/identities";
  * `chapters` are keys into the Guide's CHAPTERS.
  */
 
-export type PlaceShape = "hub" | "platform" | "shelves" | "floor" | "counter" | "bay" | "houses" | "tower";
+export type PlaceShape = "hub" | "platform" | "shelves" | "floor" | "counter" | "houses" | "tower";
 
-export type PlaceKey = "main_hub_a" | "main_hub_b" | "platform" | "store_shelf" | "store_floor" | "store_counter" | "remote_hub" | "loading_bay" | "customers" | "admin_hq";
+export type PlaceKey = "main_hub_a" | "main_hub_b" | "platform" | "store_shelf" | "store_floor" | "store_counter" | "remote_hub" | "office" | "loading_bay" | "customers" | "admin_hq";
 
 /** Which wall a door is in, and where along it (metres from the wall's west or north end). */
 export interface Door {
@@ -41,6 +41,8 @@ export interface Place {
     indoor?: boolean;
     /** Hubs: the double swing door, and whether the floor is laid out in 1 m cells. */
     door?: Door;
+    /** A sign over the door, outside (the office says OFFICE). */
+    sign?: string;
     cells?: boolean;
     /** Where the label floats, relative to the centre, when not straight above it. */
     labelAt?: [number, number, number];
@@ -49,25 +51,39 @@ export interface Place {
 }
 
 /**
- * The Main Store, 6 × 6 m and 3.5 m high (the real shop measures about 6.05 ×
- * 6.8 m), open-topped so you can see in. The 2 m main door is in the south
- * wall, 3.6 m from the west wall, 2.1 m high. The counter stands on the right
- * as you walk in, against the east wall, 3.2 m long; a metal divider is fixed to
- * the front wall at the door's west edge. The racking is in storeLayout.ts:
- * floor to ceiling on the left and back walls, hanging from the ceiling on the
- * right wall and over the door, all 50 cm deep. The open floor between the
- * racks and the counter is the Store Floor.
+ * The Main Store: 12 × 12 m (four times the floor of the real shop, which measures
+ * about 6 × 6.8 m, so there is room to move about), 3.5 m high, open-topped so you
+ * can see in. The 2 m main door is in the south wall, 6.6 m from the west wall,
+ * 2.1 m high. The counter stands on the right as you walk in, against the east
+ * wall, 3.2 m long; a metal divider is fixed to the front wall at the door's west
+ * edge. The racking (storeLayout.ts) keeps the real shop's size: each wall's run is
+ * 5 m long and centred on its wall, 50 cm deep, floor to ceiling on the left and
+ * back walls, hanging from the ceiling on the right wall and over the door. The
+ * rest of the floor is the Store Floor, with the pallets in the north-west corner.
  */
 export const STORE = {
     label: "Main Store",
-    position: [20, 9] as [number, number],
-    size: [6, 6] as [number, number],
+    position: [20, 12] as [number, number],
+    size: [12, 12] as [number, number],
     wall: 3.5,
-    door: { at: 3.6, width: 2, height: 2.1 },
+    door: { at: 6.6, width: 2, height: 2.1 },
     shelfDepth: 0.5,
     /** Height of the floor strip under the lowest shelf. */
     plinth: 0.5,
     counter: { width: 3.2, depth: 0.8, height: 1, z: 0 },
+};
+
+/** The real shop's side, in metres: the racks and the pallets keep its size, whatever the room around them. */
+export const REAL_SHOP = 6;
+/** How long one wall's run of racks is: the real shop's wall, less a rack's depth at each end. */
+export const RACK_SPAN = REAL_SHOP - 2 * STORE.shelfDepth;
+
+/** The store's corners, [x, z]: things are placed against a wall, so they are measured from the corner they stand in. */
+export const STORE_CORNER = {
+    nw: [STORE.position[0] - STORE.size[0] / 2, STORE.position[1] - STORE.size[1] / 2] as [number, number],
+    ne: [STORE.position[0] + STORE.size[0] / 2, STORE.position[1] - STORE.size[1] / 2] as [number, number],
+    sw: [STORE.position[0] - STORE.size[0] / 2, STORE.position[1] + STORE.size[1] / 2] as [number, number],
+    se: [STORE.position[0] + STORE.size[0] / 2, STORE.position[1] + STORE.size[1] / 2] as [number, number],
 };
 
 /** The fenced yard, as a polygon of [x, z] corners, and the double swing gate in its east fence. */
@@ -125,11 +141,11 @@ export const PLACES: Place[] = [
         label: "Store Shelf",
         does: "The steel racking, 50 cm deep. Left wall a–c and back wall d–h, six rows from the floor up; right wall i–k and front wall l–o, three rows hanging from the ceiling.",
         happens: ["Each physical spot (like f6) carries up to four spots of the seller's shelf, named f6a to f6d once placed", "A seller-shelf spot at its refill line raises a refill from the floor", "Tap a spot to see what is on it"],
-        position: [20, 9],
-        size: [6, 6],
+        position: STORE.position,
+        size: STORE.size,
         shape: "shelves",
         indoor: true,
-        labelAt: [0, 4.6, -2.6],
+        labelAt: [0, 4.6, -STORE.size[1] / 2 + 0.4],
         roles: ["stock_keeper", "store_manager"],
         chapters: ["stock_keeper", "seller"],
     },
@@ -138,11 +154,11 @@ export const PLACES: Place[] = [
         label: "Store Floor",
         does: "The open floor between the racks and the counter: boxes and cartons not yet on a shelf.",
         happens: ["Receive shipments and transfers", "Refill the shelf: no approval needed", "Pick & pack orders for delivery"],
-        position: [20, 9],
-        size: [6, 6],
+        position: STORE.position,
+        size: STORE.size,
         shape: "floor",
         indoor: true,
-        labelAt: [-2, 2.6, -0.5],
+        labelAt: [-2.5, 2.6, -2.2],
         roles: ["stock_keeper"],
         chapters: ["stock_keeper"],
     },
@@ -151,8 +167,8 @@ export const PLACES: Place[] = [
         label: "Counter",
         does: "The 3.2 m counter on the right as you walk in, against the east wall. Sales happen here.",
         happens: ["The customer asks; the seller finds the item on the shelf", "The seller builds the cart and checks out", "Payment is confirmed by a second person", "In-store orders are handed over here"],
-        // Against the east wall (its inner face at x 23), from 0.2 m inside the front wall 3.2 m towards the back.
-        position: [22.6, 10.2],
+        // Against the east wall (its inner face is the wall), from 0.2 m inside the front wall 3.2 m towards the back.
+        position: [STORE_CORNER.se[0] - 0.4, STORE_CORNER.se[1] - 0.2 - 1.6],
         size: [0.8, 3.2],
         shape: "counter",
         indoor: true,
@@ -174,13 +190,28 @@ export const PLACES: Place[] = [
         chapters: ["moving", "stock_keeper"],
     },
     {
+        key: "office",
+        label: "Office",
+        does: "The back office, beside the Remote Hub: a desk for every part of the business, the staff board with the shifts and who holds each key.",
+        happens: ["Count in what arrived, settle what was short", "Confirm payments and approve orders, counts and purchases", "Read the board: who works when, and who holds which key"],
+        position: [42, -15],
+        size: [24, 12],
+        height: 4,
+        shape: "hub",
+        // The entrance, in the south wall facing the road; the sign over it says OFFICE.
+        door: { wall: "south", at: 12, width: 3 },
+        sign: "OFFICE",
+        roles: ["admin", "store_manager"],
+        chapters: ["admin"],
+    },
+    {
         key: "loading_bay",
         label: "Delivery",
-        does: "Where couriers load orders: beside the store and the Remote Hub.",
+        does: "The delivery platform, beside the road between the Remote Hub and the customers: couriers load orders here.",
         happens: ["Take a run from the list on offer", "Collect the parcel: custody is now the courier's", "Hand it over, or report why it failed"],
-        position: [36, 0],
+        position: [36, 4],
         size: [8, 8],
-        shape: "bay",
+        shape: "platform",
         roles: ["delivery"],
         chapters: ["delivery"],
     },
@@ -217,8 +248,9 @@ export const PLACES: Place[] = [
  * the worker walks round them.
  */
 export const FLOOR_ZONES: Array<[number, number, number, number, number]> = [
-    [-1.7, -0.4, 1.3, 4.4, 3],
-    [0.2, -1.6, 1.3, 1.4, 1],
+    // As in the real shop, measured from the north-west corner: 1.3 m from the west rack, 0.4 m from the back wall.
+    [-4.7, -3.4, 1.3, 4.4, 3],
+    [-2.8, -4.6, 1.3, 1.4, 1],
 ];
 export const PALLET = 1.2;
 /** Every pallet's centre, [x, z, its number within its area]. */
@@ -232,13 +264,14 @@ export const HOUSE_SIZE = 3.2;
 
 /** Where a van stops to unload at each shipment destination. */
 export const PARKING: Partial<Record<PlaceKey, [number, number]>> = {
-    store_floor: [22.5, 14.6],
+    // On the street along the shop's front, a little east of its door.
+    store_floor: [STORE_CORNER.sw[0] + STORE.door.at + 1.9, STORE_CORNER.sw[1] + 4],
     remote_hub: [25.8, -1.3],
 };
 
 /** Where unloaded goods are set down: just outside the door they go in by. */
 export const DROP: Partial<Record<PlaceKey, [number, number]>> = {
-    store_floor: [20.6, 13],
+    store_floor: [STORE_CORNER.sw[0] + STORE.door.at, STORE_CORNER.sw[1] + 1],
     remote_hub: [22, -2.1],
 };
 
@@ -252,7 +285,8 @@ export const PLATFORM_BERTH: [number, number] = [-57.5, 1];
  */
 export const ROADS: Array<Array<[number, number]>> = [
     [[-31, -4], [-12, -2.5], [6, -0.5], [24, 0], [31, -1], [36, -3.5], [44, -2], [52, 2], [58, 4]],
-    [[6, -0.5], [10, 8], [15, 14.6], [30, 14.6], [44, 12], [54, 9]],
+    // Past the shop's west side, along its front (z 22) and on to the customers.
+    [[6, -0.5], [8, 10], [11, 20], [17, 22], [32, 22], [44, 16], [54, 9]],
 ];
 
 const YARD: Array<[number, number]> = [PLATFORM_BERTH, [-44, -1.5], [-36, -3.5], [-31, -4]];
@@ -260,7 +294,7 @@ const YARD: Array<[number, number]> = [PLATFORM_BERTH, [-44, -1.5], [-36, -3.5],
 /** A van's path from the platform, out of the gate, to where it unloads. */
 export function vanRoute(destination: PlaceKey): Array<[number, number]> {
     switch (destination) {
-        case "store_floor": return [...YARD, [-12, -2.5], [6, -0.5], [10, 8], [15, 14.6], PARKING.store_floor!];
+        case "store_floor": return [...YARD, [-12, -2.5], [6, -0.5], [8, 10], [11, 20], [17, 22], PARKING.store_floor!];
         case "remote_hub": return [...YARD, [-12, -2.5], [6, -0.5], [20, -0.3], PARKING.remote_hub!];
         default: return YARD;
     }

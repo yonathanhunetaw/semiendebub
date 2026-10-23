@@ -1,4 +1,9 @@
-import { Box, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography, useMediaQuery } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Box, Chip, IconButton, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useMediaQuery } from "@mui/material";
+import DirectionsRunRounded from "@mui/icons-material/DirectionsRunRounded";
+import DirectionsWalkRounded from "@mui/icons-material/DirectionsWalkRounded";
+import FullscreenExitRounded from "@mui/icons-material/FullscreenExitRounded";
+import FullscreenRounded from "@mui/icons-material/FullscreenRounded";
 import { alpha, useTheme } from "@mui/material/styles";
 import { setGame, useGame, type GameView } from "./gameStore";
 
@@ -14,6 +19,18 @@ export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onL
     // A touch screen gets the tap-and-drag hint; a mouse and keyboard, the keys.
     const coarse = useMediaQuery("(pointer: coarse)");
     const live = game.live;
+    // The browser's full screen, where the device has one (not an iPhone's Safari): the page chrome goes and the world fills the display.
+    const canFull = typeof document !== "undefined" && document.fullscreenEnabled === true;
+    const [full, setFull] = useState(typeof document !== "undefined" && document.fullscreenElement !== null);
+    useEffect(() => {
+        const onChange = () => setFull(document.fullscreenElement !== null);
+        document.addEventListener("fullscreenchange", onChange);
+        return () => document.removeEventListener("fullscreenchange", onChange);
+    }, []);
+    const toggleFull = () => {
+        if (document.fullscreenElement) void document.exitFullscreen();
+        else void document.documentElement.requestFullscreen().catch(() => undefined);
+    };
 
     return (
         <Stack spacing={1} sx={{ alignItems: "center", pointerEvents: "none" }}>
@@ -27,17 +44,31 @@ export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onL
                         <ToggleButton value="live" sx={{ fontWeight: 800, px: 1.25, textTransform: "none", "&.Mui-selected": { bgcolor: "error.main", color: "error.contrastText", "&:hover": { bgcolor: "error.dark" } } }}>Live</ToggleButton>
                     </ToggleButtonGroup>
                 )}
+                <Tooltip title={game.run ? "Running (R or Shift to walk)" : "Walking (R or Shift to run)"}>
+                    <ToggleButton size="small" value="run" selected={game.run} onChange={() => setGame({ run: !game.run })} aria-label="Run" aria-pressed={game.run}
+                        sx={{ fontWeight: 800, px: 1.1, textTransform: "none", gap: 0.5, borderRadius: 999 }}>
+                        {game.run ? <DirectionsRunRounded fontSize="small" /> : <DirectionsWalkRounded fontSize="small" />}
+                        <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>{game.run ? "Run" : "Walk"}</Box>
+                    </ToggleButton>
+                </Tooltip>
                 <ToggleButtonGroup size="small" exclusive value={game.view} onChange={(_, next: GameView | null) => next && setGame({ view: next })} aria-label="Camera">
                     <ToggleButton value="follow" sx={{ fontWeight: 800, px: 1.25, textTransform: "none" }}>Follow</ToggleButton>
                     <ToggleButton value="director" sx={{ fontWeight: 800, px: 1.25, textTransform: "none" }}>Director</ToggleButton>
                 </ToggleButtonGroup>
+                {canFull && (
+                    <Tooltip title={full ? "Leave full screen" : "Full screen"}>
+                        <IconButton size="small" onClick={toggleFull} aria-label={full ? "Leave full screen" : "Full screen"}>
+                            {full ? <FullscreenExitRounded fontSize="small" /> : <FullscreenRounded fontSize="small" />}
+                        </IconButton>
+                    </Tooltip>
+                )}
             </Stack>
             {/* How to walk, until the worker has first walked on this device. */}
             {!game.hinted && <Box sx={{ px: 1.5, py: 0.5, borderRadius: 999, bgcolor: glass, boxShadow: 1 }}>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
                     {coarse
                         ? "Tap the ground to walk there, or drag to steer · pinch to zoom"
-                        : "Click the ground to walk there, or W A S D / arrows · Shift to hurry · scroll to zoom"}
+                        : "Click the ground to walk there, or W A S D / arrows · R toggles run, Shift does the opposite · scroll to zoom"}
                 </Typography>
             </Box>}
         </Stack>

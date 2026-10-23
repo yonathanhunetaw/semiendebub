@@ -73,6 +73,8 @@ export interface Station {
     open?: { label: string; url: string };
     /** More pages of the module on the viewer's app (a desk can only do part of what a module does). */
     links?: Array<{ label: string; url: string }>;
+    /** To read rather than do (the staff board, today's calendar): its items are not counted as work waiting. */
+    info?: boolean;
     /** Facts to show at the top: "3 to pick", "12 on the shelf". */
     stats?: Array<{ label: string; value: string | number }>;
     items: StationItem[];
@@ -123,6 +125,11 @@ export function whatIsWrong(action: StationAction, values: Values): string | nul
         if (field.type === "select" && field.options && !field.options.some((o) => o.value === String(raw))) return `Choose one for ${field.label}.`;
     }
     return null;
+}
+
+/** How many items of a station are work waiting (an info station has none). */
+export function waitingCount(station: Station, struck: ReadonlySet<string>): number {
+    return station.info ? 0 : visibleItems(station, struck).length;
 }
 
 /** The items still to show in Practice: an item whose action was rehearsed is struck off for the session. */

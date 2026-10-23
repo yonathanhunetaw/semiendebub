@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Guide;
 
 use App\Models\Auth\User;
+use App\Services\Guide\Stations\BoardStations;
 use App\Services\Guide\Stations\CountStations;
 use App\Services\Guide\Stations\DeliveryStations;
 use App\Services\Guide\Stations\IdeaStations;
@@ -45,6 +46,7 @@ class StationFeed
         ShipmentStations::class,
         IdeaStations::class,
         WorkStations::class,
+        BoardStations::class,
         OverviewStations::class,
     ];
 

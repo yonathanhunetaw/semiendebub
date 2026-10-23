@@ -162,6 +162,7 @@ class OverviewStations
         return $this->station('office', 'Calendar & office', 'desk_office', $items, [
             'blurb' => "Today on the calendar: deliveries, bills, shifts, shipments. The pages that run the office are linked below.",
             'empty' => 'Nothing on the calendar today.',
+            'info' => true,
             'links' => $this->links($pages),
         ]);
     }

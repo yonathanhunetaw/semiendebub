@@ -35,9 +35,7 @@ for (const a of apps) {
         const first = a.desks[0];
         await page.getByRole('button', { name: 'Desks', exact: true }).click();
         await menu.locator('div').filter({ hasText: first }).filter({ has: page.getByRole('button', { name: 'Go' }) }).last().getByRole('button', { name: 'Go' }).click();
-        await page.keyboard.down('Shift');
         await expect(page.locator('[data-testid^="station-"]').first()).toBeVisible({ timeout: 120_000 });
-        await page.keyboard.up('Shift');
         await page.waitForTimeout(800);
         await page.screenshot({ path: `test-results/desks-${a.sub}-desk.png` });
         expect(errors).toEqual([]);
