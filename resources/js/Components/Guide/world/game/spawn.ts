@@ -1,18 +1,22 @@
 import type { GuideApp } from "@/Components/Guide/chapters";
 import type { IdentityKey } from "@/Components/Visual/identities";
 import { DROP, PLACES } from "../places";
+import { worldMarkers } from "../worldModel";
 import type { PlayerPose } from "./gameStore";
 
 /**
  * Where each app's worker starts, and whose colours they wear. A stock
  * keeper starts on the hub platform, a driver at the delivery bay, a seller
- * (and an admin) just outside the shop's front door. Yaw 0 faces south (+z),
- * PI faces north.
+ * (and an admin) just outside the shop's front door; the designed world's
+ * `spawn_player_<app>` wins when there is one. Yaw 0 faces south (+z), PI
+ * faces north.
  */
 
 const at = (key: string): [number, number] => PLACES.find((p) => p.key === key)!.position;
 
 export function spawnFor(app: GuideApp): PlayerPose {
+    const designed = worldMarkers?.spawns.get(`spawn_player_${app}`);
+    if (designed) return { x: designed.position[0], z: designed.position[2], yaw: designed.yaw };
     switch (app) {
         case "stock_keeper": {
             const [x, z] = at("platform");

@@ -4,8 +4,9 @@
  * Two zones (see App\Services\Admin\ActiveStore):
  *   - store: follows the store dropdown at the top of the sidebar;
  *   - global: the catalogue, stores, warehouses, fleet and sessions, shown to
- *     global admins only. The server 403s those routes for a store admin too,
- *     so hiding a link is never the only guard.
+ *     global admins, and to a store admin for each `area` a global admin
+ *     ticked on for them (App\Services\Admin\AdminAreas). The server 403s
+ *     those routes too, so hiding a link is never the only guard.
  *
  * `roles` lists who sees an entry; it defaults to admins. A store manager is let
  * into the admin app for Approvals alone.
@@ -22,6 +23,7 @@ import LocalShipping from "@mui/icons-material/LocalShipping";
 import Payments from "@mui/icons-material/Payments";
 import PendingActions from "@mui/icons-material/PendingActions";
 import People from "@mui/icons-material/People";
+import Public from "@mui/icons-material/Public";
 import PointOfSale from "@mui/icons-material/PointOfSale";
 import ReceiptLong from "@mui/icons-material/ReceiptLong";
 import ShoppingCart from "@mui/icons-material/ShoppingCart";
@@ -42,6 +44,8 @@ export interface AdminNavItem {
     icon: SvgIconComponent;
     /** A Ziggy route name; resolved at render time. */
     route: string;
+    /** Its query, e.g. the Guide's world view. */
+    params?: Record<string, string>;
     scope: AdminNavScope;
     /** Path prefixes that light this entry up. */
     match: string[];
@@ -55,8 +59,10 @@ export interface AdminNavItem {
     badge?: keyof AdminNavCounts;
     /** Who sees it; admins by default. */
     roles?: string[];
-    /** Only a global admin. Implied by scope "global". */
-    requires?: "globalAdmin";
+    /** Only a global admin (implied by scope "global"), or only a store admin. */
+    requires?: "globalAdmin" | "storeAdmin";
+    /** A global entry a store admin sees once this area is ticked on for them (AdminAreas). */
+    area?: string;
     /** Lives on another subdomain: a full page load, not an Inertia visit. */
     external?: boolean;
     newTab?: boolean;
@@ -93,23 +99,30 @@ export const ADMIN_NAV: AdminNavItem[] = [
     { key: "work", label: "Sites & keys", icon: VpnKey, route: "admin.work.sites.index", scope: "store", match: ["/work"] },
     // Products the stores and procurement think we should sell (ProductIdeaService).
     { key: "ideas", label: "Product ideas", icon: Lightbulb, route: "admin.ideas.index", scope: "store", match: ["/ideas", "/price-checks", "/shops"] },
-    { key: "purchase-orders", label: "Purchase Orders", icon: ReceiptLong, route: "admin.purchase_orders.index", scope: "global", match: ["/purchase-orders"] },
+    { key: "purchase-orders", label: "Purchase Orders", icon: ReceiptLong, route: "admin.purchase_orders.index", scope: "global", match: ["/purchase-orders"], area: "purchase_orders" },
     // Freight, customs and port fees procurement recorded, waiting for a second person (ConsignmentService).
-    { key: "import-costs", label: "Import Costs", icon: PendingActions, route: "admin.import_costs.index", scope: "global", match: ["/import-costs"] },
-    { key: "supplier-payments", label: "Supplier Payments", icon: PendingActions, route: "admin.supplier_payments.index", scope: "global", match: ["/supplier-payments"] },
+    { key: "import-costs", label: "Import Costs", icon: PendingActions, route: "admin.import_costs.index", scope: "global", match: ["/import-costs"], area: "import_costs" },
+    { key: "supplier-payments", label: "Supplier Payments", icon: PendingActions, route: "admin.supplier_payments.index", scope: "global", match: ["/supplier-payments"], area: "supplier_payments" },
     // Fuel for staff rides, rent, salaries: a second person confirms each (ExpenseService).
-    { key: "expenses", label: "Expenses", icon: ReceiptLong, route: "admin.expenses.index", scope: "global", match: ["/expenses"] },
+    { key: "expenses", label: "Expenses", icon: ReceiptLong, route: "admin.expenses.index", scope: "global", match: ["/expenses"], area: "expenses" },
     { key: "canvas", label: "White Board", icon: Draw, route: "admin.canvas.index", scope: "store", match: ["/canvas"], external: true, newTab: true },
-    { key: "items", label: "Items", icon: Layers, route: "admin.items.index", scope: "global", match: ["/items"] },
-    { key: "stores", label: "All stores", icon: Store, route: "admin.inventory.stores", scope: "global", match: ["/inventory/stores", "/stores"], excludePattern: /^\/stores\/\d+/ },
-    { key: "warehouses", label: "Warehouses", icon: Warehouse, route: "admin.inventory.warehouse.index", scope: "global", match: ["/inventory/warehouse"] },
-    { key: "fleet", label: "Fleet", icon: AirportShuttle, route: "admin.inventory.fleet.index", scope: "global", match: ["/inventory/fleet"] },
+    // The Live Operations world: a store admin's store; a global admin has the whole business's in the global zone.
+    { key: "world", label: "World", icon: Public, route: "admin.guide", params: { view: "world" }, scope: "store", match: [], requires: "storeAdmin" },
+    { key: "items", label: "Items", icon: Layers, route: "admin.items.index", scope: "global", match: ["/items"], area: "items" },
+    { key: "stores", label: "All stores", icon: Store, route: "admin.inventory.stores", scope: "global", match: ["/inventory/stores", "/stores"], excludePattern: /^\/stores\/\d+/, area: "stores" },
+    { key: "warehouses", label: "Warehouses", icon: Warehouse, route: "admin.inventory.warehouse.index", scope: "global", match: ["/inventory/warehouse"], area: "warehouses" },
+    { key: "fleet", label: "Fleet", icon: AirportShuttle, route: "admin.inventory.fleet.index", scope: "global", match: ["/inventory/fleet"], area: "fleet" },
+    { key: "world-hq", label: "World: every site", icon: Public, route: "admin.guide", params: { view: "world" }, scope: "global", match: [] },
 ];
 
 
-/** May this user see the entry? */
-export function navItemVisible(item: AdminNavItem, roleKey: string, isGlobalAdmin: boolean, activeStoreId: number | "all" = "all"): boolean {
-    if ((item.scope === "global" || item.requires === "globalAdmin") && !isGlobalAdmin) {
+/** May this user see the entry? `areas` are the global-zone parts ticked on for a store admin. */
+export function navItemVisible(item: AdminNavItem, roleKey: string, isGlobalAdmin: boolean, areas: string[] = []): boolean {
+    if (item.requires === "storeAdmin" && isGlobalAdmin) {
+        return false;
+    }
+
+    if ((item.scope === "global" || item.requires === "globalAdmin") && !isGlobalAdmin && !(item.area && areas.includes(item.area))) {
         return false;
     }
 
@@ -142,7 +155,7 @@ export function navItemHref(item: AdminNavItem, activeStoreId: number | "all" = 
             return activeStoreId === "all" ? route("inventory.index") : route(item.route, activeStoreId);
         }
 
-        return route(item.route);
+        return route(item.route, item.params);
     } catch {
         return "#";
     }

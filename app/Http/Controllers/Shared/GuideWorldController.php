@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
  * app's own role gate; a user tied to a store sees only that store's.
  * `?shelf=1` adds the Main Store's 200 shelf bins as they stand now.
  * `?play=1` returns only what the Play mode can pick up now (WorldFeed::play).
+ * `?catalogue=1` returns only the catalogue the hubs show, one box per item (WorldFeed::catalogue).
  */
 class GuideWorldController extends Controller
 {
@@ -25,6 +26,10 @@ class GuideWorldController extends Controller
         if ($request->boolean('play')) {
             // The viewer's app is the first part of the route's name (stock_keeper.guide.world): its routes are the ones the desks call.
             return response()->json(['play' => $feed->play($request->user(), (string) strtok((string) $request->route()?->getName(), '.'))]);
+        }
+
+        if ($request->boolean('catalogue')) {
+            return response()->json(['catalogue' => $feed->catalogue()]);
         }
 
         $payload = $feed->between($request->from(), $request->to(), $request->user());

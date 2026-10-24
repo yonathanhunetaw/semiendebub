@@ -114,7 +114,7 @@ export default function AdminSidebar({
 }) {
     const { url } = usePage();
     const path = url.split("?")[0];
-    const { isGlobalAdmin, roleKey, counts, activeStore } = useAdminScope();
+    const { isGlobalAdmin, roleKey, counts, activeStore, areas } = useAdminScope();
     const listRef = useRef<HTMLDivElement | null>(null);
 
     // Admin pages use two layouts, so moving between them rebuilds the
@@ -129,7 +129,7 @@ export default function AdminSidebar({
         selected?.scrollIntoView({ block: "nearest" });
     }, [path, activeStore.id]);
 
-    const visible = (item: AdminNavItem) => navItemVisible(item, roleKey, isGlobalAdmin, activeStore.id);
+    const visible = (item: AdminNavItem) => navItemVisible(item, roleKey, isGlobalAdmin, areas);
     const storeZone = ADMIN_NAV.filter((item) => item.scope === "store" && visible(item));
     const globalZone = ADMIN_NAV.filter((item) => item.scope === "global" && visible(item));
 
@@ -216,7 +216,7 @@ export default function AdminSidebar({
                 {globalZone.length > 0 && (
                     <>
                         <Divider sx={{ my: 1.5, mx: 2 }} />
-                        <List dense disablePadding subheader={<ListSubheader disableSticky sx={zoneHeaderSx}>Global zone (HQ only)</ListSubheader>}>
+                        <List dense disablePadding subheader={<ListSubheader disableSticky sx={zoneHeaderSx}>{isGlobalAdmin ? "Global zone (HQ only)" : "Also allowed for you"}</ListSubheader>}>
                             {globalZone.map((item) => renderItem(item))}
                         </List>
                     </>

@@ -16,7 +16,7 @@ Route::domain("admin.{$baseDomain}")
     Route::get('/show/{store}', [InventoryController::class, 'show'])->name('inventory.show');
 
     // --- Warehouse Management (global zone) ---
-    Route::prefix('warehouse')->middleware('admin.global')->group(function () {
+    Route::prefix('warehouse')->middleware('admin.global:warehouses')->group(function () {
         Route::get('/', [WarehouseController::class, 'index'])->name('admin.inventory.warehouse.index');
         Route::get('/create', [WarehouseController::class, 'create'])->name('admin.inventory.warehouse.create');
         Route::post('/', [WarehouseController::class, 'store'])->name('admin.inventory.warehouse.store');

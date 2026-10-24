@@ -16,7 +16,7 @@ Route::domain("admin.{$baseDomain}")
          */
 
         // ── Stores CRUD ───────────────────────────────────────────────────────
-        Route::prefix('stores')->name('store.')->middleware('admin.global')->group(function () {
+        Route::prefix('stores')->name('store.')->middleware('admin.global:stores')->group(function () {
             Route::get('/',             [StoreController::class, 'index'])->name('index');
             Route::get('/create',       [StoreController::class, 'create'])->name('create');
             Route::post('/',            [StoreController::class, 'store'])->name('store');

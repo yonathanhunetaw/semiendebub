@@ -104,6 +104,8 @@ class HandleInertiaRequests extends Middleware
             'activeStore' => fn () => $this->adminScope()['activeStore'] ?? null,
             'accessibleStores' => fn () => $this->adminScope()['accessibleStores'] ?? [],
             'isGlobalAdmin' => fn () => $this->adminScope()['isGlobalAdmin'] ?? false,
+            // The global-zone parts this admin may open (every one for a global admin; ticks for a store admin).
+            'adminAreas' => fn () => app(ActiveStore::class)->isResolved() ? app(\App\Services\Admin\AdminAreas::class)->grantedTo($request->user()) : [],
             // Sidebar count badges, for admins only (a store manager on the
             // approvals screen sees none of those links).
             'adminNav' => fn () => app(ActiveStore::class)->isResolved() && $request->user()?->isRole('admin')

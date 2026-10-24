@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { FLOOR_ZONES, PLACES, PLATFORM_BERTH, RACK_SPAN, STORE, STORE_CORNER, doorPosition, palletCentres } from "../places";
+import { FLOOR_ZONES, PLACES, PLATFORM_BERTH, STORE, STORE_CORNER, doorPosition, palletCentres } from "../places";
 
 /**
  * Where Play's jobs happen: floor patches you walk onto. A pickup zone is
@@ -28,26 +28,28 @@ export type ZoneKey = "floor" | "shelf" | "hub_a" | "hub_b" | "truck" | "remote"
  * The desks (stations.ts): each module that is not a walk-and-carry job has one.
  * The counter desk stands by the counter in the shop, the delivery desk on the
  * delivery platform and the arrivals desk on the hub platform; every other desk
- * is in the Office, the room behind the shop beside the Remote Hub: three rows
- * of five, with the staff board on the west wall. Each is a patch with a table.
+ * is in the Admin building at the east end of the street: three across and up
+ * to five deep, with the staff board on the west wall. Each is a patch with a table.
  */
 const OFFICE = PLACES.find((p) => p.key === "office")!;
 const [officeX, officeZ] = OFFICE.position;
 const [officeW, officeD] = OFFICE.size;
 const officeWest = officeX - officeW / 2;
 const officeNorth = officeZ - officeD / 2;
-/** A desk of the office's grid: 3 × 2.2 m, columns 3.5 m apart from 4.4 m inside the west wall (clear of the board), rows 3.3 m apart from 0.8 m inside the back wall. */
+/** A desk of the Admin building's grid: 3 × 2.2 m, columns 3.5 m apart from 4.4 m inside the west wall (clear of the board), rows 3.3 m apart from 0.8 m inside the back wall. */
 const inOffice = (col: number, row: number): [number, number, number, number] => {
     const x = officeWest + 4.4 + col * 3.5;
     const z = officeNorth + 0.8 + row * 3.3;
     return [x, z, x + 3, z + 2.2];
 };
 
-/** Where the office's desks stand: [key, sign, column, row]. */
+/** Where the Admin building's desks stand: [key, sign, column, row]. */
 const OFFICE_SLOTS = [
-    ["desk_purchasing", "Purchasing desk", 0, 0], ["desk_cash", "Cash & payments desk", 1, 0], ["desk_ideas", "Product ideas desk", 2, 0], ["desk_catalogue", "Catalogue desk", 3, 0], ["desk_sites", "Stores & fleet desk", 4, 0],
-    ["desk_orders", "Orders desk", 0, 1], ["desk_receiving", "Receiving desk", 1, 1], ["desk_counts", "Counts & levels desk", 2, 1], ["desk_moves", "Transfers desk", 3, 1], ["desk_shipments", "Shipments desk", 4, 1],
-    ["desk_customers", "Customers desk", 0, 2], ["desk_work", "Staff & keys desk", 1, 2], ["desk_office", "Calendar & office desk", 2, 2],
+    ["desk_purchasing", "Purchasing desk", 0, 0], ["desk_cash", "Cash & payments desk", 1, 0], ["desk_ideas", "Product ideas desk", 2, 0],
+    ["desk_catalogue", "Catalogue desk", 0, 1], ["desk_sites", "Stores & fleet desk", 1, 1], ["desk_orders", "Orders desk", 2, 1],
+    ["desk_receiving", "Receiving desk", 0, 2], ["desk_counts", "Counts & levels desk", 1, 2], ["desk_moves", "Transfers desk", 2, 2],
+    ["desk_shipments", "Shipments desk", 0, 3], ["desk_customers", "Customers desk", 1, 3], ["desk_work", "Staff & keys desk", 2, 3],
+    ["desk_office", "Calendar & office desk", 0, 4],
 ] as const;
 
 export type DeskKey = "desk_arrivals" | "desk_counter" | "desk_bay" | "desk_board" | (typeof OFFICE_SLOTS)[number][0];
@@ -63,13 +65,16 @@ export interface Desk {
     table: boolean;
 }
 
-/** The counter desk: west of the counter, which stands against the east wall at the front. */
+/** The counter desk: behind the counter, which stands across the shop facing the door. */
 const COUNTER = PLACES.find((p) => p.key === "store_counter")!;
 const LOADING = PLACES.find((p) => p.key === "loading_bay")!;
+const PLATFORM = PLACES.find((p) => p.key === "platform")!;
 
 export const DESKS: ReadonlyArray<Desk> = [
-    { key: "desk_arrivals", label: "Arrivals desk", rect: [-63.9, -0.3, -62.4, 2.3], rise: 0.3, table: true },
-    { key: "desk_counter", label: "Counter desk", rect: [COUNTER.position[0] - 2.8, COUNTER.position[1] - 1.2, COUNTER.position[0] - 0.7, COUNTER.position[1] + 1.2], rise: 0, table: true },
+    // On the hub platform's west half, clear of the freight car at its east edge.
+    { key: "desk_arrivals", label: "Arrivals desk", rect: [PLATFORM.position[0] - 1.9, PLATFORM.position[1] - 1.3, PLATFORM.position[0] - 0.4, PLATFORM.position[1] + 1.3], rise: 0.3, table: true },
+    // Behind the counter (it runs across the shop, facing the door): the seller stands at its back, the till table behind them.
+    { key: "desk_counter", label: "Counter desk", rect: [COUNTER.position[0] - 1.2, COUNTER.position[1] - 3, COUNTER.position[0] + 1.2, COUNTER.position[1] - 0.6], rise: 0, table: true },
     { key: "desk_bay", label: "Delivery desk", rect: [LOADING.position[0] - 1.5, LOADING.position[1] - 1.4, LOADING.position[0] + 1.5, LOADING.position[1] + 0.8], rise: 0.3, table: true },
     { key: "desk_board", label: "Staff board", rect: [officeWest + 0.6, officeZ - 2, officeWest + 3.2, officeZ + 2], rise: 0, table: false },
     ...OFFICE_SLOTS.map(([key, label, col, row]): Desk => ({ key, label, rect: inOffice(col, row), rise: 0, table: true })),
@@ -81,7 +86,7 @@ export const isDesk = (key: ZoneKey | null): key is DeskKey => key !== null && D
  * platform's east edge, at the berth's z; the car runs east from there
  * (FreightPacker), as long as its hold needs.
  */
-export const CAR = { rearX: -59.8, z: PLATFORM_BERTH[1], bed: 0.6 };
+export const CAR = { rearX: PLATFORM.position[0] + PLATFORM.size[0] / 2 + 0.2, z: PLATFORM_BERTH[1], bed: 0.6 };
 
 /** A patch just inside a hub's door, `depth` m deep and `span` m wide, and the point behind it where its stock stands. */
 function insideDoor(key: "main_hub_a" | "main_hub_b" | "remote_hub", depth: number, span: number): { rect: [number, number, number, number]; point: [number, number, number] } {
@@ -150,9 +155,9 @@ export const ZONES: Zone[] = [
         key: "shelf",
         kind: "drop",
         label: "Store Shelf · put up",
-        // In front of the back racks' middle, and at the front end of the west run (column a), whose run is RACK_SPAN long and centred on its wall.
-        rects: [[cx + 0.9, north + 0.5, cx + 2.9, north + 1.6], [STORE_CORNER.nw[0] + 0.5, cz + RACK_SPAN / 2 - 0.15, STORE_CORNER.nw[0] + 2.4, cz + RACK_SPAN / 2 + 0.45]],
-        point: [21.9, 1.6, north + 0.25],
+        // In front of the back racks' middle, and by the front end of the west run (column a), clear of the pallets.
+        rects: [[cx + 0.9, north + 0.5, cx + 2.9, north + 1.6], [STORE_CORNER.nw[0] + 0.5, STORE_CORNER.sw[1] - 3.2, STORE_CORNER.nw[0] + 2.4, STORE_CORNER.sw[1] - 2]],
+        point: [cx + 1.9, 1.6, north + 0.25],
     },
     { key: "hub_a", kind: "pickup", label: "Main Hub A · pick", rects: [HUB_A.rect], point: HUB_A.point },
     { key: "remote", kind: "pickup", label: "Remote Hub · take out", rects: [REMOTE.rect], point: REMOTE.point },
@@ -178,17 +183,27 @@ export function zoneAt(x: number, z: number): Zone | null {
 
 /** Where to walk to reach a zone: the middle of its first patch. */
 export function zoneEntrance(key: ZoneKey): [number, number] {
-    const [x0, z0, x1, z1] = ZONES.find((z) => z.key === key)!.rects[0];
+    const zone = ZONES.find((z) => z.key === key)!;
+    const [x0, z0, x1, z1] = zone.rects[0];
+    // A desk is walked to at the front of its patch, 2 m from the table, so its screen can be read; the board, 3 m from its wall.
+    if (zone.desk && zone.table !== false) return [(x0 + x1) / 2, z1 - 0.3];
+    if (zone.key === "desk_board") return [x1 - 0.3, (z0 + z1) / 2];
     return [(x0 + x1) / 2, (z0 + z1) / 2];
 }
+
+/** How far (m) from the camera a zone's or a desk's sign still shows. */
+const SIGN_RANGE = 26;
 
 export interface ZoneMarks {
     /** Which zones are worth showing now (a pickup with nothing to take, or a drop with nothing to put, stays hidden). */
     show: (keys: ZoneKey[]) => void;
     /** Mark the zone the worker stands in. */
     setActive: (key: ZoneKey | null) => void;
-    /** `at`: where the worker stands; a desk's sign shows only when they are near it and not on it (its card names it). */
-    update: (time: number, at?: { x: number; z: number } | null) => void;
+    /**
+     * `at`: where the worker stands; a desk's sign shows only when they are near it and not on it (its card names it).
+     * `eye`: where the camera is; every sign hides beyond SIGN_RANGE of it, so a zoomed-out view is not a wall of names.
+     */
+    update: (time: number, at?: { x: number; z: number } | null, eye?: THREE.Vector3) => void;
     dispose: () => void;
 }
 
@@ -233,7 +248,7 @@ export function drawZones(scene: THREE.Scene, tones: { pickup: THREE.Color; drop
         group.add(label);
         group.visible = false;
         scene.add(group);
-        return { zone, group, material, sign, active: false };
+        return { zone, group, material, sign, label, active: false };
     });
 
     return {
@@ -242,14 +257,16 @@ export function drawZones(scene: THREE.Scene, tones: { pickup: THREE.Color; drop
             m.active = m.zone.key === key;
             m.sign.classList.toggle("is-active", m.active);
         }),
-        update: (time, at) => {
+        update: (time, at, eye) => {
             for (const m of marks) {
                 if (!m.group.visible) continue;
-                if (m.zone.desk && at) {
-                    const [x0, z0, x1, z1] = m.zone.rects[0];
-                    const near = Math.hypot(at.x - (x0 + x1) / 2, at.z - (z0 + z1) / 2) <= 9;
-                    m.sign.style.display = near && !m.active ? "" : "none";
-                }
+                const [x0, z0, x1, z1] = m.zone.rects[0];
+                const mx = (x0 + x1) / 2;
+                const mz = (z0 + z1) / 2;
+                const inView = !eye || Math.hypot(eye.x - mx, eye.y - 2.4, eye.z - mz) <= SIGN_RANGE;
+                const nearWorker = !m.zone.desk || !at || (Math.hypot(at.x - mx, at.z - mz) <= 9 && !m.active);
+                // The object's visibility, not the element's style: the label renderer rewrites the style every frame.
+                m.label.visible = inView && nearWorker;
                 const base = m.active ? 0.55 : 0.3;
                 m.material.opacity = reducedMotion ? base : base + 0.15 * Math.sin(time * 3);
             }

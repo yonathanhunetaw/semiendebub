@@ -135,7 +135,8 @@ class ExpenseService
 
     public static function mayConfirm(?User $user): bool
     {
-        return $user !== null && ($user->isRole('finance') || ($user->isRole('admin') && $user->store_id === null) || $user->isRole('dev'));
+        // A global admin, or a store admin with Expenses ticked on (AdminAreas).
+        return $user !== null && ($user->isRole('finance') || app(\App\Services\Admin\AdminAreas::class)->allows($user, 'expenses') || $user->isRole('dev'));
     }
 
     /**

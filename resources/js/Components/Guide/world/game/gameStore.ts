@@ -4,6 +4,7 @@ import type { RunsState } from "./handoff";
 import type { LegsState } from "./legs";
 import type { StackBox } from "./ItemStacker";
 import type { Station } from "./stations";
+import type { StoreBoardData } from "./StoreBoard";
 import type { Hold, Placed } from "./packer";
 import type { PracticeState } from "./practice";
 import type { RelayState } from "./relay";
@@ -19,8 +20,8 @@ import type { ZoneKey } from "./zones";
  */
 
 export type GameMode = "watch" | "play";
-/** Follow: the camera trails the worker. Director: the orbit camera, the worker stays put. */
-export type GameView = "follow" | "director";
+/** Follow: the camera trails the worker. First person: the worker's eyes. Director: the orbit camera, the worker stays put. */
+export type GameView = "follow" | "first" | "director";
 
 export interface GameState {
     mode: GameMode;
@@ -80,7 +81,11 @@ const listeners = new Set<() => void>();
 /** Where the worker stands; null until Play first places them. */
 export const player: { pose: PlayerPose | null } = { pose: null };
 /** What the scene shows that React decided, so a rebuilt scene (after a colour change) puts it back: the boxes on the worker's back, which zones are lit, the freight car (null: none), and whether the worker wears the courier's colour. */
-export const kept: { boxes: StackBox[]; zones: ZoneKey[]; car: CarView | null; courier: boolean; board: Station | null } = { boxes: [], zones: [], car: null, courier: false, board: null };
+export const kept: {
+    boxes: StackBox[]; zones: ZoneKey[]; car: CarView | null; courier: boolean; board: Station | null;
+    /** What the desks' screens and the shop's notice board show, so a rebuilt scene paints them again. */
+    stations: Station[] | null; struck: ReadonlySet<string>; storeBoard: StoreBoardData | null;
+} = { boxes: [], zones: [], car: null, courier: false, board: null, stations: null, struck: new Set(), storeBoard: null };
 
 /** What the scene draws of the freight car: its hold, its sign, and the boxes packed in it. */
 export interface CarView {

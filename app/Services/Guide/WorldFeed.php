@@ -737,6 +737,48 @@ class WorldFeed
             ->all();
     }
 
+    /** Packaging tiers (ItemVariant::packagingTier), biggest first: an item's top packaging is the first it has. */
+    private const TIER_ORDER = ['cartoon', 'box', 'bag', 'bundle', 'doz', 'packet', 'piece'];
+
+    /**
+     * The catalogue as the hubs show it: one row per item, for the variant in
+     * its biggest packaging (a carton before a box before a piece), with that
+     * packaging's pieces and cbm so the world can size the box. Items with no
+     * variant are left out. Sorted by name.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function catalogue(): array
+    {
+        $variants = ItemVariant::query()
+            ->with(['item:id,product_name', 'itemPackagingType:id,name', 'packagingQuantities'])
+            ->whereHas('item')
+            ->get(['id', 'item_id', 'item_packaging_type_id']);
+
+        $rank = fn (ItemVariant $v): int => ($i = array_search($v->packagingTier(), self::TIER_ORDER, true)) === false ? count(self::TIER_ORDER) : $i;
+
+        return $variants
+            ->groupBy('item_id')
+            ->map(function (Collection $group) use ($rank): array {
+                /** @var ItemVariant $top */
+                $top = $group->sortBy(fn (ItemVariant $v): array => [$rank($v), $v->id])->first();
+                $pack = $top->packagingQuantities->firstWhere('id', $top->item_packaging_type_id);
+
+                return [
+                    'item_id' => (int) $top->item_id,
+                    'name' => (string) $top->item->product_name,
+                    'variant_id' => (int) $top->id,
+                    'packaging' => $top->itemPackagingType?->name,
+                    'tier' => $top->packagingTier(),
+                    'pieces' => $pack ? (int) $pack->pivot->quantity : null,
+                    'cbm' => $pack && $pack->pivot->cbm !== null ? (float) $pack->pivot->cbm : null,
+                ];
+            })
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
     /**
      * The Main Store's shelf as it stands now, bin by bin in layout order:
      * the n-th bin is tier ⌈n/50⌉, coordinate A–E across × 1–10 down, as

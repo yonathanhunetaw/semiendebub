@@ -53,6 +53,7 @@ export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onL
                 </Tooltip>
                 <ToggleButtonGroup size="small" exclusive value={game.view} onChange={(_, next: GameView | null) => next && setGame({ view: next })} aria-label="Camera">
                     <ToggleButton value="follow" sx={{ fontWeight: 800, px: 1.25, textTransform: "none" }}>Follow</ToggleButton>
+                    <ToggleButton value="first" sx={{ fontWeight: 800, px: 1.25, textTransform: "none" }}>First person</ToggleButton>
                     <ToggleButton value="director" sx={{ fontWeight: 800, px: 1.25, textTransform: "none" }}>Director</ToggleButton>
                 </ToggleButtonGroup>
                 {canFull && (
@@ -67,8 +68,8 @@ export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onL
             {!game.hinted && <Box sx={{ px: 1.5, py: 0.5, borderRadius: 999, bgcolor: glass, boxShadow: 1 }}>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
                     {coarse
-                        ? "Tap the ground to walk there, or drag to steer · pinch to zoom"
-                        : "Click the ground to walk there, or W A S D / arrows · R toggles run, Shift does the opposite · scroll to zoom"}
+                        ? "Tap the ground to walk there · drag on the left to steer, on the right to look · pinch to zoom"
+                        : "Click the ground to walk there, or W A S D · drag to look round · scroll in to see through their eyes (V) and zoom to read · R run"}
                 </Typography>
             </Box>}
         </Stack>

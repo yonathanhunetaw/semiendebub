@@ -36,6 +36,8 @@ export function useAdminScope() {
         canSwitch: isGlobalAdmin || accessibleStores.length > 1,
         roleKey: props.auth?.user?.role_key ?? "",
         counts: props.adminNav?.counts ?? null,
+        /** The global-zone parts this admin may open (AdminAreas). */
+        areas: props.adminAreas ?? [],
         setStore,
     };
 }

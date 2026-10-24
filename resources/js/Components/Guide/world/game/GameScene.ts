@@ -1,7 +1,9 @@
 import * as THREE from "three";
 import { createFreightCar } from "./FreightPacker";
 import { createStacker, type StackBox } from "./ItemStacker";
+import { createDeskScreens } from "./DeskScreens";
 import { createOfficeBoard } from "./OfficeBoard";
+import { createStoreBoard, type StoreBoardData } from "./StoreBoard";
 import type { Station } from "./stations";
 import { createPlayer, type PlayerOptions } from "./PlayerController";
 import { getGame, kept, player as pose, setGame, type CarView, type GameView } from "./gameStore";
@@ -30,6 +32,8 @@ export interface GameScene {
     update: (dt: number) => void;
     setView: (view: GameView) => void;
     ownsCamera: () => boolean;
+    /** Looking through the worker's eyes (the shop's walls then stand solid). */
+    isFirstPerson: () => boolean;
     walkTo: (x: number, z: number) => void;
     /** Which zones to show (the HUD knows whether there is anything to pick up or put up). */
     showZones: (keys: ZoneKey[]) => void;
@@ -43,6 +47,10 @@ export interface GameScene {
     setCourier: (on: boolean) => void;
     /** What the office's staff board shows (the "board" station); null while it is being read. */
     setBoard: (station: Station | null) => void;
+    /** What the tables' screens say (every desk's stations), and which items a Practice rehearsal struck off. */
+    setStations: (stations: Station[] | null, struck: ReadonlySet<string>) => void;
+    /** What the shop's notice board says. */
+    setStoreBoard: (data: StoreBoardData | null) => void;
     dispose: () => void;
 }
 
@@ -56,6 +64,10 @@ export function createGameScene(options: GameSceneOptions): GameScene {
     const car = createFreightCar(scene, options.carTones, reducedMotion);
     const board = createOfficeBoard(scene);
     board.set(kept.board);
+    const screens = createDeskScreens(scene);
+    screens.set(kept.stations, kept.struck);
+    const storeBoard = createStoreBoard(scene);
+    storeBoard.set(kept.storeBoard);
     let carHold: CarView["hold"] | null = null;
     const setCar = (view: CarView | null, fresh: Placed[] = []) => {
         kept.car = view;
@@ -88,7 +100,7 @@ export function createGameScene(options: GameSceneOptions): GameScene {
         const now = performance.now();
         stacker.update(now);
         car.update(now);
-        zones.update((now - startedAt) / 1000, pose.pose);
+        zones.update((now - startedAt) / 1000, pose.pose, options.camera.position);
 
         if (pose.pose && !getGame().hinted && Math.hypot(pose.pose.x - start.x, pose.pose.z - start.z) > 2) setGame({ hinted: true });
 
@@ -107,6 +119,7 @@ export function createGameScene(options: GameSceneOptions): GameScene {
         update,
         setView: worker.setView,
         ownsCamera: worker.ownsCamera,
+        isFirstPerson: worker.isFirstPerson,
         walkTo: worker.walkTo,
         showZones: (keys) => {
             kept.zones = keys;
@@ -122,6 +135,15 @@ export function createGameScene(options: GameSceneOptions): GameScene {
             kept.board = station;
             board.set(station);
         },
+        setStations: (stations, struck) => {
+            kept.stations = stations;
+            kept.struck = struck;
+            screens.set(stations, struck);
+        },
+        setStoreBoard: (data) => {
+            kept.storeBoard = data;
+            storeBoard.set(data);
+        },
         unloadAt: (zone) => {
             kept.boxes = [];
             return stacker.unload(pointOf(zone));
@@ -130,6 +152,8 @@ export function createGameScene(options: GameSceneOptions): GameScene {
             stacker.dispose();
             car.dispose();
             board.dispose();
+            screens.dispose();
+            storeBoard.dispose();
             zones.dispose();
             worker.dispose();
             options.onZone(null);

@@ -12,8 +12,8 @@ import { STORE } from "./places";
  *   right wall  i at the back to k at the front
  *   front wall  l at the right to o at the left, over the door
  *
- * The right and front walls are suspended from the ceiling: three rows
- * hanging in the band above head height (the front wall's above the door).
+ * Every run hangs, wall to wall: two rows' height of store floor stays under it
+ * (UNDER_SHELF), where cartons can stand; the front wall's starts above the door.
  *
  * A physical spot is its column and row ("f6"). A spot of the seller's shelf
  * (the A–E × 1–10 grid) is placed on one of these: a spot can carry up to
@@ -32,8 +32,8 @@ export interface RackRun {
 }
 
 export const RACKS: RackRun[] = [
-    { wall: "west", label: "Left wall", columns: ["a", "b", "c"], rows: 6, suspended: false },
-    { wall: "north", label: "Back wall", columns: ["d", "e", "f", "g", "h"], rows: 6, suspended: false },
+    { wall: "west", label: "Left wall", columns: ["a", "b", "c"], rows: 6, suspended: true },
+    { wall: "north", label: "Back wall", columns: ["d", "e", "f", "g", "h"], rows: 6, suspended: true },
     { wall: "east", label: "Right wall", columns: ["i", "j", "k"], rows: 3, suspended: true },
     { wall: "south", label: "Front wall, over the door", columns: ["l", "m", "n", "o"], rows: 3, suspended: true },
 ];
@@ -41,21 +41,22 @@ export const RACKS: RackRun[] = [
 /** How many seller-shelf spots one physical spot can carry (f6a to f6d). */
 export const SPOT_CAPACITY = 4;
 
-/** Height of one row of a suspended run, in metres. */
-export const SUSPENDED_ROW = 0.45;
+/** Height of one row, in metres. */
+export const SHELF_ROW = 0.6;
 
-/** The bottom of a standing run: a hand above the floor. */
-const STANDING_BASE = 0.1;
+/** The store floor left under a run: two rows' height. */
+export const UNDER_SHELF = 2 * SHELF_ROW;
+
+/** Where a run's bottom is: two rows up, or over the door for the front wall. */
+export function rackBottom(run: RackRun): number {
+    return run.wall === "south" ? STORE.door.height + 0.2 : UNDER_SHELF;
+}
 
 /** A run's face: how tall it is, where its middle is, and how tall each row is. */
 export function rackFace(run: RackRun): { height: number; centerY: number; rowHeight: number } {
-    const height = run.suspended ? run.rows * SUSPENDED_ROW : STORE.wall - STANDING_BASE;
+    const height = run.rows * SHELF_ROW;
 
-    return {
-        height,
-        centerY: run.suspended ? STORE.wall - height / 2 : STANDING_BASE + height / 2,
-        rowHeight: height / run.rows,
-    };
+    return { height, centerY: rackBottom(run) + height / 2, rowHeight: SHELF_ROW };
 }
 
 /** The spot under a point of a run's face: u runs left to right and v bottom to top, as three.js gives them. */

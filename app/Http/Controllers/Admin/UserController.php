@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Models\Auth\User;
 use App\Services\Admin\ActiveStore;
+use App\Services\Admin\AdminAreas;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -15,13 +16,16 @@ use Inertia\Inertia;
  * A global admin sees every user (or the active store's) and may give any role
  * and any store. A store admin sees and manages only their stores' users, can
  * never assign another store, and cannot hand out the admin or dev roles.
+ *
+ * A store admin (role admin with a store) may also be given parts of the
+ * global zone, one tick each (AdminAreas); only a global admin sets them.
  */
 class UserController extends Controller
 {
     /** Roles only a global admin may give. */
     private const GLOBAL_ONLY_ROLES = ['admin', 'dev'];
 
-    public function __construct(private readonly ActiveStore $activeStore)
+    public function __construct(private readonly ActiveStore $activeStore, private readonly AdminAreas $areas)
     {
     }
 
@@ -63,6 +67,8 @@ class UserController extends Controller
             'store_id' => 'nullable|integer|exists:stores,id',
             'password' => 'required|string|min:8|confirmed',
             'is_driver' => 'nullable|boolean',
+            'areas' => 'nullable|array',
+            'areas.*' => ['string', \Illuminate\Validation\Rule::in(array_keys(AdminAreas::AREAS))],
         ]);
 
         // Only a courier can be a driver (the one who may carry freight).
@@ -71,8 +77,11 @@ class UserController extends Controller
         $validatedData['created_by'] = auth()->id();
         $validatedData['store_id'] = $this->storeFor($validatedData['store_id'] ?? null);
 
+        $areas = $validatedData['areas'] ?? [];
+        unset($validatedData['areas']);
         $user = User::create($validatedData);
         $user->syncRoles([$validatedData['role']]);
+        $this->syncAreas($user, $areas);
 
         return redirect()->route('admin.users.index')->with('success', 'User created successfully.');
     }
@@ -103,6 +112,8 @@ class UserController extends Controller
             'user' => $user->only(['id', 'first_name', 'last_name', 'email', 'phone_number', 'store_id']) + [
                 'role' => $user->roleKey(),
                 'is_driver' => (bool) $user->is_driver,
+                // Only a store admin has ticks; a global admin has every area anyway.
+                'areas' => $user->store_id !== null ? $this->areas->grantedTo($user) : [],
             ],
         ]);
     }
@@ -125,6 +136,8 @@ class UserController extends Controller
             'role' => ['required', 'string', \Illuminate\Validation\Rule::in($this->roleNames())],
             'store_id' => 'nullable|integer|exists:stores,id',
             'is_driver' => 'nullable|boolean',
+            'areas' => 'nullable|array',
+            'areas.*' => ['string', \Illuminate\Validation\Rule::in(array_keys(AdminAreas::AREAS))],
         ]);
 
         $validatedData['is_driver'] = $validatedData['role'] === 'delivery' && (bool) ($validatedData['is_driver'] ?? false);
@@ -137,8 +150,11 @@ class UserController extends Controller
 
         $validatedData['store_id'] = $this->storeFor($validatedData['store_id'] ?? null);
 
+        $areas = $validatedData['areas'] ?? [];
+        unset($validatedData['areas']);
         $user->update($validatedData);
         $user->syncRoles([$validatedData['role']]);
+        $this->syncAreas($user, $areas);
 
         return redirect()->route('admin.users.index')->with('success', 'User updated successfully.');
     }
@@ -165,7 +181,19 @@ class UserController extends Controller
             // is exactly that); a store admin's users always have one.
             'can_assign_any_store' => $this->activeStore->isGlobal(),
             'default_store_id' => $this->activeStore->id(),
+            // The global-zone parts a store admin may be given; only a global admin sees and sets them.
+            'admin_areas' => $this->activeStore->isGlobal()
+                ? collect(AdminAreas::AREAS)->map(fn (string $label, string $key): array => ['key' => $key, 'label' => $label])->values()
+                : [],
         ];
+    }
+
+    /** A global admin's ticks for a store admin; anyone else's request leaves them as they are. */
+    private function syncAreas(User $user, array $areas): void
+    {
+        if ($this->activeStore->isGlobal()) {
+            $this->areas->sync($user->fresh(), $areas);
+        }
     }
 
     /** The store a user is saved against; a store admin's pick is never trusted. */

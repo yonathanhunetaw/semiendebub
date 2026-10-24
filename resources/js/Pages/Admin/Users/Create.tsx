@@ -1,5 +1,6 @@
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm, Link } from "@inertiajs/react";
+import AdminAreaTicks, { type AdminAreaOption } from "@/Components/Admin/AdminAreaTicks";
 import Grid from '@mui/material/Grid';
 import {
     Box, Button, Paper, Stack, TextField, Typography, MenuItem, Checkbox, FormControlLabel
@@ -15,9 +16,11 @@ interface Props {
     can_assign_any_store?: boolean;
     /** The active store, preselected for a new user. */
     default_store_id?: number | null;
+    /** The global-zone parts a store admin may be given (global admins only). */
+    admin_areas?: AdminAreaOption[];
 }
 
-export default function CreateUser({ roles = [], stores = [], can_assign_any_store = true, default_store_id = null }: Props) {
+export default function CreateUser({ roles = [], stores = [], can_assign_any_store = true, default_store_id = null, admin_areas = [] }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         first_name: '',
         last_name: '',
@@ -28,6 +31,7 @@ export default function CreateUser({ roles = [], stores = [], can_assign_any_sto
         password: '',
         password_confirmation: '',
         is_driver: false,
+        areas: [] as string[],
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -109,6 +113,11 @@ export default function CreateUser({ roles = [], stores = [], can_assign_any_sto
                                     control={<Checkbox checked={data.is_driver} onChange={e => setData('is_driver', e.target.checked)} />}
                                     label="Driver: may carry freight (hub → store shipments)"
                                 />
+                            </Grid>
+                        )}
+                        {data.role === 'admin' && data.store_id !== '' && admin_areas.length > 0 && (
+                            <Grid size={{ xs: 12 }}>
+                                <AdminAreaTicks options={admin_areas} value={data.areas} onChange={(next) => setData('areas', next)} error={errors.areas} />
                             </Grid>
                         )}
                         <Grid size={{ xs: 12 }}>

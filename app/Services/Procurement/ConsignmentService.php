@@ -58,7 +58,8 @@ class ConsignmentService
         return $user !== null
             && $cost->state() === ConsignmentCost::PENDING
             && (int) $cost->recorded_by !== (int) $user->id
-            && ($user->isRole('finance') || ($user->isRole('admin') && $user->store_id === null));
+            // A global admin, or a store admin with Import costs ticked on (AdminAreas).
+            && ($user->isRole('finance') || app(\App\Services\Admin\AdminAreas::class)->allows($user, 'import_costs'));
     }
 
     /*

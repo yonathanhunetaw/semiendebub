@@ -12,6 +12,7 @@ import {
     placeOrder,
     startCart,
 } from '../../lib/flows';
+import { saleOf, stockOf } from '../../lib/inspect';
 import { app, fixture, signIn } from '../../lib/support';
 
 /**
@@ -23,6 +24,9 @@ import { app, fixture, signIn } from '../../lib/support';
  *   the store manager confirms both payments → the seller picks & packs →
  *   the courier collects, starts the run and marks it delivered.
  *
+ * Along the way the ledger is checked too: each stage, the payment parts, the
+ * stock holds, and the units leaving the store's shelf and floor for good.
+ *
  * Runs against the duka_e2e copy prepared by ./deploy/dev.sh e2e.
  */
 
@@ -33,7 +37,20 @@ const customers = {
 
 type Kind = keyof typeof customers;
 
+/** Per fixture variant: what the store holds (shelf and floor) and what couriers carry. */
+const storeUnits = () =>
+    fixture.items.map(({ variant }) => {
+        const stock = stockOf(variant);
+        const at = (id: number) => stock[String(id)] ?? 0;
+
+        return { variant, store: at(fixture.locations.shelf) + at(fixture.locations.floor), transit: at(fixture.locations.transit) };
+    });
+
+/** Every fixture variant held once, still open. */
+const openHolds = fixture.items.map(({ variant }) => expect.objectContaining({ variant, quantity: 1, status: 'open' }));
+
 test('seller → payment → pick & pack → delivery, for an individual and a business customer', async ({ browser }) => {
+    const before = storeUnits();
     const seller = await signIn(browser, 'seller', fixture.seller.email);
     const refs: Record<Kind, string> = { individual: '', business: '' };
 
@@ -65,6 +82,17 @@ test('seller → payment → pick & pack → delivery, for an individual and a b
         });
     }
 
+    await test.step('placed: both wait for payment, each holding one of every item', () => {
+        for (const kind of ['individual', 'business'] as const) {
+            const sale = saleOf(refs[kind]);
+            expect(sale.stage).toBe('awaiting_payment');
+            expect(sale.holds).toEqual(expect.arrayContaining(openHolds));
+            expect(sale.holds).toHaveLength(fixture.items.length);
+        }
+        // A hold keeps the units on the shelf; nothing has moved yet.
+        expect(storeUnits()).toEqual(before);
+    });
+
     await test.step('seller says the individual customer paid into the bank account', async () => {
         await seller.goto(app('seller', `/orders/${refs.individual}/pay`));
         await seller.getByRole('button', { name: 'Customer says paid' }).click();
@@ -85,9 +113,27 @@ test('seller → payment → pick & pack → delivery, for an individual and a b
         await test.step(`store manager confirms the ${kind} payment`, () => confirmPayment(manager, refs[kind]));
     }
 
+    await test.step('both payments are confirmed and nothing is left to pay', () => {
+        for (const kind of ['individual', 'business'] as const) {
+            const sale = saleOf(refs[kind]);
+            expect(sale.stage).toBe('pick_pack');
+            expect(sale.payments.length).toBeGreaterThan(0);
+            expect(sale.payments.every((p) => p.status === 'confirmed')).toBe(true);
+            expect(sale.payments.reduce((sum, p) => sum + p.amount, 0)).toBeCloseTo(sale.total, 2);
+        }
+    });
+
     for (const kind of ['individual', 'business'] as const) {
         await test.step(`the ${kind} order is paid and goes through pick & pack`, () => pickAndPack(seller, refs[kind], 'delivery'));
     }
+
+    await test.step('packed: the holds are picked and the orders wait for the courier', () => {
+        for (const kind of ['individual', 'business'] as const) {
+            const sale = saleOf(refs[kind]);
+            expect(sale.stage).toBe('to_deliver');
+            expect(sale.holds.map((h) => h.status)).toEqual(sale.holds.map(() => 'picked'));
+        }
+    });
 
     const courier = await signIn(browser, 'delivery', fixture.courier.email);
     const delivered = async () => {
@@ -99,6 +145,13 @@ test('seller → payment → pick & pack → delivery, for an individual and a b
     for (const kind of ['individual', 'business'] as const) {
         await test.step(`courier collects and delivers the ${kind} order`, () => deliver(courier, refs[kind]));
     }
+
+    await test.step('delivered: two of every item left the store, none is still with a courier', () => {
+        for (const kind of ['individual', 'business'] as const) {
+            expect(saleOf(refs[kind]).stage).toBe('delivered');
+        }
+        expect(storeUnits()).toEqual(before.map((b) => ({ ...b, store: b.store - 2 })));
+    });
 
     await test.step("the courier's History counts both and finds each by its reference", async () => {
         expect(await delivered()).toBe(deliveredBefore + 2);

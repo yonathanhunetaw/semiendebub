@@ -3,6 +3,7 @@ import { Head, useForm, Link } from "@inertiajs/react";
 import { Box, Button, Paper, Stack, TextField, Typography, MenuItem, Alert, Checkbox, FormControlLabel } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UpdateIcon from '@mui/icons-material/Update';
+import AdminAreaTicks, { type AdminAreaOption } from "@/Components/Admin/AdminAreaTicks";
 import Grid from '@mui/material/Grid';
 
 interface User {
@@ -16,6 +17,8 @@ interface User {
     store_id: number | null;
     /** A courier who may carry freight (hub → store runs). */
     is_driver?: boolean;
+    /** The global-zone parts ticked on for a store admin. */
+    areas?: string[];
 }
 
 interface Props {
@@ -26,9 +29,11 @@ interface Props {
     can_assign_any_store?: boolean;
     /** The active store, preselected for a new user. */
     default_store_id?: number | null;
+    /** The global-zone parts a store admin may be given (global admins only). */
+    admin_areas?: AdminAreaOption[];
 }
 
-export default function EditUser({ user, roles = [], stores = [], can_assign_any_store = true }: Props) {
+export default function EditUser({ user, roles = [], stores = [], can_assign_any_store = true, admin_areas = [] }: Props) {
     const { data, setData, put, processing, errors } = useForm({
         first_name: user.first_name,
         last_name: user.last_name || '',
@@ -39,6 +44,7 @@ export default function EditUser({ user, roles = [], stores = [], can_assign_any
         password: '',
         password_confirmation: '',
         is_driver: Boolean(user.is_driver),
+        areas: user.areas ?? [],
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -110,6 +116,11 @@ export default function EditUser({ user, roles = [], stores = [], can_assign_any
                                     control={<Checkbox checked={data.is_driver} onChange={e => setData('is_driver', e.target.checked)} />}
                                     label="Driver: may carry freight (hub → store shipments)"
                                 />
+                            </Grid>
+                        )}
+                        {data.role === 'admin' && data.store_id !== '' && admin_areas.length > 0 && (
+                            <Grid size={{ xs: 12 }}>
+                                <AdminAreaTicks options={admin_areas} value={data.areas} onChange={(next) => setData('areas', next)} error={errors.areas} />
                             </Grid>
                         )}
                         <Grid size={{ xs: 12, sm: 6 }}>

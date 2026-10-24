@@ -7,6 +7,9 @@ namespace Tests\Feature\Guide;
 use App\Models\Auth\User;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Inventory\StockLocation;
+use App\Models\Item\Item;
+use App\Models\Item\ItemPackagingType;
+use App\Models\Item\ItemVariant;
 use App\Models\Store\Store;
 use App\Services\Inventory\StockLocationTree;
 use Carbon\CarbonImmutable;
@@ -262,6 +265,37 @@ class GuideWorldFeedTest extends TestCase
         $shipment->save();
 
         return $shipment;
+    }
+
+    #[Test]
+    public function the_catalogue_gives_one_box_per_item_in_its_biggest_packaging(): void
+    {
+        $piece = ItemPackagingType::factory()->create(['name' => 'Piece']);
+        $carton = ItemPackagingType::factory()->create(['name' => 'Cartoon']);
+        $box = ItemPackagingType::factory()->create(['name' => 'Box']);
+
+        $cups = Item::factory()->create(['product_name' => 'Cups']);
+        ItemVariant::factory()->create(['item_id' => $cups->id, 'item_packaging_type_id' => $piece->id]);
+        $cupsCarton = ItemVariant::factory()->create(['item_id' => $cups->id, 'item_packaging_type_id' => $carton->id]);
+        $cupsCarton->packagingQuantities()->attach($carton->id, ['quantity' => 48, 'cbm' => 0.064]);
+        ItemVariant::factory()->create(['item_id' => $cups->id, 'item_packaging_type_id' => $box->id]);
+
+        $bowls = Item::factory()->create(['product_name' => 'Bowls']);
+        $bowlsPiece = ItemVariant::factory()->create(['item_id' => $bowls->id, 'item_packaging_type_id' => $piece->id]);
+
+        $this->asRole($this->user('admin', null), 'admin')
+            ->getJson(route('admin.guide.world', ['catalogue' => 1]))
+            ->assertOk()
+            ->assertJsonCount(2, 'catalogue')
+            // By name: Bowls, then Cups.
+            ->assertJsonPath('catalogue.0.variant_id', $bowlsPiece->id)
+            ->assertJsonPath('catalogue.0.tier', 'piece')
+            ->assertJsonPath('catalogue.0.cbm', null)
+            ->assertJsonPath('catalogue.1.name', 'Cups')
+            ->assertJsonPath('catalogue.1.variant_id', $cupsCarton->id)
+            ->assertJsonPath('catalogue.1.tier', 'cartoon')
+            ->assertJsonPath('catalogue.1.pieces', 48)
+            ->assertJsonPath('catalogue.1.cbm', 0.064);
     }
 
     private function user(string $role, ?int $storeId): User

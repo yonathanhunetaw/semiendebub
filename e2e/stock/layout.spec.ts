@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { closeWindows, fixture, signIn } from '../lib/support';
+import { app, closeWindows, fixture, signIn } from '../lib/support';
 import { playIn } from '../lib/world';
 
 /**
@@ -66,4 +66,65 @@ test('the delivery platform and the road', async ({ browser }) => {
     await page.getByRole('button', { name: 'Director', exact: true }).click();
     await zoom(page, 6);
     await page.screenshot({ path: 'test-results/layout-7-platform-wide.png' });
+});
+
+test('the whole site along its street, and each place opened at its door', async ({ browser }) => {
+    test.setTimeout(300_000);
+    const page = await signIn(browser, 'admin', fixture.people.admin.email);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 1400, height: 800 });
+    await page.goto(app('admin', '/guide?view=world'));
+    await expect(page.getByRole('button', { name: 'Play as a worker' })).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(1500);
+    await page.getByRole('button', { name: 'See the whole site' }).click();
+    await page.waitForTimeout(2000);
+    await page.screenshot({ path: 'test-results/site-1-home.png' });
+    // The shop from inside: the racks wall to wall, hanging over the store floor; then the whole shop from above.
+    await page.getByRole('button', { name: "See the shop's racks" }).click();
+    await page.waitForTimeout(1800);
+    await page.screenshot({ path: 'test-results/site-0-racks-back.png' });
+    await page.getByRole('button', { name: 'Whole shop' }).click();
+    await page.waitForTimeout(1800);
+    await page.screenshot({ path: 'test-results/site-0-whole-shop.png' });
+    await page.getByRole('button', { name: 'See the whole site' }).click();
+    await page.waitForTimeout(1800);
+    // Zoomed out, only the places along the street are named: not the shop's shelf, floor or counter.
+    await expect(page.locator('.world-label:not(.is-far)', { hasText: /^Counter$/ })).toHaveCount(0);
+
+    // Opening a place puts the worker at its door, in Play; Escape steps back out.
+    const places = ['Suppliers', 'Storage hub', 'Main Hub A', 'Main Hub B', 'Remote Hub', 'Main Store', 'Office', 'Customer parking', 'Admin', 'Shops'];
+    for (const [n, label] of places.entries()) {
+        await page.locator('.world-label', { hasText: new RegExp(`^${label}$`) }).first().dispatchEvent('click');
+        await expect(page.getByRole('button', { name: 'Back to watching' })).toBeVisible();
+        await page.waitForTimeout(2200);
+        await page.screenshot({ path: `test-results/site-${n + 2}-${label.toLowerCase().replace(/ /g, '-')}.png` });
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('button', { name: 'Play as a worker' })).toBeVisible();
+        await page.waitForTimeout(600);
+    }
+    expect(errors).toEqual([]);
+});
+
+test('on a phone: the whole site fits, and a place opens at its door', async ({ browser }) => {
+    test.setTimeout(200_000);
+    const page = await signIn(browser, 'admin', fixture.people.admin.email);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(app('admin', '/guide?view=world'));
+    await expect(page.getByRole('button', { name: 'Play as a worker' })).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(1500);
+    await page.getByRole('button', { name: 'See the whole site' }).click();
+    await page.waitForTimeout(2000);
+    await page.screenshot({ path: 'test-results/phone-1-home.png' });
+    await page.locator('.world-label', { hasText: /^Remote Hub$/ }).dispatchEvent('click');
+    await expect(page.getByRole('button', { name: 'Back to watching' })).toBeVisible();
+    await page.waitForTimeout(2200);
+    await page.screenshot({ path: 'test-results/phone-2-remote-hub-door.png' });
+    // Director: the camera goes back over the whole site, the street running top to bottom.
+    await page.getByRole('button', { name: 'Director', exact: true }).click();
+    await page.waitForTimeout(1800);
+    await page.screenshot({ path: 'test-results/phone-3-director.png' });
+    expect(errors).toEqual([]);
 });

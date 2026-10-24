@@ -312,6 +312,13 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     // The staff board on the office wall shows the board station.
     const boardStation = feed?.stations.find((s) => s.key === "board") ?? null;
     useEffect(() => scene()?.setBoard(feed ? boardStation : null), [boardStation, feed, scene, theme.palette.mode]);
+    // The tables' screens and the shop's notice board say what the lists say.
+    useEffect(() => scene()?.setStations(feed ? feed.stations : null, desks.struck), [feed, desks.struck, scene, theme.palette.mode]);
+    useEffect(() => scene()?.setStoreBoard(feed ? {
+        toShelve: feed.jobs.map((j) => `${j.display} · ${j.itemName}`),
+        needs: feed.needs.map((n) => `${n.name} · ${n.display}`),
+        toLoad: feed.loads.map((l) => `${l.reference}: ${l.lines.reduce((n, line) => n + line.picked, 0)} / ${l.lines.reduce((n, line) => n + line.quantity, 0)} picked`),
+    } : null), [feed, scene, theme.palette.mode]);
     const goals = [...objectives(feed, session, freight, !freightPlayable, shelfLocked, relayPlayable ? relay : null, failed), ...runGoals.map((g) => ({ ...g, tone: "primary" as const })), ...legGoals.map((g) => ({ ...g, tone: "primary" as const })), ...stationGoals.map((g) => ({ ...g, tone: "primary" as const }))];
     const showGauge = freight !== null && (inHub || zone === "truck" || freightUnits > 0);
     const walkTo = (key: ZoneKey) => {

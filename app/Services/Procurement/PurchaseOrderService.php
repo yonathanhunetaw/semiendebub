@@ -254,7 +254,8 @@ class PurchaseOrderService
             return 'You raised or submitted this order. A second person has to approve it.';
         }
 
-        $globalAdmin = $by->isRole('admin') && $by->store_id === null;
+        // A global admin, or a store admin with Purchase orders ticked on (AdminAreas).
+        $globalAdmin = app(\App\Services\Admin\AdminAreas::class)->allows($by, 'purchase_orders');
 
         if ($globalAdmin) {
             return null;

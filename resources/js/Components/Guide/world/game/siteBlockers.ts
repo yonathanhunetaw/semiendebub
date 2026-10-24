@@ -1,7 +1,9 @@
-import { COMPOUND, HOUSES, HOUSE_SIZE, NEIGHBOUR, PALLET, PLACES, RACK_SPAN, STORE, doorPosition, palletCentres, type Place } from "../places";
-import { RACKS } from "../storeLayout";
+import { COMPOUND, VEHICLE, CONTAINER, CONTAINER_TRUCK, CUSTOMER_BAYS, PALLET, PLACES, STORE, doorPosition, fenceRuns, palletCentres, rackSpan, type Place } from "../places";
+import { RACKS, rackBottom } from "../storeLayout";
 import { blockedAt, boxAt, type Blockers, type Box, type Wall } from "./collision";
 import { makeGrid, type Grid } from "./pathfinding";
+import { catalogueBoxes } from "../catalogue";
+import { worldMarkers } from "../worldModel";
 import { DESKS } from "./zones";
 
 /**
@@ -9,9 +11,11 @@ import { DESKS } from "./zones";
  * numbers the scene is drawn from (places.ts, storeLayout.ts), so what
  * blocks is what you see:
  *
- *   hub walls, with their door gaps      the compound fence, with the gate gap
+ *   hub walls, with their door gaps      the compound fence, with its way in
  *   the store's walls, with the door     the counter, the divider, the pallets
- *   the standing racks (left, back)      the neighbour, the admin tower, the houses
+ *   the standing racks (left, back)
+ *   the customers' parked cars           the suppliers' and the shops' buildings
+ *   the container truck by the Storage hub
  *
  * Racks hanging from the ceiling (right wall, over the door) are above head
  * height, and the platform is a low step: neither blocks.
@@ -77,43 +81,37 @@ function storeBlockers(): Blockers {
     const counter = PLACES.find((p) => p.key === "store_counter");
     if (counter) boxes.push(boxAt(counter.position[0], counter.position[1], counter.size[0], counter.size[1]));
 
-    // Standing racks fill 50 cm along their wall; hanging ones are overhead.
+    // The racks hang wall to wall; under one too low to walk beneath (two rows of store floor), its 50 cm strip blocks.
+    // The front wall's starts above the door, so nothing blocks there.
     for (const run of RACKS) {
-        if (run.suspended) continue;
+        if (rackBottom(run) >= 2) continue;
         const dep = STORE.shelfDepth;
+        const span = rackSpan(run.wall);
         switch (run.wall) {
-            // Each run is the real shop's wall length (RACK_SPAN), centred on its wall.
-            case "west": boxes.push({ minX: west, minZ: cz - RACK_SPAN / 2, maxX: west + dep, maxZ: cz + RACK_SPAN / 2 }); break;
-            case "east": boxes.push({ minX: east - dep, minZ: cz - RACK_SPAN / 2, maxX: east, maxZ: cz + RACK_SPAN / 2 }); break;
-            case "north": boxes.push({ minX: cx - RACK_SPAN / 2, minZ: north, maxX: cx + RACK_SPAN / 2, maxZ: north + dep }); break;
-            case "south": boxes.push({ minX: cx - RACK_SPAN / 2, minZ: south - dep, maxX: cx + RACK_SPAN / 2, maxZ: south }); break;
+            case "west": boxes.push({ minX: west, minZ: cz - span / 2, maxX: west + dep, maxZ: cz + span / 2 }); break;
+            case "east": boxes.push({ minX: east - dep, minZ: cz - span / 2, maxX: east, maxZ: cz + span / 2 }); break;
+            case "north": boxes.push({ minX: cx - span / 2, minZ: north, maxX: cx + span / 2, maxZ: north + dep }); break;
+            case "south": boxes.push({ minX: cx - span / 2, minZ: south - dep, maxX: cx + span / 2, maxZ: south }); break;
         }
     }
     return { boxes, walls };
 }
 
 function fence(): Wall[] {
-    const [gx, gz] = COMPOUND.gate.at;
-    const gateHalf = COMPOUND.gate.width / 2;
     const corners = COMPOUND.corners;
-    const walls: Wall[] = [];
-    for (let i = 0; i < corners.length; i++) {
-        const [ax, az] = corners[i];
+    return corners.flatMap(([ax, az], i) => {
         const [bx, bz] = corners[(i + 1) % corners.length];
-        if (ax === gx && bx === gx) {
-            const [lo, hi] = [Math.min(az, bz), Math.max(az, bz)];
-            walls.push({ ax: gx, az: lo, bx: gx, bz: gz - gateHalf, half: FENCE / 2 });
-            walls.push({ ax: gx, az: gz + gateHalf, bx: gx, bz: hi, half: FENCE / 2 });
-        } else {
-            walls.push({ ax, az, bx, bz, half: FENCE / 2 });
-        }
-    }
-    return walls;
+        return fenceRuns(ax, az, bx, bz).map(([x1, z1, x2, z2]): Wall => ({ ax: x1, az: z1, bx: x2, bz: z2, half: FENCE / 2 }));
+    });
 }
 
 export function siteBlockers(): Blockers {
     const store = storeBlockers();
-    const boxes: Box[] = [...store.boxes, boxAt(NEIGHBOUR.position[0], NEIGHBOUR.position[1], NEIGHBOUR.size[0], NEIGHBOUR.size[1])];
+    const boxes: Box[] = [
+        ...store.boxes,
+        // The truck with its container lies along the street, cab to the east.
+        boxAt(CONTAINER_TRUCK[0] + 1, CONTAINER_TRUCK[1], CONTAINER[0] + 2.5, CONTAINER[1]),
+    ];
     // Each desk's table, at the back of its patch (zones.ts draws it there).
     for (const { rect: [x0, z0, x1] } of DESKS.filter((d) => d.table)) boxes.push(boxAt((x0 + x1) / 2, z0 + 0.45, Math.min(2.3, x1 - x0 - 0.3), 0.8));
     const walls: Wall[] = [...store.walls, ...fence()];
@@ -124,10 +122,16 @@ export function siteBlockers(): Blockers {
         switch (place.shape) {
             case "hub": walls.push(...hubWalls(place)); break;
             case "tower": boxes.push(boxAt(x, z, w, d)); break;
-            case "houses": HOUSES.forEach(([hx, hz]) => boxes.push(boxAt(x + hx, z + hz, HOUSE_SIZE, HOUSE_SIZE))); break;
+            // The cars lie across their stops, along x.
+            case "cars": CUSTOMER_BAYS.forEach(([bx, bz, kind]) => kind && boxes.push(boxAt(x + bx, z + bz, VEHICLE[kind][0], VEHICLE[kind][1]))); break;
+            case "shops": place.blocks?.forEach(([sx, sz, sw, sd]) => boxes.push(boxAt(x + sx, z + sz, sw, sd))); break;
             default: break;
         }
     }
+    // The hubs' boxes, one per item (catalogue.ts), once the catalogue has come.
+    for (const { at, side } of catalogueBoxes) boxes.push(boxAt(at[0], at[1], side, side));
+    // The designed world's own blockers (worldModel.ts), when it has any.
+    for (const { rect } of worldMarkers?.blockers ?? []) if (rect) boxes.push({ minX: rect[0], minZ: rect[1], maxX: rect[2], maxZ: rect[3] });
     return { boxes, walls };
 }
 
@@ -144,7 +148,7 @@ let cached: { key: string; blockers: Blockers; grid: Grid } | null = null;
  * ms, so they are kept until the extras change.
  */
 export function siteMap(bounds: [number, number, number, number], extra: Box[] = []): { blockers: Blockers; grid: Grid } {
-    const key = JSON.stringify(extra);
+    const key = JSON.stringify([extra, worldMarkers?.blockers.length ?? 0, catalogueBoxes.length]);
     if (cached?.key === key) return cached;
     const site = siteBlockers();
     const blockers: Blockers = { boxes: [...site.boxes, ...extra], walls: site.walls };
@@ -154,9 +158,9 @@ export function siteMap(bounds: [number, number, number, number], extra: Box[] =
     return cached;
 }
 
-/** Where doors and the gate are, so they can swing open as the worker comes near: [x, z] of each opening's middle. */
+/** Where the doors are, so they can swing open as the worker comes near: [x, z] of each door's middle. */
 export function openings(): Array<{ key: string; at: [number, number] }> {
-    const list: Array<{ key: string; at: [number, number] }> = [{ key: "gate", at: COMPOUND.gate.at }];
+    const list: Array<{ key: string; at: [number, number] }> = [];
     for (const place of PLACES) {
         const door = place.shape === "hub" ? doorPosition(place) : null;
         if (door) list.push({ key: place.key, at: door.at });

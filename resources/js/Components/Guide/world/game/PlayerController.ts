@@ -3,6 +3,7 @@ import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js
 import { move, pushOut, type Box } from "./collision";
 import { getGame, setGame, type GameView, type PlayerPose } from "./gameStore";
 import { findPath, type Point } from "./pathfinding";
+import { roomAt } from "../places";
 import { WORKER_RADIUS, siteMap } from "./siteBlockers";
 
 /**
@@ -20,10 +21,14 @@ import { WORKER_RADIUS, siteMap } from "./siteBlockers";
  * Every step goes through collision.ts, so walls, racks and the counter stop
  * them and they slide along.
  *
- * Follow: the camera hangs behind and above the worker, at a fixed compass
- * heading (from the south), so "up" is always "up" on screen. Director: the
- * world's orbit camera, free; drags turn it, so there is no stick, but taps
- * and keys still walk the worker, relative to wherever the camera looks.
+ * Follow: the camera hangs behind and above the worker. It starts at a fixed
+ * compass heading (from the south), so "up" is on screen up; drag (a mouse, or
+ * a thumb on the right half of a touch screen) to swing it round the worker and
+ * tilt it. First person: the camera is the worker's eyes (V, the HUD, or scroll
+ * in as far as Follow goes); drag to look about, the wheel (or a pinch) zooms the
+ * lens in to read a table, a rack or a board. Walking is always relative to where
+ * the camera looks. Director: the world's orbit camera, free; drags turn it,
+ * so there is no stick, but taps and keys still walk the worker.
  */
 
 export interface PlayerOptions {
@@ -41,6 +46,8 @@ export interface PlayerOptions {
     bounds: [number, number, number, number];
     reducedMotion: boolean;
     view: GameView;
+    /** Start with the camera right behind the worker at this distance and tilt (radians), e.g. framing a door they face. */
+    framing?: { distance: number; elevation: number };
     /** Called every frame with where the worker stands. */
     onPose: (pose: PlayerPose) => void;
 }
@@ -56,8 +63,10 @@ export interface Player {
     setVest: (color: THREE.Color | null) => void;
     update: (dt: number) => void;
     setView: (view: GameView) => void;
-    /** Does the follow camera own the camera right now (the world must not move it)? */
+    /** Does the follow camera (or the worker's eyes) own the camera right now (the world must not move it)? */
     ownsCamera: () => boolean;
+    /** Are we looking through the worker's eyes? */
+    isFirstPerson: () => boolean;
     dispose: () => void;
 }
 
@@ -65,7 +74,14 @@ const WALK = 3.4;
 const RUN = 7;
 /** Follow camera: distance from the worker and how steeply it looks down. */
 const PITCH = (55 * Math.PI) / 180;
-const DISTANCE = { min: 7, start: 14, max: 32 };
+const DISTANCE = { min: 2.5, start: 14, max: 32 };
+/** First person: how high the eyes are, the lens (degrees) normally and at its closest, and how far up or down one can look. */
+const EYE = 1.62;
+const FOV = { third: 40, first: 72, min: 14 };
+const LOOK_LIMIT = 1.35;
+/** Follow camera's tilt limits (radians above the horizon) and how far one pixel of drag turns the view. */
+const ELEVATION = { min: (12 * Math.PI) / 180, max: (82 * Math.PI) / 180 };
+const LOOK_RATE = 0.0055;
 const LOOK_AHEAD = 1.5;
 /** How quickly things catch up, per second: higher is snappier. */
 const CAMERA_CATCH = 5;
@@ -139,7 +155,14 @@ export function createPlayer(options: PlayerOptions): Player {
     overlay.appendChild(stickBase);
 
     let view = options.view;
-    let distance = DISTANCE.start;
+    let distance = options.framing?.distance ?? DISTANCE.start;
+    /** Where the camera hangs round the worker (follow) or looks (first person), radians; 0 is from the south, looking north. */
+    // Framed: behind the worker, looking the way they face.
+    let camYaw = options.framing ? options.spawn.yaw + Math.PI : 0;
+    /** Follow: how steeply the camera looks down. First person: how far up the eyes look (down is negative). */
+    let elevation = options.framing?.elevation ?? PITCH;
+    let lookPitch = 0;
+    let fov = FOV.first;
     let phase = 0;
     let speed = 0;
     const held = new Set<string>();
@@ -195,6 +218,7 @@ export function createPlayer(options: PlayerOptions): Player {
             stopWalkingTo();
         }
         if (event.key === "Shift") shiftHeld = true;
+        if (event.code === "KeyV" && !event.repeat && !event.metaKey && !event.ctrlKey && view !== "director") setGame({ view: view === "first" ? "follow" : "first" });
         if (event.code === "KeyR" && !event.repeat && !event.metaKey && !event.ctrlKey) setGame({ run: !getGame().run });
     };
     const onKeyUp = (event: KeyboardEvent) => {
@@ -210,16 +234,16 @@ export function createPlayer(options: PlayerOptions): Player {
     };
 
     // Pointers: taps walk, a thumb's drag is the stick, two fingers pinch.
-    const pointers = new Map<number, { x0: number; y0: number; x: number; y: number; t0: number; stick: boolean }>();
+    const pointers = new Map<number, { x0: number; y0: number; x: number; y: number; t0: number; stick: boolean; look: boolean }>();
     let pinchFrom: { gap: number; distance: number } | null = null;
     const gapBetween = () => {
         const [a, b] = [...pointers.values()];
         return Math.hypot(a.x - b.x, a.y - b.y);
     };
     const onPointerDown = (event: PointerEvent) => {
-        pointers.set(event.pointerId, { x0: event.clientX, y0: event.clientY, x: event.clientX, y: event.clientY, t0: performance.now(), stick: false });
-        if (pointers.size === 2 && view === "follow") {
-            pinchFrom = { gap: gapBetween(), distance };
+        pointers.set(event.pointerId, { x0: event.clientX, y0: event.clientY, x: event.clientX, y: event.clientY, t0: performance.now(), stick: false, look: false });
+        if (pointers.size === 2 && view !== "director") {
+            pinchFrom = { gap: gapBetween(), distance: view === "first" ? fov : distance };
             stick = null;
             stickBase.classList.remove("is-on");
         }
@@ -227,21 +251,36 @@ export function createPlayer(options: PlayerOptions): Player {
     const onPointerMove = (event: PointerEvent) => {
         const p = pointers.get(event.pointerId);
         if (!p) return;
+        const lastX = p.x;
+        const lastY = p.y;
         p.x = event.clientX;
         p.y = event.clientY;
         if (pinchFrom && pointers.size === 2) {
-            distance = THREE.MathUtils.clamp(pinchFrom.distance * (pinchFrom.gap / Math.max(1, gapBetween())), DISTANCE.min, DISTANCE.max);
+            // A pinch zooms: the follow camera's distance, or the first person's lens.
+            const ratio = pinchFrom.gap / Math.max(1, gapBetween());
+            if (view === "first") fov = THREE.MathUtils.clamp(pinchFrom.distance * ratio, FOV.min, FOV.first);
+            else distance = THREE.MathUtils.clamp(pinchFrom.distance * ratio, DISTANCE.min, DISTANCE.max);
             return;
         }
-        // Only a touch in Follow becomes the stick; a mouse drag (or Director) is left to the camera.
-        if (event.pointerType !== "touch" || view !== "follow" || pointers.size !== 1) return;
+        if (view === "director" || pointers.size !== 1) return;
+        const box = overlay.getBoundingClientRect();
+        // A mouse drag, or a thumb on the right of the screen, looks about; a thumb on the left is the stick (Follow and first person alike).
+        const looks = event.pointerType !== "touch" || p.x0 - box.left > box.width * 0.5;
+        if (looks) {
+            if (!p.look && Math.hypot(p.x - p.x0, p.y - p.y0) < TAP_SLOP) return;
+            p.look = true;
+            stopWalkingTo();
+            camYaw -= (p.x - lastX) * LOOK_RATE;
+            if (view === "first") lookPitch = THREE.MathUtils.clamp(lookPitch - (p.y - lastY) * LOOK_RATE, -LOOK_LIMIT, LOOK_LIMIT);
+            else elevation = THREE.MathUtils.clamp(elevation + (p.y - lastY) * LOOK_RATE, ELEVATION.min, ELEVATION.max);
+            return;
+        }
         const dx = p.x - p.x0;
         const dy = p.y - p.y0;
         if (!p.stick && Math.hypot(dx, dy) < DRAG) return;
         if (!p.stick) {
             p.stick = true;
             stopWalkingTo();
-            const box = overlay.getBoundingClientRect();
             stickBase.style.transform = `translate(${p.x0 - box.left}px, ${p.y0 - box.top}px)`;
             stickBase.classList.add("is-on");
         }
@@ -260,6 +299,7 @@ export function createPlayer(options: PlayerOptions): Player {
             stickBase.classList.remove("is-on");
             return;
         }
+        if (p.look) return;
         const moved = Math.hypot(p.x - p.x0, p.y - p.y0);
         if (moved >= TAP_SLOP || performance.now() - p.t0 > TAP_MS || pointers.size > 0) return;
         // A tap: walk to where it touched the ground.
@@ -275,9 +315,24 @@ export function createPlayer(options: PlayerOptions): Player {
         stickBase.classList.remove("is-on");
     };
     const onWheel = (event: WheelEvent) => {
-        if (view !== "follow") return;
+        if (view === "director") return;
         event.preventDefault();
-        distance = THREE.MathUtils.clamp(distance * Math.exp(event.deltaY * 0.001), DISTANCE.min, DISTANCE.max);
+        const k = Math.exp(event.deltaY * 0.001);
+        if (view === "first") {
+            // Scroll out past the normal lens and the camera steps back out behind the worker: one smooth zoom, as in Roblox.
+            if (event.deltaY > 0 && fov >= FOV.first - 0.5) {
+                distance = DISTANCE.min;
+                setGame({ view: "follow" });
+            } else fov = THREE.MathUtils.clamp(fov * k, FOV.min, FOV.first);
+            return;
+        }
+        // Scroll in as far as the follow camera goes and the next notch is the worker's own eyes.
+        if (event.deltaY < 0 && distance <= DISTANCE.min + 0.05) {
+            fov = FOV.first;
+            setGame({ view: "first" });
+            return;
+        }
+        distance = THREE.MathUtils.clamp(distance * k, DISTANCE.min, DISTANCE.max);
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -290,15 +345,46 @@ export function createPlayer(options: PlayerOptions): Player {
 
     const placeCamera = (k: number) => {
         wantTarget.set(root.position.x, 1, root.position.z).add(ahead);
-        wantCamera.set(wantTarget.x, wantTarget.y + distance * Math.sin(PITCH), wantTarget.z + distance * Math.cos(PITCH));
+        wantCamera.set(
+            wantTarget.x + distance * Math.sin(camYaw) * Math.cos(elevation),
+            wantTarget.y + distance * Math.sin(elevation),
+            wantTarget.z + distance * Math.cos(camYaw) * Math.cos(elevation),
+        );
+        // Inside a room the camera comes inside too, over the worker, instead of looking at its walls from outside.
+        const room = roomAt(root.position.x, root.position.z);
+        if (room) {
+            wantCamera.x = THREE.MathUtils.clamp(wantCamera.x, room[0] + 0.6, room[2] - 0.6);
+            wantCamera.z = THREE.MathUtils.clamp(wantCamera.z, room[1] + 0.6, room[3] - 0.6);
+        }
         controls.target.lerp(wantTarget, k);
         camera.position.lerp(wantCamera, k);
         camera.lookAt(controls.target);
     };
 
+    /** First person: the camera is the worker's eyes, looking where the drag has turned it. */
+    const placeEyes = () => {
+        camera.position.set(root.position.x, EYE, root.position.z);
+        camera.rotation.set(lookPitch, camYaw, 0, "YXZ");
+        // For the browser tests, in a dev build only.
+        if (import.meta.env.DEV) (window as unknown as { __dukaCamera?: unknown }).__dukaCamera = { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: camYaw, pitch: lookPitch, fov: camera.fov, near: camera.near };
+        // The orbit target follows, so the roofs and walls (which read it) behave as for a camera standing here.
+        controls.target.set(root.position.x - Math.sin(camYaw) * 2, EYE, root.position.z - Math.cos(camYaw) * 2);
+    };
+
     const setView = (next: GameView) => {
+        const was = view;
         view = next;
         controls.enabled = next === "director";
+        // The eyes see from inside: a close lens, and the figure is not in the way.
+        const first = next === "first";
+        root.visible = !first;
+        camera.near = first ? 0.08 : 0.5;
+        camera.fov = first ? fov : FOV.third;
+        camera.updateProjectionMatrix();
+        if (was === "first" && next !== "first") {
+            // Leaving the eyes: the camera hangs behind where they were looking.
+            camera.rotation.set(0, 0, 0);
+        }
         stick = null;
         stickBase.classList.remove("is-on");
         if (next === "director") {
@@ -400,6 +486,16 @@ export function createPlayer(options: PlayerOptions): Player {
         else ahead.multiplyScalar(1 - catchUp(2, dt));
 
         if (view === "follow") placeCamera(reducedMotion ? 1 : catchUp(CAMERA_CATCH, dt));
+        else if (view === "first") {
+            placeEyes();
+            // The zoom of the lens, eased.
+            if (Math.abs(camera.fov - fov) > 0.05) {
+                camera.fov += (fov - camera.fov) * catchUp(14, dt);
+                camera.updateProjectionMatrix();
+            }
+            // The figure faces where the eyes look, so a step forward is a step the way they look.
+            root.rotation.y = camYaw + Math.PI;
+        }
 
         // One object, updated in place: nothing is made per frame.
         pose.x = root.position.x;
@@ -409,6 +505,11 @@ export function createPlayer(options: PlayerOptions): Player {
     };
 
     const dispose = () => {
+        // Leave the camera as the world expects it: the ordinary lens, and the worker (who is going) not hidden.
+        camera.near = 0.5;
+        camera.fov = FOV.third;
+        camera.updateProjectionMatrix();
+        root.visible = true;
         window.removeEventListener("keydown", onKeyDown);
         window.removeEventListener("keyup", onKeyUp);
         window.removeEventListener("blur", onBlur);
@@ -442,5 +543,5 @@ export function createPlayer(options: PlayerOptions): Player {
         bandMaterial.emissive.copy(color ?? HI_VIS).multiplyScalar(0.45);
     };
 
-    return { back, walkTo, setObstacles, setVest, update, setView, ownsCamera: () => view === "follow", dispose };
+    return { back, walkTo, setObstacles, setVest, update, setView, ownsCamera: () => view !== "director", isFirstPerson: () => view === "first", dispose };
 }

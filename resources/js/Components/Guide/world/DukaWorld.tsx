@@ -4,11 +4,13 @@ import { Box, Button, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup,
 import CenterFocusStrongRounded from "@mui/icons-material/CenterFocusStrongRounded";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import SportsEsportsRounded from "@mui/icons-material/SportsEsportsRounded";
+import ViewModuleRounded from "@mui/icons-material/ViewModuleRounded";
 import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
 import { alpha, useTheme, type Theme } from "@mui/material/styles";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { identityFor } from "@/Components/Visual/identities";
 import type { GuideApp } from "@/Components/Guide/chapters";
 import EventLog from "./EventLog";
@@ -19,8 +21,9 @@ import ShipmentCard from "./ShipmentCard";
 import Timeline, { PACE_MS, dayStart, isoDay, type Pace } from "./Timeline";
 import { CARD_KINDS, KIND_COLOR, buildEvents, hhmm, lastBefore, type EventKind, type FeedEvent, type WorldEvent } from "./events";
 import {
-    COMPOUND, DROP, FLOOR_ZONES, HOUSES, HOUSE_SIZE, NEIGHBOUR, PALLET, PARKING, PLACES, PLATFORM_BERTH, RACK_SPAN, REAL_SHOP, ROADS, STORE, STORE_CORNER, palletCentres,
-    doorPosition, hubLayout, placeFor, vanRoute, type Place, type PlaceKey,
+    BAY_SIZE, COMPOUND, fenceRuns, CONTAINER, CONTAINER_TRUCK, CUSTOMER_BAYS, DROP, FLOOR_ZONES, FRONT, PALLET, STREET, VEHICLE, type VehicleKind, SIDE_OUT, PARKING, PLACES, PLATFORM_BERTH, ROADS, STORE, STORE_CORNER, rackSpan,
+    palletCentres,
+    doorPose, doorPosition, hubLayout, placeFor, vanRoute, type Place, type PlaceKey,
 } from "./places";
 import {
     ORDER_PHASE_LABEL, REFILL_PHASE_LABEL, orderStateAt, refillStateAt, stateAt,
@@ -32,6 +35,8 @@ import PlayLayer from "./game/PlayLayer";
 import { player, setGame, useGame, type GameView, type PlayerPose } from "./game/gameStore";
 import { openings } from "./game/siteBlockers";
 import { roleFor, spawnFor } from "./game/spawn";
+import { loadWorldModel } from "./worldModel";
+import { hubBoxes, setCatalogueBoxes, type CatalogueItem, type HubBox } from "./catalogue";
 
 /**
  * Live Operations: the business as a working model, to scale (one unit is one
@@ -66,6 +71,8 @@ interface SceneApi {
     setShipments: (shipments: WorldShipment[]) => void;
     setOrders: (orders: WorldOrder[]) => void;
     setRefills: (refills: WorldRefill[]) => void;
+    /** One box per item in the hubs (catalogue.ts); drawn once. */
+    setCatalogue: (items: CatalogueItem[]) => void;
     setTime: (t: number) => void;
     /** Mark one spot of the racking ("f6"), or none. */
     setSpot: (code: string | null) => void;
@@ -76,7 +83,7 @@ interface SceneApi {
     /** Light up an event; `fly` takes the camera there. */
     highlight: (h: Highlight | null, fly: boolean) => void;
     /** Play: put the worker in the world (game/PlayerController). Leaving puts the camera back. */
-    enterPlay: (app: GuideApp, pose: PlayerPose, view: GameView) => void;
+    enterPlay: (app: GuideApp, pose: PlayerPose, view: GameView, framing?: { distance: number; elevation: number }) => void;
     exitPlay: () => void;
     setView: (view: GameView) => void;
     /** What Play's screen (game/PlayLayer) drives; null outside Play. */
@@ -86,20 +93,44 @@ interface SceneApi {
 type Subject = { kind: EventKind; id: number };
 
 const ALL_KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order"];
-const SITE_CENTER = new THREE.Vector3(-14, 0, 3);
-const SITE_BOUNDS = new THREE.Box3(new THREE.Vector3(-95, 0, -26), new THREE.Vector3(69, 8, 30));
+// The street, from the Suppliers at its west end to Admin at its east end, and the places along its north side.
+// Every place and the compound, and the street's ends: the zigzag is about 160 × 90 m.
+const SITE_BOUNDS = (() => {
+    const box = new THREE.Box3(new THREE.Vector3(STREET[0], 0, -2), new THREE.Vector3(STREET[1], 8, 2));
+    for (const { position: [x, z], size: [w, d] } of PLACES) box.expandByPoint(new THREE.Vector3(x - w / 2, 0, z - d / 2)).expandByPoint(new THREE.Vector3(x + w / 2, 0, z + d / 2));
+    for (const [x, z] of COMPOUND.corners) box.expandByPoint(new THREE.Vector3(x, 0, z));
+    return box;
+})();
+const SITE_CENTER = SITE_BOUNDS.getCenter(new THREE.Vector3()).setY(0);
 
 /** Where things wait on the store floor (west of the counter) and at the delivery bay, [x, z]. */
 // (By the pallets in the north-west corner, where the real shop keeps them.)
 const FLOOR_SPOT: [number, number] = [STORE_CORNER.nw[0] + 2.1, STORE_CORNER.nw[1] + 2.2];
-const BAY_SPOT: [number, number] = [36, 4.5];
-/** A courier's ride from the delivery platform onto the main road and along it to the customers. */
-const ORDER_RIDE: Array<[number, number]> = [BAY_SPOT, [37, -0.6], [44, -2], [52, 2], [58, 4], [60, 6.5]];
-/** A refill carried from the Remote Hub's door, round the east side, in at the store's front door. */
-const REMOTE_CARRY: Array<[number, number]> = [[23, -2.5], [24.5, -0.8], [29, 0.5], [29.5, 8], [29, 18], [26, 21], [STORE_CORNER.sw[0] + STORE.door.at, 20.2], [STORE_CORNER.sw[0] + STORE.door.at, STORE_CORNER.sw[1] - 2]];
+const BAY_SPOT: [number, number] = PLACES.find((p) => p.key === "loading_bay")!.position;
+/** A courier's ride from the delivery platform, out of the shop, across the street and into the parking's lane, to a customer waiting in their vehicle at parking stop `stop`. */
+function orderRide(stop: number): Array<[number, number]> {
+    const parking = PLACES.find((p) => p.key === "customers")!;
+    const [px, pz] = parking.position;
+    const [bx, bz] = CUSTOMER_BAYS[stop];
+    // In the lane, beside the car's nose.
+    const at: [number, number] = [px + Math.sign(bx) * 0.9, pz + bz];
+    // The platform is inside the shop: out through its door first.
+    // Out of the shop's door (north row), across the street, and up the parking's lane (south row) from its north end.
+    return [BAY_SPOT, [STORE_DOOR_X, STORE_CORNER.sw[1] - 1.5], [STORE_DOOR_X, -FRONT + 3], [STORE_DOOR_X + 6, -1.5], [px - 6, 1.5], [px, FRONT - 3], [px, FRONT + 1], [px + Math.sign(bx) * 0.5, pz + bz - 1.5], at];
+}
+/** The stops where a car waits: an order is brought to one of them. */
+const WAITING_STOPS = CUSTOMER_BAYS.flatMap(([, , kind], i) => (kind ? [i] : []));
+/** A refill carried from the Remote Hub's door (south row), across the street, in at the store's front door (north row). */
+const STORE_DOOR_X = STORE_CORNER.sw[0] + STORE.door.at;
+const REMOTE_CARRY: Array<[number, number]> = [DROP.remote_hub!, [DROP.remote_hub![0] - 2, 2], [STORE_DOOR_X + 1, -2], [STORE_DOOR_X, -FRONT + 2], [STORE_DOOR_X, STORE_CORNER.sw[1] - 2]];
 
 /** Story time per ms of animation when moving between events, and its bounds. */
 const TWEEN_MIN_MS = 500;
+/** Play started at a place: 14 m behind the worker, looking down 30°, so the door and the building's front fill the view. */
+const DOOR_FRAMING = { distance: 14, elevation: (30 * Math.PI) / 180 };
+/** How close (m) the camera comes before the smaller places' names show, and the shop's and the compound's own signs. */
+const NEAR_LABEL = 70;
+const FIXED_LABEL = 110;
 const TWEEN_MAX_MS = 2400;
 
 /** `?day=2026-10-14&event=shipment-12-signed`: a link to one moment of one day. */
@@ -142,6 +173,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     // What is open: a bin, a shipment/order/refill, or a place; and the list.
     const [spot, setSpot] = useState<string | null>(null);
     const [wallView, setWallView] = useState<RackWall | null>(null);
+    /** The racks bar is open (the Racks button): it stays while moving between walls and the whole shop. */
+    const [racksOpen, setRacksOpen] = useState(false);
     const [focused, setFocused] = useState<Subject | null>(null);
     const [logOpen, setLogOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 900);
 
@@ -177,7 +210,19 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
             setFocused(null);
             setSpot(null);
             setWallView(null);
-            setSelected(key);
+            if (key === null) {
+                setSelected(null);
+                return;
+            }
+            // Opening a place puts the worker at its door, the camera behind them looking at it.
+            const pose = doorPose(key);
+            if (playRef3d.current) {
+                apiRef.current?.game()?.walkTo(pose.x, pose.z);
+                return;
+            }
+            player.pose = pose;
+            framingRef.current = DOOR_FRAMING;
+            setGame({ mode: "play", view: "follow" });
         }, (code) => {
             setFocused(null);
             setSelected(null);
@@ -206,6 +251,20 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     useEffect(() => apiRef.current?.setShipments(shipments), [shipments, theme.palette.mode]);
     useEffect(() => apiRef.current?.setOrders(orders), [orders, theme.palette.mode]);
     useEffect(() => apiRef.current?.setRefills(refills), [refills, theme.palette.mode]);
+
+    // The catalogue the hubs hold: one box per item, fetched once (it changes only as items are added).
+    const [catalogue, setCatalogue] = useState<CatalogueItem[]>([]);
+    useEffect(() => {
+        let gone = false;
+        fetch(route(`${app}.guide.world`, { catalogue: 1 }), { headers: { Accept: "application/json" }, credentials: "same-origin" })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+            .then((data: { catalogue: CatalogueItem[] }) => !gone && setCatalogue(data.catalogue))
+            .catch((error) => console.warn("Live Operations: could not load the catalogue.", error));
+        return () => {
+            gone = true;
+        };
+    }, [app]);
+    useEffect(() => apiRef.current?.setCatalogue(catalogue), [catalogue, theme.palette.mode]);
     useEffect(() => apiRef.current?.setSpot(spot), [spot, theme.palette.mode]);
     useEffect(() => { if (wallView) apiRef.current?.viewWall(wallView); }, [wallView, theme.palette.mode]);
     useEffect(() => apiRef.current?.setTime(time), [time, shipments, orders, refills, theme.palette.mode]);
@@ -213,6 +272,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     // Play: the worker steps in (where they last stood, after a colour change), and out again.
     const game = useGame();
     const playing3d = game.mode === "play" && !failed;
+    /** How the camera frames the worker when Play starts at a place's door. */
+    const framingRef = useRef<{ distance: number; elevation: number } | null>(null);
     useEffect(() => {
         if (!playing3d) return;
         setSelected(null);
@@ -221,7 +282,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         setWallView(null);
         setPlaying(false);
         setFollow(false);
-        apiRef.current?.enterPlay(app, player.pose ?? spawnFor(app), game.view);
+        apiRef.current?.enterPlay(app, player.pose ?? spawnFor(app), game.view, framingRef.current ?? undefined);
+        framingRef.current = null;
         return () => apiRef.current?.exitPlay();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [playing3d, app, theme.palette.mode]);
@@ -419,8 +481,11 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     };
 
     const openSubject = (event: WorldEvent) => {
-        // Transfers and counts have no card: they light up their place on the timeline only.
-        if (!CARD_KINDS.includes(event.kind)) return;
+        // Transfers and counts have no card of their own: their details are the list of what happened, opened.
+        if (!CARD_KINDS.includes(event.kind)) {
+            setLogOpen(true);
+            return;
+        }
         setSelected(null);
         setSpot(null);
         setFocused({ kind: event.kind, id: event.subject });
@@ -510,6 +575,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     // (createPortal, not MUI's Portal: that mounts a render late, after the scene looked for its mount.)
     return createPortal(
         <Box
+            className={playing3d && game.view === "first" ? "is-first" : undefined}
             sx={{
                 position: "fixed",
                 inset: 0,
@@ -518,6 +584,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                 overflow: "hidden",
                 background: `linear-gradient(180deg, ${alpha(theme.palette.info.main, theme.palette.mode === "dark" ? 0.18 : 0.12)} 0%, ${theme.palette.background.default} 100%)`,
                 touchAction: "none",
+                // Through the worker's eyes the floating place names only block the view: the desks' own signs stay.
+                "&.is-first .world-label, &.is-first .world-badge:not(.world-badge--zone)": { display: "none" },
                 "& .world-label": {
                     px: { xs: 0.75, sm: 1 },
                     py: 0.25,
@@ -536,7 +604,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     userSelect: "none",
                     transition: "transform .15s, opacity .2s",
                     "&:hover, &.is-selected": { transform: "scale(1.08)", bgcolor: "var(--tone)", color: "common.white" },
-                    "&.is-covered": { opacity: 0, pointerEvents: "none" },
+                    "&.is-covered, &.is-far": { opacity: 0, pointerEvents: "none" },
                 },
                 "& .world-label--fixed": {
                     fontSize: { xs: "0.6rem", sm: "0.68rem" },
@@ -639,7 +707,12 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                             {playing3d ? "Watch" : "Play"}
                         </Button>
                     )}
-                    {!playing3d && <IconButton onClick={() => { setSelected(null); setFocused(null); setFollow(false); setWallView(null); apiRef.current?.home(); }} aria-label="See the whole site" title="See the whole site"
+                    {!playing3d && <Button onClick={() => { setSelected(null); setFocused(null); setFollow(false); setRacksOpen(true); setWallView("north"); }} aria-label="See the shop's racks" startIcon={<ViewModuleRounded />}
+                        sx={{ pointerEvents: "auto", borderRadius: 999, fontWeight: 800, textTransform: "none", bgcolor: glass, boxShadow: 2, color: "text.primary", "&:hover": { bgcolor: "background.paper" }, minWidth: 0, "& .MuiButton-startIcon": { mr: { xs: 0, sm: 1 } } }}>
+                        {/* On a phone the icon alone, so the title keeps its room. */}
+                        <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Racks</Box>
+                    </Button>}
+                    {!playing3d && <IconButton onClick={() => { setSelected(null); setFocused(null); setFollow(false); setWallView(null); setRacksOpen(false); apiRef.current?.home(); }} aria-label="See the whole site" title="See the whole site"
                         sx={{ pointerEvents: "auto", bgcolor: glass, boxShadow: 2, "&:hover": { bgcolor: "background.paper" } }}>
                         <CenterFocusStrongRounded />
                     </IconButton>}
@@ -648,7 +721,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                 {playing3d && <PlayLayer app={app} scene={gameScene} />}
 
                 {/* In the shop: look at each wall of racks from where the seller stands. */}
-                {!playing3d && (wallView !== null || selected === "store_shelf" || selected === "store_floor" || selected === "store_counter") && (
+                {!playing3d && (racksOpen || wallView !== null || selected === "store_shelf" || selected === "store_floor" || selected === "store_counter") && (
                     <Box sx={{ position: "absolute", top: { xs: 60, sm: 10 }, left: { xs: 8, sm: 230 }, maxWidth: "calc(100% - 16px)", flexWrap: "wrap", pointerEvents: "auto", display: "flex", alignItems: "center", gap: 1, p: 0.5, borderRadius: 999, bgcolor: glass, boxShadow: 3 }}>
                         <Typography variant="caption" sx={{ fontWeight: 800, pl: 1, display: { xs: "none", md: "block" } }}>See the racks from the seller's side</Typography>
                         <ToggleButtonGroup size="small" exclusive value={wallView} onChange={(_, next: RackWall | null) => next && setWallView(next)} aria-label="Wall of racks">
@@ -776,9 +849,12 @@ function buildWorld(
     // The ground runs on to the horizon and fades into the sky, so the site stands on the earth instead of floating on a slab.
     const sky = color(theme.palette.background.default).lerp(color(theme.palette.info.main), dark ? 0.18 : 0.12);
     scene.background = sky;
-    scene.fog = new THREE.Fog(sky, 260, 820);
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 1600);
-    let home = homeView(width / height);
+    /** The event list stands open down the left of a wide screen (DukaWorld's logOpen starts so at 900 px): frame the site beside it. */
+    const listInset = (w: number) => (w >= 900 ? (2 * 356) / w : 0);
+    let home = homeView(width / height, listInset(width));
+    // The fog starts beyond the whole site as seen from home, so the far ends of it never fade.
+    scene.fog = new THREE.Fog(sky, Math.max(260, home.distance * 1.2), Math.max(820, home.distance * 3));
     camera.position.copy(home.camera);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -797,13 +873,16 @@ function buildWorld(
 
     scene.add(new THREE.HemisphereLight(0xffffff, dark ? 0x202830 : 0xb9c4b0, dark ? 1.3 : 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, dark ? 1.4 : 2.2);
-    sun.position.set(-40, 90, 50);
+    // Over the middle of the site, so its shadows cover the whole zigzag (outside them a shadow map turns the ground black).
+    sun.position.copy(SITE_CENTER).add(new THREE.Vector3(-40, 90, 50));
+    sun.target.position.copy(SITE_CENTER);
+    scene.add(sun.target);
     sun.castShadow = true;
     // Without a bias the big flat floors speckled with shadow acne.
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.05;
     sun.shadow.mapSize.set(4096, 4096);
-    Object.assign(sun.shadow.camera, { left: -110, right: 90, top: 50, bottom: -50, near: 1, far: 280 });
+    Object.assign(sun.shadow.camera, { left: -120, right: 120, top: 110, bottom: -110, near: 1, far: 320 });
     scene.add(sun);
 
     const groundTone = color(theme.palette.background.paper).lerp(color(theme.palette.success.main), dark ? 0.18 : 0.28);
@@ -820,23 +899,44 @@ function buildWorld(
     const keeperTone = toneOf("stock_keeper");
     const driverTone = toneOf("delivery");
 
-    // Scenery: the compound with its gate, the neighbour, the road, the store's shell.
-    const gate = addCompound(scene, wallTone, darkTone, padTone);
-    scene.add(mesh(new THREE.BoxGeometry(NEIGHBOUR.size[0], NEIGHBOUR.height, NEIGHBOUR.size[1]), wallTone.clone().lerp(darkTone, 0.35), NEIGHBOUR.position[0], NEIGHBOUR.height / 2, NEIGHBOUR.position[1]));
-    addRoads(scene, asphalt);
-    const store = addStoreShell(scene, wallTone, toneOf("seller"), padTone);
+    // Scenery: the compound, the street, the store's shell; each a named group, so a designed world (worldModel.ts) can replace it.
+    const sceneryGroup = (name: string) => {
+        const group = new THREE.Group();
+        group.name = `scenery_${name}`;
+        scene.add(group);
+        return group;
+    };
+    addCompound(sceneryGroup("compound"), wallTone, darkTone, padTone);
+    addRoads(sceneryGroup("roads"), asphalt);
+    // The container being loaded beside the Storage hub, for the Main Hub.
+    sceneryGroup("container_truck").add(makeContainerTruck(driverTone, darkTone));
+    const store = addStoreShell(sceneryGroup("store_shell"), wallTone, toneOf("seller"), padTone);
     const shelfFaces: ShelfFace[] = [];
     /** The racks' steel, shared so pressing Store Shelf can tint it all at once. */
     let steel: THREE.MeshStandardMaterial | null = null;
     const steelBase = new THREE.Color();
     const fixedLabels = [
-        fixedLabel(COMPOUND.label, -62, 3, -15),
+        // Over the compound's back fence, in the middle.
+        fixedLabel(COMPOUND.label, (COMPOUND.corners[0][0] + COMPOUND.corners[1][0]) / 2, 3, COMPOUND.corners[2][1]),
         fixedLabel(STORE.label, STORE.position[0], STORE.wall + 2.5, STORE.position[1] - STORE.size[1] / 2),
     ];
     fixedLabels.forEach((label) => scene.add(label.object));
+    // The shop's name is its place's name from afar (its shelf, floor and counter are named only close up): a tap opens it.
+    const storeLabel = fixedLabels[1];
+    storeLabel.className = "world-label";
+    storeLabel.style.setProperty("--tone", `#${toneOf("seller").getHexString()}`);
+    storeLabel.addEventListener("pointerdown", (event) => event.stopPropagation());
+    storeLabel.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onSelect("store_floor");
+    });
 
     // Places.
+    /** Labels shown by zoom: `near` is how close (m) the camera must be, or null for always. */
+    const lodLabels: Array<{ el: HTMLDivElement; object: THREE.Object3D; near: number | null }> = [{ el: fixedLabels[0], object: fixedLabels[0].object, near: FIXED_LABEL }];
     const nodes = new Map<PlaceKey, PlaceNode>();
+    /** What the code draws of each place (not its people or label): hidden when the designed world redraws it. */
+    const bodies = new Map<PlaceKey, THREE.Object3D[]>();
     const doors = new Map<PlaceKey, Swing>();
     const roofs: THREE.Object3D[] = [];
     const pickables: THREE.Object3D[] = [];
@@ -850,6 +950,7 @@ function buildWorld(
         const [w, d] = place.size;
         const group = new THREE.Group();
         group.position.set(place.position[0], 0, place.position[1]);
+        group.name = `place_${place.key}`;
 
         const outdoorPad = place.shape !== "hub" && place.shape !== "platform" && !place.indoor;
         const pad = new THREE.Mesh(new THREE.BoxGeometry(w + (outdoorPad ? 2 : 0), 0.12, d + (outdoorPad ? 2 : 0)), new THREE.MeshStandardMaterial({ color: padTone, roughness: 0.9 }));
@@ -860,20 +961,31 @@ function buildWorld(
         pad.visible = place.shape !== "shelves" && place.shape !== "floor" && place.shape !== "platform";
         group.add(pad);
 
+        let body: THREE.Object3D;
         if (place.shape === "hub") {
             const built = makeHub(place, tone, wallTone, darkTone, padTone);
-            group.add(built.group);
+            body = built.group;
             roofs.push(built.roof);
             if (built.swing) doors.set(place.key, built.swing);
         } else if (place.shape === "shelves") {
             const built = makeShelves(wallTone, darkTone);
-            group.add(built.group);
+            body = built.group;
             shelfFaces.push(...built.faces);
             steel = built.steel;
             steelBase.copy(built.steel.color);
         } else {
-            group.add(makeBuilding(place, toneOf(place.shape === "platform" ? "store_manager" : place.roles[0]), wallTone, darkTone));
+            body = makeBuilding(place, toneOf(place.shape === "platform" ? "store_manager" : place.roles[0]), wallTone, darkTone);
         }
+        // The Storage hub holds what is waiting for the next container: pallets of cartons in two rows.
+        if (place.key === "storage_hub") {
+            const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.6);
+            for (const z of [-d / 2 + 2, d / 2 - 4]) for (let x = -w / 2 + 2; x < w / 2 - 1.5; x += 2.2) {
+                body.add(mesh(new THREE.BoxGeometry(PALLET, 0.12, PALLET), darkTone, x, 0.2, z));
+                body.add(mesh(new THREE.BoxGeometry(1.1, 0.9, 1.1), carton, x, 0.71, z));
+            }
+        }
+        group.add(body);
+        bodies.set(place.key, [pad, body]);
 
         const door = doorPosition(place);
         place.roles.forEach((role, index) => {
@@ -891,11 +1003,22 @@ function buildWorld(
                 person.position.set(1.5 + spread, base, -1.9);
             } else if (place.shape === "floor") {
                 person.position.set(-0.8, base, -2 + index * 0.9);
+            } else if (place.shape === "cars") {
+                // In the lane, by the nose of a waiting car.
+                const parked = CUSTOMER_BAYS.filter(([, , kind]) => kind);
+                const [bx, bz] = parked[index % parked.length];
+                person.position.set(Math.sign(bx) * 0.6, base, bz + 0.6);
+            } else if (place.shape === "shops") {
+                // In front of the first shop's door.
+                const [bx, bz, bw, bd, , side] = place.blocks?.[0] ?? [0, 0, 0, 0, 0, "south"];
+                const [ox, oz] = SIDE_OUT[side];
+                person.position.set(bx + ox * (bw / 2 + 0.9) + oz * spread, base, bz + oz * (bd / 2 + 0.9) + ox * spread);
             } else if (place.shape === "counter") {
-                // The counter stands against the east wall: the seller at its back end, the customer facing it from the shop floor.
-                person.position.set(index === 0 ? -0.8 : -1.6, base, index === 0 ? -0.9 : 0.6);
+                // The counter stands across the shop facing the door: the seller behind it, the customer in front, on the door side.
+                person.position.set(index === 0 ? -0.8 : 0.6, base, index === 0 ? -0.9 : 1.0);
             } else {
-                person.position.set(spread, base, place.indoor ? d / 2 - 1 : d / 2 + 2);
+                // On the street side: south of a north-row place, north of a south-row one.
+                person.position.set(spread, base, place.indoor ? d / 2 - 1 : (place.faces === "north" ? -1 : 1) * (d / 2 + 2));
             }
             group.add(person);
             people.push({ mesh: person, phase: Math.random() * Math.PI * 2, base: person.position.y });
@@ -925,6 +1048,9 @@ function buildWorld(
 
         scene.add(group);
         nodes.set(place.key, { place, group, pad, label, tone });
+        // The places along the street are named from anywhere; a place inside another (the shop's shelf, floor and
+        // counter) or a platform in front of one, only from close by.
+        lodLabels.push({ el: label, object: labelObject, near: place.indoor || place.shape === "platform" ? NEAR_LABEL : null });
     }
 
     /** Vans, parcels, couriers and cartons: a tap opens the shipment, order or refill they carry. */
@@ -994,7 +1120,6 @@ function buildWorld(
             return n;
         };
         const openDoors = new Set<PlaceKey>();
-        let gateWanted = false;
 
         for (const s of shipments) {
             const rig = rigFor(s);
@@ -1042,7 +1167,7 @@ function buildWorld(
                     const n = slot("berth");
                     stack(platformAt[0] + 0.9, platformAt[1] - 0.9 + n * 1.8, Math.round(rig.cartons.length * (1 - st.progress)));
                     rig.van.visible = true;
-                    // Back doors to the platform, nose to the gate.
+                    // Back doors to the platform, nose to the way out.
                     rig.van.position.set(PLATFORM_BERTH[0], 0, PLATFORM_BERTH[1] + n * 2.6);
                     rig.van.rotation.y = 0;
                     break;
@@ -1055,7 +1180,6 @@ function buildWorld(
                     rig.van.visible = true;
                     rig.van.position.set(at.x, 0, at.z);
                     rig.van.rotation.y = Math.atan2(-tangent.z, tangent.x);
-                    if (Math.hypot(at.x - COMPOUND.gate.at[0], at.z - COMPOUND.gate.at[1]) < 14) gateWanted = true;
                     break;
                 }
                 case "arrived": {
@@ -1083,14 +1207,23 @@ function buildWorld(
         }
 
         doors.forEach((swing, key) => (swing.target = openDoors.has(key) ? 1 : 0));
-        gate.target = gateWanted ? 1 : 0;
     };
 
-    // Orders: a parcel that goes counter → picking → packed, then a courier's motorbike to the customers.
+    // Orders: a parcel that goes counter → picking → packed, then a courier's motorbike to the customer's car.
     const orderTone = color(theme.palette.success.main);
     const parcelMaterial = new THREE.MeshStandardMaterial({ color: orderTone.clone().lerp(new THREE.Color(0x8b5a2b), 0.65), roughness: 0.8, flatShading: true });
     const parcelGeometry = new THREE.BoxGeometry(0.45, 0.35, 0.45);
-    const rideCurve = new THREE.CatmullRomCurve3(ORDER_RIDE.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, "catmullrom", 0.2);
+    const rideCurves = new Map<number, THREE.CatmullRomCurve3>();
+    /** Which stop an order's customer waits at is not recorded yet: each order goes to one of the waiting cars. */
+    const rideFor = (orderId: number) => {
+        const stop = WAITING_STOPS[orderId % WAITING_STOPS.length];
+        let curve = rideCurves.get(stop);
+        if (!curve) {
+            curve = new THREE.CatmullRomCurve3(orderRide(stop).map(([x, z]) => new THREE.Vector3(x, 0, z)), false, "catmullrom", 0.2);
+            rideCurves.set(stop, curve);
+        }
+        return curve;
+    };
     const orderRigs = new Map<number, { parcel: THREE.Mesh; bike: THREE.Group }>();
     let orders: WorldOrder[] = [];
     const orderRigFor = (o: WorldOrder) => {
@@ -1120,11 +1253,11 @@ function buildWorld(
         const onCounter = (rig: { parcel: THREE.Mesh }) => {
             const n = slot("counter");
             if (n >= 10) return;
-            // Two rows of five along the counter's length (it runs north–south against the east wall).
+            // Two rows of five along the counter's length (it runs east–west across the shop).
             const { width, height } = STORE.counter;
             const [x, z] = placeFor("store_counter").position;
             rig.parcel.visible = true;
-            rig.parcel.position.set(x - 0.15 + (Math.floor(n / 5) % 2) * 0.3, height + 0.33, z - width / 2 + 0.4 + (n % 5) * 0.6);
+            rig.parcel.position.set(x - width / 2 + 0.5 + (n % 5) * 0.75, height + 0.33, z - 0.15 + (Math.floor(n / 5) % 2) * 0.3);
         };
         for (const o of orders) {
             const rig = orderRigFor(o);
@@ -1159,6 +1292,7 @@ function buildWorld(
                         break;
                     }
                     const u = Math.min(0.999, Math.max(0.001, st.progress));
+                    const rideCurve = rideFor(o.id);
                     const at = rideCurve.getPointAt(u);
                     const tangent = rideCurve.getTangentAt(u);
                     rig.bike.visible = true;
@@ -1359,12 +1493,20 @@ function buildWorld(
     renderer.domElement.addEventListener("pointerup", onUp);
 
     // Labels: when two would overlap, the less important one steps aside.
-    const labelOrder = [...[...nodes.values()].map((n) => n.label), ...fixedLabels];
+    // The shop's name first: it stands for the shelf, floor and counter, which step aside for it.
+    const labelOrder = [fixedLabels[1], ...[...nodes.values()].map((n) => n.label), fixedLabels[0]];
+    const labelAt = new THREE.Vector3();
     const declutter = () => {
+        // Zoomed out, only the places along the street keep their names.
+        for (const { el, object, near } of lodLabels) {
+            const far = near !== null && camera.position.distanceTo(object.getWorldPosition(labelAt)) > near;
+            el.classList.toggle("is-far", far);
+        }
         const shown: DOMRect[] = [];
         if (callout.visible) shown.push(calloutEl.getBoundingClientRect());
         const ordered = [...labelOrder].sort((a, b) => Number(b.classList.contains("is-selected")) - Number(a.classList.contains("is-selected")));
         for (const el of ordered) {
+            if (el.classList.contains("is-far")) continue;
             const r = el.getBoundingClientRect();
             const overlaps = shown.some((o) => r.left < o.right + 4 && r.right > o.left - 4 && r.top < o.bottom + 2 && r.bottom > o.top - 2);
             el.classList.toggle("is-covered", overlaps);
@@ -1404,14 +1546,28 @@ function buildWorld(
     let game: GameScene | null = null;
     let beforePlay: { camera: THREE.Vector3; target: THREE.Vector3 } | null = null;
 
+    // The hubs' stock: one box per item (catalogue.ts), each printed with its name.
+    let catalogueGroup: THREE.Group | null = null;
+    const setCatalogueBoxesInScene = (items: CatalogueItem[]) => {
+        if (catalogueGroup || items.length === 0) return;
+        const boxes = hubBoxes(items);
+        setCatalogueBoxes(boxes);
+        catalogueGroup = makeCatalogueBoxes(boxes);
+        catalogueGroup.traverse((o) => {
+            if ((o as THREE.Mesh).isMesh) pickables.push(o);
+        });
+        scene.add(catalogueGroup);
+    };
+
     const api: SceneApi = {
-        enterPlay: (app, pose, view) => {
+        setCatalogue: setCatalogueBoxesInScene,
+        enterPlay: (app, pose, view, framing) => {
             if (game) return;
             flight = null;
             beforePlay = { camera: camera.position.clone(), target: controls.target.clone() };
             game = createGameScene({
                 scene, camera, controls, dom: renderer.domElement, overlay: mount, figure: makePerson(toneOf(roleFor(app))), tone: toneOf(roleFor(app)),
-                spawn: pose, view, reducedMotion, bounds: [SITE_BOUNDS.min.x, SITE_BOUNDS.min.z, SITE_BOUNDS.max.x, SITE_BOUNDS.max.z],
+                spawn: pose, view, framing, reducedMotion, bounds: [SITE_BOUNDS.min.x, SITE_BOUNDS.min.z, SITE_BOUNDS.max.x, SITE_BOUNDS.max.z],
                 zoneTones: { pickup: color(theme.palette.info.main), drop: color(theme.palette.success.main) },
                 carTones: { cab: driverTone, body: wallTone.clone().lerp(color(theme.palette.background.paper), 0.5), dark: darkTone },
                 onZone: (zone) => setGame({ zone }),
@@ -1423,7 +1579,16 @@ function buildWorld(
             game = null;
             if (beforePlay) flyTo(beforePlay.target, beforePlay.camera);
         },
-        setView: (view) => game?.setView(view),
+        setView: (view) => {
+            game?.setView(view);
+            // The director's camera starts over the whole site, framed as from home: on a phone the street then runs
+            // top to bottom, instead of a thin strip across the screen.
+            if (view === "director" && game) {
+                // Between Play's bars: its controls across the top, the carrying bar along the bottom.
+                const framed = homeView(width / height, 0, width / height < 0.9 ? { bottom: -0.8, top: 0.4 } : { bottom: -0.75, top: 0.6 });
+                flyTo(framed.target, framed.camera);
+            }
+        },
         game: () => game,
         select: (key) => {
             if (key === selectedKey) return;
@@ -1493,13 +1658,11 @@ function buildWorld(
             const toward: Record<RackWall, [number, number]> = { west: [-1, 0], east: [1, 0], north: [0, -1], south: [0, 1] };
             const [dx, dz] = toward[side];
             const [cx, cz] = STORE.position;
-            // The racks keep the real shop's size, so the view does too: it is taken from the middle of the shop, not from its far walls.
-            const reach = REAL_SHOP / 2 - STORE.shelfDepth;
-            // The seller's side: stand at the opposite side of the shop, at eye height, and look at the racks.
-            // Stand right back against the far wall, unless racks stand on the floor there: then in front of them.
-            const behind = RACKS.find((r) => r.wall === ({ west: "east", east: "west", north: "south", south: "north" } as Record<RackWall, RackWall>)[side])!;
-            const stand = behind.suspended ? 2.75 : 2.2;
-            flyTo(new THREE.Vector3(cx + dx * reach, run.suspended ? 2.5 : 1.7, cz + dz * reach), new THREE.Vector3(cx - dx * stand, 1.65, cz - dz * stand), true);
+            // From the far side of the shop, at eye height, looking at the middle of the run's face.
+            const half = (dx !== 0 ? STORE.size[0] : STORE.size[1]) / 2;
+            const reach = half - STORE.shelfDepth;
+            const stand = half - 1.2;
+            flyTo(new THREE.Vector3(cx + dx * reach, rackFace(run).centerY, cz + dz * reach), new THREE.Vector3(cx - dx * stand, 1.65, cz - dz * stand), true);
         },
         highlight: (h, fly) => {
             lit = h;
@@ -1532,7 +1695,7 @@ function buildWorld(
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
         labels.setSize(width, height);
-        home = homeView(width / height);
+        home = homeView(width / height, listInset(width));
         controls.maxDistance = Math.max(260, home.distance * 1.5);
         if (!userMoved && !selectedKey && !awayFromHome) {
             camera.position.copy(home.camera);
@@ -1565,10 +1728,11 @@ function buildWorld(
             left -= step;
         }
         const gameCamera = game?.ownsCamera() ?? false;
-        // Doors and the gate swing open as the worker comes up to them.
+        // Doors swing open as the worker comes up to them.
         if (game && player.pose) {
             for (const { key, at } of nearDoors) {
-                if (Math.hypot(player.pose.x - at[0], player.pose.z - at[1]) < 4) (key === "gate" ? gate : doors.get(key as PlaceKey))!.target = 1;
+                const swing = doors.get(key as PlaceKey);
+                if (swing && Math.hypot(player.pose.x - at[0], player.pose.z - at[1]) < 4) swing.target = 1;
             }
         }
 
@@ -1591,7 +1755,9 @@ function buildWorld(
         // or have pressed one of its places: they would only be in the way.
         const [storeX, storeZ] = STORE.position;
         const nearStore = Math.hypot(camera.position.x - storeX, camera.position.z - storeZ) < 26 && camera.position.y < 40;
-        const wantFade = eyeLevel || nearStore || selectedKey === "store_shelf" || selectedKey === "store_floor" || selectedKey === "store_counter";
+        // Through the worker's eyes the shop is a room: its walls stand solid.
+        const inside = game?.isFirstPerson() ?? false;
+        const wantFade = !inside && (eyeLevel || nearStore || selectedKey === "store_shelf" || selectedKey === "store_floor" || selectedKey === "store_counter");
         wallFade += ((wantFade ? 1 : 0) - wallFade) * (reducedMotion ? 1 : 0.12);
         const faded = wallFade > 0.02;
         if (store.wallMaterial.transparent !== faded) {
@@ -1605,7 +1771,6 @@ function buildWorld(
         store.walls.forEach((wallMesh) => (wallMesh.castShadow = wallFade < 0.5));
 
         doors.forEach(easeSwing);
-        easeSwing(gate);
 
         if (lit) {
             const at = anchorOf(lit);
@@ -1629,6 +1794,7 @@ function buildWorld(
     animate();
 
     const dispose = () => {
+        disposed = true;
         cancelAnimationFrame(frame);
         game?.dispose();
         resize.disconnect();
@@ -1657,6 +1823,52 @@ function buildWorld(
         labels.domElement.remove();
     };
 
+    // The designed world (worldModel.ts), when public/world/duka-world.glb exists: laid over the code's world,
+    // each place or piece of scenery it redraws hides the code's own. The labels, people and moving things stay.
+    let disposed = false;
+    void loadWorldModel().then((model) => {
+        if (!model || disposed) return;
+        model.root.name = "duka_world_model";
+        scene.add(model.root);
+        model.places.forEach((object, key) => {
+            bodies.get(key)?.forEach((b) => (b.visible = false));
+            object.traverse((o) => {
+                o.userData.placeKey = key;
+                if ((o as THREE.Mesh).isMesh && o.visible) pickables.push(o);
+            });
+        });
+        model.scenery.forEach((name) => {
+            const code = scene.getObjectByName(`scenery_${name}`);
+            if (code && code.parent === scene) code.visible = false;
+        });
+    });
+
+    // Dev only: `await __exportDukaWorld()` in the browser console downloads the static world as duka-world.glb, to open in Blender.
+    if (import.meta.env.DEV) {
+        (window as unknown as Record<string, unknown>).__exportDukaWorld = async () => {
+            ground.name = "ground";
+            const hidden: THREE.Object3D[] = [];
+            // Only the buildings, roads and fences: not the 6 km ground, the lights, the labels, the people or a designed world already loaded.
+            const figures = new Set(people.map((p) => p.mesh));
+            scene.traverse((o) => {
+                if (o !== scene && ((o as THREE.Light).isLight || o === ground || o instanceof CSS2DObject || figures.has(o) || o.name === "duka_world_model" || o.name === "catalogue_boxes") && o.visible) {
+                    o.visible = false;
+                    hidden.push(o);
+                }
+            });
+            try {
+                const glb = await new GLTFExporter().parseAsync(scene, { binary: true, onlyVisible: true });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(new Blob([glb as ArrayBuffer], { type: "model/gltf-binary" }));
+                link.download = "duka-world.glb";
+                link.click();
+                URL.revokeObjectURL(link.href);
+            } finally {
+                hidden.forEach((o) => (o.visible = true));
+            }
+        };
+    }
+
     return { api, dispose };
 }
 
@@ -1669,37 +1881,42 @@ function buildWorld(
  * wide screen, from the east on a tall one (so the long site runs top to
  * bottom on a phone, hubs at the top). The distance is the closest at which
  * every corner of the site stays on screen, clear of the top bar and of the
- * timeline at the bottom.
+ * timeline at the bottom, and (on a wide screen, `inset` of its width, in
+ * screen units of 2) clear of the event list down the left.
  */
-function homeView(aspect: number): { target: THREE.Vector3; camera: THREE.Vector3; distance: number } {
+function homeView(aspect: number, inset = 0, band?: { bottom: number; top: number }): { target: THREE.Vector3; camera: THREE.Vector3; distance: number } {
     const portrait = aspect < 0.9;
     const elevation = portrait ? 1.05 : 0.85;
     const along = portrait ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
     const direction = along.multiplyScalar(Math.cos(elevation)).setY(Math.sin(elevation)).normalize();
-    const bottom = portrait ? -0.25 : -0.4;
-    const top = portrait ? 0.82 : 0.8;
+    // The free band of the screen, -1 (bottom) to 1 (top): `band` when Play's bars take other parts of it.
+    // A phone's timeline sheet takes about the bottom quarter.
+    const bottom = band?.bottom ?? (portrait ? -0.45 : -0.4);
+    const top = band?.top ?? (portrait ? 0.82 : 0.8);
 
     const probe = new THREE.PerspectiveCamera(40, aspect, 0.5, 900);
     const corners: THREE.Vector3[] = [];
     for (const x of [SITE_BOUNDS.min.x, SITE_BOUNDS.max.x]) for (const y of [SITE_BOUNDS.min.y, SITE_BOUNDS.max.y]) for (const z of [SITE_BOUNDS.min.z, SITE_BOUNDS.max.z]) corners.push(new THREE.Vector3(x, y, z));
 
-    // Aim a little towards the camera, so the site rides up into the free band.
+    // Aim towards the camera (or away), so the site rides up (or down) into the middle of the free band.
     const lift = new THREE.Vector3().copy(direction).setY(0).normalize();
     let distance = 30;
     let target = SITE_CENTER.clone();
     for (let i = 0; i < 120; i++) {
-        target = SITE_CENTER.clone().addScaledVector(lift, distance * (portrait ? 0.14 : 0.1));
+        target = SITE_CENTER.clone().addScaledVector(lift, distance * 0.5 * ((top + bottom) / 2));
         probe.position.copy(target).addScaledVector(direction, distance);
         probe.lookAt(target);
         probe.updateMatrixWorld();
         const fits = corners.every((c) => {
             const p = c.clone().project(probe);
-            return Math.abs(p.x) < 0.92 && p.y > bottom && p.y < top;
+            return Math.abs(p.x) < 0.92 - inset / 2 && p.y > bottom && p.y < top;
         });
         if (fits) break;
         distance *= 1.04;
     }
 
+    // Slide the site right by half the list's width, into the free part of the screen (on a wide screen the camera looks north, so right is +x).
+    if (inset > 0 && !portrait) target.x -= (inset / 2) * distance * Math.tan(THREE.MathUtils.degToRad(probe.fov / 2)) * aspect;
     return { target, camera: target.clone().addScaledVector(direction, distance), distance };
 }
 
@@ -1783,8 +2000,8 @@ function swingPair(x1: number, z1: number, x2: number, z2: number, height: numbe
     return { group, swing: { leaves, open: 0, target: 0 } };
 }
 
-/** The fenced yard, laid out from the site photo, with its two-leaf swing gate. Returns the gate. */
-function addCompound(scene: THREE.Scene, wall: THREE.Color, dark: THREE.Color, yard: THREE.Color): Swing {
+/** The fenced yard, laid out from the site photo, with an open way in (no gate) in its east fence. */
+function addCompound(scene: THREE.Object3D, wall: THREE.Color, dark: THREE.Color, yard: THREE.Color): void {
     const shape = new THREE.Shape();
     COMPOUND.corners.forEach(([x, z], i) => (i === 0 ? shape.moveTo(x, -z) : shape.lineTo(x, -z)));
     shape.closePath();
@@ -1796,8 +2013,6 @@ function addCompound(scene: THREE.Scene, wall: THREE.Color, dark: THREE.Color, y
 
     const railTone = dark.clone().lerp(wall, 0.3);
     const post = new THREE.CylinderGeometry(0.08, 0.08, 2, 6);
-    const [gx, gz] = COMPOUND.gate.at;
-    const half = COMPOUND.gate.width / 2;
 
     const fence = (x1: number, z1: number, x2: number, z2: number) => {
         const length = Math.hypot(x2 - x1, z2 - z1);
@@ -1813,28 +2028,19 @@ function addCompound(scene: THREE.Scene, wall: THREE.Color, dark: THREE.Color, y
         }
     };
 
+    // Each side, in pieces either side of the way in; a pillar at each side of it.
     const corners = COMPOUND.corners;
-    for (let i = 0; i < corners.length; i++) {
-        const [x1, z1] = corners[i];
+    corners.forEach(([x1, z1], i) => {
         const [x2, z2] = corners[(i + 1) % corners.length];
-        if (x1 === gx && x2 === gx) {
-            // The east fence, with the gate in it.
-            const [lo, hi] = [Math.min(z1, z2), Math.max(z1, z2)];
-            fence(gx, lo, gx, gz - half);
-            fence(gx, gz + half, gx, hi);
-        } else {
-            fence(x1, z1, x2, z2);
-        }
-    }
-
-    for (const z of [gz - half, gz + half]) scene.add(mesh(new THREE.BoxGeometry(0.3, 2.4, 0.3), dark, gx, 1.2, z));
-    const { group, swing } = swingPair(gx, gz - half, gx, gz + half, 2, [1, 0], railTone);
-    scene.add(group);
-    return swing;
+        fenceRuns(x1, z1, x2, z2).forEach(([a, b, c, d2]) => fence(a, b, c, d2));
+    });
+    const [gx, gz] = COMPOUND.opening.at;
+    const half = COMPOUND.opening.width / 2;
+    for (const x of [gx - half, gx + half]) scene.add(mesh(new THREE.BoxGeometry(0.3, 2.4, 0.3), dark, x, 1.2, gz));
 }
 
 /** The roads (places.ts ROADS), each a flat asphalt ribbon 4.5 m wide. */
-function addRoads(scene: THREE.Scene, asphalt: THREE.Color): void {
+function addRoads(scene: THREE.Object3D, asphalt: THREE.Color): void {
     // polygonOffset: where two roads cross, the later one must win the depth test outright (a few millimetres apart they flickered).
     const material = new THREE.MeshStandardMaterial({ color: asphalt, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     ROADS.forEach((points, r) => {
@@ -1854,7 +2060,8 @@ function addRoads(scene: THREE.Scene, asphalt: THREE.Color): void {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
         geometry.setIndex(indices);
-        geometry.computeVertexNormals();
+        // Straight up: a road run southwards winds the other way, and computed normals would face down (it drew black).
+        geometry.setAttribute("normal", new THREE.Float32BufferAttribute(positions.map((_, k) => (k % 3 === 1 ? 1 : 0)), 3));
         const road = new THREE.Mesh(geometry, material);
         road.receiveShadow = true;
         scene.add(road);
@@ -1871,7 +2078,7 @@ interface StoreShell {
 }
 
 /** The store's four walls, open-topped, with the 2 m main door in the south wall, a sign over it and the metal divider inside. */
-function addStoreShell(scene: THREE.Scene, wall: THREE.Color, tone: THREE.Color, floor: THREE.Color): StoreShell {
+function addStoreShell(scene: THREE.Object3D, wall: THREE.Color, tone: THREE.Color, floor: THREE.Color): StoreShell {
     const [cx, cz] = STORE.position;
     const [w, d] = STORE.size;
     const h = STORE.wall;
@@ -1939,9 +2146,8 @@ function makeShelves(wall: THREE.Color, dark: THREE.Color): { group: THREE.Group
         const cols = run.columns.length;
         const rows = run.rows;
         const alongX = side === "north" || side === "south";
-        // Each run keeps the real shop's wall length and is centred on its wall (the room around it is bigger).
-        void alongX;
-        const span = RACK_SPAN;
+        // Wall to wall: each run fills its wall, less a rack's depth at each end where the next wall's run meets it.
+        const span = rackSpan(side);
         const { height, centerY, rowHeight } = rackFace(run);
 
         // Where a point a fraction u along the face (read from inside the shop, left to right), e metres out from the wall, stands.
@@ -1982,8 +2188,9 @@ function makeShelves(wall: THREE.Color, dark: THREE.Color): { group: THREE.Group
 
         // The face: a canvas of spots on a plane against the wall, facing into the shop.
         const canvas = document.createElement("canvas");
-        canvas.width = cols * 128;
-        canvas.height = rows * 96;
+        // 256 × 192 px a spot, so the codes read clearly close up.
+        canvas.width = cols * 256;
+        canvas.height = rows * 192;
         const texture = new THREE.CanvasTexture(canvas);
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.anisotropy = 4;
@@ -2007,9 +2214,9 @@ function makeShelves(wall: THREE.Color, dark: THREE.Color): { group: THREE.Group
                         const x = col * cw;
                         const y = row * ch;
                         ctx.fillStyle = code === selected ? "#ffd54f" : "#f5f1ea";
-                        ctx.fillRect(x + 4, y + 4, cw - 8, ch - 8);
+                        ctx.fillRect(x + 8, y + 8, cw - 16, ch - 16);
                         ctx.fillStyle = "#3b2a1a";
-                        ctx.font = "800 34px system-ui, sans-serif";
+                        ctx.font = "800 68px system-ui, sans-serif";
                         ctx.textAlign = "center";
                         ctx.textBaseline = "middle";
                         ctx.fillText(code, x + cw / 2, y + ch / 2);
@@ -2126,7 +2333,8 @@ function doorSign(text: string, tone: THREE.Color, width: number): THREE.Mesh {
 /** A hub floor as a picture: each 1 m cell outlined and named, the walkway hatched. */
 function cellTexture(place: Place, floor: THREE.Color, dark: THREE.Color, tone: THREE.Color): THREE.CanvasTexture {
     const [w, d] = place.size;
-    const px = 48;
+    // 96 px to the metre: cell names stay readable close up, from the worker's own eyes.
+    const px = 96;
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(w * px);
     canvas.height = Math.round(d * px);
@@ -2161,7 +2369,7 @@ function cellTexture(place: Place, floor: THREE.Color, dark: THREE.Color, tone: 
     }
 
     ctx.strokeStyle = hex(dark.clone().lerp(floor, 0.45));
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.fillStyle = hex(dark);
     ctx.font = `700 ${Math.round(px * 0.3)}px system-ui, sans-serif`;
     ctx.textAlign = "center";
@@ -2205,18 +2413,43 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
             break;
         }
         case "counter": {
-            // Its footprint (place.size) runs along the east wall: 0.8 m deep in x, 3.2 m long in z.
+            // Its footprint (place.size) runs across the shop: 4 m long in x, 0.8 m deep in z.
             const ch = STORE.counter.height;
             g.add(mesh(new THREE.BoxGeometry(w, ch, d), wall.clone().lerp(dark, 0.15), 0, ch / 2 + 0.1, 0));
             g.add(mesh(new THREE.BoxGeometry(w + 0.1, 0.06, d + 0.1), tone, 0, ch + 0.13, 0));
             break;
         }
-        case "houses": {
-            HOUSES.forEach(([x, z, hh]) => {
-                g.add(mesh(new THREE.BoxGeometry(HOUSE_SIZE, hh, HOUSE_SIZE), wall, x, hh / 2, z));
-                const top = mesh(new THREE.ConeGeometry(2.6, 1.8, 4), tone, x, hh + 0.9, z);
-                top.rotation.y = Math.PI / 4;
-                g.add(top);
+        case "cars": {
+            // The customers' parking: numbered stops either side of a lane, each with its sign at the lane, a vehicle waiting at most of them.
+            const paint = new THREE.Color(0xffffff);
+            const [bw, bd] = BAY_SIZE;
+            g.add(mesh(new THREE.BoxGeometry(w, 0.04, d), wall.clone().lerp(dark, 0.35), 0, 0.1, 0));
+            CUSTOMER_BAYS.forEach(([x, z, kind], i) => {
+                for (const side of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(bw, 0.02, 0.12), paint, x, 0.13, z + (side * bd) / 2));
+                // At the bay's lane end, back to back so the number reads from either way along the lane.
+                const lane = x - Math.sign(x) * (bw / 2 + 0.15);
+                for (const facing of [Math.PI / 2, -Math.PI / 2]) {
+                    const sign = doorSign(`STOP ${i + 1}`, tone, 1.6);
+                    sign.position.set(lane + (facing > 0 ? 0.03 : -0.03), 2.2, z);
+                    sign.rotation.y = facing;
+                    g.add(sign);
+                }
+                g.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 2, 6), dark, lane, 1, z));
+                if (kind) g.add(makeVehicle(kind, [0xf4f4f0, 0x3f6fb5, 0xc0392b, 0x7f8c8d, 0xf1c40f][i % 5], dark, x, z, x < 0 ? Math.PI / 2 : -Math.PI / 2));
+            });
+            break;
+        }
+        case "shops": {
+            // Small buildings, each with its shop door and stock out front.
+            const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.6);
+            (place.blocks ?? []).forEach(([x, z, sw, sd, sh, side]) => {
+                const [ox, oz] = SIDE_OUT[side];
+                g.add(mesh(new THREE.BoxGeometry(sw, sh, sd), wall, x, sh / 2, z));
+                g.add(mesh(new THREE.BoxGeometry(sw + 0.4, 0.3, sd + 0.4), tone, x, sh + 0.15, z));
+                // The door, on the face it opens from, and a carton waiting beside it.
+                const across = ox !== 0 ? sd : sw;
+                g.add(mesh(new THREE.BoxGeometry(ox !== 0 ? 0.06 : across * 0.5, sh * 0.6, ox !== 0 ? across * 0.5 : 0.06), dark, x + ox * (sw / 2 + 0.03), sh * 0.3, z + oz * (sd / 2 + 0.03)));
+                g.add(mesh(new THREE.BoxGeometry(1, 0.8, 1), carton, x + ox * (sw / 2 + 1) + oz * (sw / 2 - 0.8), 0.4, z + oz * (sd / 2 + 1) + ox * (sd / 2 - 0.8)));
             });
             break;
         }
@@ -2231,6 +2464,141 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
     }
 
     return g;
+}
+
+/** The truck with a 40 ft container (places.ts CONTAINER), standing at CONTAINER_TRUCK along the street, cab to the east. */
+function makeContainerTruck(tone: THREE.Color, dark: THREE.Color): THREE.Group {
+    const [length, width, height] = CONTAINER;
+    const truck = new THREE.Group();
+    truck.position.set(CONTAINER_TRUCK[0], 0, CONTAINER_TRUCK[1]);
+    // Built cab to the north (-z); it stands along the street, cab to the east.
+    truck.rotation.y = -Math.PI / 2;
+    truck.add(mesh(new THREE.BoxGeometry(width, 0.3, length + 0.4), dark, 0, 1, 0));
+    truck.add(mesh(new THREE.BoxGeometry(width, height, length), new THREE.Color(0x2e86c1), 0, 1.15 + height / 2, 0));
+    truck.add(mesh(new THREE.BoxGeometry(width, 2.4, 2), tone, 0, 1.6, -length / 2 - 1.4));
+    for (const z of [-length / 2 - 1.2, -length / 2 + 2, length / 2 - 2.5, length / 2 - 1]) for (const x of [-width / 2, width / 2]) {
+        const wheel = mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.3, 12), dark, x, 0.5, z);
+        wheel.rotation.z = Math.PI / 2;
+        truck.add(wheel);
+    }
+    return truck;
+}
+
+/** Packaging tiers' cardboard colours: a carton is kraft brown, a box lighter, a bag sacking, a packet printed blue. */
+const TIER_COLOUR: Record<string, string> = { cartoon: "#c49a6c", box: "#dcbc8e", bag: "#e6dbc0", bundle: "#c9b48a", doz: "#d7c4a0", packet: "#a9c7e0", piece: "#d0d0d0" };
+/** The catalogue boxes' print: one 128 px square per item in a 2048 px atlas (256 items). */
+const ATLAS = 2048;
+const SLOT = 128;
+
+/**
+ * The hubs' boxes (catalogue.ts): a cube per item, every face printed with the
+ * item's name and its packaging, in the colour of its packaging tier. One
+ * material and one texture for all of them; each box's faces point at its own
+ * square of the atlas.
+ */
+function makeCatalogueBoxes(boxes: HubBox[]): THREE.Group {
+    const group = new THREE.Group();
+    group.name = "catalogue_boxes";
+    const per = ATLAS / SLOT;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = ATLAS;
+    const ctx = canvas.getContext("2d")!;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    boxes.slice(0, per * per).forEach((box, i) => {
+        const col = i % per;
+        const row = Math.floor(i / per);
+        const x0 = col * SLOT;
+        const y0 = row * SLOT;
+        ctx.fillStyle = TIER_COLOUR[box.item.tier ?? ""] ?? "#cfcfcf";
+        ctx.fillRect(x0, y0, SLOT, SLOT);
+        // Tape across the middle, and the name in black over it, as a printed carton.
+        ctx.fillStyle = "rgba(255,255,255,.55)";
+        ctx.fillRect(x0 + 6, y0 + 14, SLOT - 12, SLOT - 44);
+        ctx.fillStyle = "#1d1309";
+        ctx.font = "700 17px system-ui, sans-serif";
+        const lines = wrapText(ctx, box.item.name, SLOT - 18, 4);
+        lines.forEach((line, k) => ctx.fillText(line, x0 + SLOT / 2, y0 + 14 + (SLOT - 44) / 2 + (k - (lines.length - 1) / 2) * 19));
+        ctx.font = "600 14px system-ui, sans-serif";
+        ctx.fillText([box.item.packaging, box.item.pieces ? `× ${box.item.pieces}` : null].filter(Boolean).join(" "), x0 + SLOT / 2, y0 + SLOT - 15);
+    });
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85 });
+
+    boxes.slice(0, per * per).forEach((box, i) => {
+        const geometry = new THREE.BoxGeometry(box.side, box.side, box.side);
+        // Every face shows the whole of this box's square (a canvas texture is flipped: v 1 is the canvas's top).
+        const uv = geometry.attributes.uv as THREE.BufferAttribute;
+        const col = i % per;
+        const row = Math.floor(i / per);
+        for (let k = 0; k < uv.count; k++) uv.setXY(k, (col + uv.getX(k)) / per, 1 - (row + 1 - uv.getY(k)) / per);
+        const m = new THREE.Mesh(geometry, material);
+        // On the hub's cell floor (its picture lies at 0.16).
+        m.position.set(box.at[0], 0.17 + box.side / 2, box.at[1]);
+        m.castShadow = m.receiveShadow = true;
+        m.userData.placeKey = box.hub;
+        m.name = `item_${box.item.item_id}`;
+        group.add(m);
+    });
+    return group;
+}
+
+/** Breaks text into at most `max` lines that fit `width` px; the last one ends in … when cut. */
+function wrapText(ctx: CanvasRenderingContext2D, text: string, width: number, max: number): string[] {
+    const lines: string[] = [];
+    let line = "";
+    for (const word of text.split(/\s+/)) {
+        const next = line ? `${line} ${word}` : word;
+        if (ctx.measureText(next).width <= width || !line) line = next;
+        else {
+            lines.push(line);
+            line = word;
+        }
+    }
+    if (line) lines.push(line);
+    if (lines.length > max) {
+        lines.length = max;
+        lines[max - 1] = `${lines[max - 1].replace(/.$/, "")}…`;
+    }
+    return lines;
+}
+
+/**
+ * A customer's vehicle (places.ts VEHICLE) at (x, z), built nose to +z and
+ * turned by `yaw`: an Isuzu light truck (a cab in the paint, a white box
+ * behind), a minivan (tall, glass all round) or a sedan (a low cabin).
+ */
+function makeVehicle(kind: VehicleKind, paint: number, dark: THREE.Color, x: number, z: number, yaw = 0): THREE.Group {
+    const [length, width, height] = VEHICLE[kind];
+    const v = new THREE.Group();
+    v.position.set(x, 0, z);
+    v.rotation.y = yaw;
+    const body = new THREE.Color(paint);
+    const glass = body.clone().lerp(new THREE.Color(0x9fc3d6), 0.6);
+    const wheelR = kind === "isuzu" ? 0.45 : 0.33;
+    if (kind === "isuzu") {
+        const cab = 1.9;
+        v.add(mesh(new THREE.BoxGeometry(width, 2.1, cab), body, 0, wheelR + 1.05, length / 2 - cab / 2));
+        v.add(mesh(new THREE.BoxGeometry(width - 0.1, 0.8, 0.06), glass, 0, wheelR + 1.6, length / 2 + 0.01));
+        v.add(mesh(new THREE.BoxGeometry(width + 0.1, height - wheelR, length - cab - 0.2), new THREE.Color(0xf2f2ee), 0, wheelR + (height - wheelR) / 2, -cab / 2 - 0.1));
+        v.add(mesh(new THREE.BoxGeometry(width * 0.9, 0.25, length), dark, 0, wheelR + 0.1, 0));
+    } else if (kind === "minivan") {
+        v.add(mesh(new THREE.BoxGeometry(width, height - wheelR - 0.6, length), body, 0, wheelR + (height - wheelR - 0.6) / 2 + 0.05, 0));
+        v.add(mesh(new THREE.BoxGeometry(width - 0.1, 0.6, length - 0.5), glass, 0, height - 0.3, -0.2));
+    } else {
+        v.add(mesh(new THREE.BoxGeometry(width, height * 0.45, length), body, 0, wheelR + height * 0.22, 0));
+        v.add(mesh(new THREE.BoxGeometry(width - 0.15, height * 0.4, length * 0.5), glass, 0, wheelR + height * 0.62, -0.1));
+    }
+    for (const wx of [-width / 2, width / 2]) for (const wz of [-length / 2 + 0.9, length / 2 - 0.9]) {
+        const wheel = mesh(new THREE.CylinderGeometry(wheelR, wheelR, 0.24, 12), dark, wx, wheelR, wz);
+        wheel.rotation.z = Math.PI / 2;
+        v.add(wheel);
+    }
+    return v;
 }
 
 /** A box van, 5.2 × 2 m, nose along +x: cab in the driver's colour, white body. */

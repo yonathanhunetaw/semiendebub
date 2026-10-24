@@ -108,25 +108,30 @@ Route::domain("admin.{$baseDomain}")
             });
 
             // ── Global zone: the catalogue, stores, warehouses, fleet, sessions ──
-            Route::middleware('admin.global')->group(function () {
+            // Each `admin.global:<area>` is a part a global admin may tick on for one store admin
+            // (App\Services\Admin\AdminAreas); a plain `admin.global` (users, sessions, the system) never is.
+            Route::group([], function () {
             // ── Expenses: fuel for staff rides, rent, salaries (second person confirms) ──
-            require base_path('routes/web/partials/expenses.php');
-            // ── Purchase orders: approvals (orders are central, so global admins only) ──
+            Route::middleware('admin.global:expenses')->group(fn () => require base_path('routes/web/partials/expenses.php'));
+            // ── Purchase orders: approvals (orders are central) ──
             Route::controller(\App\Http\Controllers\Admin\PurchaseOrderApprovalController::class)
+                ->middleware('admin.global:purchase_orders')
                 ->prefix('purchase-orders')->name('purchase_orders.')->group(function () {
                     Route::get('/', 'index')->name('index');
                     Route::post('/{purchase}/approve', 'approve')->name('approve');
                     Route::post('/{purchase}/send-back', 'sendBack')->name('send_back');
                 });
             // Import costs (freight, customs, port fees) waiting for their second person.
-            require base_path('routes/web/partials/import-costs.php');
+            Route::middleware('admin.global:import_costs')->group(fn () => require base_path('routes/web/partials/import-costs.php'));
             Route::controller(\App\Http\Controllers\Shared\SupplierPaymentInboxController::class)
+                ->middleware('admin.global:supplier_payments')
                 ->prefix('supplier-payments')->name('supplier_payments.')->group(function () {
                     Route::get('/', 'index')->name('index');
                     Route::post('/{payment}/confirm', 'confirm')->name('confirm');
                     Route::post('/{payment}/reject', 'reject')->name('reject');
                 });
             // ── Items ──
+            Route::middleware('admin.global:items')->group(function () {
             Route::post('items/inline-options', [ItemController::class, 'storeInlineOption'])->name('items.inline-options');
             // ItemController::updateStatus() had no route at all, so the only
             // way an item's status could change was a full resource update.
@@ -175,20 +180,24 @@ Route::domain("admin.{$baseDomain}")
             Route::post('items/{item}/setup/pictures', [ItemSetupBasicsController::class, 'addPicture'])->name('items.setup.pictures.store');
             Route::delete('items/{item}/setup/pictures', [ItemSetupBasicsController::class, 'removePicture'])->name('items.setup.pictures.destroy');
             Route::resource('items', ItemController::class)->except(['create', 'edit']);
+            });
 
-            // Users, sessions and the system status live under Settings, for global admins only.
-            Route::get('system', SystemStatusController::class)->name('system.index');
-            Route::resource('users', UserController::class);
-            $sessionController = SessionController::class;
-            require __DIR__ . '/../sessions.php';
+            // Users, sessions and the system status live under Settings, for global admins only (never a tick).
+            Route::middleware('admin.global')->group(function () {
+                Route::get('system', SystemStatusController::class)->name('system.index');
+                Route::resource('users', UserController::class);
+                $sessionController = SessionController::class;
+                require __DIR__ . '/../sessions.php';
+            });
 
             // ── Stores ──
-            Route::resource('stores', StoreController::class);
+            Route::resource('stores', StoreController::class)->middleware('admin.global:stores');
 
             Route::prefix('inventory')->name('inventory.')->group(function () {
-                Route::get('/stores', [StoreController::class, 'index'])->name('stores');
+                Route::get('/stores', [StoreController::class, 'index'])->middleware('admin.global:stores')->name('stores');
 
                 // Warehouse CRUD
+                Route::middleware('admin.global:warehouses')->group(function () {
                 Route::get('/warehouse', [WarehouseController::class, 'index'])->name('warehouse');
                 Route::get('/warehouse/locations/create', [WarehouseController::class, 'create'])->name('locations.create');
                 Route::post('/warehouse/locations', [WarehouseController::class, 'store'])->name('locations.store');
@@ -200,12 +209,15 @@ Route::domain("admin.{$baseDomain}")
                 // see App\Policies\Inventory\WarehousePolicy.
                 Route::post('/warehouse/{warehouse}/managers', [WarehouseController::class, 'assignManagers'])
                     ->name('warehouse.managers.assign');
+                });
 
                 // Vehicles are shared by every store.
-                Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
-                Route::post('/fleet', [FleetController::class, 'store'])->name('fleet.store');
-                Route::put('/fleet/{vehicle}', [FleetController::class, 'update'])->name('fleet.update');
-                Route::delete('/fleet/{vehicle}', [FleetController::class, 'destroy'])->name('fleet.destroy');
+                Route::middleware('admin.global:fleet')->group(function () {
+                    Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
+                    Route::post('/fleet', [FleetController::class, 'store'])->name('fleet.store');
+                    Route::put('/fleet/{vehicle}', [FleetController::class, 'update'])->name('fleet.update');
+                    Route::delete('/fleet/{vehicle}', [FleetController::class, 'destroy'])->name('fleet.destroy');
+                });
             });
             });
 

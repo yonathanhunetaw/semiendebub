@@ -28,6 +28,7 @@ export interface AdminScopeProps {
     activeStore: ActiveStoreRef | null;
     accessibleStores: AccessibleStore[];
     isGlobalAdmin: boolean;
+    adminAreas?: string[];
     adminNav: { counts: AdminNavCounts } | null;
     auth: {
         user: {

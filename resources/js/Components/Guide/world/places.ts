@@ -5,19 +5,24 @@ import type { IdentityKey } from "@/Components/Visual/identities";
  * Pure data; DukaWorld draws it.
  *
  * One world unit is one metre. x runs east, z runs south (towards the
- * viewer). The Main Hub compound, laid out from the site photo, lies far to
- * the west: Hub A (20 × 20 m) at its west end, a building that is not ours in
- * the middle, Hub B (23 × 7 m) along the north fence, and the gate in the east
- * fence. Its hubs only send shipments, by van, to the store or the Remote Hub;
- * goods wait for the van on the 4 × 4 m platform between the two hub doors.
- * The Main Store stands to the east with the Remote Hub behind it.
+ * viewer). One street runs west to east; every place stands on its north side,
+ * in the order stock moves: the Suppliers (where orders come in), the Storage
+ * hub (where it is gathered and put in a container), the Main Hub compound
+ * (Hub A and Hub B, with the platform in their yard and an open way in, no
+ * gate), the Remote Hub, the Main Store (the Delivery platform in front), the
+ * Customer parking (customers wait in their car; walk-ins come to the
+ * counter), the Shops we deliver to, and Admin at the east end. There are no
+ * home deliveries.
  *
  * `chapters` are keys into the Guide's CHAPTERS.
  */
 
-export type PlaceShape = "hub" | "platform" | "shelves" | "floor" | "counter" | "houses" | "tower";
+export type PlaceShape = "hub" | "platform" | "shelves" | "floor" | "counter" | "cars" | "tower" | "shops";
 
-export type PlaceKey = "main_hub_a" | "main_hub_b" | "platform" | "store_shelf" | "store_floor" | "store_counter" | "remote_hub" | "office" | "loading_bay" | "customers" | "admin_hq";
+export type PlaceKey = "main_hub_a" | "main_hub_b" | "platform" | "store_shelf" | "store_floor" | "store_counter" | "remote_hub" | "office" | "admin_hq" | "loading_bay" | "customers" | "supplier" | "storage_hub" | "shops";
+
+/** Which way out of a building each side faces, [x, z]. */
+export const SIDE_OUT: Record<"north" | "south" | "east" | "west", [number, number]> = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
 
 /** Which wall a door is in, and where along it (metres from the wall's west or north end). */
 export interface Door {
@@ -44,6 +49,10 @@ export interface Place {
     /** A sign over the door, outside (the office says OFFICE). */
     sign?: string;
     cells?: boolean;
+    /** Shops: the buildings, relative to the centre, [x, z, width, depth, height, the side their door is on]. */
+    blocks?: Array<[number, number, number, number, number, "north" | "south" | "east" | "west"]>;
+    /** Which side faces the street (and has the way in): north-row places face south, south-row places north. */
+    faces?: "north" | "south";
     /** Where the label floats, relative to the centre, when not straight above it. */
     labelAt?: [number, number, number];
     roles: IdentityKey[];
@@ -51,32 +60,32 @@ export interface Place {
 }
 
 /**
- * The Main Store: 12 × 12 m (four times the floor of the real shop, which measures
- * about 6 × 6.8 m, so there is room to move about), 3.5 m high, open-topped so you
- * can see in. The 2 m main door is in the south wall, 6.6 m from the west wall,
- * 2.1 m high. The counter stands on the right as you walk in, against the east
- * wall, 3.2 m long; a metal divider is fixed to the front wall at the door's west
- * edge. The racking (storeLayout.ts) keeps the real shop's size: each wall's run is
- * 5 m long and centred on its wall, 50 cm deep, floor to ceiling on the left and
- * back walls, hanging from the ceiling on the right wall and over the door. The
- * rest of the floor is the Store Floor, with the pallets in the north-west corner.
+ * The Main Store: 16 × 18 m (roomy, so there is space to move about), 5.2 m
+ * high, open-topped so you can see in. The 2.2 m main door is in the south wall,
+ * 7 m from the west wall. The counter stands in the middle, facing the door as you
+ * walk in, 4 m long, with the Delivery platform beside it; a metal divider is fixed
+ * to the front wall at the door's west edge. The racking (storeLayout.ts) runs
+ * wall to wall on all four walls, 50 cm deep, and hangs: two rows' height of
+ * store floor stays under it (over the door, it starts above the door). The rest
+ * of the floor is the Store Floor, with the pallets in the north-west corner.
  */
 export const STORE = {
     label: "Main Store",
-    position: [20, 12] as [number, number],
-    size: [12, 12] as [number, number],
-    wall: 3.5,
-    door: { at: 6.6, width: 2, height: 2.1 },
+    // In the north row: its front (and door) on the street side, at z = -FRONT.
+    position: [-8, -18] as [number, number],
+    size: [16, 18] as [number, number],
+    wall: 5.2,
+    door: { at: 7, width: 2.2, height: 2.3 },
     shelfDepth: 0.5,
     /** Height of the floor strip under the lowest shelf. */
     plinth: 0.5,
-    counter: { width: 3.2, depth: 0.8, height: 1, z: 0 },
+    counter: { width: 4, depth: 0.8, height: 1, z: 0 },
 };
 
-/** The real shop's side, in metres: the racks and the pallets keep its size, whatever the room around them. */
-export const REAL_SHOP = 6;
-/** How long one wall's run of racks is: the real shop's wall, less a rack's depth at each end. */
-export const RACK_SPAN = REAL_SHOP - 2 * STORE.shelfDepth;
+/** How long one wall's run of racks is: wall to wall, less a rack's depth at each end where it meets the next wall's run. */
+export function rackSpan(wall: "west" | "north" | "east" | "south"): number {
+    return (wall === "north" || wall === "south" ? STORE.size[0] : STORE.size[1]) - 2 * STORE.shelfDepth;
+}
 
 /** The store's corners, [x, z]: things are placed against a wall, so they are measured from the corner they stand in. */
 export const STORE_CORNER = {
@@ -86,66 +95,130 @@ export const STORE_CORNER = {
     se: [STORE.position[0] + STORE.size[0] / 2, STORE.position[1] + STORE.size[1] / 2] as [number, number],
 };
 
-/** The fenced yard, as a polygon of [x, z] corners, and the double swing gate in its east fence. */
+/**
+ * The site is a zigzag along one street, running west to east along z = 0:
+ * the places alternate between its north row (fronts at z = -FRONT, facing
+ * south) and its south row (fronts at z = +FRONT, facing north), in the order
+ * stock moves. Between each front and the street is the apron, where the
+ * place's platform is: vans park and goods change hands there.
+ *
+ * The whole site is about 160 × 90 m: a phone held upright sees it top (west)
+ * to bottom (east), the south row on the left, Suppliers at the top left; a
+ * wide screen sees it west to east.
+ */
+export const STREET_Z = 0;
+export const FRONT = 9;
+/** The street, west end to east end. */
+export const STREET: [number, number] = [-80, 78];
+
+/** The Main Hub's fenced yard (south row), an upright rectangle of [x, z] corners, with the open way in (no gate) in its north fence. */
 export const COMPOUND = {
     label: "Main Hub compound",
-    corners: [[-94, -15], [-31, -15], [-31, -1], [-94, 12]] as Array<[number, number]>,
-    gate: { at: [-31, -4] as [number, number], width: 4 },
+    corners: [[-48, FRONT], [-14, FRONT], [-14, 56], [-48, 56]] as Array<[number, number]>,
+    opening: { at: [-23, FRONT] as [number, number], width: 6 },
 };
 
-/** The building between the hubs that is not ours: drawn grey, not clickable. */
-export const NEIGHBOUR = { position: [-65, -8] as [number, number], size: [10, 10] as [number, number], height: 4 };
+/**
+ * A fence line from (x1, z1) to (x2, z2) as the pieces either side of the
+ * compound's opening, when the opening is on it; otherwise the whole line.
+ */
+export function fenceRuns(x1: number, z1: number, x2: number, z2: number): Array<[number, number, number, number]> {
+    const [gx, gz] = COMPOUND.opening.at;
+    const length = Math.hypot(x2 - x1, z2 - z1);
+    if (length < 1e-6) return [];
+    const [ux, uz] = [(x2 - x1) / length, (z2 - z1) / length];
+    const along = (gx - x1) * ux + (gz - z1) * uz;
+    const off = Math.abs((gx - x1) * uz - (gz - z1) * ux);
+    if (off > 0.01 || along <= 0 || along >= length) return [[x1, z1, x2, z2]];
+    const half = COMPOUND.opening.width / 2;
+    return [
+        [x1, z1, x1 + ux * (along - half), z1 + uz * (along - half)],
+        [x1 + ux * (along + half), z1 + uz * (along + half), x2, z2],
+    ];
+}
+
+const STORE_DOOR_X = STORE_CORNER.sw[0] + STORE.door.at;
 
 export const PLACES: Place[] = [
+    {
+        key: "supplier",
+        label: "Suppliers",
+        does: "The suppliers we buy from: where the orders come in, at the head of the street.",
+        happens: ["Procurement checks prices and asks for quotes", "A purchase is agreed", "The goods are collected and taken to the Storage hub"],
+        position: [-65, FRONT + 11],
+        size: [14, 22],
+        shape: "shops",
+        faces: "north",
+        // Three premises one behind the other, their doors on a lane along the east side.
+        blocks: [[-2.5, -7, 9, 6, 3.5, "east"], [-2.5, 0, 9, 6, 3, "east"], [-2.5, 7, 9, 6, 4, "east"]],
+        roles: ["procurement"],
+        chapters: [],
+    },
+    {
+        key: "storage_hub",
+        label: "Storage hub",
+        does: "Where bought stock is gathered, counted and checked, then put in a container to ship to the Main Hub.",
+        happens: ["Receive the goods from each supplier", "Count and check them; set aside what is short or damaged", "Pack and load the container"],
+        position: [-53, -FRONT - 11],
+        size: [14, 22],
+        height: 5,
+        shape: "hub",
+        door: { wall: "south", at: 7, width: 4 },
+        roles: ["procurement", "stock_keeper"],
+        chapters: [],
+    },
     {
         key: "main_hub_a",
         label: "Main Hub A",
         does: "The big central warehouse, 20 × 20 m. Bulk stock in cartons, cell by cell.",
         happens: ["Pick the shipment's list from the cells", "Put the goods out on the platform", "Hand them to the driver, who loads and signs"],
-        position: [-82, -3],
+        position: [-37, 45],
         size: [20, 20],
         height: 7,
         shape: "hub",
-        door: { wall: "east", at: 16, width: 3 },
+        door: { wall: "north", at: 10, width: 3 },
         cells: true,
+        faces: "north",
         roles: ["stock_keeper"],
         chapters: ["moving", "stock_keeper"],
     },
     {
         key: "main_hub_b",
         label: "Main Hub B",
-        does: "The long warehouse on the north fence, 23 × 7 m.",
+        does: "The long warehouse, 7 × 23 m, standing beside Hub A.",
         happens: ["Pick the shipment's list from the cells", "Put the goods out on the platform", "Hand them to the driver, who loads and signs"],
-        position: [-45.5, -9.5],
-        size: [23, 7],
+        position: [-18.5, 43.5],
+        size: [7, 23],
         height: 6,
         shape: "hub",
-        door: { wall: "south", at: 8, width: 3 },
+        door: { wall: "north", at: 3.5, width: 3 },
         cells: true,
+        faces: "north",
         roles: ["stock_keeper"],
         chapters: ["moving"],
     },
     {
         key: "platform",
         label: "Platform",
-        does: "The 4 × 4 m pickup platform between the hub doors.",
+        does: "The 4 × 4 m pickup platform in the yard, in front of the hub doors.",
         happens: ["The origin hub puts the picked goods here", "They wait for the driver", "The driver checks them, loads the van and signs on the stock keeper's phone"],
-        position: [-62, 1],
+        position: [-31, 24],
         size: [4, 4],
         shape: "platform",
+        faces: "north",
         roles: ["stock_keeper", "delivery"],
         chapters: ["moving", "delivery"],
     },
     {
         key: "store_shelf",
         label: "Store Shelf",
-        does: "The steel racking, 50 cm deep. Left wall a–c and back wall d–h, six rows from the floor up; right wall i–k and front wall l–o, three rows hanging from the ceiling.",
+        does: "The steel racking, 50 cm deep, wall to wall on all four walls, hanging with two rows' height of store floor under it.",
         happens: ["Each physical spot (like f6) carries up to four spots of the seller's shelf, named f6a to f6d once placed", "A seller-shelf spot at its refill line raises a refill from the floor", "Tap a spot to see what is on it"],
         position: STORE.position,
         size: STORE.size,
         shape: "shelves",
         indoor: true,
-        labelAt: [0, 4.6, -STORE.size[1] / 2 + 0.4],
+        labelAt: [0, STORE.wall + 1.1, -STORE.size[1] / 2 + 0.4],
         roles: ["stock_keeper", "store_manager"],
         chapters: ["stock_keeper", "seller"],
     },
@@ -165,64 +238,67 @@ export const PLACES: Place[] = [
     {
         key: "store_counter",
         label: "Counter",
-        does: "The 3.2 m counter on the right as you walk in, against the east wall. Sales happen here.",
+        does: "The 4 m counter in the middle of the shop, facing the door as you walk in. Sales happen here.",
         happens: ["The customer asks; the seller finds the item on the shelf", "The seller builds the cart and checks out", "Payment is confirmed by a second person", "In-store orders are handed over here"],
-        // Against the east wall (its inner face is the wall), from 0.2 m inside the front wall 3.2 m towards the back.
-        position: [STORE_CORNER.se[0] - 0.4, STORE_CORNER.se[1] - 0.2 - 1.6],
-        size: [0.8, 3.2],
+        // Across the shop, 5 m in from the front wall, a little east of the door: customers come up to it from the door.
+        position: [STORE_DOOR_X + 2.6, STORE_CORNER.sw[1] - 5],
+        size: [4, 0.8],
         shape: "counter",
         indoor: true,
         roles: ["seller", "customer"],
         chapters: ["seller"],
     },
     {
+        key: "loading_bay",
+        label: "Delivery",
+        does: "The delivery platform inside the shop, beside the counter: couriers load orders here and take them out along the street to the customers' cars.",
+        happens: ["Take a run from the list on offer", "Collect the parcel: custody is now the courier's", "Hand it over, or report why it failed"],
+        position: [STORE_DOOR_X - 3.4, STORE_CORNER.sw[1] - 5.4],
+        size: [3.6, 3.6],
+        shape: "platform",
+        indoor: true,
+        roles: ["delivery"],
+        chapters: ["delivery"],
+    },
+    {
         key: "remote_hub",
         label: "Remote Hub",
-        does: "The warehouse behind the store, as big as the store itself.",
+        does: "The store's own warehouse, across the street from it.",
         happens: ["Receive shipments from the Main Hubs", "Send stock into the store when the floor runs short", "Orders can be delivered straight from here"],
-        position: [20, -8],
-        size: [16, 10],
+        position: [3, FRONT + 8],
+        size: [10, 16],
         height: 5,
         shape: "hub",
-        door: { wall: "south", at: 11, width: 3 },
+        door: { wall: "north", at: 5, width: 3 },
         cells: true,
+        faces: "north",
         roles: ["stock_keeper", "store_manager"],
         chapters: ["moving", "stock_keeper"],
     },
     {
         key: "office",
         label: "Office",
-        does: "The back office, beside the Remote Hub: a desk for every part of the business, the staff board with the shifts and who holds each key.",
+        does: "The back office: a desk for every part of the business, and the staff board with the shifts and who holds each key.",
         happens: ["Count in what arrived, settle what was short", "Confirm payments and approve orders, counts and purchases", "Read the board: who works when, and who holds which key"],
-        position: [42, -15],
-        size: [24, 12],
+        position: [14, -FRONT - 12],
+        size: [16, 24],
         height: 4,
         shape: "hub",
-        // The entrance, in the south wall facing the road; the sign over it says OFFICE.
-        door: { wall: "south", at: 12, width: 3 },
+        // The entrance, in the south wall facing the street; the sign over it says OFFICE.
+        door: { wall: "south", at: 8, width: 3 },
         sign: "OFFICE",
         roles: ["admin", "store_manager"],
         chapters: ["admin"],
     },
     {
-        key: "loading_bay",
-        label: "Delivery",
-        does: "The delivery platform, beside the road between the Remote Hub and the customers: couriers load orders here.",
-        happens: ["Take a run from the list on offer", "Collect the parcel: custody is now the courier's", "Hand it over, or report why it failed"],
-        position: [36, 4],
-        size: [8, 8],
-        shape: "platform",
-        roles: ["delivery"],
-        chapters: ["delivery"],
-    },
-    {
         key: "customers",
-        label: "Customers",
-        does: "Where delivered orders end up.",
-        happens: ["Receive the parcel", "Pay on delivery if they chose to"],
-        position: [62, 4],
-        size: [12, 10],
-        shape: "houses",
+        label: "Customer parking",
+        does: "Ten numbered parking stops: a customer waits in their vehicle and the order is brought out to it. (Walk-in customers are served at the counter; there are no home deliveries.)",
+        happens: ["Park at a numbered stop", "The courier brings the order to the vehicle and checks the receiver's name and phone", "Pay on delivery if they chose to"],
+        position: [29.5, FRONT + 10],
+        size: [20, 20],
+        shape: "cars",
+        faces: "north",
         roles: ["customer"],
         chapters: ["seller", "delivery"],
     },
@@ -231,12 +307,25 @@ export const PLACES: Place[] = [
         label: "Admin",
         does: "Runs the business: catalogue, prices, people and stock rules.",
         happens: ["Create shipments: the first of the four ticks", "Set shelf levels and refill routes", "Look after the people and their roles"],
-        position: [0, 22],
-        size: [6, 6],
-        height: 9,
+        position: [42, -FRONT - 7],
+        size: [10, 14],
+        height: 14,
         shape: "tower",
         roles: ["admin", "store_manager"],
         chapters: ["admin", "moving"],
+    },
+    {
+        key: "shops",
+        label: "Shops",
+        does: "The shops we deliver to, at the end of the street: two rows facing each other across a road.",
+        happens: ["A shop orders from the store", "The order is delivered to the shop's door"],
+        position: [58, FRONT + 14],
+        size: [26, 28],
+        shape: "shops",
+        faces: "north",
+        blocks: [[-7.5, -9, 9, 8, 4, "east"], [-7.5, 0, 9, 8, 3.5, "east"], [-7.5, 9, 9, 8, 4.5, "east"], [7.5, -9, 9, 8, 3.5, "west"], [7.5, 0, 9, 8, 4.5, "west"], [7.5, 9, 9, 8, 4, "west"]],
+        roles: ["customer"],
+        chapters: ["seller", "delivery"],
     },
 ];
 
@@ -248,9 +337,9 @@ export const PLACES: Place[] = [
  * the worker walks round them.
  */
 export const FLOOR_ZONES: Array<[number, number, number, number, number]> = [
-    // As in the real shop, measured from the north-west corner: 1.3 m from the west rack, 0.4 m from the back wall.
-    [-4.7, -3.4, 1.3, 4.4, 3],
-    [-2.8, -4.6, 1.3, 1.4, 1],
+    // As in the real shop, measured from the north-west corner: 1.3 m from the west wall, 0.4 m from the back wall.
+    [-STORE.size[0] / 2 + 1.3, -STORE.size[1] / 2 + 2.6, 1.3, 4.4, 3],
+    [-STORE.size[0] / 2 + 3.2, -STORE.size[1] / 2 + 1.4, 1.3, 1.4, 1],
 ];
 export const PALLET = 1.2;
 /** Every pallet's centre, [x, z, its number within its area]. */
@@ -258,46 +347,104 @@ export function palletCentres(): Array<[number, number, number]> {
     return FLOOR_ZONES.flatMap(([x, z, , depth, pallets]) => Array.from({ length: pallets }, (_, i): [number, number, number] => [x, z - depth / 2 + 0.9 + i * 1.7, i]));
 }
 
-/** The customers' houses, relative to that place's centre: [x, z, height], each 3.2 m square. */
-export const HOUSES: Array<[number, number, number]> = [[-3.5, -2, 3], [0.5, 2, 4], [3.8, -2.6, 3]];
-export const HOUSE_SIZE = 3.2;
+/** The vehicles customers wait in: [length, width, height], metres. An Isuzu is a light truck: a cab and a box. */
+export type VehicleKind = "isuzu" | "minivan" | "sedan";
+export const VEHICLE: Record<VehicleKind, [number, number, number]> = {
+    isuzu: [6.6, 2.1, 2.9],
+    minivan: [4.9, 1.9, 1.9],
+    sedan: [4.6, 1.8, 1.45],
+};
 
-/** Where a van stops to unload at each shipment destination. */
+/**
+ * The customers' parking stops, relative to that place's centre: two columns
+ * of five either side of a lane up the middle, [x, z, what waits there (null:
+ * free)]. Each stop is BAY_SIZE (along x, along z); a vehicle lies across it,
+ * its nose to the lane. Numbered 1… from the street (north), the west column
+ * first.
+ */
+export const BAY_SIZE: [number, number] = [7.5, 3.6];
+const BAY_X = BAY_SIZE[0] / 2 + 2;
+const BAY_Z = [-7.2, -3.6, 0, 3.6, 7.2];
+const WAITING: Array<VehicleKind | null> = ["isuzu", "minivan", "isuzu", "sedan", "isuzu", "isuzu", null, "minivan", "isuzu", "minivan"];
+export const CUSTOMER_BAYS: Array<[number, number, VehicleKind | null]> = [
+    ...BAY_Z.map((z, i): [number, number, VehicleKind | null] => [-BAY_X, z, WAITING[i]]),
+    ...BAY_Z.map((z, i): [number, number, VehicleKind | null] => [BAY_X, z, WAITING[i + 5]]),
+];
+
+/** A 40 ft container, [length, width, height]. */
+export const CONTAINER: [number, number, number] = [12, 2.4, 2.6];
+/** The container truck loading on the Storage hub's apron, along the street, cab to the east: [x, z]. */
+export const CONTAINER_TRUCK: [number, number] = [-56, -FRONT + 3.5];
+
+const doorX = (key: PlaceKey) => {
+    const place = PLACES.find((p) => p.key === key)!;
+    return place.position[0] - place.size[0] / 2 + place.door!.at;
+};
+const REMOTE_DOOR_X = doorX("remote_hub");
+
+/** Where a van stops to unload at each shipment destination: on the apron, beside the door. */
 export const PARKING: Partial<Record<PlaceKey, [number, number]>> = {
-    // On the street along the shop's front, a little east of its door.
-    store_floor: [STORE_CORNER.sw[0] + STORE.door.at + 1.9, STORE_CORNER.sw[1] + 4],
-    remote_hub: [25.8, -1.3],
+    store_floor: [STORE_DOOR_X + 3.5, -FRONT + 4],
+    remote_hub: [REMOTE_DOOR_X + 3.5, FRONT - 4],
 };
 
 /** Where unloaded goods are set down: just outside the door they go in by. */
 export const DROP: Partial<Record<PlaceKey, [number, number]>> = {
-    store_floor: [STORE_CORNER.sw[0] + STORE.door.at, STORE_CORNER.sw[1] + 1],
-    remote_hub: [22, -2.1],
+    store_floor: [STORE_DOOR_X, -FRONT + 1],
+    remote_hub: [REMOTE_DOOR_X, FRONT - 1.5],
 };
 
-/** Where a van waits to load at the platform: alongside it, facing the gate. */
-export const PLATFORM_BERTH: [number, number] = [-57.5, 1];
+/** Where a van waits to load at the platform: alongside its east edge. */
+export const PLATFORM_BERTH: [number, number] = [-26.5, 24];
+
+const YARD: Array<[number, number]> = [PLATFORM_BERTH, [COMPOUND.opening.at[0], 20], [COMPOUND.opening.at[0], 12], [COMPOUND.opening.at[0], FRONT - 1], [COMPOUND.opening.at[0] + 4, STREET_Z]];
 
 /**
- * The roads, as polylines of [x, z]: the main road from the gate along the
- * back of the store (past the Remote Hub) to the delivery bay and on to the
- * customers, and the street that loops round to the store's front door.
+ * The roads, as polylines of [x, z]: the one street; the Main Hub's yard from
+ * the platform out to it; the lane up the customers' parking; and the road
+ * between the two rows of shops.
  */
+const parking = PLACES.find((p) => p.key === "customers")!;
+const shops = PLACES.find((p) => p.key === "shops")!;
 export const ROADS: Array<Array<[number, number]>> = [
-    [[-31, -4], [-12, -2.5], [6, -0.5], [24, 0], [31, -1], [36, -3.5], [44, -2], [52, 2], [58, 4]],
-    // Past the shop's west side, along its front (z 22) and on to the customers.
-    [[6, -0.5], [8, 10], [11, 20], [17, 22], [32, 22], [44, 16], [54, 9]],
+    [[STREET[0], STREET_Z], [STREET[1], STREET_Z]],
+    [[PLATFORM_BERTH[0] + 1, PLATFORM_BERTH[1] - 2], [COMPOUND.opening.at[0], 18], [COMPOUND.opening.at[0], FRONT + 1], [COMPOUND.opening.at[0], STREET_Z + 1]],
+    [[parking.position[0], STREET_Z + 1], [parking.position[0], parking.position[1] + parking.size[1] / 2 - 1]],
+    [[shops.position[0], STREET_Z + 1], [shops.position[0], shops.position[1] + shops.size[1] / 2 - 1]],
 ];
 
-const YARD: Array<[number, number]> = [PLATFORM_BERTH, [-44, -1.5], [-36, -3.5], [-31, -4]];
-
-/** A van's path from the platform, out of the gate, to where it unloads. */
+/** A van's path from the platform, out of the compound and along the street, to where it unloads. */
 export function vanRoute(destination: PlaceKey): Array<[number, number]> {
-    switch (destination) {
-        case "store_floor": return [...YARD, [-12, -2.5], [6, -0.5], [8, 10], [11, 20], [17, 22], PARKING.store_floor!];
-        case "remote_hub": return [...YARD, [-12, -2.5], [6, -0.5], [20, -0.3], PARKING.remote_hub!];
-        default: return YARD;
+    const to = PARKING[destination];
+    if (!to) return YARD;
+    return [...YARD, [to[0] - 12, STREET_Z], [to[0] - 4, Math.sign(to[1]) * 2], to];
+}
+
+/** The room (a hub, the shop, the office) whose walls stand round (x, z), as [minX, minZ, maxX, maxZ]; null outdoors. */
+export function roomAt(x: number, z: number): [number, number, number, number] | null {
+    const rooms: Array<{ position: [number, number]; size: [number, number] }> = [STORE, ...PLACES.filter((p) => p.shape === "hub")];
+    for (const { position: [cx, cz], size: [w, d] } of rooms) {
+        if (x > cx - w / 2 && x < cx + w / 2 && z > cz - d / 2 && z < cz + d / 2) return [cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2];
     }
+    return null;
+}
+
+/**
+ * Where a worker stands to go into a place: outside its door, facing it (yaw 0
+ * faces south, +z). The shop's own places use the shop's door; a place with no
+ * door, the middle of its street side.
+ */
+export function doorPose(key: PlaceKey): { x: number; z: number; yaw: number } {
+    const place = placeFor(key);
+    if (place.indoor) return { x: STORE_DOOR_X, z: STORE_CORNER.sw[1] + 3.2, yaw: Math.PI };
+    const door = doorPosition(place);
+    if (door) {
+        const [ox, oz] = door.out;
+        return { x: door.at[0] + ox * 3.2, z: door.at[1] + oz * 3.2, yaw: Math.atan2(-ox, -oz) };
+    }
+    // Facing the place from its street side: a north-row place faces south, so the worker stands south of it, facing north.
+    const out = place.faces === "north" ? -1 : 1;
+    return { x: place.position[0], z: place.position[1] + out * (place.size[1] / 2 + 2.5), yaw: out > 0 ? Math.PI : 0 };
 }
 
 export function placeFor(key: PlaceKey): Place {

@@ -146,7 +146,8 @@ class SupplierPaymentService
     public static function mayConfirm(SupplierPayment $payment, User $by): bool
     {
         return (int) $payment->claimed_by !== (int) $by->id
-            && ($by->isRole('finance') || self::isGlobalAdmin($by));
+            // A global admin, or a store admin with Supplier payments ticked on (AdminAreas).
+            && ($by->isRole('finance') || app(\App\Services\Admin\AdminAreas::class)->allows($by, 'supplier_payments'));
     }
 
     private static function isGlobalAdmin(User $user): bool
