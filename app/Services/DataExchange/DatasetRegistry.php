@@ -6,6 +6,7 @@ namespace App\Services\DataExchange;
 
 use App\Services\DataExchange\Datasets\CategoriesDataset;
 use App\Services\DataExchange\Datasets\ExpensesDataset;
+use App\Services\DataExchange\Datasets\ItemLevelsDataset;
 use App\Services\DataExchange\Datasets\ItemsDataset;
 use App\Services\DataExchange\Datasets\OptionNamesDataset;
 use App\Services\DataExchange\Datasets\StockCountsDataset;
@@ -15,6 +16,9 @@ use App\Services\DataExchange\Datasets\TariffsDataset;
 use App\Services\DataExchange\Datasets\VariantsDataset;
 use App\Services\Finance\ExpenseService;
 use App\Services\Inventory\CatalogueSheet;
+use App\Services\Inventory\LocationLevels;
+use App\Services\Inventory\PackagingLadder;
+use App\Services\Inventory\ShelfMatrix;
 use App\Services\Inventory\StocktakeService;
 use App\Services\Item\ItemWriter;
 use App\Services\Item\StorePrices;
@@ -50,6 +54,7 @@ final class DatasetRegistry
             new OptionNamesDataset('item_packaging_types', 'Packaging types', $this->model('Item\\ItemPackagingType'), 'Carton'),
             new ItemsDataset(app(ItemWriter::class)),
             new VariantsDataset(app(ItemWriter::class)),
+            new ItemLevelsDataset(app(ShelfMatrix::class), app(LocationLevels::class), app(PackagingLadder::class), app(CatalogueSheet::class)),
             new StockCountsDataset(app(StocktakeService::class), app(CatalogueSheet::class)),
             new StorePricesDataset(app(StorePrices::class)),
             new ExpensesDataset(app(ExpenseService::class)),

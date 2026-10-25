@@ -171,6 +171,7 @@ export default function DataExchange({ groups = [], stores = [], preview = null 
         { title: "Barcodes", hint: "One code per variant, or AUTO for the shop's own", keys: ["item_variants"] },
         { title: "Put items in a store", hint: "Switched off and unpriced until a price is set", keys: [], deploy: true },
         { title: "Prices", hint: "A price above zero puts a variant on sale", keys: ["store_prices"] },
+        { title: "Shelves and levels", hint: "Which items each shelf, floor and hub holds, and the lines that raise a refill", keys: ["item_levels"] },
         { title: "Stock", hint: "Opening counts, approved in Admin → Counts", keys: ["stock_counts"] },
     ].filter((step) => step.deploy || step.keys.every(has));
 
