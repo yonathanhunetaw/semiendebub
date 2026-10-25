@@ -1,10 +1,13 @@
-import KeyCard from "@/Components/Work/KeyCard";
 import { cardCls, ghostBtn, hoursText, inputCls, KIND_ICON, workLayout, wr } from "@/Components/Work/workUi";
-import type { CustodyKeyView, DayHours, SiteKind, WorkApp } from "@/types/work";
+import type { DayHours, SiteKind, WorkApp } from "@/types/work";
 import { Head, Link } from "@inertiajs/react";
 import React, { useState } from "react";
 
-/** The sites this user manages: today's hours and who holds each key. */
+/**
+ * Site setup: the sites this user manages, each to its hours, checklists and
+ * printed QR, and to its shifts and who opens, closes and drives. Keys are in
+ * My work → Keys.
+ */
 
 interface ManagedSite {
     id: number;
@@ -13,7 +16,6 @@ interface ManagedSite {
     kind_label: string;
     has_shifts: boolean;
     today: DayHours | null;
-    key: CustodyKeyView;
 }
 
 interface Props {
@@ -51,12 +53,12 @@ function HoursDownload({ app }: { app: WorkApp }): React.ReactElement {
 export default function SitesIndex({ app, sites = [] }: Props): React.ReactElement {
     return (
         <>
-            <Head title="Sites" />
+            <Head title="Site setup" />
 
             <div className="min-h-screen bg-surface-container-low pb-36">
                 <header className="sticky top-0 z-40 border-b border-outline-variant/60 bg-surface-container-lowest px-4 py-3">
-                    <h1 className="text-lg font-bold tracking-tight text-on-surface">Sites</h1>
-                    <p className="text-[11px] text-outline">Opening hours and keys of the places you manage.</p>
+                    <h1 className="text-lg font-bold tracking-tight text-on-surface">Site setup</h1>
+                    <p className="text-[11px] text-outline">Opening hours, checklists and the printed QR of the places you manage.</p>
                     <HoursDownload app={app} />
                 </header>
 
@@ -78,12 +80,9 @@ export default function SitesIndex({ app, sites = [] }: Props): React.ReactEleme
                                 </div>
                                 <span className="material-symbols-outlined text-outline">chevron_right</span>
                             </Link>
-                            {site.has_shifts ? (
-                                <Link href={wr(app, "work.rota", { site: site.id })} className={`block text-center ${cardCls} py-2 text-[12px] font-bold text-primary`}>
-                                    Rota this week
-                                </Link>
-                            ) : null}
-                            <KeyCard app={app} keyView={site.key} />
+                            <Link href={wr(app, "work.rota", { site: site.id })} className={`block text-center ${cardCls} py-2 text-[12px] font-bold text-primary`}>
+                                {site.has_shifts ? "Shifts and opening this week" : "Who opens, closes and drives"}
+                            </Link>
                         </div>
                     ))}
                 </div>

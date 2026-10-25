@@ -1,7 +1,7 @@
 import { dayDateTime } from "@/utils/dates";
 import type { SiteDayView } from "@/types/work";
 import React from "react";
-import { cardCls, hoursText, KIND_ICON } from "./workUi";
+import { cardCls, hm, hoursText, KIND_ICON } from "./workUi";
 
 const STATUS: Record<SiteDayView["status"], { label: string; className: string }> = {
     planned: { label: "Not open yet", className: "border-outline-variant bg-surface-container text-on-surface-variant" },
@@ -11,7 +11,7 @@ const STATUS: Record<SiteDayView["status"], { label: string; className: string }
     closed_day: { label: "Closed today", className: "border-outline-variant bg-surface-container text-on-surface-variant" },
 };
 
-/** Today at one site: hours, who opens and closes, who did, the key. */
+/** Today at one site: hours, who opens, closes and drives, who did, the key. */
 export default function SiteDayCard({ day, children }: { day: SiteDayView; children?: React.ReactNode }): React.ReactElement {
     const chip = STATUS[day.status];
 
@@ -35,6 +35,12 @@ export default function SiteDayCard({ day, children }: { day: SiteDayView; child
                 <dt className="text-on-surface-variant">Closes</dt>
                 <dd className="text-on-surface">
                     {day.closed_at ? `${day.closed_by} · ${dayDateTime(day.closed_at, "")}` : (day.closer?.name ?? "Not named")}
+                </dd>
+                <dt className="text-on-surface-variant">Driver</dt>
+                <dd className={day.driver ? "text-on-surface" : "font-semibold text-on-warning-container"}>
+                    {day.driver?.name ?? "No driver planned"}
+                    {day.rides.map((ride) => ` · ${ride.purpose === "opening" ? "pick-up" : "home"} ${hm(ride.departs_at)}`).join("")}
+                    {day.no_driver ? " · went ahead without one" : ""}
                 </dd>
                 <dt className="text-on-surface-variant">Key</dt>
                 <dd className="text-on-surface">{day.i_hold_key ? "You hold it" : (day.key_holder?.name ?? "Nobody holds it")}</dd>

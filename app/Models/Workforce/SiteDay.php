@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One site on one date: who is to open and close it, who did, and when.
+ * One site on one date: who is to open and close it (and drive them), who did, and when.
  * Only App\Services\Workforce\SiteDayService changes `status`.
  */
 class SiteDay extends Model
@@ -28,8 +28,8 @@ class SiteDay extends Model
     public const STATUS_CLOSED_DAY = 'closed_day';
 
     protected $fillable = [
-        'stock_location_id', 'date', 'status', 'opener_id', 'closer_id',
-        'opened_at', 'opened_by', 'opened_without_key', 'open_checklist', 'float_amount', 'open_note',
+        'stock_location_id', 'date', 'status', 'opener_id', 'closer_id', 'driver_id',
+        'opened_at', 'opened_by', 'opened_without_key', 'no_driver', 'open_checklist', 'float_amount', 'open_note',
         'closed_at', 'closed_by', 'close_checklist', 'till_count', 'close_note', 'missed_at',
     ];
 
@@ -38,12 +38,14 @@ class SiteDay extends Model
         'date' => 'date',
         'opener_id' => 'integer',
         'closer_id' => 'integer',
+        'driver_id' => 'integer',
         'opened_by' => 'integer',
         'closed_by' => 'integer',
         'opened_at' => 'datetime',
         'closed_at' => 'datetime',
         'missed_at' => 'datetime',
         'opened_without_key' => 'boolean',
+        'no_driver' => 'boolean',
         'open_checklist' => 'array',
         'close_checklist' => 'array',
         'float_amount' => 'decimal:2',
@@ -63,6 +65,12 @@ class SiteDay extends Model
     public function closer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'closer_id');
+    }
+
+    /** Brings the opener in and takes the closer home (StaffRideService::planFor). */
+    public function driver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'driver_id');
     }
 
     public function openedBy(): BelongsTo

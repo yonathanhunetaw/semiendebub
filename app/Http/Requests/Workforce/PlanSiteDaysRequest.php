@@ -22,6 +22,7 @@ class PlanSiteDaysRequest extends FormRequest
             'days.*.date' => ['required', 'date_format:Y-m-d', 'distinct'],
             'days.*.opener_id' => ['nullable', 'integer', 'exists:users,id'],
             'days.*.closer_id' => ['nullable', 'integer', 'exists:users,id'],
+            'days.*.driver_id' => ['nullable', 'integer', 'exists:users,id'],
         ];
     }
 }

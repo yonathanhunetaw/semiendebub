@@ -32,8 +32,10 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * "My work": the keys I hold and the ones waiting for me, the sites I work
- * at and their hours today. Key steps go through KeyCustodyService.
+ * "My work", in tabs: Today (clocked in, opening and closing at each site,
+ * the driver's planned runs), Shifts, Keys, Leave and Rides. A manager also
+ * sees their sites (to plan shifts and who opens, closes and drives) and the
+ * keys of those sites. Key steps go through KeyCustodyService.
  */
 class WorkController extends Controller
 {
@@ -84,8 +86,24 @@ class WorkController extends Controller
             'rides' => $this->rides->forStaff($user)
                 ->filter(fn (StaffRide $ride): bool => $ride->riders->contains('user_id', $user->id))
                 ->map(fn (StaffRide $ride): array => $this->rides->present($ride, $user))->values()->all(),
+            // A driver's runs from the days' plans: bring the opener in, take the closer home.
+            'driving' => $user->is_driver ? $this->rides->forDriver($user)
+                ->filter(fn (StaffRide $ride): bool => $ride->purpose !== null && (int) $ride->driver_id === (int) $user->id)
+                ->map(fn (StaffRide $ride): array => $this->rides->present($ride, $user))->values()->all() : [],
             'homeArea' => $user->home_area,
-            'managesSites' => $this->sites->managedBy($user)->isNotEmpty(),
+            'managesSites' => ($managed = $this->sites->managedBy($user))->isNotEmpty(),
+            'sites' => $managed->map(fn (StockLocation $site): array => [
+                'id' => (int) $site->id,
+                'name' => $site->name,
+                'kind' => $site->kind,
+                'kind_label' => $site->kind_label,
+                'has_shifts' => $this->sites->hasShifts($site),
+            ])->values()->all(),
+            // The keys of the sites I manage that someone else holds (mine are in `keys`), with their log.
+            'siteKeys' => $managed->map(fn (StockLocation $site): CustodyKey => $this->keys->keyFor($site))
+                ->reject(fn (CustodyKey $key): bool => (int) $key->holder_id === (int) $user->id)
+                ->map(fn (CustodyKey $key): array => $this->keys->present($key, $user, true) + ['receivers' => $this->keys->receivers($key)])
+                ->values()->all(),
             'reasons' => KeyHandover::REASONS,
         ]);
     }

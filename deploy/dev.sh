@@ -326,6 +326,8 @@ cmd_e2e() {
     export APP_URL="http://$(env_value APP_DOMAIN):${E2E_PORT}"
     export QUEUE_CONNECTION=sync MAIL_MAILER=log SENTRY_LARAVEL_DSN= DEBUGBAR_ENABLED=false
     export DISCORD_VISIT_WEBHOOK_URL= DISCORD_DAILY_VISIT_WEBHOOK_URL= DISCORD_LOGIN_WEBHOOK_URL=
+    # Pictures (the r2 disk) go to storage/app/public/r2-local, never prod's bucket.
+    export R2_LOCAL=true
 
     php artisan migrate --force >/dev/null
     mkdir -p e2e/.fixture

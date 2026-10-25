@@ -1,23 +1,28 @@
-import { cardCls, DUTY_LABEL, ghostBtn, hm, inputCls, LEAVE_LABEL, primaryBtn, ROLE_LABEL, SHIFT_CHIP, WEEKDAYS, workLayout, wr } from "@/Components/Work/workUi";
+import { cardCls, ghostBtn, hm, inputCls, LEAVE_LABEL, primaryBtn, ROLE_LABEL, SHIFT_CHIP, WEEKDAYS, workLayout, wr } from "@/Components/Work/workUi";
 import { dayDate } from "@/utils/dates";
-import type { CoverageGap, DayHours, LeaveView, ShiftDuty, ShiftView, StaffingRuleRow, WorkApp } from "@/types/work";
+import type { CoverageGap, DayHours, LeaveView, Person, ShiftView, SiteDayView, StaffingRuleRow, WorkApp } from "@/types/work";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import { calendarPrefill } from "@/Components/Calendar/calendarPrefill";
 import React, { useState } from "react";
 
 /**
- * The rota of one site, a week at a time. The manager drafts shifts and
- * publishes the week; each person accepts theirs, or asks for a change.
- * A shift may carry the opening or closing duty. Gaps against the staffing
- * rules show at the top.
+ * Shifts and opening of one site, a week at a time: the one place a manager
+ * plans each day. Per day: who opens, who closes and who drives (the driver
+ * brings the opener in and takes the closer home; those rides are made from
+ * it), then the shifts. The manager drafts shifts and publishes the week;
+ * each person accepts theirs, or asks for a change. Gaps against the staffing
+ * rules show at the top. A Main Hub has no shifts: only who opens, closes, drives.
  */
 
 interface Props {
     app: WorkApp;
-    site: { id: number; name: string; kind_label: string };
+    site: { id: number; name: string; kind_label: string; has_shifts: boolean };
     /** Monday of the week shown. */
     week: string;
-    days?: { date: string; hours: DayHours | null }[];
+    /** Each day's hours and plan (null for a past day nothing happened on). */
+    days?: { date: string; hours: DayHours | null; plan: (SiteDayView & { editable: boolean }) | null }[];
+    /** People who drive (users marked as drivers). */
+    drivers?: Person[];
     people?: { id: number; name: string; role: string }[];
     shifts?: ShiftView[];
     gaps?: CoverageGap[];
@@ -38,7 +43,6 @@ interface Draft {
     user_id: string;
     starts: string;
     ends: string;
-    duty: ShiftDuty;
 }
 
 function ShiftForm({ app, siteId, draft, people, onDone }: { app: WorkApp; siteId: number; draft: Draft; people: Props["people"]; onDone: () => void }): React.ReactElement {
@@ -49,7 +53,7 @@ function ShiftForm({ app, siteId, draft, people, onDone }: { app: WorkApp; siteI
     const save = () => {
         setBusy(true);
         setProblem(null);
-        const data = { user_id: Number(form.user_id), starts_at: `${form.date}T${form.starts}`, ends_at: `${form.date}T${form.ends}`, duty: form.duty };
+        const data = { user_id: Number(form.user_id), starts_at: `${form.date}T${form.starts}`, ends_at: `${form.date}T${form.ends}` };
         const options = {
             preserveScroll: true,
             onFinish: () => setBusy(false),
@@ -67,7 +71,7 @@ function ShiftForm({ app, siteId, draft, people, onDone }: { app: WorkApp; siteI
 
     return (
         <div className="mt-2 grid grid-cols-2 gap-2 rounded-[12px] border border-primary/30 bg-primary-container/20 p-2.5">
-            <select className={`${inputCls} col-span-2`} value={form.user_id} onChange={(e) => setForm({ ...form, user_id: e.target.value })}>
+            <select className={`${inputCls} col-span-2`} aria-label="Who works this shift" value={form.user_id} onChange={(e) => setForm({ ...form, user_id: e.target.value })}>
                 <option value="">Who…</option>
                 {(people ?? []).map((p) => (
                     <option key={p.id} value={p.id}>
@@ -77,11 +81,6 @@ function ShiftForm({ app, siteId, draft, people, onDone }: { app: WorkApp; siteI
             </select>
             <input type="time" className={inputCls} value={form.starts} onChange={(e) => setForm({ ...form, starts: e.target.value })} />
             <input type="time" className={inputCls} value={form.ends} onChange={(e) => setForm({ ...form, ends: e.target.value })} />
-            <select className={`${inputCls} col-span-2`} value={form.duty} onChange={(e) => setForm({ ...form, duty: e.target.value as ShiftDuty })}>
-                <option value="none">No opening / closing duty</option>
-                <option value="opener">Opens the site</option>
-                <option value="closer">Closes the site</option>
-            </select>
             {problem ? <p className="col-span-2 text-[11px] text-error">{problem}</p> : null}
             <div className="col-span-2 flex gap-2">
                 <button type="button" className={primaryBtn} disabled={busy || !form.user_id || !form.starts || !form.ends} onClick={save}>
@@ -91,6 +90,56 @@ function ShiftForm({ app, siteId, draft, people, onDone }: { app: WorkApp; siteI
                     Back
                 </button>
             </div>
+        </div>
+    );
+}
+
+/** Who opens, closes and drives that day: saved on its own, at once. */
+function DayPlan({ app, siteId, date, plan, people, drivers }: { app: WorkApp; siteId: number; date: string; plan: SiteDayView & { editable: boolean }; people: Props["people"]; drivers: Person[] }): React.ReactElement {
+    type Field = "opener_id" | "closer_id" | "driver_id";
+    // The day's own copy: a second change made before the first save returns must not send stale names.
+    const [chosen, setChosen] = useState<Record<Field, number | null>>({ opener_id: plan.opener?.id ?? null, closer_id: plan.closer?.id ?? null, driver_id: plan.driver?.id ?? null });
+    const [saving, setSaving] = useState(false);
+    const save = (field: Field, value: number | null) => {
+        const next = { ...chosen, [field]: value };
+        setChosen(next);
+        setSaving(true);
+        router.put(wr(app, "work.sites.plan", siteId), { days: [{ date, ...next }] }, { preserveScroll: true, onFinish: () => setSaving(false) });
+    };
+    const pick = (label: string, field: Field, options: Person[], none: string) => (
+        <label className="block text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">
+            {label}
+            <select
+                className={`${inputCls} mt-0.5 normal-case tracking-normal ${field === "driver_id" && chosen.driver_id === null ? "border-warning" : ""}`}
+                aria-label={`${label} ${date}`}
+                value={chosen[field] ?? ""}
+                disabled={!plan.editable || saving}
+                onChange={(e) => save(field, e.target.value ? Number(e.target.value) : null)}
+            >
+                <option value="">{none}</option>
+                {options.map((p) => (
+                    <option key={p.id} value={p.id}>
+                        {p.name}
+                    </option>
+                ))}
+            </select>
+        </label>
+    );
+
+    return (
+        <div className="mt-2 rounded-[12px] border border-outline-variant/60 bg-surface-container-low p-2">
+            <div className="grid grid-cols-3 gap-2">
+                {pick("Opens", "opener_id", people ?? [], "Nobody yet")}
+                {pick("Closes", "closer_id", people ?? [], "Nobody yet")}
+                {pick("Drives", "driver_id", drivers, "No driver")}
+            </div>
+            <p className="mt-1.5 text-[11px] text-on-surface-variant">
+                {plan.driver
+                    ? plan.rides.length > 0
+                        ? plan.rides.map((ride) => `${ride.purpose === "opening" ? "Picks up the opener" : "Takes the closer home"} ${hm(ride.departs_at)}`).join(" · ")
+                        : "The driver's rides appear once the opener or closer is named."
+                    : "No driver: the opener comes on their own and the closer goes home on their own. Opening and closing go ahead, flagged."}
+            </p>
         </div>
     );
 }
@@ -181,14 +230,14 @@ function RulesForm({ app, siteId, rules }: { app: WorkApp; siteId: number; rules
     );
 }
 
-export default function Rota({ app, site, week, days = [], people = [], shifts = [], gaps = [], rules = [], leave = [] }: Props): React.ReactElement {
+export default function Rota({ app, site, week, days = [], drivers = [], people = [], shifts = [], gaps = [], rules = [], leave = [] }: Props): React.ReactElement {
     // Started from a day on the calendar: open a new shift on that day.
     const [editing, setEditing] = useState<Draft | null>(() => {
         const prefill = calendarPrefill();
         const day = prefill.open ? days.find((d) => d.date === prefill.date) : undefined;
         if (!day) return null;
 
-        return { id: null, date: day.date, user_id: "", starts: prefill.time ?? day.hours?.opens_at ?? "08:30", ends: day.hours?.closes_at ?? "17:00", duty: "none" };
+        return { id: null, date: day.date, user_id: "", starts: prefill.time ?? day.hours?.opens_at ?? "08:30", ends: day.hours?.closes_at ?? "17:00" };
     });
     const drafts = shifts.filter((s) => s.status === "draft").length;
     const go = (date: string) => router.get(wr(app, "work.rota", { site: site.id, week: date }), {}, { preserveScroll: true });
@@ -196,22 +245,23 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
     const startEdit = (date: string, hours: DayHours | null, shift?: ShiftView) =>
         setEditing(
             shift
-                ? { id: shift.id, date, user_id: String(shift.user?.id ?? ""), starts: hm(shift.starts_at), ends: hm(shift.ends_at), duty: shift.duty }
-                : { id: null, date, user_id: "", starts: hours?.opens_at ?? "08:30", ends: hours?.closes_at ?? "17:00", duty: "none" },
+                ? { id: shift.id, date, user_id: String(shift.user?.id ?? ""), starts: hm(shift.starts_at), ends: hm(shift.ends_at) }
+                : { id: null, date, user_id: "", starts: hours?.opens_at ?? "08:30", ends: hours?.closes_at ?? "17:00" },
         );
 
     return (
         <>
-            <Head title={`Rota · ${site.name}`} />
+            <Head title={`${site.has_shifts ? "Shifts and opening" : "Who opens and closes"} · ${site.name}`} />
 
             <div className="min-h-screen bg-surface-container-low pb-36">
                 <header className="sticky top-0 z-40 border-b border-outline-variant/60 bg-surface-container-lowest px-4 py-3">
                     <div className="flex items-center gap-3">
-                        <Link href={wr(app, "work.sites.show", site.id)} className="material-symbols-outlined text-on-surface-variant">
+                        <Link href={`${wr(app, "work")}?tab=shifts`} className="material-symbols-outlined text-on-surface-variant" aria-label="Back to My work">
                             arrow_back
                         </Link>
                         <div className="min-w-0 flex-1">
-                            <h1 className="truncate text-lg font-bold tracking-tight text-on-surface">Rota · {site.name}</h1>
+                            <h1 className="truncate text-lg font-bold tracking-tight text-on-surface">{site.name}</h1>
+                            <p className="text-[11px] font-semibold text-on-surface-variant">{site.has_shifts ? "Shifts and opening" : "Who opens, closes and drives"}</p>
                             <p className="text-[11px] text-outline">Week of {dayDate(week)}</p>
                         </div>
                         <button type="button" className="material-symbols-outlined text-on-surface-variant" onClick={() => go(addDays(week, -7))} aria-label="Previous week">
@@ -221,7 +271,7 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
                             chevron_right
                         </button>
                     </div>
-                    <div className="mt-2 flex gap-2">
+                    {site.has_shifts ? <div className="mt-2 flex gap-2">
                         <button
                             type="button"
                             className={primaryBtn}
@@ -233,7 +283,7 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
                         <button type="button" className={ghostBtn} onClick={() => router.post(wr(app, "work.rota.copy", site.id), { week }, { preserveScroll: true })}>
                             Copy last week
                         </button>
-                    </div>
+                    </div> : null}
                 </header>
 
                 <div className="mx-auto max-w-2xl space-y-3 px-3.5 pt-3">
@@ -250,7 +300,7 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
                         </section>
                     ) : null}
 
-                    {days.map(({ date, hours }) => {
+                    {days.map(({ date, hours, plan }) => {
                         const dayShifts = shifts.filter((s) => s.date === date);
                         const away = leave.filter((l) => l.starts_on <= date && l.ends_on >= date);
                         const closed = hours?.closed ?? false;
@@ -265,6 +315,8 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
                                         {hours === null ? "Hours not set" : closed ? "Closed" : `${hours.opens_at}–${hours.closes_at}`}
                                     </span>
                                 </div>
+
+                                {plan !== null && !closed ? <DayPlan app={app} siteId={site.id} date={date} plan={plan} people={people} drivers={drivers} /> : null}
 
                                 {away.length > 0 ? (
                                     <p className="mt-1 text-[11px] text-on-surface-variant">
@@ -283,7 +335,8 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
                                                 <div className="min-w-0 flex-1">
                                                     <p className="truncate text-[12px] font-semibold text-on-surface">
                                                         {shift.user?.name} · {hm(shift.starts_at)}–{hm(shift.ends_at)}
-                                                        {shift.duty !== "none" ? <span className="text-primary"> · {DUTY_LABEL[shift.duty]}</span> : null}
+                                                        {plan?.opener?.id === shift.user?.id ? <span className="text-primary"> · Opens</span> : null}
+                                                        {plan?.closer?.id === shift.user?.id ? <span className="text-primary"> · Closes</span> : null}
                                                     </p>
                                                     {shift.change_note ? <p className="text-[11px] text-on-warning-container">“{shift.change_note}”</p> : null}
                                                 </div>
@@ -308,7 +361,7 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
 
                                 {editing?.id === null && editing.date === date ? (
                                     <ShiftForm app={app} siteId={site.id} draft={editing} people={people} onDone={() => setEditing(null)} />
-                                ) : !closed ? (
+                                ) : !closed && site.has_shifts ? (
                                     <button type="button" className="mt-2 text-[12px] font-bold text-primary" onClick={() => startEdit(date, hours)}>
                                         + Add shift
                                     </button>
@@ -317,7 +370,7 @@ export default function Rota({ app, site, week, days = [], people = [], shifts =
                         );
                     })}
 
-                    <RulesForm app={app} siteId={site.id} rules={rules} />
+                    {site.has_shifts ? <RulesForm app={app} siteId={site.id} rules={rules} /> : null}
                 </div>
             </div>
         </>

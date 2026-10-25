@@ -16,7 +16,6 @@ use App\Models\Workforce\SiteHourException;
 use App\Exceptions\WorkforceException;
 use App\Services\Admin\ActiveStore;
 use App\Services\Workforce\CounterQr;
-use App\Services\Workforce\KeyCustodyService;
 use App\Services\Workforce\SiteDayService;
 use App\Services\Workforce\LocalTime;
 use App\Services\Workforce\Sites;
@@ -37,7 +36,6 @@ class SiteController extends Controller
 
     public function __construct(
         private readonly Sites $sites,
-        private readonly KeyCustodyService $keys,
         private readonly SiteDayService $days,
         private readonly CounterQr $qr,
     ) {
@@ -45,8 +43,6 @@ class SiteController extends Controller
 
     public function index(Request $request): Response
     {
-        /** @var User $user */
-        $user = $request->user();
         $today = now();
 
         return Inertia::render('Work/Sites/Index', [
@@ -58,7 +54,6 @@ class SiteController extends Controller
                 'kind_label' => $site->kind_label,
                 'has_shifts' => $this->sites->hasShifts($site),
                 'today' => $this->sites->hoursOn($site, $today),
-                'key' => $this->keys->present($this->keys->keyFor($site), $user),
             ])->values()->all(),
         ]);
     }
@@ -68,7 +63,6 @@ class SiteController extends Controller
         /** @var User $user */
         $user = $request->user();
         $this->authorizeSite($user, $site);
-        $key = $this->keys->keyFor($site);
 
         return Inertia::render('Work/Sites/Show', [
             'app' => $this->app($request),
@@ -94,21 +88,7 @@ class SiteController extends Controller
                     'closes_at' => $exception->closes_at ? substr((string) $exception->closes_at, 0, 5) : null,
                     'note' => $exception->note,
                 ])->all(),
-            // Not `key`: React keeps that prop name for itself.
-            'siteKey' => $this->keys->present($key, $user, true) + ['receivers' => $this->keys->receivers($key)],
             'today' => $this->days->present($site, $this->days->day($site, now()), $user),
-            'plan' => collect(range(0, 6))->map(function (int $offset) use ($site): array {
-                $date = LocalTime::today()->addDays($offset);
-                $day = $this->days->day($site, $date);
-
-                return [
-                    'date' => $date->toDateString(),
-                    'status' => $day->status,
-                    'hours' => $this->sites->hoursOn($site, $date),
-                    'opener_id' => $day->opener_id,
-                    'closer_id' => $day->closer_id,
-                ];
-            })->all(),
             'settings' => [
                 'open_grace_minutes' => (int) ($settings = $this->qr->settings($site))->open_grace_minutes,
                 'opening_checklist' => $settings->openingItems(),
@@ -142,13 +122,14 @@ class SiteController extends Controller
                     $request->user(),
                     isset($day['opener_id']) ? (int) $day['opener_id'] : null,
                     isset($day['closer_id']) ? (int) $day['closer_id'] : null,
+                    isset($day['driver_id']) ? (int) $day['driver_id'] : null,
                 );
             }
         } catch (WorkforceException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Openers and closers saved.');
+        return back()->with('success', 'Who opens, closes and drives: saved.');
     }
 
     public function saveSettings(SaveSiteSettingsRequest $request, StockLocation $site): RedirectResponse

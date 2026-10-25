@@ -8,7 +8,9 @@ use App\Exceptions\WorkforceException;
 use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\CustodyKey;
+use App\Models\Workforce\Shift;
 use App\Models\Workforce\SiteDay;
+use App\Models\Workforce\StaffRide;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -17,8 +19,11 @@ use Illuminate\Support\Facades\DB;
 /**
  * Opening and closing a site, one day at a time.
  *
- *   plan   a manager names who opens and who closes on a date (shifts with
- *          an opener / closer duty do the same, RotaService).
+ *   plan   a manager names who opens, who closes and who drives on a date
+ *          (on the Rota page). The driver brings the opener in and takes
+ *          the closer home: those two staff rides follow the plan
+ *          (StaffRideService::planFor). Without a driver, opening and closing
+ *          still go ahead, flagged `no_driver`.
  *   open   at the site: scan the counter QR (the printed one works), hold the
  *          site's key, tick the opening checklist, count the cash float. A
  *          manager without the key may open with a note; it is flagged.
@@ -38,6 +43,7 @@ class SiteDayService
         private readonly CounterQr $qr,
         private readonly KeyCustodyService $keys,
         private readonly AttendanceService $attendance,
+        private readonly StaffRideService $rides,
     ) {
     }
 
@@ -68,7 +74,7 @@ class SiteDayService
     }
 
     /** @throws WorkforceException */
-    public function plan(StockLocation $site, CarbonInterface $date, User $by, ?int $openerId, ?int $closerId): SiteDay
+    public function plan(StockLocation $site, CarbonInterface $date, User $by, ?int $openerId, ?int $closerId, ?int $driverId = null): SiteDay
     {
         if (! $this->sites->canManage($by, $site)) {
             throw new WorkforceException('Only a manager of this site plans who opens and closes it.', 403);
@@ -81,10 +87,39 @@ class SiteDayService
             }
         }
 
-        $day = $this->day($site, $date);
-        $day->update(['opener_id' => $openerId, 'closer_id' => $closerId]);
+        if ($driverId !== null && ! (bool) User::query()->whereKey($driverId)->value('is_driver')) {
+            throw new WorkforceException('Pick a driver (someone marked as a driver in Users).');
+        }
 
-        return $day;
+        return DB::transaction(function () use ($site, $date, $openerId, $closerId, $driverId): SiteDay {
+            $day = $this->day($site, $date);
+            $day->update(['opener_id' => $openerId, 'closer_id' => $closerId, 'driver_id' => $driverId]);
+
+            // The plan is now the one place: an older shift duty would put its person back.
+            Shift::query()->where('stock_location_id', $site->id)
+                ->whereBetween('starts_at', [LocalTime::startOf($day->date->toDateString()), LocalTime::startOf($day->date->toDateString())->addDay()])
+                ->where('duty', '!=', Shift::DUTY_NONE)
+                ->update(['duty' => Shift::DUTY_NONE]);
+
+            $this->planChanged($day);
+
+            return $day;
+        });
+    }
+
+    /** Keep the day's opening and closing rides in step after its opener, closer or driver changed. */
+    public function planChanged(SiteDay $day): void
+    {
+        $this->rides->planFor($day->refresh());
+    }
+
+    /** People who drive, for picking the day's driver. */
+    public function drivers(): Collection
+    {
+        return User::query()->where('is_driver', true)->orderBy('first_name')->get()
+            ->map(fn (User $user): array => ['id' => (int) $user->id, 'name' => trim($user->first_name.' '.$user->last_name)])
+            ->values()
+            ->toBase();
     }
 
     /**
@@ -128,11 +163,16 @@ class SiteDayService
                 }
             }
 
+            // No driver planned, or the opener's pick-up never set off: it opens, flagged for the manager.
+            $pickup = $this->rides->plannedFor($day)->get(StaffRide::PURPOSE_OPENING);
+            $noDriver = $day->driver_id === null || $pickup === null || ! in_array($pickup->status, [StaffRide::STATUS_DEPARTED, StaffRide::STATUS_DONE], true);
+
             $day->update([
                 'status' => SiteDay::STATUS_OPEN,
                 'opened_at' => now(),
                 'opened_by' => $by->id,
                 'opened_without_key' => ! $holds,
+                'no_driver' => $noDriver,
                 'open_checklist' => $this->ticks($this->qr->settings($site)->openingItems(), $ticked),
                 'float_amount' => $float,
                 'open_note' => $note ?: null,
@@ -177,6 +217,7 @@ class SiteDayService
                 'closed_at' => now(),
                 'closed_by' => $by->id,
                 'close_checklist' => $this->ticks($this->qr->settings($site)->closingItems(), $ticked),
+                'no_driver' => $day->no_driver || $day->driver_id === null,
                 'till_count' => $till,
                 'close_note' => $note !== null && trim($note) !== '' ? trim($note) : null,
             ]);
@@ -251,7 +292,7 @@ class SiteDayService
     /** @return array<string, mixed> */
     public function present(StockLocation $site, SiteDay $day, User $viewer): array
     {
-        $day->loadMissing(['opener', 'closer', 'openedBy', 'closedBy']);
+        $day->loadMissing(['opener', 'closer', 'driver', 'openedBy', 'closedBy']);
         $settings = $this->qr->settings($site);
         $key = CustodyKey::query()->with('holder')->where('keyable_type', StockLocation::class)->where('keyable_id', $site->id)->first();
         $manages = $this->sites->canManage($viewer, $site);
@@ -266,6 +307,15 @@ class SiteDayService
             'hours' => $hours,
             'opener' => $day->opener ? ['id' => (int) $day->opener->id, 'name' => $name($day->opener)] : null,
             'closer' => $day->closer ? ['id' => (int) $day->closer->id, 'name' => $name($day->closer)] : null,
+            'driver' => $day->driver ? ['id' => (int) $day->driver->id, 'name' => $name($day->driver)] : null,
+            'no_driver' => (bool) $day->no_driver,
+            // The driver's two runs: the opener's pick-up and the closer's ride home.
+            'rides' => $this->rides->plannedFor($day)->map(fn (StaffRide $ride): array => [
+                'id' => (int) $ride->id,
+                'purpose' => $ride->purpose,
+                'departs_at' => LocalTime::wall($ride->departs_at),
+                'status' => $ride->status,
+            ])->values()->all(),
             'opened_at' => $day->opened_at?->toIso8601String(),
             'opened_by' => $name($day->openedBy),
             'i_opened' => $day->opened_by !== null && (int) $day->opened_by === (int) $viewer->id,

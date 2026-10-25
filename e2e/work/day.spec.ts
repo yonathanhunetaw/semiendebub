@@ -28,7 +28,7 @@ const at = (hours: number): string => {
 async function addShift(page: Page, name: string, from: string, to: string): Promise<void> {
     const day = page.locator(`section[data-date="${today()}"]`);
     await day.getByRole('button', { name: '+ Add shift' }).click();
-    await day.locator('select').first().selectOption({ label: name });
+    await day.getByLabel('Who works this shift').selectOption({ label: name });
     const times = day.locator('input[type="time"]');
     await times.nth(0).fill(from);
     await times.nth(1).fill(to);
@@ -44,7 +44,7 @@ test('a day: key, rota, open with the QR, clock in, break, close and hand the ke
 
     // ── The manager: the key to Seller Two, both sellers on today's rota ──
     const manager = await signIn(browser, 'seller', fixture.manager.email);
-    await manager.goto(`/work/sites/${id}`);
+    await manager.goto('/work?tab=keys');
     await manager.getByRole('button', { name: /^Give (the key|to someone)$/ }).first().click();
     await manager.locator('select').filter({ hasText: 'Give the key to…' }).selectOption({ label: two.name });
     await manager.getByPlaceholder('Why without the holder? (required)').fill('E2E: first holder');
@@ -62,16 +62,17 @@ test('a day: key, rota, open with the QR, clock in, break, close and hand the ke
 
     // ── Each accepts their shift ──
     const first = await signIn(browser, 'seller', seller.email);
-    await first.goto('/work');
+    await first.goto('/work?tab=shifts');
     await first.locator('[data-shift]').filter({ hasText: `${one[0]}–${one[1]}` }).getByRole('button', { name: 'Accept' }).click();
     await expect(flash(first, 'Shift accepted.')).toBeVisible();
 
     const second = await signIn(browser, 'seller', two.email);
-    await second.goto('/work');
+    await second.goto('/work?tab=shifts');
     await second.locator('[data-shift]').filter({ hasText: `${other[0]}–${other[1]}` }).getByRole('button', { name: 'Accept' }).click();
     await expect(flash(second, 'Shift accepted.')).toBeVisible();
 
     // ── Seller Two hands the key to the seller; it is theirs once they accept ──
+    await second.getByRole('tab', { name: 'Keys' }).click();
     await second.getByRole('button', { name: 'Hand over', exact: true }).first().click();
     await second.locator('select').filter({ hasText: 'Hand it to…' }).selectOption({ label: seller.name });
     await second.getByRole('button', { name: 'Hand over', exact: true }).click();

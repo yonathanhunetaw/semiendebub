@@ -13,10 +13,13 @@ use App\Http\Requests\Workforce\ShiftChangeRequest;
 use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\Shift;
+use App\Models\Workforce\SiteDay;
 use App\Models\Workforce\StaffingRule;
 use App\Models\Workforce\LeaveRequest;
 use App\Services\Workforce\LeaveService;
+use App\Services\Workforce\LocalTime;
 use App\Services\Workforce\RotaService;
+use App\Services\Workforce\SiteDayService;
 use App\Services\Workforce\Sites;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,38 +29,50 @@ use Inertia\Response;
 
 /**
  * The rota of one site, a week at a time (managers), and the person's own
- * accept / ask-for-a-change. Every step goes through RotaService.
+ * accept / ask-for-a-change. Every step goes through RotaService. Each day
+ * also carries its plan: who opens, closes and drives (SiteDayService), the
+ * one place it is set. A Main Hub has no shifts, so its page is the plan only.
  */
 class RotaController extends Controller
 {
     use ReadsWorkApp;
 
-    public function __construct(private readonly Sites $sites, private readonly RotaService $rota, private readonly LeaveService $leave)
+    public function __construct(private readonly Sites $sites, private readonly RotaService $rota, private readonly LeaveService $leave, private readonly SiteDayService $days)
     {
     }
 
     public function show(RotaWeekRequest $request, StockLocation $site): Response
     {
-        $this->authorizeSite($request->user(), $site);
+        $this->authorizeSite($request->user(), $site, plan: true);
         $start = $request->weekStart();
         $end = $start->addDays(6);
+        $shifts = $this->sites->hasShifts($site);
+        $today = LocalTime::dateOf();
 
         return Inertia::render('Work/Rota', [
             'app' => $this->app($request),
-            'site' => ['id' => (int) $site->id, 'name' => $site->name, 'kind_label' => $site->kind_label],
+            'site' => ['id' => (int) $site->id, 'name' => $site->name, 'kind_label' => $site->kind_label, 'has_shifts' => $shifts],
             'week' => $start->toDateString(),
-            'days' => collect(range(0, 6))->map(fn (int $i): array => [
-                'date' => $start->addDays($i)->toDateString(),
-                'hours' => $this->sites->hoursOn($site, $start->addDays($i)),
-            ])->all(),
+            'days' => collect(range(0, 6))->map(function (int $i) use ($site, $start, $today, $request): array {
+                $date = $start->addDays($i)->toDateString();
+                // Today on: made from the hours if new. Past days: only what happened (never made up afterwards).
+                $day = $date >= $today ? $this->days->day($site, LocalTime::day($date)) : SiteDay::query()->where('stock_location_id', $site->id)->whereDate('date', $date)->first();
+
+                return [
+                    'date' => $date,
+                    'hours' => $this->sites->hoursOn($site, $date),
+                    'plan' => $day === null ? null : $this->days->present($site, $day, $request->user()) + ['editable' => $date >= $today && in_array($day->status, [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED, SiteDay::STATUS_OPEN], true)],
+                ];
+            })->all(),
+            'drivers' => $this->days->drivers()->all(),
             'people' => $this->sites->people($site)->map(fn (User $person): array => [
                 'id' => (int) $person->id,
                 'name' => trim($person->first_name.' '.$person->last_name),
                 'role' => $person->roleKey(),
             ])->values()->all(),
-            'shifts' => $this->rota->between($site, $start, $start->addWeek())
-                ->map(fn (Shift $shift): array => $this->rota->present($shift))->values()->all(),
-            'gaps' => $this->rota->coverage($site, $start, $end),
+            'shifts' => $shifts ? $this->rota->between($site, $start, $start->addWeek())
+                ->map(fn (Shift $shift): array => $this->rota->present($shift))->values()->all() : [],
+            'gaps' => $shifts ? $this->rota->coverage($site, $start, $end) : [],
             'leave' => $this->leave->atSite($site, $start, $end)->map(fn (LeaveRequest $leave): array => $this->leave->present($leave))->values()->all(),
             'rules' => StaffingRule::query()->where('stock_location_id', $site->id)->get()
                 ->map(fn (StaffingRule $rule): array => [
@@ -135,10 +150,11 @@ class RotaController extends Controller
         return $this->attempt(fn () => $this->rota->requestChange($shift, $request->user(), (string) $request->validated('note')), 'Sent to your manager.');
     }
 
-    private function authorizeSite(?User $user, StockLocation $site): void
+    /** $plan: the page itself, which every site has (a Main Hub's is only who opens, closes and drives). */
+    private function authorizeSite(?User $user, StockLocation $site, bool $plan = false): void
     {
         abort_unless($this->sites->isSite($site), 404);
         abort_unless($this->sites->canManage($user, $site), 403, 'You do not manage this site.');
-        abort_unless($this->sites->hasShifts($site), 404);
+        abort_unless($plan || $this->sites->hasShifts($site), 404);
     }
 }

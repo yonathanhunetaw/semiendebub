@@ -36,11 +36,18 @@ use Illuminate\Support\Facades\DB;
  *   drop     each rider dropped off (or did not show).
  *   finish   once nobody is still riding.
  *   cancel   whoever asked, or a manager, before it sets off.
+ *   planFor  a site day's plan makes its two rides: the driver brings the
+ *            opener in before opening and takes the closer home after
+ *            closing. They are kept in step with the plan until they set off,
+ *            and only that driver takes them.
  */
 class StaffRideService
 {
     /** A car counts as busy this long either side of another booked run. */
     public const BUSY_HOURS = 2;
+
+    /** The opener's pick-up is this long before opening. */
+    public const PICKUP_LEAD_MINUTES = 45;
 
     public function __construct(private readonly Sites $sites)
     {
@@ -112,6 +119,10 @@ class StaffRideService
 
             if ($ride->status !== StaffRide::STATUS_REQUESTED) {
                 throw new WorkforceException('Another driver has this ride, or it is closed.');
+            }
+
+            if ($ride->driver_id !== null && (int) $ride->driver_id !== (int) $driver->id) {
+                throw new WorkforceException('This ride is planned for another driver.', 403);
             }
 
             if ($vehicle->status !== Vehicle::STATUS_ACTIVE) {
@@ -205,6 +216,76 @@ class StaffRideService
         return $ride;
     }
 
+    /**
+     * Make, change or cancel the day's opening and closing rides to match its
+     * plan. Rides that set off are left alone; a ride already taken by another
+     * driver goes back to the planned one, who picks the car again.
+     */
+    public function planFor(SiteDay $day): void
+    {
+        $site = $day->site()->first();
+        if ($site === null) {
+            return;
+        }
+
+        $date = $day->date->toDateString();
+        $closedDay = $this->sites->hoursOn($site, $date)['closed'] ?? true;
+        $wants = [
+            StaffRide::PURPOSE_OPENING => [
+                $day->opener_id,
+                $this->sites->opensAt($site, $date)?->subMinutes(self::PICKUP_LEAD_MINUTES),
+                in_array($day->status, [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED], true),
+            ],
+            StaffRide::PURPOSE_CLOSING => [
+                $day->closer_id,
+                $this->sites->closesAt($site, $date),
+                in_array($day->status, [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED, SiteDay::STATUS_OPEN], true),
+            ],
+        ];
+
+        DB::transaction(function () use ($day, $site, $closedDay, $wants): void {
+            foreach ($wants as $purpose => [$riderId, $at, $stillAhead]) {
+                $ride = StaffRide::query()->lockForUpdate()->where('site_day_id', $day->id)->where('purpose', $purpose)
+                    ->whereIn('status', [StaffRide::STATUS_REQUESTED, StaffRide::STATUS_CLAIMED])->latest('id')->first();
+                $wanted = ! $closedDay && $stillAhead && $day->driver_id !== null && $riderId !== null && $at !== null && $at->greaterThan(now());
+
+                if (! $wanted) {
+                    $ride?->update(['status' => StaffRide::STATUS_CANCELLED]);
+
+                    continue;
+                }
+
+                $ride ??= StaffRide::create([
+                    'stock_location_id' => $site->id,
+                    'site_day_id' => $day->id,
+                    'purpose' => $purpose,
+                    'departs_at' => $at->utc(),
+                    'status' => StaffRide::STATUS_REQUESTED,
+                    'driver_id' => $day->driver_id,
+                    'created_by' => $day->driver_id,
+                ]);
+
+                $ride->update(['departs_at' => $at->utc()] + ((int) $ride->driver_id !== (int) $day->driver_id
+                    ? ['status' => StaffRide::STATUS_REQUESTED, 'driver_id' => $day->driver_id, 'vehicle_id' => null, 'claimed_at' => null]
+                    : []));
+
+                if (! $ride->riders()->where('user_id', $riderId)->exists()) {
+                    $ride->riders()->delete();
+                    $rider = User::query()->find($riderId);
+                    $ride->riders()->create(['user_id' => $riderId, 'drop_off' => $rider?->home_area, 'status' => StaffRideRider::STATUS_RIDING]);
+                }
+            }
+        });
+    }
+
+    /** The day's planned rides, by purpose (for the site day card). */
+    public function plannedFor(SiteDay $day): Collection
+    {
+        return StaffRide::query()->where('site_day_id', $day->id)->where('status', '!=', StaffRide::STATUS_CANCELLED)->latest('id')->get()->unique('purpose')
+            ->sortBy(fn (StaffRide $ride): int => $ride->purpose === StaffRide::PURPOSE_OPENING ? 0 : 1)
+            ->keyBy('purpose');
+    }
+
     public function mayRequest(?User $user, StockLocation $site): bool
     {
         if ($user === null || ! $this->sites->hasShifts($site)) {
@@ -269,7 +350,9 @@ class StaffRideService
     {
         return StaffRide::query()->with(['site', 'riders.user', 'vehicle', 'driver'])
             ->where(fn ($query) => $query
-                ->where(fn ($pool) => $pool->where('status', StaffRide::STATUS_REQUESTED)->where('departs_at', '>', now()->subHours(3)))
+                // Open to any driver, or planned for this one.
+                ->where(fn ($pool) => $pool->where('status', StaffRide::STATUS_REQUESTED)->where('departs_at', '>', now()->subHours(3))
+                    ->where(fn ($whose) => $whose->whereNull('driver_id')->orWhere('driver_id', $driver->id)))
                 ->orWhere(fn ($mine) => $mine->where('driver_id', $driver->id)->whereIn('status', [StaffRide::STATUS_CLAIMED, StaffRide::STATUS_DEPARTED]))
                 // Today's finished ones too: the driver records their fuel after.
                 ->orWhere(fn ($done) => $done->where('driver_id', $driver->id)->where('status', StaffRide::STATUS_DONE)->where('departs_at', '>=', LocalTime::today()->utc())))
@@ -315,6 +398,8 @@ class StaffRideService
             // Wall-clock, no zone (like the shipment slots).
             'departs_at' => LocalTime::wall($ride->departs_at),
             'status' => $ride->status,
+            // 'opening' (a pick-up to the site) or 'closing' (home) when the day's plan made it.
+            'purpose' => $ride->purpose,
             'note' => $ride->note,
             'driver' => $ride->driver ? ['id' => (int) $ride->driver->id, 'name' => $name($ride->driver)] : null,
             'vehicle' => $ride->vehicle ? ['id' => (int) $ride->vehicle->id, 'name' => $ride->vehicle->name, 'plate' => $ride->vehicle->plate] : null,
@@ -335,8 +420,10 @@ class StaffRideService
             'can' => [
                 'fuel' => $drives && in_array($ride->status, [StaffRide::STATUS_DEPARTED, StaffRide::STATUS_DONE], true)
                     && ($fuel === null || $fuel->status === Expense::STATUS_REJECTED),
-                'claim' => $ride->status === StaffRide::STATUS_REQUESTED && (bool) $viewer->is_driver,
-                'drive' => $drives,
+                'claim' => $ride->status === StaffRide::STATUS_REQUESTED && (bool) $viewer->is_driver
+                    && ($ride->driver_id === null || $drives),
+                // A planned ride names its driver before they take it: drive once taken.
+                'drive' => $drives && $ride->status !== StaffRide::STATUS_REQUESTED,
                 'opt_out' => $open && $mine !== null && $mine->status === StaffRideRider::STATUS_RIDING,
                 'cancel' => $open && ((int) $ride->created_by === (int) $viewer->id || $manages),
             ],

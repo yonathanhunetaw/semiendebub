@@ -123,7 +123,7 @@ class OverviewStations
                 ['label' => 'main hubs', 'value' => StockLocation::query()->where('kind', StockLocation::KIND_MAIN_HUB)->count()],
                 ['label' => 'vehicles', 'value' => Vehicle::query()->count()],
             ],
-            'links' => $this->links(['All stores' => 'admin.inventory.stores', 'Warehouses' => 'admin.inventory.warehouse.index', 'Fleet' => 'admin.inventory.fleet.index', 'Sites & keys' => 'admin.work.sites.index']),
+            'links' => $this->links(['All stores' => 'admin.inventory.stores', 'Warehouses' => 'admin.inventory.warehouse.index', 'Fleet' => 'admin.inventory.fleet.index', 'My work' => 'admin.work']),
         ]);
     }
 

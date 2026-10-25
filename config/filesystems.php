@@ -61,8 +61,16 @@ return [
             'signature_version' => 'v4',
         ],
 
-        // Cloudflare R2 disk:
-        'r2' => [
+        // Cloudflare R2 disk. R2_LOCAL=true (set by `deploy/dev.sh e2e`) keeps it on this
+        // machine instead: dev shares prod's bucket, so test uploads must never reach it.
+        'r2' => env('R2_LOCAL', false) ? [
+            'driver'     => 'local',
+            'root'       => storage_path('app/public/r2-local'),
+            'url'        => rtrim(env('APP_URL', 'http://localhost'), '/') . '/storage/r2-local',
+            'visibility' => 'public',
+            'throw'      => false,
+            'report'     => false,
+        ] : [
             'driver'                  => 's3',
             'key'                     => env('R2_ACCESS_KEY_ID'),
             'secret'                  => env('R2_SECRET_ACCESS_KEY'),

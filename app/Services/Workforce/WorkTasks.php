@@ -210,6 +210,33 @@ class WorkTasks
             ), $missed->count(), $this->sitesUrl($user), true);
         }
 
+        // Managers: today's opening or closing with no driver (it goes ahead, but nobody brings or takes them).
+        $driverless = $today->whereNull('driver_id')
+            ->whereIn('status', [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED, SiteDay::STATUS_OPEN])
+            ->filter(fn (SiteDay $day): bool => $day->site !== null && $this->sites->canManage($user, $day->site));
+        if ($driverless->isNotEmpty()) {
+            $tasks[] = $this->task('sites-no-driver', 'warning', 'No driver today', sprintf(
+                '%s %s no driver for opening and closing. Plan one on Shifts and opening.',
+                $driverless->map(fn (SiteDay $day): string => $day->site->name)->join(', ', ' and '),
+                $driverless->count() === 1 ? 'has' : 'have',
+            ), $driverless->count(), $href);
+        }
+
+        // Drivers: today's runs from the plans, until they set off.
+        if ($user->is_driver) {
+            $runs = StaffRide::query()->with('site')->where('driver_id', $user->id)->whereNotNull('purpose')
+                ->whereIn('status', [StaffRide::STATUS_REQUESTED, StaffRide::STATUS_CLAIMED])
+                ->whereBetween('departs_at', [LocalTime::today()->utc(), LocalTime::today()->addDay()->utc()])
+                ->orderBy('departs_at')->get();
+            foreach ($runs as $run) {
+                $tasks[] = $this->task("drive-{$run->id}", 'site', $run->purpose === StaffRide::PURPOSE_OPENING ? 'Bring the opener in' : 'Take the closer home', sprintf(
+                    '%s at %s. Pick the car on Staff rides.',
+                    $run->site?->name ?? 'The site',
+                    LocalTime::wall($run->departs_at, 'H:i'),
+                ), 1, $this->workRoute($user, 'work.rides'));
+            }
+        }
+
         // Site keys I hold whose next opener is someone else.
         $held = CustodyKey::query()->with('keyable')->where('holder_id', $user->id)->where('keyable_type', StockLocation::class)->get();
         foreach ($held as $key) {

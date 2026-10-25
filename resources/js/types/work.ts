@@ -72,6 +72,12 @@ export interface SiteDayView {
     hours: DayHours | null;
     opener: Person | null;
     closer: Person | null;
+    /** Brings the opener in and takes the closer home. */
+    driver: Person | null;
+    /** Opened or closed with no driver planned (or the opener's pick-up never set off). */
+    no_driver: boolean;
+    /** The driver's two runs from the plan; times are wall-clock "YYYY-MM-DDTHH:mm". */
+    rides: { id: number; purpose: RidePurpose; departs_at: string; status: RideView["status"] }[];
     opened_at: string | null;
     opened_by: string | null;
     i_opened: boolean;
@@ -173,11 +179,15 @@ export interface SwapView {
 }
 
 /** StaffRideService::present */
+/** A ride made from a site day's plan: the opener's pick-up, or the closer's ride home. */
+export type RidePurpose = "opening" | "closing";
+
 export interface RideView {
     id: number;
     site: { id: number; name: string } | null;
     departs_at: string;
     status: "requested" | "claimed" | "departed" | "done" | "cancelled";
+    purpose: RidePurpose | null;
     note: string | null;
     driver: Person | null;
     vehicle: { id: number; name: string; plate: string } | null;

@@ -29,8 +29,10 @@ use Illuminate\Support\Facades\DB;
  *   cancel         the manager drops a shift.
  *   coverage       where the shifts fall short of the site's staffing rules.
  *
- * A shift with the opening or closing duty names that person as the site
- * day's opener or closer (SiteDayService). One person never has two shifts
+ * Who opens, closes and drives is the site day's plan (SiteDayService::plan,
+ * set on the Rota page). Older shifts may still carry an opening or closing
+ * duty, which names that person in the plan. When a person's shift goes
+ * (cancelled, leave, given away in a swap), the plan follows them. One person never has two shifts
  * at the same time, at any site. Stores and Remote Hubs only.
  */
 class RotaService
@@ -67,7 +69,8 @@ class RotaService
         // Typed on the shops' clock; kept as UTC instants.
         $starts = LocalTime::parse((string) $data['starts_at']);
         $ends = LocalTime::parse((string) $data['ends_at']);
-        $duty = in_array($data['duty'] ?? null, Shift::DUTIES, true) ? $data['duty'] : Shift::DUTY_NONE;
+        // The Rota no longer sends a duty (the day's plan names opener and closer): keep whatever the shift had.
+        $duty = in_array($data['duty'] ?? null, Shift::DUTIES, true) ? $data['duty'] : ($shift?->duty ?? Shift::DUTY_NONE);
 
         if ($ends->lessThanOrEqualTo($starts)) {
             throw new WorkforceException('A shift ends after it starts.');
@@ -219,7 +222,7 @@ class RotaService
         $shift->update(['user_id' => $to->id, 'status' => Shift::STATUS_ACCEPTED, 'accepted_at' => now(), 'change_note' => null]);
 
         if ($site !== null) {
-            $this->releaseDuty($site, $shift->duty, $from, CarbonImmutable::instance($shift->starts_at));
+            $this->releaseDuty($site, $shift->duty, $from, CarbonImmutable::instance($shift->starts_at), $to);
             $this->applyDuty($site, $shift);
         }
 
@@ -466,20 +469,43 @@ class RotaService
 
         $day = $this->days->day($site, CarbonImmutable::instance($shift->starts_at));
         $day->update([$shift->duty === Shift::DUTY_OPENER ? 'opener_id' : 'closer_id' => $shift->user_id]);
+        $this->days->planChanged($day);
     }
 
-    private function releaseDuty(StockLocation $site, ?string $duty, int $userId, CarbonImmutable $date): void
+    /**
+     * The person's shift left that day: their duty goes with it, and so do the
+     * plan's opener / closer if they have no other shift there that day. With
+     * $to (a swap), the plan names the colleague instead.
+     */
+    private function releaseDuty(StockLocation $site, ?string $duty, int $userId, CarbonImmutable $date, ?User $to = null): void
     {
-        if ($duty === null || $duty === Shift::DUTY_NONE) {
+        $day = SiteDay::query()->where('stock_location_id', $site->id)->whereDate('date', LocalTime::dateOf($date))->first();
+        if ($day === null) {
             return;
         }
 
-        $column = $duty === Shift::DUTY_OPENER ? 'opener_id' : 'closer_id';
+        $dayStart = LocalTime::startOf(LocalTime::dateOf($date));
+        $stillThere = Shift::query()->where('stock_location_id', $site->id)->where('user_id', $userId)
+            ->whereNotIn('status', [Shift::STATUS_CANCELLED])
+            ->whereBetween('starts_at', [$dayStart, $dayStart->addDay()])
+            ->exists();
 
-        SiteDay::query()->where('stock_location_id', $site->id)
-            ->whereDate('date', LocalTime::dateOf($date))
-            ->where($column, $userId)
-            ->update([$column => null]);
+        $columns = $stillThere ? [] : ['opener_id', 'closer_id'];
+        if ($duty === Shift::DUTY_OPENER || $duty === Shift::DUTY_CLOSER) {
+            $columns[] = $duty === Shift::DUTY_OPENER ? 'opener_id' : 'closer_id';
+        }
+
+        $changes = [];
+        foreach (array_unique($columns) as $column) {
+            if ((int) $day->{$column} === $userId) {
+                $changes[$column] = $to?->id;
+            }
+        }
+
+        if ($changes !== []) {
+            $day->update($changes);
+            $this->days->planChanged($day);
+        }
     }
 
     /** @throws WorkforceException */

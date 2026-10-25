@@ -14,12 +14,15 @@ interface Props {
 /**
  * One staff ride: when, from where, who rides and where they get off; and
  * what the viewer can do (claim, set off, drop each rider, finish, opt out, cancel).
+ * A ride from the day's plan says so: the opener's pick-up goes the other way
+ * (from home to the site), the closer's goes home after closing.
  */
 export default function RideCard({ app, ride, vehicles = [], meId }: Props): React.ReactElement {
     const [car, setCar] = useState<string>("");
     const post = (name: string, data: Record<string, string | number | boolean | null> = {}) => router.post(wr(app, name, ride.id), data, { preserveScroll: true });
     const riding = ride.riders.filter((r) => r.status === "riding").length;
     const picked = vehicles.find((v) => String(v.id) === car);
+    const pickup = ride.purpose === "opening";
     const fuel = useForm<{ amount: string; litres: string; receipt: File | null }>({ amount: "", litres: "", receipt: null });
 
     return (
@@ -27,10 +30,13 @@ export default function RideCard({ app, ride, vehicles = [], meId }: Props): Rea
             <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                     <p className="text-[14px] font-bold text-on-surface">
-                        {ride.departs_at.slice(0, 10) === new Date().toISOString().slice(0, 10) ? "Today" : ride.departs_at.slice(0, 10)} {hm(ride.departs_at)} · from {ride.site?.name}
+                        {ride.departs_at.slice(0, 10) === new Date().toISOString().slice(0, 10) ? "Today" : ride.departs_at.slice(0, 10)} {hm(ride.departs_at)} · {pickup ? `to ${ride.site?.name}` : `from ${ride.site?.name}`}
                     </p>
+                    {ride.purpose ? (
+                        <p className="text-[11px] font-semibold text-primary">{pickup ? "Opening: bring the opener in" : "Closing: take the closer home"}</p>
+                    ) : null}
                     <p className="text-[11px] text-on-surface-variant">
-                        {ride.driver ? `${ride.driver.name} · ${ride.vehicle?.name} ${ride.vehicle?.plate}` : "No driver yet"}
+                        {ride.driver ? `${ride.driver.name}${ride.vehicle ? ` · ${ride.vehicle.name} ${ride.vehicle.plate}` : " · car not picked yet"}` : "No driver yet"}
                         {ride.driver && !ride.driver_holds_key ? " · car key not with the driver" : ""}
                         {ride.note ? ` · ${ride.note}` : ""}
                     </p>
@@ -43,7 +49,7 @@ export default function RideCard({ app, ride, vehicles = [], meId }: Props): Rea
                     <li key={rider.id} className="flex items-center justify-between gap-2 py-1.5">
                         <span className={`text-[12px] ${rider.status === "riding" ? "text-on-surface" : "text-on-surface-variant line-through"}`}>
                             {rider.name}
-                            <span className="text-on-surface-variant"> · {rider.drop_off ?? "drop-off not set"}</span>
+                            <span className="text-on-surface-variant"> · {pickup ? "pick up at " : ""}{rider.drop_off ?? (pickup ? "home not set" : "drop-off not set")}</span>
                         </span>
                         {ride.can.drive && rider.status === "riding" ? (
                             <span className="flex gap-2">

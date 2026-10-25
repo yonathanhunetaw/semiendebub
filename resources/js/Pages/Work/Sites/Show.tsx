@@ -1,14 +1,15 @@
-import KeyCard from "@/Components/Work/KeyCard";
 import SiteDayCard from "@/Components/Work/SiteDayCard";
 import { cardCls, ghostBtn, inputCls, KIND_ICON, primaryBtn, WEEKDAYS, workLayout, wr } from "@/Components/Work/workUi";
 import { dayDate } from "@/utils/dates";
-import type { CustodyKeyView, DayHours, SiteDayStatus, SiteDayView, SiteHourExceptionRow, SiteKind, WeekdayHours, WorkApp } from "@/types/work";
+import type { SiteDayView, SiteHourExceptionRow, SiteKind, WeekdayHours, WorkApp } from "@/types/work";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import React from "react";
 
 /**
- * One site for its managers: the week's opening hours, dates that differ
- * (holidays, short days), the key with its whole log, and who works there.
+ * Setting up one site, for its managers: the week's opening hours, dates that
+ * differ (holidays, short days), the opening and closing checklists, the
+ * printed QR, and who works there. Who opens, closes and drives each day is
+ * planned on the Shifts page (the Rota); the site's key is in My work → Keys.
  */
 
 interface Props {
@@ -16,11 +17,8 @@ interface Props {
     site: { id: number; name: string; kind: SiteKind; kind_label: string; address: string | null; has_shifts: boolean };
     week?: WeekdayHours[];
     exceptions?: SiteHourExceptionRow[];
-    siteKey: CustodyKeyView;
     people?: { id: number; name: string; role: string }[];
     today: SiteDayView;
-    /** The next 7 days: who opens and closes. */
-    plan?: { date: string; status: SiteDayStatus; hours: DayHours | null; opener_id: number | null; closer_id: number | null }[];
     settings: { open_grace_minutes: number; opening_checklist: string[]; closing_checklist: string[] };
 }
 
@@ -30,7 +28,7 @@ const lines = (text: string): string[] =>
         .map((line) => line.trim())
         .filter(Boolean);
 
-export default function SiteShow({ app, site, week = [], exceptions = [], siteKey, people = [], today, plan = [], settings }: Props): React.ReactElement {
+export default function SiteShow({ app, site, week = [], exceptions = [], people = [], today, settings }: Props): React.ReactElement {
     const hours = useForm<{ days: WeekdayHours[] }>({ days: week });
     const exception = useForm({ date: "", closed: true, opens_at: "", closes_at: "", note: "" });
 
@@ -58,13 +56,6 @@ export default function SiteShow({ app, site, week = [], exceptions = [], siteKe
 
     const errors = hours.errors as Record<string, string>;
 
-    const planForm = useForm({ days: plan.map(({ date, opener_id, closer_id }) => ({ date, opener_id, closer_id })) });
-    const setPlan = (index: number, field: "opener_id" | "closer_id", value: string) =>
-        planForm.setData(
-            "days",
-            planForm.data.days.map((day, i) => (i === index ? { ...day, [field]: value ? Number(value) : null } : day)),
-        );
-
     const settingsForm = useForm({
         open_grace_minutes: settings.open_grace_minutes,
         opening: settings.opening_checklist.join("\n"),
@@ -82,7 +73,7 @@ export default function SiteShow({ app, site, week = [], exceptions = [], siteKe
 
     return (
         <>
-            <Head title={site.name} />
+            <Head title={`Site setup · ${site.name}`} />
 
             <div className="min-h-screen bg-surface-container-low pb-36">
                 <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-outline-variant/60 bg-surface-container-lowest px-4 py-3">
@@ -102,15 +93,13 @@ export default function SiteShow({ app, site, week = [], exceptions = [], siteKe
                 <div className="mx-auto max-w-2xl space-y-4 px-3.5 pt-3">
                     <SiteDayCard day={today}>
                         <div className="mt-3 flex flex-wrap gap-2">
+                            <Link href={wr(app, "work.rota", { site: site.id })} className={primaryBtn}>
+                                {site.has_shifts ? "Shifts and opening" : "Who opens and closes"}
+                            </Link>
                             {site.has_shifts ? (
-                                <>
-                                    <Link href={wr(app, "work.rota", { site: site.id })} className={primaryBtn}>
-                                        Rota
-                                    </Link>
-                                    <Link href={wr(app, "work.attendance", { site: site.id })} className={ghostBtn}>
-                                        Attendance
-                                    </Link>
-                                </>
+                                <Link href={wr(app, "work.attendance", { site: site.id })} className={ghostBtn}>
+                                    Attendance
+                                </Link>
                             ) : null}
                             <Link href={wr(app, "work.sites.printed-qr", site.id)} className={ghostBtn}>
                                 Printed QR
@@ -122,60 +111,6 @@ export default function SiteShow({ app, site, week = [], exceptions = [], siteKe
                             ) : null}
                         </div>
                     </SiteDayCard>
-
-                    <KeyCard app={app} keyView={siteKey} showLog />
-
-                    <form
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            planForm.put(wr(app, "work.sites.plan", site.id), { preserveScroll: true });
-                        }}
-                        className={cardCls}
-                    >
-                        <h2 className="text-[13px] font-bold text-on-surface">Who opens and closes</h2>
-                        <p className="text-[11px] text-on-surface-variant">The next 7 days. They see it in their bell; the key holder is told whom to hand it to.</p>
-                        <div className="mt-2 divide-y divide-outline-variant/40">
-                            {planForm.data.days.map((day, i) => {
-                                const row = plan[i];
-                                const closed = row?.hours?.closed || row?.status === "closed_day";
-                                return (
-                                    <div key={day.date} className="grid grid-cols-[88px_1fr_1fr] items-center gap-2 py-2">
-                                        <span className="text-[12px] font-semibold text-on-surface">
-                                            {dayDate(day.date)}
-                                            <span className="block text-[10px] font-normal text-on-surface-variant">
-                                                {closed ? "Closed" : row?.hours ? `${row.hours.opens_at}–${row.hours.closes_at}` : "No hours"}
-                                            </span>
-                                        </span>
-                                        {closed ? (
-                                            <span className="col-span-2 text-[11px] text-outline">—</span>
-                                        ) : (
-                                            <>
-                                                <select className={inputCls} value={day.opener_id ?? ""} onChange={(e) => setPlan(i, "opener_id", e.target.value)}>
-                                                    <option value="">Opener…</option>
-                                                    {people.map((p) => (
-                                                        <option key={p.id} value={p.id}>
-                                                            {p.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                <select className={inputCls} value={day.closer_id ?? ""} onChange={(e) => setPlan(i, "closer_id", e.target.value)}>
-                                                    <option value="">Closer…</option>
-                                                    {people.map((p) => (
-                                                        <option key={p.id} value={p.id}>
-                                                            {p.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <button type="submit" className={`mt-3 ${primaryBtn}`} disabled={planForm.processing}>
-                            Save
-                        </button>
-                    </form>
 
                     <form onSubmit={saveHours} className={cardCls}>
                         <h2 className="text-[13px] font-bold text-on-surface">Opening hours</h2>

@@ -212,6 +212,14 @@ final class PrepareE2eCommand extends Command
             ['name' => 'E2E Van', 'max_cbm' => 6, 'payload_kg' => 1000, 'status' => \App\Models\Fulfillment\Vehicle::STATUS_ACTIVE],
         );
 
+        // The store open every day, 07:00–21:00, so a planned driver always gets a pick-up and a ride home (work/opening).
+        if ($storeNode !== null) {
+            app(\App\Services\Workforce\Sites::class)->saveWeek($storeNode, collect(range(0, 6))->map(fn (int $day): array => [
+                'weekday' => $day, 'closed' => false, 'opens_at' => '07:00', 'closes_at' => '21:00',
+            ])->all());
+            \App\Models\Workforce\SiteHourException::query()->where('stock_location_id', $storeNode->id)->delete();
+        }
+
         // A shipment waiting to be loaded, for the Guide world's freight car (e2e/stock/play.spec.ts):
         // scheduled from the main hub to the store's Remote Hub on the E2E van, nothing picked.
         // Put back to that on every run, so a spec that loads it never leaves it loaded.

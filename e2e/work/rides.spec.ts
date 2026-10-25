@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { pngFile } from '../lib/files';
 import { closeWindows, fixture, flash, signIn } from '../lib/support';
 
 /**
  * Staff transport: the manager asks for a ride home for the seller; the courier
  * (a driver) takes it in the E2E van, sets off, drops the seller and finishes,
- * then records the fuel it took, which Finance confirms as an expense.
+ * then records the fuel it took with a photo of the receipt, which Finance opens and confirms as an expense.
  */
 
 test.afterAll(closeWindows);
@@ -17,7 +18,7 @@ test('a ride home: asked for, taken with a free car, driven and done', async ({ 
 
     // ── The seller says where they get dropped ──
     const seller = await signIn(browser, 'seller', fixture.seller.email);
-    await seller.goto('/work');
+    await seller.goto('/work?tab=rides');
     await seller.getByPlaceholder(/Area or landmark/).fill('E2E Bole Bulbula');
     await seller.getByRole('button', { name: 'Save', exact: true }).last().click();
     await expect(flash(seller, /Staff transport drops you there/)).toBeVisible();
@@ -48,6 +49,7 @@ test('a ride home: asked for, taken with a free car, driven and done', async ({ 
     // ── The fuel goes to Finance, who confirms it ──
     await courier.getByPlaceholder('Amount (ETB)').fill('850');
     await courier.getByPlaceholder('Litres (optional)').fill('12.5');
+    await courier.getByLabel('Receipt photo (optional)').setInputFiles(pngFile('fuel-receipt.png'));
     await courier.getByRole('button', { name: 'Record fuel' }).click();
     await expect(flash(courier, /Fuel recorded/)).toBeVisible();
     await expect(courier.getByText(/waiting for finance/)).toBeVisible();
@@ -55,6 +57,8 @@ test('a ride home: asked for, taken with a free car, driven and done', async ({ 
     const finance = await signIn(browser, 'finance', fixture.people.finance.email);
     await finance.goto('/expenses');
     const fuel = finance.locator('li').filter({ hasText: 'Fuel · ETB 850.00' }).filter({ hasText: fixture.vehicle.plate });
+    const receipt = await finance.request.get((await fuel.getByRole('link', { name: 'Receipt' }).getAttribute('href'))!);
+    expect(receipt.headers()['content-type']).toContain('image/png');
     await fuel.getByRole('button', { name: 'Confirm' }).click();
     await expect(flash(finance, /Expense confirmed/)).toBeVisible();
 

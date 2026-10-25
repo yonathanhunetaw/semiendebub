@@ -147,14 +147,15 @@ class WorkPagesTest extends TestCase
         $this->on('seller', $this->manager)->get(route('seller.work.sites.show', $this->site))
             ->assertOk()
             ->assertInertia(fn ($page) => $page->component('Work/Sites/Show')
-                ->where('site.id', $this->site->id)->has('plan', 7)->has('settings.opening_checklist')->has('siteKey.receivers'));
+                // Who opens, closes and drives is planned on the Rota page; the key is in My work → Keys.
+                ->where('site.id', $this->site->id)->missing('plan')->missing('siteKey')->has('settings.opening_checklist'));
 
         $tomorrow = LocalTime::today()->addDay()->toDateString();
         $outsider = $this->user('seller', Store::factory()->create()->id);
         $this->on('seller', $this->manager)->put(route('seller.work.sites.plan', $this->site), ['days' => [['date' => $tomorrow, 'opener_id' => $outsider->id]]])
             ->assertSessionHas('error', 'That person does not work at this site.');
         $this->on('seller', $this->manager)->put(route('seller.work.sites.plan', $this->site), ['days' => [['date' => $tomorrow, 'opener_id' => $this->seller->id, 'closer_id' => $this->keeper->id]]])
-            ->assertSessionHas('success', 'Openers and closers saved.');
+            ->assertSessionHas('success', 'Who opens, closes and drives: saved.');
         $day = app(SiteDayService::class)->day($this->site, LocalTime::day($tomorrow));
         $this->assertSame([$this->seller->id, $this->keeper->id], [(int) $day->opener_id, (int) $day->closer_id]);
 

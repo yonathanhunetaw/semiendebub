@@ -15,6 +15,9 @@ Keep `make dev` running in another terminal (its Vite serves the pages), then:
 | `make e2e-ui T=seller/orders` | the same, in Playwright's window: click a test, watch each step |
 | `make e2e ARGS='-g "walk-in"'` | tests whose title matches |
 
+Uploads are safe: the test server sets `R2_LOCAL=true`, so the `r2` disk (item pictures) writes to
+`storage/app/public/r2-local` instead of the bucket dev shares with prod.
+
 Each run copies `duka` → `duka_e2e`, runs `php artisan e2e:prepare` (test users, customers,
 items, prices, stock; written to `e2e/.fixture/fixture.json`) and serves the copy on :8096.
 After a run: `npx playwright show-report` for the HTML report, or
@@ -29,6 +32,8 @@ e2e/
   <module>/pages.spec.ts        every page of that app opens clean: no error status, no JS error,
                                 no console error, no 500 behind it; also the first record a list links to
   admin/
+    item-setup/                 a new item made on its one page; pictures (gallery + a variant slot) through the real
+                                file chooser, served from the local r2 stand-in (never prod's bucket), then removed
     settings/                   adding and renaming a store, taking on a seller who signs straight in
                                 Import / Export: a whole catalogue from files (categories → items → barcodes → store → prices →
                                 a stock count approved in Admin → Counts); a wrong line is named; the zip; a store admin is refused
@@ -53,9 +58,13 @@ e2e/
                                 is due next month, ticked paid there, and seen by a colleague
   work/                         keys, opening with the printed QR, clocking in with the moving code, breaks,
                                 closing and handing the key on; shift swaps and leave; a staff ride home
-  dev/, finance/, marketing/, procurement/, shared/   page sweeps only (most are placeholders)
+  finance/                      an expense with a receipt photo, opened and confirmed by a second person
+  procurement/                  the pipeline (idea → quote → landed cost → receiving), purchase orders, payments,
+                                tariffs from a CSV file (a wrong line saves nothing)
+  dev/, marketing/, shared/     page sweeps only (most are placeholders)
   lib/
     support.ts                  signIn(), app(), the fixture and its types
+    files.ts                    pngFile() and csvFile(): files to hand to an upload input
     flows.ts                    the steps specs share: carts, checkout, confirming, pick & pack, delivery
     inspect.ts                  ledger facts (stock per location, an order's stage and holds, a store, a site's QR codes)
     pages.ts                    sweep() and pagesTest(): open a list of pages and collect every fault
