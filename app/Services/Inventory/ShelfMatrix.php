@@ -12,6 +12,7 @@ use App\Models\Inventory\StockLocation;
 use App\Models\Item\Item;
 use App\Models\StockKeeper\ItemStock;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
@@ -173,6 +174,55 @@ class ShelfMatrix
     }
 
     /**
+     * Stand an item's bin on one slot of the racks ("f6c"). A slot holds one item: if another item is there, the two
+     * swap (the other takes this item's old slot, or is left unplaced when this one had none).
+     *
+     * @return array{band: ShelfItemBand, swapped: ?string} the band, and the name of the item that was moved to make room
+     *
+     * @throws InvalidArgumentException not a Store Shelf, no such slot, or the item has no bin here yet
+     */
+    public function placeOnSlot(StockLocation $shelf, Item $item, string $slot, ?User $by = null): array
+    {
+        if ($shelf->kind !== StockLocation::KIND_SHELF) {
+            throw new InvalidArgumentException("{$shelf->name} is not a Store Shelf.");
+        }
+
+        $code = ShelfSlots::normalise($slot);
+        if ($code === null) {
+            throw new InvalidArgumentException("'{$slot}' is not a slot on the racks (a column a to o, a row, and a to d: like f6c).");
+        }
+
+        return DB::transaction(function () use ($shelf, $item, $code, $by): array {
+            $band = ShelfItemBand::query()->where('stock_location_id', $shelf->id)->where('item_id', $item->id)->lockForUpdate()->first();
+            if ($band === null) {
+                throw new InvalidArgumentException("{$item->product_name} has no bin on this shelf yet: give it its limits first.");
+            }
+
+            $other = ShelfItemBand::query()->where('stock_location_id', $shelf->id)->where('spot', $code)->where('id', '!=', $band->id)->lockForUpdate()->first();
+            if ($other !== null) {
+                // Free this item's old slot first, so the swap never holds one slot twice.
+                $old = $band->spot;
+                $band->update(['spot' => null, 'updated_by' => $by?->id]);
+                $other->update(['spot' => $old, 'updated_by' => $by?->id]);
+            }
+            $band->update(['spot' => $code, 'updated_by' => $by?->id]);
+
+            return ['band' => $band, 'swapped' => $other?->item?->product_name];
+        });
+    }
+
+    /** Lift an item's bin off its slot (it stays on the shelf; the world fills it in order again). */
+    public function clearSlot(StockLocation $shelf, Item $item, ?User $by = null): bool
+    {
+        if ($shelf->kind !== StockLocation::KIND_SHELF) {
+            throw new InvalidArgumentException("{$shelf->name} is not a Store Shelf.");
+        }
+
+        return ShelfItemBand::query()->where('stock_location_id', $shelf->id)->where('item_id', $item->id)->whereNotNull('spot')
+            ->update(['spot' => null, 'updated_by' => $by?->id]) > 0;
+    }
+
+    /**
      * Take an item off the shelf's planogram.
      *
      * Stock already on the shelf stays where it is and shows as unassigned
@@ -266,6 +316,8 @@ class ShelfMatrix
             'in_unit' => round($pieces / $per, 1),
             'unit' => ['id' => $unit['id'], 'name' => $unit['name'], 'pieces' => $per],
             'units' => array_map(fn (array $t): array => ['id' => $t['id'], 'name' => $t['name'], 'pieces' => (int) $t['pieces']], $tiers),
+            // The slot of the racks it stands on ("f6c"), or null when it has not been placed.
+            'spot' => $band?->spot,
             'band' => $band === null ? null : [
                 'id' => (int) $band->id,
                 'max' => $band->max_units,

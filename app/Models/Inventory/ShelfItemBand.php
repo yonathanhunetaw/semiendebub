@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $max_units
  * @property int $refill_units
  * @property int $critical_units
+ * @property string|null $spot the slot of the racks it stands on ("f6c"), or null when not placed
  */
 class ShelfItemBand extends Model
 {
@@ -25,6 +26,7 @@ class ShelfItemBand extends Model
         'stock_location_id',
         'item_id',
         'item_packaging_type_id',
+        'spot',
         'max_units',
         'refill_units',
         'critical_units',

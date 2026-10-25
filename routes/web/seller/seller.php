@@ -87,6 +87,8 @@ Route::domain("seller.$baseDomain")
             Route::get('/locations/{location}/assignable', [LocationController::class, 'assignable'])->name('locations.assignable');
             Route::patch('/locations/{location}/bands/{item}', [LocationController::class, 'updateBand'])->name('locations.bands.update');
             Route::delete('/locations/{location}/bands/{item}', [LocationController::class, 'destroyBand'])->name('locations.bands.destroy');
+            // Put a bin on a slot of the racks (the Guide world's racks view), or lift it off.
+            Route::put('/locations/{location}/bands/{item}/spot', [LocationController::class, 'placeBand'])->name('locations.bands.spot');
             Route::post('/locations/{location}/bands/{item}/refill', [LocationController::class, 'requestRefill'])->name('locations.bands.refill');
             Route::put('/locations/{location}/routes/{item}', [LocationController::class, 'updateRoute'])->name('locations.routes.update');
             // The refill list: the store manager takes suggestions onto the

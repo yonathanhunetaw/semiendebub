@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePage } from "@inertiajs/react";
-import { Box, Button, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Box, Button, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Typography, useMediaQuery } from "@mui/material";
 import CenterFocusStrongRounded from "@mui/icons-material/CenterFocusStrongRounded";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import SportsEsportsRounded from "@mui/icons-material/SportsEsportsRounded";
@@ -30,7 +30,7 @@ import {
     ORDER_PHASE_LABEL, REFILL_PHASE_LABEL, orderStateAt, refillStateAt, stateAt,
     type WorldOrder, type WorldRefill, type WorldShipment,
 } from "./replay";
-import { RACKS, SHELF_BOX, SPOT_CAPACITY, rackFace, slotBox, slotCapacity, slotFrame, spotAt, type RackWall } from "./storeLayout";
+import { RACKS, SHELF_BOX, SPOT_CAPACITY, rackFace, slotAtU, slotBox, slotCapacity, slotFrame, spotAt, type RackWall } from "./storeLayout";
 import { createGameScene, type GameScene } from "./game/GameScene";
 import PlayLayer from "./game/PlayLayer";
 import { player, setGame, useGame, type GameView, type PlayerPose } from "./game/gameStore";
@@ -38,7 +38,10 @@ import { openings } from "./game/siteBlockers";
 import { roleFor, spawnFor } from "./game/spawn";
 import { loadWorldModel } from "./worldModel";
 import { barLines, placeBins, placeShelf, type ShelfBin } from "./shelfSpots";
-import { BOX_SIDE, hubBoxes, packLines, setCatalogueBoxes, shown, stackSlot, type CatalogueItem, type HubBox } from "./catalogue";
+import ShelfPlacer from "./ShelfPlacer";
+import { placeBinLive } from "./game/actions";
+import { BOX_SIDE, catalogueBoxes, hubBoxes, packLines, setCatalogueBoxes, shown, stackSlot, STACK_FOOTPRINT, type CatalogueItem, type HubBox, type StockPlace } from "./catalogue";
+import ItemFinder, { FIND_PLACES, type FindOption } from "./ItemFinder";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { boxAt } from "./game/collision";
 
@@ -79,6 +82,8 @@ interface SceneApi {
     setRefills: (refills: WorldRefill[]) => void;
     /** One box per item in the hubs (catalogue.ts); drawn once. */
     setCatalogue: (items: CatalogueItem[]) => void;
+    /** Mark one item's boxes in one hub (or the shop floor): a ring, a frame and a beam on each stack and one label; null clears it. `fly` takes the camera to its first stack there. */
+    setItemFocus: (itemId: number | null, hub: StockPlace | null, fly: boolean) => void;
     /** The seller shelf's bins, drawn on the racks' spots (shelfSpots.ts). */
     setShelf: (bins: ShelfBin[]) => void;
     setTime: (t: number) => void;
@@ -136,6 +141,9 @@ const REMOTE_CARRY: Array<[number, number]> = [DROP.remote_hub!, [DROP.remote_hu
 const TWEEN_MIN_MS = 500;
 /** Play started at a place: 14 m behind the worker, looking down 30°, so the door and the building's front fill the view. */
 const DOOR_FRAMING = { distance: 14, elevation: (30 * Math.PI) / 180 };
+/** doorPose stands a worker this far (m) outside the door; Director's camera looks at the door from further back along the same line. */
+const DOOR_STANDOFF = 3.2;
+const DIRECTOR_DOOR_ELEVATION = (24 * Math.PI) / 180;
 /** How close (m) the camera comes before the smaller places' names show, and the shop's and the compound's own signs. */
 const NEAR_LABEL = 70;
 const FIXED_LABEL = 110;
@@ -157,6 +165,17 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const mountRef = useRef<HTMLDivElement>(null);
     const apiRef = useRef<SceneApi | null>(null);
     const [selected, setSelected] = useState<PlaceKey | null>(null);
+    /** The place last pressed (Director's focus), for the item finder. */
+    const [tapped, setTapped] = useState<PlaceKey | null>(null);
+    /** The item the finder is marking in the world, and the hub the worker stands in (Play). */
+    const [findItem, setFindItem] = useState<number | null>(null);
+    const [hubHere, setHubHere] = useState<StockPlace | null>(null);
+    /** The shelf's layout tool (ShelfPlacer): the item chosen to put on a slot, what the server says the viewer may do, and the last answer. */
+    const [placing, setPlacing] = useState<number | null>(null);
+    const placingRef = useRef<number | null>(null);
+    const placeRef = useRef<((slot: string) => Promise<void>) | null>(null);
+    const [shelfEdit, setShelfEdit] = useState<{ location_id: number | null; can_place: boolean }>({ location_id: null, can_place: false });
+    const [placeNote, setPlaceNote] = useState<{ tone: "success" | "error"; text: string } | null>(null);
     const [failed, setFailed] = useState(false);
 
     // What the day holds.
@@ -176,6 +195,9 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const [pace, setPace] = useState<Pace>("normal");
     const [live, setLive] = useState(() => !linked.day || linked.day === isoDay(new Date()));
     const [follow, setFollow] = useState(true);
+    /** A screen wider than tall: Play's camera controls move up into the top bar (the slot below, filled by PlayLayer). */
+    const landscape = useMediaQuery("(orientation: landscape)");
+    const [barSlot, setBarSlot] = useState<HTMLElement | null>(null);
     const [kinds, setKinds] = useState<EventKind[]>(ALL_KINDS);
     const [arrivals, setArrivals] = useState(0);
 
@@ -223,6 +245,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         const mount = mountRef.current;
         if (!mount) return;
         const built = buildWorld(mount, theme, (key) => {
+            setTapped(key);
             setFocused(null);
             setSpot(null);
             setWallView(null);
@@ -242,7 +265,12 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
             player.pose = pose;
             framingRef.current = DOOR_FRAMING;
             setGame({ mode: "play", view: "follow" });
-        }, (code) => {
+        }, (code, slot) => {
+            // With an item chosen in the placer, a tap on the racks puts it on that slot instead of opening the spot.
+            if (placingRef.current !== null) {
+                void placeRef.current?.(slot);
+                return;
+            }
             setFocused(null);
             setSelected(null);
             setSpot(code);
@@ -276,7 +304,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const [shelf, setShelf] = useState<ShelfBin[]>([]);
     useEffect(() => {
         let gone = false;
-        const load = (query: Record<string, number | string>, then: (data: { catalogue?: CatalogueItem[]; shelf?: ShelfBin[] }) => void) =>
+        const load = (query: Record<string, number | string>, then: (data: { catalogue?: CatalogueItem[]; shelf?: ShelfBin[]; shelf_edit?: { location_id: number | null; can_place: boolean } }) => void) =>
             fetch(route(`${app}.guide.world`, query), { headers: { Accept: "application/json" }, credentials: "same-origin" })
                 .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
                 .then((data) => !gone && then(data))
@@ -285,7 +313,10 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         const refresh = () => {
             load({ catalogue: 1 }, (data) => setCatalogue(data.catalogue ?? []));
             // The shelf rides on the day's feed, which is heavy: ask for today only.
-            load({ shelf: 1, from: new Date().toISOString().slice(0, 10) }, (data) => setShelf(data.shelf ?? []));
+            load({ shelf: 1, from: new Date().toISOString().slice(0, 10) }, (data) => {
+                setShelf(data.shelf ?? []);
+                setShelfEdit(data.shelf_edit ?? { location_id: null, can_place: false });
+            });
         };
         refresh();
         const timer = window.setInterval(refresh, 60_000);
@@ -320,6 +351,80 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     }, [playing3d, app, theme.palette.mode, firstName]);
     useEffect(() => apiRef.current?.setView(game.view), [game.view]);
     const gameScene = useCallback(() => apiRef.current?.game() ?? null, []);
+
+    // The item finder: shown while a hub (or the shop floor) is open: the one the worker stands in, the one pressed
+    // in Director, or the one selected while watching.
+    useEffect(() => {
+        if (!playing3d) {
+            setHubHere(null);
+            return;
+        }
+        const read = () => setHubHere(player.pose ? findPlaceAt(player.pose.x, player.pose.z) : null);
+        read();
+        const timer = window.setInterval(read, 350);
+        return () => window.clearInterval(timer);
+    }, [playing3d]);
+    const asStockPlace = (key: PlaceKey | null): StockPlace | null => (key !== null && (FIND_PLACES as string[]).includes(key) ? (key as StockPlace) : null);
+    const activeHub: StockPlace | null = playing3d ? (hubHere ?? (game.view === "director" ? asStockPlace(tapped) : null)) : asStockPlace(selected);
+    const stacks = useMemo(() => hubBoxes(catalogue), [catalogue]);
+    const findOptions = useMemo<FindOption[]>(() => {
+        if (!activeHub) return [];
+        const byItem = new Map<number, FindOption>();
+        for (const box of stacks) {
+            if (box.hub !== activeHub) continue;
+            const option = byItem.get(box.item.item_id) ?? { item: box.item, cells: [], boxes: box.item.boxes?.[activeHub] ?? 0 };
+            option.cells.push(box.cell);
+            byItem.set(box.item.item_id, option);
+        }
+        return [...byItem.values()].sort((a, b) => a.item.name.localeCompare(b.item.name));
+    }, [stacks, activeHub]);
+    // Another hub (or none) clears the mark.
+    useEffect(() => setFindItem(null), [activeHub]);
+    const flyToFound = useRef(false);
+    useEffect(() => {
+        apiRef.current?.setItemFocus(findItem, activeHub, flyToFound.current);
+        flyToFound.current = false;
+    }, [findItem, activeHub, theme.palette.mode]);
+    const chooseFound = (id: number | null) => {
+        // Watching and in Director the camera flies to it; as the worker you walk (the button), or look round.
+        flyToFound.current = !playing3d || game.view === "director";
+        setFindItem(id);
+    };
+    // The shelf's layout tool: in the racks view, an item is chosen and a tap on a slot puts its bin there.
+    const reloadShelf = useCallback(() => {
+        fetch(route(`${app}.guide.world`, { shelf: 1, from: new Date().toISOString().slice(0, 10) }), { headers: { Accept: "application/json" }, credentials: "same-origin" })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+            .then((data) => {
+                setShelf(data.shelf ?? []);
+                setShelfEdit(data.shelf_edit ?? { location_id: null, can_place: false });
+            })
+            .catch((error) => console.warn("Live Operations: could not reload the shelf.", error));
+    }, [app]);
+    const racksShown = !playing3d && (racksOpen || wallView !== null || selected === "store_shelf" || selected === "store_floor" || selected === "store_counter");
+    const canPlace = shelfEdit.can_place && shelfEdit.location_id !== null && racksShown;
+    useEffect(() => {
+        placingRef.current = canPlace ? placing : null;
+    }, [placing, canPlace]);
+    useEffect(() => {
+        if (!canPlace) setPlacing(null);
+    }, [canPlace]);
+    // The last answer stays until another item is chosen (or it is closed): it is easy to miss when it fades.
+    useEffect(() => setPlaceNote(null), [placing]);
+    const placedBins = useMemo(() => placeBins(shelf), [shelf]);
+    const putOnSlot = async (slot: string | null) => {
+        const id = placingRef.current;
+        const location = shelfEdit.location_id;
+        if (id === null || location === null) return;
+        const answer = await placeBinLive(app, location, id, slot, shelf.find((b) => b.item_id === id)?.name ?? "the item");
+        setPlaceNote({ tone: answer.ok ? "success" : "error", text: answer.message });
+        if (answer.ok) reloadShelf();
+    };
+    placeRef.current = (slot) => putOnSlot(slot);
+
+    const walkToFound = () => {
+        const box = stacks.find((b) => b.hub === activeHub && b.item.item_id === findItem);
+        if (box) gameScene()?.walkTo(box.at[0], box.at[1] + STACK_FOOTPRINT / 2 + 0.9);
+    };
 
     // Light up the current event; fly there while the camera follows.
     useEffect(() => {
@@ -662,6 +767,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     pointerEvents: "none",
                 },
                 "& .world-badge--refill": { bgcolor: "info.main", color: "info.contrastText" },
+                "& .world-badge--find": { bgcolor: "#ffc21a", color: "#1d1309", border: "2px solid #1d1309", fontWeight: 900, fontSize: "0.78rem", px: 1, py: 0.2, boxShadow: 3 },
                 // A first name over a person's head.
                 "& .world-badge--name": { bgcolor: glass, color: "text.primary", border: "2px solid", borderColor: "divider", fontSize: "0.72rem", px: 1, py: 0.1, transform: "translateY(-4px)" },
                 // Play's job zones (game/zones.ts): a sign over each, brighter where the worker stands.
@@ -727,7 +833,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
             )}
 
             {/* The overlay: top bar; the list and the open card; the timeline. */}
-            <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 1, p: 1, pt: "max(8px, env(safe-area-inset-top))", pb: "max(8px, env(safe-area-inset-bottom))", pointerEvents: "none" }}>
+            <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 1, p: 1, pt: "max(8px, env(safe-area-inset-top))", pb: "max(8px, env(safe-area-inset-bottom))", pointerEvents: "none", zIndex: 1000 }}>
                 <Stack direction="row" spacing={1} alignItems="center">
                     <IconButton onClick={onClose} aria-label="Close" sx={{ pointerEvents: "auto", bgcolor: glass, boxShadow: 2, "&:hover": { bgcolor: "background.paper" } }}>
                         <CloseRounded />
@@ -735,6 +841,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     <Typography sx={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: { xs: "1rem", sm: "1.15rem" }, textShadow: `0 1px 0 ${theme.palette.background.paper}` }} noWrap>
                         Live Operations
                     </Typography>
+                    {/* Wider than tall: Play's camera and Practice/Live controls ride here (PlayLayer fills this slot). */}
+                    <Box ref={setBarSlot} sx={{ display: playing3d && landscape ? "flex" : "none", alignItems: "center", minWidth: 0, flexShrink: 1, pointerEvents: "none" }} />
                     {!failed && (
                         <Button onClick={() => setGame({ mode: playing3d ? "watch" : "play" })} aria-label={playing3d ? "Back to watching" : "Play as a worker"} startIcon={playing3d ? <VisibilityRounded /> : <SportsEsportsRounded />}
                             sx={{ pointerEvents: "auto", borderRadius: 999, fontWeight: 800, textTransform: "none", bgcolor: glass, boxShadow: 2, color: "text.primary", "&:hover": { bgcolor: "background.paper" } }}>
@@ -752,7 +860,14 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     </IconButton>}
                 </Stack>
 
-                {playing3d && <PlayLayer app={app} scene={gameScene} />}
+                {playing3d && <PlayLayer app={app} scene={gameScene} barSlot={landscape ? barSlot : null} />}
+
+                {/* While a hub is open: pick an item and its boxes light up in the world. */}
+                {activeHub && !failed && (
+                    <Box sx={{ position: "absolute", top: playing3d ? (landscape ? 126 : 232) : { xs: 60, sm: 62 }, left: 8, pointerEvents: "none" }}>
+                        <ItemFinder place={activeHub} options={findOptions} value={findItem} onChange={chooseFound} onWalk={playing3d && game.view !== "director" ? walkToFound : undefined} />
+                    </Box>
+                )}
 
                 {/* In the shop: look at each wall of racks from where the seller stands. */}
                 {!playing3d && (racksOpen || wallView !== null || selected === "store_shelf" || selected === "store_floor" || selected === "store_counter") && (
@@ -766,6 +881,13 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                             ))}
                         </ToggleButtonGroup>
                         <Button size="small" onClick={() => { setWallView(null); apiRef.current?.viewStore(); }} sx={{ borderRadius: 999, fontWeight: 800, textTransform: "none" }}>Whole shop</Button>
+                    </Box>
+                )}
+
+                {/* Whoever may change the shelf's layout: pick an item, tap a slot on the racks. */}
+                {canPlace && (
+                    <Box sx={{ position: "absolute", top: { xs: 112, sm: 62 }, right: 8, pointerEvents: "none" }}>
+                        <ShelfPlacer bins={shelf} placed={placedBins} value={placing} onChange={setPlacing} onLift={() => void putOnSlot(null)} note={placeNote} onNote={() => setPlaceNote(null)} />
                     </Box>
                 )}
 
@@ -845,7 +967,7 @@ function buildWorld(
     mount: HTMLDivElement,
     theme: Theme,
     onSelect: (key: PlaceKey | null) => void,
-    onSpot: (code: string) => void,
+    onSpot: (code: string, slot: string) => void,
     onUserMove: () => void,
     onSubject: (kind: EventKind, id: number) => void,
 ): { api: SceneApi; dispose: () => void } | null {
@@ -1551,7 +1673,7 @@ function buildWorld(
         }
         const face = hit?.object.userData.shelfFace as ShelfFace | undefined;
         if (face && hit?.uv) {
-            onSpot(face.spotAt(hit.uv.x, hit.uv.y));
+            onSpot(face.spotAt(hit.uv.x, hit.uv.y), face.slotAt(hit.uv.x, hit.uv.y));
             return;
         }
         onSelect((hit?.object.userData.placeKey as PlaceKey | undefined) ?? null);
@@ -1668,6 +1790,86 @@ function buildWorld(
         shelfBoxes = mesh;
     };
 
+    // The item found with the item finder: marks on each of its stacks, pulsing in the frame loop.
+    let findId: number | null = null;
+    let findHub: StockPlace | null = null;
+    let findGroup: THREE.Group | null = null;
+    let findLabels: HTMLDivElement[] = [];
+    let findPulse: Array<{ material: THREE.Material & { opacity: number }; low: number; high: number }> = [];
+    const clearFind = () => {
+        if (!findGroup) return;
+        scene.remove(findGroup);
+        findGroup.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (m.geometry) m.geometry.dispose();
+            const mat = (m as THREE.Mesh).material;
+            (Array.isArray(mat) ? mat : mat ? [mat] : []).forEach((x) => x.dispose());
+        });
+        findLabels.forEach((el) => el.remove());
+        findGroup = null;
+        findLabels = [];
+        findPulse = [];
+    };
+    const paintFind = () => {
+        clearFind();
+        if (findId === null) return;
+        const stacks = catalogueBoxes.filter((b) => b.item.item_id === findId && (findHub === null || b.hub === findHub));
+        if (stacks.length === 0) return;
+        const amber = 0xffc21a;
+        const group = new THREE.Group();
+        group.name = "item_find";
+        const glow = (material: THREE.Material & { opacity: number }, low: number, high: number) => {
+            findPulse.push({ material, low, high });
+            return material;
+        };
+        stacks.forEach((stack, n) => {
+            const base = stack.hub === "store_floor" ? 0.19 : 0.17;
+            const layers = Math.ceil(shown(stack.count) / 4);
+            const height = Math.max(1, layers) * BOX_SIDE;
+            const [x, z] = stack.at;
+            // A ring on the floor round the stack.
+            const ring = new THREE.Mesh(
+                new THREE.RingGeometry(STACK_FOOTPRINT * 0.8, STACK_FOOTPRINT * 0.8 + 0.28, 48),
+                glow(new THREE.MeshBasicMaterial({ color: amber, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }), 0.35, 0.95),
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(x, base + 0.04, z);
+            ring.raycast = () => {};
+            group.add(ring);
+            // A frame round the boxes, seen through whatever stands in front.
+            const frame = new THREE.LineSegments(
+                new THREE.EdgesGeometry(new THREE.BoxGeometry(STACK_FOOTPRINT + 0.14, height + 0.14, STACK_FOOTPRINT + 0.14)),
+                glow(new THREE.LineBasicMaterial({ color: amber, transparent: true, opacity: 1, depthTest: false }), 0.55, 1),
+            );
+            frame.position.set(x, base + height / 2, z);
+            frame.renderOrder = 10;
+            frame.raycast = () => {};
+            group.add(frame);
+            // A beam above it, so it is found from across the hub.
+            const beam = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.1, 0.1, 6, 12, 1, true),
+                glow(new THREE.MeshBasicMaterial({ color: amber, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }), 0.15, 0.5),
+            );
+            beam.position.set(x, base + 3, z);
+            beam.raycast = () => {};
+            group.add(beam);
+            // One label for the item, over its first stack: its cells and how many boxes the place holds.
+            if (n === 0) {
+                const el = document.createElement("div");
+                el.className = "world-badge world-badge--find";
+                const cells = stacks.map((b) => b.cell);
+                const boxes = stacks.reduce((sum, b) => sum + b.count, 0);
+                el.textContent = `${cells.slice(0, 3).join(", ")}${cells.length > 3 ? ` +${cells.length - 3}` : ""} · ${boxes} × ${stack.item.pack?.[0]?.name ?? stack.item.tier ?? "box"}`;
+                const label = new CSS2DObject(el);
+                label.position.set(x, base + height + 1.4, z);
+                group.add(label);
+                findLabels.push(el);
+            }
+        });
+        scene.add(group);
+        findGroup = group;
+    };
+
     const setCatalogueBoxesInScene = (items: CatalogueItem[]) => {
         // The stock changes as the day goes: draw it again (the old stacks leave the scene and the picking list).
         if (catalogueGroup) {
@@ -1682,7 +1884,10 @@ function buildWorld(
             });
             catalogueGroup = null;
         }
-        if (items.length === 0) return;
+        if (items.length === 0) {
+            paintFind();
+            return;
+        }
         const boxes = hubBoxes(items);
         setCatalogueBoxes(boxes);
         catalogueGroup = makeCatalogueBoxes(boxes);
@@ -1690,10 +1895,19 @@ function buildWorld(
             if ((o as THREE.Mesh).isMesh) pickables.push(o);
         });
         scene.add(catalogueGroup);
+        // The stock was drawn again: the marks follow the stacks.
+        paintFind();
     };
 
     const api: SceneApi = {
         setCatalogue: setCatalogueBoxesInScene,
+        setItemFocus: (itemId, hub, fly) => {
+            findId = itemId;
+            findHub = hub;
+            paintFind();
+            const first = itemId === null ? null : catalogueBoxes.find((b) => b.item.item_id === itemId && (hub === null || b.hub === hub));
+            if (first && fly) flyClose(first.at[0], first.at[1], 6);
+        },
         setShelf: (bins) => {
             const placed = placeShelf(bins);
             shelfFaces.forEach((face) => face.setBins(placed));
@@ -1739,8 +1953,16 @@ function buildWorld(
         game: () => game,
         focusPlace: (key) => {
             // The shop's shelf, floor and counter are the one building: focus it whole.
-            const node = nodes.get(key.startsWith("store_") ? "store_floor" : key);
-            if (node) flyClose(node.group.position.x, node.group.position.z, Math.max(...node.place.size, 6));
+            const whole = key.startsWith("store_") ? "store_floor" : key;
+            const node = nodes.get(whole);
+            if (!node) return;
+            // Face the door: stand out in front of it, on the line the door opens along, and look at it.
+            const pose = doorPose(whole);
+            const forward = new THREE.Vector3(Math.sin(pose.yaw), 0, Math.cos(pose.yaw));
+            const door = new THREE.Vector3(pose.x, 0, pose.z).addScaledVector(forward, DOOR_STANDOFF);
+            const back = Math.min(44, Math.max(16, Math.max(...node.place.size) * 0.9 + 8));
+            const cam = door.clone().addScaledVector(forward, -(back + DOOR_STANDOFF)).setY((back + DOOR_STANDOFF) * Math.tan(DIRECTOR_DOOR_ELEVATION));
+            flyTo(door.clone().setY(1.5), cam);
         },
         select: (key) => {
             if (key === selectedKey) return;
@@ -1868,6 +2090,10 @@ function buildWorld(
     const animate = () => {
         frame = requestAnimationFrame(animate);
         const time = (performance.now() - startedAt) / 1000;
+        if (findPulse.length) {
+            const wave = 0.5 + 0.5 * Math.sin(time * 5);
+            for (const { material, low, high } of findPulse) material.opacity = low + (high - low) * wave;
+        }
         // Seconds since the last frame, capped so a tab coming back does not teleport the worker; at 0.1 s
         // the worker keeps their real pace down to 10 fps (a slow phone), and collision still steps finely (collision.move).
         const elapsed = (performance.now() - lastFrame) / 1000;
@@ -2093,6 +2319,17 @@ function fixedLabel(text: string, x: number, y: number, z: number): HTMLDivEleme
     return el;
 }
 
+/** Which stock place (a hub, or the shop's floor) a point stands in; null outside them all. */
+function findPlaceAt(x: number, z: number): StockPlace | null {
+    for (const key of FIND_PLACES) {
+        const place = key === "store_floor" ? STORE : placeFor(key as PlaceKey);
+        const [px, pz] = place.position;
+        const [w, d] = place.size;
+        if (Math.abs(x - px) <= w / 2 && Math.abs(z - pz) <= d / 2) return key;
+    }
+    return null;
+}
+
 function labelHeight(place: Place): number {
     if (place.indoor) return 3.4;
     switch (place.shape) {
@@ -2275,6 +2512,8 @@ interface ShelfFace {
     paint: (selected: string | null) => void;
     /** The spot ("f6") under a point on the face, from its uv. */
     spotAt: (u: number, v: number) => string;
+    /** The slot ("f6c") under a point on the face: the spot and which of its four slots. */
+    slotAt: (u: number, v: number) => string;
     /** The bins on each spot of the whole rack (shelfSpots.ts): drawn in the spot's four slots. */
     setBins: (placed: Map<string, ShelfBin[]>) => void;
 }
@@ -2359,6 +2598,7 @@ function makeShelves(wall: THREE.Color, dark: THREE.Color): { group: THREE.Group
         const STATUS_FILL: Record<ShelfBin["status"], string> = { ok: "#e3f1df", refill: "#ffe7b0", critical: "#ffc4bd", empty: "#d9d9d9" };
         const face: ShelfFace = {
             spotAt: (u, v) => spotAt(run, u, v),
+            slotAt: (u, v) => `${spotAt(run, u, v)}${"abcd"[slotAtU(run, u)]}`,
             setBins: (next) => {
                 placed = next;
                 face.paint(null);

@@ -70,6 +70,13 @@ export function spotAt(run: RackRun, u: number, v: number): string {
     return `${run.columns[col]}${row + 1}`;
 }
 
+/** The slot (0 to 3, left to right) of a spot under a point of a run's face: u runs left to right across the whole face. */
+export function slotAtU(run: RackRun, u: number): number {
+    const across = Math.min(0.99999, Math.max(0, u)) * run.columns.length;
+
+    return Math.min(SPOT_CAPACITY - 1, Math.floor((across - Math.floor(across)) * SPOT_CAPACITY));
+}
+
 /** The run a spot code belongs to, with its column and row. */
 export function describeSpot(code: string): { run: RackRun; column: string; row: number } | null {
     const column = code.slice(0, 1);

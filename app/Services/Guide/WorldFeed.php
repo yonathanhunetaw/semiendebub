@@ -26,6 +26,7 @@ use App\Models\Inventory\ItemStock;
 use App\Services\Inventory\PackagingLadder;
 use App\Services\Inventory\RefillBoard;
 use App\Services\Inventory\ShelfMatrix;
+use App\Services\Inventory\StockPermissions;
 use App\Services\Inventory\StockLocationTree;
 use App\Services\ShipmentWorkflowService;
 use App\Services\TransferWorkflowService;
@@ -1012,12 +1013,34 @@ class WorldFeed
                 'in_unit' => $bin['in_unit'],
                 'status' => $bin['status'],
                 'assigned' => $bin['assigned'],
+                // The slot of the racks it stands on ("f6c"), or null: the world fills unplaced bins in order.
+                'spot' => $bin['spot'],
                 'band' => $bin['band'] === null ? null : [
                     'max' => $bin['band']['max'], 'refill' => $bin['band']['refill'], 'critical' => $bin['band']['critical'], 'unit' => $bin['unit']['name'],
                 ],
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * What the viewer may do to the shelf from the world: put its bins on slots of the racks. Only the admin and seller
+     * apps have the route (and, as on the item page, only whoever may edit the planogram).
+     *
+     * @return array{location_id: int|null, can_place: bool}
+     */
+    public function shelfEdit(User $viewer, string $app): array
+    {
+        $shelf = StockLocation::query()
+            ->where('kind', StockLocation::KIND_SHELF)
+            ->whereIn('store_id', StockLocation::query()->where('kind', StockLocation::KIND_STORE)->where('name', self::MAIN_STORE)->select('store_id'))
+            ->first();
+
+        if ($shelf === null || ! in_array($app, ['admin', 'seller'], true) || ($viewer->store_id !== null && (int) $viewer->store_id !== (int) $shelf->store_id)) {
+            return ['location_id' => $shelf?->id !== null ? (int) $shelf->id : null, 'can_place' => false];
+        }
+
+        return ['location_id' => (int) $shelf->id, 'can_place' => app(StockPermissions::class)->canEditPlanogram($viewer, $shelf)];
     }
 
     /** @return array<string, mixed> */

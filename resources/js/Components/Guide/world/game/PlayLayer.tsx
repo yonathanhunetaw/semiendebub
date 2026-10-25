@@ -49,7 +49,7 @@ const REFRESH_MS = 30_000;
 /** The session as it is right now (not as of the last render), for handlers that run later. */
 const getSession = (): PracticeState | null => getGame().session;
 
-export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => GameScene | null }) {
+export default function PlayLayer({ app, scene, barSlot = null }: { app: GuideApp; scene: () => GameScene | null; /** The world's top bar, when the screen is wider than tall: the camera and Practice/Live controls ride there. */ barSlot?: HTMLElement | null }) {
     const theme = useTheme();
     const game = useGame();
     const session = game.session;
@@ -341,7 +341,7 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
     return (
         <>
             <Stack spacing={1} sx={{ alignItems: "center", pointerEvents: "none" }}>
-                <GameHud canGoLive={liveAllowed || game.live} onLive={askLive} />
+                <GameHud canGoLive={liveAllowed || game.live} onLive={askLive} inBar={barSlot} />
                 {/* The goals: one row to swipe, so they never bury the world (the site is big, and a desk has its own goal). */}
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center", maxWidth: "calc(100vw - 16px)", overflowX: "auto", px: 0.5, pb: 0.5, scrollbarWidth: "none", pointerEvents: "auto" }}>
                     {(feed?.stations.length ?? 0) > 0 && (

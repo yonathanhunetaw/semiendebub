@@ -50,7 +50,7 @@ export function floorSite(itemIds: number[]): Site | null {
 export function shelfSite(itemIds: number[]): Site | null {
     for (const id of itemIds) {
         for (const [code, bins] of shelfPlacement) {
-            const slot = bins.findIndex((b) => b.item_id === id);
+            const slot = bins.findIndex((b) => b?.item_id === id);
             const frame = slot < 0 ? null : slotFrame(code, slot);
             if (!frame) continue;
             const [rx, rz] = runPoint(frame.run, frame.from + frame.width / 2, STORE.shelfDepth / 2);

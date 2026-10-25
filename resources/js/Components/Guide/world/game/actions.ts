@@ -132,3 +132,15 @@ export function shipmentStepLive(load: FreightLoad, step: LoadStep, payload: Rec
     return post(route("stock_keeper.shipments.step", { shipment: load.shipmentId, step }), payload, load.reference,
         `You may not pick ${load.reference}: only the people who work ${hub}'s dock can.`);
 }
+
+/**
+ * The racks view: put a shelf bin on a slot of the racks ("f6c"), or lift it off (null). The admin and seller apps have the
+ * route (the item page's own planogram permission decides): admin items.setup.spot, seller locations.bands.spot.
+ */
+export function placeBinLive(app: GuideApp, locationId: number, itemId: number, slot: string | null, name: string): Promise<Answer> {
+    const url = app === "admin"
+        ? route("admin.items.setup.spot", { item: itemId, location: locationId })
+        : route("seller.locations.bands.spot", { location: locationId, item: itemId });
+
+    return stationLive("put", url, { spot: slot }, name);
+}

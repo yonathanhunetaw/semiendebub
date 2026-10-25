@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\SaveItemSpotRequest;
 use App\Http\Requests\Inventory\RaiseShelfRefillRequest;
 use App\Http\Requests\Inventory\UpdateRefillRouteRequest;
 use App\Http\Requests\Inventory\UpdateShelfBandRequest;
@@ -133,6 +134,26 @@ class LocationController extends Controller
         }
 
         return back()->with('success', "{$item->product_name}'s shelf band saved.");
+    }
+
+    /** Put the item's shelf bin on a slot of the racks, or lift it off (an empty slot): the world's racks view. */
+    public function placeBand(SaveItemSpotRequest $request, StockLocation $location, Item $item): RedirectResponse
+    {
+        abort_unless($this->permissions->canEditPlanogram($request->user(), $location), 403);
+
+        try {
+            $slot = $request->validated('spot');
+            if ($slot === null || trim($slot) === '') {
+                $this->matrix->clearSlot($location, $item, $request->user());
+
+                return back()->with('success', "{$item->product_name} is off its slot.");
+            }
+            $placed = $this->matrix->placeOnSlot($location, $item, $slot, $request->user());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['spot' => $e->getMessage()]);
+        }
+
+        return back()->with('success', "{$item->product_name} is on {$placed['band']->spot}.".($placed['swapped'] ? " {$placed['swapped']} took its old place." : ''));
     }
 
     /** Take an item off the shelf's planogram. */

@@ -40,6 +40,8 @@ class GuideWorldController extends Controller
         // The shelf is always as it stands now; only fetched when asked for.
         if ($request->boolean('shelf')) {
             $payload['shelf'] = $feed->shelf($request->user());
+            // Whether the viewer may put its bins on slots of the racks (the world's racks view).
+            $payload['shelf_edit'] = $feed->shelfEdit($request->user(), (string) strtok((string) $request->route()?->getName(), '.'));
         }
 
         return response()->json($payload);

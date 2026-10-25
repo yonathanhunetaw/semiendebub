@@ -156,6 +156,7 @@ Route::domain("admin.{$baseDomain}")
             Route::get('items/{item}/setup', [ItemSetupController::class, 'show'])->name('items.setup');
             Route::put('items/{item}/setup/stores/{store}/prices', [ItemSetupController::class, 'savePrices'])->name('items.setup.prices');
             Route::put('items/{item}/setup/locations/{location}/bin', [ItemSetupController::class, 'saveBin'])->name('items.setup.bin');
+            Route::put('items/{item}/setup/locations/{location}/spot', [ItemSetupController::class, 'saveSpot'])->name('items.setup.spot');
             Route::delete('items/{item}/setup/locations/{location}/bin', [ItemSetupController::class, 'removeBin'])->name('items.setup.bin.destroy');
             // Refill route and counts (stock only ever changes through a count).
             Route::put('items/{item}/setup/stores/{store}/refill-route', [ItemSetupStockController::class, 'saveRoute'])->name('items.setup.route');

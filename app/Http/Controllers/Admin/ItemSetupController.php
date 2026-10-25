@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SaveItemBinRequest;
 use App\Http\Requests\Admin\SaveItemPricesRequest;
+use App\Http\Requests\Admin\SaveItemSpotRequest;
 use App\Models\Inventory\ShelfItemBand;
 use App\Models\Inventory\StockLocation;
 use App\Models\Auth\User;
@@ -137,6 +138,26 @@ final class ItemSetupController extends Controller
         }
 
         return back()->with('success', "{$item->product_name}'s limits at {$location->name} saved.");
+    }
+
+    /** Put the item's shelf bin on a slot of the racks, or lift it off (an empty slot). The world's racks view calls this too. */
+    public function saveSpot(SaveItemSpotRequest $request, Item $item, StockLocation $location): RedirectResponse
+    {
+        abort_unless($location->kind === StockLocation::KIND_SHELF && $this->places->canEdit($request->user(), $location), 403);
+
+        try {
+            $slot = $request->validated('spot');
+            if ($slot === null || trim($slot) === '') {
+                $this->matrix->clearSlot($location, $item, $request->user());
+
+                return back()->with('success', "{$item->product_name} is off its slot.");
+            }
+            $placed = $this->matrix->placeOnSlot($location, $item, $slot, $request->user());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['spot' => $e->getMessage()]);
+        }
+
+        return back()->with('success', "{$item->product_name} is on {$placed['band']->spot}.".($placed['swapped'] ? " {$placed['swapped']} took its old place." : ''));
     }
 
     public function removeBin(Request $request, Item $item, StockLocation $location): RedirectResponse

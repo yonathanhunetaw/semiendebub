@@ -50,6 +50,8 @@ e2e/
     balance/                    a seller handing cash over to a settlement account
     refills/                    a shelf refill the floor covers; one it cannot, sent on via the Remote Hub list
   stock/                        shipments (hub → Remote Hub) and transfers / shelving
+                                the Guide world: Director faces a building's door, the hub item finder marks an item, Play's controls ride in
+                                the top bar when wide, and the Racks view puts an item on a slot (a taken slot swaps)
   stockkeeper/                  stocktakes: approved by a second keeper, or by the manager in Admin → Counts;
                                 receiving short and damaged, the shortfall settled by a second keeper
   delivery/, vendor/            editing one's own profile

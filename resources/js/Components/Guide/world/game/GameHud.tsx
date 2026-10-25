@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Box, Chip, IconButton, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useMediaQuery } from "@mui/material";
 import DirectionsRunRounded from "@mui/icons-material/DirectionsRunRounded";
 import DirectionsWalkRounded from "@mui/icons-material/DirectionsWalkRounded";
@@ -11,8 +12,11 @@ import { setGame, useGame, type GameView } from "./gameStore";
  * Play's top bar: Practice or Live, the camera choice, and how to walk.
  * Live shows only to someone who may do the job for real (permissions.ts),
  * and while it is on a red LIVE badge stays up.
+ *
+ * On a screen wider than it is tall (`inBar`), the controls ride in the world's top bar, beside the title, so they
+ * take no room from the view; the walking hint stays where it was.
  */
-export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onLive: (on: boolean) => void }) {
+export default function GameHud({ canGoLive, onLive, inBar = null }: { canGoLive: boolean; onLive: (on: boolean) => void; inBar?: HTMLElement | null }) {
     const theme = useTheme();
     const game = useGame();
     const glass = alpha(theme.palette.background.paper, 0.92);
@@ -32,12 +36,13 @@ export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onL
         else void document.documentElement.requestFullscreen().catch(() => undefined);
     };
 
-    return (
-        <Stack spacing={1} sx={{ alignItems: "center", pointerEvents: "none" }}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ pointerEvents: "auto", p: 0.5, pl: 1, borderRadius: 999, bgcolor: glass, boxShadow: 3, flexWrap: "wrap", justifyContent: "center", border: live ? "2px solid" : "none", borderColor: "error.main" }}>
-                {/* On a phone the switch beside it already says Practice or Live; only LIVE keeps a (short) chip there. */}
-                <Chip size="small" color={live ? "error" : "info"} label={live ? "LIVE: drops make real records" : "Practice: nothing is saved"} sx={{ fontWeight: 900, display: { xs: "none", sm: "inline-flex" } }} />
-                {live && <Chip size="small" color="error" label="LIVE" sx={{ fontWeight: 900, display: { xs: "inline-flex", sm: "none" } }} />}
+    const pills = (
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ pointerEvents: "auto", p: 0.5, pl: 1, borderRadius: 999, bgcolor: glass, boxShadow: 3, flexWrap: inBar ? "nowrap" : "wrap", justifyContent: "center", border: live ? "2px solid" : "none", borderColor: "error.main", maxWidth: "100%", overflowX: inBar ? "auto" : "visible", scrollbarWidth: "none" }}>
+                {/* On a phone the switch beside it already says Practice or Live; only LIVE keeps a (short) chip there. In the top bar the chip is short everywhere. */}
+                {inBar
+                    ? <Chip size="small" color={live ? "error" : "info"} label={live ? "LIVE" : "Practice"} sx={{ fontWeight: 900, display: canGoLive ? "none" : "inline-flex" }} />
+                    : <Chip size="small" color={live ? "error" : "info"} label={live ? "LIVE: drops make real records" : "Practice: nothing is saved"} sx={{ fontWeight: 900, display: { xs: "none", sm: "inline-flex" } }} />}
+                {live && !inBar && <Chip size="small" color="error" label="LIVE" sx={{ fontWeight: 900, display: { xs: "inline-flex", sm: "none" } }} />}
                 {canGoLive && (
                     <ToggleButtonGroup size="small" exclusive value={live ? "live" : "practice"} disabled={game.saving} onChange={(_, next: string | null) => next && onLive(next === "live")} aria-label="Practice or Live">
                         <ToggleButton value="practice" sx={{ fontWeight: 800, px: 1.25, textTransform: "none" }}>Practice</ToggleButton>
@@ -64,6 +69,13 @@ export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onL
                     </Tooltip>
                 )}
             </Stack>
+    );
+
+    return (
+        <>
+            {inBar ? createPortal(pills, inBar) : null}
+        <Stack spacing={1} sx={{ alignItems: "center", pointerEvents: "none" }}>
+            {!inBar && pills}
             {/* How to walk, until the worker has first walked on this device. */}
             {!game.hinted && <Box sx={{ px: 1.5, py: 0.5, borderRadius: 999, bgcolor: glass, boxShadow: 1 }}>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
@@ -73,5 +85,6 @@ export default function GameHud({ canGoLive, onLive }: { canGoLive: boolean; onL
                 </Typography>
             </Box>}
         </Stack>
+        </>
     );
 }

@@ -2,10 +2,11 @@ import { RACKS, SPOT_CAPACITY } from "./storeLayout.ts";
 
 /**
  * The seller's shelf (its bins, WorldFeed::shelf) laid onto the physical racks.
- * Which bin sits on which physical spot is not recorded, so the world places
- * them in the order the shelf lists its bins: spot a1, a2 … (a spot carries up
- * to SPOT_CAPACITY, named a1a to a1d), wall after wall. The racks' own
- * numbers (refill line, low line, how full) are the bins' real ones.
+ * A shelf manager can put a bin on a slot ("f6c"; it is recorded: `spot`). A bin
+ * with no recorded slot is placed in the order the shelf lists its bins, in the
+ * slots nobody holds: spot a1, a2 … (a spot carries up to SPOT_CAPACITY, named
+ * a1a to a1d), wall after wall. The racks' own numbers (refill line, low line,
+ * how full) are the bins' real ones.
  */
 
 export interface ShelfBin {
@@ -18,6 +19,8 @@ export interface ShelfBin {
     in_unit?: number;
     status: "empty" | "critical" | "refill" | "ok";
     assigned: boolean;
+    /** The slot of the racks it was put on ("f6c"), or null/absent: the world places it. */
+    spot?: string | null;
     band: { max: number; refill: number; critical: number; unit: string } | null;
 }
 
@@ -27,14 +30,47 @@ export const SPOT_ORDER: string[] = RACKS.flatMap((run) => run.columns.flatMap((
 /** The placement the world drew last (set when the shelf arrives), for the zones of the shelving job. */
 export let shelfPlacement: Map<string, ShelfBin[]> = new Map();
 
-/** The bins on each spot (up to SPOT_CAPACITY, in order); spots with none are left out. */
+/** Every slot of the racks, in reading order (a1a, a1b, a1c, a1d, a2a …). */
+export const SLOT_ORDER: string[] = SPOT_ORDER.flatMap((spot) => Array.from({ length: SPOT_CAPACITY }, (_, i) => `${spot}${"abcd"[i]}`));
+const SLOTS = new Set(SLOT_ORDER);
+
+/**
+ * The bins on each spot, by slot: `list[slot]` is the bin on slot 0 to 3 (a spot with only slot c taken has holes before it);
+ * spots with none are left out. Recorded slots first; the rest fill the free slots in the shelf's order.
+ */
 export function placeBins(bins: ShelfBin[]): Map<string, ShelfBin[]> {
+    const taken = new Map<string, ShelfBin>();
+    const loose: ShelfBin[] = [];
+    for (const bin of bins) {
+        const slot = bin.spot ? bin.spot.toLowerCase() : null;
+        if (slot && SLOTS.has(slot) && !taken.has(slot)) taken.set(slot, bin);
+        else loose.push(bin);
+    }
+    let next = 0;
+    for (const bin of loose) {
+        while (next < SLOT_ORDER.length && taken.has(SLOT_ORDER[next])) next++;
+        if (next >= SLOT_ORDER.length) break;
+        taken.set(SLOT_ORDER[next++], bin);
+    }
     const placed = new Map<string, ShelfBin[]>();
-    bins.slice(0, SPOT_ORDER.length * SPOT_CAPACITY).forEach((bin, i) => {
-        const code = SPOT_ORDER[Math.floor(i / SPOT_CAPACITY)];
-        placed.set(code, [...(placed.get(code) ?? []), bin]);
-    });
+    for (const code of SLOT_ORDER) {
+        const bin = taken.get(code);
+        if (!bin) continue;
+        const spot = code.slice(0, -1);
+        const list = placed.get(spot) ?? [];
+        list[code.slice(-1).charCodeAt(0) - 97] = bin;
+        placed.set(spot, list);
+    }
     return placed;
+}
+
+/** The slot ("f6c") an item's bin stands on in this placement, or null when it is not on the racks. */
+export function slotOfItem(placed: Map<string, ShelfBin[]>, itemId: number): string | null {
+    for (const [spot, list] of placed) {
+        const slot = list.findIndex((bin) => bin?.item_id === itemId);
+        if (slot >= 0) return `${spot}${"abcd"[slot]}`;
+    }
+    return null;
 }
 
 /** The world drew these bins on the racks: keep the placement for the shelving job's zones and tell its listeners. */
