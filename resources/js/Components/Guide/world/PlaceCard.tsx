@@ -108,8 +108,7 @@ export default function PlaceCard({
                         <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800, display: "block", mt: 1.5 }}>Floor</Typography>
                         <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
                             <Chip size="small" label={`${cells.length} cells of 1 m²`} sx={{ fontWeight: 700 }} />
-                            <Chip size="small" variant="outlined" label={`${cells[0].name}–${cells[cells.length - 1].name}`} />
-                            <Chip size="small" variant="outlined" label="2 m walkway" />
+                            <Chip size="small" variant="outlined" label="A at your left as you come in" />
                         </Stack>
                         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
                             Zoom in to see each cell. Stock will be placed into cells by its volume.

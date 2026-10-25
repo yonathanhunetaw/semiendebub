@@ -1,3 +1,4 @@
+import { useBusy } from "@/hooks/useBusy";
 import FlashToast from "@/Components/Shared/FlashToast";
 import { cardCls, ghostBtn, inputCls, primaryBtn, sectionTitle } from "@/Components/Work/workUi";
 import AdminLayout from "@/Layouts/AdminLayout";
@@ -59,6 +60,7 @@ const sum = (totals: Record<string, number>): number => Object.values(totals).re
 
 function Row({ app, row }: { app: Props["app"]; row: ExpenseRow }): React.ReactElement {
     const [rejecting, setRejecting] = useState(false);
+    const { busy, post } = useBusy();
     const [reason, setReason] = useState("");
 
     return (
@@ -92,15 +94,15 @@ function Row({ app, row }: { app: Props["app"]; row: ExpenseRow }): React.ReactE
                         <button
                             type="button"
                             className={primaryBtn}
-                            disabled={reason.trim() === ""}
-                            onClick={() => router.post(route(`${app}.expenses.reject`, row.id), { reason }, { preserveScroll: true })}
+                            disabled={busy || reason.trim() === ""}
+                            onClick={() => post(route(`${app}.expenses.reject`, row.id), { reason }, { preserveScroll: true })}
                         >
                             Reject
                         </button>
                     </div>
                 ) : (
                     <div className="mt-2 flex gap-2">
-                        <button type="button" className={primaryBtn} onClick={() => router.post(route(`${app}.expenses.confirm`, row.id), {}, { preserveScroll: true })}>
+                        <button type="button" className={primaryBtn} disabled={busy} onClick={() => post(route(`${app}.expenses.confirm`, row.id), {}, { preserveScroll: true })}>
                             Confirm
                         </button>
                         <button type="button" className={ghostBtn} onClick={() => setRejecting(true)}>

@@ -344,13 +344,16 @@ class GuideWorldFeedTest extends TestCase
         // 5 cartons (a carton variant's unit is 48 pieces) in Hub A, and one on the shop floor; nothing in Hub B.
         app(\App\Services\StockService::class)->receive($cupsCarton->id, $this->hubA, 5);
         app(\App\Services\StockService::class)->receive($cupsCarton->id, $this->floor(), 1);
+        app(\App\Services\StockService::class)->receive($cupsCarton->id, $this->remoteHub, 2);
 
-        $boxes = $this->asRole($this->user('admin', null), 'admin')
+        $row = $this->asRole($this->user('admin', null), 'admin')
             ->getJson(route('admin.guide.world', ['catalogue' => 1]))
             ->assertOk()
-            ->json('catalogue.0.boxes');
+            ->json('catalogue.0');
 
-        $this->assertSame(['main_hub_a' => 5, 'store_floor' => 1], $boxes);
+        $this->assertEqualsCanonicalizing(['main_hub_a' => 5, 'remote_hub' => 2, 'store_floor' => 1], $row['boxes']);
+        // What a carton holds comes with it, biggest first, for the label.
+        $this->assertSame(48, $row['pack'][0]['pieces']);
     }
 
     private function user(string $role, ?int $storeId): User

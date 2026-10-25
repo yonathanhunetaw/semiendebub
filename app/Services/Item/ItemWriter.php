@@ -300,6 +300,17 @@ final class ItemWriter
     /** @param array<string, mixed> $data name, description, packaging details, category (id or new name), status */
     public function create(array $data, Request $request): Item
     {
+        return $this->createFromData($data, $this->generalImages($request, []));
+    }
+
+    /**
+     * The same item as create(), without a request: for callers that have no uploads (the CSV import).
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<string>  $generalImages  storage keys
+     */
+    public function createFromData(array $data, array $generalImages = []): Item
+    {
         return Item::create([
             'product_name' => $data['product_name'],
             'product_description' => $data['product_description'] ?? null,
@@ -308,8 +319,24 @@ final class ItemWriter
             'item_category_id' => $this->resolveCategoryId($data['item_category_id']),
             // evaluateDraftStatus() writes the status asked for once variants exist.
             'status' => 'draft',
-            'general_images' => $this->generalImages($request, []),
+            'general_images' => $generalImages,
             'is_incomplete' => true,
+        ]);
+    }
+
+    /**
+     * Change an item's own details (not its status, pictures or options).
+     *
+     * @param  array<string, mixed>  $data  product_name, product_description, packaging_details, hs_code, item_category_id (id or new name)
+     */
+    public function updateBasics(Item $item, array $data): void
+    {
+        $item->update([
+            'product_name' => $data['product_name'],
+            'product_description' => $data['product_description'] ?? null,
+            'packaging_details' => $data['packaging_details'] ?? null,
+            'hs_code' => \App\Models\Procurement\Tariff::normalise($data['hs_code'] ?? null),
+            'item_category_id' => $this->resolveCategoryId($data['item_category_id']),
         ]);
     }
 
@@ -421,6 +448,36 @@ final class ItemWriter
      */
     public function saveBarcodes(Item $item, array $codes): void
     {
+        [$clean, $errors] = $this->checkBarcodes($item, $codes);
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        DB::transaction(function () use ($clean): void {
+            foreach ($clean as $variantId => $code) {
+                ItemVariant::query()->whereKey($variantId)->update(['barcode' => $code]);
+            }
+        });
+    }
+
+    /**
+     * What saveBarcodes would refuse, without saving anything (the CSV import checks a file with it).
+     *
+     * @param  array<int|string, mixed>  $codes  variant id => code
+     * @return array<string, string> "barcodes.{variant id}" => message
+     */
+    public function barcodeErrors(Item $item, array $codes): array
+    {
+        return $this->checkBarcodes($item, $codes)[1];
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $codes
+     * @return array{0: array<int, ?string>, 1: array<string, string>} [variant id => code to save, errors]
+     */
+    private function checkBarcodes(Item $item, array $codes): array
+    {
         $variants = ItemVariant::query()->where('item_id', $item->id)->get()->keyBy('id');
         $errors = [];
         $clean = [];
@@ -457,15 +514,7 @@ final class ItemWriter
             $clean[(int) $variantId] = $code;
         }
 
-        if ($errors !== []) {
-            throw ValidationException::withMessages($errors);
-        }
-
-        DB::transaction(function () use ($clean): void {
-            foreach ($clean as $variantId => $code) {
-                ItemVariant::query()->whereKey($variantId)->update(['barcode' => $code]);
-            }
-        });
+        return [$clean, $errors];
     }
 
     /**

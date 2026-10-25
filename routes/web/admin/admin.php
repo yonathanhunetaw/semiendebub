@@ -188,6 +188,15 @@ Route::domain("admin.{$baseDomain}")
             // Users, sessions and the system status live under Settings, for global admins only (never a tick).
             Route::middleware('admin.global')->group(function () {
                 Route::get('system', SystemStatusController::class)->name('system.index');
+                // Import / Export: every module's data as CSV, and the safe ones back in (Settings tab).
+                Route::controller(\App\Http\Controllers\Admin\DataExchangeController::class)->prefix('data')->name('data.')->group(function () {
+                    Route::get('/', 'index')->name('index');
+                    Route::get('/everything.zip', 'everything')->name('everything');
+                    Route::post('/deploy', 'deploy')->name('deploy');
+                    Route::get('/{dataset}/export.csv', 'export')->name('export');
+                    Route::get('/{dataset}/template.csv', 'template')->name('template');
+                    Route::post('/{dataset}/import', 'import')->name('import');
+                });
                 Route::resource('users', UserController::class);
                 $sessionController = SessionController::class;
                 require __DIR__ . '/../sessions.php';

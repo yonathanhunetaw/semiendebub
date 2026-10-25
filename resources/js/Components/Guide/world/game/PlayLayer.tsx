@@ -14,6 +14,8 @@ import { getGame, kept, liveConfirmed, setGame, useGame } from "./gameStore";
 import { canGoLive, canLegLive, stationsLive, canLoadLive, canRunLive, canShelveLive } from "./permissions";
 import { startLegs } from "./legs";
 import { DeskMenu, StationCards, deskGoals, deskZones, stationsAt, useStations } from "./StationPanel";
+import { floorSite, shelfSite } from "./jobSites";
+import { onStockDrawn } from "../shelfSpots";
 import { LegCards, ZONES_OF_LEGS, legGoal, legZones, legsAt, useLegs } from "./LegPanel";
 import { startRuns } from "./handoff";
 import { RunCards, ZONES_OF_RUNS, runGoal, runZones, runsAt, useRuns } from "./RunPanel";
@@ -144,6 +146,16 @@ export default function PlayLayer({ app, scene }: { app: GuideApp; scene: () => 
         kept.zones = keys;
         scene()?.showZones(keys);
     }, [floorJobs, carrying, hubZone, freightUnits, shelfLocked, relayZones?.join(), runZones(game.runs, game.live).join(), legZones(game.legs, game.live).join(), deskZones(feed?.stations ?? null, desks.struck).join(), scene, theme.palette.mode]);
+
+    // The pick-up stands in front of the item's own stack on the floor, the put-up in front of its own slot on the racks: they follow
+    // the first item of the jobs waiting / the jobs carried, and the stock as the world draws it again.
+    const [stockTick, setStockTick] = useState(0);
+    useEffect(() => onStockDrawn(() => setStockTick((n) => n + 1)), []);
+    const floorItems = (session?.floor ?? []).map((j) => j.itemId ?? 0).filter(Boolean);
+    const carriedItems = (session?.carrying ?? []).map((j) => j.itemId ?? 0).filter(Boolean);
+    useEffect(() => {
+        scene()?.setJobSites(floorSite(floorItems), shelfSite(carriedItems));
+    }, [floorItems.join(), carriedItems.join(), stockTick, scene, theme.palette.mode]);
 
     /** Why your arms cannot take on `job` now (they hold another job's stock), or null. */
     const armsBusy = (job: "shelf" | "freight" | "relay"): string | null => {

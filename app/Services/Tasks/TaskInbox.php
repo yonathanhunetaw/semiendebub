@@ -100,14 +100,14 @@ class TaskInbox
                     ->whereIn('status', [TransferWorkflowService::STATUS_PENDING, TransferWorkflowService::STATUS_IN_TRANSIT])
                     ->where('approval_state', '!=', Transfer::APPROVAL_PENDING)
                     ->count();
-                $this->push($tasks, 'shelve', 'shelf', 'Refill the shelf', "{$toShelve} item(s) to carry from the store floor to the shelf.", $toShelve, $this->url('stock_keeper.shelving.index'));
+                $this->push($tasks, 'shelve', 'shelf', 'Refill the shelf', "{$toShelve} item(s) to carry from the store floor to the shelf.", $toShelve, $this->keeperUrl($role, 'stock_keeper.shelving.index'));
 
                 $toAccept = RefillRequest::query()->where('store_id', $storeId)
                     ->where('source', ItemRefillRoute::SOURCE_REMOTE_HUB)
                     ->where('status', RefillRequest::STATUS_IN_PROGRESS)
                     ->whereNull('transfer_id')
                     ->count();
-                $this->push($tasks, 'accept-remote', 'hub', 'Accept Remote Hub refills', "{$toAccept} Remote Hub refill(s) to accept.", $toAccept, $this->url('stock_keeper.shelving.index'));
+                $this->push($tasks, 'accept-remote', 'hub', 'Accept Remote Hub refills', "{$toAccept} Remote Hub refill(s) to accept.", $toAccept, $this->keeperUrl($role, 'stock_keeper.shelving.index'));
             }
 
             if ($this->rulesOnRefills($user, $storeId)) {
@@ -156,6 +156,12 @@ class TaskInbox
     }
 
     /** @param array<string, mixed> $params */
+    /** The stock keeper app admits stock keepers and admins only; a store manager sees the task without a dead link. */
+    private function keeperUrl(string $role, string $name): ?string
+    {
+        return in_array($role, ['stock_keeper', 'admin'], true) ? $this->url($name) : null;
+    }
+
     private function url(string $name, array $params = []): ?string
     {
         return Route::has($name) ? route($name, $params) : null;

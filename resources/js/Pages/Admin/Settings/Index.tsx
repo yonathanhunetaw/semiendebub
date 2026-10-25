@@ -23,6 +23,7 @@ import ChevronRight from "@mui/icons-material/ChevronRight";
 import DarkModeRounded from "@mui/icons-material/DarkModeRounded";
 import Devices from "@mui/icons-material/Devices";
 import Dns from "@mui/icons-material/Dns";
+import ImportExport from "@mui/icons-material/ImportExport";
 import Layers from "@mui/icons-material/Layers";
 import LightModeRounded from "@mui/icons-material/LightModeRounded";
 import LocalOffer from "@mui/icons-material/LocalOffer";
@@ -109,6 +110,7 @@ export default function SettingsIndex() {
         { icon: ManageAccounts, title: "Users", desc: "Staff, roles and which store each works at", href: route("admin.users.index") },
         { icon: Devices, title: "Sessions", desc: "Who is signed in, and ending sessions", href: route("admin.sessions.index") },
         { icon: Dns, title: "System status", desc: "Which server is live, what happened, possible data loss", href: route("admin.system.index") },
+        { icon: ImportExport, title: "Import / Export", desc: "Every module as a spreadsheet, and setup data back in", href: route("admin.data.index") },
         { icon: Store, title: "All stores", desc: "Add, rename or close stores", href: route("admin.inventory.stores") },
         { icon: Warehouse, title: "Warehouses", desc: "Main hubs and the stores each serves", href: route("admin.inventory.warehouse.index") },
         { icon: AirportShuttle, title: "Fleet", desc: "Vehicles shared by every store", href: route("admin.inventory.fleet.index") },

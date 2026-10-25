@@ -117,13 +117,16 @@ class StocktakeService
      */
     public function post(Stocktake $take, User $by): Stocktake
     {
-        $this->assertStatus($take, Stocktake::SUBMITTED, 'posted');
-
-        if (! $this->permissions->isGlobalAdmin($by) && (int) $take->submitted_by === (int) $by->id) {
-            throw new InvalidArgumentException('Someone other than the person who submitted the count approves it.');
-        }
-
         return DB::transaction(function () use ($take, $by): Stocktake {
+            // Re-read under a row lock so a double click cannot post twice.
+            $take = Stocktake::query()->lockForUpdate()->findOrFail($take->id);
+
+            $this->assertStatus($take, Stocktake::SUBMITTED, 'posted');
+
+            if (! $this->permissions->isGlobalAdmin($by) && (int) $take->submitted_by === (int) $by->id) {
+                throw new InvalidArgumentException('Someone other than the person who submitted the count approves it.');
+            }
+
             $take->lines()->whereNotNull('counted')->get()->each(function (StocktakeLine $line) use ($take, $by): void {
                 $delta = (int) $line->counted - (int) $line->expected;
 

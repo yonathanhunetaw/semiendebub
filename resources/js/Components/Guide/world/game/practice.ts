@@ -16,6 +16,8 @@ export interface ShelveJob {
     transferId: number;
     reference: string;
     itemName: string;
+    /** The item, to find its stack on the floor and its slot on the racks (0 when unknown). */
+    itemId?: number;
     quantity: number;
     /** The transfer's unit, e.g. "Packet": its quantity is counted in it. */
     unit: string;

@@ -26,7 +26,7 @@ class ProfileController extends Controller
     {
         $courier = Auth::user();
 
-        return Inertia::render('Delivery/Profile/index', [
+        return Inertia::render('Delivery/Profile/Index', [
             'courier' => [
                 'id' => (int) $courier->id,
                 'first_name' => $courier->first_name,

@@ -58,6 +58,13 @@ class SupplierController extends Controller
 
     public function store(SaveSupplierRequest $request): RedirectResponse
     {
+        // A double click or a replayed request must not add the same supplier twice.
+        $exists = Supplier::query()->whereRaw('LOWER(name) = ?', [mb_strtolower(trim((string) $request->validated('name')))])->exists();
+
+        if ($exists) {
+            return back()->withInput()->with('error', 'A supplier with that name already exists.');
+        }
+
         $supplier = Supplier::query()->create($request->validated() + ['created_by' => $request->user()->id]);
 
         return redirect()->route('procurement.suppliers.index')->with('success', "{$supplier->name} added.");

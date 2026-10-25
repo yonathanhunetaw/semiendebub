@@ -74,7 +74,7 @@ export const STORE = {
     // In the north row: its front (and door) on the street side, at z = -FRONT.
     position: [-8, -18] as [number, number],
     size: [16, 18] as [number, number],
-    wall: 5.2,
+    wall: 9,
     door: { at: 7, width: 2.2, height: 2.3 },
     shelfDepth: 0.5,
     /** Height of the floor strip under the lowest shelf. */
@@ -240,8 +240,8 @@ export const PLACES: Place[] = [
         label: "Counter",
         does: "The 4 m counter in the middle of the shop, facing the door as you walk in. Sales happen here.",
         happens: ["The customer asks; the seller finds the item on the shelf", "The seller builds the cart and checks out", "Payment is confirmed by a second person", "In-store orders are handed over here"],
-        // Across the shop, 5 m in from the front wall, a little east of the door: customers come up to it from the door.
-        position: [STORE_DOOR_X + 2.6, STORE_CORNER.sw[1] - 5],
+        // Across the shop in its middle, beside the delivery platform (the owner's sketch): customers come up to it from the door.
+        position: [STORE_DOOR_X + 2.1, STORE_CORNER.sw[1] - 8.2],
         size: [4, 0.8],
         shape: "counter",
         indoor: true,
@@ -253,7 +253,7 @@ export const PLACES: Place[] = [
         label: "Delivery",
         does: "The delivery platform inside the shop, beside the counter: couriers load orders here and take them out along the street to the customers' cars.",
         happens: ["Take a run from the list on offer", "Collect the parcel: custody is now the courier's", "Hand it over, or report why it failed"],
-        position: [STORE_DOOR_X - 3.4, STORE_CORNER.sw[1] - 5.4],
+        position: [STORE_DOOR_X - 1.95, STORE_CORNER.sw[1] - 9.5],
         size: [3.6, 3.6],
         shape: "platform",
         indoor: true,
@@ -336,11 +336,7 @@ export const PLACES: Place[] = [
  * apart from 0.9 m inside the area's north edge. The scene draws them and
  * the worker walks round them.
  */
-export const FLOOR_ZONES: Array<[number, number, number, number, number]> = [
-    // As in the real shop, measured from the north-west corner: 1.3 m from the west wall, 0.4 m from the back wall.
-    [-STORE.size[0] / 2 + 1.3, -STORE.size[1] / 2 + 2.6, 1.3, 4.4, 3],
-    [-STORE.size[0] / 2 + 3.2, -STORE.size[1] / 2 + 1.4, 1.3, 1.4, 1],
-];
+export const FLOOR_ZONES: Array<[number, number, number, number, number]> = [];
 export const PALLET = 1.2;
 /** Every pallet's centre, [x, z, its number within its area]. */
 export function palletCentres(): Array<[number, number, number]> {
@@ -476,7 +472,7 @@ export interface Cell {
 
 export interface HubLayout {
     cells: Cell[];
-    /** Walkway rectangles, relative to the hub's centre: [x0, z0, x1, z1]. */
+    /** Walkway rectangles (none: the stock fills the floor), relative to the hub's centre: [x0, z0, x1, z1]. */
     aisles: Array<[number, number, number, number]>;
 }
 
@@ -492,52 +488,36 @@ export function columnLetter(index: number): string {
 }
 
 /**
- * A hub's floor as 1 m cells, with a 2 m walkway down the middle of its length
- * and a 2 m path from the door to it. Cells are named like a spreadsheet:
- * letters across from the west wall, numbers down from the north wall (C4).
- * Walkway squares keep their letters and numbers but hold no cell.
+ * A hub's whole floor as 1 m cells (no space is left for a walkway: the stock fills it). Cells are named like a spreadsheet as
+ * you read them standing at the door looking in: letters from your left to your right (A is the left-hand column), numbers
+ * from the door wall outwards (C4 is the third column, the fourth row in).
  */
 export function hubLayout(place: Place): HubLayout {
     const [w, d] = place.size;
     const x0 = -w / 2;
     const z0 = -d / 2;
-    const aisles: HubLayout["aisles"] = [];
+    const cols = Math.floor(w);
+    const rows = Math.floor(d);
 
-    // The walkway runs along the longer side, through the middle.
-    if (w >= d) {
-        const mid = Math.floor(d / 2) - 1;
-        aisles.push([x0, z0 + mid, x0 + w, z0 + mid + 2]);
-    } else {
-        const mid = Math.floor(w / 2) - 1;
-        aisles.push([x0 + mid, z0, x0 + mid + 2, z0 + d]);
-    }
+    // For the wall the door is in (a viewer enters facing the opposite wall): the letter (from the viewer's left) and the number (from the door).
+    const at = (col: number, row: number): [number, number] => {
+        switch (place.door?.wall ?? "south") {
+            case "north": return [cols - 1 - col, row];
+            case "west": return [row, col];
+            case "east": return [rows - 1 - row, cols - 1 - col];
+            default: return [col, rows - 1 - row];
+        }
+    };
 
-    // From the door straight in to the walkway.
-    const door = place.door;
-    if (door) {
-        const [mx0, mz0, mx1, mz1] = aisles[0];
-        const along = Math.round(door.at) - 1;
-        const dz = z0 + along;
-        const dx = x0 + along;
-        switch (door.wall) {
-            case "east": aisles.push([w >= d ? x0 + w - 2 : mx1, w >= d ? Math.min(dz, mz0) : dz, x0 + w, w >= d ? Math.max(dz + 2, mz1) : dz + 2]); break;
-            case "west": aisles.push([x0, w >= d ? Math.min(dz, mz0) : dz, w >= d ? x0 + 2 : mx0, w >= d ? Math.max(dz + 2, mz1) : dz + 2]); break;
-            case "south": aisles.push([w >= d ? dx : Math.min(dx, mx0), w >= d ? mz1 : z0 + d - 2, w >= d ? dx + 2 : Math.max(dx + 2, mx1), z0 + d]); break;
-            case "north": aisles.push([w >= d ? dx : Math.min(dx, mx0), z0, w >= d ? dx + 2 : Math.max(dx + 2, mx1), w >= d ? mz0 : z0 + 2]); break;
+    const found: Array<{ cell: Cell; letter: number; number: number }> = [];
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            const [letter, number] = at(col, row);
+            found.push({ cell: { name: `${columnLetter(letter)}${number + 1}`, x: x0 + col + 0.5, z: z0 + row + 0.5 }, letter, number });
         }
     }
+    // In reading order from the door: the row nearest it first, left to right.
+    const cells = found.sort((p, q) => p.number - q.number || p.letter - q.letter).map((f) => f.cell);
 
-    const inAisle = (x: number, z: number) => aisles.some(([ax0, az0, ax1, az1]) => x > ax0 && x < ax1 && z > az0 && z < az1);
-
-    const cells: Cell[] = [];
-    for (let row = 0; row < Math.floor(d); row++) {
-        for (let col = 0; col < Math.floor(w); col++) {
-            const x = x0 + col + 0.5;
-            const z = z0 + row + 0.5;
-            if (inAisle(x, z)) continue;
-            cells.push({ name: `${columnLetter(col)}${row + 1}`, x, z });
-        }
-    }
-
-    return { cells, aisles };
+    return { cells, aisles: [] };
 }

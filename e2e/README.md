@@ -30,6 +30,8 @@ e2e/
                                 no console error, no 500 behind it; also the first record a list links to
   admin/
     settings/                   adding and renaming a store, taking on a seller who signs straight in
+                                Import / Export: a whole catalogue from files (categories → items → barcodes → store → prices →
+                                a stock count approved in Admin → Counts); a wrong line is named; the zip; a store admin is refused
     pricing/                    business / individual / seller / customer prices set in Admin → Stores,
                                 then the seller's cart charging each; stock pools (set aside for Business)
   seller/

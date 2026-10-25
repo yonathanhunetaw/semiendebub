@@ -10,6 +10,7 @@ use App\Models\Item\Item;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Models\Store\StoreVariantCustomerPrice;
+use App\Models\Store\StoreVariantIndividualPrice;
 use App\Models\Store\StoreVariantSellerPrice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -25,6 +26,76 @@ use Illuminate\Validation\ValidationException;
  */
 final class StorePrices
 {
+    /**
+     * The store's own price of each variant of an item (the price every buyer without a seller/customer
+     * price pays), saved a variant at a time, with the rules of the item setup page's Prices part:
+     *
+     * - a price above zero puts the variant on sale (unless an admin forced it off); a price of zero, or a
+     *   forced-off variant, takes it off. This is what switches a deployed variant on.
+     * - `on_sale` false forces the variant off; true lifts a forced-off.
+     * - an individual price is saved with it, or removed when blank; `business_pool` is set when present.
+     *
+     * @param  list<array<string, mixed>>  $lines  store_variant_id, price, discount_price, discount_ends_at, individual_price, on_sale, business_pool
+     * @return int how many variants were saved
+     *
+     * @throws ValidationException a line names a store variant that is not this item's in this store
+     */
+    public function saveBase(Store $store, Item $item, array $lines): int
+    {
+        $rows = StoreVariant::query()->where('store_id', $store->id)->where('item_id', $item->id)->get()->keyBy('id');
+        $saved = 0;
+
+        DB::transaction(function () use ($lines, $rows, &$saved): void {
+            foreach ($lines as $line) {
+                $row = $rows->get((int) $line['store_variant_id']);
+                if ($row === null) {
+                    throw ValidationException::withMessages(['variants' => 'A price line does not belong to this item in this store.']);
+                }
+
+                $matrix = (array) $row->pricing_matrix;
+                $matrix = isset($matrix[0]) && is_array($matrix[0]) ? $matrix[0] : $matrix;
+                $discount = $line['discount_price'] ?? null;
+                $row->pricing_matrix = array_merge($matrix, [
+                    'price' => (float) $line['price'],
+                    'discount_price' => $this->blank($discount) ? null : (float) $discount,
+                    'discount_ends_at' => $this->blank($discount) ? null : $line['discount_ends_at'],
+                ]);
+                // The "on sale" switch: off forces the variant off; on lifts a forced-off. A real price puts a
+                // variant on sale (unless it is forced off); no price takes it off.
+                $onSale = array_key_exists('on_sale', $line) && $line['on_sale'] !== null ? filter_var($line['on_sale'], FILTER_VALIDATE_BOOLEAN) : null;
+                if ($onSale === false) {
+                    $row->manual_status = 'forced';
+                    $row->forced_status = 'inactive';
+                } elseif ($onSale === true && $row->manual_status === 'forced') {
+                    $row->manual_status = 'auto';
+                    $row->forced_status = null;
+                }
+                if ((float) $line['price'] <= 0 || $row->manual_status === 'forced') {
+                    $row->active = false;
+                } else {
+                    $row->active = true;
+                }
+                if (array_key_exists('business_pool', $line)) {
+                    $row->business_pool = $this->blank($line['business_pool']) ? null : (int) $line['business_pool'];
+                }
+                $row->save();
+
+                $individual = $line['individual_price'] ?? null;
+                if ($this->blank($individual)) {
+                    StoreVariantIndividualPrice::query()->where('store_variant_id', $row->id)->delete();
+                } else {
+                    StoreVariantIndividualPrice::query()->updateOrCreate(['store_variant_id' => $row->id], [
+                        'pricing_matrix' => ['price' => (float) $individual, 'discount_price' => null, 'discount_ends_at' => null, 'auto_from_business' => false],
+                        'active' => true,
+                    ]);
+                }
+                $saved++;
+            }
+        });
+
+        return $saved;
+    }
+
     /** @param list<array<string, mixed>> $lines {store_variant_id, price, discount_price, discount_ends_at} */
     public function saveSeller(Store $store, Item $item, User $seller, string $type, array $lines): int
     {

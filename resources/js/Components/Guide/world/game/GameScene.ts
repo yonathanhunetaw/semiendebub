@@ -9,7 +9,8 @@ import type { Station } from "./stations";
 import { createPlayer, type PlayerOptions } from "./PlayerController";
 import { getGame, kept, player as pose, setGame, type CarView, type GameView } from "./gameStore";
 import type { Placed } from "./packer";
-import { ZONES, drawZones, zoneAt, type ZoneKey } from "./zones";
+import { ZONES, aimZone, drawZones, zoneAt, type ZoneKey } from "./zones";
+import type { Site } from "./jobSites";
 
 /**
  * Everything Play adds to the world, as one thing DukaWorld holds: the
@@ -40,6 +41,8 @@ export interface GameScene {
     walkTo: (x: number, z: number) => void;
     /** Which zones to show (the HUD knows whether there is anything to pick up or put up). */
     showZones: (keys: ZoneKey[]) => void;
+    /** Put the shelving job's pick-up and put-up where its items are (null: leave that zone where it stands). */
+    setJobSites: (floor: Site | null, shelf: Site | null) => void;
     /** The stack is now these boxes; new ones fly in from that zone. */
     setCarried: (boxes: StackBox[], from: ZoneKey | null) => void;
     /** Fly the whole stack into a zone; resolves when it has landed. */
@@ -129,6 +132,13 @@ export function createGameScene(options: GameSceneOptions): GameScene {
         showZones: (keys) => {
             kept.zones = keys;
             zones.show(keys);
+        },
+        setJobSites: (floor, shelf) => {
+            for (const [key, site] of [["floor", floor], ["shelf", shelf]] as const) {
+                if (!site) continue;
+                aimZone(key, site.rect, site.point);
+                zones.relayout(key);
+            }
         },
         setCarried: (boxes, from) => {
             kept.boxes = boxes;

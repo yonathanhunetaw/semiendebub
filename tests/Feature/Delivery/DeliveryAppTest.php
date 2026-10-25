@@ -415,7 +415,7 @@ class DeliveryAppTest extends TestCase
     {
         $this->get(route('delivery.profile.index'))->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('Delivery/Profile/index')
+                ->component('Delivery/Profile/Index')
                 ->where('courier.id', $this->courier->id)
                 ->has('metrics'));
     }

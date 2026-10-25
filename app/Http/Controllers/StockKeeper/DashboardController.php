@@ -38,36 +38,34 @@ class DashboardController extends Controller
     {
         $stock = $this->stock->forUser(Auth::user());
 
-        $alerts = $stock->lowStockQuery()
-            ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
-            ->orderByRaw('(quantity - min_stock_level) ASC')
-            ->limit(8)
-            ->get()
-            ->map(fn (ItemStock $stock) => $this->stock->presentStockRow($stock))
-            ->values()
-            ->all();
-
-        $recentMovements = $stock->visibleOnly(ItemStock::query())
-            ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
-            ->orderByDesc('updated_at')
-            ->limit(8)
-            ->get()
-            ->map(fn (ItemStock $stock) => $this->stock->presentStockRow($stock))
-            ->values()
-            ->all();
-
+        // The page paints with the stock figures; the lists and the jobs
+        // count (the slow part) arrive a moment later.
         return Inertia::render('StockKeeper/Dashboard/index', [
             'metrics' => $stock->metrics(),
-            'alerts' => $alerts,
-            'recent_movements' => $recentMovements,
-            'locations' => $stock->locations(),
             'assigned_location' => $this->stock->assignedLocation(Auth::user()),
-            'todo' => $this->todo(Auth::user()),
-            'transfer_summary' => [
+            'alerts' => Inertia::defer(fn () => $stock->lowStockQuery()
+                ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
+                ->orderByRaw('(quantity - min_stock_level) ASC')
+                ->limit(8)
+                ->get()
+                ->map(fn (ItemStock $row) => $this->stock->presentStockRow($row))
+                ->values()
+                ->all(), 'lists'),
+            'recent_movements' => Inertia::defer(fn () => $stock->visibleOnly(ItemStock::query())
+                ->with(['itemVariant.item', 'itemVariant.itemColor', 'itemVariant.itemSize'])
+                ->orderByDesc('updated_at')
+                ->limit(8)
+                ->get()
+                ->map(fn (ItemStock $row) => $this->stock->presentStockRow($row))
+                ->values()
+                ->all(), 'lists'),
+            'locations' => Inertia::defer(fn () => $stock->locations(), 'lists'),
+            'todo' => Inertia::defer(fn () => $this->todo(Auth::user()), 'jobs'),
+            'transfer_summary' => Inertia::defer(fn () => [
                 'pending' => Transfer::query()->where('status', 'pending')->count(),
                 'in_transit' => Transfer::query()->where('status', 'in_transit')->count(),
                 'completed' => Transfer::query()->where('status', 'completed')->count(),
-            ],
+            ], 'jobs'),
         ]);
     }
 

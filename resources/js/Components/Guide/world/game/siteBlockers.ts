@@ -4,7 +4,7 @@ import { blockedAt, boxAt, type Blockers, type Box, type Wall } from "./collisio
 import { makeGrid, type Grid } from "./pathfinding";
 import { catalogueBoxes } from "../catalogue";
 import { worldMarkers } from "../worldModel";
-import { DESKS } from "./zones";
+import { DESKS, tableZ } from "./zones";
 
 /**
  * Everything on the site the worker cannot walk through, from the same
@@ -113,7 +113,7 @@ export function siteBlockers(): Blockers {
         boxAt(CONTAINER_TRUCK[0] + 1, CONTAINER_TRUCK[1], CONTAINER[0] + 2.5, CONTAINER[1]),
     ];
     // Each desk's table, at the back of its patch (zones.ts draws it there).
-    for (const { rect: [x0, z0, x1] } of DESKS.filter((d) => d.table)) boxes.push(boxAt((x0 + x1) / 2, z0 + 0.45, Math.min(2.3, x1 - x0 - 0.3), 0.8));
+    for (const desk of DESKS.filter((d) => d.table)) boxes.push(boxAt((desk.rect[0] + desk.rect[2]) / 2, tableZ(desk), Math.min(2.3, desk.rect[2] - desk.rect[0] - 0.3), 0.8));
     const walls: Wall[] = [...store.walls, ...fence()];
 
     for (const place of PLACES) {
@@ -129,7 +129,8 @@ export function siteBlockers(): Blockers {
         }
     }
     // The hubs' boxes, one per item (catalogue.ts), once the catalogue has come.
-    for (const { at, side } of catalogueBoxes) boxes.push(boxAt(at[0], at[1], side, side));
+    // The shop floor's stacks block; the hubs' floors are filled wall to wall with stock, so there the worker walks among the boxes.
+    for (const { at, side, hub } of catalogueBoxes) if (hub === "store_floor") boxes.push(boxAt(at[0], at[1], side, side));
     // The designed world's own blockers (worldModel.ts), when it has any.
     for (const { rect } of worldMarkers?.blockers ?? []) if (rect) boxes.push({ minX: rect[0], minZ: rect[1], maxX: rect[2], maxZ: rect[3] });
     return { boxes, walls };

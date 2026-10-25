@@ -9,9 +9,7 @@ export default function SharedSidebar({ variant, open, onClose, sx }: any) {
     const { url } = usePage();
 
     const menuItems = [
-        { label: 'Common Hub', icon: <HubIcon />, href: '/shared/dashboard' },
-        { label: 'Resources', icon: <FolderSharedIcon />, href: '/shared/resources' },
-        { label: 'Integrations', icon: <SettingsInputComponentIcon />, href: '/shared/tools' },
+        { label: 'Common Hub', icon: <HubIcon />, href: '/dashboard' },
     ];
 
     return (

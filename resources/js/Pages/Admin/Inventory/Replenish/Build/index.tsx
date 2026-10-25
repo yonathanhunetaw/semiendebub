@@ -1,3 +1,4 @@
+import { useBusy } from "@/hooks/useBusy";
 import React, { useState } from "react";
 import AppLayout from "@/Layouts/AppLayout";
 import { Head, router } from "@inertiajs/react";
@@ -533,8 +534,9 @@ export default function ReplenishBuild({
             return { ...item, target_dest: nextDest };
         }));
     };
+    const { post: postOnce } = useBusy();
     const handleReview = () => {
-        router.post(route("admin.inventory.replenish.store"), { transfer_id, vehicle_id: selectedVehicle, quantities });
+        postOnce(route("admin.inventory.replenish.store"), { transfer_id, vehicle_id: selectedVehicle, quantities });
     };
 
     // ── Proposed Time Gap Windows: the alternate run-times delivery/origin/destination

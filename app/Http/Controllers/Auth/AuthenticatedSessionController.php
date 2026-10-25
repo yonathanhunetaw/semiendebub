@@ -175,9 +175,13 @@ class AuthenticatedSessionController extends Controller
         return config('subdomains.host_role_map', [])[$host] ?? null;
     }
 
+    /**
+     * Every app shows the shared login. (A per-host lookup in subdomains.host_component_map used to
+     * be tried here, but the dots in a hostname are read as nested keys, so it never matched.)
+     */
     private function loginComponentForHost(string $host): string
     {
-        return config("subdomains.host_component_map.{$host}", 'Auth/Login/index');
+        return 'Auth/Login/index';
     }
 
     private function loginUrl(Request $request): string

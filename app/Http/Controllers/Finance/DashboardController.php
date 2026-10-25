@@ -8,7 +8,7 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        return Inertia::render('Finance/Dashboard/Index', [
+        return Inertia::render('Finance/Dashboard/index', [
             'stats' => [
                 'revenue' => 50000,
                 'expenses' => 32000,

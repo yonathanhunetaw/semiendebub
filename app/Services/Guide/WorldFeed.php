@@ -906,7 +906,7 @@ class WorldFeed
      * The catalogue as the hubs show it: one row per item, for the variant in
      * its biggest packaging (a carton before a box before a piece), with that
      * packaging's pieces and cbm. `boxes` says how many of that packaging each
-     * place really holds (main_hub_a, main_hub_b, store_floor; a place with
+     * place really holds (main_hub_a, main_hub_b, remote_hub, store_floor; a place with
      * none is left out): the stock there in pieces over the packaging's pieces,
      * at least one while anything is there. Items with no variant are left out.
      * Sorted by name.
@@ -922,10 +922,11 @@ class WorldFeed
 
         $rank = fn (ItemVariant $v): int => ($i = array_search($v->packagingTier(), self::TIER_ORDER, true)) === false ? count(self::TIER_ORDER) : $i;
         $stock = $this->piecesByPlace();
+        $ladders = $this->ladder->forItems($variants->pluck('item_id')->unique()->all());
 
         return $variants
             ->groupBy('item_id')
-            ->map(function (Collection $group) use ($rank, $stock): array {
+            ->map(function (Collection $group) use ($rank, $stock, $ladders): array {
                 /** @var ItemVariant $top */
                 $top = $group->sortBy(fn (ItemVariant $v): array => [$rank($v), $v->id])->first();
                 $pack = $top->packagingQuantities->firstWhere('id', $top->item_packaging_type_id);
@@ -944,6 +945,8 @@ class WorldFeed
                     'pieces' => $pack ? (int) $pack->pivot->quantity : null,
                     'cbm' => $pack && $pack->pivot->cbm !== null ? (float) $pack->pivot->cbm : null,
                     'boxes' => $boxes,
+                    // What a carton holds, biggest first: the world writes it under the name (1 Carton = 20 Packets = 1000 Pieces).
+                    'pack' => collect($ladders[(int) $top->item_id] ?? [])->map(fn (array $t): array => ['name' => (string) $t['name'], 'pieces' => (int) $t['pieces']])->sortByDesc('pieces')->values()->all(),
                 ];
             })
             ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
@@ -952,7 +955,7 @@ class WorldFeed
     }
 
     /**
-     * Pieces of each item in Main Hub A, Main Hub B and the Main Store's floor (what the world stands boxes for).
+     * Pieces of each item in Main Hub A, Main Hub B, the Remote Hub and the Main Store's floor (what the world stands boxes for).
      *
      * @return array<int, array<string, int>> item id => place key => pieces
      */
@@ -966,12 +969,13 @@ class WorldFeed
             ->join('item_variants as iv', 'iv.id', '=', 'item_stocks.item_variant_id')
             ->where('item_stocks.quantity', '>', 0)
             ->where(fn ($q) => $q->where('sl.kind', StockLocation::KIND_MAIN_HUB)
+                ->orWhere(fn ($remote) => $remote->where('sl.kind', StockLocation::KIND_REMOTE_HUB)->where('sl.store_id', $mainStoreId ?? 0))
                 ->orWhere(fn ($floor) => $floor->whereIn('sl.kind', [StockLocation::KIND_STORE, StockLocation::KIND_BACKROOM])->where('sl.store_id', $mainStoreId ?? 0)))
             ->get(['iv.item_id', 'item_stocks.item_variant_id', 'item_stocks.quantity', 'sl.kind', 'sl.name'])
             ->each(function ($row) use (&$out): void {
-                $place = $row->kind === StockLocation::KIND_MAIN_HUB
+                $place = $row->kind === StockLocation::KIND_REMOTE_HUB ? 'remote_hub' : ($row->kind === StockLocation::KIND_MAIN_HUB
                     ? (preg_match('/\bA$/', trim((string) $row->name)) ? 'main_hub_a' : (preg_match('/\bB$/', trim((string) $row->name)) ? 'main_hub_b' : null))
-                    : 'store_floor';
+                    : 'store_floor');
                 if ($place === null) {
                     return;
                 }
@@ -1005,6 +1009,7 @@ class WorldFeed
                 'name' => $bin['name'],
                 'display' => $bin['display'],
                 'fill' => $bin['fill'],
+                'in_unit' => $bin['in_unit'],
                 'status' => $bin['status'],
                 'assigned' => $bin['assigned'],
                 'band' => $bin['band'] === null ? null : [

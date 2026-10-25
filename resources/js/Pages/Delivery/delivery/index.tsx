@@ -1,3 +1,4 @@
+import { useBusy } from "@/hooks/useBusy";
 import { Head, router, useForm } from "@inertiajs/react";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
@@ -117,8 +118,9 @@ export default function Runs({
         );
     };
 
+    const { post } = useBusy();
     const claim = (run: DeliveryRun): void => {
-        router.post(route("delivery.delivery.claim", run.id), {}, { preserveScroll: true });
+        post(route("delivery.delivery.claim", run.id), {}, { preserveScroll: true });
     };
 
     return (

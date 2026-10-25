@@ -161,9 +161,9 @@ class LocationScopeTest extends TestCase
         $this->asKeeper($bogale)
             ->get(route('stock_keeper.dashboard'))
             ->assertOk()
-            ->assertInertia(fn ($page) => $page
+            ->assertInertia(fn ($page) => $page->loadDeferredProps(fn ($loaded) => $loaded
                 ->where('locations', fn ($locations) => collect($locations)->pluck('id')->all() === [$this->hubA->id])
-                ->where('recent_movements', fn ($rows) => collect($rows)->pluck('quantity')->all() === [10]));
+                ->where('recent_movements', fn ($rows) => collect($rows)->pluck('quantity')->all() === [10])));
 
         $this->asKeeper($bogale)->get(route('stock_keeper.alerts.index'))->assertOk();
     }

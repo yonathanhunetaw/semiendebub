@@ -1,3 +1,4 @@
+import { useBusy } from "@/hooks/useBusy";
 import React from "react";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import ProcurementLayout from "@/Layouts/ProcurementLayout";
@@ -31,6 +32,7 @@ const ALLOCATION_LABEL: Record<string, string> = { cbm: "by size (CBM)", value: 
  * each line's landed cost so far, and the estimate beside what was paid.
  */
 export default function ProcurementConsignment({ consignment: c, available = [], kinds = [], currencies = [], rates = {} }: Props) {
+    const { busy, post } = useBusy();
     const [adding, setAdding] = React.useState(false);
     const [costing, setCosting] = React.useState(false);
     const [moving, setMoving] = React.useState<{ stage: string; label: string } | null>(null);
@@ -73,7 +75,7 @@ export default function ProcurementConsignment({ consignment: c, available = [],
                             </SkButton>
                         ))}
                         {forming ? (
-                            <SkButton variant="danger" onClick={() => router.post(route("procurement.consignments.cancel", c.id), {}, { preserveScroll: true })}>
+                            <SkButton variant="danger" loading={busy} onClick={() => post(route("procurement.consignments.cancel", c.id), {}, { preserveScroll: true })}>
                                 Cancel it
                             </SkButton>
                         ) : null}
@@ -103,7 +105,7 @@ export default function ProcurementConsignment({ consignment: c, available = [],
                             </p>
                         </div>
                         {c.can_finalise ? (
-                            <SkButton icon="task_alt" onClick={() => router.post(route("procurement.consignments.finalise", c.id), {}, { preserveScroll: true })}>
+                            <SkButton icon="task_alt" loading={busy} onClick={() => post(route("procurement.consignments.finalise", c.id), {}, { preserveScroll: true })}>
                                 Finalise costs
                             </SkButton>
                         ) : null}

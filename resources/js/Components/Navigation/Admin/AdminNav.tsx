@@ -132,13 +132,16 @@ export default function AdminNav({
                         >
                             Profile
                         </MenuItem>
-                        <MenuItem
-                            component={Link}
-                            href="/settings"
-                            onClick={() => setAnchorEl(null)}
-                        >
-                            Settings
-                        </MenuItem>
+                        {/* /settings exists on the admin app only. */}
+                        {auth?.user?.role_key === "admin" && (
+                            <MenuItem
+                                component={Link}
+                                href="/settings"
+                                onClick={() => setAnchorEl(null)}
+                            >
+                                Settings
+                            </MenuItem>
+                        )}
                         <MenuItem
                             onClick={() => {
                                 setAnchorEl(null);

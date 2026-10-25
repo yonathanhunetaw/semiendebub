@@ -41,19 +41,12 @@ class ExpenseService
      */
     public function record(User $by, array $data, ?UploadedFile $receipt = null, ?StaffRide $ride = null): Expense
     {
+        if (($problem = $this->problem($data)) !== null) {
+            throw new PaymentException($problem);
+        }
+
         $amount = round((float) $data['amount'], 2);
-        if ($amount <= 0) {
-            throw new PaymentException('An expense is above zero.');
-        }
-
-        if (! in_array($data['category'], Expense::CATEGORIES, true)) {
-            throw new PaymentException('Pick a kind of expense.');
-        }
-
         $spentOn = CarbonImmutable::parse($data['spent_on'] ?? now()->toDateString())->toDateString();
-        if ($spentOn > now()->addDay()->toDateString()) {
-            throw new PaymentException('An expense is for today or a day before.');
-        }
 
         return DB::transaction(function () use ($by, $data, $receipt, $ride, $amount, $spentOn): Expense {
             $document = $receipt !== null ? $this->documents->upload($receipt, $by, isset($data['store_id']) ? (int) $data['store_id'] : null) : null;
@@ -74,6 +67,31 @@ class ExpenseService
                 'recorded_by' => $by->id,
             ]);
         });
+    }
+
+    /**
+     * Why these figures cannot be recorded as an expense, or null when they can. record() refuses the same
+     * things; the CSV import asks first so it can name the line.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function problem(array $data): ?string
+    {
+        if (round((float) ($data['amount'] ?? 0), 2) <= 0) {
+            return 'An expense is above zero.';
+        }
+
+        if (! in_array($data['category'] ?? null, Expense::CATEGORIES, true)) {
+            return 'Pick a kind of expense.';
+        }
+
+        try {
+            $spentOn = CarbonImmutable::parse($data['spent_on'] ?? now()->toDateString())->toDateString();
+        } catch (\Throwable) {
+            return 'That is not a date.';
+        }
+
+        return $spentOn > now()->addDay()->toDateString() ? 'An expense is for today or a day before.' : null;
     }
 
     /** @throws PaymentException */

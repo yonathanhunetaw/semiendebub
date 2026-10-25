@@ -31,6 +31,7 @@ const MAP: Record<GuideApp, StepRef[]> = {
         [/^\/items/, "admin", "catalogue"],
         [/^\/(users|sessions)/, "admin", "people"],
         [/^\/system/, "admin", "system"],
+        [/^\/data/, "admin", "data"],
         [/^\/settings/, "admin", "store"],
         [/^\/dashboard/, "admin", "dashboard"],
         [/^\/calendar/, "admin", "calendar"],

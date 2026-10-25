@@ -54,8 +54,10 @@ export function SkButton({
     icon,
     variant = "primary",
     className = "",
+    loading = false,
+    disabled,
     ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: string; variant?: "primary" | "outline" | "ghost" | "danger" | "success" }) {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: string; loading?: boolean; variant?: "primary" | "outline" | "ghost" | "danger" | "success" }) {
     const look = {
         primary: "bg-primary text-on-primary shadow-sm hover:opacity-95",
         success: "bg-success text-on-success shadow-sm hover:opacity-95",
@@ -68,6 +70,8 @@ export function SkButton({
         <button
             type="button"
             {...props}
+            disabled={disabled || loading}
+            aria-busy={loading || undefined}
             className={`inline-flex items-center justify-center gap-1.5 rounded-[12px] px-4 py-2.5 text-[14px] font-bold transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 ${look} ${className}`}
         >
             {icon ? <span className="material-symbols-outlined text-[19px]">{icon}</span> : null}

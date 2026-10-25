@@ -12,10 +12,8 @@ export default function FinanceSidebar({ variant, open, onClose, sx }: any) {
     const { url } = usePage();
 
     const menuItems = [
-        { label: 'Ledger Home', icon: <AccountBalanceIcon />, href: '/finance/dashboard' },
-        { label: 'ROI & Analytics', icon: <CurrencyExchangeIcon />, href: '/finance/analytics' },
-        { label: 'Gold & Crypto', icon: <SavingsIcon />, href: '/finance/assets' },
-        { label: 'Reports', icon: <AssessmentIcon />, href: '/finance/reports' },
+        { label: 'Ledger Home', icon: <AccountBalanceIcon />, href: '/dashboard' },
+        { label: 'Reports', icon: <AssessmentIcon />, href: '/reports' },
         { label: 'Supplier payments', icon: <PendingActionsIcon />, href: '/supplier-payments' },
         { label: 'Import costs', icon: <PendingActionsIcon />, href: '/import-costs' },
         { label: 'Expenses', icon: <ReceiptLongIcon />, href: '/expenses' },

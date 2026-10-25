@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DESKS, type Desk } from "./zones";
+import { DESKS, tableZ, type Desk } from "./zones";
 import { isWorthShowing, visibleItems, waitingCount, type Station } from "./stations";
 
 /**
@@ -134,15 +134,19 @@ export function createDeskScreens(scene: THREE.Scene): DeskScreens {
 
     for (const desk of DESKS) {
         if (!desk.table) continue;
-        const [x0, z0, x1] = desk.rect;
+        const [x0, , x1] = desk.rect;
         const cx = (x0 + x1) / 2;
         const tableWidth = Math.min(2.3, x1 - x0 - 0.3);
-        const tableFront = z0 + 0.45 + 0.4;
+        // The table's side the worker faces: south for the desks at the back of their patch, north for the shop's, whose worker faces the door.
+        const side = desk.toDoor ? -1 : 1;
+        const tz = tableZ(desk);
+        const tableFront = tz + side * 0.4;
 
         // The sign on the table's front: its name, in capitals.
         const signTexture = texture(paintSign(desk.label));
         const sign = new THREE.Mesh(new THREE.PlaneGeometry(tableWidth * 0.86, (tableWidth * 0.86) * (SIGN.h / SIGN.w)), new THREE.MeshBasicMaterial({ map: signTexture }));
-        sign.position.set(cx, desk.rise + 0.42, tableFront + 0.012);
+        sign.position.set(cx, desk.rise + 0.42, tableFront + side * 0.012);
+        sign.rotation.y = desk.toDoor ? Math.PI : 0;
         sign.raycast = () => {};
         group.add(sign);
 
@@ -153,13 +157,14 @@ export function createDeskScreens(scene: THREE.Scene): DeskScreens {
         const screenTexture = texture(screenCanvas);
         const screenWidth = Math.min(1.5, tableWidth * 0.8);
         const screen = new THREE.Mesh(new THREE.PlaneGeometry(screenWidth, screenWidth * (SCREEN.h / SCREEN.w)), new THREE.MeshBasicMaterial({ map: screenTexture }));
-        screen.position.set(cx, desk.rise + 0.86 + (screenWidth * (SCREEN.h / SCREEN.w)) / 2 + 0.03, z0 + 0.45 + 0.05);
-        screen.rotation.x = -0.18;
+        screen.position.set(cx, desk.rise + 0.86 + (screenWidth * (SCREEN.h / SCREEN.w)) / 2 + 0.03, tz + side * 0.05);
+        screen.rotation.order = "YXZ";
+        screen.rotation.set(-0.18, desk.toDoor ? Math.PI : 0, 0);
         screen.raycast = () => {};
         group.add(screen);
         // Its stand.
         const stand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.1), new THREE.MeshStandardMaterial({ color: 0x2b3446 }));
-        stand.position.set(cx, desk.rise + 0.91, z0 + 0.5);
+        stand.position.set(cx, desk.rise + 0.91, tz + side * 0.05);
         stand.raycast = () => {};
         group.add(stand);
 

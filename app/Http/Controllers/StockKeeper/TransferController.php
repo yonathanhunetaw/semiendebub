@@ -13,6 +13,7 @@ use App\Services\TransferWorkflowService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -148,6 +149,8 @@ class TransferController extends Controller
 
     public function cancel(Transfer $transfer): RedirectResponse
     {
+        abort_unless(Gate::allows('cancel', $transfer), 403);
+
         if (! $this->workflow->cancel($transfer, Auth::id())) {
             return back()->with('error', 'A completed transfer cannot be cancelled.');
         }

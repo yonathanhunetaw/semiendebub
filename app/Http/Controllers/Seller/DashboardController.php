@@ -79,8 +79,6 @@ class DashboardController extends Controller
             'top_cart_is_individual' => $context['top_cart_is_individual'],
         ];
 
-        \Log::info('Seller Dashboard Props', $props);
-
         return Inertia::render('Seller/Items/Index', $props);
     }
 }

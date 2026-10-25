@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { FLOOR_ZONES, PLACES, PLATFORM_BERTH, STORE, STORE_CORNER, doorPosition, palletCentres } from "../places";
+import { PLACES, PLATFORM_BERTH, STORE, STORE_CORNER, doorPosition } from "../places";
 
 /**
  * Where Play's jobs happen: floor patches you walk onto. A pickup zone is
@@ -63,7 +63,12 @@ export interface Desk {
     rise: number;
     /** Has a table at the back of its patch (the board hangs on the wall instead). */
     table: boolean;
+    /** The shop's desks stand with the table at the door end of the patch, so whoever works there faces the door. */
+    toDoor?: boolean;
 }
+
+/** Where a desk's table stands along z: the north (back) end of its patch, or the south (door) end for the shop's desks. */
+export const tableZ = (d: { rect: [number, number, number, number]; toDoor?: boolean }): number => (d.toDoor ? d.rect[3] - 0.45 : d.rect[1] + 0.45);
 
 /** The counter desk: behind the counter, which stands across the shop facing the door. */
 const COUNTER = PLACES.find((p) => p.key === "store_counter")!;
@@ -74,8 +79,8 @@ export const DESKS: ReadonlyArray<Desk> = [
     // On the hub platform's west half, clear of the freight car at its east edge.
     { key: "desk_arrivals", label: "Arrivals desk", rect: [PLATFORM.position[0] - 1.9, PLATFORM.position[1] - 1.3, PLATFORM.position[0] - 0.4, PLATFORM.position[1] + 1.3], rise: 0.3, table: true },
     // Behind the counter (it runs across the shop, facing the door): the seller stands at its back, the till table behind them.
-    { key: "desk_counter", label: "Counter desk", rect: [COUNTER.position[0] - 1.2, COUNTER.position[1] - 3, COUNTER.position[0] + 1.2, COUNTER.position[1] - 0.6], rise: 0, table: true },
-    { key: "desk_bay", label: "Delivery desk", rect: [LOADING.position[0] - 1.5, LOADING.position[1] - 1.4, LOADING.position[0] + 1.5, LOADING.position[1] + 0.8], rise: 0.3, table: true },
+    { key: "desk_counter", label: "Counter desk", rect: [COUNTER.position[0] - 1.2, COUNTER.position[1] - 3, COUNTER.position[0] + 1.2, COUNTER.position[1] - 0.6], rise: 0, table: true, toDoor: true },
+    { key: "desk_bay", label: "Delivery desk", rect: [LOADING.position[0] - 1.5, LOADING.position[1] - 1.4, LOADING.position[0] + 1.5, LOADING.position[1] + 0.8], rise: 0.3, table: true, toDoor: true },
     { key: "desk_board", label: "Staff board", rect: [officeWest + 0.6, officeZ - 2, officeWest + 3.2, officeZ + 2], rise: 0, table: false },
     ...OFFICE_SLOTS.map(([key, label, col, row]): Desk => ({ key, label, rect: inOffice(col, row), rise: 0, table: true })),
 ];
@@ -132,6 +137,7 @@ export interface Zone {
     /** A desk (stations.ts): the scene puts a table on it, unless `table` is false (the board hangs on a wall). */
     desk?: boolean;
     table?: boolean;
+    toDoor?: boolean;
     /** How far above the ground the surface under it is (a platform is a step up); the patch lies just over it. */
     rise?: number;
 }
@@ -139,24 +145,22 @@ export interface Zone {
 const [cx, cz] = STORE.position;
 const [, depth] = STORE.size;
 const north = cz - depth / 2;
-const [westPallet] = palletCentres();
 
 export const ZONES: Zone[] = [
     {
         key: "floor",
         kind: "pickup",
         label: "Store Floor · pick up",
-        // East of the west pallets, in the shop's north-west corner (1.6 m from the west wall, 2.2 m from the back wall).
-        rects: [[STORE_CORNER.nw[0] + 1.6, STORE_CORNER.nw[1] + 2.2, STORE_CORNER.nw[0] + 3.6, STORE_CORNER.nw[1] + 5.4]],
-        // The middle west pallet, where the cartons stand.
-        point: [cx + westPallet[0], 1, STORE_CORNER.nw[1] + 3],
+        // Until a job says which item (jobSites.ts moves this in front of that item's stack): the west wall's middle.
+        rects: [[STORE_CORNER.nw[0] + 1.7, cz - 1, STORE_CORNER.nw[0] + 3.1, cz + 1]],
+        point: [STORE_CORNER.nw[0] + 1, 1, cz],
     },
     {
         key: "shelf",
         kind: "drop",
         label: "Store Shelf · put up",
-        // In front of the back racks' middle, and by the front end of the west run (column a), clear of the pallets.
-        rects: [[cx + 0.9, north + 0.5, cx + 2.9, north + 1.6], [STORE_CORNER.nw[0] + 0.5, STORE_CORNER.sw[1] - 3.2, STORE_CORNER.nw[0] + 2.4, STORE_CORNER.sw[1] - 2]],
+        // Likewise moved in front of the item's slot on the racks; until then, in front of the back racks' middle.
+        rects: [[cx + 0.9, north + 1.7, cx + 2.9, north + 3.1]],
         point: [cx + 1.9, 1.6, north + 0.25],
     },
     { key: "hub_a", kind: "pickup", label: "Main Hub A · pick", rects: [HUB_A.rect], point: HUB_A.point },
@@ -171,7 +175,7 @@ export const ZONES: Zone[] = [
         rects: [[CAR.rearX - 2.4, CAR.z - 1.3, CAR.rearX - 0.35, CAR.z + 1.3]],
         point: [CAR.rearX + 0.6, CAR.bed + 0.8, CAR.z],
     },
-    ...DESKS.map((d): Zone => ({ key: d.key, kind: "pickup", label: d.label, rects: [[...d.rect] as [number, number, number, number]], point: [(d.rect[0] + d.rect[2]) / 2, 1, (d.rect[1] + d.rect[3]) / 2], desk: true, table: d.table, rise: d.rise })),
+    ...DESKS.map((d): Zone => ({ key: d.key, kind: "pickup", label: d.label, rects: [[...d.rect] as [number, number, number, number]], point: [(d.rect[0] + d.rect[2]) / 2, 1, (d.rect[1] + d.rect[3]) / 2], desk: true, table: d.table, toDoor: d.toDoor, rise: d.rise })),
 ];
 
 export function zoneAt(x: number, z: number): Zone | null {
@@ -186,7 +190,7 @@ export function zoneEntrance(key: ZoneKey): [number, number] {
     const zone = ZONES.find((z) => z.key === key)!;
     const [x0, z0, x1, z1] = zone.rects[0];
     // A desk is walked to at the front of its patch, 2 m from the table, so its screen can be read; the board, 3 m from its wall.
-    if (zone.desk && zone.table !== false) return [(x0 + x1) / 2, z1 - 0.3];
+    if (zone.desk && zone.table !== false) return [(x0 + x1) / 2, zone.toDoor ? z0 + 0.3 : z1 - 0.3];
     if (zone.key === "desk_board") return [x1 - 0.3, (z0 + z1) / 2];
     return [(x0 + x1) / 2, (z0 + z1) / 2];
 }
@@ -194,7 +198,17 @@ export function zoneEntrance(key: ZoneKey): [number, number] {
 /** How far (m) from the camera a zone's or a desk's sign still shows. */
 const SIGN_RANGE = 26;
 
+/** Move a zone to a new place (the shelving job's pick-up and put-up follow the item): its patch, and where boxes fly from or to. */
+export function aimZone(key: ZoneKey, rect: [number, number, number, number], point: [number, number, number]): void {
+    const zone = ZONES.find((z) => z.key === key);
+    if (!zone) return;
+    zone.rects = [rect];
+    zone.point = point;
+}
+
 export interface ZoneMarks {
+    /** Draw a zone's patch again after `aimZone` moved it. */
+    relayout: (key: ZoneKey) => void;
     /** Which zones are worth showing now (a pickup with nothing to take, or a drop with nothing to put, stays hidden). */
     show: (keys: ZoneKey[]) => void;
     /** Mark the zone the worker stands in. */
@@ -219,23 +233,32 @@ export function drawZones(scene: THREE.Scene, tones: { pickup: THREE.Color; drop
         // Outside a door it lies on the street or the ground (a road is 4–6 cm up).
         const outdoors = zone.key === "remote_door" || zone.key === "store_door";
         const base = zone.rise !== undefined && zone.rise > 0 ? zone.rise : zone.key === "truck" ? 0.3 : outdoors ? 0.08 : 0.14;
-        for (const [x0, z0, x1, z1] of zone.rects) {
-            const patch = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), material);
-            patch.rotation.x = -Math.PI / 2;
-            patch.position.set((x0 + x1) / 2, base + 0.05, (z0 + z1) / 2);
-            patch.renderOrder = 2;
-            patch.raycast = () => {};
-            group.add(patch);
-        }
+        const patches: THREE.Mesh[] = [];
+        const lay = () => {
+            patches.splice(0).forEach((p) => {
+                group.remove(p);
+                p.geometry.dispose();
+            });
+            for (const [x0, z0, x1, z1] of zone.rects) {
+                const patch = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), material);
+                patch.rotation.x = -Math.PI / 2;
+                patch.position.set((x0 + x1) / 2, base + 0.05, (z0 + z1) / 2);
+                patch.renderOrder = 2;
+                patch.raycast = () => {};
+                group.add(patch);
+                patches.push(patch);
+            }
+        };
+        lay();
         if (zone.desk && zone.table !== false) {
             // A table at the back of the patch, so the desk reads as a desk.
             const [x0, z0, x1, z1] = zone.rects[0];
             const table = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.2, x1 - x0 - 0.4), 0.8, 0.7), deskMaterial);
-            table.position.set((x0 + x1) / 2, base + 0.4, z0 + 0.45);
+            table.position.set((x0 + x1) / 2, base + 0.4, tableZ({ rect: zone.rects[0], toDoor: zone.toDoor }));
             table.raycast = () => {};
             group.add(table);
             const top = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.3, x1 - x0 - 0.3), 0.06, 0.8), deskTopMaterial);
-            top.position.set((x0 + x1) / 2, base + 0.83, z0 + 0.45);
+            top.position.set((x0 + x1) / 2, base + 0.83, tableZ({ rect: zone.rects[0], toDoor: zone.toDoor }));
             top.raycast = () => {};
             group.add(top);
         }
@@ -248,10 +271,16 @@ export function drawZones(scene: THREE.Scene, tones: { pickup: THREE.Color; drop
         group.add(label);
         group.visible = false;
         scene.add(group);
-        return { zone, group, material, sign, label, active: false };
+        return { zone, group, material, sign, label, active: false, lay };
     });
 
     return {
+        relayout: (key) => marks.forEach((m) => {
+            if (m.zone.key !== key) return;
+            m.lay();
+            const [x0, z0, x1, z1] = m.zone.rects[0];
+            m.label.position.set((x0 + x1) / 2, 2.4, (z0 + z1) / 2);
+        }),
         show: (keys) => marks.forEach((m) => (m.group.visible = keys.includes(m.zone.key))),
         setActive: (key) => marks.forEach((m) => {
             m.active = m.zone.key === key;

@@ -96,6 +96,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
             { label: "Users", route: "admin.users.index", match: ["/users"], globalOnly: true },
             { label: "Sessions", route: "admin.sessions.index", match: ["/sessions"], globalOnly: true },
             { label: "System", route: "admin.system.index", match: ["/system"], globalOnly: true },
+            { label: "Import / Export", route: "admin.data.index", match: ["/data"], globalOnly: true },
         ],
     },
 ];

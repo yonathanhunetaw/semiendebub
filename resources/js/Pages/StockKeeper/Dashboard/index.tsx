@@ -1,7 +1,7 @@
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Deferred, Head, Link, usePage } from "@inertiajs/react";
 import React from "react";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
-import { EmptyState, StatusPill, type Tone } from "@/Components/Shared/ui";
+import { EmptyState, ListSkeleton, StatTilesSkeleton, StatusPill, type Tone } from "@/Components/Shared/ui";
 import type { StockKeeperDashboardProps, StockRow, StockRowStatus } from "@/types/stockkeeper";
 
 /**
@@ -72,7 +72,7 @@ export default function Dashboard({ metrics, alerts = [], recent_movements = [],
                     {name ? `, ${name}` : ""}
                 </h1>
                 <p className="mt-1 max-w-[560px] text-[14px] opacity-90">
-                    {waiting > 0 ? `${fmt(waiting)} job${waiting === 1 ? "" : "s"} waiting across your docks.` : "Nothing waiting. Your docks are clear."}
+                    {todo === undefined ? "Checking your docks…" : waiting > 0 ? `${fmt(waiting)} job${waiting === 1 ? "" : "s"} waiting across your docks.` : "Nothing waiting. Your docks are clear."}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
                     {[
@@ -93,6 +93,7 @@ export default function Dashboard({ metrics, alerts = [], recent_movements = [],
             </section>
 
             {/* Today's jobs */}
+            <Deferred data="todo" fallback={<div className="mb-4 lg:mb-6"><StatTilesSkeleton count={4} /></div>}>
             {jobs.length > 0 && (
                 <section className="mb-4 lg:mb-6">
                     <h2 className="mb-2 px-1 text-[13px] font-bold uppercase tracking-wider text-on-surface-variant">Today</h2>
@@ -120,6 +121,7 @@ export default function Dashboard({ metrics, alerts = [], recent_movements = [],
                     </div>
                 </section>
             )}
+            </Deferred>
 
             {/* Stock at a glance */}
             <section className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3 lg:mb-6 lg:grid-cols-4">
@@ -140,6 +142,15 @@ export default function Dashboard({ metrics, alerts = [], recent_movements = [],
                 ))}
             </section>
 
+            <Deferred
+                data={["alerts", "recent_movements", "locations"]}
+                fallback={
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
+                        <ListSkeleton rows={5} />
+                        <ListSkeleton rows={5} />
+                    </div>
+                }
+            >
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
                 <StockList title="Needs attention" icon="notification_important" rows={alerts} href={route("stock_keeper.alerts.index")} empty="Nothing is low. Everything is above its minimum." />
                 <StockList title="Recently changed" icon="history" rows={recent_movements} href={route("stock_keeper.inventory.index")} empty="No stock has changed yet." />
@@ -162,6 +173,7 @@ export default function Dashboard({ metrics, alerts = [], recent_movements = [],
                     </div>
                 </section>
             )}
+            </Deferred>
         </>
     );
 }

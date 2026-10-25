@@ -505,10 +505,10 @@ class AdminStoreScopeTest extends TestCase
         $this->get(route('admin.flow'))->assertRedirect('/guide');
         $this->get(route('admin.guide', ['chapter' => 'moving', 'step' => 'sh-carry']))->assertOk()
             ->assertInertia(fn ($page) => $page->component('Guide/Index')->where('app', 'admin')->where('chapter', 'moving')->where('step', 'sh-carry'));
-        $this->get(route('admin.dashboard'))->assertInertia(fn ($page) => $page
+        $this->get(route('admin.dashboard'))->assertInertia(fn ($page) => $page->loadDeferredProps(fn ($loaded) => $loaded
             ->where('pipeline.cart', 1)
             ->where('pipeline.to_pay', 1)
-            ->where('pipeline.delivered', 0));
+            ->where('pipeline.delivered', 0)));
     }
 
     #[Test]
@@ -521,7 +521,7 @@ class AdminStoreScopeTest extends TestCase
         $area = fn (array $areas, string $key): ?array => collect($areas)->firstWhere('key', $key);
 
         $this->actingAs($this->storeAdmin);
-        $this->get(route('admin.dashboard'))->assertOk()->assertInertia(fn ($page) => $page
+        $this->get(route('admin.dashboard'))->assertOk()->assertInertia(fn ($page) => $page->loadDeferredProps(fn ($loaded) => $loaded
             ->where('areas', function ($areas) use ($area) {
                 $areas = collect($areas)->map(fn ($a) => (array) $a)->all();
                 $keys = collect($areas)->pluck('key')->all();
@@ -529,11 +529,11 @@ class AdminStoreScopeTest extends TestCase
                 return $keys === ['customers', 'carts', 'orders', 'payments', 'balances', 'pick_pack', 'delivery', 'store', 'transfers', 'shipments']
                     && $area($areas, 'customers')['value'] === 1
                     && $area($areas, 'orders')['attention'] === 1;
-            }));
+            })));
 
         $this->actingAs($this->global);
-        $this->get(route('admin.dashboard', ['store' => 'all']))->assertInertia(fn ($page) => $page
+        $this->get(route('admin.dashboard', ['store' => 'all']))->assertInertia(fn ($page) => $page->loadDeferredProps(fn ($loaded) => $loaded
             ->where('areas', fn ($areas) => collect($areas)->pluck('key')->intersect(['warehouses', 'fleet', 'catalogue', 'people'])->count() === 4
-                && collect($areas)->firstWhere('key', 'customers')['value'] === 2));
+                && collect($areas)->firstWhere('key', 'customers')['value'] === 2)));
     }
 }

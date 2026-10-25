@@ -4,6 +4,7 @@ import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import ScanSheet from "@/Components/StockKeeper/ScanSheet";
 import { EmptyState, StatusPill } from "@/Components/Shared/ui";
 import type { StocktakeDetail, StocktakeLine } from "@/types/stockkeeper";
+import { useBusy } from "@/hooks/useBusy";
 import { STOCKTAKE_STATUS } from "@/Components/StockKeeper/stocktakeStatus";
 
 /**
@@ -46,7 +47,8 @@ export default function StocktakeShow({ stocktake }: { stocktake: StocktakeDetai
         }
     };
 
-    const act = (name: "submit" | "post" | "void") => router.post(route(`stock_keeper.stocktakes.${name}`, t.id), {}, { preserveScroll: true });
+    const { busy, post } = useBusy();
+    const act = (name: "submit" | "post" | "void") => post(route(`stock_keeper.stocktakes.${name}`, t.id), {}, { preserveScroll: true });
 
     return (
         <>
@@ -94,7 +96,7 @@ export default function StocktakeShow({ stocktake }: { stocktake: StocktakeDetai
                                 <span className="material-symbols-outlined text-[20px]">barcode_scanner</span>
                                 Count by scanning
                             </button>
-                            <button type="button" onClick={() => act("submit")} disabled={t.totals.counted === 0} className="flex items-center gap-1.5 rounded-[12px] border border-primary px-4 py-2.5 text-[14px] font-bold text-primary disabled:opacity-50">
+                            <button type="button" onClick={() => act("submit")} disabled={busy || t.totals.counted === 0} className="flex items-center gap-1.5 rounded-[12px] border border-primary px-4 py-2.5 text-[14px] font-bold text-primary disabled:opacity-50">
                                 <span className="material-symbols-outlined text-[20px]">send</span>
                                 Submit count
                             </button>
@@ -102,7 +104,7 @@ export default function StocktakeShow({ stocktake }: { stocktake: StocktakeDetai
                     )}
                     {t.status === "submitted" &&
                         (t.can_approve ? (
-                            <button type="button" onClick={() => act("post")} className="flex items-center gap-1.5 rounded-[12px] bg-success px-4 py-2.5 text-[14px] font-bold text-on-success shadow-sm">
+                            <button type="button" onClick={() => act("post")} disabled={busy} className="flex items-center gap-1.5 rounded-[12px] bg-success px-4 py-2.5 text-[14px] font-bold text-on-success shadow-sm">
                                 <span className="material-symbols-outlined text-[20px]">task_alt</span>
                                 Approve and book {t.totals.over + t.totals.short} difference{t.totals.over + t.totals.short === 1 ? "" : "s"}
                             </button>
@@ -113,7 +115,7 @@ export default function StocktakeShow({ stocktake }: { stocktake: StocktakeDetai
                             </p>
                         ))}
                     {(counting || t.status === "submitted") && (
-                        <button type="button" onClick={() => act("void")} className="rounded-[12px] px-3 py-2.5 text-[14px] font-bold text-error hover:bg-error-container/50">
+                        <button type="button" onClick={() => act("void")} disabled={busy} className="rounded-[12px] px-3 py-2.5 text-[14px] font-bold text-error hover:bg-error-container/50">
                             Void
                         </button>
                     )}

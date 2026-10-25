@@ -100,6 +100,10 @@ class DashboardStoreScopeTest extends TestCase
         $data = [];
         $this->get($url)->assertOk()->assertInertia(function (Assert $page) use (&$data): void {
             $data = $page->toArray()['props'];
+            // The figures are deferred: pull them in as the page does after it paints.
+            $page->loadDeferredProps(function (Assert $loaded) use (&$data): void {
+                $data = array_merge($data, $loaded->toArray()['props']);
+            });
         });
 
         return $data;

@@ -184,6 +184,9 @@ export const CHAPTERS: GuideChapter[] = [
             { key: "system", title: "Check the servers", who: ["admin"], action: "point", stage: { type: "scenes", scenes: ["hub", "store"] },
                 say: "System shows which server is live, each server's last 24 hours, and whether the backup server has the newest data. A server that did not report is never shown as up, and a changed table that is not in a backup yet shows as a warning, not an error.",
                 link: { label: "System", route: "admin.system.index" } },
+            { key: "data", title: "Move data in and out", who: ["admin"], action: "point", stage: { type: "scenes", scenes: ["store", "warehouse"] },
+                say: "Import / Export in Settings gives every module as a spreadsheet, and takes the setup data back. A new catalogue goes in this order: categories, colours and sizes, items, barcodes, put the items in a store, prices, then a stock count. I check each file first and nothing is saved until I press Apply, so one wrong row saves nothing. Prices put a variant on sale, and stock arrives as a count that someone approves.",
+                link: { label: "Import / Export", route: "admin.data.index" } },
         ],
     },
     {

@@ -52,6 +52,7 @@ final class ItemSetupController extends Controller
         private readonly PackagingLadder $ladder,
         private readonly \App\Services\Item\ItemWriter $writer,
         private readonly \App\Services\Item\ItemPlaces $places,
+        private readonly \App\Services\Item\StorePrices $prices,
     ) {
     }
 
@@ -118,56 +119,7 @@ final class ItemSetupController extends Controller
 
     public function savePrices(SaveItemPricesRequest $request, Item $item, Store $store): RedirectResponse
     {
-        $rows = StoreVariant::query()->where('store_id', $store->id)->where('item_id', $item->id)->get()->keyBy('id');
-        $saved = 0;
-
-        DB::transaction(function () use ($request, $rows, &$saved): void {
-            foreach ($request->validated('variants') as $line) {
-                $row = $rows->get((int) $line['store_variant_id']);
-                if ($row === null) {
-                    throw ValidationException::withMessages(['variants' => 'A price line does not belong to this item in this store.']);
-                }
-
-                $matrix = (array) $row->pricing_matrix;
-                $matrix = isset($matrix[0]) && is_array($matrix[0]) ? $matrix[0] : $matrix;
-                $discount = $line['discount_price'] ?? null;
-                $row->pricing_matrix = array_merge($matrix, [
-                    'price' => (float) $line['price'],
-                    'discount_price' => $discount === null || $discount === '' ? null : (float) $discount,
-                    'discount_ends_at' => $discount === null || $discount === '' ? null : $line['discount_ends_at'],
-                ]);
-                // The "on sale" switch: off forces the variant off; on lifts a forced-off. A real price puts a
-                // variant on sale (unless it is forced off); no price takes it off.
-                $onSale = array_key_exists('on_sale', $line) && $line['on_sale'] !== null ? filter_var($line['on_sale'], FILTER_VALIDATE_BOOLEAN) : null;
-                if ($onSale === false) {
-                    $row->manual_status = 'forced';
-                    $row->forced_status = 'inactive';
-                } elseif ($onSale === true && $row->manual_status === 'forced') {
-                    $row->manual_status = 'auto';
-                    $row->forced_status = null;
-                }
-                if ((float) $line['price'] <= 0 || $row->manual_status === 'forced') {
-                    $row->active = false;
-                } else {
-                    $row->active = true;
-                }
-                if (array_key_exists('business_pool', $line)) {
-                    $row->business_pool = $line['business_pool'] === null || $line['business_pool'] === '' ? null : (int) $line['business_pool'];
-                }
-                $row->save();
-
-                $individual = $line['individual_price'] ?? null;
-                if ($individual === null || $individual === '') {
-                    StoreVariantIndividualPrice::query()->where('store_variant_id', $row->id)->delete();
-                } else {
-                    StoreVariantIndividualPrice::query()->updateOrCreate(['store_variant_id' => $row->id], [
-                        'pricing_matrix' => ['price' => (float) $individual, 'discount_price' => null, 'discount_ends_at' => null, 'auto_from_business' => false],
-                        'active' => true,
-                    ]);
-                }
-                $saved++;
-            }
-        });
+        $saved = $this->prices->saveBase($store, $item, $request->validated('variants'));
 
         return back()->with('success', "Prices saved for {$store->name} ({$saved} variant".($saved === 1 ? '' : 's').').');
     }

@@ -14,6 +14,7 @@ export {
     type PageHeaderProps,
 } from "./PageHeader";
 export { SectionTitle, type SectionTitleAction, type SectionTitleProps } from "./SectionTitle";
+export { ChartSkeleton, DashboardSkeleton, ListSkeleton, Skeleton, StatTilesSkeleton } from "./Skeleton";
 export { countBadge, StatCard, type StatCardProps } from "./StatCard";
 export {
     STATUS_TONES,

@@ -124,5 +124,7 @@ createInertiaApp({
         // Injected into a <style> as plain CSS, so the theme variable resolves:
         // the page-load bar follows the role accent.
         color: 'rgb(var(--primary))',
+        // Show the bar on the first frame of a visit, not after the default 250 ms.
+        delay: 0,
     },
 });

@@ -57,33 +57,45 @@ class DashboardController extends Controller
 
         $scopeIds = $activeStore->scopeIds();
 
-        return Inertia::render('Admin/Dashboard/index', array_merge(
-            $this->sessionFigures($scopeIds),
-            $this->cartFigures($store),
-            [
-                'customersCount' => $this->customersCount($store),
-                'productsCount' => $this->productsCount($store),
-                'activeVariantsCount' => $this->activeVariantsCount($store),
-                'lowStockItems' => $this->lowStockItems($store),
-                'groupedProducts' => $this->groupedProducts($store),
-                'stores' => $this->storeOptions($activeStore),
-                // The id as a string, or 'all'. The switcher compares it
-                // against each option's id to decide which chip is lit.
-                'currentStore' => $store ? (string) $store->id : 'all',
-                'currentStoreName' => $store?->name,
-                // The redesigned dashboard: five KPI cards, the 7-day trend,
-                // open deliveries and a feed, all from real rows in scope.
-                'trend' => $this->trend($activeStore),
-                'activeDeliveries' => $this->activeDeliveries($activeStore),
-                'activity' => $this->activity($activeStore),
-                // Orders at each stop of the road, for the journey strip:
-                // open carts, the board's stages, and delivered in 7 days.
-                'pipeline' => $this->pipeline($activeStore),
-                // Every area of the app as a card: figure, facts, what needs
-                // attention, and links into each list.
-                'areas' => app(\App\Services\Admin\DashboardAreas::class)->all(),
-            ],
-        ));
+        // Each figures method runs once, however many props read from it.
+        $sessionFigures = null;
+        $cartFigures = null;
+        $sessions = function () use (&$sessionFigures, $scopeIds): array {
+            return $sessionFigures ??= $this->sessionFigures($scopeIds);
+        };
+        $carts = function () use (&$cartFigures, $store): array {
+            return $cartFigures ??= $this->cartFigures($store);
+        };
+
+        // The page and its outline show at once; the figures arrive in three
+        // groups, the tiles first, then the panels, then figures no panel
+        // shows yet (kept for the scope tests and for the next panel).
+        return Inertia::render('Admin/Dashboard/index', [
+            'stores' => $this->storeOptions($activeStore),
+            // The id as a string, or 'all'. The switcher compares it
+            // against each option's id to decide which chip is lit.
+            'currentStore' => $store ? (string) $store->id : 'all',
+            'currentStoreName' => $store?->name,
+            // Every area of the app as a card: figure, facts, what needs
+            // attention, and links into each list.
+            'areas' => Inertia::defer(fn () => app(\App\Services\Admin\DashboardAreas::class)->all(), 'tiles'),
+            // Orders at each stop of the road, for the journey strip:
+            // open carts, the board's stages, and delivered in 7 days.
+            'pipeline' => Inertia::defer(fn () => $this->pipeline($activeStore), 'tiles'),
+            // The 7-day trend, open deliveries and a feed, all from real rows in scope.
+            'trend' => Inertia::defer(fn () => $this->trend($activeStore), 'panels'),
+            'activeDeliveries' => Inertia::defer(fn () => $this->activeDeliveries($activeStore), 'panels'),
+            'activity' => Inertia::defer(fn () => $this->activity($activeStore), 'panels'),
+            'lowStockItems' => Inertia::defer(fn () => $this->lowStockItems($store), 'panels'),
+            'customersCount' => Inertia::defer(fn () => $this->customersCount($store), 'extras'),
+            'productsCount' => Inertia::defer(fn () => $this->productsCount($store), 'extras'),
+            'activeVariantsCount' => Inertia::defer(fn () => $this->activeVariantsCount($store), 'extras'),
+            'groupedProducts' => Inertia::defer(fn () => $this->groupedProducts($store), 'extras'),
+            'sessionsCount' => Inertia::defer(fn () => $sessions()['sessionsCount'], 'extras'),
+            'rolesBreakdown' => Inertia::defer(fn () => $sessions()['rolesBreakdown'], 'extras'),
+            'openCartsCount' => Inertia::defer(fn () => $carts()['openCartsCount'], 'extras'),
+            'cartsBreakdown' => Inertia::defer(fn () => $carts()['cartsBreakdown'], 'extras'),
+        ]);
     }
 
     /**

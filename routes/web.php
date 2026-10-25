@@ -46,8 +46,6 @@ require __DIR__.'/web/delivery/delivery.php';               // ['auth', 'verifie
 |-------------------------------------------------------------------------------------------------------------*/
 
 require __DIR__.'/web/dev/dev.php';
-require __DIR__.'/web/dev/lessons/lesson4.php';
-require __DIR__.'/web/dev/lessons/lesson6.php';
 
 /*-------------------------------------------------------------------------------------------------------------
 | ERRORS -> routes/web/errors/error.php

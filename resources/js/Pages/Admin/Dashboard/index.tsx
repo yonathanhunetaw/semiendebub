@@ -1,6 +1,7 @@
 import React from "react";
 import AdminLayout from "@/Layouts/AdminLayout";
-import { Head, Link, router, usePage, usePoll } from "@inertiajs/react";
+import { Deferred, Head, Link, router, usePage, usePoll } from "@inertiajs/react";
+import { ChartSkeleton, ListSkeleton, StatTilesSkeleton } from "@/Components/Shared/ui";
 import { Box, Button, IconButton, Paper, Stack, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import { LineChart } from "@mui/x-charts/LineChart";
@@ -501,25 +502,51 @@ export default function Dashboard({
             <Hero />
 
             {/* What is waiting on someone, then a way into every list. */}
-            <AttentionPanel areas={areas} updatedAt={updatedAt} />
-            <GoToBar areas={areas} />
+            <Deferred
+                data={["areas", "pipeline"]}
+                fallback={
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                        <StatTilesSkeleton count={4} />
+                        <StatTilesSkeleton count={4} />
+                    </Box>
+                }
+            >
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <AttentionPanel areas={areas} updatedAt={updatedAt} />
+                    <GoToBar areas={areas} />
 
-            <PipelineStrip pipeline={pipeline} />
+                    <PipelineStrip pipeline={pipeline} />
 
-            <AreaTiles areas={areas} />
-            <NetworkStrip areas={areas} />
+                    <AreaTiles areas={areas} />
+                    <NetworkStrip areas={areas} />
+                </Box>
+            </Deferred>
 
-            {/* Trend + deliveries */}
-            <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 2fr) minmax(0, 1fr)" } }}>
-                <TrendPanel trend={trend} />
-                <ActiveDeliveriesPanel deliveries={activeDeliveries.slice(0, 4)} total={openDeliveries} />
-            </Box>
+            <Deferred
+                data={["trend", "activeDeliveries", "activity", "lowStockItems"]}
+                fallback={
+                    <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 1fr) minmax(0, 1fr)" } }}>
+                        <ChartSkeleton />
+                        <ListSkeleton />
+                        <ListSkeleton />
+                        <ListSkeleton />
+                    </Box>
+                }
+            >
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    {/* Trend + deliveries */}
+                    <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 2fr) minmax(0, 1fr)" } }}>
+                        <TrendPanel trend={trend} />
+                        <ActiveDeliveriesPanel deliveries={activeDeliveries.slice(0, 4)} total={openDeliveries} />
+                    </Box>
 
-            {/* Low stock + activity */}
-            <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 3fr) minmax(0, 2fr)" } }}>
-                <LowStockPanel lowStock={lowStockItems} isGlobalAdmin={isGlobalAdmin} />
-                <ActivityPanel activity={activity} />
-            </Box>
+                    {/* Low stock + activity */}
+                    <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 3fr) minmax(0, 2fr)" } }}>
+                        <LowStockPanel lowStock={lowStockItems} isGlobalAdmin={isGlobalAdmin} />
+                        <ActivityPanel activity={activity} />
+                    </Box>
+                </Box>
+            </Deferred>
         </Box>
     );
 }

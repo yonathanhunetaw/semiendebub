@@ -24,21 +24,21 @@ import { CARD_KINDS, KIND_COLOR, buildEvents, hhmm, lastBefore, type EventKind, 
 import {
     BAY_SIZE, COMPOUND, fenceRuns, CONTAINER, CONTAINER_TRUCK, CUSTOMER_BAYS, DROP, FLOOR_ZONES, FRONT, PALLET, STREET, VEHICLE, type VehicleKind, SIDE_OUT, PARKING, PLACES, PLATFORM_BERTH, ROADS, STORE, STORE_CORNER, rackSpan,
     palletCentres,
-    doorPose, doorPosition, hubLayout, placeFor, vanRoute, type Place, type PlaceKey,
+    doorPose, doorPosition, hubLayout, placeFor, roomAt, vanRoute, type Place, type PlaceKey,
 } from "./places";
 import {
     ORDER_PHASE_LABEL, REFILL_PHASE_LABEL, orderStateAt, refillStateAt, stateAt,
     type WorldOrder, type WorldRefill, type WorldShipment,
 } from "./replay";
-import { RACKS, SPOT_CAPACITY, rackFace, spotAt, type RackWall } from "./storeLayout";
+import { RACKS, SHELF_BOX, SPOT_CAPACITY, rackFace, slotBox, slotCapacity, slotFrame, spotAt, type RackWall } from "./storeLayout";
 import { createGameScene, type GameScene } from "./game/GameScene";
 import PlayLayer from "./game/PlayLayer";
 import { player, setGame, useGame, type GameView, type PlayerPose } from "./game/gameStore";
 import { openings } from "./game/siteBlockers";
 import { roleFor, spawnFor } from "./game/spawn";
 import { loadWorldModel } from "./worldModel";
-import { barLines, placeBins, type ShelfBin } from "./shelfSpots";
-import { BOX_SIDE, hubBoxes, setCatalogueBoxes, shown, stackSlot, type CatalogueItem, type HubBox } from "./catalogue";
+import { barLines, placeBins, placeShelf, type ShelfBin } from "./shelfSpots";
+import { BOX_SIDE, hubBoxes, packLines, setCatalogueBoxes, shown, stackSlot, type CatalogueItem, type HubBox } from "./catalogue";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { boxAt } from "./game/collision";
 
@@ -71,6 +71,8 @@ interface Highlight {
 
 interface SceneApi {
     select: (key: PlaceKey | null) => void;
+    /** Director: fly the free camera in to a place and look at it. */
+    focusPlace: (key: PlaceKey) => void;
     home: () => void;
     setShipments: (shipments: WorldShipment[]) => void;
     setOrders: (orders: WorldOrder[]) => void;
@@ -231,7 +233,10 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
             // Opening a place puts the worker at its door, the camera behind them looking at it.
             const pose = doorPose(key);
             if (playRef3d.current) {
-                apiRef.current?.game()?.walkTo(pose.x, pose.z);
+                const game = apiRef.current?.game();
+                // The free camera (Director): a tap on a place zooms in and focuses it. Otherwise the worker walks to its door.
+                if (game && !game.ownsCamera()) apiRef.current?.focusPlace(key);
+                else game?.walkTo(pose.x, pose.z);
                 return;
             }
             player.pose = pose;
@@ -940,6 +945,30 @@ function buildWorld(
     // The container being loaded beside the Storage hub, for the Main Hub.
     sceneryGroup("container_truck").add(makeContainerTruck(driverTone, darkTone));
     const store = addStoreShell(sceneryGroup("store_shell"), wallTone, toneOf("seller"), padTone);
+    // The Store Floor as the strip round the foot of the racks (2.2 m wide, the door's gap left open), lit when it is focused.
+    const floorRingMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const floorRing = new THREE.Group();
+    {
+        const [nx, nz] = STORE_CORNER.nw;
+        const [ex, sz] = STORE_CORNER.se;
+        const band = 2.2;
+        const doorX = nx + STORE.door.at;
+        const gap = STORE.door.width / 2 + 0.6;
+        const strips: Array<[number, number, number, number]> = [
+            [nx, nz, nx + band, sz], [ex - band, nz, ex, sz], [nx + band, nz, ex - band, nz + band],
+            [nx + band, sz - band, doorX - gap, sz], [doorX + gap, sz - band, ex - band, sz],
+        ];
+        for (const [x0, z0, x1, z1] of strips) {
+            const strip = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), floorRingMaterial);
+            strip.rotation.x = -Math.PI / 2;
+            strip.position.set((x0 + x1) / 2, 0.115, (z0 + z1) / 2);
+            strip.renderOrder = 2;
+            strip.raycast = () => {};
+            floorRing.add(strip);
+        }
+        floorRing.visible = false;
+        scene.add(floorRing);
+    }
     const shelfFaces: ShelfFace[] = [];
     /** The racks' steel, shared so pressing Store Shelf can tint it all at once. */
     let steel: THREE.MeshStandardMaterial | null = null;
@@ -962,7 +991,7 @@ function buildWorld(
 
     // Places.
     /** Labels shown by zoom: `near` is how close (m) the camera must be, or null for always. */
-    const lodLabels: Array<{ el: HTMLDivElement; object: THREE.Object3D; near: number | null }> = [{ el: fixedLabels[0], object: fixedLabels[0].object, near: FIXED_LABEL }];
+    const lodLabels: Array<{ el: HTMLDivElement; object: THREE.Object3D; near: number | null; key: PlaceKey | null }> = [{ el: fixedLabels[0], object: fixedLabels[0].object, near: FIXED_LABEL, key: null }];
     const nodes = new Map<PlaceKey, PlaceNode>();
     /** What the code draws of each place (not its people or label): hidden when the designed world redraws it. */
     const bodies = new Map<PlaceKey, THREE.Object3D[]>();
@@ -1004,14 +1033,6 @@ function buildWorld(
             steelBase.copy(built.steel.color);
         } else {
             body = makeBuilding(place, toneOf(place.shape === "platform" ? "store_manager" : place.roles[0]), wallTone, darkTone);
-        }
-        // The Storage hub holds what is waiting for the next container: pallets of cartons in two rows.
-        if (place.key === "storage_hub") {
-            const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.6);
-            for (const z of [-d / 2 + 2, d / 2 - 4]) for (let x = -w / 2 + 2; x < w / 2 - 1.5; x += 2.2) {
-                body.add(mesh(new THREE.BoxGeometry(PALLET, 0.12, PALLET), darkTone, x, 0.2, z));
-                body.add(mesh(new THREE.BoxGeometry(1.1, 0.9, 1.1), carton, x, 0.71, z));
-            }
         }
         group.add(body);
         bodies.set(place.key, [pad, body]);
@@ -1079,7 +1100,7 @@ function buildWorld(
         nodes.set(place.key, { place, group, pad, label, tone });
         // The places along the street are named from anywhere; a place inside another (the shop's shelf, floor and
         // counter) or a platform in front of one, only from close by.
-        lodLabels.push({ el: label, object: labelObject, near: place.indoor || place.shape === "platform" ? NEAR_LABEL : null });
+        lodLabels.push({ el: label, object: labelObject, near: place.indoor || place.shape === "platform" ? NEAR_LABEL : null, key: place.key });
     }
 
     /** Vans, parcels, couriers and cartons: a tap opens the shipment, order or refill they carry. */
@@ -1482,7 +1503,13 @@ function buildWorld(
         // Pressing the Store Floor or the Store Shelf tints it, so it stands out from the rest of the shop.
         const tint = (key: PlaceKey) => (selectedKey === key ? 0.75 : hovered === key ? 0.3 : 0);
         const floorNode = nodes.get("store_floor");
-        if (floorNode) store.floorMaterial.color.copy(store.floorBase).lerp(floorNode.tone, tint("store_floor"));
+        // The Store Floor is the strip round the foot of the racks, where its stock stands: only that lights up, not the whole shop.
+        store.floorMaterial.color.copy(store.floorBase);
+        if (floorNode) {
+            floorRingMaterial.color.copy(floorNode.tone);
+            floorRingMaterial.opacity = 0.55 * tint("store_floor");
+            floorRing.visible = floorRingMaterial.opacity > 0.01;
+        }
         const shelfNode = nodes.get("store_shelf");
         if (steel && shelfNode) steel.color.copy(steelBase).lerp(shelfNode.tone, tint("store_shelf"));
         renderer.domElement.style.cursor = hovered || hoveringSubject ? "pointer" : "grab";
@@ -1506,7 +1533,15 @@ function buildWorld(
         if (!downAt) return;
         const moved = Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y);
         downAt = null;
-        if (moved >= 6 || game) return;
+        if (moved >= 6) return;
+        if (game) {
+            // Director: a tap on a building zooms in and focuses it (the callback decides; the worker's views ignore taps here).
+            if (!game.ownsCamera()) {
+                const key = hitAt(event)?.object.userData.placeKey as PlaceKey | undefined;
+                if (key) onSelect(key);
+            }
+            return;
+        }
         // A tap on a van, parcel or carton opens what it carries; on the racking, that spot; anywhere else, the place.
         const hit = hitAt(event);
         const subject = hit?.object.userData.subject as { kind: EventKind; id: number } | undefined;
@@ -1529,10 +1564,23 @@ function buildWorld(
     // The shop's name first: it stands for the shelf, floor and counter, which step aside for it.
     const labelOrder = [fixedLabels[1], ...[...nodes.values()].map((n) => n.label), fixedLabels[0]];
     const labelAt = new THREE.Vector3();
+    /** Standing in a building (the shop, a hub, the office): only the names of what is inside it show, none of the places outside. */
+    const insideNames = (): Set<PlaceKey> | null => {
+        if (!game || !player.pose) return null;
+        const room = roomAt(player.pose.x, player.pose.z);
+        if (!room) return null;
+        const [sx, sz] = STORE.position;
+        if (room[0] === sx - STORE.size[0] / 2 && room[1] === sz - STORE.size[1] / 2) return new Set<PlaceKey>(["store_shelf", "store_floor", "store_counter", "loading_bay"]);
+        const own = PLACES.find((p) => p.shape === "hub" && room[0] === p.position[0] - p.size[0] / 2 && room[1] === p.position[1] - p.size[1] / 2);
+        return new Set<PlaceKey>(own ? [own.key] : []);
+    };
     const declutter = () => {
-        // Zoomed out, only the places along the street keep their names.
-        for (const { el, object, near } of lodLabels) {
-            const far = near !== null && camera.position.distanceTo(object.getWorldPosition(labelAt)) > near;
+        const inside = insideNames();
+        fixedLabels[1].classList.toggle("is-far", inside !== null);
+        // Zoomed out, only the places along the street keep their names; inside a building, only its own.
+        for (const { el, object, near, key } of lodLabels) {
+            const outside = inside !== null && (key === null || !inside.has(key));
+            const far = outside || (near !== null && camera.position.distanceTo(object.getWorldPosition(labelAt)) > near);
             el.classList.toggle("is-far", far);
         }
         const shown: DOMRect[] = [];
@@ -1581,6 +1629,45 @@ function buildWorld(
 
     // The hubs' stock: one box per item (catalogue.ts), each printed with its name.
     let catalogueGroup: THREE.Group | null = null;
+    // The shelf's stock, as tiny cartons all one size on the racks: as many as the bin holds of its unit (one InstancedMesh).
+    let shelfBoxes: THREE.InstancedMesh | null = null;
+    const shelfBoxGeometry = new THREE.BoxGeometry(SHELF_BOX, SHELF_BOX, SHELF_BOX);
+    const shelfBoxMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true });
+    const SHELF_BOX_COLOUR: Record<ShelfBin["status"], THREE.Color> = {
+        ok: new THREE.Color(0xc49a6c), refill: new THREE.Color(0xe0a23a), critical: new THREE.Color(0xd2574a), empty: new THREE.Color(0xbdbdbd),
+    };
+    const paintShelfBoxes = (_bins: ShelfBin[], placed: Map<string, ShelfBin[]>) => {
+        if (shelfBoxes) {
+            scene.remove(shelfBoxes);
+            shelfBoxes.dispose();
+            shelfBoxes = null;
+        }
+        const spots: Array<{ at: [number, number, number]; colour: THREE.Color }> = [];
+        placed.forEach((list, code) => list.forEach((bin, slot) => {
+            const frame = slotFrame(code, slot);
+            if (!frame || bin.status === "empty") return;
+            const cap = slotCapacity(frame.width);
+            const count = Math.min(cap, Math.max(1, Math.ceil(bin.in_unit ?? bin.fill * cap)));
+            for (let i = 0; i < count; i++) {
+                const at = slotBox(code, slot, i);
+                if (at) spots.push({ at, colour: SHELF_BOX_COLOUR[bin.status] });
+            }
+        }));
+        if (spots.length === 0) return;
+        const mesh = new THREE.InstancedMesh(shelfBoxGeometry, shelfBoxMaterial, spots.length);
+        const matrix = new THREE.Matrix4();
+        spots.forEach(({ at, colour }, i) => {
+            matrix.makeTranslation(STORE.position[0] + at[0], at[1], STORE.position[1] + at[2]);
+            mesh.setMatrixAt(i, matrix);
+            mesh.setColorAt(i, colour);
+        });
+        mesh.castShadow = true;
+        mesh.raycast = () => {};
+        mesh.name = "shelf_boxes";
+        scene.add(mesh);
+        shelfBoxes = mesh;
+    };
+
     const setCatalogueBoxesInScene = (items: CatalogueItem[]) => {
         // The stock changes as the day goes: draw it again (the old stacks leave the scene and the picking list).
         if (catalogueGroup) {
@@ -1608,8 +1695,9 @@ function buildWorld(
     const api: SceneApi = {
         setCatalogue: setCatalogueBoxesInScene,
         setShelf: (bins) => {
-            const placed = placeBins(bins);
+            const placed = placeShelf(bins);
             shelfFaces.forEach((face) => face.setBins(placed));
+            paintShelfBoxes(bins, placed);
         },
         enterPlay: (app, pose, view, framing, name) => {
             if (game) return;
@@ -1649,6 +1737,11 @@ function buildWorld(
             }
         },
         game: () => game,
+        focusPlace: (key) => {
+            // The shop's shelf, floor and counter are the one building: focus it whole.
+            const node = nodes.get(key.startsWith("store_") ? "store_floor" : key);
+            if (node) flyClose(node.group.position.x, node.group.position.z, Math.max(...node.place.size, 6));
+        },
         select: (key) => {
             if (key === selectedKey) return;
             selectedKey = key;
@@ -1910,7 +2003,7 @@ function buildWorld(
             // Only the buildings, roads and fences: not the 6 km ground, the lights, the labels, the people or a designed world already loaded.
             const figures = new Set(people.map((p) => p.mesh));
             scene.traverse((o) => {
-                if (o !== scene && ((o as THREE.Light).isLight || o === ground || o instanceof CSS2DObject || figures.has(o) || o.name === "duka_world_model" || o.name === "catalogue_boxes") && o.visible) {
+                if (o !== scene && ((o as THREE.Light).isLight || o === ground || o instanceof CSS2DObject || figures.has(o) || o.name === "duka_world_model" || o.name === "catalogue_boxes" || o.name === "shelf_boxes") && o.visible) {
                     o.visible = false;
                     hidden.push(o);
                 }
@@ -2442,7 +2535,7 @@ function doorSign(text: string, tone: THREE.Color, width: number): THREE.Mesh {
     return sign;
 }
 
-/** A hub floor as a picture: each 1 m cell outlined and named, the walkway hatched. */
+/** A hub floor as a picture: each 1 m cell outlined and named (the walkway is left plain). */
 function cellTexture(place: Place, floor: THREE.Color, dark: THREE.Color, tone: THREE.Color): THREE.CanvasTexture {
     const [w, d] = place.size;
     // 96 px to the metre: cell names stay readable close up, from the worker's own eyes.
@@ -2457,28 +2550,10 @@ function cellTexture(place: Place, floor: THREE.Color, dark: THREE.Color, tone: 
     ctx.fillStyle = hex(floor.clone().lerp(white, 0.35));
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const { cells, aisles } = hubLayout(place);
+    const { cells } = hubLayout(place);
     const toPx = (x: number, z: number): [number, number] => [(x + w / 2) * px, (z + d / 2) * px];
 
-    for (const [x0, z0, x1, z1] of aisles) {
-        const [ax, az] = toPx(x0, z0);
-        const [bx, bz] = toPx(x1, z1);
-        ctx.fillStyle = hex(tone.clone().lerp(white, 0.65));
-        ctx.fillRect(ax, az, bx - ax, bz - az);
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(ax, az, bx - ax, bz - az);
-        ctx.clip();
-        ctx.strokeStyle = hex(tone.clone().lerp(white, 0.35));
-        ctx.lineWidth = 6;
-        for (let s = 0; s < canvas.width + canvas.height; s += 24) {
-            ctx.beginPath();
-            ctx.moveTo(s, 0);
-            ctx.lineTo(s - canvas.height, canvas.height);
-            ctx.stroke();
-        }
-        ctx.restore();
-    }
+    // The walkway is plain floor: no marking, only left clear of stock.
 
     ctx.strokeStyle = hex(dark.clone().lerp(floor, 0.45));
     ctx.lineWidth = 3;
@@ -2486,10 +2561,17 @@ function cellTexture(place: Place, floor: THREE.Color, dark: THREE.Color, tone: 
     ctx.font = `700 ${Math.round(px * 0.3)}px system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    // The canvas's top is north. Entering by a north door you look south: the names turn half way round; by the west door, a quarter.
+    const turn = { south: 0, north: Math.PI, west: Math.PI / 2, east: -Math.PI / 2 }[place.door?.wall ?? "south"];
     for (const cell of cells) {
         const [cx, cz] = toPx(cell.x, cell.z);
         ctx.strokeRect(cx - px / 2 + 2, cz - px / 2 + 2, px - 4, px - 4);
-        ctx.fillText(cell.name, cx, cz);
+        // The names read the right way up for someone standing at the door and looking in.
+        ctx.save();
+        ctx.translate(cx, cz);
+        ctx.rotate(turn);
+        ctx.fillText(cell.name, 0, 0);
+        ctx.restore();
     }
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -2514,14 +2596,10 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
             break;
         }
         case "floor": {
-            // The open floor beside the counter (places.ts FLOOR_ZONES): pallet areas, with cartons stacked one or two high.
-            const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.55);
+            // The open floor (places.ts FLOOR_ZONES): pallet areas. The real stock stands round the foot of the racks (catalogue.ts).
             const patch = tone.clone().lerp(wall, 0.75);
             for (const [x, z, zw, zd] of FLOOR_ZONES) g.add(mesh(new THREE.BoxGeometry(zw, 0.04, zd), patch, x, 0.13, z));
-            palletCentres().forEach(([x, pz, i]) => {
-                g.add(mesh(new THREE.BoxGeometry(PALLET, 0.12, PALLET), dark, x, 0.2, pz));
-                for (let y = 0; y < 1 + (i % 2); y++) g.add(mesh(new THREE.BoxGeometry(1.1, 0.6, 1.1), carton, x, 0.56 + y * 0.62, pz));
-            });
+            palletCentres().forEach(([x, pz]) => g.add(mesh(new THREE.BoxGeometry(PALLET, 0.12, PALLET), dark, x, 0.2, pz)));
             break;
         }
         case "counter": {
@@ -2553,15 +2631,13 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
         }
         case "shops": {
             // Small buildings, each with its shop door and stock out front.
-            const carton = tone.clone().lerp(new THREE.Color(0x8b5a2b), 0.6);
             (place.blocks ?? []).forEach(([x, z, sw, sd, sh, side]) => {
                 const [ox, oz] = SIDE_OUT[side];
                 g.add(mesh(new THREE.BoxGeometry(sw, sh, sd), wall, x, sh / 2, z));
                 g.add(mesh(new THREE.BoxGeometry(sw + 0.4, 0.3, sd + 0.4), tone, x, sh + 0.15, z));
-                // The door, on the face it opens from, and a carton waiting beside it.
+                // The door, on the face it opens from.
                 const across = ox !== 0 ? sd : sw;
                 g.add(mesh(new THREE.BoxGeometry(ox !== 0 ? 0.06 : across * 0.5, sh * 0.6, ox !== 0 ? across * 0.5 : 0.06), dark, x + ox * (sw / 2 + 0.03), sh * 0.3, z + oz * (sd / 2 + 0.03)));
-                g.add(mesh(new THREE.BoxGeometry(1, 0.8, 1), carton, x + ox * (sw / 2 + 1) + oz * (sw / 2 - 0.8), 0.4, z + oz * (sd / 2 + 1) + ox * (sd / 2 - 0.8)));
             });
             break;
         }
@@ -2598,15 +2674,14 @@ function makeContainerTruck(tone: THREE.Color, dark: THREE.Color): THREE.Group {
 
 /** Packaging tiers' cardboard colours: a carton is kraft brown, a box lighter, a bag sacking, a packet printed blue. */
 const TIER_COLOUR: Record<string, string> = { cartoon: "#c49a6c", box: "#dcbc8e", bag: "#e6dbc0", bundle: "#c9b48a", doz: "#d7c4a0", packet: "#a9c7e0", piece: "#d0d0d0" };
-/** The catalogue boxes' print: one 128 px square per item in a 2048 px atlas (256 items). */
-const ATLAS = 2048;
-const SLOT = 128;
+/** The catalogue boxes' print: one 192 px square per item in a 3072 px atlas (256 items). */
+const ATLAS = 3072;
+const SLOT = 192;
 
 /**
- * The hubs' boxes (catalogue.ts): a cube per item, every face printed with the
- * item's name and its packaging, in the colour of its packaging tier. One
- * material and one texture for all of them; each box's faces point at its own
- * square of the atlas.
+ * The stock's boxes (catalogue.ts): every box the same carton, every face printed with its item's name and, written
+ * clearly under it, what a carton holds ("1 Carton / = 20 Packets / = 1000 Pieces"), in the colour of its packaging
+ * tier. One material and one texture for all of them; an item's boxes, wherever they stand, share its square of the atlas.
  */
 function makeCatalogueBoxes(boxes: HubBox[]): THREE.Group {
     const group = new THREE.Group();
@@ -2618,30 +2693,42 @@ function makeCatalogueBoxes(boxes: HubBox[]): THREE.Group {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    boxes.slice(0, per * per).forEach((box, i) => {
-        const col = i % per;
-        const row = Math.floor(i / per);
-        const x0 = col * SLOT;
-        const y0 = row * SLOT;
+    // One square per distinct item, in the order they first stand.
+    const slotOf = new Map<number, number>();
+    for (const box of boxes) if (!slotOf.has(box.item.item_id) && slotOf.size < per * per) slotOf.set(box.item.item_id, slotOf.size);
+    const seen = new Set<number>();
+    for (const box of boxes) {
+        const i = slotOf.get(box.item.item_id);
+        if (i === undefined || seen.has(box.item.item_id)) continue;
+        seen.add(box.item.item_id);
+        const x0 = (i % per) * SLOT;
+        const y0 = Math.floor(i / per) * SLOT;
         ctx.fillStyle = TIER_COLOUR[box.item.tier ?? ""] ?? "#cfcfcf";
         ctx.fillRect(x0, y0, SLOT, SLOT);
-        // Tape across the middle, and the name in black over it, as a printed carton.
-        ctx.fillStyle = "rgba(255,255,255,.55)";
-        ctx.fillRect(x0 + 6, y0 + 14, SLOT - 12, SLOT - 44);
+        // A white label on the carton: the name in bold, a rule, then what it holds, large and plain.
+        ctx.fillStyle = "rgba(255,255,255,.85)";
+        ctx.fillRect(x0 + 8, y0 + 8, SLOT - 16, SLOT - 16);
         ctx.fillStyle = "#1d1309";
-        ctx.font = "700 17px system-ui, sans-serif";
-        const lines = wrapText(ctx, box.item.name, SLOT - 18, 4);
-        lines.forEach((line, k) => ctx.fillText(line, x0 + SLOT / 2, y0 + 14 + (SLOT - 44) / 2 + (k - (lines.length - 1) / 2) * 19));
-        ctx.font = "600 14px system-ui, sans-serif";
-        ctx.fillText(`${box.count} × ${[box.item.packaging, box.item.pieces ? `of ${box.item.pieces}` : null].filter(Boolean).join(" ")}`, x0 + SLOT / 2, y0 + SLOT - 15);
-    });
+        ctx.font = "800 21px system-ui, sans-serif";
+        const name = wrapText(ctx, box.item.name, SLOT - 28, 2);
+        name.forEach((line, k) => ctx.fillText(line, x0 + SLOT / 2, y0 + 26 + k * 24));
+        const ruleY = y0 + 26 + name.length * 24 - 4;
+        ctx.fillRect(x0 + 18, ruleY, SLOT - 36, 2);
+        const lines = packLines(box.item.pack).slice(0, 4);
+        const room = SLOT - 8 - (ruleY - y0) - 8;
+        const step = Math.min(30, room / Math.max(1, lines.length));
+        ctx.font = `800 ${Math.min(26, step - 4)}px system-ui, sans-serif`;
+        lines.forEach((line, k) => ctx.fillText(line, x0 + SLOT / 2, ruleY + 8 + step * (k + 0.5)));
+    }
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 4;
     const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85 });
 
-    boxes.slice(0, per * per).forEach((box, i) => {
+    boxes.forEach((box) => {
+        const i = slotOf.get(box.item.item_id);
+        if (i === undefined) return;
         const col = i % per;
         const row = Math.floor(i / per);
         // The real number of boxes (up to a full stack), every one the same carton, merged into one mesh per stack.

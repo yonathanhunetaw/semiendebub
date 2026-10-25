@@ -3,7 +3,7 @@ import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js
 import { blockedAt, move, pushOut, type Box } from "./collision";
 import { getGame, setGame, type GameView, type PlayerPose } from "./gameStore";
 import { findPath, type Point } from "./pathfinding";
-import { roomAt } from "../places";
+import { STORE, roomAt } from "../places";
 import { WORKER_RADIUS, siteMap } from "./siteBlockers";
 
 /**
@@ -383,7 +383,9 @@ export function createPlayer(options: PlayerOptions): Player {
         if (room) {
             const bound = (v0: number, v1: number, lo: number, hi: number) => (v1 > hi ? (hi - v0) / (v1 - v0) : v1 < lo ? (lo - v0) / (v1 - v0) : 1);
             t = Math.min(t, bound(from.x, to.x, room[0] + 0.6, room[2] - 0.6), bound(from.z, to.z, room[1] + 0.6, room[3] - 0.6));
-            if (to.y > CLEAR_CEILING) t = Math.min(t, (CLEAR_CEILING - from.y) / dy);
+            // The shop's walls are 9 m high; the hubs' ceilings are lower.
+            const ceiling = room[0] === STORE.position[0] - STORE.size[0] / 2 && room[1] === STORE.position[1] - STORE.size[1] / 2 ? STORE.wall - 0.4 : CLEAR_CEILING;
+            if (to.y > ceiling) t = Math.min(t, (ceiling - from.y) / dy);
         }
         // Walls, shelving and the like near the ground: step along the line and stop short of the first one.
         const length = Math.hypot(to.x - from.x, to.z - from.z);

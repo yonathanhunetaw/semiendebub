@@ -1,3 +1,4 @@
+import { useBusy } from "@/hooks/useBusy";
 import { Head, Link, router, usePoll } from "@inertiajs/react";
 import AirportShuttleRoundedIcon from "@mui/icons-material/AirportShuttleRounded";
 import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
@@ -91,14 +92,16 @@ export default function Dashboard({
 
     usePoll(20_000, { only: ["being_packed", "up_next", "available_runs", "metrics"] });
 
+    const { post } = useBusy();
     const claim = (run: DeliveryRun): void => {
-        router.post(route("delivery.delivery.claim", run.id), {}, { preserveScroll: true });
+        post(route("delivery.delivery.claim", run.id), {}, { preserveScroll: true });
     };
 
     const shortcuts = [
         { label: "Deliveries", hint: "Customer drop-offs", icon: <LocalShippingRoundedIcon />, href: route("delivery.delivery.index"), color: theme.palette.primary.main },
         { label: "Freight", hint: "Hub → store runs", icon: <WarehouseRoundedIcon />, href: route("delivery.shipments.index"), color: theme.palette.info.main },
         { label: "Transfers", hint: "Site to site", icon: <SwapHorizRoundedIcon />, href: route("delivery.transfers.index"), color: theme.palette.success.main },
+        { label: "History", hint: "Finished freight runs", icon: <CheckCircleRoundedIcon />, href: route("delivery.history.index"), color: theme.palette.success.main },
         { label: "Calendar", hint: "Your runs by day", icon: <CalendarMonthRoundedIcon />, href: route("delivery.calendar"), color: theme.palette.warning.main },
         { label: "Keys", hint: "Car keys you hold", icon: <VpnKeyRoundedIcon />, href: route("delivery.work"), color: theme.palette.secondary.main },
         { label: "Staff rides", hint: "Take staff home", icon: <AirportShuttleRoundedIcon />, href: route("delivery.work.rides"), color: theme.palette.info.main },

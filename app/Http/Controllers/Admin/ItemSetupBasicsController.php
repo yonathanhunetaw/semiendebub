@@ -36,13 +36,7 @@ final class ItemSetupBasicsController extends Controller
 
     public function update(SaveItemBasicsRequest $request, Item $item): RedirectResponse
     {
-        $item->update([
-            'product_name' => $request->validated('product_name'),
-            'product_description' => $request->validated('product_description'),
-            'packaging_details' => $request->validated('packaging_details'),
-            'hs_code' => \App\Models\Procurement\Tariff::normalise($request->validated('hs_code')),
-            'item_category_id' => $this->writer->resolveCategoryId($request->validated('item_category_id')),
-        ]);
+        $this->writer->updateBasics($item, $request->validated());
         $this->writer->evaluateDraftStatus($item, $request->validated('status'));
 
         return back()->with('success', 'Basics saved.');

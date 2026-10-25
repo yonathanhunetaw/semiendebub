@@ -88,6 +88,7 @@ interface RawLoad {
 interface RawJob {
     transfer_id: number;
     reference: string;
+    item_id?: number;
     item_name: string;
     quantity: number;
     unit: string;
@@ -107,6 +108,7 @@ export async function loadPlayFeed(app: GuideApp): Promise<PlayFeed> {
             transferId: row.transfer_id,
             reference: row.reference,
             itemName: row.item_name,
+            itemId: row.item_id,
             quantity: row.quantity,
             unit: row.unit,
             unitCbm: row.unit_cbm,

@@ -67,7 +67,11 @@ class CheckoutService
             // 1. Validation
             $cart->loadMissing(['customer', 'store', 'seller', 'variants.item']);
 
-            if ($cart->status === 'completed') {
+            // Read the status under a row lock: a second checkout of the same
+            // cart waits here, then sees "completed" and stops.
+            $currentStatus = Cart::query()->whereKey($cart->id)->lockForUpdate()->value('status');
+
+            if ($cart->status === 'completed' || $currentStatus === 'completed') {
                 throw new CartCheckoutException("Cart #{$cart->id} has already been completed.", $cart->id);
             }
 

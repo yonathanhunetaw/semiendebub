@@ -9,6 +9,7 @@ use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\LeaveRequest;
 use App\Models\Workforce\Shift;
 use App\Models\Workforce\TimeEntry;
+use App\Services\Shared\CsvWriter;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -145,20 +146,7 @@ class HoursReport
      */
     public function csv(array $header, array $rows): string
     {
-        $out = fopen('php://temp', 'r+');
-        // Excel opens UTF-8 (Amharic names) correctly with a BOM.
-        fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, $header, ',', '"', '');
-
-        foreach ($rows as $row) {
-            fputcsv($out, array_map(fn ($cell) => is_string($cell) && preg_match('/^[=+\-@]/', $cell) ? "'".$cell : $cell, $row), ',', '"', '');
-        }
-
-        rewind($out);
-        $csv = (string) stream_get_contents($out);
-        fclose($out);
-
-        return $csv;
+        return (new CsvWriter())->write($header, $rows);
     }
 
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} the shops' midnight starting the first day, and after the last (UTC) */
