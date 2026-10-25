@@ -121,6 +121,9 @@ Route::domain("admin.{$baseDomain}")
                     Route::post('/{purchase}/approve', 'approve')->name('approve');
                     Route::post('/{purchase}/send-back', 'sendBack')->name('send_back');
                 });
+            // The limit itself is a global admin's alone (a plain admin.global, never ticked on for a store admin).
+            Route::put('purchase-orders/limit', [\App\Http\Controllers\Admin\PurchaseOrderApprovalController::class, 'setLimit'])
+                ->middleware('admin.global')->name('purchase_orders.limit');
             // Import costs (freight, customs, port fees) waiting for their second person.
             Route::middleware('admin.global:import_costs')->group(fn () => require base_path('routes/web/partials/import-costs.php'));
             Route::controller(\App\Http\Controllers\Shared\SupplierPaymentInboxController::class)

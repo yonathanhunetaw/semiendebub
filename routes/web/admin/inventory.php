@@ -13,7 +13,6 @@ Route::domain("admin.{$baseDomain}")
 
     // --- General Inventory ---
     Route::get('/', [InventoryController::class, 'index'])->name('inventory.index');
-    Route::get('/show/{store}', [InventoryController::class, 'show'])->name('inventory.show');
 
     // --- Warehouse Management (global zone) ---
     Route::prefix('warehouse')->middleware('admin.global:warehouses')->group(function () {

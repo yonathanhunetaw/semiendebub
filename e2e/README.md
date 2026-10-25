@@ -34,8 +34,9 @@ e2e/
                                 then the seller's cart charging each; stock pools (set aside for Business)
   seller/
     checkout/                   paying (cash, bank, pay later), delivery methods, no-stock items
-    orders/                     whole journeys, in-store hand-over, cancel, failed and returned deliveries,
-                                and the courier's History
+    orders/                     whole journeys (checked in the ledger too), in-store hand-over, cancel,
+                                failed and returned deliveries, the courier's History, and an item only
+                                the main hub has: held there, shipped to the Remote Hub, then delivered
     payments/                   the two-person rule, split payments, "not received yet"
     pricing/                    the price ladder (store → individual → seller → customer), discounts
     customers/                  credit from the admin, selling on it, repayments
@@ -57,6 +58,7 @@ e2e/
     inspect.ts                  ledger facts (stock per location, an order's stage and holds, a store, a site's QR codes)
     pages.ts                    sweep() and pagesTest(): open a list of pages and collect every fault
     profile.ts                  profileTest(): edit a phone number on /profile and see it kept
+    shipments.ts                signing, checking, the manifest picker, a whole hub → Remote Hub shipment
     transfers.ts                raise, claim, hand to the courier, hand over, receive (with counts)
 ```
 

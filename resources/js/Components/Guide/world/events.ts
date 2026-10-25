@@ -9,7 +9,7 @@ import type { WorldOrder, WorldRefill, WorldShipment } from "./replay";
  * these one at a time; the world flies to each and lights the spot up.
  */
 
-export type EventKind = "shipment" | "order" | "refill" | "transfer" | "count";
+export type EventKind = "shipment" | "order" | "refill" | "transfer" | "count" | "work";
 
 /** The kinds with a card of their own (the rest are events only). */
 export const CARD_KINDS: EventKind[] = ["shipment", "order", "refill"];
@@ -39,6 +39,7 @@ export const KIND_LABEL: Record<EventKind, string> = {
     refill: "Refill",
     transfer: "Transfer",
     count: "Count",
+    work: "Work",
 };
 
 export const KIND_PLURAL: Record<EventKind, string> = {
@@ -47,6 +48,7 @@ export const KIND_PLURAL: Record<EventKind, string> = {
     refill: "Refills",
     transfer: "Transfers",
     count: "Counts",
+    work: "Work",
 };
 
 /** The palette colour each kind of event wears. */
@@ -56,6 +58,7 @@ export const KIND_COLOR: Record<EventKind, "warning" | "success" | "info" | "pri
     refill: "info",
     transfer: "primary",
     count: "secondary",
+    work: "secondary",
 };
 
 const ms = (iso: string | null | undefined): number | null => (iso ? Date.parse(iso) : null);
@@ -92,11 +95,11 @@ function shipmentEvents(s: WorldShipment): WorldEvent[] {
     });
 
     push("picked", s.steps.picked, `Picking starts at ${fromName}`, from, "stock_keeper");
-    push("prepared", s.steps.prepared, "The goods are out on the platform", "platform", "stock_keeper");
-    push("loading", s.steps.loading, "The driver checks the goods and loads the van", "platform", "delivery");
-    push("signed", s.steps.signed ?? s.steps.in_transit, "The driver signs; the van leaves", "platform", "delivery");
+    push("prepared", s.steps.prepared, s.preparer ? `${s.preparer} has the goods out on the platform` : "The goods are out on the platform", "platform", "stock_keeper");
+    push("loading", s.steps.loading, `${s.courier ? s.courier.split(" ")[0] : "The driver"} checks the goods and loads the van`, "platform", "delivery");
+    push("signed", s.steps.signed ?? s.steps.in_transit, `${s.courier ? s.courier.split(" ")[0] : "The driver"} signs; the van leaves`, "platform", "delivery");
     push("delivered", s.steps.delivered, `The van arrives at ${toName}`, to, "delivery");
-    push("received", s.steps.received, `Received at ${toName}`, to, "stock_keeper", { final: true });
+    push("received", s.steps.received, `Received at ${toName}${s.receiver ? ` by ${s.receiver}` : ""}`, to, "stock_keeper", { final: true });
     push("cancelled", s.cancelled_at, "Shipment cancelled", from, "admin", { final: true, bad: true });
     return out;
 }
@@ -111,15 +114,15 @@ function orderEventsOf(o: WorldOrder): WorldEvent[] {
         if (at !== null) out.push({ key: `order-${o.id}-${step}`, at, kind: "order", subject: o.id, reference: o.reference, what, detail, where, who, ...extra });
     };
 
-    push("created", o.created_at, "The seller checks the cart out at the counter", "store_counter", "seller");
+    push("created", o.created_at, `${o.seller ?? "The seller"} checks the cart out at the counter`, "store_counter", "seller");
     o.payments.forEach((p, i) => {
-        push(`claimed-${i}`, p.claimed_at, `Payment taken · ${p.method.replace(/_/g, " ")}`, "store_counter", "seller");
-        push(`confirmed-${i}`, p.confirmed_at, "A second person confirms the payment", "store_counter", "store_manager");
+        push(`claimed-${i}`, p.claimed_at, `${p.claimed_by ? `${p.claimed_by} takes` : "Payment taken ·"} ${p.claimed_by ? "payment · " : ""}${p.method.replace(/_/g, " ")}`.trim(), "store_counter", "seller");
+        push(`confirmed-${i}`, p.confirmed_at, p.confirmed_by ? `${p.confirmed_by} confirms the payment` : "A second person confirms the payment", "store_counter", "store_manager");
     });
-    push("picking", o.picking_started_at, `Picking starts at ${placeFor(source).label}`, source, "stock_keeper");
+    push("picking", o.picking_started_at, `${o.picker ? `${o.picker} starts picking` : "Picking starts"} at ${placeFor(source).label}`, source, "stock_keeper");
     push("packed", o.packed_at, inStore ? "Packed for the customer at the counter" : "Packed for the courier", source, "stock_keeper");
-    push("out", o.delivery?.picked_up_at ?? o.delivery?.shipped_at, inStore ? "Ready at the counter" : "The courier collects it", inStore ? "store_counter" : "loading_bay", inStore ? "seller" : "delivery");
-    push("delivered", o.delivery?.delivered_at, inStore ? "Handed over at the counter" : "Delivered to the customer", inStore ? "store_counter" : "customers", inStore ? "customer" : "delivery", { final: true });
+    push("out", o.delivery?.picked_up_at ?? o.delivery?.shipped_at, inStore ? "Ready at the counter" : `${o.courier ?? "The courier"} collects it`, inStore ? "store_counter" : "loading_bay", inStore ? "seller" : "delivery");
+    push("delivered", o.delivery?.delivered_at, inStore ? "Handed over at the counter" : `${o.courier ? `${o.courier} delivers` : "Delivered"} to the customer`, inStore ? "store_counter" : "customers", inStore ? "customer" : "delivery", { final: true });
     push("failed", o.delivery?.failed_at, "Delivery failed", "customers", "delivery", { final: true, bad: true });
     push("cancelled", o.cancelled_at, "Order cancelled", "store_counter", "seller", { final: true, bad: true });
     return out;
@@ -135,16 +138,16 @@ function refillEventsOf(r: WorldRefill): WorldEvent[] {
     };
 
     const source = r.source === "remote_hub" ? "from the Remote Hub" : r.source === "shipment" ? "from a shipment" : "from the floor";
-    push("raised", r.raised_at, `The bin hit its refill line: refill ${source} raised`, "store_shelf", "store_manager");
-    push("accepted", r.accepted_at, "A stock keeper takes the refill", from, "stock_keeper");
+    push("raised", r.raised_at, `The bin hit its refill line: refill ${source} raised${r.raised_by ? ` by ${r.raised_by}` : ""}`, "store_shelf", "store_manager");
+    push("accepted", r.accepted_at, r.accepted_by ? `${r.accepted_by} takes the refill` : "A stock keeper takes the refill", from, "stock_keeper");
     push("dispatched", r.transfer?.dispatched_at, "On its way from the Remote Hub", "remote_hub", "stock_keeper");
     push("handed", r.transfer?.handed_over_at, "Handed over at the store", "store_floor", "stock_keeper");
     push("shelved", r.transfer?.completed_at ?? r.fulfilled_at, "On the shelf", "store_shelf", "stock_keeper", { final: true });
-    push("cancelled", r.cancelled_at ?? r.transfer?.cancelled_at, "Refill cancelled", "store_shelf", "store_manager", { final: true, bad: true });
+    push("cancelled", r.cancelled_at ?? r.transfer?.cancelled_at, r.cancelled_by ? `Refill cancelled by ${r.cancelled_by}` : "Refill cancelled", "store_shelf", "store_manager", { final: true, bad: true });
     return out;
 }
 
-const KIND_ORDER: Record<EventKind, number> = { shipment: 0, transfer: 1, refill: 2, count: 3, order: 4 };
+const KIND_ORDER: Record<EventKind, number> = { shipment: 0, transfer: 1, refill: 2, count: 3, order: 4, work: 5 };
 
 /** An event the server already built (transfers, counts): `at` arrives as an ISO time. */
 export type FeedEvent = Omit<WorldEvent, "at"> & { at: string };

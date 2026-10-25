@@ -26,6 +26,9 @@ export interface WorldShipment {
     vehicle: string | null;
     courier: string | null;
     creator: string | null;
+    /** First names of who did the step (null: unknown). */
+    preparer?: string | null;
+    receiver?: string | null;
     items: number;
     cbm: number;
     created_at: string | null;
@@ -151,6 +154,9 @@ export interface WorldRefill {
     status: string;
     raised_at: string | null;
     accepted_at: string | null;
+    raised_by?: string | null;
+    accepted_by?: string | null;
+    cancelled_by?: string | null;
     fulfilled_at: string | null;
     cancelled_at: string | null;
     transfer: { dispatched_at: string | null; handed_over_at: string | null; completed_at: string | null; cancelled_at: string | null } | null;
@@ -208,7 +214,10 @@ export interface WorldOrder {
     total: number;
     items: number;
     created_at: string | null;
-    payments: Array<{ method: string; status: string; amount: number; claimed_at: string | null; confirmed_at: string | null }>;
+    seller?: string | null;
+    picker?: string | null;
+    courier?: string | null;
+    payments: Array<{ method: string; status: string; amount: number; claimed_at: string | null; confirmed_at: string | null; claimed_by?: string | null; confirmed_by?: string | null }>;
     picking_started_at: string | null;
     packed_at: string | null;
     cancelled_at: string | null;

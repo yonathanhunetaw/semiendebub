@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePage } from "@inertiajs/react";
 import { Box, Button, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import CenterFocusStrongRounded from "@mui/icons-material/CenterFocusStrongRounded";
 import CloseRounded from "@mui/icons-material/CloseRounded";
@@ -29,14 +30,17 @@ import {
     ORDER_PHASE_LABEL, REFILL_PHASE_LABEL, orderStateAt, refillStateAt, stateAt,
     type WorldOrder, type WorldRefill, type WorldShipment,
 } from "./replay";
-import { RACKS, rackFace, spotAt, type RackWall } from "./storeLayout";
+import { RACKS, SPOT_CAPACITY, rackFace, spotAt, type RackWall } from "./storeLayout";
 import { createGameScene, type GameScene } from "./game/GameScene";
 import PlayLayer from "./game/PlayLayer";
 import { player, setGame, useGame, type GameView, type PlayerPose } from "./game/gameStore";
 import { openings } from "./game/siteBlockers";
 import { roleFor, spawnFor } from "./game/spawn";
 import { loadWorldModel } from "./worldModel";
-import { hubBoxes, setCatalogueBoxes, type CatalogueItem, type HubBox } from "./catalogue";
+import { barLines, placeBins, type ShelfBin } from "./shelfSpots";
+import { BOX_SIDE, hubBoxes, setCatalogueBoxes, shown, stackSlot, type CatalogueItem, type HubBox } from "./catalogue";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { boxAt } from "./game/collision";
 
 /**
  * Live Operations: the business as a working model, to scale (one unit is one
@@ -73,6 +77,8 @@ interface SceneApi {
     setRefills: (refills: WorldRefill[]) => void;
     /** One box per item in the hubs (catalogue.ts); drawn once. */
     setCatalogue: (items: CatalogueItem[]) => void;
+    /** The seller shelf's bins, drawn on the racks' spots (shelfSpots.ts). */
+    setShelf: (bins: ShelfBin[]) => void;
     setTime: (t: number) => void;
     /** Mark one spot of the racking ("f6"), or none. */
     setSpot: (code: string | null) => void;
@@ -83,7 +89,7 @@ interface SceneApi {
     /** Light up an event; `fly` takes the camera there. */
     highlight: (h: Highlight | null, fly: boolean) => void;
     /** Play: put the worker in the world (game/PlayerController). Leaving puts the camera back. */
-    enterPlay: (app: GuideApp, pose: PlayerPose, view: GameView, framing?: { distance: number; elevation: number }) => void;
+    enterPlay: (app: GuideApp, pose: PlayerPose, view: GameView, framing?: { distance: number; elevation: number }, name?: string | null) => void;
     exitPlay: () => void;
     setView: (view: GameView) => void;
     /** What Play's screen (game/PlayLayer) drives; null outside Play. */
@@ -92,7 +98,7 @@ interface SceneApi {
 
 type Subject = { kind: EventKind; id: number };
 
-const ALL_KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order"];
+const ALL_KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order", "work"];
 // The street, from the Suppliers at its west end to Admin at its east end, and the places along its north side.
 // Every place and the compound, and the street's ends: the zigzag is about 160 × 90 m.
 const SITE_BOUNDS = (() => {
@@ -143,6 +149,7 @@ function linkedMoment(): { day: string | null; event: string | null } {
 }
 
 export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideApp; onOpenChapter: (key: string) => void; onClose: () => void }) {
+    const firstName = usePage<{ auth?: { user?: { first_name?: string | null } } }>().props.auth?.user?.first_name ?? null;
     const theme = useTheme();
     const [linked] = useState(linkedMoment);
     const mountRef = useRef<HTMLDivElement>(null);
@@ -185,13 +192,20 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const dayEvents = useMemo(() => allEvents.filter((e) => e.at >= start && e.at < start + 86_400_000), [allEvents, start]);
     const events = useMemo(() => dayEvents.filter((e) => kinds.includes(e.kind)), [dayEvents, kinds]);
     const counts = useMemo(() => {
-        const c: Record<EventKind, number> = { shipment: 0, order: 0, refill: 0, transfer: 0, count: 0 };
+        const c: Record<EventKind, number> = { shipment: 0, order: 0, refill: 0, transfer: 0, count: 0, work: 0 };
         dayEvents.forEach((e) => c[e.kind]++);
         return c;
     }, [dayEvents]);
     const current: WorldEvent | null = cursor !== null ? events[cursor] ?? null : null;
     /** The last event that has happened by the moment shown: what the list and strip dim after. */
     const reached = useMemo(() => lastBefore(events, time), [events, time]);
+
+    /** Is the Main Store open at the moment shown? Null when the day has no opening or closing to go by. */
+    const storeOpen = useMemo(() => {
+        const sites = dayEvents.filter((e) => e.kind === "work" && e.key.startsWith("site-") && e.where === "store_floor" && e.at <= time);
+        const last = sites[sites.length - 1];
+        return last ? last.key.endsWith("-opened") : null;
+    }, [dayEvents, time]);
 
     // Refs for the clock loop and the callbacks it runs.
     const timeRef = useRef(time);
@@ -254,17 +268,29 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
 
     // The catalogue the hubs hold: one box per item, fetched once (it changes only as items are added).
     const [catalogue, setCatalogue] = useState<CatalogueItem[]>([]);
+    const [shelf, setShelf] = useState<ShelfBin[]>([]);
     useEffect(() => {
         let gone = false;
-        fetch(route(`${app}.guide.world`, { catalogue: 1 }), { headers: { Accept: "application/json" }, credentials: "same-origin" })
-            .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-            .then((data: { catalogue: CatalogueItem[] }) => !gone && setCatalogue(data.catalogue))
-            .catch((error) => console.warn("Live Operations: could not load the catalogue.", error));
+        const load = (query: Record<string, number | string>, then: (data: { catalogue?: CatalogueItem[]; shelf?: ShelfBin[] }) => void) =>
+            fetch(route(`${app}.guide.world`, query), { headers: { Accept: "application/json" }, credentials: "same-origin" })
+                .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+                .then((data) => !gone && then(data))
+                .catch((error) => console.warn("Live Operations: could not load the stock.", error));
+        // What the stock is now: the hubs' and the floor's boxes, and the shelf's bins; again every minute.
+        const refresh = () => {
+            load({ catalogue: 1 }, (data) => setCatalogue(data.catalogue ?? []));
+            // The shelf rides on the day's feed, which is heavy: ask for today only.
+            load({ shelf: 1, from: new Date().toISOString().slice(0, 10) }, (data) => setShelf(data.shelf ?? []));
+        };
+        refresh();
+        const timer = window.setInterval(refresh, 60_000);
         return () => {
             gone = true;
+            window.clearInterval(timer);
         };
     }, [app]);
     useEffect(() => apiRef.current?.setCatalogue(catalogue), [catalogue, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setShelf(shelf), [shelf, theme.palette.mode]);
     useEffect(() => apiRef.current?.setSpot(spot), [spot, theme.palette.mode]);
     useEffect(() => { if (wallView) apiRef.current?.viewWall(wallView); }, [wallView, theme.palette.mode]);
     useEffect(() => apiRef.current?.setTime(time), [time, shipments, orders, refills, theme.palette.mode]);
@@ -282,11 +308,11 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         setWallView(null);
         setPlaying(false);
         setFollow(false);
-        apiRef.current?.enterPlay(app, player.pose ?? spawnFor(app), game.view, framingRef.current ?? undefined);
+        apiRef.current?.enterPlay(app, player.pose ?? spawnFor(app), game.view, framingRef.current ?? undefined, firstName);
         framingRef.current = null;
         return () => apiRef.current?.exitPlay();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [playing3d, app, theme.palette.mode]);
+    }, [playing3d, app, theme.palette.mode, firstName]);
     useEffect(() => apiRef.current?.setView(game.view), [game.view]);
     const gameScene = useCallback(() => apiRef.current?.game() ?? null, []);
 
@@ -549,7 +575,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
 
     let card: React.ReactNode = null;
     if (spot !== null) {
-        card = <SpotCard code={spot} onClose={() => setSpot(null)} />;
+        card = <SpotCard code={spot} bins={placeBins(shelf).get(spot) ?? []} onClose={() => setSpot(null)} />;
     } else if (focusedShipment) {
         card = <ShipmentCard shipment={focusedShipment} time={time} events={subjectEvents} currentKey={currentKey} onEvent={jumpTo} onClose={() => setFocused(null)} />;
     } else if (focusedOrder) {
@@ -631,6 +657,8 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     pointerEvents: "none",
                 },
                 "& .world-badge--refill": { bgcolor: "info.main", color: "info.contrastText" },
+                // A first name over a person's head.
+                "& .world-badge--name": { bgcolor: glass, color: "text.primary", border: "2px solid", borderColor: "divider", fontSize: "0.72rem", px: 1, py: 0.1, transform: "translateY(-4px)" },
                 // Play's job zones (game/zones.ts): a sign over each, brighter where the worker stands.
                 "& .world-badge--zone": { bgcolor: glass, color: "text.primary", border: "2px solid", borderColor: "divider", fontSize: "0.7rem", "&.is-active": { bgcolor: "primary.main", color: "primary.contrastText", borderColor: "primary.main" } },
                 // What just happened, floating over where it happened.
@@ -664,6 +692,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     pointerEvents: "none",
                     opacity: 0,
                     transition: "opacity .12s",
+                    "@media (pointer: coarse)": { opacity: 0.35 },
                     "&.is-on": { opacity: 1 },
                     "@media (prefers-reduced-motion: reduce)": { transition: "none" },
                 },
@@ -739,7 +768,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                 {!playing3d && <Box sx={{ flex: 1, minHeight: 0, display: "flex", gap: 1, alignItems: { xs: "flex-end", sm: "stretch" } }}>
                     {logOpen && (
                         <Box sx={{ pointerEvents: "auto", width: { xs: "100%", sm: 340 }, height: { xs: "45dvh", sm: "auto" }, display: card ? { xs: "none", sm: "flex" } : "flex", flexDirection: "column", minHeight: 0 }}>
-                            <EventLog events={events} counts={counts} kinds={kinds} onKinds={chooseKinds} cursor={cursor} reached={reached} onCursor={goTo} onClose={closeLog} />
+                            <EventLog storeOpen={storeOpen} events={events} counts={counts} kinds={kinds} onKinds={chooseKinds} cursor={cursor} reached={reached} onCursor={goTo} onClose={closeLog} />
                         </Box>
                     )}
                     <Box sx={{ flex: 1, display: { xs: logOpen && !card ? "none" : "block", sm: "block" } }} />
@@ -1167,8 +1196,8 @@ function buildWorld(
                     const n = slot("berth");
                     stack(platformAt[0] + 0.9, platformAt[1] - 0.9 + n * 1.8, Math.round(rig.cartons.length * (1 - st.progress)));
                     rig.van.visible = true;
-                    // Back doors to the platform, nose to the way out.
-                    rig.van.position.set(PLATFORM_BERTH[0], 0, PLATFORM_BERTH[1] + n * 2.6);
+                    // Back doors to the platform, nose to the way out, in the lane beside the freight car.
+                    rig.van.position.set(PLATFORM_BERTH[0], 0, PLATFORM_BERTH[1] + 4 + n * 2.6);
                     rig.van.rotation.y = 0;
                     break;
                 }
@@ -1224,7 +1253,7 @@ function buildWorld(
         }
         return curve;
     };
-    const orderRigs = new Map<number, { parcel: THREE.Mesh; bike: THREE.Group }>();
+    const orderRigs = new Map<number, { parcel: THREE.Mesh; bike: THREE.Group; riderName: (text: string | null | undefined) => void }>();
     let orders: WorldOrder[] = [];
     const orderRigFor = (o: WorldOrder) => {
         let rig = orderRigs.get(o.id);
@@ -1234,7 +1263,7 @@ function buildWorld(
             const bike = makeBike(driverTone, darkTone, parcelMaterial);
             parcel.visible = bike.visible = false;
             scene.add(parcel, bike);
-            rig = { parcel, bike };
+            rig = { parcel, bike, riderName: nameTag(bike, null, 2.4).set };
             tappable(parcel, "order", o.id);
             tappable(bike, "order", o.id);
             orderRigs.set(o.id, rig);
@@ -1296,6 +1325,7 @@ function buildWorld(
                     const at = rideCurve.getPointAt(u);
                     const tangent = rideCurve.getTangentAt(u);
                     rig.bike.visible = true;
+                    rig.riderName(o.courier);
                     rig.bike.position.set(at.x, 0, at.z + slot("ride") * 0.2);
                     rig.bike.rotation.y = Math.atan2(-tangent.z, tangent.x);
                     break;
@@ -1308,7 +1338,7 @@ function buildWorld(
 
     // Refills: a sign on the bin while it waits, then a stock keeper carrying the carton to it.
     const refillTone = color(theme.palette.info.main);
-    const refillRigs = new Map<number, { carton: THREE.Mesh; walker: THREE.Group; badge: CSS2DObject; badgeEl: HTMLDivElement; path: THREE.CatmullRomCurve3 | null }>();
+    const refillRigs = new Map<number, { carton: THREE.Mesh; walker: THREE.Group; walkerName: (text: string | null | undefined) => void; badge: CSS2DObject; badgeEl: HTMLDivElement; path: THREE.CatmullRomCurve3 | null }>();
     let refills: WorldRefill[] = [];
     // Which physical spot an item's shelf spot is placed on is not recorded yet, so a refill goes to the middle of the back wall.
     const binSpot = (_itemId: number) => ({ x: STORE.position[0], y: 1.6, z: STORE.position[1] - STORE.size[1] / 2 + STORE.shelfDepth + 0.7 });
@@ -1319,12 +1349,13 @@ function buildWorld(
             carton.scale.setScalar(0.6);
             carton.castShadow = true;
             const walker = makePerson(keeperTone);
+            const walkerName = nameTag(walker, null).set;
             const badgeEl = document.createElement("div");
             badgeEl.className = "world-badge world-badge--refill";
             const badge = new CSS2DObject(badgeEl);
             carton.visible = walker.visible = badge.visible = false;
             scene.add(carton, walker, badge);
-            rig = { carton, walker, badge, badgeEl, path: null };
+            rig = { carton, walker, walkerName, badge, badgeEl, path: null };
             tappable(carton, "refill", r.id);
             tappable(walker, "refill", r.id);
             refillRigs.set(r.id, rig);
@@ -1354,6 +1385,7 @@ function buildWorld(
                 const at = rig.path.getPointAt(u);
                 const ahead = rig.path.getPointAt(Math.min(1, u + 0.01));
                 rig.walker.visible = rig.carton.visible = true;
+                rig.walkerName(r.accepted_by ?? r.raised_by);
                 rig.walker.position.set(at.x, STORE.plinth > 0 ? 0.12 : 0, at.z);
                 rig.walker.rotation.y = Math.atan2(ahead.x - at.x, ahead.z - at.z);
                 // Carried at chest height, lifted into the bin over the last stretch.
@@ -1410,6 +1442,7 @@ function buildWorld(
             if (rig?.bike.visible) return rig.bike.position.clone().setY(0);
             return rig?.parcel.visible ? rig.parcel.position.clone().setY(0) : null;
         }
+        if (h.kind !== "refill") return null;
         const rig = refillRigs.get(h.subject);
         if (rig?.walker.visible) return rig.walker.position.clone().setY(0);
         return rig?.badge.visible ? rig.badge.position.clone().setY(0) : null;
@@ -1549,7 +1582,20 @@ function buildWorld(
     // The hubs' stock: one box per item (catalogue.ts), each printed with its name.
     let catalogueGroup: THREE.Group | null = null;
     const setCatalogueBoxesInScene = (items: CatalogueItem[]) => {
-        if (catalogueGroup || items.length === 0) return;
+        // The stock changes as the day goes: draw it again (the old stacks leave the scene and the picking list).
+        if (catalogueGroup) {
+            const old = catalogueGroup;
+            scene.remove(old);
+            old.traverse((o) => {
+                const m = o as THREE.Mesh;
+                if (!m.isMesh) return;
+                const at = pickables.indexOf(m);
+                if (at >= 0) pickables.splice(at, 1);
+                m.geometry.dispose();
+            });
+            catalogueGroup = null;
+        }
+        if (items.length === 0) return;
         const boxes = hubBoxes(items);
         setCatalogueBoxes(boxes);
         catalogueGroup = makeCatalogueBoxes(boxes);
@@ -1561,16 +1607,29 @@ function buildWorld(
 
     const api: SceneApi = {
         setCatalogue: setCatalogueBoxesInScene,
-        enterPlay: (app, pose, view, framing) => {
+        setShelf: (bins) => {
+            const placed = placeBins(bins);
+            shelfFaces.forEach((face) => face.setBins(placed));
+        },
+        enterPlay: (app, pose, view, framing, name) => {
             if (game) return;
             flight = null;
             beforePlay = { camera: camera.position.clone(), target: controls.target.clone() };
             game = createGameScene({
-                scene, camera, controls, dom: renderer.domElement, overlay: mount, figure: makePerson(toneOf(roleFor(app))), tone: toneOf(roleFor(app)),
+                scene, camera, controls, dom: renderer.domElement, overlay: mount, figure: (() => {
+                    const figure = makePerson(toneOf(roleFor(app)));
+                    nameTag(figure, name);
+                    return figure;
+                })(), tone: toneOf(roleFor(app)),
                 spawn: pose, view, framing, reducedMotion, bounds: [SITE_BOUNDS.min.x, SITE_BOUNDS.min.z, SITE_BOUNDS.max.x, SITE_BOUNDS.max.z],
                 zoneTones: { pickup: color(theme.palette.info.main), drop: color(theme.palette.success.main) },
                 carTones: { cab: driverTone, body: wallTone.clone().lerp(color(theme.palette.background.paper), 0.5), dark: darkTone },
                 onZone: (zone) => setGame({ zone }),
+                // The standing people at the places are solid; the walkers of the replay move, so they are not.
+                figures: people.map((p) => {
+                    const at = p.mesh.getWorldPosition(new THREE.Vector3());
+                    return boxAt(at.x, at.z, 0.7, 0.7);
+                }),
             });
         },
         exitPlay: () => {
@@ -2123,6 +2182,8 @@ interface ShelfFace {
     paint: (selected: string | null) => void;
     /** The spot ("f6") under a point on the face, from its uv. */
     spotAt: (u: number, v: number) => string;
+    /** The bins on each spot of the whole rack (shelfSpots.ts): drawn in the spot's four slots. */
+    setBins: (placed: Map<string, ShelfBin[]>) => void;
 }
 
 /**
@@ -2188,9 +2249,11 @@ function makeShelves(wall: THREE.Color, dark: THREE.Color): { group: THREE.Group
 
         // The face: a canvas of spots on a plane against the wall, facing into the shop.
         const canvas = document.createElement("canvas");
-        // 256 × 192 px a spot, so the codes read clearly close up.
-        canvas.width = cols * 256;
-        canvas.height = rows * 192;
+        // The picture keeps the face's own proportions (a spot is several metres wide and 60 cm high), so nothing is stretched.
+        const ppm = Math.min(200, 4096 / span);
+        canvas.width = Math.round(span * ppm);
+        canvas.height = Math.round(height * ppm);
+        let placed = new Map<string, ShelfBin[]>();
         const texture = new THREE.CanvasTexture(canvas);
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.anisotropy = 4;
@@ -2200,26 +2263,75 @@ function makeShelves(wall: THREE.Color, dark: THREE.Color): { group: THREE.Group
         plane.rotation.y = side === "west" ? Math.PI / 2 : side === "east" ? -Math.PI / 2 : side === "south" ? Math.PI : 0;
         g.add(plane);
 
+        const STATUS_FILL: Record<ShelfBin["status"], string> = { ok: "#e3f1df", refill: "#ffe7b0", critical: "#ffc4bd", empty: "#d9d9d9" };
         const face: ShelfFace = {
             spotAt: (u, v) => spotAt(run, u, v),
+            setBins: (next) => {
+                placed = next;
+                face.paint(null);
+            },
             paint: (selected) => {
                 const ctx = canvas.getContext("2d")!;
                 const cw = canvas.width / cols;
                 const ch = canvas.height / rows;
+                const sw = cw / SPOT_CAPACITY;
+                // Text sizes follow the slot's height, so they read the same on every wall.
+                const unit = ch / 120;
                 ctx.fillStyle = `#${backTone.getHexString()}`;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.textBaseline = "middle";
                 for (let row = 0; row < rows; row++) {
                     for (let col = 0; col < cols; col++) {
                         const code = `${run.columns[col]}${row + 1}`;
                         const x = col * cw;
                         const y = row * ch;
+                        const bins = placed.get(code) ?? [];
                         ctx.fillStyle = code === selected ? "#ffd54f" : "#f5f1ea";
-                        ctx.fillRect(x + 8, y + 8, cw - 16, ch - 16);
-                        ctx.fillStyle = "#3b2a1a";
-                        ctx.font = "800 68px system-ui, sans-serif";
-                        ctx.textAlign = "center";
-                        ctx.textBaseline = "middle";
-                        ctx.fillText(code, x + cw / 2, y + ch / 2);
+                        ctx.fillRect(x + 4 * unit, y + 4 * unit, cw - 8 * unit, ch - 8 * unit);
+                        for (let slot = 0; slot < SPOT_CAPACITY; slot++) {
+                            const sx = x + slot * sw;
+                            const bin = bins[slot];
+                            const pad = 7 * unit;
+                            // The slot's own name (f6a …) in its corner.
+                            ctx.textAlign = "left";
+                            if (!bin) {
+                                if (bins.length > 0) {
+                                    ctx.fillStyle = "rgba(60,42,26,.35)";
+                                    ctx.font = `700 ${16 * unit}px system-ui, sans-serif`;
+                                    ctx.fillText(`${code}${"abcd"[slot]}`, sx + pad * 2, y + ch / 2);
+                                }
+                                continue;
+                            }
+                            ctx.fillStyle = STATUS_FILL[bin.status];
+                            ctx.fillRect(sx + pad, y + pad, sw - 2 * pad, ch - 2 * pad);
+                            ctx.fillStyle = "rgba(60,42,26,.55)";
+                            ctx.font = `700 ${14 * unit}px system-ui, sans-serif`;
+                            ctx.fillText(`${code}${"abcd"[slot]}`, sx + pad * 1.6, y + 17 * unit);
+                            ctx.fillStyle = "#2a1b0e";
+                            ctx.font = `800 ${22 * unit}px system-ui, sans-serif`;
+                            wrapText(ctx, bin.name, sw - 4 * pad, 2).forEach((line, k) => ctx.fillText(line, sx + pad * 1.6, y + 40 * unit + k * 24 * unit));
+                            // The bar along the bottom: how full it is, with the refill line (amber) and the low line (red) on it.
+                            const bx = sx + pad * 1.6;
+                            const bw = sw - pad * 3.2;
+                            const by = y + ch - 24 * unit;
+                            ctx.fillStyle = "rgba(0,0,0,.18)";
+                            ctx.fillRect(bx, by, bw, 11 * unit);
+                            ctx.fillStyle = bin.status === "critical" ? "#c62828" : bin.status === "refill" ? "#ef8f00" : "#2e7d32";
+                            ctx.fillRect(bx, by, bw * Math.max(0, Math.min(1, bin.fill)), 11 * unit);
+                            const lines = barLines(bin);
+                            if (lines) {
+                                for (const [at, colour] of [[lines.refill, "#ef8f00"], [lines.critical, "#c62828"]] as const) {
+                                    ctx.fillStyle = colour;
+                                    ctx.fillRect(bx + bw * at - 1.5 * unit, by - 5 * unit, 3 * unit, 21 * unit);
+                                }
+                            }
+                        }
+                        if (bins.length === 0) {
+                            ctx.fillStyle = "#3b2a1a";
+                            ctx.font = `800 ${46 * unit}px system-ui, sans-serif`;
+                            ctx.textAlign = "center";
+                            ctx.fillText(code, x + cw / 2, y + ch / 2);
+                        }
                     }
                 }
                 texture.needsUpdate = true;
@@ -2521,7 +2633,7 @@ function makeCatalogueBoxes(boxes: HubBox[]): THREE.Group {
         const lines = wrapText(ctx, box.item.name, SLOT - 18, 4);
         lines.forEach((line, k) => ctx.fillText(line, x0 + SLOT / 2, y0 + 14 + (SLOT - 44) / 2 + (k - (lines.length - 1) / 2) * 19));
         ctx.font = "600 14px system-ui, sans-serif";
-        ctx.fillText([box.item.packaging, box.item.pieces ? `× ${box.item.pieces}` : null].filter(Boolean).join(" "), x0 + SLOT / 2, y0 + SLOT - 15);
+        ctx.fillText(`${box.count} × ${[box.item.packaging, box.item.pieces ? `of ${box.item.pieces}` : null].filter(Boolean).join(" ")}`, x0 + SLOT / 2, y0 + SLOT - 15);
     });
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -2530,15 +2642,25 @@ function makeCatalogueBoxes(boxes: HubBox[]): THREE.Group {
     const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85 });
 
     boxes.slice(0, per * per).forEach((box, i) => {
-        const geometry = new THREE.BoxGeometry(box.side, box.side, box.side);
-        // Every face shows the whole of this box's square (a canvas texture is flipped: v 1 is the canvas's top).
-        const uv = geometry.attributes.uv as THREE.BufferAttribute;
         const col = i % per;
         const row = Math.floor(i / per);
-        for (let k = 0; k < uv.count; k++) uv.setXY(k, (col + uv.getX(k)) / per, 1 - (row + 1 - uv.getY(k)) / per);
+        // The real number of boxes (up to a full stack), every one the same carton, merged into one mesh per stack.
+        const pieces: THREE.BufferGeometry[] = [];
+        for (let k = 0; k < shown(box.count); k++) {
+            const part = new THREE.BoxGeometry(BOX_SIDE, BOX_SIDE, BOX_SIDE);
+            // Every face shows the whole of this item's square (a canvas texture is flipped: v 1 is the canvas's top).
+            const uv = part.attributes.uv as THREE.BufferAttribute;
+            for (let n = 0; n < uv.count; n++) uv.setXY(n, (col + uv.getX(n)) / per, 1 - (row + 1 - uv.getY(n)) / per);
+            const [dx, dy, dz] = stackSlot(k);
+            part.translate(dx, dy, dz);
+            pieces.push(part);
+        }
+        if (pieces.length === 0) return;
+        const geometry = mergeGeometries(pieces)!;
+        pieces.forEach((part) => part.dispose());
         const m = new THREE.Mesh(geometry, material);
-        // On the hub's cell floor (its picture lies at 0.16).
-        m.position.set(box.at[0], 0.17 + box.side / 2, box.at[1]);
+        // On the cell's floor (a hub's picture lies at 0.16; the shop's floor is at 0.19).
+        m.position.set(box.at[0], box.hub === "store_floor" ? 0.19 : 0.17, box.at[1]);
         m.castShadow = m.receiveShadow = true;
         m.userData.placeKey = box.hub;
         m.name = `item_${box.item.item_id}`;
@@ -2633,6 +2755,21 @@ function makeBike(tone: THREE.Color, dark: THREE.Color, boxMaterial: THREE.Mater
     box.castShadow = true;
     bike.add(box);
     return bike;
+}
+
+/** A first name floating over a figure's head: a label that rides on the figure, so it follows it. Empty text hides it. */
+function nameTag(figure: THREE.Object3D, text: string | null | undefined, height = 2.1): { tag: CSS2DObject; set: (text: string | null | undefined) => void } {
+    const el = document.createElement("div");
+    el.className = "world-badge world-badge--name";
+    const tag = new CSS2DObject(el);
+    tag.position.set(0, height, 0);
+    const set = (next: string | null | undefined) => {
+        el.textContent = next ?? "";
+        tag.visible = !!next;
+    };
+    set(text);
+    figure.add(tag);
+    return { tag, set };
 }
 
 function makePerson(tone: THREE.Color): THREE.Group {

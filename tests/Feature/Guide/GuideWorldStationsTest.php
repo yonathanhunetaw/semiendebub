@@ -266,4 +266,65 @@ class GuideWorldStationsTest extends TestCase
         $this->assertStringContainsString(trim($worker->first_name.' '.$worker->last_name), $siteItem['subtitle'], 'the key holder is named');
         $this->assertStringContainsString('opens', implode(' ', $siteItem['lines']));
     }
+
+    #[Test]
+    public function the_work_desk_offers_shift_swaps_leave_breaks_and_a_drivers_rides(): void
+    {
+        $worker = $this->user('stock_keeper');
+        $mate = $this->user('stock_keeper');
+        $site = StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_STORE)->first();
+        $start = \App\Services\Workforce\LocalTime::today()->addDay()->addHours(8)->utc();
+        foreach ([$worker, $mate] as $person) {
+            \App\Models\Workforce\Shift::query()->create([
+                'stock_location_id' => $site->id, 'user_id' => $person->id, 'starts_at' => $start, 'ends_at' => $start->addHours(8),
+                'duty' => 'floor', 'status' => 'published',
+            ]);
+        }
+        \App\Models\Workforce\TimeEntry::query()->create(['user_id' => $worker->id, 'stock_location_id' => $site->id, 'clock_in_at' => now()->subHour(), 'in_method' => 'qr']);
+
+        $work = $this->station($this->stations($worker, 'stock_keeper'), 'work');
+        $items = collect($work['items']);
+        $shift = $items->first(fn ($i) => str_starts_with($i['id'], 'shift-'));
+        $keys = array_column($shift['actions'], 'key');
+        $this->assertContains('offer', $keys);
+        $this->assertContains('change', $keys);
+        $offer = collect($shift['actions'])->firstWhere('key', 'offer');
+        $this->assertSame($mate->id, $offer['fields'][0]['options'][0]['value'], 'the colleague at the same site is offered');
+
+        $this->assertSame(['ask'], array_column($items->firstWhere('id', 'ask-leave')['actions'], 'key'));
+
+        // At the site: close (it is not open, so open), the counter code, and a break while clocked in.
+        $siteItem = $items->firstWhere('id', 'site-'.$site->id);
+        $keys = array_column($siteItem['actions'], 'key');
+        $this->assertContains('open', $keys);
+        $this->assertContains('clock-out', $keys);
+        $this->assertContains('break-start', $keys);
+        $this->assertSame('token', collect($siteItem['actions'])->firstWhere('key', 'clock-out')['fields'][0]['name']);
+    }
+
+    #[Test]
+    public function managers_get_attendance_fixes_the_rota_and_admins_get_holidays(): void
+    {
+        $manager = $this->user('store_manager');
+        $worker = $this->user('stock_keeper');
+        $site = StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_STORE)->first();
+        $site->managerAssignments()->create(['user_id' => $manager->id]);
+        $start = \App\Services\Workforce\LocalTime::today()->addDays(2)->addHours(8)->utc();
+        \App\Models\Workforce\Shift::query()->create([
+            'stock_location_id' => $site->id, 'user_id' => $worker->id, 'starts_at' => $start, 'ends_at' => $start->addHours(8), 'duty' => 'floor', 'status' => 'draft',
+        ]);
+        $entry = \App\Models\Workforce\TimeEntry::query()->create(['user_id' => $worker->id, 'stock_location_id' => $site->id, 'clock_in_at' => now()->subDay(), 'in_method' => 'qr']);
+
+        $manager->update(['role' => 'stock_keeper']);
+        $items = collect($this->station($this->stations($manager, 'stock_keeper'), 'work')['items']);
+
+        $this->assertContains('clock-out', array_column($items->firstWhere('id', 'entry-'.$entry->id)['actions'], 'key'));
+        $this->assertContains('fix', array_column($items->firstWhere('id', 'entry-'.$entry->id)['actions'], 'key'));
+        $this->assertTrue($items->contains(fn ($i) => str_starts_with($i['id'], 'rota-') && in_array('publish', array_column($i['actions'], 'key'), true)), 'a draft week can be sent');
+        $this->assertTrue($items->contains(fn ($i) => str_starts_with($i['id'], 'rotashift-')), 'upcoming shifts can be cancelled');
+
+        $admin = $this->user('admin', null);
+        $this->assertNotNull(collect($this->station($this->stations($admin, 'admin'), 'work')['items'])->firstWhere('id', 'holiday-add'));
+        $this->assertNull($items->firstWhere('id', 'holiday-add'), 'only admins get holidays');
+    }
 }

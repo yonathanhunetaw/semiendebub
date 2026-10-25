@@ -209,6 +209,41 @@ class GuideWorldFeedTest extends TestCase
     }
 
     #[Test]
+    public function count_events_name_the_person_who_did_each_step(): void
+    {
+        $day = CarbonImmutable::parse('2026-10-14 00:00');
+        $keeper = $this->user('admin', null);
+        $keeper->update(['first_name' => 'Abel']);
+
+        $count = \App\Models\Inventory\Stocktake::query()->create(['reference' => 'CNT-2', 'stock_location_id' => $this->floor()->id, 'status' => 'posted', 'started_by' => $keeper->id]);
+        $count->forceFill(['created_at' => $day->setTime(8, 0)])->save();
+
+        $events = collect($this->asRole($keeper, 'admin')->getJson(route('admin.guide.world', ['from' => $day->toDateString()]))->assertOk()->json('events'))->where('kind', 'count');
+
+        $this->assertSame('Abel starts a count', $events->first()['what']);
+    }
+
+    #[Test]
+    public function a_site_opening_and_a_clock_in_come_back_as_named_work_events(): void
+    {
+        $day = CarbonImmutable::parse('2026-10-14 00:00');
+        $admin = $this->user('admin', null);
+        $opener = $this->user('stock_keeper', null);
+        $opener->update(['first_name' => 'Sara']);
+        $site = $this->floor();
+
+        $siteDay = \App\Models\Workforce\SiteDay::query()->create(['stock_location_id' => $site->id, 'date' => $day->toDateString(), 'status' => 'open', 'opener_id' => $opener->id, 'opened_by' => $opener->id, 'opened_at' => $day->setTime(8, 0)]);
+        \App\Models\Workforce\TimeEntry::query()->create(['user_id' => $opener->id, 'stock_location_id' => $site->id, 'clock_in_at' => $day->setTime(7, 55), 'in_method' => 'qr']);
+
+        $events = collect($this->asRole($admin, 'admin')->getJson(route('admin.guide.world', ['from' => $day->toDateString()]))->assertOk()->json('events'))->where('kind', 'work');
+
+        $opened = $events->firstWhere('key', "site-{$siteDay->id}-opened");
+        $this->assertNotNull($opened, json_encode($events->pluck('key')));
+        $this->assertStringStartsWith('Sara opens', $opened['what']);
+        $this->assertContains('Sara clocks in', $events->pluck('what')->all());
+    }
+
+    #[Test]
     public function a_user_tied_to_another_store_gets_no_transfer_or_count_events(): void
     {
         $this->transfer(\App\Models\Item\ItemVariant::factory()->create(), $this->floor(), ['reference' => 'TRF-X', 'created_at' => CarbonImmutable::parse('2026-10-14 09:00')]);
@@ -296,6 +331,26 @@ class GuideWorldFeedTest extends TestCase
             ->assertJsonPath('catalogue.1.tier', 'cartoon')
             ->assertJsonPath('catalogue.1.pieces', 48)
             ->assertJsonPath('catalogue.1.cbm', 0.064);
+    }
+
+    #[Test]
+    public function the_catalogue_counts_the_real_boxes_each_place_holds_from_its_stock(): void
+    {
+        $carton = ItemPackagingType::factory()->create(['name' => 'Cartoon']);
+        $cups = Item::factory()->create(['product_name' => 'Cups']);
+        $cupsCarton = ItemVariant::factory()->create(['item_id' => $cups->id, 'item_packaging_type_id' => $carton->id]);
+        $cupsCarton->packagingQuantities()->attach($carton->id, ['quantity' => 48, 'cbm' => 0.064]);
+
+        // 5 cartons (a carton variant's unit is 48 pieces) in Hub A, and one on the shop floor; nothing in Hub B.
+        app(\App\Services\StockService::class)->receive($cupsCarton->id, $this->hubA, 5);
+        app(\App\Services\StockService::class)->receive($cupsCarton->id, $this->floor(), 1);
+
+        $boxes = $this->asRole($this->user('admin', null), 'admin')
+            ->getJson(route('admin.guide.world', ['catalogue' => 1]))
+            ->assertOk()
+            ->json('catalogue.0.boxes');
+
+        $this->assertSame(['main_hub_a' => 5, 'store_floor' => 1], $boxes);
     }
 
     private function user(string $role, ?int $storeId): User

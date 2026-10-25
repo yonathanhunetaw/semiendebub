@@ -9,13 +9,15 @@ import type { PurchaseDetail } from "@/types/procurement";
 interface Props {
     orders?: PurchaseDetail[];
     adminLimit: number;
+    canSetLimit?: boolean;
 }
 
 /**
  * Purchase orders waiting for approval. Procurement raises and submits them
  * in its own app; from the limit only a global admin approves, here.
  */
-export default function AdminPurchaseOrders({ orders = [], adminLimit }: Props) {
+export default function AdminPurchaseOrders({ orders = [], adminLimit, canSetLimit = false }: Props) {
+    const [limit, setLimit] = React.useState(String(adminLimit));
     const [sendingBack, setSendingBack] = React.useState<PurchaseDetail | null>(null);
     const [reason, setReason] = React.useState("");
     const [busy, setBusy] = React.useState(false);
@@ -40,6 +42,33 @@ export default function AdminPurchaseOrders({ orders = [], adminLimit }: Props) 
                 title="Purchase orders to approve"
                 subtitle={`Raised and submitted by procurement. From ${money(adminLimit)} only a global admin approves; below it another procurement user can too. Whoever raised or submitted an order never approves it.`}
             />
+
+            {canSetLimit ? (
+                <SkCard className="mb-4">
+                    <div className="flex flex-wrap items-end gap-3 p-4">
+                        <SkField label="Global admin approves from (ETB)">
+                            <input
+                                className={inputClass}
+                                type="number"
+                                min={1}
+                                step="any"
+                                inputMode="decimal"
+                                value={limit}
+                                onChange={(e) => setLimit(e.target.value)}
+                            />
+                        </SkField>
+                        <SkButton
+                            disabled={busy || !(Number(limit) > 0) || Number(limit) === adminLimit}
+                            onClick={() => {
+                                setBusy(true);
+                                router.put(route("admin.purchase_orders.limit"), { limit }, { preserveScroll: true, onFinish: () => setBusy(false) });
+                            }}
+                        >
+                            Save limit
+                        </SkButton>
+                    </div>
+                </SkCard>
+            ) : null}
 
             {orders.length === 0 ? (
                 <EmptyState framed icon="task_alt" title="Nothing waiting" description="Submitted purchase orders show up here." />

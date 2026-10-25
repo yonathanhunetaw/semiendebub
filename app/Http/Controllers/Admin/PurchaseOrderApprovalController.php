@@ -7,7 +7,9 @@ namespace App\Http\Controllers\Admin;
 use App\Exceptions\PurchaseOrderException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Procurement\PurchaseOrderReasonRequest;
+use App\Http\Requests\Procurement\SetApprovalLimitRequest;
 use App\Models\Procurement\Purchase;
+use App\Services\Admin\ActiveStore;
 use App\Services\Procurement\PurchaseOrderPresenter;
 use App\Services\Procurement\PurchaseOrderService;
 use Illuminate\Http\RedirectResponse;
@@ -26,7 +28,7 @@ class PurchaseOrderApprovalController extends Controller
     {
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request, ActiveStore $activeStore): Response
     {
         $user = $request->user();
 
@@ -38,7 +40,15 @@ class PurchaseOrderApprovalController extends Controller
         return Inertia::render('Admin/PurchaseOrders/Index', [
             'orders' => $submitted->map(fn (Purchase $p) => PurchaseOrderPresenter::detail($p, $user))->values()->all(),
             'adminLimit' => PurchaseOrderService::adminLimit(),
+            'canSetLimit' => $activeStore->isGlobal(),
         ]);
+    }
+
+    public function setLimit(SetApprovalLimitRequest $request): RedirectResponse
+    {
+        PurchaseOrderService::setAdminLimit((float) $request->validated('limit'), $request->user());
+
+        return back()->with('success', 'From ETB '.number_format(PurchaseOrderService::adminLimit()).' only a global admin approves purchase orders.');
     }
 
     public function approve(Request $request, Purchase $purchase): RedirectResponse

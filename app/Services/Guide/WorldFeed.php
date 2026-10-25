@@ -15,7 +15,15 @@ use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\Stocktake;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\Transfer;
+use App\Models\Workforce\KeyHandover;
+use App\Models\Workforce\LeaveRequest;
+use App\Models\Workforce\ShiftSwap;
+use App\Models\Workforce\SiteDay;
+use App\Models\Workforce\StaffRide;
+use App\Models\Workforce\TimeEntry;
 use App\Services\Fulfillment\ShipmentHandoffService;
+use App\Models\Inventory\ItemStock;
+use App\Services\Inventory\PackagingLadder;
 use App\Services\Inventory\RefillBoard;
 use App\Services\Inventory\ShelfMatrix;
 use App\Services\Inventory\StockLocationTree;
@@ -56,6 +64,7 @@ class WorldFeed
         private readonly ShelfMatrix $shelves,
         private readonly StockLocationTree $tree,
         private readonly RefillBoard $board,
+        private readonly PackagingLadder $ladder,
     ) {}
 
     /** The Main Store's id, or null; a viewer tied to another store gets null too. */
@@ -85,7 +94,7 @@ class WorldFeed
         }
 
         return RefillRequest::query()
-            ->with(['item:id,product_name', 'transfer'])
+            ->with(['item:id,product_name', 'transfer', 'raiser:id,first_name', 'accepter:id,first_name', 'canceller:id,first_name'])
             ->where('store_id', $storeId)
             ->where('created_at', '<=', $to)
             ->where(fn ($q) => $q->whereNull('fulfilled_at')->orWhere('fulfilled_at', '>=', $from))
@@ -106,6 +115,9 @@ class WorldFeed
                 'accepted_at' => $r->accepted_at?->toIso8601String(),
                 'fulfilled_at' => $r->fulfilled_at?->toIso8601String(),
                 'cancelled_at' => $r->cancelled_at?->toIso8601String(),
+                'raised_by' => $r->raiser?->first_name,
+                'accepted_by' => $r->accepter?->first_name,
+                'cancelled_by' => $r->canceller?->first_name,
                 'transfer' => $r->transfer === null ? null : [
                     'dispatched_at' => $r->transfer->dispatched_at?->toIso8601String(),
                     'handed_over_at' => $r->transfer->handed_over_at?->toIso8601String(),
@@ -132,7 +144,7 @@ class WorldFeed
         }
 
         return Sale::query()
-            ->with(['payments', 'delivery'])
+            ->with(['payments.claimer:id,first_name', 'payments.confirmer:id,first_name', 'delivery.courier:id,first_name', 'seller:id,first_name', 'pickingStartedBy:id,first_name'])
             ->withCount('items')
             ->where('store_id', $storeId)
             ->where('created_at', '<=', $to)
@@ -160,7 +172,152 @@ class WorldFeed
             return [];
         }
 
-        return array_values(array_merge($this->transferEvents($from, $to), $this->countEvents($from, $to)));
+        return array_values(array_merge($this->transferEvents($from, $to), $this->countEvents($from, $to), $this->workEvents($from, $to, $viewer)));
+    }
+
+    /**
+     * The Work area as events: a site opened (late, without the key) or closed or missed, people clocking in and
+     * out, shift swaps, key hand-overs, leave and staff rides. Staff names are first names; a store-tied viewer
+     * only sees people of their own store.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function workEvents(CarbonImmutable $from, CarbonImmutable $to, User $viewer): array
+    {
+        $mainStoreId = $this->mainStoreId();
+        $out = [];
+        $mine = fn (?User $u): bool => $viewer->store_id === null || $u === null || $u->store_id === null || (int) $u->store_id === (int) $viewer->store_id;
+        $inRange = fn (mixed $at): bool => $at !== null && $at >= $from && $at <= $to;
+        $emit = function (string $key, mixed $at, string $subject, string $reference, string $what, string $detail, ?string $where, string $who, array $extra = []) use (&$out, $inRange): void {
+            if ($inRange($at)) {
+                $out[] = ['key' => $key, 'at' => $at->toIso8601String(), 'kind' => 'work', 'subject' => (int) crc32($subject) & 0x7fffffff,
+                    'reference' => $reference, 'what' => $what, 'detail' => $detail, 'where' => $where, 'who' => $who] + $extra;
+            }
+        };
+        $name = fn (?User $u, string $fallback): string => $u?->first_name ?: $fallback;
+
+        // Sites: opened, closed, missed.
+        SiteDay::query()
+            ->with(['site', 'opener:id,first_name,store_id', 'closer:id,first_name,store_id', 'openedBy:id,first_name,store_id', 'closedBy:id,first_name,store_id'])
+            ->where(fn ($q) => $q->whereBetween('opened_at', [$from, $to])->orWhereBetween('closed_at', [$from, $to])->orWhereBetween('missed_at', [$from, $to]))
+            ->orderBy('date')
+            ->limit(300)
+            ->get()
+            ->each(function (SiteDay $d) use ($emit, $name, $mine, $mainStoreId): void {
+                $where = $this->placeKey($d->site, $mainStoreId) ?? 'office';
+                $site = (string) ($d->site?->name ?? 'a site');
+                $ref = 'Site · '.$d->date?->format('Y-m-d');
+                $opener = $d->openedBy ?? $d->opener;
+                $closer = $d->closedBy ?? $d->closer;
+                if (! $mine($opener) && ! $mine($closer)) {
+                    return;
+                }
+                $emit("site-{$d->id}-opened", $d->opened_at, "site-{$d->id}", $ref, $name($opener, 'Someone').' opens '.$site.($d->opened_without_key ? ' without the key' : ''), $site, $where, 'store_manager');
+                $emit("site-{$d->id}-closed", $d->closed_at, "site-{$d->id}", $ref, $name($closer, 'Someone').' closes '.$site, $site, $where, 'store_manager', ['final' => true]);
+                $emit("site-{$d->id}-missed", $d->missed_at, "site-{$d->id}", $ref, $site.' was not opened on time', $site, $where, 'store_manager', ['final' => true, 'bad' => true]);
+            });
+
+        // Clocking in and out.
+        TimeEntry::query()
+            ->with(['user:id,first_name,store_id', 'site'])
+            ->where(fn ($q) => $q->whereBetween('clock_in_at', [$from, $to])->orWhereBetween('clock_out_at', [$from, $to]))
+            ->orderBy('clock_in_at')
+            ->limit(300)
+            ->get()
+            ->each(function (TimeEntry $t) use ($emit, $name, $mine, $mainStoreId): void {
+                if (! $mine($t->user)) {
+                    return;
+                }
+                $where = $this->placeKey($t->site, $mainStoreId) ?? 'office';
+                $site = (string) ($t->site?->name ?? 'work');
+                $who = $name($t->user, 'Someone');
+                $emit("clock-{$t->id}-in", $t->clock_in_at, "clock-{$t->id}", 'Clock-in', $who.' clocks in', $site, $where, 'seller');
+                $emit("clock-{$t->id}-out", $t->clock_out_at, "clock-{$t->id}", 'Clock-in', $who.' clocks out', $site, $where, 'seller', ['final' => true]);
+            });
+
+        // Shift swaps.
+        ShiftSwap::query()
+            ->with(['from:id,first_name,store_id', 'to:id,first_name,store_id', 'shift.site'])
+            ->where(fn ($q) => $q->whereBetween('created_at', [$from, $to])->orWhereBetween('taken_at', [$from, $to])->orWhereBetween('decided_at', [$from, $to]))
+            ->orderBy('created_at')
+            ->limit(200)
+            ->get()
+            ->each(function (ShiftSwap $w) use ($emit, $name, $mine): void {
+                if (! $mine($w->from)) {
+                    return;
+                }
+                $detail = (string) ($w->shift?->site?->name ?? 'a shift');
+                $ref = 'Swap #'.$w->id;
+                $emit("swap-{$w->id}-offered", $w->created_at, "swap-{$w->id}", $ref, $name($w->from, 'Someone').' offers a shift', $detail, 'office', 'seller');
+                $emit("swap-{$w->id}-taken", $w->taken_at, "swap-{$w->id}", $ref, $name($w->to, 'Someone').' takes the shift', $detail, 'office', 'seller');
+                $approved = $w->status === ShiftSwap::STATUS_APPROVED;
+                if (in_array($w->status, [ShiftSwap::STATUS_APPROVED, ShiftSwap::STATUS_REJECTED], true)) {
+                    $emit("swap-{$w->id}-decided", $w->decided_at, "swap-{$w->id}", $ref, $approved ? 'The swap is approved' : 'The swap is turned down', $detail, 'office', 'store_manager', $approved ? ['final' => true] : ['final' => true, 'bad' => true]);
+                }
+            });
+
+        // Keys changing hands.
+        KeyHandover::query()
+            ->with(['key.keyable', 'from:id,first_name,store_id', 'to:id,first_name,store_id'])
+            ->where(fn ($q) => $q->whereBetween('created_at', [$from, $to])->orWhereBetween('decided_at', [$from, $to]))
+            ->orderBy('created_at')
+            ->limit(200)
+            ->get()
+            ->each(function (KeyHandover $h) use ($emit, $name, $mine): void {
+                if (! $mine($h->from) && ! $mine($h->to)) {
+                    return;
+                }
+                $keyable = $h->key?->keyable;
+                $label = (string) ($keyable?->getAttribute('name') ?? $keyable?->getAttribute('plate_number') ?? $keyable?->getAttribute('plate') ?? 'a key');
+                $ref = 'Key · '.$label;
+                $emit("key-{$h->id}-claimed", $h->created_at, "key-{$h->id}", $ref, $name($h->from, 'Someone').' hands the key to '.$name($h->to, 'someone'), $label, 'office', 'seller');
+                if (in_array($h->status, [KeyHandover::STATUS_ACCEPTED, KeyHandover::STATUS_FORCED], true)) {
+                    $emit("key-{$h->id}-decided", $h->decided_at, "key-{$h->id}", $ref, $name($h->to, 'Someone').' has the key', $label, 'office', 'seller', ['final' => true]);
+                } elseif ($h->status === KeyHandover::STATUS_REJECTED) {
+                    $emit("key-{$h->id}-decided", $h->decided_at, "key-{$h->id}", $ref, $name($h->to, 'Someone').' refuses the key', $label, 'office', 'seller', ['final' => true, 'bad' => true]);
+                }
+            });
+
+        // Leave.
+        LeaveRequest::query()
+            ->with('user:id,first_name,store_id')
+            ->where(fn ($q) => $q->whereBetween('created_at', [$from, $to])->orWhereBetween('decided_at', [$from, $to]))
+            ->orderBy('created_at')
+            ->limit(200)
+            ->get()
+            ->each(function (LeaveRequest $l) use ($emit, $name, $mine): void {
+                if (! $mine($l->user)) {
+                    return;
+                }
+                $detail = ucfirst((string) $l->type).' · '.$l->starts_on?->format('M j').' – '.$l->ends_on?->format('M j');
+                $emit("leave-{$l->id}-asked", $l->created_at, "leave-{$l->id}", 'Leave #'.$l->id, $name($l->user, 'Someone').' asks for leave', $detail, 'office', 'seller');
+                if ($l->status === LeaveRequest::STATUS_APPROVED) {
+                    $emit("leave-{$l->id}-decided", $l->decided_at, "leave-{$l->id}", 'Leave #'.$l->id, 'Leave approved for '.$name($l->user, 'someone'), $detail, 'office', 'store_manager', ['final' => true]);
+                } elseif ($l->status === LeaveRequest::STATUS_REJECTED) {
+                    $emit("leave-{$l->id}-decided", $l->decided_at, "leave-{$l->id}", 'Leave #'.$l->id, 'Leave turned down for '.$name($l->user, 'someone'), $detail, 'office', 'store_manager', ['final' => true, 'bad' => true]);
+                }
+            });
+
+        // Staff rides.
+        StaffRide::query()
+            ->with(['driver:id,first_name,store_id', 'site', 'vehicle'])
+            ->where(fn ($q) => $q->whereBetween('claimed_at', [$from, $to])->orWhereBetween('departed_at', [$from, $to])->orWhereBetween('finished_at', [$from, $to]))
+            ->orderBy('departs_at')
+            ->limit(200)
+            ->get()
+            ->each(function (StaffRide $r) use ($emit, $name, $mine, $mainStoreId): void {
+                if (! $mine($r->driver)) {
+                    return;
+                }
+                $where = $this->placeKey($r->site, $mainStoreId) ?? 'office';
+                $detail = 'Staff ride · '.($r->site?->name ?? 'a site');
+                $driver = $name($r->driver, 'A driver');
+                $emit("ride-{$r->id}-claimed", $r->claimed_at, "ride-{$r->id}", 'Ride #'.$r->id, $driver.' takes the staff ride', $detail, $where, 'delivery');
+                $emit("ride-{$r->id}-departed", $r->departed_at, "ride-{$r->id}", 'Ride #'.$r->id, $driver.' sets off with the staff', $detail, $where, 'delivery');
+                $emit("ride-{$r->id}-finished", $r->finished_at, "ride-{$r->id}", 'Ride #'.$r->id, 'The staff ride is done', $detail, $where, 'delivery', ['final' => true]);
+            });
+
+        return $out;
     }
 
     /**
@@ -199,9 +356,9 @@ class WorldFeed
                     }
                 };
 
-                $emit('raised', $t->created_at, 'A transfer is raised'.($t->initiator ? ' by '.trim($t->initiator->first_name.' '.$t->initiator->last_name) : ''), $origin, 'stock_keeper');
-                $emit('dispatched', $t->dispatched_at, $t->courier_id !== null ? 'Handed to the courier' : 'Sent', $origin, 'stock_keeper');
-                $emit('handed', $t->handed_over_at, 'The courier hands it over', $destination, 'delivery');
+                $emit('raised', $t->created_at, 'A transfer is raised'.($t->initiator ? ' by '.$t->initiator->first_name : ''), $origin, 'stock_keeper');
+                $emit('dispatched', $t->dispatched_at, $t->courier_id !== null ? 'Handed to the courier'.($t->courier ? ' '.$t->courier->first_name : '') : 'Sent', $origin, 'stock_keeper');
+                $emit('handed', $t->handed_over_at, $t->courier ? $t->courier->first_name.' hands it over' : 'The courier hands it over', $destination, 'delivery');
                 $emit('completed', $t->completed_at, 'Received: it lands', $destination, 'stock_keeper', ['final' => true]);
                 $emit('cancelled', $t->cancelled_at, 'Transfer cancelled', $origin, 'stock_keeper', ['final' => true, 'bad' => true]);
             });
@@ -221,7 +378,7 @@ class WorldFeed
         $out = [];
 
         Stocktake::query()
-            ->with('location')
+            ->with(['location', 'starter:id,first_name', 'submitter:id,first_name', 'approver:id,first_name'])
             ->withCount('lines')
             ->where('created_at', '<=', $to)
             ->where(fn ($q) => $q->whereNull('posted_at')->orWhere('posted_at', '>=', $from))
@@ -243,9 +400,9 @@ class WorldFeed
                     }
                 };
 
-                $emit('started', $s->created_at, 'A count starts', 'stock_keeper');
-                $emit('submitted', $s->submitted_at, 'The count is submitted for approval', 'stock_keeper');
-                $emit('posted', $s->posted_at, 'Approved by a second person: adjustments booked', 'store_manager', ['final' => true]);
+                $emit('started', $s->created_at, $s->starter ? $s->starter->first_name.' starts a count' : 'A count starts', 'stock_keeper');
+                $emit('submitted', $s->submitted_at, $s->submitter ? $s->submitter->first_name.' submits the count for approval' : 'The count is submitted for approval', 'stock_keeper');
+                $emit('posted', $s->posted_at, $s->approver ? 'Approved by '.$s->approver->first_name.', a second person: adjustments booked' : 'Approved by a second person: adjustments booked', 'store_manager', ['final' => true]);
                 $emit('voided', $s->voided_at, 'The count is voided', 'store_manager', ['final' => true, 'bad' => true]);
             });
 
@@ -288,6 +445,9 @@ class WorldFeed
             'total' => (float) $sale->total_amount,
             'items' => (int) ($sale->items_count ?? 0),
             'created_at' => $sale->created_at?->toIso8601String(),
+            'seller' => $sale->seller?->first_name,
+            'picker' => $sale->pickingStartedBy?->first_name,
+            'courier' => $delivery?->courier?->first_name,
             'payments' => $sale->payments
                 ->where('kind', '!=', Payment::KIND_REPAYMENT)
                 ->map(fn (Payment $p): array => [
@@ -296,6 +456,8 @@ class WorldFeed
                     'amount' => (float) $p->amount,
                     'claimed_at' => ($p->claimed_at ?? $p->paid_at ?? $p->created_at)?->toIso8601String(),
                     'confirmed_at' => $p->confirmed_at?->toIso8601String(),
+                    'claimed_by' => $p->claimer?->first_name,
+                    'confirmed_by' => $p->confirmer?->first_name,
                 ])
                 ->values()
                 ->all(),
@@ -321,7 +483,7 @@ class WorldFeed
     public function between(CarbonImmutable $from, CarbonImmutable $to, User $viewer): array
     {
         $query = Shipment::query()
-            ->with(['originLocation', 'destinationLocation', 'courier:id,first_name,last_name', 'creator:id,first_name,last_name'])
+            ->with(['originLocation', 'destinationLocation', 'courier:id,first_name,last_name', 'creator:id,first_name,last_name', 'preparer:id,first_name', 'receiver:id,first_name'])
             ->withCount('items')
             ->withSum('items', 'cbm')
             ->where('created_at', '<=', $to)
@@ -743,8 +905,11 @@ class WorldFeed
     /**
      * The catalogue as the hubs show it: one row per item, for the variant in
      * its biggest packaging (a carton before a box before a piece), with that
-     * packaging's pieces and cbm so the world can size the box. Items with no
-     * variant are left out. Sorted by name.
+     * packaging's pieces and cbm. `boxes` says how many of that packaging each
+     * place really holds (main_hub_a, main_hub_b, store_floor; a place with
+     * none is left out): the stock there in pieces over the packaging's pieces,
+     * at least one while anything is there. Items with no variant are left out.
+     * Sorted by name.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -756,13 +921,19 @@ class WorldFeed
             ->get(['id', 'item_id', 'item_packaging_type_id']);
 
         $rank = fn (ItemVariant $v): int => ($i = array_search($v->packagingTier(), self::TIER_ORDER, true)) === false ? count(self::TIER_ORDER) : $i;
+        $stock = $this->piecesByPlace();
 
         return $variants
             ->groupBy('item_id')
-            ->map(function (Collection $group) use ($rank): array {
+            ->map(function (Collection $group) use ($rank, $stock): array {
                 /** @var ItemVariant $top */
                 $top = $group->sortBy(fn (ItemVariant $v): array => [$rank($v), $v->id])->first();
                 $pack = $top->packagingQuantities->firstWhere('id', $top->item_packaging_type_id);
+                $per = max(1, $pack ? (int) $pack->pivot->quantity : 1);
+                $boxes = [];
+                foreach ($stock[(int) $top->item_id] ?? [] as $place => $pieces) {
+                    $boxes[$place] = max(1, (int) round($pieces / $per));
+                }
 
                 return [
                     'item_id' => (int) $top->item_id,
@@ -772,11 +943,42 @@ class WorldFeed
                     'tier' => $top->packagingTier(),
                     'pieces' => $pack ? (int) $pack->pivot->quantity : null,
                     'cbm' => $pack && $pack->pivot->cbm !== null ? (float) $pack->pivot->cbm : null,
+                    'boxes' => $boxes,
                 ];
             })
             ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
             ->all();
+    }
+
+    /**
+     * Pieces of each item in Main Hub A, Main Hub B and the Main Store's floor (what the world stands boxes for).
+     *
+     * @return array<int, array<string, int>> item id => place key => pieces
+     */
+    private function piecesByPlace(): array
+    {
+        $mainStoreId = $this->mainStoreId();
+        $out = [];
+
+        ItemStock::query()
+            ->join('stock_locations as sl', 'sl.id', '=', 'item_stocks.stock_location_id')
+            ->join('item_variants as iv', 'iv.id', '=', 'item_stocks.item_variant_id')
+            ->where('item_stocks.quantity', '>', 0)
+            ->where(fn ($q) => $q->where('sl.kind', StockLocation::KIND_MAIN_HUB)
+                ->orWhere(fn ($floor) => $floor->whereIn('sl.kind', [StockLocation::KIND_STORE, StockLocation::KIND_BACKROOM])->where('sl.store_id', $mainStoreId ?? 0)))
+            ->get(['iv.item_id', 'item_stocks.item_variant_id', 'item_stocks.quantity', 'sl.kind', 'sl.name'])
+            ->each(function ($row) use (&$out): void {
+                $place = $row->kind === StockLocation::KIND_MAIN_HUB
+                    ? (preg_match('/\bA$/', trim((string) $row->name)) ? 'main_hub_a' : (preg_match('/\bB$/', trim((string) $row->name)) ? 'main_hub_b' : null))
+                    : 'store_floor';
+                if ($place === null) {
+                    return;
+                }
+                $out[(int) $row->item_id][$place] = ($out[(int) $row->item_id][$place] ?? 0) + (int) $row->quantity * $this->ladder->piecesPerUnit((int) $row->item_variant_id);
+            });
+
+        return $out;
     }
 
     /**
@@ -835,6 +1037,8 @@ class WorldFeed
             'vehicle' => trim(($shipment->vehicle_name ?? '').' '.($shipment->vehicle_plate ?? '')) ?: null,
             'courier' => $shipment->courier ? trim($shipment->courier->first_name.' '.$shipment->courier->last_name) : null,
             'creator' => $shipment->creator ? trim($shipment->creator->first_name.' '.$shipment->creator->last_name) : null,
+            'preparer' => $shipment->preparer?->first_name,
+            'receiver' => $shipment->receiver?->first_name,
             'items' => (int) ($shipment->items_count ?? 0),
             'cbm' => round((float) ($shipment->items_sum_cbm ?? 0), 2),
             'created_at' => $shipment->created_at?->toIso8601String(),

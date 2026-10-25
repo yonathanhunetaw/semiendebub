@@ -6,7 +6,7 @@ import RoleAvatar from "@/Components/Visual/RoleAvatar";
 import { placeFor } from "./places";
 import { KIND_COLOR, KIND_PLURAL, hhmm, type EventKind, type WorldEvent } from "./events";
 
-const KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order"];
+const KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order", "work"];
 
 /**
  * Everything that happened in the day, as a list: grouped by hour, each line
@@ -14,6 +14,7 @@ const KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order"];
  * the world there. The kind chips filter the whole timeline.
  */
 export default React.memo(function EventLog({
+    storeOpen = null,
     events,
     counts,
     kinds,
@@ -23,6 +24,8 @@ export default React.memo(function EventLog({
     onCursor,
     onClose,
 }: {
+    /** Is the Main Store open at the moment shown (null: nothing recorded to say). */
+    storeOpen?: boolean | null;
     events: WorldEvent[];
     counts: Record<EventKind, number>;
     kinds: EventKind[];
@@ -55,6 +58,7 @@ export default React.memo(function EventLog({
             <Box sx={{ p: 1.5, pb: 1, borderBottom: "1px solid", borderColor: "divider" }}>
                 <Stack direction="row" alignItems="center">
                     <Typography sx={{ flex: 1, fontWeight: 900 }}>What happened</Typography>
+                    {storeOpen !== null && <Chip size="small" color={storeOpen ? "success" : "default"} label={storeOpen ? "Store open" : "Store closed"} sx={{ fontWeight: 800, mr: 0.5 }} />}
                     <IconButton size="small" onClick={onClose} aria-label="Close the list"><CloseRounded fontSize="small" /></IconButton>
                 </Stack>
                 <Stack direction="row" spacing={0.75} sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>

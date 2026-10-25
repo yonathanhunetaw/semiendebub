@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { unitsAt } from '../lib/inspect';
-import { checkAll, sign, tomorrowAtTen } from '../lib/shipments';
+import { addToManifest, checkAll, sign, tomorrowAtTen } from '../lib/shipments';
 import { app, fixture, signIn } from '../lib/support';
 
 /**
@@ -39,9 +39,7 @@ test('shipment Hub A → Remote Hub: agreed by all four, picked, carried and sig
     });
 
     await test.step('admin puts the hub variant on the manifest', async () => {
-        // The picker lists what the hub holds, labelled with packaging and SKU.
-        await admin.getByLabel('SKU').fill(fixture.hubVariant.sku);
-        await admin.getByRole('option', { name: fixture.hubVariant.label }).click();
+        await addToManifest(admin, fixture.hubVariant.sku);
         await admin.getByLabel('Qty').fill(String(quantity));
         await admin.getByRole('button', { name: 'Add', exact: true }).click();
         await expect(admin.getByText('Manifest updated.')).toBeVisible();

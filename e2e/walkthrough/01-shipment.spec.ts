@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { checkAll, sign, tomorrowAtTen } from "../lib/shipments";
+import { addToManifest, checkAll, sign, tomorrowAtTen } from "../lib/shipments";
 import { app, fixture, signIn, closeWindows } from "../lib/support";
 
 // One browser serves the whole run: close this file's windows when each test ends.
@@ -67,8 +67,7 @@ test(`shipment: ${quantity} of the hub's goods from the main hub to the Remote H
             });
 
         await test.step(`2. the admin puts ${quantity} × ${goods.sku} on the manifest`, async () => {
-            await admin.getByLabel("SKU").fill(goods.sku);
-            await admin.getByRole("option", { name: goods.label }).click();
+            await addToManifest(admin, goods.sku);
             await admin.getByLabel("Qty").fill(String(quantity));
             await admin
                 .getByRole("button", { name: "Add", exact: true })

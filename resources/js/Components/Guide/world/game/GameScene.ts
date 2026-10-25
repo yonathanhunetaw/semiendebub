@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { createFreightCar } from "./FreightPacker";
 import { createStacker, type StackBox } from "./ItemStacker";
+import type { Box } from "./collision";
 import { createDeskScreens } from "./DeskScreens";
 import { createOfficeBoard } from "./OfficeBoard";
 import { createStoreBoard, type StoreBoardData } from "./StoreBoard";
@@ -26,6 +27,8 @@ export interface GameSceneOptions extends Omit<PlayerOptions, "onPose"> {
     zoneTones: { pickup: THREE.Color; drop: THREE.Color };
     carTones: { cab: THREE.Color; body: THREE.Color; dark: THREE.Color };
     onZone: (zone: ZoneKey | null) => void;
+    /** The people standing at the places, as boxes on the ground: the worker walks round them. */
+    figures?: Box[];
 }
 
 export interface GameScene {
@@ -68,6 +71,8 @@ export function createGameScene(options: GameSceneOptions): GameScene {
     screens.set(kept.stations, kept.struck);
     const storeBoard = createStoreBoard(scene);
     storeBoard.set(kept.storeBoard);
+    const figures = options.figures ?? [];
+    if (figures.length > 0) worker.setObstacles(figures);
     let carHold: CarView["hold"] | null = null;
     const setCar = (view: CarView | null, fresh: Placed[] = []) => {
         kept.car = view;
@@ -76,7 +81,7 @@ export function createGameScene(options: GameSceneOptions): GameScene {
             carHold = view?.hold ?? null;
             car.setHold(carHold, view?.label ?? "");
             const footprint = car.footprint();
-            worker.setObstacles(footprint ? [footprint] : []);
+            worker.setObstacles(footprint ? [...figures, footprint] : figures);
         }
         car.setBoxes(view?.placed ?? [], fresh);
     };

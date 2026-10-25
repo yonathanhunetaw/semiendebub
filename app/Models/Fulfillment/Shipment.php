@@ -158,6 +158,16 @@ class Shipment extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function preparer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'prepared_by');
+    }
+
+    public function receiver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'received_by');
+    }
+
     /*
     |--------------------------------------------------------------------------
     | Scopes

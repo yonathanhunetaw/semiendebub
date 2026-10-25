@@ -154,6 +154,11 @@ class RefillRequest extends Model
         return $this->belongsTo(User::class, 'raised_by');
     }
 
+    public function accepter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'accepted_by');
+    }
+
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');

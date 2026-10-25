@@ -1,4 +1,4 @@
-import { STORE } from "./places";
+import { STORE } from "./places.ts";
 
 /**
  * The Main Store's physical racking, as it is built. Each run is one wall of

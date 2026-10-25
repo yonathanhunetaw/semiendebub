@@ -6,6 +6,7 @@ namespace App\Services\Procurement;
 
 use App\Exceptions\PurchaseOrderException;
 use App\Models\Auth\User;
+use App\Models\Procurement\ProcurementSetting;
 use App\Models\Procurement\Purchase;
 use App\Models\Procurement\Supplier;
 use App\Models\Procurement\SupplierPayable;
@@ -236,7 +237,16 @@ class PurchaseOrderService
     /** The ETB value at or above which only a global admin approves. */
     public static function adminLimit(): float
     {
-        return (float) config('procurement.admin_approval_etb', 500000);
+        $saved = ProcurementSetting::query()->value('admin_approval_etb');
+
+        return $saved !== null ? (float) $saved : (float) config('procurement.admin_approval_etb', 500000);
+    }
+
+    /** A global admin sets the limit in the app; it replaces the PROCUREMENT_ADMIN_APPROVAL_ETB default. */
+    public static function setAdminLimit(float $limit, User $by): void
+    {
+        $row = ProcurementSetting::query()->first() ?? new ProcurementSetting();
+        $row->fill(['admin_approval_etb' => $limit, 'updated_by' => $by->id])->save();
     }
 
     /** Does this order need a global admin to approve it? */

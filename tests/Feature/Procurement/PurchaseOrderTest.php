@@ -11,6 +11,7 @@ use App\Models\Procurement\Purchase;
 use App\Models\Procurement\Supplier;
 use App\Models\Store\Store;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Services\Procurement\PurchaseOrderService;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -194,6 +195,31 @@ class PurchaseOrderTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertSame(Purchase::STATUS_APPROVED, $purchase->refresh()->status);
+    }
+
+    #[Test]
+    public function only_a_global_admin_changes_the_approval_limit_and_it_replaces_the_default(): void
+    {
+        $admin = $this->user('admin');
+        $adminHost = ['HTTP_HOST' => 'admin.'.config('app.system_domain')];
+
+        $this->assertSame(500000.0, PurchaseOrderService::adminLimit());
+
+        $storeAdmin = $this->user('admin', ['store_id' => Store::factory()->create()->id]);
+        $this->withServerVariables($adminHost)->actingAs($storeAdmin)
+            ->put(route('admin.purchase_orders.limit'), ['limit' => 10])->assertForbidden();
+
+        $this->withServerVariables($adminHost)->actingAs($admin)
+            ->put(route('admin.purchase_orders.limit'), ['limit' => 0])->assertSessionHasErrors('limit');
+
+        $this->withServerVariables($adminHost)->actingAs($admin)
+            ->put(route('admin.purchase_orders.limit'), ['limit' => 250000])->assertSessionHas('success');
+
+        $this->assertSame(250000.0, PurchaseOrderService::adminLimit());
+
+        $this->withServerVariables($adminHost)->actingAs($admin)
+            ->get(route('admin.purchase_orders.index'))
+            ->assertInertia(fn ($page) => $page->where('adminLimit', 250000)->where('canSetLimit', true));
     }
 
     #[Test]

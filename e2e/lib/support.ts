@@ -25,7 +25,13 @@ export interface Fixture {
     /** Stock location ids, for checking the ledger (lib/inspect.ts). */
     locations: Record<'shelf' | 'floor' | 'remoteHub' | 'hub' | 'transit', number>;
     /** Priced in the store, but nothing on its shelf, floor or Remote Hub. */
-    noStockItem: { item_id: number; name: string; variants: number };
+    noStockItem: {
+        item_id: number;
+        name: string;
+        variants: number;
+        /** Its first variant, which only the main hub holds (at least 5); label/sku as the admin's manifest picker lists it. */
+        hubOnly: { variant: number; label: string; sku: string } | null;
+    };
     /** Everyone else, one per user type (see PrepareE2eCommand). */
     people: Record<'seller2' | 'admin' | 'storeAdmin' | 'hubKeeper' | 'finance' | 'procurement' | 'marketing' | 'vendor' | 'dev' | 'shared' | 'manager2' | 'keeper2' | 'procurement2', Person>;
     hub: { id: number; name: string };

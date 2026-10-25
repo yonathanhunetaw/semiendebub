@@ -3,14 +3,15 @@ import { Box, Chip, IconButton, Paper, Stack, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import { SPOT_CAPACITY, describeSpot } from "./storeLayout";
+import type { ShelfBin } from "./shelfSpots";
 
 /**
  * One physical spot of the Main Store's racking ("f6"): where it is, and what
- * the seller's shelf has placed on it. Nothing is placed yet, so for now it
- * says so and what will happen: a spot carries up to four seller-shelf spots,
- * named f6a to f6d once they are placed.
+ * the seller's shelf has on it: up to four bins (f6a to f6d), each with its
+ * stock, refill line and low line. The world lays the bins out in the shelf's
+ * own order (shelfSpots.ts), as which bin is on which physical spot is not recorded.
  */
-export default function SpotCard({ code, onClose }: { code: string; onClose: () => void }) {
+export default function SpotCard({ code, bins = [], onClose }: { code: string; bins?: ShelfBin[]; onClose: () => void }) {
     const theme = useTheme();
     const spot = describeSpot(code);
 
@@ -32,9 +33,27 @@ export default function SpotCard({ code, onClose }: { code: string; onClose: () 
                 </Stack>
             )}
 
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-                Nothing from the seller's shelf has been placed on this spot yet. Once it is, the spot shows as {code}a, {code}b and so on: up to {SPOT_CAPACITY} to a spot.
-            </Typography>
+            {bins.length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+                    Nothing from the seller's shelf is on this spot. A spot carries up to {SPOT_CAPACITY} bins: {code}a, {code}b and so on.
+                </Typography>
+            ) : (
+                <Stack spacing={1} sx={{ mt: 1.5 }}>
+                    {bins.map((bin, i) => (
+                        <Box key={bin.item_id} sx={{ p: 1, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                                <Typography sx={{ fontWeight: 900, flex: 1, minWidth: 0 }} noWrap>{code}{"abcd"[i]} · {bin.name}</Typography>
+                                <Chip size="small" label={bin.status === "ok" ? "OK" : bin.status === "refill" ? "Refill" : bin.status === "critical" ? "Low" : "Empty"}
+                                    color={bin.status === "ok" ? "success" : bin.status === "refill" ? "warning" : bin.status === "critical" ? "error" : "default"} sx={{ fontWeight: 800 }} />
+                            </Stack>
+                            <Typography variant="body2" color="text.secondary">
+                                {bin.display || "None on the shelf"}
+                                {bin.band ? ` · refill at ${bin.band.refill}, low at ${bin.band.critical}, up to ${bin.band.max} ${bin.band.unit}` : " · no refill line set"}
+                            </Typography>
+                        </Box>
+                    ))}
+                </Stack>
+            )}
         </Paper>
     );
 }

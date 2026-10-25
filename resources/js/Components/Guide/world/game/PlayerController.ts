@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { move, pushOut, type Box } from "./collision";
+import { blockedAt, move, pushOut, type Box } from "./collision";
 import { getGame, setGame, type GameView, type PlayerPose } from "./gameStore";
 import { findPath, type Point } from "./pathfinding";
 import { roomAt } from "../places";
@@ -79,8 +79,16 @@ const DISTANCE = { min: 2.5, start: 14, max: 32 };
 const EYE = 1.62;
 const FOV = { third: 40, first: 72, min: 14 };
 const LOOK_LIMIT = 1.35;
-/** Follow camera's tilt limits (radians above the horizon) and how far one pixel of drag turns the view. */
-const ELEVATION = { min: (12 * Math.PI) / 180, max: (82 * Math.PI) / 180 };
+/**
+ * Follow camera's tilt limits (radians above the horizon): from nearly the ground, looking up at the sky and the roof, to almost
+ * straight down. Below the horizon the camera would sink into the floor, so it is pulled in along its line instead (see placeCamera).
+ */
+const ELEVATION = { min: (-70 * Math.PI) / 180, max: (85 * Math.PI) / 180 };
+/** The camera's clearance: above the floor, under a roof, off a wall; and how far down the screen the worker is drawn (share of its height). */
+const CLEAR_FLOOR = 0.35;
+const CLEAR_CEILING = 4.6;
+const CLEAR_WALL = 0.3;
+const SCREEN_LOW = 0.2;
 const LOOK_RATE = 0.0055;
 const LOOK_AHEAD = 1.5;
 /** How quickly things catch up, per second: higher is snappier. */
@@ -229,23 +237,46 @@ export function createPlayer(options: PlayerOptions): Player {
     const onBlur = () => {
         held.clear();
         shiftHeld = false;
+        pointers.clear();
+        pinchFrom = null;
         stick = null;
         stickBase.classList.remove("is-on");
     };
 
-    // Pointers: taps walk, a thumb's drag is the stick, two fingers pinch.
-    const pointers = new Map<number, { x0: number; y0: number; x: number; y: number; t0: number; stick: boolean; look: boolean }>();
+    // Pointers, tracked one by one so both thumbs work at once (as in Roblox): on a touch screen a thumb that lands on the left
+    // half is the stick, one on the right half looks about; a mouse drag looks. Two fingers on the same half pinch to zoom.
+    type Touch = { x0: number; y0: number; x: number; y: number; t0: number; side: "left" | "right"; stick: boolean; look: boolean; pinch: boolean };
+    const pointers = new Map<number, Touch>();
     let pinchFrom: { gap: number; distance: number } | null = null;
+    const pinching = () => [...pointers.values()].filter((p) => p.pinch);
     const gapBetween = () => {
-        const [a, b] = [...pointers.values()];
+        const [a, b] = pinching();
         return Math.hypot(a.x - b.x, a.y - b.y);
     };
+    /** At rest the stick waits in the lower-left corner (faint, touch screens only); a thumb on the left half picks it up wherever it lands. */
+    const restStick = () => {
+        const box = overlay.getBoundingClientRect();
+        stickBase.style.transform = `translate(${Math.min(90, box.width * 0.2)}px, ${box.height - Math.min(130, box.height * 0.25)}px)`;
+        stickKnob.style.transform = "translate(0px, 0px)";
+    };
+    const letGoOfStick = () => {
+        stick = null;
+        stickBase.classList.remove("is-on");
+        restStick();
+    };
+    restStick();
     const onPointerDown = (event: PointerEvent) => {
-        pointers.set(event.pointerId, { x0: event.clientX, y0: event.clientY, x: event.clientX, y: event.clientY, t0: performance.now(), stick: false, look: false });
-        if (pointers.size === 2 && view !== "director") {
+        const box = overlay.getBoundingClientRect();
+        const side = event.pointerType === "touch" && event.clientX - box.left < box.width * 0.5 ? "left" : "right";
+        const p: Touch = { x0: event.clientX, y0: event.clientY, x: event.clientX, y: event.clientY, t0: performance.now(), side, stick: false, look: false, pinch: false };
+        // The pointer keeps sending its moves to the canvas even if the thumb slides over a button.
+        try { dom.setPointerCapture(event.pointerId); } catch { /* an already-ended pointer */ }
+        const mate = [...pointers.values()].find((q) => q.side === side && event.pointerType === "touch");
+        pointers.set(event.pointerId, p);
+        if (mate && view !== "director") {
+            p.pinch = mate.pinch = true;
             pinchFrom = { gap: gapBetween(), distance: view === "first" ? fov : distance };
-            stick = null;
-            stickBase.classList.remove("is-on");
+            if (mate.stick) letGoOfStick();
         }
     };
     const onPointerMove = (event: PointerEvent) => {
@@ -255,18 +286,16 @@ export function createPlayer(options: PlayerOptions): Player {
         const lastY = p.y;
         p.x = event.clientX;
         p.y = event.clientY;
-        if (pinchFrom && pointers.size === 2) {
+        if (p.pinch) {
+            if (!pinchFrom || pinching().length !== 2) return;
             // A pinch zooms: the follow camera's distance, or the first person's lens.
             const ratio = pinchFrom.gap / Math.max(1, gapBetween());
             if (view === "first") fov = THREE.MathUtils.clamp(pinchFrom.distance * ratio, FOV.min, FOV.first);
             else distance = THREE.MathUtils.clamp(pinchFrom.distance * ratio, DISTANCE.min, DISTANCE.max);
             return;
         }
-        if (view === "director" || pointers.size !== 1) return;
-        const box = overlay.getBoundingClientRect();
-        // A mouse drag, or a thumb on the right of the screen, looks about; a thumb on the left is the stick (Follow and first person alike).
-        const looks = event.pointerType !== "touch" || p.x0 - box.left > box.width * 0.5;
-        if (looks) {
+        if (view === "director") return;
+        if (p.side === "right") {
             if (!p.look && Math.hypot(p.x - p.x0, p.y - p.y0) < TAP_SLOP) return;
             p.look = true;
             stopWalkingTo();
@@ -275,6 +304,7 @@ export function createPlayer(options: PlayerOptions): Player {
             else elevation = THREE.MathUtils.clamp(elevation + (p.y - lastY) * LOOK_RATE, ELEVATION.min, ELEVATION.max);
             return;
         }
+        const box = overlay.getBoundingClientRect();
         const dx = p.x - p.x0;
         const dy = p.y - p.y0;
         if (!p.stick && Math.hypot(dx, dy) < DRAG) return;
@@ -289,19 +319,23 @@ export function createPlayer(options: PlayerOptions): Player {
         stickKnob.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
         stick = { x: (dx * k) / STICK_REACH, y: (-dy * k) / STICK_REACH };
     };
-    const onPointerUp = (event: PointerEvent) => {
+    const release = (event: PointerEvent) => {
         const p = pointers.get(event.pointerId);
         pointers.delete(event.pointerId);
-        if (pointers.size < 2) pinchFrom = null;
-        if (!p) return;
-        if (p.stick) {
-            stick = null;
-            stickBase.classList.remove("is-on");
-            return;
+        try { dom.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+        if (!p) return null;
+        if (p.pinch) {
+            pinchFrom = null;
+            pointers.forEach((q) => (q.pinch = false));
         }
-        if (p.look) return;
+        if (p.stick) letGoOfStick();
+        return p;
+    };
+    const onPointerUp = (event: PointerEvent) => {
+        const p = release(event);
+        if (!p || p.stick || p.look || p.pinch) return;
         const moved = Math.hypot(p.x - p.x0, p.y - p.y0);
-        if (moved >= TAP_SLOP || performance.now() - p.t0 > TAP_MS || pointers.size > 0) return;
+        if (moved >= TAP_SLOP || performance.now() - p.t0 > TAP_MS) return;
         // A tap: walk to where it touched the ground.
         const box = dom.getBoundingClientRect();
         ndc.set(((event.clientX - box.left) / box.width) * 2 - 1, -((event.clientY - box.top) / box.height) * 2 + 1);
@@ -309,10 +343,7 @@ export function createPlayer(options: PlayerOptions): Player {
         if (raycaster.ray.intersectPlane(groundPlane, hit)) walkTo(hit.x, hit.z);
     };
     const onPointerCancel = (event: PointerEvent) => {
-        pointers.delete(event.pointerId);
-        pinchFrom = null;
-        stick = null;
-        stickBase.classList.remove("is-on");
+        release(event);
     };
     const onWheel = (event: WheelEvent) => {
         if (view === "director") return;
@@ -343,19 +374,65 @@ export function createPlayer(options: PlayerOptions): Player {
     window.addEventListener("pointercancel", onPointerCancel);
     dom.addEventListener("wheel", onWheel, { passive: false });
 
-    const placeCamera = (k: number) => {
-        wantTarget.set(root.position.x, 1, root.position.z).add(ahead);
-        wantCamera.set(
-            wantTarget.x + distance * Math.sin(camYaw) * Math.cos(elevation),
-            wantTarget.y + distance * Math.sin(elevation),
-            wantTarget.z + distance * Math.cos(camYaw) * Math.cos(elevation),
-        );
-        // Inside a room the camera comes inside too, over the worker, instead of looking at its walls from outside.
+    /** The largest share (0..1) of the way from the worker to the wanted camera spot that is free: above the floor, under the roof, inside the room, clear of walls. */
+    const freeShare = (from: THREE.Vector3, to: THREE.Vector3): number => {
+        let t = 1;
+        const dy = to.y - from.y;
+        if (to.y < CLEAR_FLOOR && dy < 0) t = Math.min(t, (CLEAR_FLOOR - from.y) / dy);
         const room = roomAt(root.position.x, root.position.z);
         if (room) {
-            wantCamera.x = THREE.MathUtils.clamp(wantCamera.x, room[0] + 0.6, room[2] - 0.6);
-            wantCamera.z = THREE.MathUtils.clamp(wantCamera.z, room[1] + 0.6, room[3] - 0.6);
+            const bound = (v0: number, v1: number, lo: number, hi: number) => (v1 > hi ? (hi - v0) / (v1 - v0) : v1 < lo ? (lo - v0) / (v1 - v0) : 1);
+            t = Math.min(t, bound(from.x, to.x, room[0] + 0.6, room[2] - 0.6), bound(from.z, to.z, room[1] + 0.6, room[3] - 0.6));
+            if (to.y > CLEAR_CEILING) t = Math.min(t, (CLEAR_CEILING - from.y) / dy);
         }
+        // Walls, shelving and the like near the ground: step along the line and stop short of the first one.
+        const length = Math.hypot(to.x - from.x, to.z - from.z);
+        if (length > 0.5) {
+            const steps = Math.min(40, Math.ceil(length / 0.6));
+            for (let i = 1; i <= steps; i++) {
+                const u = i / steps;
+                if (u > t) break;
+                const y = from.y + dy * u;
+                if (y < 2.6 && blockedAt(from.x + (to.x - from.x) * u, from.z + (to.z - from.z) * u, CLEAR_WALL, blockers)) {
+                    t = Math.min(t, Math.max(0, (i - 1) / steps));
+                    break;
+                }
+            }
+        }
+        return Math.max(0.02, t);
+    };
+
+    let framedW = 0;
+    let framedH = 0;
+    /** Draw the worker low on the screen (about 70% down) by shifting the picture, not the worker: the view ahead gets the room. */
+    const frame = (low: boolean) => {
+        const w = dom.clientWidth;
+        const h = dom.clientHeight;
+        if (!w || !h) return;
+        if (!low) {
+            if (camera.view?.enabled) {
+                camera.clearViewOffset();
+                framedW = framedH = 0;
+            }
+            return;
+        }
+        if (w === framedW && h === framedH && camera.view?.enabled) return;
+        framedW = w;
+        framedH = h;
+        camera.setViewOffset(w, h, 0, -h * SCREEN_LOW, w, h);
+    };
+
+    const placeCamera = (k: number) => {
+        frame(true);
+        wantTarget.set(root.position.x, 1, root.position.z).add(ahead);
+        wantCamera.set(
+            distance * Math.sin(camYaw) * Math.cos(elevation),
+            distance * Math.sin(elevation),
+            distance * Math.cos(camYaw) * Math.cos(elevation),
+        );
+        // Pulled in along its line (the look direction stays) when the floor, the roof or a wall is in the way.
+        const share = freeShare(wantTarget, wantCamera.add(wantTarget));
+        wantCamera.sub(wantTarget).multiplyScalar(share).add(wantTarget);
         controls.target.lerp(wantTarget, k);
         camera.position.lerp(wantCamera, k);
         camera.lookAt(controls.target);
@@ -378,6 +455,7 @@ export function createPlayer(options: PlayerOptions): Player {
         // The eyes see from inside: a close lens, and the figure is not in the way.
         const first = next === "first";
         root.visible = !first;
+        if (next !== "follow") frame(false);
         camera.near = first ? 0.08 : 0.5;
         camera.fov = first ? fov : FOV.third;
         camera.updateProjectionMatrix();
@@ -508,6 +586,7 @@ export function createPlayer(options: PlayerOptions): Player {
         // Leave the camera as the world expects it: the ordinary lens, and the worker (who is going) not hidden.
         camera.near = 0.5;
         camera.fov = FOV.third;
+        camera.clearViewOffset();
         camera.updateProjectionMatrix();
         root.visible = true;
         window.removeEventListener("keydown", onKeyDown);
@@ -521,6 +600,8 @@ export function createPlayer(options: PlayerOptions): Player {
         stickBase.remove();
         controls.enabled = true;
         scene.remove(root, goal);
+        // Labels riding on the figure (its name tag) are page elements: take them off the page too.
+        root.traverse((o) => (o as unknown as { element?: HTMLElement }).element?.remove());
         [root, goal].forEach((group) => group.traverse((o) => {
             const m = o as THREE.Mesh;
             if (!m.isMesh) return;

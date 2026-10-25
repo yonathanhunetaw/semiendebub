@@ -185,20 +185,6 @@ class MenuController extends Controller
     //                      ->with('success', 'Cart created successfully!');
     // }
     /**
-     * Display the specified resource.
-     */
-    public function show(Cart $cart)
-    {
-        // Ensure the authenticated user owns the cart
-        $this->authorize('view', $cart);
-
-        // Eager load the items related to this cart
-        $cart->load(['items', 'customer', 'seller']);
-
-        return Inertia::render('Seller/Carts/Show', compact('cart'));
-    }
-
-    /**
      * Show the form for editing the specified resource.
      */
     public function edit(Cart $cart)

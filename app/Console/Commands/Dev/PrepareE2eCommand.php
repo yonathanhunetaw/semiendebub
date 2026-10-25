@@ -121,6 +121,19 @@ final class PrepareE2eCommand extends Command
             ->variantOptions(atLocationId: $hub->id)
             ->firstWhere('id', (int) $hubVariant->item_variant_id);
 
+        // The out-of-stock item's first variant (the one its add-to-cart sheet starts on), held
+        // only by the main hub: an order for it waits there until a shipment brings it in.
+        $hubOnly = null;
+        if ($hub !== null) {
+            $variantId = (int) ItemVariant::query()->where('item_id', $noStockItem['item_id'])->orderBy('id')->value('id');
+            $held = (int) ItemStock::query()->where('item_variant_id', $variantId)->where('stock_location_id', $hub->id)->sum('quantity');
+            if ($held < 5) {
+                app(\App\Services\StockService::class)->receive($variantId, $hub, 5 - $held, ['reason' => 'E2E fixture']);
+            }
+            $option = app(\App\Services\StockKeeperService::class)->variantOptions(atLocationId: $hub->id)->firstWhere('id', $variantId);
+            $hubOnly = ['variant' => $variantId, 'label' => $option['label'] ?? null, 'sku' => $option['sku'] ?? null];
+        }
+
         // Stock waiting in the Remote Hub, for the refill transfer to the store floor:
         // twenty of the second stocked item's first variant.
         $remoteVariant = null;
@@ -242,7 +255,7 @@ final class PrepareE2eCommand extends Command
             'items' => array_map(fn (array $item): array => $item + [
                 'variant' => (int) ItemVariant::query()->where('item_id', $item['item_id'])->orderBy('id')->value('id'),
             ], $items),
-            'noStockItem' => $noStockItem,
+            'noStockItem' => $noStockItem + ['hubOnly' => $hubOnly],
             // Where stock sits, for the specs that check the ledger (e2e:inspect).
             'locations' => [
                 'shelf' => $shelf?->id,

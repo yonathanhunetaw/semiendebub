@@ -15,15 +15,6 @@ use Tests\TestCase;
  */
 class InertiaPagesExistTest extends TestCase
 {
-    /**
-     * Renders in code no route reaches, so no one can open them. Delete them, or route
-     * them and add the page, and take them off this list.
-     */
-    private const UNROUTED = [
-        'Customer/Index',      // Admin\Client\Customer\CustomerController: routes/web/admin/customer/customer.php is never loaded
-        'Seller/Carts/Show',   // Seller\MenuController::show has no route
-    ];
-
     #[Test]
     public function every_rendered_page_has_a_file(): void
     {
@@ -42,7 +33,7 @@ class InertiaPagesExistTest extends TestCase
                 foreach ($matches[1] as $page) {
                     $base = resource_path("js/Pages/{$page}");
 
-                    if (! is_file("{$base}.tsx") && ! is_file("{$base}.jsx") && ! in_array($page, self::UNROUTED, true)) {
+                    if (! is_file("{$base}.tsx") && ! is_file("{$base}.jsx")) {
                         $missing[] = "{$page} (".str_replace(base_path().'/', '', $file->getPathname()).')';
                     }
                 }
