@@ -11,10 +11,15 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
+import ImpersonationBanner from './Components/Shared/ImpersonationBanner';
+import { installStockKeepingRoutes } from './utils/stockKeepingRoutes';
 import { ThemeContext } from './theme/ThemeContext';
 import { getDesignTokens, resolveRole, RoleContext, RoleFavicon, THEME_STORAGE_KEY, DEFAULT_THEME_SETTING } from './theme';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+// Inside the seller app, stock keeper pages link to the seller app's /stock copy of themselves.
+installStockKeepingRoutes();
 
 
 
@@ -112,6 +117,7 @@ createInertiaApp({
                             <CssBaseline />
                             <RoleFavicon />
                             <App {...props} />
+                            <ImpersonationBanner initial={props.initialPage.props as unknown as React.ComponentProps<typeof ImpersonationBanner>['initial']} />
                         </ThemeProvider>
                     </RoleContext.Provider>
                 </ThemeContext.Provider>

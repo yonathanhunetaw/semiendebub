@@ -29,6 +29,8 @@ interface User {
     email: string;
     phone_number: string | null;
     role: string;
+    /** Every role they hold (main first is not guaranteed). */
+    role_keys?: string[];
     created_at: string;
     creator?: {
         id: number;
@@ -118,6 +120,12 @@ export default function UsersIndex({ users }: Props) {
                                         size="small"
                                         color={getRoleColor(user.role)}
                                     />
+                                    {/* The roles they also hold, so who can do what is visible at a glance. */}
+                                    {(user.role_keys ?? [])
+                                        .filter((key) => key.replace(/_/g, ' ') !== user.role.toLowerCase())
+                                        .map((key) => (
+                                            <Chip key={key} label={key.replace(/_/g, ' ')} size="small" variant="outlined" sx={{ ml: 0.5 }} />
+                                        ))}
                                 </TableCell>
                                 <TableCell>
                                     <Typography variant="body2" color="text.secondary">

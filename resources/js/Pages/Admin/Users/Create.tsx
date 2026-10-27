@@ -1,5 +1,6 @@
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, useForm, Link } from "@inertiajs/react";
+import UserAccessFields from "@/Components/Admin/UserAccessFields";
 import AdminAreaTicks, { type AdminAreaOption } from "@/Components/Admin/AdminAreaTicks";
 import Grid from '@mui/material/Grid';
 import {
@@ -11,6 +12,10 @@ import SaveIcon from '@mui/icons-material/Save';
 interface Props {
     /** Every role that exists (spatie roles table). */
     roles?: string[];
+    /** The roles that can be ticked beside the main one. */
+    also_role_options?: string[];
+    /** The dev layer: may tick Dev on a global admin and hide a user. */
+    can_dev?: boolean;
     stores?: Array<{ id: number; name: string }>;
     /** A global admin may leave a user without a store; a store admin may not. */
     can_assign_any_store?: boolean;
@@ -20,13 +25,15 @@ interface Props {
     admin_areas?: AdminAreaOption[];
 }
 
-export default function CreateUser({ roles = [], stores = [], can_assign_any_store = true, default_store_id = null, admin_areas = [] }: Props) {
+export default function CreateUser({ roles = [], also_role_options = [], can_dev = false, stores = [], can_assign_any_store = true, default_store_id = null, admin_areas = [] }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         first_name: '',
         last_name: '',
         email: '',
         phone_number: '',
         role: 'user',
+        is_hidden: false,
+        also_roles: [] as string[],
         store_id: (default_store_id ?? '') as number | '',
         password: '',
         password_confirmation: '',
@@ -80,33 +87,13 @@ export default function CreateUser({ roles = [], stores = [], can_assign_any_sto
                                 helperText={errors.email}
                             />
                         </Grid>
-                        <Grid size={{ xs: 12 }}>
-                            <TextField
-                                fullWidth select label="Role"
-                                value={data.role}
-                                onChange={e => setData('role', e.target.value)}
-                                error={!!errors.role}
-                                helperText={errors.role}
-                            >
-                                {roles.map(role => (
-                                    <MenuItem key={role} value={role}>{role.replace('_', ' ')}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
-                        <Grid size={{ xs: 12 }}>
-                            <TextField
-                                fullWidth select label="Store"
-                                value={data.store_id}
-                                onChange={e => setData('store_id', e.target.value === '' ? '' : Number(e.target.value))}
-                                error={!!errors.store_id}
-                                helperText={errors.store_id ?? 'Sellers and stock keepers work at one store; leave empty for roles that cover all of them.'}
-                            >
-                                {can_assign_any_store && <MenuItem value="">No store</MenuItem>}
-                                {stores.map(store => (
-                                    <MenuItem key={store.id} value={store.id}>{store.name}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
+                        <UserAccessFields
+                            roles={roles} alsoOptions={also_role_options} stores={stores} canAssignAnyStore={can_assign_any_store}
+                            role={data.role} storeId={data.store_id} alsoRoles={data.also_roles}
+                            onRole={(role) => setData('role', role)} onStore={(id) => setData('store_id', id)} onAlsoRoles={(next) => setData('also_roles', next)}
+                            canDev={can_dev} isHidden={data.is_hidden} onHidden={(hidden) => setData('is_hidden', hidden)}
+                            errors={errors}
+                        />
                         {data.role === 'delivery' && (
                             <Grid size={{ xs: 12 }}>
                                 <FormControlLabel

@@ -99,6 +99,9 @@ class LocationController extends Controller
             'in_delivery' => $scopeIds !== null ? 0 : (int) ItemStock::query()
                 ->whereIn('stock_location_id', StockLocation::query()->where('kind', StockLocation::KIND_TRANSIT)->select('id'))
                 ->sum('quantity'),
+            // Only a global admin changes who manages or keeps stock at a place;
+            // a store admin sees who they are.
+            'can_edit' => $this->activeStore->isGlobal(),
             'candidates' => $this->people(self::MANAGER_ROLES),
             'staff_candidates' => $this->people(['stock_keeper']),
             'abilities' => array_map(
@@ -110,8 +113,9 @@ class LocationController extends Controller
 
     public function assignManagers(AssignLocationManagersRequest $request, StockLocation $stockLocation): RedirectResponse
     {
+        abort_unless($this->activeStore->isGlobal(), 403, 'Only a global admin changes a place\'s managers.');
         abort_if(in_array($stockLocation->kind, StockLocation::OFF_NETWORK_KINDS, true), 404);
-        $this->authorizeLocation($stockLocation, $request->managerIds());
+        $this->authorizeLocation($stockLocation);
 
         try {
             $stockLocation->syncManagers($request->managerIds(), $request->user()?->id, $request->abilities());
@@ -124,8 +128,9 @@ class LocationController extends Controller
 
     public function assignStaff(AssignLocationStaffRequest $request, StockLocation $stockLocation): RedirectResponse
     {
+        abort_unless($this->activeStore->isGlobal(), 403, 'Only a global admin changes a place\'s stock keepers.');
         abort_if(in_array($stockLocation->kind, StockLocation::OFF_NETWORK_KINDS, true), 404);
-        $this->authorizeLocation($stockLocation, $request->staffIds());
+        $this->authorizeLocation($stockLocation);
 
         $stockLocation->syncStaff($request->staffIds(), $request->user()?->id);
 
@@ -138,7 +143,7 @@ class LocationController extends Controller
      */
     private function people(array $roles): array
     {
-        return $this->activeStore->apply(User::query())
+        return $this->activeStore->apply(User::query()->visibleTo(auth()->user()))
             ->whereIn('role', $roles)
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name', 'email', 'role'])
@@ -150,20 +155,11 @@ class LocationController extends Controller
     }
 
     /**
-     * A store admin manages their own stores' locations, with their own
-     * stores' people; a main hub (no store) is a global admin's.
-     *
-     * @param  array<int, int>  $userIds
+     * Only a global admin gets this far (the assign methods refuse a store
+     * admin): the location must exist in the active scope.
      */
-    private function authorizeLocation(StockLocation $location, array $userIds): void
+    private function authorizeLocation(StockLocation $location): void
     {
         abort_unless($this->activeStore->allows($location->store_id !== null ? (int) $location->store_id : null), 404);
-
-        if (! $this->activeStore->isGlobal()) {
-            $outsiders = User::query()->whereKey($userIds)->get(['id', 'store_id'])
-                ->reject(fn (User $user): bool => $this->activeStore->allows($user->store_id !== null ? (int) $user->store_id : null));
-
-            abort_if($outsiders->isNotEmpty(), 403, 'You can only assign your own stores\' people.');
-        }
     }
 }

@@ -105,7 +105,7 @@ class StoreController extends Controller
             : [];
 
         // Available sellers for adding new ones
-        $availableSellers = User::where('role', 'seller')
+        $availableSellers = User::query()->visibleTo(auth()->user())->where('role', 'seller')
             ->where('store_id', $store->id)
             ->select('id', 'first_name', 'last_name')
             ->get()

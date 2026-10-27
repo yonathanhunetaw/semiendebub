@@ -261,7 +261,7 @@ class CartController extends Controller
         $storeId = auth()->user()->store_id;
 
         $customers = CustomerController::forSeller(request())->get();
-        $sellers = User::where('role', 'seller')->where('store_id', $storeId)->get();
+        $sellers = User::query()->visibleTo(auth()->user())->where('role', 'seller')->where('store_id', $storeId)->get();
 
         $cart->load(['customer', 'seller']);
 

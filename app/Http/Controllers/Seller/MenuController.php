@@ -193,7 +193,7 @@ class MenuController extends Controller
         $this->authorize('update', $cart);
 
         $customers = Customer::all();
-        $sellers = User::where('role', 'seller')->get();
+        $sellers = User::query()->visibleTo(auth()->user())->where('role', 'seller')->get();
         $cart->load(['customer', 'seller']);
 
         return Inertia::render('Seller/Carts/Edit', compact('cart', 'customers', 'sellers'));
@@ -293,7 +293,7 @@ class MenuController extends Controller
     public function create()
     {
         $customers = Customer::all(); // Get all customers
-        $sellers = User::where('role', 'seller')->get(); // assuming sellers have 'seller' role
+        $sellers = User::query()->visibleTo(auth()->user())->where('role', 'seller')->get(); // assuming sellers have 'seller' role
 
         return Inertia::render('Seller/Carts/Create', compact('customers', 'sellers'));
 

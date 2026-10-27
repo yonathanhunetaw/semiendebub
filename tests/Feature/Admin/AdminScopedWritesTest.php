@@ -99,22 +99,32 @@ class AdminScopedWritesTest extends TestCase
     // ---- Location managers ---------------------------------------------------
 
     #[Test]
-    public function a_store_admin_assigns_only_their_own_stores_people(): void
+    public function a_store_admin_sees_a_places_people_but_cannot_change_them(): void
     {
         $this->withServerVariables(['HTTP_HOST' => 'admin.'.config('app.system_domain')]);
         $this->actingAs($this->user('admin', $this->own));
         $shelf = StockLocation::query()->where('store_id', $this->own->id)->where('kind', StockLocation::KIND_SHELF)->sole();
-        $outsider = $this->user('seller', $this->other);
         $insider = $this->user('seller', $this->own);
 
-        $this->post(route('admin.inventory.stock-locations.managers', $shelf), ['manager_ids' => [$outsider->id]])->assertForbidden();
-        $this->assertFalse($shelf->fresh()->isManagedBy($outsider));
+        $this->get(route('admin.inventory.stock-locations.index'))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('can_edit', false));
 
-        $this->post(route('admin.inventory.stock-locations.managers', $shelf), ['manager_ids' => [$insider->id]])->assertSessionHas('success');
-        $this->assertTrue($shelf->fresh()->isManagedBy($insider));
+        $this->post(route('admin.inventory.stock-locations.managers', $shelf), ['manager_ids' => [$insider->id]])->assertForbidden();
+        $this->post(route('admin.inventory.stock-locations.staff', $shelf), ['staff_ids' => [$insider->id]])->assertForbidden();
+        $this->assertFalse($shelf->fresh()->isManagedBy($insider));
+    }
 
-        $otherShelf = StockLocation::query()->where('store_id', $this->other->id)->where('kind', StockLocation::KIND_SHELF)->sole();
-        $this->post(route('admin.inventory.stock-locations.managers', $otherShelf), ['manager_ids' => [$insider->id]])->assertNotFound();
+    #[Test]
+    public function a_global_admin_changes_a_places_managers_in_any_store(): void
+    {
+        $this->withServerVariables(['HTTP_HOST' => 'admin.'.config('app.system_domain')]);
+        $this->actingAs($this->user('admin', null));
+        $shelf = StockLocation::query()->where('store_id', $this->other->id)->where('kind', StockLocation::KIND_SHELF)->sole();
+        $keeper = $this->user('seller', $this->other);
+
+        $this->get(route('admin.inventory.stock-locations.index'))->assertInertia(fn ($page) => $page->where('can_edit', true));
+        $this->post(route('admin.inventory.stock-locations.managers', $shelf), ['manager_ids' => [$keeper->id]])->assertSessionHas('success');
+        $this->assertTrue($shelf->fresh()->isManagedBy($keeper));
     }
 
     // ---- Carts from the seller app -------------------------------------------
@@ -156,6 +166,7 @@ class AdminScopedWritesTest extends TestCase
     public function a_store_admins_cart_from_the_seller_app_is_their_stores(): void
     {
         $admin = $this->user('admin', $this->own);
+        $admin->assignRole('seller'); // a store admin works in the seller app when ticked for it
         $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
         $this->actingAs($admin);
 

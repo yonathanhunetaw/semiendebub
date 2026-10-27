@@ -195,7 +195,8 @@ class ItemController extends Controller
         $storeId = $store?->id;
 
         // Another seller's price tier is theirs to see; only an admin may look through it.
-        $sellerId = Auth::user()->isRole('admin') && request()->filled('seller_id')
+        // hasRole, not isRole: an admin also ticked as a seller is a seller in this app by roleKey(), but still an admin.
+        $sellerId = Auth::user()->hasRole('admin') && request()->filled('seller_id')
             ? (int) request('seller_id')
             : Auth::id();
 

@@ -31,7 +31,7 @@ function roleLabel(roleKey: string, isGlobalAdmin: boolean, display: string): st
 
 /**
  * The admin top bar (64px, full width above the sidebar): menu toggle, brand,
- * quick search, Role Switcher, today's date, notifications, and the account.
+ * quick search, Apps menu, today's date, notifications, and the account.
  */
 export default function AdminTopBar({ onMenuClick, current }: { onMenuClick: () => void; current: RoleKey }) {
     const { props } = usePage<AdminScopeProps & Record<string, unknown>>();
@@ -170,10 +170,6 @@ export default function AdminTopBar({ onMenuClick, current }: { onMenuClick: () 
                                 Scope: {activeStore.name}
                             </Typography>
                         )}
-                    </Box>
-                    {/* The pill is hidden on a phone, so the switcher lives here too. */}
-                    <Box sx={{ display: { xs: "block", sm: "none" }, px: 2, pb: 1 }}>
-                        <RoleSwitcher roleKey={roleKey} current={current} />
                     </Box>
                     <Divider />
                     <MenuItem component={Link} href="/profile" onClick={() => setAnchor(null)}>

@@ -55,8 +55,9 @@ class ReconcileUserRolesCommand extends Command
                 $column = $this->normalise($user->getAttributes()['role'] ?? '');
                 $assigned = $user->roles->pluck('name')->map(fn ($n) => $this->normalise($n));
 
-                // Already in step: one assignment, matching the column.
-                if ($assigned->count() === 1 && $assigned->first() === $column) {
+                // Already in step: the column names one of the assigned roles
+                // (a user may hold extra "also works as" roles beside it).
+                if ($assigned->contains($column)) {
                     continue;
                 }
 
@@ -82,7 +83,9 @@ class ReconcileUserRolesCommand extends Command
                 // right but never assigned would otherwise stay unassigned.
                 $user->forceFill(['role' => $target])->save();
 
-                if ($assigned->count() !== 1 || $assigned->first() !== $target) {
+                // Only assign when nothing carries the role yet; never strip
+                // the extra roles a user was ticked for.
+                if (! $assigned->contains($target)) {
                     $user->syncRoles([$target]);
                 }
             }

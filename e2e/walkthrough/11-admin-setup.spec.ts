@@ -45,7 +45,7 @@ test('admin setup: a new store, a new seller who signs in, and their own price',
         await admin.getByLabel('First Name').fill(hire.first);
         await admin.getByLabel('Last Name').fill(hire.last);
         await admin.getByLabel('Email').fill(hire.email);
-        await admin.getByLabel('Role', { exact: true }).click();
+        await admin.getByLabel('Main role', { exact: true }).click();
         await admin.getByRole('option', { name: 'seller', exact: true }).click();
         await admin.getByLabel('Store', { exact: true }).click();
         await admin.getByRole('option', { name: fixture.store.name, exact: true }).click();

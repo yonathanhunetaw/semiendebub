@@ -49,6 +49,12 @@ class SessionController extends Controller
             ->get()
             ->keyBy('id');
 
+        // Hidden users (the demo accounts, anyone holding dev) are not listed
+        // for anyone outside the dev layer.
+        $viewer = auth()->user();
+        $hidden = $users->filter(fn (User $user): bool => $user->isHiddenFrom($viewer))->keys();
+        $sessions = $sessions->reject(fn ($session): bool => $hidden->contains($session->user_id))->values();
+
         $sessionLifetime = (int) config('session.lifetime', 120);
         $rememberLifetime = 8640; // 6 days in minutes for remember-me sessions
 

@@ -331,6 +331,7 @@ class CanvasController extends Controller
         $storeId = $canvas->store_id ?? $this->activeStore->id();
 
         return User::query()
+            ->visibleTo(Auth::user())
             ->whereKeyNot(Auth::id())
             ->when($storeId !== null, fn (Builder $q) => $q->where(fn (Builder $inner) => $inner
                 ->where('store_id', $storeId)

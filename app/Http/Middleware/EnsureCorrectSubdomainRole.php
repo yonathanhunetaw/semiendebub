@@ -10,9 +10,10 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * The gate in front of every role subdomain's authenticated routes.
  *
- * A global admin may enter any subdomain and a store admin only the
- * store-scoped ones (`subdomains.store_admin_roles`); anyone else needs one of the roles the
- * route group names (`role.subdomain:seller,store_manager`). What happens to a
+ * A global admin (an admin with no store) may enter any subdomain. Everyone
+ * else, a store admin included, needs one of the roles the route group names,
+ * so a store admin enters the seller or stock keeper app only when they are
+ * ticked for it (the "also works as" roles on the user) (`role.subdomain:seller,store_manager`). What happens to a
  * user in the wrong place depends on how sessions are shared: with one session
  * per host (local multi-account testing) they get a 403, so the tab is not
  * yanked to another account's app; with a shared session they are sent to
@@ -35,9 +36,8 @@ class EnsureCorrectSubdomainRole
             return $next($request);
         }
 
-        // A global admin may enter any subdomain; a store admin only the apps
-        // that scope to their store (`subdomains.store_admin_roles`).
-        if ($user->hasRole('admin') && $this->adminMayEnter($user, $subdomainRoles)) {
+        // A global admin may enter any subdomain.
+        if ($user->hasRole('admin') && $user->store_id === null) {
             return $next($request);
         }
 
@@ -66,18 +66,6 @@ class EnsureCorrectSubdomainRole
         }
 
         abort(403, 'Unauthorized subdomain access.');
-    }
-
-    /**
-     * @param  array<int, string>  $subdomainRoles
-     */
-    private function adminMayEnter($user, array $subdomainRoles): bool
-    {
-        if ($user->store_id === null) {
-            return true;
-        }
-
-        return array_intersect($subdomainRoles, config('subdomains.store_admin_roles', [])) !== [];
     }
 
     private function separatedSessionHosts(): bool

@@ -3,6 +3,7 @@ import { Head, useForm, Link } from "@inertiajs/react";
 import { Box, Button, Paper, Stack, TextField, Typography, MenuItem, Alert, Checkbox, FormControlLabel } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UpdateIcon from '@mui/icons-material/Update';
+import UserAccessFields from "@/Components/Admin/UserAccessFields";
 import AdminAreaTicks, { type AdminAreaOption } from "@/Components/Admin/AdminAreaTicks";
 import Grid from '@mui/material/Grid';
 
@@ -14,6 +15,9 @@ interface User {
     phone_number: string | null;
     /** The role key (stock_keeper), not its display form. */
     role: string;
+    /** The other roles they hold beside the main one. */
+    also_roles?: string[];
+    is_hidden?: boolean;
     store_id: number | null;
     /** A courier who may carry freight (hub → store runs). */
     is_driver?: boolean;
@@ -24,6 +28,9 @@ interface User {
 interface Props {
     user: User;
     roles?: string[];
+    also_role_options?: string[];
+    /** The dev layer: may tick Dev on a global admin and hide a user. */
+    can_dev?: boolean;
     stores?: Array<{ id: number; name: string }>;
     /** A global admin may leave a user without a store; a store admin may not. */
     can_assign_any_store?: boolean;
@@ -33,13 +40,15 @@ interface Props {
     admin_areas?: AdminAreaOption[];
 }
 
-export default function EditUser({ user, roles = [], stores = [], can_assign_any_store = true, admin_areas = [] }: Props) {
+export default function EditUser({ user, roles = [], also_role_options = [], can_dev = false, stores = [], can_assign_any_store = true, admin_areas = [] }: Props) {
     const { data, setData, put, processing, errors } = useForm({
         first_name: user.first_name,
         last_name: user.last_name || '',
         email: user.email,
         phone_number: user.phone_number || '',
         role: user.role,
+        is_hidden: Boolean(user.is_hidden),
+        also_roles: user.also_roles ?? [],
         store_id: (user.store_id ?? '') as number | '',
         password: '',
         password_confirmation: '',
@@ -87,29 +96,13 @@ export default function EditUser({ user, roles = [], stores = [], can_assign_any
                                 error={!!errors.email} helperText={errors.email}
                             />
                         </Grid>
-                        <Grid size={{ xs: 12, sm: 6 }}>
-                            <TextField
-                                fullWidth select label="Role" value={data.role}
-                                onChange={e => setData('role', e.target.value)}
-                                error={!!errors.role} helperText={errors.role}
-                            >
-                                {roles.map(r => (
-                                    <MenuItem key={r} value={r}>{r.replace('_', ' ')}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
-                        <Grid size={{ xs: 12, sm: 6 }}>
-                            <TextField
-                                fullWidth select label="Store" value={data.store_id}
-                                onChange={e => setData('store_id', e.target.value === '' ? '' : Number(e.target.value))}
-                                error={!!errors.store_id} helperText={errors.store_id}
-                            >
-                                {can_assign_any_store && <MenuItem value="">No store</MenuItem>}
-                                {stores.map(store => (
-                                    <MenuItem key={store.id} value={store.id}>{store.name}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
+                        <UserAccessFields
+                            half roles={roles} alsoOptions={also_role_options} stores={stores} canAssignAnyStore={can_assign_any_store}
+                            role={data.role} storeId={data.store_id} alsoRoles={data.also_roles}
+                            onRole={(role) => setData('role', role)} onStore={(id) => setData('store_id', id)} onAlsoRoles={(next) => setData('also_roles', next)}
+                            canDev={can_dev} isHidden={data.is_hidden} onHidden={(hidden) => setData('is_hidden', hidden)}
+                            errors={errors}
+                        />
                         {data.role === 'delivery' && (
                             <Grid size={{ xs: 12 }}>
                                 <FormControlLabel

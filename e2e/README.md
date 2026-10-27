@@ -29,12 +29,22 @@ After a run: `npx playwright show-report` for the HTML report, or
 e2e/
   smoke.spec.ts                 the login page loads
   access/roles.spec.ts          every user type: its own app, refused (sent home) from the others
+  access/guide-link.spec.ts     no "How this works" button on any page; the guide is one step from each app's Settings
   <module>/pages.spec.ts        every page of that app opens clean: no error status, no JS error,
                                 no console error, no 500 behind it; also the first record a list links to
   admin/
+    apps/                       the Apps menu: apps A to Z, then Me first and people A to Z; opening as a seller with no
+                                login, the round nine-dots button saying who you are, switching again from inside, Back to
+                                admin; a store admin only themself in the apps they are ticked for; Settings on a phone
+    store/                      the Store hub (Stock, Movement, Approvals cards, no tab bars), every tile and its back link,
+                                an item as stacked cards (where it is, how packed, refill levels, variants), no fake controls
     item-setup/                 a new item made on its one page; pictures (gallery + a variant slot) through the real
                                 file chooser, served from the local r2 stand-in (never prod's bucket), then removed
-    settings/                   adding and renaming a store, taking on a seller who signs straight in
+                                (and the file with it)
+    settings/                   "Also works as" ticks on a user, and the global-admin checkbox; the dev layer (hidden demo
+                                users, Dev on a global admin) in the Users list, Sessions and the Apps menu; Locations read-only
+                                for a store admin
+                                adding and renaming a store, taking on a seller who signs straight in
                                 Import / Export: a whole catalogue from files (categories → items → barcodes → store → prices →
                                 a stock count approved in Admin → Counts); a wrong line is named; the zip; a store admin is refused
     pricing/                    business / individual / seller / customer prices set in Admin → Stores,
@@ -49,6 +59,8 @@ e2e/
     customers/                  credit from the admin, selling on it, repayments
     balance/                    a seller handing cash over to a settlement account
     refills/                    a shelf refill the floor covers; one it cannot, sent on via the Remote Hub list
+  seller/stock-keeping/         a seller ticked as a stock keeper: Stock keeping under /stock in the seller app, every link
+                                staying there, a stocktake counted there and approved by a second keeper
   stock/                        shipments (hub → Remote Hub) and transfers / shelving
                                 the Guide world: Director faces a building's door, the hub item finder marks an item, Play's controls ride in
                                 the top bar when wide, and the Racks view puts an item on a slot (a taken slot swaps)
@@ -59,7 +71,10 @@ e2e/
   calendar/                     /calendar opens clean on all five apps; a monthly bill marked paid today
                                 is due next month, ticked paid there, and seen by a colleague
   work/                         keys, opening with the printed QR, clocking in with the moving code, breaks,
-                                closing and handing the key on; shift swaps and leave; a staff ride home
+                                closing and handing the key on; shift swaps and leave; a staff ride home; the
+                                day's opener/closer/driver; at the Remote Hub a late opening, opening without
+                                the key, a close that waits for a clock-out, a fixed clock-in and holiday overtime
+                                approved (e2e:prepare keeps it open 00:00–23:59, fresh for today)
   finance/                      an expense with a receipt photo, opened and confirmed by a second person
   procurement/                  the pipeline (idea → quote → landed cost → receiving), purchase orders, payments,
                                 tariffs from a CSV file (a wrong line saves nothing)

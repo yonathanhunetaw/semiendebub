@@ -53,7 +53,7 @@ test('global admin takes on a seller, who signs straight in to the seller app', 
     await admin.getByLabel('First Name').fill('Newly');
     await admin.getByLabel('Last Name').fill(`Hired ${stamp}`);
     await admin.getByLabel('Email').fill(email);
-    await admin.getByLabel('Role', { exact: true }).click();
+    await admin.getByLabel('Main role', { exact: true }).click();
     await admin.getByRole('option', { name: 'seller', exact: true }).click();
     await admin.getByLabel('Store', { exact: true }).click();
     await admin.getByRole('option', { name: fixture.store.name, exact: true }).click();

@@ -314,7 +314,7 @@ class VariantController extends Controller
         $variant->load('item.colors', 'item.sizes', 'item.packagingTypes', 'storeVariants.store');
 
         $customers = Customer::all();
-        $sellers = User::where('role', 'seller')->get();
+        $sellers = User::query()->visibleTo(auth()->user())->where('role', 'seller')->get();
         $stores = Store::all();
 
         return view('admin.variants.edit', compact('variant', 'customers', 'sellers', 'stores', 'store'));

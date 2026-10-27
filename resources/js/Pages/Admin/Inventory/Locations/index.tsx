@@ -72,6 +72,8 @@ interface Props {
     candidates?: Candidate[];
     staff_candidates?: Candidate[];
     abilities?: Ability[];
+    /** Only a global admin changes managers and stock keepers; a store admin just sees them. */
+    can_edit?: boolean;
     /** Units in couriers' hands right now. */
     in_delivery?: number;
 }
@@ -111,9 +113,10 @@ export default function LocationsIndex({
     candidates = [],
     staff_candidates = [],
     abilities = [],
+    can_edit = false,
     in_delivery = 0,
 }: Props): React.ReactElement {
-    const shared = { candidates, staffCandidates: staff_candidates, abilities };
+    const shared = { candidates, staffCandidates: staff_candidates, abilities, canEdit: can_edit };
 
     return (
         <>
@@ -126,6 +129,7 @@ export default function LocationsIndex({
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Every place stock can sit, who manages it and what each manager may do, and its stock keepers. A store's managers
                     and stock keepers also run its shelf, floor and Remote Hub.
+                    {can_edit ? "" : " You can see who they are; a global admin changes them."}
                 </Typography>
 
                 <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2, bgcolor: "rgb(var(--primary-container) / 0.6)" }}>
@@ -174,12 +178,14 @@ function LocationCard({
     candidates,
     staffCandidates,
     abilities,
+    canEdit,
     inheritsFrom,
 }: {
     location: LocationRow;
     candidates: Candidate[];
     staffCandidates: Candidate[];
     abilities: Ability[];
+    canEdit: boolean;
     /** Set for a location inside a store: the store's people reach it too. */
     inheritsFrom?: string;
 }): React.ReactElement {
@@ -236,9 +242,11 @@ function LocationCard({
                                 </Tooltip>
                             ))
                         )}
-                        <Button size="small" onClick={() => setEditingManagers(true)}>
-                            {location.managers.length === 0 ? "Assign" : "Change"}
-                        </Button>
+                        {canEdit && (
+                            <Button size="small" onClick={() => setEditingManagers(true)}>
+                                {location.managers.length === 0 ? "Assign" : "Change"}
+                            </Button>
+                        )}
                     </Stack>
 
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
@@ -252,9 +260,11 @@ function LocationCard({
                         ) : (
                             location.staff.map((person) => <Chip key={person.id} size="small" variant="outlined" label={person.name} />)
                         )}
-                        <Button size="small" onClick={() => setEditingStaff(true)}>
-                            {location.staff.length === 0 ? "Assign" : "Change"}
-                        </Button>
+                        {canEdit && (
+                            <Button size="small" onClick={() => setEditingStaff(true)}>
+                                {location.staff.length === 0 ? "Assign" : "Change"}
+                            </Button>
+                        )}
                     </Stack>
                 </Stack>
             </Stack>

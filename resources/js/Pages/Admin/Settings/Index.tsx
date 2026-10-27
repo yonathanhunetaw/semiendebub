@@ -37,6 +37,8 @@ import Warehouse from "@mui/icons-material/Warehouse";
 import { ThemeContext } from '@/theme/ThemeContext';
 import { useAdminScope } from "@/Components/Navigation/Admin/useAdminScope";
 import StoreScopeSelect from "@/Components/Navigation/Admin/StoreScopeSelect";
+import RoleSwitcher from "@/Components/Navigation/Admin/RoleSwitcher";
+import { useRole } from "@/theme";
 
 type ThemeSetting = "light" | "dark" | "system";
 
@@ -93,7 +95,8 @@ export default function SettingsIndex() {
         toggleTheme: (newMode: ThemeSetting) => void;
         currentSetting: ThemeSetting;
     };
-    const { isGlobalAdmin, activeStore, accessibleStores, canSwitch } = useAdminScope();
+    const { isGlobalAdmin, activeStore, accessibleStores, canSwitch, roleKey } = useAdminScope();
+    const role = useRole();
 
     const storeLinks: SettingLink[] = [
         ...(activeStore.id !== "all"
@@ -162,6 +165,19 @@ export default function SettingsIndex() {
                         </ListItemButton>
                     </Box>
                 </Card>
+
+                {/* On a phone the top bar has no room for the switcher, so it lives here; tablet and desktop keep it in the bar. */}
+                {roleKey === "admin" && (
+                    <Card sx={{ ...cardSx, p: 2, display: { xs: "flex", sm: "none" }, flexDirection: "column", gap: 1 }}>
+                        <Typography sx={{ fontWeight: 800 }}>Apps</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            Open another app, as yourself or as someone else, without signing in again.
+                        </Typography>
+                        <Box>
+                            <RoleSwitcher roleKey={roleKey} current={role} />
+                        </Box>
+                    </Card>
+                )}
 
                 <Card sx={{ ...cardSx, p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
                     <Box>

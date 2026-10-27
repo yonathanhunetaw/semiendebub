@@ -20,6 +20,8 @@ use App\Services\Seller\SellerCatalog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 
 /**
@@ -49,6 +51,8 @@ final class PrepareE2eCommand extends Command
 
             return self::FAILURE;
         }
+
+        $this->fillMissingPictures();
 
         $wanted = max(1, (int) $this->option('items'));
         // One extra stocked item carries the known prices for the pricing specs.
@@ -92,6 +96,12 @@ final class PrepareE2eCommand extends Command
             'keeper2' => $this->user('stock_keeper', 'stock-keeper-2', 'E2E', 'Keeper Two', '0999000016', $store),
             // A second buyer: a purchase order is approved by someone other than whoever raised it.
             'procurement2' => $this->user('procurement', 'procurement-2', 'E2E', 'Procurement Two', '0999000017', null),
+            // The Apps menu and the dev layer: a global admin with Dev on top, a hidden demo seller, a seller who is also a
+            // stock keeper, and a store admin ticked for the seller and stock keeper apps.
+            'devAdmin' => $this->user('admin', 'dev-admin', 'E2E', 'Dev Admin', '0999000018', null, ['dev']),
+            'demoSeller' => $this->user('seller', 'demo-seller', 'E2E', 'Demo Hidden Seller', '0999000019', $store, [], hidden: true),
+            'dualSeller' => $this->user('seller', 'dual-seller', 'E2E', 'Dual Seller', '0999000020', $store, ['stock_keeper']),
+            'tickedStoreAdmin' => $this->user('admin', 'ticked-store-admin', 'E2E', 'Ticked Store Admin', '0999000021', $store, ['seller', 'stock_keeper']),
         ];
 
         $hub = StockLocation::query()->where('kind', StockLocation::KIND_MAIN_HUB)->orderBy('id')->first();
@@ -106,7 +116,7 @@ final class PrepareE2eCommand extends Command
         // The store keepers staff the whole store: its floor, its shelf and its Remote Hub.
         $storeNode = StockLocation::query()->where('store_id', $store->id)->where('kind', StockLocation::KIND_STORE)->first();
         foreach (array_filter([$storeNode, $remoteHub]) as $location) {
-            foreach ([$keeper, $people['keeper2']] as $staff) {
+            foreach ([$keeper, $people['keeper2'], $people['dualSeller']] as $staff) {
                 LocationStaff::query()->firstOrCreate(['stock_location_id' => $location->id, 'user_id' => $staff->id]);
             }
         }
@@ -218,6 +228,21 @@ final class PrepareE2eCommand extends Command
                 'weekday' => $day, 'closed' => false, 'opens_at' => '07:00', 'closes_at' => '21:00',
             ])->all());
             \App\Models\Workforce\SiteHourException::query()->where('stock_location_id', $storeNode->id)->delete();
+        }
+
+        // The Remote Hub open all day, every day, and fresh for today: nobody holds its key, nobody is clocked in,
+        // the day not started, no holiday today. Its opening time is long past, so the sweep marks it late (work/remote-hub).
+        if ($remoteHub !== null) {
+            app(\App\Services\Workforce\Sites::class)->saveWeek($remoteHub, collect(range(0, 6))->map(fn (int $day): array => [
+                'weekday' => $day, 'closed' => false, 'opens_at' => '00:00', 'closes_at' => '23:59',
+            ])->all());
+            \App\Models\Workforce\SiteHourException::query()->where('stock_location_id', $remoteHub->id)->delete();
+            $remoteKey = app(\App\Services\Workforce\KeyCustodyService::class)->keyFor($remoteHub);
+            \App\Models\Workforce\KeyHandover::query()->where('custody_key_id', $remoteKey->id)->where('status', \App\Models\Workforce\KeyHandover::STATUS_CLAIMED)->delete();
+            $remoteKey->update(['holder_id' => null, 'held_since' => null]);
+            \App\Models\Workforce\TimeEntry::query()->open()->where('stock_location_id', $remoteHub->id)->delete();
+            \App\Models\Workforce\SiteDay::query()->where('stock_location_id', $remoteHub->id)->whereDate('date', \App\Services\Workforce\LocalTime::today()->toDateString())->delete();
+            \App\Models\Workforce\PublicHoliday::query()->whereDate('date', \App\Services\Workforce\LocalTime::today()->toDateString())->delete();
         }
 
         // A shipment waiting to be loaded, for the Guide world's freight car (e2e/stock/play.spec.ts):
@@ -533,7 +558,51 @@ final class PrepareE2eCommand extends Command
         return ['item_id' => (int) $item->id, 'name' => (string) $item->product_name, 'variant' => (int) $variant->id, 'sku' => (string) $variant->sku];
     }
 
-    private function user(string $role, string $key, string $first, string $last, string $phone, ?Store $store): User
+    /**
+     * The dev data was copied from prod and names pictures that live in prod's bucket. The e2e
+     * server keeps the `r2` disk on this machine (R2_LOCAL), where those files do not exist, so
+     * every shop page would log a 403 for each one. Writes a small placeholder for each missing
+     * file, so a page that really breaks still shows, and a missing picture does not.
+     */
+    private function fillMissingPictures(): void
+    {
+        if (! config('filesystems.disks.r2.root')) {
+            return; // the real bucket: never write to it
+        }
+
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+        $disk = Storage::disk('r2');
+        $made = 0;
+
+        foreach (Schema::getTables() as $table) {
+            foreach (Schema::getColumnListing($table['name']) as $column) {
+                // image, image_path, general_images (a JSON list of keys)…
+                if (! str_contains($column, 'image')) {
+                    continue;
+                }
+
+                foreach (DB::table($table['name'])->whereNotNull($column)->where($column, 'like', '%uploads/%')->distinct()->pluck($column) as $value) {
+                    preg_match_all('#uploads/[^"\s,\]\\\\]+#', (string) $value, $keys);
+
+                    foreach ($keys[0] as $key) {
+                        if (! $disk->exists($key)) {
+                            $disk->put($key, $png);
+                            $made++;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($made > 0) {
+            $this->components->info("Wrote {$made} placeholder picture(s) for files only prod's bucket has.");
+        }
+    }
+
+    /**
+     * @param  array<int, string>  $also  roles held beside the main one ("also works as")
+     */
+    private function user(string $role, string $key, string $first, string $last, string $phone, ?Store $store, array $also = [], bool $hidden = false): User
     {
         $user = User::query()->updateOrCreate(
             ['email' => "e2e.{$key}@duka.test"],
@@ -546,12 +615,15 @@ final class PrepareE2eCommand extends Command
                 'is_driver' => $role === 'delivery',
                 'password' => Hash::make(self::PASSWORD),
                 'email_verified_at' => now(),
+                'is_hidden' => $hidden,
             ],
         );
 
         // Older dev data may predate a role (store_manager came later).
-        Role::findOrCreate($role, 'web');
-        $user->syncRoles([$role]);
+        foreach ([$role, ...$also] as $name) {
+            Role::findOrCreate($name, 'web');
+        }
+        $user->syncRoles([$role, ...$also]);
 
         return $user;
     }

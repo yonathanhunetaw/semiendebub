@@ -216,7 +216,7 @@ final class ItemSetupController extends Controller
             'lines' => $lines,
             'seller_prices' => $this->sellerEntries($rows->pluck('id')->all(), $lines),
             'customer_prices' => $this->customerEntries($rows->pluck('id')->all(), $lines),
-            'sellers' => User::query()->where('store_id', $store->id)->where('role', 'seller')->orderBy('first_name')->get(['id', 'first_name', 'last_name'])
+            'sellers' => User::query()->visibleTo(auth()->user())->where('store_id', $store->id)->where('role', 'seller')->orderBy('first_name')->get(['id', 'first_name', 'last_name'])
                 ->map(fn (User $u): array => ['id' => (int) $u->id, 'name' => trim($u->first_name.' '.$u->last_name)])->all(),
             'prices_url' => $readiness === null ? null : route('store.item.variants', [$store->id, $item->id]),
             'places' => $where['places'],

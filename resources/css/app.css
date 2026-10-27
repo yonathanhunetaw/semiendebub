@@ -85,9 +85,9 @@
     }
 }
 
-/* The guide's round button rides above a page's docked bar (cart total,
+/* The Apps menu's round button rides above a page's docked bar (cart total,
    checkout) instead of covering its main button. */
-:root:has(.dock-sheet) .guide-fab {
+:root:has(.dock-sheet) .role-fab {
     --dock-gap: 92px;
 }
 

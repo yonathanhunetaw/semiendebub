@@ -33,7 +33,7 @@ export interface Fixture {
         hubOnly: { variant: number; label: string; sku: string } | null;
     };
     /** Everyone else, one per user type (see PrepareE2eCommand). */
-    people: Record<'seller2' | 'admin' | 'storeAdmin' | 'hubKeeper' | 'finance' | 'procurement' | 'marketing' | 'vendor' | 'dev' | 'shared' | 'manager2' | 'keeper2' | 'procurement2', Person>;
+    people: Record<'seller2' | 'admin' | 'storeAdmin' | 'hubKeeper' | 'finance' | 'procurement' | 'marketing' | 'vendor' | 'dev' | 'shared' | 'manager2' | 'keeper2' | 'procurement2' | 'devAdmin' | 'demoSeller' | 'dualSeller' | 'tickedStoreAdmin', Person>;
     hub: { id: number; name: string };
     remoteHub: { id: number; name: string };
     /** Twenty units seeded in the Remote Hub: the transfer, receiving and stocktake specs all draw on them. */

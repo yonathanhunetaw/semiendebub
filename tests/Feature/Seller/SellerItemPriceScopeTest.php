@@ -112,7 +112,7 @@ class SellerItemPriceScopeTest extends TestCase
             ->where('variantData.0.final_price', 100));
 
         $admin = User::factory()->create(['role' => 'admin', 'store_id' => $this->store->id]);
-        $admin->assignRole('admin');
+        $admin->assignRole(['admin', 'seller']); // a store admin opens the seller app only when ticked for it
         $this->show(['seller_id' => $colleague->id], $admin->refresh())->assertInertia(fn (Assert $page) => $page
             ->where('variantData.0.seller_price', 77));
     }

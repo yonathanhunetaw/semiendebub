@@ -297,7 +297,7 @@ class StoreController extends Controller
 
         // A customer or seller price is set for this store's own people.
         $customers = Customer::where('store_id', $store->id)->orderBy('first_name')->get(['id', 'first_name', 'last_name', 'tin_number']);
-        $sellers = User::where('role', 'seller')
+        $sellers = User::query()->visibleTo(auth()->user())->where('role', 'seller')
             ->where('store_id', $store->id)
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name']);

@@ -14,6 +14,8 @@ interface Props {
         phone_number: string | null;
         /** Display form, e.g. "Stock Keeper". */
         role: string | null;
+        /** Every role they hold. */
+        role_keys?: string[];
         created_at: string | null;
         store?: { id: number; name: string } | null;
         creator?: { first_name: string; last_name: string | null } | null;
@@ -22,10 +24,12 @@ interface Props {
 
 /** One user's profile: who they are, what they can do, where they work. */
 export default function ShowUser({ user }: Props): React.ReactElement {
+    const alsoRoles = (user.role_keys ?? []).filter((key) => key.replace(/_/g, " ") !== (user.role ?? "").toLowerCase());
     const rows: Array<[string, React.ReactNode]> = [
         ["Email", user.email],
         ["Phone", user.phone_number ?? "—"],
         ["Role", user.role ? <Chip size="small" label={user.role} /> : "—"],
+        ["Also works as", alsoRoles.length > 0 ? alsoRoles.map((key) => <Chip key={key} size="small" variant="outlined" label={key.replace(/_/g, " ")} sx={{ mr: 0.5 }} />) : "—"],
         ["Store", user.store?.name ?? "All stores"],
         ["Created by", user.creator ? `${user.creator.first_name} ${user.creator.last_name ?? ""}`.trim() : "—"],
         ["Created", user.created_at ? new Date(user.created_at).toLocaleString() : "—"],

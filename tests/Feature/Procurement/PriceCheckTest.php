@@ -54,6 +54,7 @@ class PriceCheckTest extends TestCase
         $this->avoided->stores()->attach($this->own->id, ['mode' => Shop::AVOID]);
 
         $this->storeAdmin = $this->user('admin', $this->own);
+        $this->storeAdmin->assignRole('seller'); // records prices in the seller app, which a store admin enters when ticked for it
         $this->seller = $this->user('seller', $this->own);
     }
 

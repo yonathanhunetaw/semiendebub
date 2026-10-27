@@ -29,6 +29,8 @@ class DevNavigationTest extends TestCase
         '/login',
         // JSON data endpoint polled by the log viewer, not a page a human visits.
         '/logs/fetch',
+        // The Role Switcher's JSON listing, present on every host.
+        '/impersonate/users',
     ];
 
     #[Test]

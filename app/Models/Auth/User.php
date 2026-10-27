@@ -32,6 +32,7 @@ class User extends Authenticatable
         'email',
         'role',
         'is_driver',
+        'is_hidden',
         'password',
         'store_id',
         'home_area',
@@ -138,6 +139,36 @@ class User extends Authenticatable
     }
 
     /**
+     * The dev layer: a global admin who also holds the dev role sees every
+     * user. Everyone else does not see hidden users (the demo accounts) or
+     * anyone holding the dev role.
+     */
+    public function canSeeHiddenUsers(): bool
+    {
+        return $this->hasRole('dev') && $this->hasRole('admin') && $this->store_id === null;
+    }
+
+    /** Users this viewer may see (see canSeeHiddenUsers); a hidden user still sees themself. */
+    public function scopeVisibleTo(\Illuminate\Database\Eloquent\Builder $query, ?self $viewer): \Illuminate\Database\Eloquent\Builder
+    {
+        if ($viewer?->canSeeHiddenUsers()) {
+            return $query;
+        }
+
+        // Grouped, so the viewer's own row survives whatever else the caller adds.
+        return $query->where(function (\Illuminate\Database\Eloquent\Builder $visible) use ($viewer): void {
+            $visible->where(fn ($open) => $open->where('users.is_hidden', false)->whereDoesntHave('roles', fn ($roles) => $roles->where('name', 'dev')))
+                ->when($viewer !== null, fn ($q) => $q->orWhere('users.id', $viewer->id));
+        });
+    }
+
+    /** Is this user out of sight for the viewer? */
+    public function isHiddenFrom(?self $viewer): bool
+    {
+        return ! $viewer?->canSeeHiddenUsers() && $this->isNot($viewer) && ($this->is_hidden || $this->hasRole('dev'));
+    }
+
+    /**
      * Get the customers created by the user.
      */
     public function customers()
@@ -208,11 +239,54 @@ class User extends Authenticatable
         // Read straight past the display accessor, then normalise either form.
         $column = $this->normaliseRoleKey($this->getAttributes()['role'] ?? '');
 
+        // Someone who holds several roles (the "also works as" ticks) is the
+        // role of the app they are standing in; elsewhere they are their main
+        // role. A single role never reaches this, so nothing else changes.
+        if ($assigned->count() > 1 && ($here = $this->roleOfThisHost($assigned->all(), $column)) !== null) {
+            return $here;
+        }
+
         if ($column !== '' && $assigned->contains($column)) {
             return $column;
         }
 
         return $assigned->first() ?? $column;
+    }
+
+    /**
+     * Which of the user's roles the current subdomain is the app of, if any.
+     *
+     * The seller app is also the store manager's, so either fits there; the
+     * main role wins when both are held. Console and queue work has no
+     * subdomain, so it always sees the main role.
+     *
+     * @param  array<int, string>  $assigned
+     */
+    private function roleOfThisHost(array $assigned, string $column): ?string
+    {
+        // Not config("subdomains.host_role_map.{$host}"): the dots in a hostname
+        // would be read as nested keys.
+        // A route group can say which role the request is made in (ActingAsRole):
+        // the stock keeping area inside the seller app is a stock keeper's.
+        $acting = request()->attributes->get('acting_role');
+
+        if (is_string($acting) && in_array($acting, $assigned, true)) {
+            return $acting;
+        }
+
+        $hostRole = config('subdomains.host_role_map', [])[request()->getHost()] ?? null;
+
+        if ($hostRole === null) {
+            return null;
+        }
+
+        $fits = array_values(array_intersect($hostRole === 'seller' ? ['seller', 'store_manager'] : [$hostRole], $assigned));
+
+        if ($fits === []) {
+            return null;
+        }
+
+        return in_array($column, $fits, true) ? $column : $fits[0];
     }
 
     /**
@@ -313,6 +387,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_driver' => 'boolean',
+            'is_hidden' => 'boolean',
         ];
     }
 }

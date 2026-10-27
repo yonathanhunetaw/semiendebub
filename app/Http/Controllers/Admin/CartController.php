@@ -61,7 +61,7 @@ class CartController extends Controller
                 'name' => $c->name, // Uses 'name' accessor from Customer model
                 'store_id' => $c->store_id,
             ]),
-            'sellers' => $activeStore->apply(User::where('role', 'seller'))->get(['id', 'first_name', 'last_name', 'store_id']),
+            'sellers' => $activeStore->apply(User::query()->visibleTo(auth()->user())->where('role', 'seller'))->get(['id', 'first_name', 'last_name', 'store_id']),
             // A store admin's stores only; every store for a global admin.
             'stores' => $activeStore->accessibleStores()->map(fn ($s) => ['id' => $s->id, 'name' => $s->name])->values(),
             'defaultStoreId' => $activeStore->id(),

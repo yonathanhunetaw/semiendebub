@@ -101,10 +101,11 @@ class SubdomainRoleGateTest extends TestCase
     }
 
     #[Test]
-    public function a_store_admin_still_enters_the_store_scoped_apps(): void
+    public function a_store_admin_enters_the_apps_they_are_ticked_for(): void
     {
         config(['subdomains.separated_session_hosts' => true]);
         $storeAdmin = $this->storeAdmin();
+        $storeAdmin->assignRole(['seller', 'stock_keeper']);
 
         foreach (['seller', 'stockkeeper', 'stock'] as $app) {
             $status = $this->actingAs($storeAdmin)->get($this->host($app).'/dashboard')->status();

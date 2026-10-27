@@ -38,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => RoleMiddleware::class,
             'role.subdomain' => EnsureCorrectSubdomainRole::class,
+            'acting.as' => \App\Http\Middleware\ActingAsRole::class,
             'guest.subdomain' => EnsureGuestSubdomainRole::class,
             'guest.subdomain.login' => AllowSubdomainLogin::class,
             'notify.public.visit' => NotifyPublicVisit::class,

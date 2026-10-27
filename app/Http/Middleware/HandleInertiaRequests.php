@@ -62,7 +62,9 @@ class HandleInertiaRequests extends Middleware
 
         return [
             ...parent::share($request),
-            'auth' => [
+            // Lazy: the shared role (role_key) can depend on a route group's ActingAsRole,
+            // which runs after this middleware does.
+            'auth' => fn () => [
                 'user' => $request->user() ? [
                     'id' => $request->user()->id,
                     'first_name' => $request->user()->first_name,
@@ -83,8 +85,12 @@ class HandleInertiaRequests extends Middleware
                     // use.
                     'role_key' => $request->user()->roleKey(),
                     'store_id' => $request->user()->store_id,
+                    // Every role they hold (their main role plus "also works as"), as keys.
+                    'roles' => $request->user()->roles->pluck('name')->values(),
                 ] : null,
             ],
+            // Set while an admin is "opened as" someone else (ImpersonationController).
+            'impersonating' => fn () => $request->session()->get('impersonator'),
             // The seller bottom nav badges its Carts tab with how many items
             // sit in the seller's open carts (not how many carts there are).
             // Lazy, and null for every other role, so nobody else pays the query.

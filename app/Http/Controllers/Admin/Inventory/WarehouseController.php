@@ -243,6 +243,7 @@ class WarehouseController extends Controller
     private function assignableManagers(): array
     {
         return User::query()
+            ->visibleTo(auth()->user())
             ->whereHas('roles', fn ($query) => $query->whereIn('name', ['admin', 'store_manager', 'stock_keeper', 'seller']))
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name', 'email'])
