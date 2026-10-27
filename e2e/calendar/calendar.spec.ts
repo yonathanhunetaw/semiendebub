@@ -8,6 +8,10 @@ import { sweep } from '../lib/pages';
  * ticked paid and is seen by a colleague at the same store.
  */
 
+// The Month / Week / Day / List buttons and Next are the wide layout; on a phone the view is a select (the
+// "phone" test below sets its own width). So these tests run at a desktop width.
+test.use({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false });
+
 const apps: Array<[Subdomain, string, string]> = [
     ['admin', 'admin', fixture.people.admin.email],
     ['seller', 'seller', fixture.seller.email],
@@ -37,6 +41,8 @@ test('seller: a bill paid today is due again next month and can be ticked paid t
     test.setTimeout(180_000);
     const title = `E2E internet ${Date.now()}`;
     const event = (page: Page) => page.locator('.rbc-event').filter({ hasText: title });
+    // Next month's grid also shows the last days of this month, so the paid one can sit beside it.
+    const upcoming = (page: Page) => event(page).and(page.locator('.state-upcoming'));
 
     const seller = await signIn(browser, 'seller', fixture.seller.email);
     await seller.goto('/calendar');
@@ -61,20 +67,21 @@ test('seller: a bill paid today is due again next month and can be ticked paid t
 
     // Next month: due, then ticked paid from its sheet.
     await month(seller, 1);
-    await expect(event(seller)).toHaveClass(/state-upcoming/);
-    await event(seller).click();
+    await expect(upcoming(seller)).toHaveCount(1);
+    await upcoming(seller).click();
     const details = seller.getByRole('dialog', { name: title });
     await expect(details.getByText('ETB 1,500')).toBeVisible();
     await expect(details.getByText('Every month')).toBeVisible();
     await details.getByRole('button', { name: /Mark paid$/ }).click();
     await expect(flash(seller, `"${title}" marked paid.`)).toBeVisible();
-    await expect(event(seller)).toHaveClass(/state-done/);
+    await expect(upcoming(seller)).toHaveCount(0);
+    await expect(event(seller).last()).toHaveClass(/state-done/);
 
     // Shared with the store: another seller there sees it.
     const colleague = await signIn(browser, 'seller', fixture.people.seller2.email);
     await colleague.goto('/calendar');
     await month(colleague, 1);
-    await expect(event(colleague)).toBeVisible();
+    await expect(event(colleague).last()).toBeVisible();
 });
 
 test('seller: an uploaded receipt is checked, then lands on the calendar as paid', async ({ browser }) => {
@@ -123,7 +130,8 @@ test('seller: a shipment started from a day opens its form on that day', async (
     await seller.getByRole('button', { name: /Add$/ }).click();
     await seller.getByRole('dialog', { name: 'Add to this day' }).getByRole('button', { name: /Shipment/ }).click();
 
-    await expect(seller).toHaveURL(new RegExp(`/shipments\\?.*new=1.*date=${today()}`));
+    // The query's order is not the point: both must be there.
+    await expect(seller).toHaveURL(new RegExp(`/shipments\\?(?=.*new=1)(?=.*date=${today()})`));
     await expect(seller.locator('input[type="date"]').first()).toHaveValue(today());
 });
 
