@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
  */
 const appRoot = fileURLToPath(new URL('../..', import.meta.url));
 
-function inspect<T>(what: 'stock' | 'item' | 'sale' | 'transfer' | 'shipment' | 'store' | 'site', key: string | number): T {
+function inspect<T>(what: 'stock' | 'item' | 'sale' | 'transfer' | 'shipment' | 'store' | 'site' | 'site-at', key: string | number): T {
     const out = execFileSync('php', ['artisan', 'e2e:inspect', what, String(key)], { cwd: appRoot, env: process.env, encoding: 'utf8' });
     // Debug logging may share stdout; the answer is the last JSON line.
     const line = out.trim().split('\n').reverse().find((l) => l.startsWith('{') || l.startsWith('['));
@@ -76,3 +76,11 @@ export interface SiteFacts {
 
 /** A store's site (Work): its QR codes, key holder and today's state. */
 export const siteOf = (storeId: number): SiteFacts => inspect('site', storeId);
+
+/** The same for any site by its stock location id (the main hub). */
+export const siteAt = (locationId: number): SiteFacts => inspect('site-at', locationId);
+
+/** What the scheduler does every few minutes: openings not done in time are marked late. */
+export const sweepSites = (): void => {
+    execFileSync('php', ['artisan', 'sites:sweep'], { cwd: appRoot, env: process.env, encoding: 'utf8' });
+};

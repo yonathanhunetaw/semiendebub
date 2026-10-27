@@ -174,8 +174,15 @@ class ItemSetupVariantsTest extends TestCase
         $this->assertNotEmpty($images[2]);
         Storage::disk('r2')->assertExists($images[2]);
 
+        // A .png over the .jpg: a new key, and the old file goes.
+        $this->post(route('admin.items.setup.image', [$this->item, $a, 2]), ['image' => UploadedFile::fake()->image('two.png')])->assertRedirect();
+        $png = $a->fresh()->images[2];
+        $this->assertNotSame($images[2], $png);
+        Storage::disk('r2')->assertMissing($images[2]);
+
         $this->delete(route('admin.items.setup.image.destroy', [$this->item, $a, 2]))->assertRedirect();
         $this->assertNull($a->fresh()->images[2] ?? null);
+        Storage::disk('r2')->assertMissing($png);
     }
 
     #[Test]

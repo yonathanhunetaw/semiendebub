@@ -15,6 +15,8 @@ use App\Services\ItemVariantGenerationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -227,15 +229,23 @@ final class ItemWriter
     public function setVariantImage(ItemVariant $variant, int $slot, UploadedFile $file): void
     {
         $slots = $this->slotsOf($variant);
+        $old = $slots[$slot];
         $slots[$slot] = $this->storeVariantFile($variant, $slot, $file);
         $variant->update(['images' => $slots]);
+        if ($old !== null && $old !== $slots[$slot]) {
+            $this->forgetFile($old);
+        }
     }
 
     public function removeVariantImage(ItemVariant $variant, int $slot): void
     {
         $slots = $this->slotsOf($variant);
+        $old = $slots[$slot];
         $slots[$slot] = null;
         $variant->update(['images' => $slots]);
+        if ($old !== null) {
+            $this->forgetFile($old);
+        }
     }
 
     /** @return list<string|null> */
@@ -276,6 +286,34 @@ final class ItemWriter
     public function removeGeneralImage(Item $item, string $path): void
     {
         $item->update(['general_images' => array_values(array_filter($item->general_images ?? [], fn ($p): bool => $p !== $path))]);
+        $this->forgetFile($path);
+    }
+
+    /**
+     * Delete a picture we uploaded (an uploads/ key on the r2 disk) once no item or variant
+     * points at it any more. URLs and seeded images/ paths are never touched; a failed delete
+     * only leaves the file behind.
+     */
+    private function forgetFile(string $path): void
+    {
+        $key = ltrim($path, '/');
+        if (! str_starts_with($key, 'uploads/')) {
+            return;
+        }
+
+        $name = '%'.basename($key).'%';
+        $inUse = Item::query()->where('general_images', 'like', $name)->pluck('general_images')
+            ->merge(ItemVariant::query()->where('images', 'like', $name)->pluck('images'))
+            ->contains(fn ($paths): bool => in_array($key, array_map(fn ($p) => is_string($p) ? ltrim($p, '/') : $p, (array) $paths), true));
+        if ($inUse) {
+            return;
+        }
+
+        try {
+            Storage::disk('r2')->delete($key);
+        } catch (\Throwable $e) {
+            Log::warning("ItemWriter: could not delete [{$key}]: ".$e->getMessage());
+        }
     }
 
     /** Every category with its full path ("Writing Tools > Pencil"), for pickers. @return list<array{id: int, path: string}> */

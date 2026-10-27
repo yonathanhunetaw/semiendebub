@@ -425,6 +425,9 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         const box = stacks.find((b) => b.hub === activeHub && b.item.item_id === findItem);
         if (box) gameScene()?.walkTo(box.at[0], box.at[1] + STACK_FOOTPRINT / 2 + 0.9);
     };
+    const finder = activeHub && !failed
+        ? <ItemFinder place={activeHub} options={findOptions} value={findItem} onChange={chooseFound} onWalk={playing3d && game.view !== "director" ? walkToFound : undefined} />
+        : null;
 
     // Light up the current event; fly there while the camera follows.
     useEffect(() => {
@@ -860,13 +863,11 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     </IconButton>}
                 </Stack>
 
-                {playing3d && <PlayLayer app={app} scene={gameScene} barSlot={landscape ? barSlot : null} />}
-
-                {/* While a hub is open: pick an item and its boxes light up in the world. */}
-                {activeHub && !failed && (
-                    <Box sx={{ position: "absolute", top: playing3d ? (landscape ? 126 : 232) : { xs: 60, sm: 62 }, left: 8, pointerEvents: "none" }}>
-                        <ItemFinder place={activeHub} options={findOptions} value={findItem} onChange={chooseFound} onWalk={playing3d && game.view !== "director" ? walkToFound : undefined} />
-                    </Box>
+                {/* While a hub is open: pick an item and its boxes light up in the world. In Play it sits in Play's own top column (below
+                    its goals, whatever their height); while watching it floats at the top left. */}
+                {playing3d && <PlayLayer app={app} scene={gameScene} barSlot={landscape ? barSlot : null} topExtra={finder} />}
+                {!playing3d && finder && (
+                    <Box sx={{ position: "absolute", top: { xs: 60, sm: 62 }, left: 8, pointerEvents: "none" }}>{finder}</Box>
                 )}
 
                 {/* In the shop: look at each wall of racks from where the seller stands. */}

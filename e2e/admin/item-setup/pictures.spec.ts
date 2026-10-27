@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { pngFile } from '../../lib/files';
 import { run } from '../../lib/flows';
@@ -5,9 +7,13 @@ import { app, closeWindows, fixture, signIn } from '../../lib/support';
 
 test.afterEach(closeWindows);
 
+/** Is the picture behind this URL still on the test server's local r2 disk? */
+const stored = (src: string): boolean =>
+    existsSync(fileURLToPath(new URL(`../../../storage/app/public/r2-local/${src.split('/storage/r2-local/')[1]}`, import.meta.url)));
+
 /**
  * Pictures on the item setup page, through the real file chooser: one for the item's gallery (the part of the
- * readiness score new-item.spec leaves) and one in a variant's slot, each shown, served and removed again.
+ * readiness score new-item.spec leaves) and one in a variant's slot, each shown, served and removed again (the file with it).
  * The test server keeps the r2 disk on this Mac (R2_LOCAL, set by `deploy/dev.sh e2e`), so nothing reaches prod's bucket.
  */
 test('a gallery picture and a variant photo are uploaded, shown and removed', async ({ browser }) => {
@@ -24,7 +30,9 @@ test('a gallery picture and a variant photo are uploaded, shown and removed', as
     /** The picture is really there: served by the test server (not R2) and decoded by the browser. */
     const served = async (img: Locator) => {
         await expect(img).toBeVisible();
-        expect(await img.getAttribute('src')).toContain('/storage/r2-local/');
+        const src = (await img.getAttribute('src'))!;
+        expect(src).toContain('/storage/r2-local/');
+        expect(stored(src)).toBe(true);
         await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
     };
 
@@ -56,11 +64,13 @@ test('a gallery picture and a variant photo are uploaded, shown and removed', as
         await served(admin.getByRole('img', { name: 'Item picture' }));
     });
 
-    await test.step('removing it takes the score back down', async () => {
+    await test.step('removing it takes the score back down and deletes the file', async () => {
+        const src = (await admin.getByRole('img', { name: 'Item picture' }).getAttribute('src'))!;
         await admin.getByRole('button', { name: /^Remove picture uploads\// }).click();
         await expect(admin.getByText('Picture removed.').first()).toBeVisible();
         await expect(admin.getByRole('img', { name: 'Item picture' })).toHaveCount(0);
         await expect.poll(percent).toBe(start);
+        expect(stored(src)).toBe(false);
     });
 
     await test.step('a photo in the variant’s first slot', async () => {
@@ -72,10 +82,12 @@ test('a gallery picture and a variant photo are uploaded, shown and removed', as
 
         await admin.reload();
         await served(admin.getByRole('img', { name: `${sku} picture 1` }));
+        const src = (await admin.getByRole('img', { name: `${sku} picture 1` }).getAttribute('src'))!;
 
         await admin.getByRole('button', { name: `Remove picture 1 of ${sku}` }).click();
         await expect(admin.getByText('Picture removed.').first()).toBeVisible();
         await expect(admin.getByRole('img', { name: `${sku} picture 1` })).toHaveCount(0);
+        expect(stored(src)).toBe(false);
         await expect(admin.getByRole('button', { name: `Add picture 1 to ${sku}` })).toBeVisible();
     });
 });

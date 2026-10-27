@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Paper, Snackbar, Stack, Tooltip, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import CloseRounded from "@mui/icons-material/CloseRounded";
@@ -49,7 +49,7 @@ const REFRESH_MS = 30_000;
 /** The session as it is right now (not as of the last render), for handlers that run later. */
 const getSession = (): PracticeState | null => getGame().session;
 
-export default function PlayLayer({ app, scene, barSlot = null }: { app: GuideApp; scene: () => GameScene | null; /** The world's top bar, when the screen is wider than tall: the camera and Practice/Live controls ride there. */ barSlot?: HTMLElement | null }) {
+export default function PlayLayer({ app, scene, barSlot = null, topExtra = null }: { app: GuideApp; scene: () => GameScene | null; /** The world's top bar, when the screen is wider than tall: the camera and Practice/Live controls ride there. */ barSlot?: HTMLElement | null; /** Something that belongs under the goals row (the hub item finder): it flows below whatever height the bars above it have, so it never covers them. */ topExtra?: React.ReactNode }) {
     const theme = useTheme();
     const game = useGame();
     const session = game.session;
@@ -357,6 +357,7 @@ export default function PlayLayer({ app, scene, barSlot = null }: { app: GuideAp
                         </Button>
                     ))}
                 </Stack>
+                {topExtra}
             </Stack>
 
             <Box sx={{ flex: 1 }} />

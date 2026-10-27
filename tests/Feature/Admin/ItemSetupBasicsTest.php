@@ -96,11 +96,25 @@ class ItemSetupBasicsTest extends TestCase
 
         $this->delete(route('admin.items.setup.pictures.destroy', $item), ['path' => $path])->assertRedirect();
         $this->assertSame([], $item->fresh()->general_images);
+        Storage::disk('r2')->assertMissing($path);
 
         $this->delete(route('admin.items.setup.pictures.destroy', $item), ['path' => 'uploads/items/not-mine.jpg'])->assertNotFound();
 
         $item->update(['general_images' => array_map(fn ($i) => "uploads/items/{$i}.jpg", range(1, 10))]);
         $this->post(route('admin.items.setup.pictures.store', $item), ['image' => UploadedFile::fake()->image('b.jpg')])->assertSessionHasErrors('image');
+    }
+
+    #[Test]
+    public function a_removed_picture_another_item_still_shows_keeps_its_file(): void
+    {
+        Storage::disk('r2')->put('uploads/items/shared.jpg', 'x');
+        $item = Item::factory()->create(['general_images' => ['uploads/items/shared.jpg']]);
+        Item::factory()->create(['general_images' => ['uploads/items/shared.jpg']]);
+
+        $this->delete(route('admin.items.setup.pictures.destroy', $item), ['path' => 'uploads/items/shared.jpg'])->assertRedirect();
+
+        $this->assertSame([], $item->fresh()->general_images);
+        Storage::disk('r2')->assertExists('uploads/items/shared.jpg');
     }
 
     #[Test]

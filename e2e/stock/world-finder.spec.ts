@@ -73,6 +73,19 @@ test('Director faces the door, the hub item finder marks an item, and the contro
         // The goal line "… to fetch from Hub A" walks the worker there.
         await page.getByRole('button', { name: /fetch from Hub A/ }).click();
         await expect(page.getByTestId('item-finder')).toContainText('Main Hub A', { timeout: 120_000 });
+        // The finder flows under Play's goals row: it must never cover the Desks button or the goals (it once did, on a phone).
+        const clearOfGoals = async () => {
+            const finderBox = (await page.getByTestId('item-finder').boundingBox())!;
+            const desksBox = (await page.getByRole('button', { name: 'Desks', exact: true }).boundingBox())!;
+            expect(finderBox.y).toBeGreaterThanOrEqual(desksBox.y + desksBox.height - 2);
+        };
+        await clearOfGoals();
+        await page.setViewportSize({ width: 393, height: 852 });
+        await page.waitForTimeout(800);
+        await clearOfGoals();
+        await page.screenshot({ path: 'test-results/finder-6b-phone.png' });
+        await page.setViewportSize({ width: 1180, height: 700 });
+        await page.waitForTimeout(800);
         await page.getByTestId('item-finder-input').click();
         await page.getByRole('option').first().click();
         await expect(page.getByRole('button', { name: 'Walk there' })).toBeVisible();

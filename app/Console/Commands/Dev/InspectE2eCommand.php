@@ -24,13 +24,14 @@ use Illuminate\Console\Command;
  *   php artisan e2e:inspect store 'Name'      a store's id and the stock locations it got
  *   php artisan e2e:inspect site 12           store 12's site: its QR codes (what a phone camera
  *                                             reads off the counter), key holder, today's status
+ *   php artisan e2e:inspect site-at 3         the same for stock location 3 (a main hub, a remote hub)
  *
  * Like e2e:prepare it refuses any database not named *_e2e.
  */
 final class InspectE2eCommand extends Command
 {
     /** @var string */
-    protected $signature = 'e2e:inspect {what : stock, item, sale, transfer, shipment, store or site} {key : a variant id or a reference}';
+    protected $signature = 'e2e:inspect {what : stock, item, sale, transfer, shipment, store, site or site-at} {key : a variant id or a reference}';
 
     /** @var string */
     protected $description = 'Print ledger facts from the *_e2e database for the Playwright specs';
@@ -54,7 +55,8 @@ final class InspectE2eCommand extends Command
             'transfer' => $this->transfer($key),
             'shipment' => $this->shipment($key),
             'store' => $this->store($key),
-            'site' => $this->site((int) $key),
+            'site' => $this->site(StockLocation::query()->where('store_id', (int) $key)->where('kind', StockLocation::KIND_STORE)->first()),
+            'site-at' => $this->site(StockLocation::query()->find((int) $key)),
             default => null,
         };
 
@@ -136,11 +138,9 @@ final class InspectE2eCommand extends Command
         ];
     }
 
-    /** @return array<string, mixed>|null */
-    /** @return array<string, mixed>|null a store's site node, its QR paths and today */
-    private function site(int $storeId): ?array
+    /** @return array<string, mixed>|null a site, its QR paths and today */
+    private function site(?StockLocation $site): ?array
     {
-        $site = StockLocation::query()->where('store_id', $storeId)->where('kind', StockLocation::KIND_STORE)->first();
         if ($site === null) {
             return null;
         }
