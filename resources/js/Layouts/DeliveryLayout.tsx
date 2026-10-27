@@ -1,5 +1,4 @@
 import * as React from "react";
-import GuideButton from "@/Components/Guide/GuideButton";
 import { Box, Paper, BottomNavigation, BottomNavigationAction, alpha } from "@mui/material";
 import SpaceDashboardRoundedIcon from "@mui/icons-material/SpaceDashboardRounded";
 import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
@@ -75,8 +74,6 @@ export default function DeliveryLayout({ children }: { children: React.ReactNode
 
             <Box component="main" sx={{ bgcolor: "background.default" }}>
                 {children}
-                {/* The page's step in the guide (Components/Guide). */}
-                <GuideButton app="delivery" variant="fab" />
             </Box>
 
             <Paper

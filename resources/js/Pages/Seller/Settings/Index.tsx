@@ -5,7 +5,7 @@ import {
     sellerShadow,
 } from "@/Components/Seller/sellerUi";
 import SellerLayout from "@/Layouts/SellerLayout";
-import { Head, router, useForm, usePage } from "@inertiajs/react";
+import { Head, Link, router, useForm, usePage } from "@inertiajs/react";
 import {
     Avatar, Box, Button, Chip, Divider, FormControlLabel, Stack, Switch,
     TextField, Typography, ToggleButtonGroup, ToggleButton, alpha, useTheme,
@@ -14,6 +14,7 @@ import React from "react";
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import SettingsBrightnessRoundedIcon from '@mui/icons-material/SettingsBrightnessRounded';
+import AutoStoriesRoundedIcon from '@mui/icons-material/AutoStoriesRounded';
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
 import StorefrontRoundedIcon from '@mui/icons-material/StorefrontRounded';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
@@ -126,6 +127,14 @@ export default function Index() {
                                 {user?.email || "No email on file"}
                             </Typography>
                         </Box>
+                    </Box>
+
+                    {/* ── How Duka works: the guide's one way in from this app ── */}
+                    <Box sx={cardSx}>
+                        <SectionLabel icon={<AutoStoriesRoundedIcon sx={{ fontSize: 18 }} />} label="How Duka works" />
+                        <Button component={Link} href={route("seller.guide")} variant="outlined" fullWidth sx={{ justifyContent: "flex-start", textTransform: "none", fontWeight: 700 }}>
+                            The people, the order's road and how stock moves
+                        </Button>
                     </Box>
 
                     {/* ── Appearance ── */}

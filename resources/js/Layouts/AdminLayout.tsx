@@ -6,7 +6,6 @@ import FlashToast from "@/Components/Shared/FlashToast";
 import AdminSidebar, { ADMIN_SIDEBAR_WIDTH } from "@/Components/Navigation/Admin/AdminSidebar";
 import AdminTopBar from "@/Components/Navigation/Admin/AdminTopBar";
 import SectionTabs from "@/Components/Navigation/Admin/SectionTabs";
-import GuideButton from "@/Components/Guide/GuideButton";
 import { stackedTableSx, useStackedTableLabels } from "@/Components/Shared/stackedTables";
 import { arrive, motionSafe } from "@/Components/Visual/motion";
 import { getRole, useRole } from "@/theme";
@@ -131,9 +130,6 @@ export default function AdminLayout({ children, breadcrumbs = false, flashToast 
                     {breadcrumbs && <PathBreadcrumbs />}
                     {/* Payments, Customers and Settings group several screens under tabs. */}
                     <SectionTabs />
-                    {/* The page's step in the guide, one tap away. */}
-                    {/* Only the dashboard links to the guide. */}
-                    {url.split("?")[0] === "/dashboard" && <GuideButton app="admin" />}
                     {/* Keyed by path, so a new page rises in; filters on the same page don't replay it. */}
                     <Box key={url.split("?")[0]} sx={{ animation: `${arrive} .32s ease-out both`, ...motionSafe }}>
                         <ThemeProvider theme={pageTheme}>{children}</ThemeProvider>

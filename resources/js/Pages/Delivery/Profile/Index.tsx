@@ -1,4 +1,5 @@
 import { Head, Link, router, useForm } from "@inertiajs/react";
+import AutoStoriesRoundedIcon from "@mui/icons-material/AutoStoriesRounded";
 import DevicesRoundedIcon from "@mui/icons-material/DevicesRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import {
@@ -155,6 +156,16 @@ export default function Profile({
                         overflow: "hidden",
                     }}
                 >
+                    <Button
+                        component={Link}
+                        href={route("delivery.guide")}
+                        startIcon={<AutoStoriesRoundedIcon />}
+                        fullWidth
+                        sx={{ justifyContent: "flex-start", py: 1.5, px: 2.5 }}
+                    >
+                        How Duka works
+                    </Button>
+                    <Divider />
                     <Button
                         component={Link}
                         href={route("delivery.sessions.index")}

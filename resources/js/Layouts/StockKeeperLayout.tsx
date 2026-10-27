@@ -1,5 +1,4 @@
 import FlashToast from "@/Components/Shared/FlashToast";
-import GuideButton from "@/Components/Guide/GuideButton";
 import StockKeeperBottomNav from "@/Components/Navigation/StockKeeper/StockKeeperBottomNav";
 import StockKeeperSideNav from "@/Components/Navigation/StockKeeper/StockKeeperSideNav";
 import { activeSkItem } from "@/Components/Navigation/StockKeeper/stockKeeperNav";
@@ -71,8 +70,6 @@ export default function StockKeeperLayout({ children }: { children: React.ReactN
 
             <StockKeeperBottomNav />
             <ScanSheet open={scanning} onClose={() => setScanning(false)} onCode={openCode} />
-            {/* The page's step in the guide (Components/Guide). */}
-            <GuideButton app="stock_keeper" variant="fab" />
         </div>
     );
 }
