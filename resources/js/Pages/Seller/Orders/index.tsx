@@ -97,6 +97,15 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0, plans = {}
         if (opened) openPick(opened);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
+    // Ticking the first line starts picking, which moves the order from Paid to Pick & pack. Follow it, or the
+    // card the seller is working on drops out of the tab they are looking at.
+    useEffect(() => {
+        const opened = open ? loaded.find((order) => order.reference === open) : undefined;
+        if (!opened) return;
+
+        const wanted = TABS.find((entry) => entry.stage === opened.stage)?.id ?? "all";
+        setTab((current) => (current === "all" || current === wanted ? current : wanted));
+    }, [loaded, open]);
     const [search, setSearch] = useState("");
     const [selectMode, setSelectMode] = useState(false);
     const [selected, setSelected] = useState<number[]>([]);
