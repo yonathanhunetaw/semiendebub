@@ -29,6 +29,8 @@ Route::domain("admin.{$baseDomain}")
         Route::prefix('stores')->name('store.')->group(function () {
 
             // ── Inventory sub-pages (must come BEFORE /{store} wildcard) ──────
+            // The Store hub: grouped cards that open the screens below.
+            Route::get('/{store}/hub', \App\Http\Controllers\Admin\Store\StoreHubController::class)->name('hub');
             Route::get('/{store}/inventory/replenish',  [StoreController::class, 'replenish'])->name('replenish');
             Route::get('/{store}/inventory/items/{item}', [StoreController::class, 'itemVariants'])->name('item.variants');
             Route::get('/{store}/inventory/deviations', [StoreController::class, 'deviations'])->name('deviations');

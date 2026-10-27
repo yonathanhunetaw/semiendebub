@@ -8,6 +8,7 @@ import {
 } from "@/Components/Shared/OpsHub";
 import { Card } from "@/Components/Shared/ui";
 import { Head, Link } from "@inertiajs/react";
+import { useAdminScope } from "@/Components/Navigation/Admin/useAdminScope";
 import React, { useMemo, useState } from "react";
 
 /**
@@ -103,6 +104,7 @@ export default function InventoryHub({
     deployedItems,
     orderStages = {},
 }: Props): React.ReactElement {
+    const { isGlobalAdmin } = useAdminScope();
     const [itemSearch, setItemSearch] = useState("");
 
     const retail = stores.filter((store) => store.type === "retail");
@@ -250,13 +252,16 @@ export default function InventoryHub({
                                 </div>
                             </div>
 
-                            <Link
-                                href={route("admin.inventory.stores")}
-                                className="flex shrink-0 items-center gap-1 rounded-[999px] border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-[11px] font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low"
-                            >
-                                <span className="material-symbols-outlined text-[16px]">grid_view</span>
-                                All stock
-                            </Link>
+                            {/* The all-stock list is a global admin's; a store admin would get a 403. */}
+                            {isGlobalAdmin && (
+                                <Link
+                                    href={route("admin.inventory.stores")}
+                                    className="flex shrink-0 items-center gap-1 rounded-[999px] border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-[11px] font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low"
+                                >
+                                    <span className="material-symbols-outlined text-[16px]">grid_view</span>
+                                    All stock
+                                </Link>
+                            )}
                         </div>
                     </section>
 

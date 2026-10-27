@@ -79,7 +79,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
         key: "store",
         label: "Store",
         icon: Storefront,
-        route: "store.show",
+        route: "store.hub",
         scope: "store",
         match: ["/inventory"],
         exclude: ["/inventory/stores", "/inventory/warehouse", "/inventory/fleet"],

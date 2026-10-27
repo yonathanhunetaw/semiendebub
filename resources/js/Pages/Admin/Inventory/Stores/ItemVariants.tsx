@@ -18,8 +18,7 @@ export default function ItemVariants({ store, item, customers, sellers }: {
     customers: Person[];
     sellers: Person[];
 }) {
-    const [expanded, setExpanded] = useState(true);
-    const [tab, setTab] = useState<'stock' | 'replenish' | 'variants'>('stock');
+    const expanded = true;
     const [variants, setVariants] = useState<Variant[]>(item.variants);
     const [highlightedVariantId, setHighlightedVariantId] = useState<number | null>(null);
     const [editing, setEditing] = useState<Variant | null>(null);
@@ -45,7 +44,6 @@ export default function ItemVariants({ store, item, customers, sellers }: {
     const handleSaved = (updated: Variant) => {
         setVariants(prev => prev.map(v => (v.id === updated.id ? updated : v)));
         setEditing(null);
-        setExpanded(true);
         setHighlightedVariantId(updated.id);
         window.setTimeout(() => {
             document.getElementById(`variant-${updated.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -129,23 +127,16 @@ export default function ItemVariants({ store, item, customers, sellers }: {
                     </CardContent>
                 </Card>
 
-                {/* ── Details panel (tabs) ──────────────────────────────── */}
-                <Card sx={{ borderRadius: 2 }}>
-                    <CardContent sx={{ p: 0 }}>
-                        <StitchProductDetails
-                            expanded={expanded}
-                            setExpanded={setExpanded}
-                            tab={tab}
-                            setTab={setTab}
-                            item={item}
-                            variants={variants}
-                            hasLow={hasLow}
-                            lowStockVariants={lowStockVariants}
-                            highlightedVariantId={highlightedVariantId}
-                            setEditing={setEditing}
-                        />
-                    </CardContent>
-                </Card>
+                {/* ── Details: stock, refill levels, variants (stacked cards) ── */}
+                <StitchProductDetails
+                    expanded={expanded}
+                    item={item}
+                    variants={variants}
+                    hasLow={hasLow}
+                    lowStockVariants={lowStockVariants}
+                    highlightedVariantId={highlightedVariantId}
+                    setEditing={setEditing}
+                />
 
                 {/* ── Edit drawer ───────────────────────────────────────── */}
                 {editing && (

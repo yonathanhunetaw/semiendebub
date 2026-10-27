@@ -5,9 +5,9 @@
  *   Payments   → payments, collection accounts, seller balances
  *   Customers  → customers, who has credit, customer prices & discounts
  *   Settings   → general, users, sessions and system status (all but general: global admins only)
- *   Store      → the active store's items, replenishment and price deviations,
- *                plus the inventory screens (locations, transfers, capacity,
- *                approvals, shipments). On "All stores" the first tab is the
+ *   Store      → a hub of grouped cards (Pages/Admin/Stores/Hub): the active store's
+ *                items, replenishment, price deviations and capacity, transfers and
+ *                shipments, and the approvals (locations live in Settings). On "All stores" the first tab is the
  *                cross-store inventory overview and the per-store tabs hide.
  */
 export interface AdminSectionTab {
@@ -73,7 +73,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
         groups: [
             { key: "stock", label: "Stock" },
             { key: "movement", label: "Movement" },
-            { key: "places", label: "Places" },
             { key: "approvals", label: "Approvals" },
         ],
         tabs: [
@@ -81,9 +80,8 @@ export const ADMIN_SECTIONS: AdminSection[] = [
             { label: "Overview", route: "inventory.index", group: "stock", match: [/^\/inventory$/], allStoresOnly: true },
             { label: "Replenish", route: "store.replenish", group: "stock", match: [/^\/stores\/\d+\/inventory\/replenish$/], storeParam: true },
             { label: "Price deviations", route: "store.deviations", group: "stock", match: [/^\/stores\/\d+\/inventory\/deviations$/], storeParam: true },
-            { label: "Locations", route: "admin.inventory.stock-locations.index", group: "places", match: ["/inventory/locations"] },
             { label: "Transfers", route: "admin.inventory.transfers", group: "movement", match: ["/inventory/transfers"] },
-            { label: "Capacity", route: "admin.inventory.capacity.index", group: "places", match: ["/inventory/capacity"] },
+            { label: "Capacity", route: "admin.inventory.capacity.index", group: "stock", match: ["/inventory/capacity"] },
             { label: "Approvals", route: "admin.inventory.replenishment.index", group: "approvals", match: ["/inventory/replenishment"], roles: ["admin", "store_manager"] },
             { label: "Counts", route: "admin.inventory.counts.index", group: "approvals", match: ["/inventory/counts"], roles: ["admin", "store_manager"] },
             { label: "Shipments", route: "admin.inventory.shipments.index", group: "movement", match: ["/inventory/shipments"] },
