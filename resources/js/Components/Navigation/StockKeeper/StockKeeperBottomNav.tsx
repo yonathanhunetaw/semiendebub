@@ -1,7 +1,7 @@
 import { Link, usePage } from "@inertiajs/react";
 import React from "react";
 import useBottomNav from "@/hooks/useBottomNav";
-import { SK_BOTTOM_TABS, SK_NAV, SK_NAV_ITEMS, activeSkItem } from "./stockKeeperNav";
+import { SK_BOTTOM_TABS, SK_NAV_ITEMS, activeSkItem, skNavGroups } from "./stockKeeperNav";
 
 /**
  * Phones and tablets (below lg): a floating bottom bar with four sections and
@@ -34,7 +34,7 @@ export default function StockKeeperBottomNav(): React.ReactElement {
                     <button type="button" aria-label="Close" onClick={() => setMoreOpen(false)} className="absolute inset-0 bg-on-surface/40" />
                     <div className="absolute inset-x-0 bottom-0 mx-auto max-h-[80vh] w-full max-w-[640px] overflow-y-auto rounded-t-[24px] border border-outline-variant bg-surface-container-lowest px-4 pb-[calc(96px+env(safe-area-inset-bottom))] pt-3 shadow-2xl">
                         <div className="mx-auto mb-3 h-1 w-10 rounded-[999px] bg-outline-variant" />
-                        {SK_NAV.map((group) => (
+                        {skNavGroups().map((group) => (
                             <div key={group.label} className="mb-3">
                                 <p className="mb-1.5 px-1 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{group.label}</p>
                                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">

@@ -35,6 +35,12 @@ Route::domain("seller.$baseDomain")
             })->name('login'); // CRITICAL: Laravel's 'auth' middleware needs this name
         });
 
+        // A seller who is also ticked as a stock keeper does that work here too, under /stock:
+        // the same routes, controllers and pages as the stock keeper app, acting as a stock keeper.
+        Route::middleware(['auth', 'verified', 'role.subdomain:stock_keeper', 'acting.as:stock_keeper'])
+            ->prefix('stock')->name('stock.')
+            ->group(base_path('routes/web/partials/stock-keeping.php'));
+
         // Store managers work in the seller app too: refill suggestions, refill
         // routes and the Remote Hub list are theirs (SHELF_REFILL_V2).
         Route::middleware(['auth', 'verified', 'role.subdomain:seller,store_manager'])->group(function () {

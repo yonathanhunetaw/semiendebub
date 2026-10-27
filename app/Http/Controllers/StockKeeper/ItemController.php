@@ -40,6 +40,6 @@ class ItemController extends Controller
             return back()->with('error', "No item has the barcode or SKU \"{$code}\". Ask an admin to add it.");
         }
 
-        return redirect()->route('stock_keeper.items.show', ['item' => $variant->item_id, 'variant' => $variant->id]);
+        return redirect()->to(\App\Support\StockKeepingRoutes::url('stock_keeper.items.show', ['item' => $variant->item_id, 'variant' => $variant->id]));
     }
 }

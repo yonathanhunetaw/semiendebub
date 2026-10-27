@@ -14,7 +14,7 @@ import {
 } from "@/Components/Shared/ui";
 import type { OrderStage } from "@/Data/sellerOrderFlow";
 import type { LocationTile } from "@/types/sellerLocations";
-import { Head, Link } from "@inertiajs/react";
+import { Head, Link, usePage } from "@inertiajs/react";
 import React, { useState } from "react";
 
 /**
@@ -224,6 +224,17 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
         },
     ];
 
+    // A seller who is also ticked as a stock keeper gets the stock keeping area, under /stock in this app.
+    const roles = ((usePage().props as { auth?: { user?: { roles?: string[] } | null } }).auth?.user?.roles) ?? [];
+    const stockRows: Row[] = roles.includes("stock_keeper")
+        ? [
+              { label: "Stock keeping", caption: "Home, alerts and what needs doing", icon: "warehouse", route: "seller.stock.dashboard", tone: "primary" },
+              { label: "Stock", caption: "What is where, receive, adjust", icon: "inventory_2", route: "seller.stock.inventory.index", tone: "info" },
+              { label: "Shelving", caption: "Shelf refills to do", icon: "shelves", route: "seller.stock.shelving.index", tone: "warning" },
+              { label: "Stocktake", caption: "Count a place, approve the differences", icon: "fact_check", route: "seller.stock.stocktakes.index", tone: "success" },
+          ]
+        : [];
+
     const settingsHref = href("seller.settings.index");
     const [notifyOpen, setNotifyOpen] = useState(false);
 
@@ -315,6 +326,8 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
                 />
 
                 <OpsCard title="Merchant Operations" note="Core Tools" rows={opsRows} />
+
+                {stockRows.length > 0 && <OpsCard title="Stock keeping" note="Your second role" rows={stockRows} />}
                 </div>
             </div>
         </>

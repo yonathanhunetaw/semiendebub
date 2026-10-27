@@ -1,7 +1,7 @@
 import { Link, router, usePage } from "@inertiajs/react";
 import React from "react";
 import { ThemeContext } from '@/theme/ThemeContext';
-import { SK_NAV, activeSkItem } from "./stockKeeperNav";
+import { activeSkItem, skNavGroups } from "./stockKeeperNav";
 
 interface SideNavProps {
     auth?: { user?: { first_name?: string; last_name?: string; role?: string } | null };
@@ -43,7 +43,7 @@ export default function StockKeeperSideNav({ onScan }: { onScan: () => void }): 
             </div>
 
             <nav aria-label="Stock keeper sections" className="flex-1 overflow-y-auto px-3 pb-4">
-                {SK_NAV.map((group) => (
+                {skNavGroups().map((group) => (
                     <div key={group.label} className="mt-3">
                         <p className="mb-1 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/80">{group.label}</p>
                         {group.items.map((item) => {

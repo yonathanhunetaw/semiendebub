@@ -84,7 +84,7 @@ class StocktakeController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return redirect()->route('stock_keeper.stocktakes.show', $take)->with('success', "Count {$take->reference} started for {$location->name}.");
+        return redirect()->to(\App\Support\StockKeepingRoutes::url('stock_keeper.stocktakes.show', $take))->with('success', "Count {$take->reference} started for {$location->name}.");
     }
 
     public function show(Request $request, Stocktake $stocktake): Response

@@ -1,3 +1,4 @@
+import { inSellerStockArea } from "@/utils/stockKeepingRoutes";
 /**
  * The stock keeper app's sections, shared by the bottom nav (phones and
  * tablets), the "More" sheet and the desktop sidebar so the three never
@@ -29,6 +30,8 @@ export const SK_NAV: SkNavGroup[] = [
             { key: "alerts", label: "Stock alerts", icon: "notification_important", route: "stock_keeper.alerts.index", paths: ["/stock-alerts"], hint: "Low and out of stock" },
             { key: "calendar", label: "Calendar", icon: "calendar_month", route: "stock_keeper.calendar", paths: ["/calendar"], hint: "Freight, transfers and arrivals by day" },
             { key: "work", label: "My work", icon: "badge", route: "stock_keeper.work", paths: ["/work"], hint: "Keys, shifts, clock in and out" },
+            // Stock keepers have no Settings page, so the guide's one way in sits here.
+            { key: "guide", label: "How Duka works", icon: "menu_book", route: "stock_keeper.guide", paths: ["/guide"], hint: "The people, the order's road and how stock moves" },
         ],
     },
     {
@@ -55,10 +58,33 @@ export const SK_NAV: SkNavGroup[] = [
 
 export const SK_NAV_ITEMS: SkNavItem[] = SK_NAV.flatMap((group) => group.items);
 
+/** The calendar, My work and the guide stay in the seller app's own menu. */
+const IN_THE_SELLER_APP = new Set(["calendar", "work", "guide"]);
+
+/**
+ * The sections to list. Inside the seller app (a seller who is also a stock
+ * keeper works under /stock) the shared screens are the seller app's own, so
+ * they drop out and a way back to the seller app joins.
+ */
+export function skNavGroups(): SkNavGroup[] {
+    if (!inSellerStockArea()) {
+        return SK_NAV;
+    }
+
+    return [
+        ...SK_NAV.map((group) => ({ ...group, items: group.items.filter((item) => !IN_THE_SELLER_APP.has(item.key)) })),
+        {
+            label: "Seller",
+            items: [{ key: "seller", label: "Seller app", icon: "storefront", route: "seller.dashboard", paths: [], hint: "Back to selling" }],
+        },
+    ];
+}
+
 /** The four tabs on the phone bar; everything else sits under "More". */
 export const SK_BOTTOM_TABS = ["home", "stock", "levels", "shipments"] as const;
 
 export function activeSkItem(url: string): SkNavItem | undefined {
-    const path = url.split("?")[0];
+    // Under /stock in the seller app the section paths are the same, one level down.
+    const path = url.split("?")[0].replace(/^\/stock(?=\/|$)/, "");
     return SK_NAV_ITEMS.find((item) => item.paths.some((prefix) => path.startsWith(prefix)));
 }
