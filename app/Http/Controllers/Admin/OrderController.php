@@ -9,6 +9,8 @@ use App\Models\Finance\Sale;
 use App\Services\Admin\ActiveStore;
 use App\Services\Fulfillment\CustodyLog;
 use App\Services\Fulfillment\SellerOrderBoard;
+use App\Services\Workforce\DayBook;
+use App\Services\Workforce\TimeFilter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,8 +32,9 @@ class OrderController extends Controller
         'canceled' => [Sale::STAGE_CANCELLED],
     ];
 
-    public function index(Request $request, SellerOrderBoard $board, ActiveStore $activeStore): Response
+    public function index(Request $request, SellerOrderBoard $board, ActiveStore $activeStore, TimeFilter $time, DayBook $days): Response
     {
+        $period = $time->fromRequest($request);
         $stage = $request->string('stage')->toString() ?: 'all';
         // The active store (sidebar dropdown, or this page's own `?store=`,
         // which goes through the same ActiveStore resolution).
@@ -42,12 +45,17 @@ class OrderController extends Controller
             ->with(['store', 'customer', 'delivery'])
             ->when(isset(self::STAGE_FILTER[$stage]), fn ($q) => $q->whereIn('fulfillment_stage', self::STAGE_FILTER[$stage]))
             ->when($search !== '', fn ($q) => $q->where('reference_number', 'like', "%{$search}%"))
+            // Orders still on their way are always listed; the period narrows the finished ones.
+            ->tap(fn ($q) => $time->applyKeepingOpen($q, 'sales.created_at', 'sales.store_id', $activeStore->scopeIds(), $period,
+                fn ($open) => $open->whereNotIn('sales.fulfillment_stage', [Sale::STAGE_DELIVERED, Sale::STAGE_CANCELLED])))
             ->latest('id')
             ->paginate(25)
             ->withQueryString();
 
         return Inertia::render('Admin/Orders/Index', [
             'orders' => collect($paginator->items())->map(fn (Sale $sale): array => [
+                'open' => ! in_array($sale->fulfillment_stage, [Sale::STAGE_DELIVERED, Sale::STAGE_CANCELLED], true),
+                'day' => $days->tag($sale->store_id !== null ? (int) $sale->store_id : null, $sale->created_at),
                 'id' => (int) $sale->id,
                 'reference' => (string) $sale->reference_number,
                 'store' => $sale->store?->name,
@@ -60,7 +68,8 @@ class OrderController extends Controller
                 'placed_at' => $sale->created_at?->toIso8601String(),
             ])->values(),
             'counts' => $board->counts($storeId),
-            'filters' => ['stage' => $stage, 'store' => $storeId, 'search' => $search],
+            'time' => $time->describe($period),
+            'filters' => ['stage' => $stage, 'store' => $storeId, 'search' => $search, 'when' => $period['when']],
             'stores' => $activeStore->accessibleStores()->where('type', \App\Models\Store\Store::TYPE_RETAIL)
                 ->map(fn ($store): array => ['id' => (int) $store->id, 'name' => (string) $store->name])->values(),
             'can_pick_all' => $activeStore->isGlobal(),

@@ -9,6 +9,9 @@ use App\Models\Finance\Sale;
 use App\Models\Finance\SaleItem;
 use App\Models\Fulfillment\Delivery;
 use App\Services\Finance\PaymentBoard;
+use App\Services\Workforce\DayBook;
+use App\Services\Workforce\LocalTime;
+use App\Services\Workforce\TimeFilter;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -63,17 +66,41 @@ class SellerOrderBoard
         return $counts;
     }
 
+    /** Orders past this are finished; everything before is still on its way. */
+    private const FINISHED = [Sale::STAGE_DELIVERED, Sale::STAGE_CANCELLED];
+
+    /** A safety cap on orders still on their way (a board that big is a problem to see, not hide). */
+    private const OPEN_LIMIT = 300;
+
+    private ?DayBook $dayBook = null;
+
     /**
-     * The newest orders, shaped as the seller order cards expect.
+     * The orders, shaped as the seller order cards expect: every order still
+     * on its way (whatever its day), plus the newest finished ones inside the
+     * period. A busy week of delivered orders can no longer push an unpaid
+     * order off the board.
      *
+     * @param  array{when: string, date: string|null}  $period
      * @return array<int, array<string, mixed>>
      */
-    public function orders(?int $storeId): array
+    public function orders(?int $storeId, array $period = ['when' => 'all', 'date' => null]): array
     {
-        return $this->withCardRelations($this->scoped($storeId))
-            ->latest('id')
-            ->limit(self::LIST_LIMIT)
-            ->get()
+        $time = app(TimeFilter::class);
+        $storeIds = $storeId !== null ? [$storeId] : null;
+        $narrow = fn (Builder $query): Builder => $time->apply($query, 'sales.created_at', 'sales.store_id', $storeIds, $period);
+
+        $open = $this->withCardRelations($this->scoped($storeId))->whereNotIn('sales.fulfillment_stage', self::FINISHED);
+        $finished = $this->withCardRelations($this->scoped($storeId))->whereIn('sales.fulfillment_stage', self::FINISHED);
+
+        // "Outside open hours" is a review of those orders alone; any other period narrows only the finished ones.
+        $finished = $narrow($finished);
+        if ($period['when'] === 'outside') {
+            $open = $narrow($open);
+        }
+
+        return $open->latest('id')->limit(self::OPEN_LIMIT)->get()
+            ->concat($finished->latest('id')->limit(self::LIST_LIMIT)->get())
+            ->sortByDesc('id')
             ->map(fn (Sale $sale): array => $this->present($sale))
             ->values()
             ->all();
@@ -198,7 +225,10 @@ class SellerOrderBoard
                 ? app(SellerOrderService::class)->minutesLeft($sale)
                 : null,
             // With the day of the week: "Monday, Oct 12 · 09:14".
-            'placed' => $sale->created_at?->format($sale->created_at->isCurrentYear() ? 'l, M j · H:i' : 'l, M j Y · H:i') ?? '',
+            'placedAt' => $sale->created_at?->toIso8601String(),
+            'open' => ! in_array($sale->fulfillment_stage, self::FINISHED, true),
+            'day' => ($this->dayBook ??= app(DayBook::class))->tag($sale->store_id !== null ? (int) $sale->store_id : null, $sale->created_at),
+            'placed' => LocalTime::wall($sale->created_at, LocalTime::wall($sale->created_at, 'Y') === LocalTime::now()->format('Y') ? 'l, M j · H:i' : 'l, M j Y · H:i') ?? '',
             'lines' => $lines,
             'destination' => [
                 'name' => $sale->delivery?->recipient_name ?? $storeName,

@@ -166,6 +166,10 @@ class BalanceLedger
      */
     public function entries(int $userId, int $limit = 50): array
     {
+        // Each line is tagged with the business day of the seller's store it happened in.
+        $days = app(\App\Services\Workforce\DayBook::class);
+        $storeId = \App\Models\Auth\User::query()->whereKey($userId)->value('store_id');
+
         return BalanceEntry::query()->where('user_id', $userId)
             ->with(['account', 'payment.sale', 'payment.customer', 'remittance.to'])
             ->latest('id')
@@ -181,6 +185,7 @@ class BalanceLedger
                         ? 'Credit repaid by '.($entry->payment->customer?->name ?? 'a customer')
                         : 'Received for '.($entry->payment?->sale?->reference_number ?? 'a payment')),
                 'at' => $entry->created_at?->toIso8601String(),
+                'day' => $days->tag($storeId !== null ? (int) $storeId : null, $entry->created_at),
             ])
             ->values()
             ->all();

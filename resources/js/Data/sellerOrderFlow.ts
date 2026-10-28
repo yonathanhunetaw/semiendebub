@@ -8,6 +8,7 @@
  * Replace this module with server props when the domain lands.
  */
 
+import type { DayTagView } from "@/types/time";
 import type { OrderPayment, PaymentAccountOption } from "@/types/payments";
 import { statusTone, type Tone } from "@/Components/Shared/ui";
 
@@ -50,6 +51,12 @@ export interface SellerOrder {
     customer: string;
     stage: OrderStage;
     placed: string;
+    /** ISO time it was placed, for how long it has waited. */
+    placedAt?: string | null;
+    /** Still on its way (not delivered or cancelled). */
+    open?: boolean;
+    /** The business day it was placed in. */
+    day?: DayTagView | null;
     /** Minutes left before an unpaid order lapses; only meaningful for to_pay. */
     expiresInMinutes?: number;
     lines: OrderLine[];

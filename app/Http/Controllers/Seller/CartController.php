@@ -32,6 +32,8 @@ class CartController extends Controller
     protected $cartService;
     use AuthorizesRequests;
 
+    private ?\App\Services\Workforce\DayBook $dayBook = null;
+
     public function __construct(CartService $cartService)
     {
         $this->cartService = $cartService;
@@ -133,6 +135,10 @@ class CartController extends Controller
             'id' => $cart->id,
             'status' => $cart->status,
             'priority' => $cart->priority,
+            // When it was started and last touched, and the business day it began in.
+            'created_at' => $cart->created_at?->toIso8601String(),
+            'updated_at' => $cart->updated_at?->toIso8601String(),
+            'day' => ($this->dayBook ??= app(\App\Services\Workforce\DayBook::class))->tag($cart->store_id !== null ? (int) $cart->store_id : null, $cart->created_at),
             'customer' => $cart->customer ? [
                 'name' => trim(($cart->customer->first_name ?? '') . ' ' . ($cart->customer->last_name ?? '')) ?: null,
                 'type' => $cart->customer->active_pricing_customer_type ?? null,

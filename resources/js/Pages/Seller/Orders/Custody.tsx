@@ -2,7 +2,7 @@ import SellerLayout from "@/Layouts/SellerLayout";
 import { birr } from "@/Data/sellerOrderFlow";
 import { Head, router } from "@inertiajs/react";
 import React, { useState } from "react";
-import { dayDateTime } from "@/utils/dates";
+import { dayDateTime, shopZone } from "@/utils/dates";
 
 /** App\Services\Fulfillment\CustodyLog::forSale() */
 interface Place {
@@ -93,7 +93,7 @@ const PLACE_ICON: Record<string, string> = {
 const PHASE_ICON: Record<number, string> = { 1: "storefront", 2: "sync_alt", 3: "local_shipping" };
 
 const time = (iso: string | null): string =>
-    iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
+    iso ? new Date(iso).toLocaleTimeString([], { timeZone: shopZone(), hour: "2-digit", minute: "2-digit" }) : "—";
 
 const dateTime = (iso: string | null): string =>
     dayDateTime(iso);

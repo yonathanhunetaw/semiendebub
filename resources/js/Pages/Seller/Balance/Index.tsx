@@ -10,6 +10,7 @@ import type {
 import { Head, router } from "@inertiajs/react";
 import React, { useState } from "react";
 import { dayDateTime } from "@/utils/dates";
+import DayTag from "@/Components/Shared/time/DayTag";
 
 /**
  * The seller's balance.
@@ -185,6 +186,9 @@ export default function BalanceIndex({
                                             <p className="text-[10px] text-outline">
                                                 {entry.bucket} · {when(entry.at)}
                                             </p>
+                                            <span className="mt-0.5 block">
+                                                <DayTag tag={entry.day} />
+                                            </span>
                                         </div>
                                         <span
                                             className={`shrink-0 font-mono text-xs font-bold ${

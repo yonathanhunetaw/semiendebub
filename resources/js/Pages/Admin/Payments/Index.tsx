@@ -21,6 +21,10 @@ import {
 import React from "react";
 import { dayDateTime } from "@/utils/dates";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
+import AgeBadge from "@/Components/Shared/time/AgeBadge";
+import DayTag from "@/Components/Shared/time/DayTag";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
+import type { DayTagView, TimeFilterView } from "@/types/time";
 
 interface PaymentRow {
     id: number;
@@ -37,6 +41,9 @@ interface PaymentRow {
     reference: string | null;
     taken_by: string | null;
     paid_at: string | null;
+    /** Waiting on its account's owner: listed whatever its day. */
+    open: boolean;
+    day: DayTagView | null;
 }
 
 /** A part this admin may be the second person on (PaymentBoard::inbox). */
@@ -58,8 +65,11 @@ interface Props {
     to_confirm?: ToConfirm[];
     payments?: PaymentRow[];
     today?: Array<{ method: string; total: number; count: number }>;
+    /** What the takings box covers: Today, Yesterday, Last 7 days… */
+    summary_label?: string;
+    time: TimeFilterView;
     methods?: string[];
-    filters: { method: string | null };
+    filters: { method: string | null; when: string };
     pagination: { current_page: number; last_page: number; total: number };
 }
 
@@ -76,7 +86,7 @@ const STATUS: Record<string, { label: string; color: "default" | "info" | "succe
 };
 
 /** Every payment part, with today's confirmed takings by method. */
-export default function PaymentsIndex({ to_confirm = [], payments = [], today = [], methods = [], filters, pagination }: Props): React.ReactElement {
+export default function PaymentsIndex({ to_confirm = [], payments = [], today = [], summary_label = "Today", time, methods = [], filters, pagination }: Props): React.ReactElement {
     const go = (patch: Record<string, string | number | null>): void =>
         router.get(route("admin.payments.index"), { ...filters, ...patch }, { preserveState: true, replace: true });
 
@@ -90,11 +100,18 @@ export default function PaymentsIndex({ to_confirm = [], payments = [], today = 
                     Payments
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Received today: {money(todayTotal)}
+                    Received ({summary_label.toLowerCase()}): {money(todayTotal)}
                     {today.length > 0 ? ` — ${today.map((row) => `${label(row.method)} ${money(row.total)} (${row.count})`).join(" · ")}` : ""}
                 </Typography>
 
                 <ConfirmInbox parts={to_confirm} />
+
+                <Box sx={{ mb: 1.5 }}>
+                    <TimeFilterChips filter={time} />
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                        Parts waiting to be confirmed are always listed; the day narrows the settled ones.
+                    </Typography>
+                </Box>
 
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
                     <Chip label="All methods" color={filters.method === null ? "primary" : "default"} onClick={() => go({ method: null, page: null })} />
@@ -125,7 +142,13 @@ export default function PaymentsIndex({ to_confirm = [], payments = [], today = 
                         <TableBody>
                             {payments.map((p) => (
                                 <TableRow key={p.id} hover>
-                                    <TableCell>{dayDateTime(p.paid_at)}</TableCell>
+                                    <TableCell>
+                                        {dayDateTime(p.paid_at)}
+                                        <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                                            <DayTag tag={p.day} />
+                                            {p.open ? <AgeBadge since={p.paid_at} warnHours={12} lateHours={48} prefix="waiting " /> : null}
+                                        </Stack>
+                                    </TableCell>
                                     <TableCell>
                                         {p.order ? (
                                             <Button size="small" onClick={() => router.visit(route("admin.orders.custody", { reference: p.order as string }))}>

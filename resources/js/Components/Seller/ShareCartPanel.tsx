@@ -1,4 +1,5 @@
 import React from "react";
+import { shopZone } from "@/utils/dates";
 import { router } from "@inertiajs/react";
 import { StatusPill, type Tone } from "@/Components/Shared/ui";
 
@@ -20,7 +21,7 @@ const STAGE: Record<CartShareInfo["stage"], { label: string; tone: Tone }> = {
     expired: { label: "Expired", tone: "neutral" },
 };
 
-const ago = (iso: string | null) => (iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null);
+const ago = (iso: string | null) => (iso ? new Date(iso).toLocaleString(undefined, { timeZone: shopZone(), day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null);
 
 /**
  * Share the open cart with its customer: one secret link (7 days) they open

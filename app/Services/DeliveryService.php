@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Models\Auth\User;
 use App\Exceptions\MovementDomainException;
+use App\Models\Auth\User;
 use App\Models\Fulfillment\Delivery;
 use App\Services\Fulfillment\MovementDomainService;
 use App\Services\Inventory\StockScope;
+use App\Services\Workforce\LocalTime;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -95,7 +95,8 @@ class DeliveryService
             'in_transit' => (int) $mine()->where('status', self::STATUS_IN_TRANSIT)->count(),
             'delivered_today' => (int) $mine()
                 ->where('status', self::STATUS_DELIVERED)
-                ->whereDate('delivered_at', Carbon::today())
+                ->where('delivered_at', '>=', LocalTime::today()->utc())
+                ->where('delivered_at', '<', LocalTime::today()->addDay()->utc())
                 ->count(),
             'delivered_total' => (int) $mine()->where('status', self::STATUS_DELIVERED)->count(),
             'failed' => (int) $mine()->where('status', self::STATUS_FAILED)->count(),

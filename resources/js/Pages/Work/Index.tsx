@@ -197,7 +197,7 @@ export default function WorkIndex({
                             <h2 className={sectionTitle}>Opening and closing today</h2>
                             {days.length === 0 ? <p className={`${cardCls} text-[12px] text-on-surface-variant`}>You do not work at any site.</p> : null}
                             {days.map((day) => (
-                                <SiteDayCard key={day.id} day={day}>
+                                <SiteDayCard key={day.id} day={day} app={app}>
                                     {day.status === "open" && (day.i_opened || day.manages) ? (
                                         <Link href={wr(app, "work.sites.counter", day.site.id)} className={`mt-3 inline-block ${ghostBtn}`}>
                                             Counter screen

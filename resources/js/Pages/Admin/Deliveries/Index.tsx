@@ -17,6 +17,10 @@ import {
 } from "@mui/material";
 import React, { useState } from "react";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
+import AgeBadge from "@/Components/Shared/time/AgeBadge";
+import DayTag from "@/Components/Shared/time/DayTag";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
+import type { DayTagView, TimeFilterView } from "@/types/time";
 
 interface DeliveryRow {
     id: number;
@@ -30,11 +34,16 @@ interface DeliveryRow {
     ready: boolean;
     failure_reason: string | null;
     updated_at: string | null;
+    created_at: string | null;
+    /** Still going or failed: listed whatever its day. */
+    open: boolean;
+    day: DayTagView | null;
 }
 
 interface Props {
     deliveries?: DeliveryRow[];
-    filters: { status: string };
+    filters: { status: string; when: string };
+    time: TimeFilterView;
     counts?: { open: number; unassigned: number; failed: number; delivered: number };
     couriers?: Array<{ id: number; name: string }>;
     pagination: { current_page: number; last_page: number; total: number };
@@ -61,6 +70,7 @@ const STATUS_COLOR: Record<string, "default" | "warning" | "info" | "primary" | 
 export default function DeliveriesIndex({
     deliveries = [],
     filters,
+    time,
     counts = { open: 0, unassigned: 0, failed: 0, delivered: 0 },
     couriers = [],
     pagination,
@@ -94,6 +104,10 @@ export default function DeliveriesIndex({
                         );
                     })}
                 </Stack>
+
+                <Box sx={{ mb: 2 }}>
+                    <TimeFilterChips filter={time} />
+                </Box>
 
                 <Paper variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
                     <Table size="small">
@@ -140,6 +154,10 @@ export default function DeliveriesIndex({
                                                 Waiting for Pick &amp; Pack
                                             </Typography>
                                         ) : null}
+                                        <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                                            <DayTag tag={d.day} />
+                                            {d.open ? <AgeBadge since={d.created_at} warnHours={24} lateHours={48} prefix="ordered " /> : null}
+                                        </Stack>
                                     </TableCell>
                                     <TableCell>
                                         {d.courier ?? (d.ready && d.status === "pending" ? <AssignCourier delivery={d} couriers={couriers} /> : "—")}

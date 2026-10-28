@@ -1,4 +1,5 @@
 import { router } from "@inertiajs/react";
+import { shopZone } from "@/utils/dates";
 import AssignmentTurnedInRoundedIcon from "@mui/icons-material/AssignmentTurnedInRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import DrawRoundedIcon from "@mui/icons-material/DrawRounded";
@@ -55,6 +56,7 @@ type Phase = "done" | "current" | "todo";
 const when = (value: string | null): string | null =>
     value
         ? new Date(value).toLocaleString(undefined, {
+              timeZone: shopZone(),
               weekday: "short",
               day: "numeric",
               month: "short",

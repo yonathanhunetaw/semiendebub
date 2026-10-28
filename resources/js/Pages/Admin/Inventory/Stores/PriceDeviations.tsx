@@ -1,5 +1,6 @@
 // resources/js/Pages/Admin/Inventory/Stores/PriceDeviations.tsx
 import React, { useMemo, useState } from "react";
+import { shopZone } from "@/utils/dates";
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import axios from "axios";
@@ -202,7 +203,7 @@ export default function PriceDeviations({ store, deviations = [] }: Props) {
                         <Box>
                             <Typography variant="caption" color="text.secondary">Ends</Typography>
                             <Typography variant="body2" fontWeight={700}>
-                                {new Date(d.discount_ends_at).toLocaleDateString()}
+                                {new Date(d.discount_ends_at).toLocaleDateString(undefined, { timeZone: shopZone() })}
                             </Typography>
                         </Box>
                     </Stack>
@@ -294,7 +295,7 @@ export default function PriceDeviations({ store, deviations = [] }: Props) {
                                             {fmt(d.discount_price)}
                                         </TableCell>
                                         <TableCell sx={{ fontFamily: "monospace" }}>-{pct.toFixed(1)}%</TableCell>
-                                        <TableCell>{new Date(d.discount_ends_at).toLocaleDateString()}</TableCell>
+                                        <TableCell>{new Date(d.discount_ends_at).toLocaleDateString(undefined, { timeZone: shopZone() })}</TableCell>
                                         <TableCell><UrgencyChip days={days} /></TableCell>
                                         <TableCell align="right">
                                             <Stack direction="row" spacing={0.5} justifyContent="flex-end">

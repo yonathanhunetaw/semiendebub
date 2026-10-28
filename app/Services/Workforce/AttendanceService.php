@@ -100,10 +100,10 @@ class AttendanceService
     }
 
     /** Closing the site: clock out the closer and (when asked) everyone else. */
-    public function clockOutAtClosing(StockLocation $site, User $closer): void
+    public function clockOutAtClosing(StockLocation $site, User $closer, ?CarbonInterface $at = null): void
     {
         foreach ($this->stillIn($site) as $entry) {
-            $this->finish($entry, TimeEntry::METHOD_CLOSING, $closer, (int) $entry->user_id === (int) $closer->id ? null : 'Clocked out when '.$closer->first_name.' closed the site');
+            $this->finish($entry, TimeEntry::METHOD_CLOSING, $closer, (int) $entry->user_id === (int) $closer->id ? null : 'Clocked out when '.$closer->first_name.' closed the site', $at);
         }
     }
 

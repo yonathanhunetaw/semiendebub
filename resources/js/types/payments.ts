@@ -115,6 +115,8 @@ export interface BalanceEntryRow {
     bucket: string;
     what: string;
     at: string | null;
+    /** The business day of the seller's store it happened in. */
+    day?: import("./time").DayTagView | null;
 }
 
 /* ----------------------------------------------------------

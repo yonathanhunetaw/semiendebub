@@ -45,6 +45,10 @@ class CartController extends Controller
             ->paginate(15)
             ->withQueryString();
 
+        // Which business day each cart was started in.
+        $days = app(\App\Services\Workforce\DayBook::class);
+        $carts->getCollection()->each(fn (Cart $cart) => $cart->setAttribute('day', $days->tag($cart->store_id !== null ? (int) $cart->store_id : null, $cart->created_at)));
+
         return Inertia::render('Admin/Carts/Index', [
             'carts' => $carts,
         ]);

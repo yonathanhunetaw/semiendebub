@@ -84,7 +84,7 @@ export default function Clock({ app, token, code, works_here, site, day, key_rec
                         <p className={`${cardCls} text-[12px] text-on-surface-variant`}>You do not work at this site.</p>
                     ) : null}
 
-                    {day ? <SiteDayCard day={day} /> : null}
+                    {day ? <SiteDayCard day={day} app={app} /> : null}
 
                     {code === "live" && works_here && has_shifts && day?.status === "open" ? (
                         <section className={cardCls}>

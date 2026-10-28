@@ -21,6 +21,7 @@ use App\Models\StockKeeper\ItemStock;
 use App\Models\StockKeeper\Transfer;
 use App\Services\DeliveryService;
 use App\Services\Fulfillment\SellerOrderBoard;
+use App\Services\Workforce\LocalTime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -46,8 +47,8 @@ final class DashboardAreas
     public function all(): array
     {
         $store = $this->activeStore;
-        $since = now()->subDays(6)->startOfDay();
-        $today = now()->startOfDay();
+        $since = LocalTime::today()->subDays(6)->utc();
+        $today = LocalTime::today()->utc();
         $scopeIds = $store->scopeIds();
 
         $board = $this->board->counts($store->id());

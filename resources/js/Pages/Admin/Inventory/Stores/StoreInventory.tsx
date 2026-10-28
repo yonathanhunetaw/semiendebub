@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { shopZone } from "@/utils/dates";
 import StitchProductDetails from './StitchProductDetails';
 import AdminLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
@@ -1557,7 +1558,7 @@ const PICK_FIELDS: Array<{ field: PickField; label: string }> = [
 const uniq = (values: Array<string | null | undefined>) => Array.from(new Set(values.filter((v): v is string => !!v)));
 
 const shortDate = (iso: string | null | undefined) =>
-    iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : null;
+    iso ? new Date(iso).toLocaleDateString(undefined, { timeZone: shopZone(), day: "numeric", month: "short", year: "numeric" }) : null;
 
 /** A price, its discount (struck original) and when the discount ends. */
 function PriceLine({ price, discount, endsAt, emphasis = false }: {

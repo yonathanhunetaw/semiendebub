@@ -86,6 +86,10 @@ export interface SiteDayView {
     open_note: string | null;
     closed_at: string | null;
     closed_by: string | null;
+    /** A manager closed it afterwards; nobody closed it at the counter. */
+    closed_late: boolean;
+    /** Still open from an earlier date: nobody closed it. */
+    overdue_close: boolean;
     till_count: number | null;
     close_note: string | null;
     open_checklist: { item: string; done: boolean }[];

@@ -30,7 +30,7 @@ class SiteDay extends Model
     protected $fillable = [
         'stock_location_id', 'date', 'status', 'opener_id', 'closer_id', 'driver_id',
         'opened_at', 'opened_by', 'opened_without_key', 'no_driver', 'open_checklist', 'float_amount', 'open_note',
-        'closed_at', 'closed_by', 'close_checklist', 'till_count', 'close_note', 'missed_at',
+        'closed_at', 'closed_by', 'closed_late', 'close_checklist', 'till_count', 'close_note', 'missed_at',
     ];
 
     protected $casts = [
@@ -46,6 +46,7 @@ class SiteDay extends Model
         'missed_at' => 'datetime',
         'opened_without_key' => 'boolean',
         'no_driver' => 'boolean',
+        'closed_late' => 'boolean',
         'open_checklist' => 'array',
         'close_checklist' => 'array',
         'float_amount' => 'decimal:2',

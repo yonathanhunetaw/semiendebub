@@ -4,6 +4,7 @@ import { Box, Button, Chip, Paper, Stack, Typography } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import React from "react";
+import { shopZone } from "@/utils/dates";
 
 interface Props {
     user: {
@@ -32,7 +33,7 @@ export default function ShowUser({ user }: Props): React.ReactElement {
         ["Also works as", alsoRoles.length > 0 ? alsoRoles.map((key) => <Chip key={key} size="small" variant="outlined" label={key.replace(/_/g, " ")} sx={{ mr: 0.5 }} />) : "—"],
         ["Store", user.store?.name ?? "All stores"],
         ["Created by", user.creator ? `${user.creator.first_name} ${user.creator.last_name ?? ""}`.trim() : "—"],
-        ["Created", user.created_at ? new Date(user.created_at).toLocaleString() : "—"],
+        ["Created", user.created_at ? new Date(user.created_at).toLocaleString(undefined, { timeZone: shopZone() }) : "—"],
     ];
 
     return (

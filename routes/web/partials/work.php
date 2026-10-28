@@ -39,6 +39,7 @@ Route::post('/work/sites/{site}/printed-qr', [SiteController::class, 'reprint'])
 Route::get('/work/clock/{site}/{token}', [ClockController::class, 'show'])->name('work.clock');
 Route::post('/work/sites/{site}/open', [ClockController::class, 'open'])->name('work.sites.open');
 Route::post('/work/sites/{site}/close', [ClockController::class, 'close'])->name('work.sites.close');
+Route::post('/work/sites/{site}/close-late', [ClockController::class, 'closeLate'])->name('work.sites.close-late');
 Route::get('/work/sites/{site}/counter', [ClockController::class, 'counter'])->name('work.sites.counter');
 Route::get('/work/sites/{site}/counter/code', [ClockController::class, 'code'])->name('work.sites.counter.code');
 

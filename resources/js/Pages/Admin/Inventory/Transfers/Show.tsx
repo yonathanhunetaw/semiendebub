@@ -1,4 +1,5 @@
 import AdminLayout from "@/Layouts/AppLayout";
+import { shopZone } from "@/utils/dates";
 import type { TransferRow } from "@/types/stockkeeper";
 import { Head, Link, router } from "@inertiajs/react";
 import {
@@ -178,7 +179,7 @@ export default function TransferShow({ transfer, journal = [], couriers = [] }: 
                         <TableBody>
                             {journal.map((row) => (
                                 <TableRow key={row.id}>
-                                    <TableCell>{row.at ? new Date(row.at).toLocaleString() : "—"}</TableCell>
+                                    <TableCell>{row.at ? new Date(row.at).toLocaleString(undefined, { timeZone: shopZone() }) : "—"}</TableCell>
                                     <TableCell>{VERB[row.type] ?? row.type}</TableCell>
                                     <TableCell>{row.location ?? "—"}</TableCell>
                                     <TableCell align="right" sx={{ fontFamily: "monospace" }}>

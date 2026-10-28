@@ -13,6 +13,7 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import ImpersonationBanner from './Components/Shared/ImpersonationBanner';
 import { installStockKeepingRoutes } from './utils/stockKeepingRoutes';
+import { setShopTimeZone } from './utils/dates';
 import { ThemeContext } from './theme/ThemeContext';
 import { getDesignTokens, resolveRole, RoleContext, RoleFavicon, THEME_STORAGE_KEY, DEFAULT_THEME_SETTING } from './theme';
 
@@ -58,6 +59,8 @@ createInertiaApp({
         });
     },
     setup({ el, App, props }) {
+        setShopTimeZone((props.initialPage.props as { shopTimeZone?: string }).shopTimeZone);
+
         const Root = () => {
             // --- ROLE (module) DETECTION ---
             // Same hostname rule as the pre-paint script in app.blade.php.

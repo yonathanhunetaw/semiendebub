@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { shopZone } from "@/utils/dates";
 import { Link, router } from "@inertiajs/react";
 import PartyDetailModal from "@/Components/Seller/PartyDetailModal";
 import { TONES, statusTone } from "@/Components/Shared/ui";
@@ -32,8 +33,8 @@ function formatDateTime(valStr: string) {
     if (valStr.includes("T")) {
         const d = new Date(valStr);
         if (!isNaN(d.getTime())) {
-            const dateStr = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-            const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+            const dateStr = d.toLocaleDateString("en-US", { timeZone: shopZone(), weekday: "short", month: "short", day: "numeric" });
+            const timeStr = d.toLocaleTimeString("en-US", { timeZone: shopZone(), hour: "numeric", minute: "2-digit" });
             return `${dateStr} • ${timeStr}`;
         }
     }

@@ -1,5 +1,6 @@
 // resources/js/Pages/Admin/Inventory/Transfers/index.tsx
 import AdminLayout from "@/Layouts/AppLayout";
+import { shopZone } from "@/utils/dates";
 import { Head, Link, router } from "@inertiajs/react";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
@@ -260,7 +261,7 @@ export default function TransfersIndex({
                                         </TableCell>
                                         <TableCell>
                                             <Typography variant="caption" color="text.secondary">
-                                                {new Date(transfer.created_at).toLocaleDateString()}
+                                                {new Date(transfer.created_at).toLocaleDateString(undefined, { timeZone: shopZone() })}
                                             </Typography>
                                             {transfer.completed_at && (
                                                 <Typography
@@ -268,7 +269,7 @@ export default function TransfersIndex({
                                                     color="success.main"
                                                     display="block"
                                                 >
-                                                    ✓ {new Date(transfer.completed_at).toLocaleDateString()}
+                                                    ✓ {new Date(transfer.completed_at).toLocaleDateString(undefined, { timeZone: shopZone() })}
                                                 </Typography>
                                             )}
                                         </TableCell>

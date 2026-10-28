@@ -18,6 +18,10 @@ import {
 import React, { useState } from "react";
 import { dayDateTime } from "@/utils/dates";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
+import AgeBadge from "@/Components/Shared/time/AgeBadge";
+import DayTag from "@/Components/Shared/time/DayTag";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
+import type { DayTagView, TimeFilterView } from "@/types/time";
 
 type Stage = "to_pay" | "paid" | "packing" | "to_deliver" | "delivered" | "canceled";
 
@@ -32,12 +36,16 @@ interface OrderRow {
     delivery_status: string | null;
     courier: string | null;
     placed_at: string | null;
+    /** Still on its way: listed whatever its day. */
+    open: boolean;
+    day: DayTagView | null;
 }
 
 interface Props {
     orders?: OrderRow[];
     counts?: Partial<Record<Stage, number>>;
-    filters: { stage: string; store: number | null; search: string };
+    filters: { stage: string; store: number | null; search: string; when: string };
+    time: TimeFilterView;
     stores?: Array<{ id: number; name: string }>;
     /** A global admin may look at every store at once. */
     can_pick_all?: boolean;
@@ -60,7 +68,7 @@ const birr = (amount: number): string =>
  * Every order across every store. Stages match the seller's board; opening an
  * order shows who has held its goods, where and when.
  */
-export default function OrdersIndex({ orders = [], counts = {}, filters, stores = [], can_pick_all = false, pagination }: Props): React.ReactElement {
+export default function OrdersIndex({ orders = [], counts = {}, filters, time, stores = [], can_pick_all = false, pagination }: Props): React.ReactElement {
     const [search, setSearch] = useState(filters.search ?? "");
 
     /*
@@ -135,6 +143,13 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, stores 
                     />
                 </Stack>
 
+                <Box sx={{ mb: 2 }}>
+                    <TimeFilterChips filter={time} />
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                        Orders still on their way are always listed; the day narrows the finished ones.
+                    </Typography>
+                </Box>
+
                 <Paper variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
                     <Table size="small">
                         <TableHead>
@@ -168,7 +183,13 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, stores 
                                             {order.delivery_status ? `${order.delivery_status.replace("_", " ")}${order.courier ? ` · ${order.courier}` : ""}` : "—"}
                                         </TableCell>
                                         <TableCell align="right">{birr(order.total)}</TableCell>
-                                        <TableCell>{dayDateTime(order.placed_at)}</TableCell>
+                                        <TableCell>
+                                            {dayDateTime(order.placed_at)}
+                                            <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                                                <DayTag tag={order.day} />
+                                                {order.open ? <AgeBadge since={order.placed_at} warnHours={24} lateHours={72} /> : null}
+                                            </Stack>
+                                        </TableCell>
                                     </TableRow>
                                 );
                             })}

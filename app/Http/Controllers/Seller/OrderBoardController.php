@@ -51,9 +51,12 @@ class OrderBoardController extends Controller
     public function index(Request $request): Response
     {
         $storeId = $this->storeId($request);
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        $period = $time->fromRequest($request);
 
         return Inertia::render('Seller/Orders/index', [
-            'orders' => $this->board->orders($storeId),
+            'orders' => $this->board->orders($storeId, $period),
+            'time' => $time->describe($period),
             'limit' => SellerOrderBoard::LIST_LIMIT,
             // Every order waiting in Pick & pack at this store, keyed by sale
             // id: what each card's pick panel works from.

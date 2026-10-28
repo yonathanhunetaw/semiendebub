@@ -1,4 +1,5 @@
 import { birr } from "@/Data/sellerOrderFlow";
+import { shopZone } from "@/utils/dates";
 import type { PickPackLine, PickPackPlan, SourceRef, SourcingOption } from "@/types/sourcing";
 import { Link, router } from "@inertiajs/react";
 import React, { useMemo, useState } from "react";
@@ -206,7 +207,7 @@ export default function PickPackPanel({ plan }: { plan: PickPackPlan }): React.R
                         <span className="material-symbols-outlined text-[15px]">{startedAt ? "person_play" : "hourglass_empty"}</span>
                         <span className="truncate">
                             {startedAt
-                                ? `Picking since ${startedAt.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}${sale.picking_started_by ? ` · ${sale.picking_started_by}` : ""}`
+                                ? `Picking since ${startedAt.toLocaleString(undefined, { timeZone: shopZone(), weekday: "short", hour: "2-digit", minute: "2-digit" })}${sale.picking_started_by ? ` · ${sale.picking_started_by}` : ""}`
                                 : "Nobody has started picking yet"}
                         </span>
                     </span>

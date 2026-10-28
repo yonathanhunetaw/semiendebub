@@ -9,8 +9,11 @@ use App\Models\Auth\User;
 use App\Models\Fulfillment\Delivery;
 use App\Services\Admin\ActiveStore;
 use App\Services\DeliveryService;
+use App\Services\Workforce\DayBook;
+use App\Services\Workforce\TimeFilter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -26,9 +29,13 @@ class DeliveryController extends Controller
     ) {
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request, TimeFilter $time, DayBook $days): Response
     {
         $status = $request->string('status')->toString() ?: 'open';
+        $period = $time->fromRequest($request);
+        // A delivery's time is when it landed, else when it last moved; its store is its order's.
+        $movedAt = DB::raw('COALESCE(deliveries.delivered_at, deliveries.updated_at)');
+        $storeOf = DB::raw('(select store_id from sales where sales.id = deliveries.sale_id)');
 
         // A delivery has no store of its own: it is its order's.
         $scoped = fn () => $this->activeStore->applyThrough(Delivery::query(), 'sale');
@@ -38,6 +45,9 @@ class DeliveryController extends Controller
             ->when($status === 'open', fn ($q) => $q->open())
             ->when($status === 'unassigned', fn ($q) => $q->unassigned()->readyToCollect()->where('status', DeliveryService::STATUS_PENDING))
             ->when(! in_array($status, ['open', 'unassigned', 'all'], true), fn ($q) => $q->where('status', $status))
+            // Runs still going (or failed, which needs a decision) are always listed; the period narrows the finished ones.
+            ->tap(fn ($q) => $time->applyKeepingOpen($q, $movedAt, $storeOf, $this->activeStore->scopeIds(), $period,
+                fn ($open) => $open->whereIn('deliveries.status', ['pending', 'dispatched', 'in_transit', DeliveryService::STATUS_FAILED])))
             ->latest('id')
             ->paginate(25)
             ->withQueryString();
@@ -55,8 +65,12 @@ class DeliveryController extends Controller
                 'ready' => $d->sale === null || $d->sale->sourcing_confirmed_at !== null,
                 'failure_reason' => $d->failure_reason,
                 'updated_at' => $d->updated_at?->toIso8601String(),
+                'created_at' => $d->created_at?->toIso8601String(),
+                'open' => in_array($d->status, ['pending', 'dispatched', 'in_transit', DeliveryService::STATUS_FAILED], true),
+                'day' => $days->tag($d->sale?->store_id !== null ? (int) $d->sale->store_id : null, $d->delivered_at ?? $d->created_at),
             ])->values(),
-            'filters' => ['status' => $status],
+            'time' => $time->describe($period),
+            'filters' => ['status' => $status, 'when' => $period['when']],
             'counts' => [
                 'open' => $scoped()->open()->count(),
                 'unassigned' => $scoped()->unassigned()->readyToCollect()->where('status', DeliveryService::STATUS_PENDING)->count(),

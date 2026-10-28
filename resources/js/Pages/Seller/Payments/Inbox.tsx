@@ -4,6 +4,7 @@ import type { InboxPayment, RemittanceRow, WaitingPayment } from "@/types/paymen
 import { Head, router } from "@inertiajs/react";
 import React, { useState } from "react";
 import { dayDateTime } from "@/utils/dates";
+import AgeBadge from "@/Components/Shared/time/AgeBadge";
 
 /**
  * Payments to confirm.
@@ -104,6 +105,9 @@ export default function Inbox({ payments = [], expected = [], handovers = [], wa
                                 {handover.reference ? `Reference ${handover.reference} · ` : ""}
                                 {dayDateTime(handover.at, "")}
                             </p>
+                            <p className="mt-1">
+                                <AgeBadge since={handover.at} warnHours={12} lateHours={48} prefix="waiting " />
+                            </p>
                             <div className="mt-3 flex gap-2 border-t border-outline-variant/60 pt-3">
                                 <button
                                     type="button"
@@ -156,6 +160,9 @@ export default function Inbox({ payments = [], expected = [], handovers = [], wa
                                 <p>
                                     {payment.account ? "Marked paid by" : "Cash taken by"} {payment.claimed_by ?? "a seller"}
                                     {payment.claimed_at ? ` · ${dayDateTime(payment.claimed_at)}` : ""}
+                                </p>
+                                <p>
+                                    <AgeBadge since={payment.claimed_at ?? payment.created_at} warnHours={12} lateHours={48} prefix="waiting " />
                                 </p>
                                 <p>
                                     Order total {birr(payment.order_total)}

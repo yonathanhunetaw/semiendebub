@@ -10,6 +10,7 @@ use App\Http\Requests\Inventory\RejectReplenishmentRequest;
 use App\Models\StockKeeper\Transfer;
 use App\Services\Admin\ActiveStore;
 use App\Services\Inventory\ReplenishmentProposalService;
+use App\Services\Workforce\LocalTime;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -48,12 +49,14 @@ class ReplenishmentController extends Controller
                 'approved_today' => $activeStore->apply(Transfer::query(), 'to_store_id')
                     ->autoProposed()
                     ->where('approval_state', Transfer::APPROVAL_APPROVED)
-                    ->whereDate('approved_at', now()->toDateString())
+                    ->where('approved_at', '>=', LocalTime::today()->utc())
+                    ->where('approved_at', '<', LocalTime::today()->addDay()->utc())
                     ->count(),
                 'rejected_today' => $activeStore->apply(Transfer::query(), 'to_store_id')
                     ->autoProposed()
                     ->where('approval_state', Transfer::APPROVAL_REJECTED)
-                    ->whereDate('rejected_at', now()->toDateString())
+                    ->where('rejected_at', '>=', LocalTime::today()->utc())
+                    ->where('rejected_at', '<', LocalTime::today()->addDay()->utc())
                     ->count(),
             ],
             // Breaches the Transfer domain cannot express: warehouse to

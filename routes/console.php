@@ -25,6 +25,7 @@ Artisan::command('inspire', function () {
 
 Schedule::command('inventory:propose-replenishment')
     ->dailyAt('02:30')
+    ->timezone(config('app.business_timezone'))
     ->withoutOverlapping()
     ->onOneServer();
 

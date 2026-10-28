@@ -165,7 +165,7 @@ class WorkStations
         $code = [['name' => 'token', 'label' => 'Code on the counter screen', 'type' => 'text', 'required' => true]];
         $entry = $this->attendance->openEntry($viewer);
         foreach ($this->sites->workedAtBy($viewer)->filter(fn (StockLocation $site): bool => $this->sites->hasShifts($site))->take(6) as $site) {
-            $day = $this->days->day($site, now());
+            $day = $this->days->current($site);
             $here = $entry !== null && (int) $entry->stock_location_id === (int) $site->id;
             $onBreak = $here && $entry->breaks()->whereNull('ended_at')->exists();
             $state = match ($day->status) {

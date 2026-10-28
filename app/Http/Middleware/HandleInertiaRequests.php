@@ -120,6 +120,8 @@ class HandleInertiaRequests extends Middleware
             // The top bar's bell: what this user has to do next (TaskInbox).
             // Lazy and recomputed per visit, so a done task drops off.
             'tasks' => fn () => $request->user() ? app(\App\Services\Tasks\TaskInbox::class)->for($request->user()) : [],
+            // The shops' clock (Addis): browser screens show times on it, not on the phone's zone.
+            'shopTimeZone' => (string) config('app.business_timezone', 'UTC'),
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

@@ -20,6 +20,10 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
+import AgeBadge from "@/Components/Shared/time/AgeBadge";
+import DayTag from "@/Components/Shared/time/DayTag";
+import type { DayTagView } from "@/types/time";
+import { dayDateTime } from "@/utils/dates";
 
 interface Cart {
     id: number;
@@ -27,6 +31,8 @@ interface Cart {
     session_id: string | null;
     created_at: string;
     updated_at: string;
+    /** The business day it was started in. */
+    day?: DayTagView | null;
     customer?: {
         id: number;
         name: string;
@@ -130,6 +136,9 @@ export default function CartsIndex({ carts }: Props) {
                             <TableCell sx={{ fontWeight: "bold" }}>
                                 Status
                             </TableCell>
+                            <TableCell sx={{ fontWeight: "bold" }}>
+                                Started
+                            </TableCell>
                             <TableCell
                                 align="right"
                                 sx={{ fontWeight: "bold" }}
@@ -183,7 +192,6 @@ export default function CartsIndex({ carts }: Props) {
                                         </Typography>
                                     </TableCell>
                                     <TableCell>
-                                        // Inside your .map() function in React:
                                         <Chip
                                             // Change .items to .variants to match the Controller's 'with' call
                                             label={`${cart.variants?.length ?? 0} items`}
@@ -195,6 +203,13 @@ export default function CartsIndex({ carts }: Props) {
                                                 fontSize: "0.7rem",
                                             }}
                                         />
+                                    </TableCell>
+                                    <TableCell>
+                                        {dayDateTime(cart.created_at)}
+                                        <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                                            <DayTag tag={cart.day} />
+                                            {cart.status === "open" ? <AgeBadge since={cart.updated_at} warnHours={24} lateHours={72} prefix="idle " /> : null}
+                                        </Stack>
                                     </TableCell>
                                     <TableCell align="right">
                                         <Stack
@@ -233,7 +248,7 @@ export default function CartsIndex({ carts }: Props) {
                         ) : (
                             <TableRow>
                                 <TableCell
-                                    colSpan={6}
+                                    colSpan={7}
                                     align="center"
                                     sx={{ py: 5 }}
                                 >

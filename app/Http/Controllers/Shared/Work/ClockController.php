@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Shared\Work;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Shared\Work\Concerns\ReadsWorkApp;
 use App\Http\Requests\Workforce\ClockRequest;
+use App\Http\Requests\Workforce\CloseLateSiteRequest;
 use App\Http\Requests\Workforce\CloseSiteRequest;
 use App\Http\Requests\Workforce\OpenSiteRequest;
 use App\Models\Auth\User;
@@ -53,7 +54,7 @@ class ClockController extends Controller
         abort_unless($this->sites->isSite($site), 404);
         $kind = $this->qr->verify($site, $token);
         $works = $this->sites->worksAt($user, $site);
-        $day = $this->days->day($site, now());
+        $day = $this->days->current($site);
 
         return Inertia::render('Work/Clock', [
             'app' => $this->app($request),
@@ -125,6 +126,20 @@ class ClockController extends Controller
         ), $keyTo ? sprintf('%s is closed. The key waits for %s to accept it.', $site->name, $keyTo->first_name) : sprintf('%s is closed.', $site->name));
     }
 
+    /** A manager closes a day nobody closed, saying when the shop really closed. */
+    public function closeLate(CloseLateSiteRequest $request, StockLocation $site): RedirectResponse
+    {
+        abort_unless($this->sites->isSite($site), 404);
+
+        return $this->attempt(fn () => $this->days->closeLate(
+            $site,
+            $request->user(),
+            LocalTime::parse($request->validated('closed_at')),
+            $request->validated('till_count') !== null ? (float) $request->validated('till_count') : null,
+            (string) $request->validated('note'),
+        ), sprintf('%s is closed for that day.', $site->name));
+    }
+
     /** The counter screen: the live QR, refreshed every minute. */
     public function counter(Request $request, StockLocation $site): Response
     {
@@ -148,7 +163,7 @@ class ClockController extends Controller
     /** @return array{url: string, seconds_left: int, open: bool} */
     private function liveCode(StockLocation $site): array
     {
-        $open = $this->days->day($site, now())->status === SiteDay::STATUS_OPEN;
+        $open = $this->days->current($site)->status === SiteDay::STATUS_OPEN;
 
         return [
             'url' => $this->qr->url($site, $this->qr->liveToken($site)),
@@ -165,7 +180,7 @@ class ClockController extends Controller
             return;
         }
 
-        $day = $this->days->day($site, now());
+        $day = $this->days->current($site);
         $here = $user !== null && (int) ($this->attendance->openEntry($user)?->stock_location_id ?? 0) === (int) $site->id;
 
         abort_unless(

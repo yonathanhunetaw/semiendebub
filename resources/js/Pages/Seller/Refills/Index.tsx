@@ -1,4 +1,5 @@
 import SellerLayout from "@/Layouts/SellerLayout";
+import { shopZone } from "@/utils/dates";
 import type { RefillRow, RefillStage, RefillWaitingList } from "@/types/refills";
 import { Head, Link, router } from "@inertiajs/react";
 import React, { useMemo, useState } from "react";
@@ -47,7 +48,7 @@ const STAGE_CHIP: Record<RefillStage, { label: string; cls: string }> = {
 };
 
 const when = (iso: string | null): string =>
-    iso ? new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "not scheduled yet";
+    iso ? new Date(iso).toLocaleString(undefined, { timeZone: shopZone(), weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "not scheduled yet";
 
 /**
  * The refill list: suggestions from stock keepers and the auto trigger for

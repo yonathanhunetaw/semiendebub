@@ -1,4 +1,5 @@
 import { Head, Link, router } from "@inertiajs/react";
+import { shopZone } from "@/utils/dates";
 import {
     Box,
     IconButton,
@@ -111,7 +112,7 @@ function DiscountCountdown({ endsAt }: { endsAt: string | null }) {
     else label = `${minutes}m ${seconds}s`;
 
     return (
-        <Tooltip title={`Discount ends: ${new Date(endsAt).toLocaleString()}`} arrow>
+        <Tooltip title={`Discount ends: ${new Date(endsAt).toLocaleString(undefined, { timeZone: shopZone() })}`} arrow>
             <Stack direction="row" alignItems="center" spacing={0.5}>
                 <AccessTimeIcon sx={{ fontSize: "0.85rem", color: "rgb(var(--inverse-primary))" }} />
                 <Typography variant="caption" sx={{ fontWeight: 700, color: "rgb(var(--inverse-on-surface))", fontSize: "0.75rem" }}>

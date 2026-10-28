@@ -8,6 +8,7 @@ use App\Models\Procurement\PayableInstallment;
 use App\Models\Procurement\Purchase;
 use App\Models\Procurement\SupplierPayable;
 use App\Models\Procurement\SupplierPayment;
+use App\Services\Workforce\LocalTime;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -61,7 +62,7 @@ class PayablesLedger
      */
     public function installment(PayableInstallment $installment, ?CarbonImmutable $today = null): array
     {
-        $today ??= CarbonImmutable::today();
+        $today ??= CarbonImmutable::parse(LocalTime::dateOf());
         $payments = $installment->relationLoaded('payments') ? $installment->payments : $installment->payments()->get();
 
         $paid = round((float) $payments->where('status', SupplierPayment::STATUS_CONFIRMED)->sum('amount'), 2);
@@ -103,7 +104,7 @@ class PayablesLedger
      */
     public function summary(SupplierPayable $payable, ?CarbonImmutable $today = null): array
     {
-        $today ??= CarbonImmutable::today();
+        $today ??= CarbonImmutable::parse(LocalTime::dateOf());
         $payable->loadMissing(['installments.payments', 'payable']);
 
         $rows = $payable->installments->map(function (PayableInstallment $i) use ($payable, $today) {
@@ -138,7 +139,7 @@ class PayablesLedger
      */
     public function openInstallments(?int $supplierId = null, ?CarbonImmutable $today = null): Collection
     {
-        $today ??= CarbonImmutable::today();
+        $today ??= CarbonImmutable::parse(LocalTime::dateOf());
 
         return SupplierPayable::query()
             ->whereNull('cancelled_at')
@@ -175,7 +176,7 @@ class PayablesLedger
      */
     public function totals(?CarbonImmutable $today = null): array
     {
-        $today ??= CarbonImmutable::today();
+        $today ??= CarbonImmutable::parse(LocalTime::dateOf());
         $rows = $this->openInstallments(null, $today);
         $soon = $today->addDays(self::DUE_SOON_DAYS)->toDateString();
 

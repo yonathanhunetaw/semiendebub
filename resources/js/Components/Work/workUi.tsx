@@ -1,4 +1,5 @@
 import FlashToast from "@/Components/Shared/FlashToast";
+import { shopZone } from "@/utils/dates";
 import AdminLayout from "@/Layouts/AdminLayout";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
 import SellerLayout from "@/Layouts/SellerLayout";
@@ -100,7 +101,7 @@ export const duration = (minutes: number | null): string =>
 
 /** An ISO instant → "HH:mm" in the browser's time. */
 export const clockTime = (iso: string | null): string =>
-    iso === null ? "—" : new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    iso === null ? "—" : new Date(iso).toLocaleTimeString([], { timeZone: shopZone(), hour: "2-digit", minute: "2-digit", hour12: false });
 
 export const LEAVE_LABEL: Record<string, string> = { annual: "Annual leave", sick: "Sick", unpaid: "Unpaid leave", other: "Other leave" };
 

@@ -6,6 +6,8 @@ use App\Http\Requests\Customer\AdminCustomerRequest;
 use App\Models\Auth\Customer;
 use App\Models\Store\StoreVariantCustomerPrice;
 use App\Services\Admin\ActiveStore;
+use App\Services\Workforce\LocalTime;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -55,8 +57,6 @@ class CustomerController extends Controller
             ? (string) $request->query('status')
             : 'active';
 
-        $now = now();
-
         $rows = $this->activeStore->applyThrough(StoreVariantCustomerPrice::query(), 'storeVariant')
             ->with([
                 'customer:id,first_name,last_name,name,phone,phone_number,store_id',
@@ -69,7 +69,7 @@ class CustomerController extends Controller
             ])
             ->latest('updated_at')
             ->get()
-            ->map(function (StoreVariantCustomerPrice $price) use ($now): array {
+            ->map(function (StoreVariantCustomerPrice $price): array {
                 // Customer prices are a flat {price, discount_price, discount_ends_at};
                 // tolerate a one-tier ladder too.
                 $matrix = (array) ($price->pricing_matrix ?? []);
@@ -80,7 +80,7 @@ class CustomerController extends Controller
 
                 $status = match (true) {
                     $discount === null => 'price',
-                    $endsAt !== null && $endsAt->endOfDay()->lt($now) => 'expired',
+                    $endsAt !== null && $endsAt->toDateString() < LocalTime::dateOf() => 'expired',
                     default => 'active',
                 };
 
@@ -100,7 +100,7 @@ class CustomerController extends Controller
                     'price' => isset($tier['price']) ? (float) $tier['price'] : null,
                     'discount_price' => $discount,
                     'discount_ends_at' => $endsAt?->toDateString(),
-                    'days_left' => $status === 'active' && $endsAt !== null ? (int) $now->copy()->startOfDay()->diffInDays($endsAt->copy()->startOfDay()) : null,
+                    'days_left' => $status === 'active' && $endsAt !== null ? (int) CarbonImmutable::parse(LocalTime::dateOf())->diffInDays($endsAt->copy()->startOfDay()) : null,
                     'status' => $status,
                 ];
             });

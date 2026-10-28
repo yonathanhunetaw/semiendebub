@@ -1,7 +1,8 @@
 import { dayDateTime } from "@/utils/dates";
-import type { SiteDayView } from "@/types/work";
+import type { SiteDayView, WorkApp } from "@/types/work";
+import { router } from "@inertiajs/react";
 import React from "react";
-import { cardCls, hm, hoursText, KIND_ICON } from "./workUi";
+import { cardCls, ghostBtn, hm, hoursText, inputCls, KIND_ICON, primaryBtn, wr } from "./workUi";
 
 const STATUS: Record<SiteDayView["status"], { label: string; className: string }> = {
     planned: { label: "Not open yet", className: "border-outline-variant bg-surface-container text-on-surface-variant" },
@@ -11,8 +12,66 @@ const STATUS: Record<SiteDayView["status"], { label: string; className: string }
     closed_day: { label: "Closed today", className: "border-outline-variant bg-surface-container text-on-surface-variant" },
 };
 
+/**
+ * A day nobody closed: a manager says when the shop really closed and counts the
+ * till. Sales after that moment count as outside open hours.
+ */
+function LateClose({ app, day }: { app: WorkApp; day: SiteDayView }): React.ReactElement {
+    const [shown, setShown] = React.useState(false);
+    const [closedAt, setClosedAt] = React.useState("");
+    const [till, setTill] = React.useState("");
+    const [note, setNote] = React.useState("");
+    const [busy, setBusy] = React.useState(false);
+
+    return (
+        <div className="mt-3 rounded-[12px] border border-error/30 bg-error-container/50 p-3">
+            <p className="text-[12px] font-bold text-on-error-container">Still open from {dayDateTime(day.opened_at, day.date)}. Nobody closed it.</p>
+            {shown ? (
+                <div className="mt-2 space-y-2">
+                    <label className="block text-[11px] text-on-surface-variant">
+                        When did the shop really close?
+                        <input type="datetime-local" className={`mt-1 ${inputCls}`} value={closedAt} onChange={(e) => setClosedAt(e.target.value)} />
+                    </label>
+                    <label className="block text-[11px] text-on-surface-variant">
+                        Till count (ETB)
+                        <input type="number" min="0" className={`mt-1 ${inputCls}`} value={till} onChange={(e) => setTill(e.target.value)} />
+                    </label>
+                    <label className="block text-[11px] text-on-surface-variant">
+                        Why was it not closed at the counter?
+                        <input type="text" className={`mt-1 ${inputCls}`} value={note} onChange={(e) => setNote(e.target.value)} />
+                    </label>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            className={primaryBtn}
+                            disabled={busy || closedAt === "" || note.trim() === ""}
+                            onClick={() => {
+                                setBusy(true);
+                                router.post(
+                                    wr(app, "work.sites.close-late", day.site.id),
+                                    { closed_at: closedAt, till_count: till === "" ? null : Number(till), note },
+                                    { preserveScroll: true, onFinish: () => setBusy(false) },
+                                );
+                            }}
+                        >
+                            Close that day
+                        </button>
+                        <button type="button" className={ghostBtn} onClick={() => setShown(false)}>
+                            Not now
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <button type="button" className={`mt-2 ${ghostBtn}`} onClick={() => setShown(true)}>
+                    Close it now…
+                </button>
+            )}
+        </div>
+    );
+}
+
 /** Today at one site: hours, who opens, closes and drives, who did, the key. */
-export default function SiteDayCard({ day, children }: { day: SiteDayView; children?: React.ReactNode }): React.ReactElement {
+export default function SiteDayCard({ day, app, children }: { day: SiteDayView; app?: WorkApp; children?: React.ReactNode }): React.ReactElement {
     const chip = STATUS[day.status];
 
     return (
@@ -57,6 +116,10 @@ export default function SiteDayCard({ day, children }: { day: SiteDayView; child
                     </>
                 ) : null}
             </dl>
+
+            {day.closed_late ? <p className="mt-2 text-[11px] font-semibold text-on-warning-container">Closed afterwards by a manager.</p> : null}
+
+            {app && day.manages && day.overdue_close ? <LateClose app={app} day={day} /> : null}
 
             {children}
         </section>

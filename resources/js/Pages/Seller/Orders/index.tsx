@@ -2,6 +2,10 @@ import ListTopBar, { type TabSpec } from "@/Components/Seller/ListTopBar";
 import PickPackPanel from "@/Components/Seller/Orders/PickPackPanel";
 import type { PickPackPlan } from "@/types/sourcing";
 import SellerLayout from "@/Layouts/SellerLayout";
+import AgeBadge from "@/Components/Shared/time/AgeBadge";
+import DayTag from "@/Components/Shared/time/DayTag";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
+import type { TimeFilterView } from "@/types/time";
 import {
     type OrderStage,
     STAGE_META,
@@ -25,7 +29,8 @@ import React, { useEffect, useMemo, useState } from "react";
 
 interface Props {
     orders?: SellerOrder[];
-    /** The list is capped at the newest N orders. */
+    time: TimeFilterView;
+    /** The finished orders are capped at the newest N orders. */
     limit?: number;
     /** Pick plans for every order in Pick & pack, keyed by sale id. */
     plans?: Record<number, PickPackPlan>;
@@ -71,7 +76,7 @@ function useTicker(active: boolean): number {
     return tick;
 }
 
-export default function OrdersIndex({ orders: loaded = [], limit = 0, plans = {}, open = null }: Props): React.ReactElement {
+export default function OrdersIndex({ orders: loaded = [], time, limit = 0, plans = {}, open = null }: Props): React.ReactElement {
     /* Hiding is a view filter only; it never deletes an order. */
     const [hidden, setHidden] = useState<number[]>([]);
     const orders = useMemo(
@@ -186,6 +191,11 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0, plans = {}
                     deleteActive={selectMode}
                 />
 
+                <div className="mx-2.5 mt-2">
+                    <TimeFilterChips filter={time} hide={["all"]} />
+                    <p className="mt-1 text-[10px] text-outline">Orders still on their way are always here; the day narrows the finished ones.</p>
+                </div>
+
                 {/* Paid orders waiting on the shelf: the most important thing on this board. */}
                 {toPick.length > 0 ? (
                     <section className="mx-2.5 mt-2.5 flex items-center gap-3 rounded-[16px] bg-primary p-3.5 text-on-primary shadow-md">
@@ -280,8 +290,12 @@ export default function OrdersIndex({ orders: loaded = [], limit = 0, plans = {}
                                             {order.customer}
                                         </span>
                                     </div>
-                                    <span className="shrink-0 font-mono text-xs tracking-tight text-outline">
-                                        {order.placed}
+                                    <span className="flex shrink-0 flex-col items-end gap-1">
+                                        <span className="font-mono text-xs tracking-tight text-outline">{order.placed}</span>
+                                        <span className="flex gap-1">
+                                            <DayTag tag={order.day} />
+                                            {order.open ? <AgeBadge since={order.placedAt} warnHours={24} lateHours={72} /> : null}
+                                        </span>
                                     </span>
                                 </div>
 

@@ -1,5 +1,8 @@
 import NotificationsBell from "@/Components/Navigation/Admin/NotificationsBell";
 import ShareCartPanel, { type CartShareInfo } from "@/Components/Seller/ShareCartPanel";
+import AgeBadge from "@/Components/Shared/time/AgeBadge";
+import DayTag from "@/Components/Shared/time/DayTag";
+import type { DayTagView } from "@/types/time";
 import SellerLayout from "@/Layouts/SellerLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import React, { useEffect, useMemo, useState } from "react";
@@ -39,6 +42,9 @@ interface CartSummary {
     id: number;
     status: string | null;
     priority: number | null;
+    created_at: string | null;
+    updated_at: string | null;
+    day: DayTagView | null;
     customer: { name: string | null; type: string | null } | null;
     seller: { name: string | null } | null;
     line_count: number;
@@ -419,6 +425,10 @@ export default function CartsIndex({ carts = [], home_store, focus_cart = null }
                                                         <span className="block truncate text-[11px] font-bold text-on-surface">
                                                             {cartLabel(cart)}
                                                         </span>
+                                                        <span className="mb-0.5 flex gap-1">
+                                                            <DayTag tag={cart.day} />
+                                                            <AgeBadge since={cart.updated_at} warnHours={24} lateHours={72} prefix="idle " />
+                                                        </span>
                                                         <span className="block text-[10px] leading-none text-on-surface-variant">
                                                             <span className="font-bold text-primary">
                                                                 {cart.line_count}
@@ -505,6 +515,10 @@ export default function CartsIndex({ carts = [], home_store, focus_cart = null }
                                     {active.seller?.name ?? "Unassigned"}
                                     {active.customer?.type === "business" ? " · Business" : ""}
                                 </p>
+                                <span className="mt-1 flex gap-1">
+                                    <DayTag tag={active.day} />
+                                    <AgeBadge since={active.updated_at} warnHours={24} lateHours={72} prefix="idle " />
+                                </span>
                             </div>
                             <DeleteCartButton key={active.id} cart={active} />
                         </div>

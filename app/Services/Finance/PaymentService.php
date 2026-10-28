@@ -16,6 +16,7 @@ use App\Models\Inventory\StockReservation;
 use App\Services\Admin\ActiveStore;
 use App\Services\Inventory\StockPools;
 use App\Services\StockService;
+use App\Services\Workforce\LocalTime;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -124,7 +125,7 @@ class PaymentService
                 // A credit order is the admin's trust in the customer: its
                 // stock is held from now, and it is due in credit_days.
                 $this->keepHolds($sale, $by);
-                $sale->update(['due_date' => now()->addDays((int) $sale->customer->credit_days)->toDateString()]);
+                $sale->update(['due_date' => LocalTime::today()->addDays((int) $sale->customer->credit_days)->toDateString()]);
             }
 
             return $this->settle($sale, $by);

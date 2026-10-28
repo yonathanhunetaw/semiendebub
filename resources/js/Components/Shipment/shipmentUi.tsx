@@ -1,4 +1,5 @@
 import { router } from "@inertiajs/react";
+import { shopZone } from "@/utils/dates";
 import {
     Alert,
     Box,
@@ -385,6 +386,7 @@ export function formatMoment(value: string | null | undefined): string {
     }
 
     return new Date(value).toLocaleString(undefined, {
+        timeZone: shopZone(),
         month: "short",
         day: "numeric",
         hour: "2-digit",
@@ -416,6 +418,7 @@ export function formatWindow(value: string | null | undefined): string {
     if (Number.isNaN(date.getTime())) return value;
 
     return date.toLocaleString(undefined, {
+        timeZone: shopZone(),
         weekday: "short",
         day: "numeric",
         month: "short",

@@ -1,4 +1,5 @@
 import AdminLayout from "@/Layouts/AppLayout";
+import { shopZone } from "@/utils/dates";
 import { Head, router } from "@inertiajs/react";
 import FactCheckIcon from "@mui/icons-material/FactCheck";
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Stack, Typography } from "@mui/material";
@@ -32,7 +33,7 @@ interface Props {
     counts?: Count[];
 }
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
+const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString(undefined, { timeZone: shopZone(), day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
 
 /**
  * Stocktakes a keeper has submitted, waiting for a second person. Approving books each

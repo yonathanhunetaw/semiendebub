@@ -21,6 +21,7 @@ import Scene from "@/Components/Visual/scenes";
 import { motionSafe, pulse } from "@/Components/Visual/motion";
 import { AreaTiles, AttentionPanel, GoToBar, NetworkStrip, PanelHead, densePanelSx, type DashboardArea } from "@/Components/Visual/DashboardAreas";
 import type { AdminScopeProps } from "@/types/adminScope";
+import ShopDaysPanel, { type ShopDayRow } from "@/Components/Admin/Dashboard/ShopDaysPanel";
 
 /**
  * The admin's first screen, kept dense: greeting and store switch in one
@@ -88,6 +89,7 @@ interface Props {
     activity?: ActivityRow[];
     pipeline?: Partial<Record<JourneyStage, number>>;
     areas?: DashboardArea[];
+    shopDays?: ShopDayRow[];
 }
 
 // ========== HELPERS ==========
@@ -484,11 +486,12 @@ export default function Dashboard({
     activity = [],
     pipeline = {},
     areas = [],
+    shopDays = [],
 }: Props) {
     // Live: the figures refresh every 30 seconds without reloading the page.
     const [updatedAt, setUpdatedAt] = React.useState(() => Date.now());
     usePoll(30_000, {
-        only: ["areas", "pipeline", "trend", "activeDeliveries", "activity", "lowStockItems", "adminNav"],
+        only: ["areas", "pipeline", "shopDays", "trend", "activeDeliveries", "activity", "lowStockItems", "adminNav"],
         onSuccess: () => setUpdatedAt(Date.now()),
     });
 
@@ -503,7 +506,7 @@ export default function Dashboard({
 
             {/* What is waiting on someone, then a way into every list. */}
             <Deferred
-                data={["areas", "pipeline"]}
+                data={["areas", "pipeline", "shopDays"]}
                 fallback={
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                         <StatTilesSkeleton count={4} />
@@ -516,6 +519,8 @@ export default function Dashboard({
                     <GoToBar areas={areas} />
 
                     <PipelineStrip pipeline={pipeline} />
+
+                    <ShopDaysPanel rows={shopDays} />
 
                     <AreaTiles areas={areas} />
                     <NetworkStrip areas={areas} />

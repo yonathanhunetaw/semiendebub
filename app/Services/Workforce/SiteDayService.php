@@ -73,6 +73,16 @@ class SiteDayService
         return $day;
     }
 
+    /**
+     * The row for "now" at a site: the day that is open (a shop that opened on
+     * the 20th and closes at 00:30 on the 21st is still the 20th's day), else
+     * today's row on the shops' calendar.
+     */
+    public function current(StockLocation $site): SiteDay
+    {
+        return app(ShopDay::class)->current($site) ?? $this->day($site, now());
+    }
+
     /** @throws WorkforceException */
     public function plan(StockLocation $site, CarbonInterface $date, User $by, ?int $openerId, ?int $closerId, ?int $driverId = null): SiteDay
     {
@@ -134,6 +144,12 @@ class SiteDayService
 
             if (! $this->sites->worksAt($by, $site)) {
                 throw new WorkforceException('You do not work at this site.', 403);
+            }
+
+            $earlier = app(ShopDay::class)->current($site);
+            if ($earlier !== null && $earlier->date->toDateString() !== LocalTime::dateOf()) {
+                // Days never overlap, and a closed day is final: the old one is closed first.
+                throw new WorkforceException(sprintf('%s is still open from %s. Close it first; if nobody did, a manager can set when it really closed.', $site->name, $earlier->date->format('l, M j')));
             }
 
             $day = SiteDay::query()->lockForUpdate()->findOrFail($this->day($site, now())->id);
@@ -198,7 +214,7 @@ class SiteDayService
                 throw new WorkforceException('You do not work at this site.', 403);
             }
 
-            $day = SiteDay::query()->lockForUpdate()->findOrFail($this->day($site, now())->id);
+            $day = SiteDay::query()->lockForUpdate()->findOrFail($this->current($site)->id);
 
             if ($day->status !== SiteDay::STATUS_OPEN) {
                 throw new WorkforceException(sprintf('%s is not open, so it cannot be closed.', $site->name));
@@ -229,6 +245,54 @@ class SiteDayService
             }
 
             return $day;
+        });
+    }
+
+    /**
+     * A manager closes a day nobody closed: the shop opened on an earlier date
+     * and was never closed at the counter. They say when it really closed and
+     * count the till. Sales after that moment fall outside open hours; the day
+     * is then final like any other.
+     *
+     * @throws WorkforceException
+     */
+    public function closeLate(StockLocation $site, User $by, CarbonInterface $closedAt, ?float $till, string $note): SiteDay
+    {
+        if (! $this->sites->canManage($by, $site)) {
+            throw new WorkforceException('Only a manager of this site closes a day afterwards.', 403);
+        }
+
+        $note = trim($note);
+        if ($note === '') {
+            throw new WorkforceException('Say why it was not closed at the counter.');
+        }
+
+        return DB::transaction(function () use ($site, $by, $closedAt, $till, $note): SiteDay {
+            $open = app(ShopDay::class)->current($site);
+            $open = $open === null ? null : SiteDay::query()->lockForUpdate()->find($open->id);
+
+            if ($open === null || $open->status !== SiteDay::STATUS_OPEN || $open->date->toDateString() >= LocalTime::dateOf()) {
+                throw new WorkforceException(sprintf('%s has no earlier day left open.', $site->name));
+            }
+
+            $closedAt = CarbonImmutable::instance($closedAt)->utc();
+            if ($closedAt->lt($open->opened_at) || $closedAt->gt(now())) {
+                throw new WorkforceException('The closing time has to be after it opened and not in the future.');
+            }
+
+            $open->update([
+                'status' => SiteDay::STATUS_CLOSED,
+                'closed_at' => $closedAt,
+                'closed_by' => $by->id,
+                'closed_late' => true,
+                'no_driver' => $open->no_driver || $open->driver_id === null,
+                'till_count' => $till,
+                'close_note' => $note,
+            ]);
+
+            $this->attendance->clockOutAtClosing($site, $by, $closedAt);
+
+            return $open;
         });
     }
 
@@ -284,7 +348,7 @@ class SiteDayService
     public function todayFor(User $user): Collection
     {
         return $this->sites->workedAtBy($user)
-            ->map(fn (StockLocation $site): array => $this->present($site, $this->day($site, now()), $user))
+            ->map(fn (StockLocation $site): array => $this->present($site, $this->current($site), $user))
             ->values()
             ->toBase();
     }
@@ -323,6 +387,9 @@ class SiteDayService
             'float_amount' => $day->float_amount !== null ? (float) $day->float_amount : null,
             'open_note' => $day->open_note,
             'closed_at' => $day->closed_at?->toIso8601String(),
+            'closed_late' => (bool) $day->closed_late,
+            // Still open from an earlier date: nobody closed it. A manager can.
+            'overdue_close' => $day->status === SiteDay::STATUS_OPEN && $day->date->toDateString() < LocalTime::dateOf(),
             'closed_by' => $name($day->closedBy),
             'till_count' => $day->till_count !== null ? (float) $day->till_count : null,
             'close_note' => $day->close_note,

@@ -1,4 +1,5 @@
 import { Head, Link, router } from "@inertiajs/react";
+import { shopZone } from "@/utils/dates";
 import React, { useState } from "react";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import { EmptyState, StatusPill, type Tone } from "@/Components/Shared/ui";
@@ -17,7 +18,7 @@ const NEED: Record<ShelvingNeed["status"], { label: string; tone: Tone }> = {
 };
 
 const scheduled = (iso: string | null): string =>
-    iso ? new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "not scheduled yet";
+    iso ? new Date(iso).toLocaleString(undefined, { timeZone: shopZone(), weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "not scheduled yet";
 
 /** What became of a request, in the stock keeper's words. */
 function fate(row: RefillRow): { text: string; tone: Tone; icon: string } {

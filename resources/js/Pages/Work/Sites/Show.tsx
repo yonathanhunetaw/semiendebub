@@ -91,7 +91,7 @@ export default function SiteShow({ app, site, week = [], exceptions = [], people
                 </header>
 
                 <div className="mx-auto max-w-2xl space-y-4 px-3.5 pt-3">
-                    <SiteDayCard day={today}>
+                    <SiteDayCard day={today} app={app}>
                         <div className="mt-3 flex flex-wrap gap-2">
                             <Link href={wr(app, "work.rota", { site: site.id })} className={primaryBtn}>
                                 {site.has_shifts ? "Shifts and opening" : "Who opens and closes"}

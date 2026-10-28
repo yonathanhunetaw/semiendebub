@@ -88,7 +88,7 @@ class SiteController extends Controller
                     'closes_at' => $exception->closes_at ? substr((string) $exception->closes_at, 0, 5) : null,
                     'note' => $exception->note,
                 ])->all(),
-            'today' => $this->days->present($site, $this->days->day($site, now()), $user),
+            'today' => $this->days->present($site, $this->days->current($site), $user),
             'settings' => [
                 'open_grace_minutes' => (int) ($settings = $this->qr->settings($site))->open_grace_minutes,
                 'opening_checklist' => $settings->openingItems(),

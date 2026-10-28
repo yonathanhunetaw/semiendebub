@@ -1,4 +1,5 @@
 import React from "react";
+import { shopZone } from "@/utils/dates";
 import { Head, router, useForm } from "@inertiajs/react";
 import SharedCartLayout from "@/Layouts/SharedCartLayout";
 import { StatusPill } from "@/Components/Shared/ui";
@@ -116,7 +117,7 @@ export default function SharedCartShow({ token, cart }: Props) {
 
     const unavailable = cart.lines.some((l) => l.availability.state === "unavailable");
     const pickupBlocked = cart.lines.some((l) => l.availability.state !== "now");
-    const expires = new Date(cart.expires_at).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    const expires = new Date(cart.expires_at).toLocaleDateString(undefined, { timeZone: shopZone(), day: "numeric", month: "short" });
 
     return (
         <>

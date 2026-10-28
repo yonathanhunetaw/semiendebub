@@ -8,6 +8,7 @@ import {
     type PaperProps,
 } from "@mui/material";
 import React from "react";
+import { shopZone } from "@/utils/dates";
 
 import type { PurchaseOrderStatus } from "@/types/vendor";
 
@@ -200,6 +201,7 @@ export function formatMoment(value: string | null | undefined): string {
     }
 
     return new Date(value).toLocaleString(undefined, {
+        timeZone: shopZone(),
         month: "short",
         day: "numeric",
         year: "numeric",

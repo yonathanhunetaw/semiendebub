@@ -9,6 +9,7 @@ use App\Models\Auth\User;
 use App\Models\Finance\Expense;
 use App\Models\Workforce\StaffRide;
 use App\Services\Documents\DocumentService;
+use App\Services\Workforce\LocalTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
@@ -46,7 +47,7 @@ class ExpenseService
         }
 
         $amount = round((float) $data['amount'], 2);
-        $spentOn = CarbonImmutable::parse($data['spent_on'] ?? now()->toDateString())->toDateString();
+        $spentOn = CarbonImmutable::parse($data['spent_on'] ?? LocalTime::dateOf())->toDateString();
 
         return DB::transaction(function () use ($by, $data, $receipt, $ride, $amount, $spentOn): Expense {
             $document = $receipt !== null ? $this->documents->upload($receipt, $by, isset($data['store_id']) ? (int) $data['store_id'] : null) : null;
@@ -86,12 +87,12 @@ class ExpenseService
         }
 
         try {
-            $spentOn = CarbonImmutable::parse($data['spent_on'] ?? now()->toDateString())->toDateString();
+            $spentOn = CarbonImmutable::parse($data['spent_on'] ?? LocalTime::dateOf())->toDateString();
         } catch (\Throwable) {
             return 'That is not a date.';
         }
 
-        return $spentOn > now()->addDay()->toDateString() ? 'An expense is for today or a day before.' : null;
+        return $spentOn > LocalTime::today()->addDay()->toDateString() ? 'An expense is for today or a day before.' : null;
     }
 
     /** @throws PaymentException */
@@ -116,7 +117,7 @@ class ExpenseService
         return $this->record($driver, [
             'category' => 'fuel',
             'amount' => $amount,
-            'spent_on' => ($ride->departed_at ?? now())->toDateString(),
+            'spent_on' => LocalTime::dateOf($ride->departed_at),
             'description' => sprintf('Staff ride from %s', $ride->site?->name ?? 'a site'),
             'store_id' => $ride->site?->store_id,
             'vehicle_id' => $ride->vehicle_id,

@@ -1,4 +1,5 @@
 import CallRoundedIcon from "@mui/icons-material/CallRounded";
+import { shopZone } from "@/utils/dates";
 import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
 import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import MapRoundedIcon from "@mui/icons-material/MapRounded";
@@ -387,6 +388,7 @@ export function formatMoment(value: string | null | undefined): string {
     }
 
     return new Date(value).toLocaleString(undefined, {
+        timeZone: shopZone(),
         month: "short",
         day: "numeric",
         hour: "2-digit",

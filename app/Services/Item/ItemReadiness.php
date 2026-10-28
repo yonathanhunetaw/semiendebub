@@ -6,15 +6,16 @@ namespace App\Services\Item;
 
 use App\Models\Inventory\ItemRefillRoute;
 use App\Models\Inventory\ShelfItemBand;
+use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\Stocktake;
 use App\Models\Inventory\StocktakeLine;
-use App\Models\Inventory\StockLocation;
 use App\Models\Item\Item;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Models\Store\StoreVariantCustomerPrice;
 use App\Models\Store\StoreVariantIndividualPrice;
 use App\Models\Store\StoreVariantSellerPrice;
+use App\Services\Workforce\LocalTime;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -202,7 +203,7 @@ final class ItemReadiness
         }
         $ends = $matrix['discount_ends_at'] ?? null;
 
-        return $ends === null || $ends === '' || now()->startOfDay()->lte(\Illuminate\Support\Carbon::parse((string) $ends)->endOfDay());
+        return $ends === null || $ends === '' || LocalTime::dateOf() <= LocalTime::dateText((string) $ends);
     }
 
     /** @param list<int> $variantIds @param list<int> $placeIds */

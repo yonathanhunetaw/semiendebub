@@ -7,6 +7,7 @@ namespace App\Services\Finance;
 use App\Models\Auth\Customer;
 use App\Models\Finance\Payment;
 use App\Models\Finance\Sale;
+use App\Services\Workforce\LocalTime;
 
 /**
  * What a customer owes on credit, and whether they may buy on credit now.
@@ -59,7 +60,7 @@ class CustomerCreditService
             ->get(['id', 'reference_number', 'due_date']);
 
         $repaid = $this->repaidCents($customerId);
-        $today = now()->startOfDay();
+        $today = LocalTime::dateOf();
 
         return $sales->map(function (Sale $sale) use ($charges, &$repaid, $today): array {
             $charged = $this->cents($charges->get($sale->id, 0));
@@ -73,7 +74,7 @@ class CustomerCreditService
                 'charged' => $charged / 100,
                 'owed' => $owed / 100,
                 'due_date' => $sale->due_date?->toDateString(),
-                'overdue' => $owed > 0 && $sale->due_date !== null && $sale->due_date->lt($today),
+                'overdue' => $owed > 0 && $sale->due_date !== null && $sale->due_date->toDateString() < $today,
             ];
         })->values()->all();
     }

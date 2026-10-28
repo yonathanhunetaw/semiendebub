@@ -10,9 +10,12 @@ use App\Models\Finance\Payment;
 use App\Services\Admin\ActiveStore;
 use App\Services\Finance\PaymentBoard;
 use App\Services\Finance\PaymentService;
+use App\Services\Workforce\DayBook;
+use App\Services\Workforce\LocalTime;
+use App\Services\Workforce\TimeFilter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,9 +31,17 @@ use Inertia\Response;
  */
 class PaymentController extends Controller
 {
-    public function index(Request $request, ActiveStore $activeStore, PaymentBoard $board): Response
+    public function index(Request $request, ActiveStore $activeStore, PaymentBoard $board, TimeFilter $time, DayBook $days): Response
     {
         $method = $request->string('method')->toString() ?: null;
+        $period = $time->fromRequest($request);
+        // The takings box follows the chosen period. With none chosen it is everything taken on today's
+        // calendar date, so cash taken while the store was closed is never left out of sight.
+        $summaryPeriod = $period;
+
+        // When a payment was taken, and in which store (its order's, else its customer's).
+        $paidAt = DB::raw('COALESCE(payments.paid_at, payments.created_at)');
+        $storeOf = DB::raw('COALESCE((select store_id from sales where sales.id = payments.sale_id), (select store_id from customers where customers.id = payments.customer_id))');
 
         // A payment's store is its order's; a credit repayment has no order,
         // so it is its customer's.
@@ -41,8 +52,11 @@ class PaymentController extends Controller
                 ->orWhere(fn ($repayment) => $activeStore->applyThrough($repayment->whereNull('sale_id'), 'customer')));
 
         $paginator = $scoped()
-            ->with(['sale.store', 'user', 'account.owner'])
+            ->with(['sale.store', 'user', 'account.owner', 'customer:id,store_id'])
             ->when($method, fn ($q, string $m) => $q->where('payment_method', $m))
+            // Parts still waiting on confirmation are always listed; the period narrows the settled ones.
+            ->tap(fn ($q) => $time->applyKeepingOpen($q, $paidAt, $storeOf, $activeStore->scopeIds(), $period,
+                fn ($open) => $open->whereIn('payments.status', [Payment::STATUS_PENDING, Payment::STATUS_CLAIMED])))
             ->latest('id')
             ->paginate(25)
             ->withQueryString();
@@ -62,17 +76,23 @@ class PaymentController extends Controller
                 'reference' => $p->transaction_reference,
                 'taken_by' => $p->user ? trim($p->user->first_name.' '.$p->user->last_name) : null,
                 'paid_at' => ($p->paid_at ?? $p->created_at)?->toIso8601String(),
+                'open' => in_array($p->status, [Payment::STATUS_PENDING, Payment::STATUS_CLAIMED], true),
+                'day' => $days->tag(($p->sale?->store_id ?? $p->customer?->store_id) !== null ? (int) ($p->sale?->store_id ?? $p->customer?->store_id) : null, $p->paid_at ?? $p->created_at),
             ])->values(),
             'today' => $scoped()
                 ->confirmed()
-                ->whereDate('paid_at', Carbon::today())
+                ->tap(fn ($q) => $period['when'] === 'all'
+                    ? $q->where($paidAt, '>=', LocalTime::startOf(LocalTime::today()))->where($paidAt, '<', LocalTime::startOf(LocalTime::today()->addDay()))
+                    : $time->apply($q, $paidAt, $storeOf, $activeStore->scopeIds(), $summaryPeriod))
                 ->selectRaw('payment_method, SUM(amount) as total, COUNT(*) as n')
                 ->groupBy('payment_method')
                 ->get()
                 ->map(fn ($row): array => ['method' => (string) $row->payment_method, 'total' => (float) $row->total, 'count' => (int) $row->n])
                 ->values(),
             'methods' => Payment::query()->distinct()->orderBy('payment_method')->pluck('payment_method'),
-            'filters' => ['method' => $method],
+            'summary_label' => $period['when'] === 'all' ? 'Today' : (TimeFilter::LABELS[$period['when']] ?? 'Today'),
+            'time' => $time->describe($period),
+            'filters' => ['method' => $method, 'when' => $period['when']],
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),

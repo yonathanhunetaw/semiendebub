@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature\Workforce;
 
 use App\Models\Auth\User;
+use App\Models\Finance\Sale;
 use App\Models\Inventory\StockLocation;
 use App\Models\Store\Store;
 use App\Models\Workforce\SiteDay;
 use App\Models\Workforce\StaffingRule;
 use App\Models\Workforce\TimeEntry;
+use App\Models\Procurement\PayableInstallment;
+use App\Services\Procurement\PayablesLedger;
 use App\Services\Workforce\CounterQr;
 use App\Services\Workforce\KeyCustodyService;
 use App\Services\Workforce\LocalTime;
@@ -20,6 +23,7 @@ use App\Services\Workforce\StaffRideService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
+use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -132,5 +136,44 @@ class ShopClockTest extends TestCase
         $ride = $rides->request($this->site, $this->manager, LocalTime::parse('2026-10-19T19:15'), [$this->seller->id]);
         $this->assertSame('2026-10-19T19:15', $rides->present($ride->fresh(), $this->manager)['departs_at']);
         $this->assertSame('2026-10-19 16:15:00', $ride->fresh()->getRawOriginal('departs_at'));
+    }
+
+    #[Test]
+    public function the_dashboard_trend_counts_a_sale_after_midnight_on_the_shops_new_day(): void
+    {
+        // 01:30 on the 20th in Addis is 22:30 on the 19th in UTC.
+        $this->travelToLocal('2026-10-20 01:30');
+        $sale = Sale::query()->create(['store_id' => $this->site->store_id, 'total_amount' => 100, 'reference_number' => 'CLOCK-1']);
+        $this->assertSame('2026-10-19', $sale->created_at->toDateString(), 'Stored as UTC.');
+
+        $admin = $this->user('admin', null);
+        $this->withServerVariables(['HTTP_HOST' => 'admin.localhost'])->actingAs($admin, 'web');
+
+        $days = [];
+        $this->get(route('admin.dashboard'))->assertOk()->assertInertia(function (Assert $page) use (&$days): void {
+            $page->loadDeferredProps(function (Assert $loaded) use (&$days): void {
+                $days = collect($loaded->toArray()['props']['trend']['days'])->keyBy('date')->all();
+            });
+        });
+
+        $this->assertSame(1, $days['2026-10-20']['orders'], 'It is the 20th at the shops.');
+        $this->assertSame(0, $days['2026-10-19']['orders']);
+    }
+
+    #[Test]
+    public function a_supplier_installment_turns_overdue_at_addis_midnight_not_at_3_am(): void
+    {
+        $installment = (new PayableInstallment)->forceFill([
+            'sequence' => 1, 'label' => 'Balance', 'amount' => 100,
+            'due_rule' => PayableInstallment::DUE_ON_DATE, 'due_date' => '2026-10-19',
+        ]);
+
+        // Still the 19th at the shops: due, not late.
+        $this->travelToLocal('2026-10-19 23:30');
+        $this->assertSame('due', app(PayablesLedger::class)->installment($installment)['state']);
+
+        // 01:00 on the 20th at the shops is still the 19th in UTC: already late.
+        $this->travelToLocal('2026-10-20 01:00');
+        $this->assertSame('overdue', app(PayablesLedger::class)->installment($installment)['state']);
     }
 }

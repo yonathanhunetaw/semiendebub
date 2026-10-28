@@ -1,4 +1,5 @@
 import { StatusPill } from "@/Components/Shared/ui";
+import { shopZone } from "@/utils/dates";
 import type { ItemRow, ItemSort, ItemStatus } from "@/types/adminItems";
 import { Link } from "@inertiajs/react";
 import {
@@ -70,7 +71,7 @@ export function timeAgo(iso: string | null): string {
     return "just now";
 }
 
-export const fullDate = (iso: string | null): string => (iso ? new Date(iso).toLocaleString() : "");
+export const fullDate = (iso: string | null): string => (iso ? new Date(iso).toLocaleString(undefined, { timeZone: shopZone() }) : "");
 
 /** Overlapping photo stack; a faded glyph when the item has none. */
 export function ItemThumbs({ images, size = 40 }: { images: string[]; size?: number }): React.ReactElement {

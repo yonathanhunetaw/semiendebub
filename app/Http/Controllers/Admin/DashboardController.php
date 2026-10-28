@@ -82,6 +82,8 @@ class DashboardController extends Controller
             // Orders at each stop of the road, for the journey strip:
             // open carts, the board's stages, and delivered in 7 days.
             'pipeline' => Inertia::defer(fn () => $this->pipeline($activeStore), 'tiles'),
+            // Each store's business day: open or not, today's orders and takings, yesterday's, and what came outside open hours.
+            'shopDays' => Inertia::defer(fn () => $this->shopDays($activeStore), 'tiles'),
             // The 7-day trend, open deliveries and a feed, all from real rows in scope.
             'trend' => Inertia::defer(fn () => $this->trend($activeStore), 'panels'),
             'activeDeliveries' => Inertia::defer(fn () => $this->activeDeliveries($activeStore), 'panels'),
@@ -341,6 +343,82 @@ class DashboardController extends Controller
             ->all();
     }
 
+    /**
+     * Each retail store's business day side by side: today's (the day that is
+     * open now, else today's if it already closed), yesterday's, and the orders
+     * that came in while the store was closed over the last 7 days.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function shopDays(ActiveStore $activeStore): array
+    {
+        $shopDay = app(\App\Services\Workforce\ShopDay::class);
+        $scopeIds = $activeStore->scopeIds();
+        $paidAt = DB::raw('COALESCE(payments.paid_at, payments.created_at)');
+
+        $figures = function (?\App\Models\Workforce\SiteDay $day, int $storeId) use ($shopDay, $paidAt): ?array {
+            if ($day === null) {
+                return null;
+            }
+
+            $sales = fn () => \App\Models\Finance\Sale::query()->where('sales.store_id', $storeId);
+            $span = $shopDay->span($day);
+
+            return [
+                'date' => $day->date->toDateString(),
+                'status' => (string) $day->status,
+                'opened_at' => $span[0]->toIso8601String(),
+                'closed_at' => $span[1]?->toIso8601String(),
+                'orders' => $shopDay->within($sales(), 'sales.created_at', $day)->count(),
+                'takings' => round((float) $shopDay->within(
+                    \App\Models\Finance\Payment::query()->confirmed()
+                        ->whereNotIn('payments.payment_method', self::NON_CASH_METHODS)
+                        ->whereIn('payments.sale_id', $sales()->select('sales.id')),
+                    $paidAt,
+                    $day,
+                )->sum('payments.amount'), 2),
+                'late_close' => (bool) $day->closed_late,
+            ];
+        };
+
+        return \App\Models\Store\Store::query()
+            ->where('type', \App\Models\Store\Store::TYPE_RETAIL)
+            ->when($scopeIds !== null, fn ($q) => $q->whereIn('id', $scopeIds ?: [0]))
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(function (\App\Models\Store\Store $store) use ($shopDay, $figures): ?array {
+                $site = $shopDay->siteOf((int) $store->id);
+                if ($site === null) {
+                    return null;
+                }
+
+                $today = $shopDay->current($site) ?? \App\Models\Workforce\SiteDay::query()
+                    ->where('stock_location_id', $site->id)->whereDate('date', \App\Services\Workforce\LocalTime::dateOf())->whereNotNull('opened_at')->first();
+                $yesterday = \App\Models\Workforce\SiteDay::query()
+                    ->where('stock_location_id', $site->id)->whereDate('date', \App\Services\Workforce\LocalTime::today()->subDay()->toDateString())
+                    ->whereNotNull('opened_at')->where('status', '!=', \App\Models\Workforce\SiteDay::STATUS_OPEN)->first();
+
+                $outside = $shopDay->outsideHours(
+                    \App\Models\Finance\Sale::query()->where('sales.store_id', $store->id)
+                        ->where('sales.created_at', '>=', \App\Services\Workforce\LocalTime::startOf(\App\Services\Workforce\LocalTime::today()->subDays(6))),
+                    'sales.created_at',
+                    'sales.store_id',
+                )->count();
+
+                return [
+                    'store_id' => (int) $store->id,
+                    'store' => (string) $store->name,
+                    'open' => $today?->status === \App\Models\Workforce\SiteDay::STATUS_OPEN,
+                    'today' => $figures($today, (int) $store->id),
+                    'yesterday' => $figures($yesterday, (int) $store->id),
+                    'outside_orders' => $outside,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     /** Window for the KPI cards and the trend chart. */
     private const TREND_DAYS = 7;
 
@@ -369,7 +447,8 @@ class DashboardController extends Controller
      */
     private function trend(ActiveStore $activeStore): array
     {
-        $since = now()->subDays(self::TREND_DAYS - 1)->startOfDay();
+        // The shops' days (Addis), not UTC's: a sale at 01:00 is that day's.
+        $since = \App\Services\Workforce\LocalTime::today()->subDays(self::TREND_DAYS - 1)->utc();
 
         $orders = $activeStore->apply(\App\Models\Finance\Sale::query())
             ->where('created_at', '>=', $since)
@@ -382,12 +461,12 @@ class DashboardController extends Controller
             ->get(['paid_at', 'amount']);
 
         $days = collect(range(self::TREND_DAYS - 1, 0))->map(function (int $back) use ($orders, $payments): array {
-            $day = now()->subDays($back)->toDateString();
+            $day = \App\Services\Workforce\LocalTime::today()->subDays($back)->toDateString();
 
             return [
                 'date' => $day,
-                'orders' => $orders->filter(fn ($sale) => $sale->created_at?->toDateString() === $day)->count(),
-                'revenue' => round((float) $payments->filter(fn ($payment) => \Illuminate\Support\Carbon::parse($payment->paid_at)->toDateString() === $day)->sum('amount'), 2),
+                'orders' => $orders->filter(fn ($sale) => $sale->created_at !== null && \App\Services\Workforce\LocalTime::dateOf($sale->created_at) === $day)->count(),
+                'revenue' => round((float) $payments->filter(fn ($payment) => \App\Services\Workforce\LocalTime::dateOf(\Illuminate\Support\Carbon::parse($payment->paid_at)) === $day)->sum('amount'), 2),
             ];
         })->values();
 
@@ -498,7 +577,7 @@ class DashboardController extends Controller
             'to_deliver' => (int) ($board['to_deliver'] ?? 0),
             'delivered' => $activeStore->apply(\App\Models\Finance\Sale::query())
                 ->where('fulfillment_stage', \App\Models\Finance\Sale::STAGE_DELIVERED)
-                ->where('updated_at', '>=', now()->subDays(self::TREND_DAYS - 1)->startOfDay())
+                ->where('updated_at', '>=', \App\Services\Workforce\LocalTime::today()->subDays(self::TREND_DAYS - 1)->utc())
                 ->count(),
         ];
     }

@@ -1,4 +1,5 @@
 import { Link } from "@inertiajs/react";
+import { shopZone } from "@/utils/dates";
 import Box from "@mui/material/Box";
 import React from "react";
 import { type CatalogItem, cardPricing, money } from "@/Components/Seller/catalogPricing";
@@ -187,7 +188,7 @@ function DiscountCountdown({ endsAt }: { endsAt: string }): React.ReactElement |
 
     return (
         <span
-            title={`Discount ends ${new Date(endsAt).toLocaleString()}`}
+            title={`Discount ends ${new Date(endsAt).toLocaleString(undefined, { timeZone: shopZone() })}`}
             className="inline-flex items-center gap-0.5 rounded-md bg-inverse-surface/80 px-1.5 py-0.5 text-[10px] font-bold text-inverse-on-surface backdrop-blur-sm"
         >
             <span className="material-symbols-outlined text-[12px]">schedule</span>
