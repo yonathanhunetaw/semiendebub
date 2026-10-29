@@ -25,6 +25,7 @@ import { dayDateTime } from "@/utils/dates";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
 import DayTag from "@/Components/Shared/time/DayTag";
+import { DayHeadingRow, startsDay } from "@/Components/Shared/time/DayHeading";
 import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
 import type { DayTagView, TimeFilterView } from "@/types/time";
 
@@ -142,8 +143,10 @@ export default function PaymentsIndex({ to_confirm = [], payments = [], today = 
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {payments.map((p) => (
-                                <TableRow key={p.id} hover>
+                            {payments.map((p, i) => (
+                                <React.Fragment key={p.id}>
+                                {startsDay(payments, i) ? <DayHeadingRow tag={p.day} colSpan={7} /> : null}
+                                <TableRow hover>
                                     <TableCell>
                                         {dayDateTime(p.paid_at)}
                                         <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
@@ -186,6 +189,7 @@ export default function PaymentsIndex({ to_confirm = [], payments = [], today = 
                                         {money(p.amount, p.currency)}
                                     </TableCell>
                                 </TableRow>
+                                </React.Fragment>
                             ))}
                             {payments.length === 0 ? (
                                 <TableRow>

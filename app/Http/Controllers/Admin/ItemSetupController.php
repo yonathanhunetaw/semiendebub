@@ -112,6 +112,8 @@ final class ItemSetupController extends Controller
             ],
             'readiness' => $readiness,
             'stores' => $stores,
+            // The newest price changes of this item in the stores on this page.
+            'priceHistory' => app(\App\Services\Item\PriceHistory::class)->forItem((int) $item->id, $this->sheet->stores()->pluck('id')->map(fn ($id): int => (int) $id)->all()),
             'warehouses' => $this->places->warehouses($item, $request->user()),
             'stock' => collect($places)->map(fn (array $p, int $id): array => ['location_id' => $id, 'place' => $p['name'], 'pieces' => $pieces[$id] ?? 0])->values()->all(),
             'history' => $this->history($item, $variantIds),

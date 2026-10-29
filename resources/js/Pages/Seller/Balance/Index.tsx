@@ -11,6 +11,7 @@ import { Head, router } from "@inertiajs/react";
 import React, { useState } from "react";
 import { dayDateTime } from "@/utils/dates";
 import DayTag from "@/Components/Shared/time/DayTag";
+import { dayGroupLabel, startsDay } from "@/Components/Shared/time/DayHeading";
 
 /**
  * The seller's balance.
@@ -212,8 +213,14 @@ export default function BalanceIndex({
                         <section className="rounded-[16px] border border-outline-variant/60 bg-surface-container-lowest p-3.5 shadow-sm">
                             <h2 className="mb-2 text-sm font-bold text-on-surface">History</h2>
                             <div className="divide-y divide-outline-variant/60">
-                                {entries.map((entry) => (
-                                    <div key={entry.id} className="flex items-start justify-between gap-3 py-2">
+                                {entries.map((entry, index) => (
+                                    <React.Fragment key={entry.id}>
+                                    {startsDay(entries, index) ? (
+                                        <p className={`pt-2 text-[10px] font-extrabold uppercase tracking-wide ${entry.day?.outside ? "text-on-warning-container" : "text-outline"}`}>
+                                            {dayGroupLabel(entry.day)}
+                                        </p>
+                                    ) : null}
+                                    <div className="flex items-start justify-between gap-3 py-2">
                                         <div className="min-w-0">
                                             <p className="truncate text-xs text-on-surface">{entry.what}</p>
                                             <p className="text-[10px] text-outline">
@@ -231,6 +238,7 @@ export default function BalanceIndex({
                                             {entry.amount < 0 ? `−${birr(-entry.amount)}` : `+${birr(entry.amount)}`}
                                         </span>
                                     </div>
+                                    </React.Fragment>
                                 ))}
                             </div>
                         </section>

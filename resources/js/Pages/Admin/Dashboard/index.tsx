@@ -22,6 +22,8 @@ import { motionSafe, pulse } from "@/Components/Visual/motion";
 import { AreaTiles, AttentionPanel, GoToBar, NetworkStrip, PanelHead, densePanelSx, type DashboardArea } from "@/Components/Visual/DashboardAreas";
 import type { AdminScopeProps } from "@/types/adminScope";
 import ShopDaysPanel, { type ShopDayRow } from "@/Components/Admin/Dashboard/ShopDaysPanel";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
+import type { TimeFilterView } from "@/types/time";
 
 /**
  * The admin's first screen, kept dense: greeting and store switch in one
@@ -90,6 +92,8 @@ interface Props {
     pipeline?: Partial<Record<JourneyStage, number>>;
     areas?: DashboardArea[];
     shopDays?: ShopDayRow[];
+    /** The period the cards' counted-over-time facts cover. */
+    areaTime?: TimeFilterView;
 }
 
 // ========== HELPERS ==========
@@ -487,6 +491,7 @@ export default function Dashboard({
     pipeline = {},
     areas = [],
     shopDays = [],
+    areaTime,
 }: Props) {
     // Live: the figures refresh every 30 seconds without reloading the page.
     const [updatedAt, setUpdatedAt] = React.useState(() => Date.now());
@@ -522,6 +527,14 @@ export default function Dashboard({
 
                     <ShopDaysPanel rows={shopDays} />
 
+                    {areaTime ? (
+                        <Box>
+                            <TimeFilterChips filter={areaTime} hide={["outside", "all"]} only={["areas", "areaTime"]} />
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                                The big figures are open work right now; "new", "opened", "taken", "delivered" and "confirmed" cover the chosen period.
+                            </Typography>
+                        </Box>
+                    ) : null}
                     <AreaTiles areas={areas} />
                     <NetworkStrip areas={areas} />
                 </Box>

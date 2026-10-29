@@ -21,7 +21,6 @@ use App\Models\StockKeeper\ItemStock;
 use App\Models\StockKeeper\Transfer;
 use App\Services\DeliveryService;
 use App\Services\Fulfillment\SellerOrderBoard;
-use App\Services\Workforce\LocalTime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -42,13 +41,22 @@ final class DashboardAreas
     }
 
     /**
+     * The headline figures are open work and stay whole (open carts, orders in
+     * progress, runs on the road); the facts counted over time ("new", "opened",
+     * "taken", "delivered", "confirmed") cover the period chosen on the
+     * dashboard, on Addis calendar dates: the cards span every store.
+     *
+     * @param  array{when: string, date: string|null}  $period
      * @return array<int, array<string, mixed>>
      */
-    public function all(): array
+    public function all(array $period = ['when' => 'today', 'date' => null]): array
     {
         $store = $this->activeStore;
-        $since = LocalTime::today()->subDays(6)->utc();
-        $today = LocalTime::today()->utc();
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        // Narrows a query to the period on one of its time columns.
+        $in = fn (string $column) => fn ($query) => $time->applyCalendar($query, $column, $period);
+        $label = \App\Services\Workforce\TimeFilter::LABELS[$period['when']] ?? 'Today';
+        $lower = mb_strtolower($label);
         $scopeIds = $store->scopeIds();
 
         $board = $this->board->counts($store->id());
@@ -68,32 +76,32 @@ final class DashboardAreas
             // ── Selling ──
             $this->area('customers', 'selling', 'Customers', 'store', route('admin.customers.index'),
                 $store->apply(Customer::query())->count(), 'customers', 0, null, [
-                    ['New this week', $store->apply(Customer::query())->where('created_at', '>=', $since)->count(), null],
+                    ["New · {$lower}", $store->apply(Customer::query())->tap($in('created_at'))->count(), null],
                     ['With credit', $store->apply(Customer::query())->where('credit_limit', '>', 0)->count(), route('admin.credit.index')],
                     ['Special prices', null, route('admin.customers.discounts')],
                 ]),
             $this->area('carts', 'selling', 'Carts', 'cart', route('admin.carts.index'),
                 $store->apply(Cart::query())->where('status', 'open')->count(), 'open carts', 0, null, [
-                    ['Opened today', $store->apply(Cart::query())->where('created_at', '>=', $today)->count(), null],
+                    ["Opened · {$lower}", $store->apply(Cart::query())->tap($in('created_at'))->count(), null],
                 ]),
             $this->area('orders', 'selling', 'Orders', 'paid', route('admin.orders.index'),
                 $sales()->whereNotIn('fulfillment_stage', [Sale::STAGE_DELIVERED, Sale::STAGE_CANCELLED])->count(), 'in progress',
                 (int) ($board['to_pay'] ?? 0), 'waiting for payment', [
                     ['To pay', (int) ($board['to_pay'] ?? 0), $orders('to_pay')],
                     ['To deliver', (int) ($board['to_deliver'] ?? 0), $orders('to_deliver')],
-                    ['Delivered · 7d', $sales()->where('fulfillment_stage', Sale::STAGE_DELIVERED)->where('updated_at', '>=', $since)->count(), $orders('delivered')],
+                    ["Delivered · {$lower}", $sales()->where('fulfillment_stage', Sale::STAGE_DELIVERED)->tap($in('updated_at'))->count(), $orders('delivered')],
                 ]),
             $this->area('payments', 'selling', 'Payments', 'pay', route('admin.payments.index'),
-                round((float) $payments()->confirmed()->where('paid_at', '>=', $today)->where('payment_method', '!=', Payment::METHOD_CREDIT)->sum('amount'), 2), 'taken today',
+                round((float) $payments()->confirmed()->tap($in('paid_at'))->where('payment_method', '!=', Payment::METHOD_CREDIT)->sum('amount'), 2), "taken · {$lower}",
                 $payments()->where('status', Payment::STATUS_CLAIMED)->count(), 'waiting for the owner to confirm', [
-                    ['Cash today', round((float) $payments()->confirmed()->where('paid_at', '>=', $today)->where('payment_method', Payment::METHOD_CASH)->sum('amount'), 2), null, 'money'],
+                    ["Cash · {$lower}", round((float) $payments()->confirmed()->tap($in('paid_at'))->where('payment_method', Payment::METHOD_CASH)->sum('amount'), 2), null, 'money'],
                     ['Accounts', $store->apply(PaymentAccount::query())->where('is_active', true)->count(), route('admin.payment-accounts.index')],
                     ['On credit', $payments()->where('payment_method', Payment::METHOD_CREDIT)->count(), route('admin.credit.index')],
                 ], 'money'),
             $this->area('balances', 'selling', 'Seller balances', 'pay', route('admin.balances.index'),
                 $store->applyThrough(\App\Models\Finance\BalanceEntry::query(), 'user')->distinct()->count('user_id'), 'sellers holding money',
                 $store->applyThrough(Remittance::query(), 'user')->where('status', Remittance::STATUS_CLAIMED)->count(), 'handovers waiting', [
-                    ['Confirmed · 7d', $store->applyThrough(Remittance::query(), 'user')->where('status', Remittance::STATUS_CONFIRMED)->where('updated_at', '>=', $since)->count(), null],
+                    ["Confirmed · {$lower}", $store->applyThrough(Remittance::query(), 'user')->where('status', Remittance::STATUS_CONFIRMED)->tap($in('remittances.updated_at'))->count(), null],
                 ]),
 
             // ── Fulfilment ──
@@ -109,7 +117,7 @@ final class DashboardAreas
                     + $deliveries()->where('status', DeliveryService::STATUS_FAILED)->count(), 'need a courier or failed', [
                     ['No courier', $deliveries()->unassigned()->readyToCollect()->where('status', DeliveryService::STATUS_PENDING)->count(), route('admin.deliveries.index', ['status' => 'unassigned'])],
                     ['Failed', $deliveries()->where('status', DeliveryService::STATUS_FAILED)->count(), route('admin.deliveries.index', ['status' => 'failed'])],
-                    ['Delivered · 7d', $deliveries()->where('status', DeliveryService::STATUS_DELIVERED)->where('delivered_at', '>=', $since)->count(), route('admin.deliveries.index', ['status' => 'delivered'])],
+                    ["Delivered · {$lower}", $deliveries()->where('status', DeliveryService::STATUS_DELIVERED)->tap($in('delivered_at'))->count(), route('admin.deliveries.index', ['status' => 'delivered'])],
                 ]),
 
             // ── Stock ──

@@ -125,7 +125,21 @@ export interface HistoryRow {
     at: string | null;
 }
 
+/** PriceHistory::forItem: one change to a store, seller, customer or individual price. */
+export interface PriceChangeRow {
+    id: number;
+    kind: "store" | "seller" | "customer" | "individual" | string;
+    store: string | null;
+    variant: string | null;
+    old_price: number | null;
+    new_price: number | null;
+    by: string | null;
+    at: string | null;
+}
+
 export interface ItemSetupProps {
+    /** The newest price changes of this item (catalogue history; sale lines keep their own price). */
+    priceHistory?: PriceChangeRow[];
     item: {
         id: number;
         name: string;

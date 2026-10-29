@@ -6,6 +6,7 @@ use App\Models\Item\Item;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Item\ItemVariant;
 use App\Models\Store\Store;
+use App\Models\Store\Concerns\RecordsPriceChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class StoreVariant extends Model
 {
+    use RecordsPriceChanges;
+
+    /** For the price history (price_changes.kind). */
+    public const PRICE_KIND = PriceChange::KIND_STORE;
+
     use HasFactory;
 
     protected $fillable = [

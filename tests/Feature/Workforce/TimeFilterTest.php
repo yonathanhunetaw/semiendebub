@@ -177,4 +177,27 @@ class TimeFilterTest extends TestCase
         $this->assertCount(2, $refs('week'));
         $this->assertCount(2, $refs('outside'), 'Means nothing without a store day: narrows nothing.');
     }
+
+    #[Test]
+    public function the_dashboard_cards_count_their_facts_over_the_chosen_period(): void
+    {
+        $this->sale('2026-10-19 10:00'); // delivered yesterday
+        $this->at('2026-10-20 09:00');
+
+        $facts = function (string $query): array {
+            $orders = [];
+            $this->get(route('admin.dashboard').$query)->assertOk()->assertInertia(function (Assert $page) use (&$orders): void {
+                $page->loadDeferredProps(function (Assert $loaded) use (&$orders): void {
+                    $orders = collect($loaded->toArray()['props']['areas'])->firstWhere('key', 'orders');
+                });
+            });
+
+            return collect($orders['facts'] ?? [])->mapWithKeys(fn ($fact) => [$fact['label'] => $fact['value']])->all();
+        };
+
+        $this->assertSame(0, $facts('')['Delivered · today']);
+        $this->assertSame(1, $facts('?when=yesterday')['Delivered · yesterday']);
+        $this->assertSame(1, $facts('?when=week')['Delivered · last 7 days']);
+        $this->assertArrayHasKey('Delivered · today', $facts('?when=outside'), 'No business-day view across stores: back to today.');
+    }
 }

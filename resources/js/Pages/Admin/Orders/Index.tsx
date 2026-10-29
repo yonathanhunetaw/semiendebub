@@ -22,6 +22,7 @@ import { FigureRow, FigureTile, PageBand, Pill, adminTableSx, densePanelSx } fro
 import ReceiptLongOutlined from "@mui/icons-material/ReceiptLongOutlined";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
 import DayTag from "@/Components/Shared/time/DayTag";
+import { DayHeadingRow, startsDay } from "@/Components/Shared/time/DayHeading";
 import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
 import type { DayTagView, TimeFilterView } from "@/types/time";
 
@@ -177,11 +178,12 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, time, s
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {orders.map((order) => {
+                            {orders.map((order, i) => {
                                 const stage = STAGES.find((s) => s.value === (order.stage === "packing" ? "paid" : order.stage));
                                 return (
+                                    <React.Fragment key={order.id}>
+                                    {startsDay(orders, i) ? <DayHeadingRow tag={order.day} colSpan={7} /> : null}
                                     <TableRow
-                                        key={order.id}
                                         hover
                                         sx={{ cursor: "pointer" }}
                                         onClick={() => router.visit(route("admin.orders.custody", { reference: order.reference }))}
@@ -204,6 +206,7 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, time, s
                                             </Stack>
                                         </TableCell>
                                     </TableRow>
+                                    </React.Fragment>
                                 );
                             })}
                             {orders.length === 0 ? (

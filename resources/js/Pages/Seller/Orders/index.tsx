@@ -4,6 +4,7 @@ import type { PickPackPlan } from "@/types/sourcing";
 import SellerLayout from "@/Layouts/SellerLayout";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
 import DayTag from "@/Components/Shared/time/DayTag";
+import { dayGroupLabel, startsDay } from "@/Components/Shared/time/DayHeading";
 import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
 import type { TimeFilterView } from "@/types/time";
 import {
@@ -231,7 +232,7 @@ export default function OrdersIndex({ orders: loaded = [], time, limit = 0, plan
                 ) : null}
 
                 <main className="space-y-3 p-2.5">
-                    {visible.map((order) => {
+                    {visible.map((order, index) => {
                         const meta = STAGE_META[order.stage];
                         const checked = selected.includes(order.id);
                         const total = orderTotal(order);
@@ -245,8 +246,13 @@ export default function OrdersIndex({ orders: loaded = [], time, limit = 0, plan
                                 : null;
 
                         return (
+                            <React.Fragment key={order.id}>
+                            {startsDay(visible, index) ? (
+                                <p className={`px-1 pt-1 text-[11px] font-extrabold uppercase tracking-wide ${order.day?.outside ? "text-on-warning-container" : "text-outline"}`}>
+                                    {dayGroupLabel(order.day)}
+                                </p>
+                            ) : null}
                             <div
-                                key={order.id}
                                 id={`order-${order.id}`}
                                 onClick={() =>
                                     selectMode
@@ -479,6 +485,7 @@ export default function OrdersIndex({ orders: loaded = [], time, limit = 0, plan
                                     )
                                 ) : null}
                             </div>
+                            </React.Fragment>
                         );
                     })}
 

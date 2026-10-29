@@ -21,6 +21,7 @@ import { FigureRow, FigureTile, PageBand, Pill, adminTableSx, densePanelSx } fro
 import LocalShippingOutlined from "@mui/icons-material/LocalShippingOutlined";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
 import DayTag from "@/Components/Shared/time/DayTag";
+import { DayHeadingRow, startsDay } from "@/Components/Shared/time/DayHeading";
 import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
 import type { DayTagView, TimeFilterView } from "@/types/time";
 
@@ -129,8 +130,10 @@ export default function DeliveriesIndex({
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {deliveries.map((d) => (
-                                <TableRow key={d.id} hover>
+                            {deliveries.map((d, i) => (
+                                <React.Fragment key={d.id}>
+                                {startsDay(deliveries, i) ? <DayHeadingRow tag={d.day} colSpan={5} /> : null}
+                                <TableRow hover>
                                     <TableCell sx={{ fontFamily: "monospace" }}>{d.tracking_number ?? "—"}</TableCell>
                                     <TableCell>
                                         {d.order ? (
@@ -171,6 +174,7 @@ export default function DeliveriesIndex({
                                         {d.courier ?? (d.ready && d.status === "pending" ? <AssignCourier delivery={d} couriers={couriers} /> : "—")}
                                     </TableCell>
                                 </TableRow>
+                                </React.Fragment>
                             ))}
                             {deliveries.length === 0 ? (
                                 <TableRow>

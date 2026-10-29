@@ -9,7 +9,8 @@ import PricesPart from "@/Components/Admin/ItemSetup/PricesPart";
 import BasicsPart from "@/Components/Admin/ItemSetup/BasicsPart";
 import VariantsPart, { RELOAD } from "@/Components/Admin/ItemSetup/VariantsPart";
 import { ChecksList, Section, colourOf, percentOf } from "@/Components/Admin/ItemSetup/parts";
-import type { Check, HistoryRow, ItemSetupProps, StoreSetup } from "@/types/itemSetup";
+import type { Check, HistoryRow, ItemSetupProps, PriceChangeRow, StoreSetup } from "@/types/itemSetup";
+import { dayDateTime } from "@/utils/dates";
 
 const SECTIONS: Array<{ id: string; label: string }> = [
     { id: "basics", label: "Basics" },
@@ -24,7 +25,7 @@ const SECTIONS: Array<{ id: string; label: string }> = [
 const PRICE_KEYS = ["priced", "individual", "seller_prices", "customer_prices", "discount", "pool"];
 const PLACEMENT_KEYS = ["bin", "levels", "route"];
 
-export default function Setup({ item, options, catalog, readiness, stores, warehouses, stock, history }: ItemSetupProps): React.ReactElement {
+export default function Setup({ item, options, catalog, readiness, stores, warehouses, stock, history, priceHistory = [] }: ItemSetupProps): React.ReactElement {
     const storeReadiness = (id: number) => (Array.isArray(readiness.stores) ? readiness.stores.find((s) => s.store.id === id) : readiness.stores[String(id)]) ?? null;
     const [storeId, setStoreId] = React.useState<number>(() => stores.find((s) => s.deployed)?.id ?? stores[0]?.id ?? 0);
     const store: StoreSetup | undefined = stores.find((s) => s.id === storeId);
@@ -131,12 +132,54 @@ export default function Setup({ item, options, catalog, readiness, stores, wareh
                 {/* 6. History */}
                 <Section id="history" title="History" hint="What has happened to this item. Read only.">
                     <HistoryTabs history={history} />
+                    <PriceChanges rows={priceHistory} />
                 </Section>
 
                 <Typography variant="caption" color="text.secondary">
                     <Link href={route("admin.items.show", item.id)}>Item details</Link> · {percentOf(readiness.item.checks)}% of the item's own checks done.
                 </Typography>
             </Stack>
+        </>
+    );
+}
+
+const PRICE_KIND: Record<string, string> = { store: "Store price", seller: "Seller price", customer: "Customer price", individual: "With VAT" };
+
+const priceText = (value: number | null): string => (value === null ? "—" : `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ETB`);
+
+/** Every change to this item's prices, newest first: what it was, what it became, who and when. */
+function PriceChanges({ rows }: { rows: PriceChangeRow[] }) {
+    return (
+        <>
+            <Typography sx={{ fontWeight: 700, mt: 2, mb: 0.5 }}>Price changes</Typography>
+            {rows.length === 0 ? (
+                <Typography color="text.secondary" sx={{ py: 1 }}>No price changes recorded yet.</Typography>
+            ) : (
+                <Table size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>When</TableCell>
+                            <TableCell>Store · variant</TableCell>
+                            <TableCell>Price</TableCell>
+                            <TableCell align="right">Was</TableCell>
+                            <TableCell align="right">Now</TableCell>
+                            <TableCell>By</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {rows.map((r) => (
+                            <TableRow key={r.id}>
+                                <TableCell>{dayDateTime(r.at)}</TableCell>
+                                <TableCell>{[r.store, r.variant].filter(Boolean).join(" · ") || "—"}</TableCell>
+                                <TableCell>{PRICE_KIND[r.kind] ?? r.kind}</TableCell>
+                                <TableCell align="right">{r.old_price === null ? "first set" : priceText(r.old_price)}</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 700 }}>{priceText(r.new_price)}</TableCell>
+                                <TableCell>{r.by ?? "—"}</TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            )}
         </>
     );
 }

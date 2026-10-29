@@ -51,6 +51,12 @@ class DashboardController extends Controller
 
     public function index(Request $request, ActiveStore $activeStore): Response
     {
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        $areaPeriod = $time->fromRequest($request, 'today');
+        // A business-day view has no meaning across stores' cards: they use calendar dates.
+        if (! in_array($areaPeriod['when'], ['today', 'yesterday', 'week', 'month'], true)) {
+            $areaPeriod = ['when' => 'today', 'date' => null];
+        }
         // The sidebar dropdown and the chips on this page both go through
         // ActiveStore (`?store=` -> session), so they can never disagree.
         $store = $activeStore->store();
@@ -78,7 +84,9 @@ class DashboardController extends Controller
             'currentStoreName' => $store?->name,
             // Every area of the app as a card: figure, facts, what needs
             // attention, and links into each list.
-            'areas' => Inertia::defer(fn () => app(\App\Services\Admin\DashboardAreas::class)->all(), 'tiles'),
+            // The period the cards' counted-over-time facts cover (today by default, Addis calendar dates).
+            'areaTime' => $time->describe($areaPeriod),
+            'areas' => Inertia::defer(fn () => app(\App\Services\Admin\DashboardAreas::class)->all($areaPeriod), 'tiles'),
             // Orders at each stop of the road, for the journey strip:
             // open carts, the board's stages, and delivered in 7 days.
             'pipeline' => Inertia::defer(fn () => $this->pipeline($activeStore), 'tiles'),
