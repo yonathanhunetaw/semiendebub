@@ -1,3 +1,4 @@
+import { resetPlayLoad } from '../lib/inspect';
 import { expect, test } from '@playwright/test';
 import { app, closeWindows, fixture, signIn } from '../lib/support';
 import { playIn } from '../lib/world';
@@ -13,7 +14,8 @@ import { playIn } from '../lib/world';
 test.afterEach(async () => closeWindows());
 
 test('Director faces the door, the hub item finder marks an item, and the controls move to the top bar when wide', async ({ browser }) => {
-    test.setTimeout(300_000);
+    // Several walks across the 3D world, the last one to Hub A: slow on a busy machine.
+    test.setTimeout(420_000);
     const page = await signIn(browser, 'admin', fixture.people.admin.email);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -68,6 +70,9 @@ test('Director faces the door, the hub item finder marks an item, and the contro
     });
 
     await test.step('Play: walking into a hub brings the finder up, and the worker can walk to the item', async () => {
+        // The play specs before this one load and deliver the freight shipment; put it back waiting.
+        resetPlayLoad();
+        await playIn(page, 'admin');
         await page.getByRole('button', { name: 'Follow', exact: true }).click();
         await page.waitForTimeout(500);
         // The goal line "… to fetch from Hub A" walks the worker there.

@@ -22,6 +22,12 @@ class GuideWorldController extends Controller
 {
     public function __invoke(WorldShipmentsRequest $request, WorldFeed $feed): JsonResponse
     {
+        // A background read of the world's data must not use up a message meant for the page:
+        // a placement's "… is on f6c." was lost when this feed was read between its redirect and the reload.
+        if ($request->hasSession()) {
+            $request->session()->reflash();
+        }
+
         // Play asks only for what it can pick up now; the day's replay is not needed.
         if ($request->boolean('play')) {
             // The viewer's app is the first part of the route's name (stock_keeper.guide.world): its routes are the ones the desks call.

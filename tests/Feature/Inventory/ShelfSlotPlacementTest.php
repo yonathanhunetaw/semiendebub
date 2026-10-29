@@ -126,4 +126,18 @@ class ShelfSlotPlacementTest extends TestCase
         // the stock keeper's app has no such route at all
         $this->assertFalse(\Illuminate\Support\Facades\Route::has('stock_keeper.locations.bands.spot'));
     }
+
+    #[Test]
+    public function a_world_data_read_in_between_does_not_eat_the_placement_message(): void
+    {
+        $host = 'http://admin.'.config('app.system_domain');
+        $put = $this->actingAs($this->admin)->from("{$host}/guide?view=world")
+            ->put(route('admin.items.setup.spot', ['item' => $this->item->id, 'location' => $this->shelf()->id]), ['spot' => 'f6c']);
+
+        // The world reads its data in the background before the page comes back.
+        $this->getJson("{$host}/guide/world?catalogue=1")->assertOk();
+
+        $page = $this->get((string) $put->headers->get('Location'), ['X-Inertia' => 'true', 'X-Inertia-Version' => \Inertia\Inertia::getVersion()]);
+        $this->assertStringContainsString('is on f6c', (string) $page->json('props.flash.success'));
+    }
 }

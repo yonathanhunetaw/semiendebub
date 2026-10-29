@@ -84,3 +84,8 @@ export const siteAt = (locationId: number): SiteFacts => inspect('site-at', loca
 export const sweepSites = (): void => {
     execFileSync('php', ['artisan', 'sites:sweep'], { cwd: appRoot, env: process.env, encoding: 'utf8' });
 };
+
+/** Puts the world's freight shipment (SHP-E2E-PLAY) back to scheduled, nothing picked: for a spec that needs it waiting. */
+export function resetPlayLoad(): void {
+    execFileSync('php', ['artisan', 'e2e:prepare', '--reset-play-load'], { cwd: appRoot, env: process.env, encoding: 'utf8' });
+}

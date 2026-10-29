@@ -35,7 +35,7 @@ use Spatie\Permission\Models\Role;
 final class PrepareE2eCommand extends Command
 {
     /** @var string */
-    protected $signature = 'e2e:prepare {--items=2 : How many stocked items to pick}';
+    protected $signature = 'e2e:prepare {--items=2 : How many stocked items to pick} {--reset-play-load : Only put the world\'s freight shipment back to scheduled}';
 
     /** @var string */
     protected $description = 'Create the Playwright test users, account and item picks in the *_e2e database';
@@ -50,6 +50,23 @@ final class PrepareE2eCommand extends Command
             $this->components->error("Refusing to run against '{$database}': only a *_e2e database outside production.");
 
             return self::FAILURE;
+        }
+
+        // A spec that needs the freight shipment waiting (e2e/stock/world-finder.spec.ts) puts it
+        // back itself: the play specs before it load and deliver it in the same run.
+        if ($this->option('reset-play-load')) {
+            $shipment = \App\Models\Fulfillment\Shipment::query()->where('reference', 'SHP-E2E-PLAY')->first();
+            $shipment?->update([
+                'status' => 'scheduled',
+                'picked_at' => null, 'prepared_at' => null, 'prepared_by' => null,
+                'courier_started_at' => null, 'courier_checked_at' => null, 'courier_signed_at' => null, 'courier_signature' => null,
+                'dispatched_at' => null, 'in_transit_at' => null, 'delivered_at' => null,
+                'receiver_checked_at' => null, 'received_at' => null, 'received_by' => null, 'receiver_signature' => null,
+            ]);
+            $shipment?->items()->update(['picked_quantity' => 0]);
+            $this->line($shipment ? 'reset' : 'none');
+
+            return self::SUCCESS;
         }
 
         $this->fillMissingPictures();
