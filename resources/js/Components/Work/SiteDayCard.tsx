@@ -21,6 +21,7 @@ function LateClose({ app, day }: { app: WorkApp; day: SiteDayView }): React.Reac
     const [closedAt, setClosedAt] = React.useState("");
     const [till, setTill] = React.useState("");
     const [note, setNote] = React.useState("");
+    const [why, setWhy] = React.useState("");
     const [busy, setBusy] = React.useState(false);
 
     return (
@@ -37,6 +38,10 @@ function LateClose({ app, day }: { app: WorkApp; day: SiteDayView }): React.Reac
                         <input type="number" min="0" className={`mt-1 ${inputCls}`} value={till} onChange={(e) => setTill(e.target.value)} />
                     </label>
                     <label className="block text-[11px] text-on-surface-variant">
+                        If the count is not what it should be, say why
+                        <input type="text" className={`mt-1 ${inputCls}`} value={why} onChange={(e) => setWhy(e.target.value)} />
+                    </label>
+                    <label className="block text-[11px] text-on-surface-variant">
                         Why was it not closed at the counter?
                         <input type="text" className={`mt-1 ${inputCls}`} value={note} onChange={(e) => setNote(e.target.value)} />
                     </label>
@@ -49,7 +54,7 @@ function LateClose({ app, day }: { app: WorkApp; day: SiteDayView }): React.Reac
                                 setBusy(true);
                                 router.post(
                                     wr(app, "work.sites.close-late", day.site.id),
-                                    { closed_at: closedAt, till_count: till === "" ? null : Number(till), note },
+                                    { closed_at: closedAt, till_count: till === "" ? null : Number(till), note, difference_note: why || null },
                                     { preserveScroll: true, onFinish: () => setBusy(false) },
                                 );
                             }}
@@ -66,6 +71,47 @@ function LateClose({ app, day }: { app: WorkApp; day: SiteDayView }): React.Reac
                     Close it now…
                 </button>
             )}
+        </div>
+    );
+}
+
+const etb = (amount: number): string => `ETB ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** The day's cash: frozen when the day closed, or so far for a manager while it is open. */
+function CashLines({ cash }: { cash: NonNullable<SiteDayView["cash"]> }): React.ReactElement {
+    const off = cash.difference !== null && Math.abs(cash.difference) >= 0.01;
+
+    return (
+        <div className="mt-2.5 rounded-[12px] border border-outline-variant/60 bg-surface-container px-3 py-2 text-[11px]">
+            <p className="font-bold text-on-surface">{cash.final ? "Cash for the day (final)" : "Cash so far today"}</p>
+            <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5">
+                <dt className="text-on-surface-variant">Taken</dt>
+                <dd className="text-on-surface">{etb(cash.collected)}</dd>
+                {cash.unconfirmed > 0 ? (
+                    <>
+                        <dt className="text-on-surface-variant">Not confirmed yet</dt>
+                        <dd className="text-on-surface">{etb(cash.unconfirmed)}</dd>
+                    </>
+                ) : null}
+                <dt className="text-on-surface-variant">Handed over</dt>
+                <dd className="text-on-surface">{etb(cash.handed_over)}</dd>
+                <dt className="text-on-surface-variant">Should be in the till</dt>
+                <dd className="text-on-surface">{etb(cash.expected)}</dd>
+                {cash.counted !== null ? (
+                    <>
+                        <dt className="text-on-surface-variant">Counted</dt>
+                        <dd className="text-on-surface">{etb(cash.counted)}</dd>
+                    </>
+                ) : null}
+            </dl>
+            {off ? (
+                <p className="mt-1 font-semibold text-on-error-container">
+                    {cash.difference! < 0 ? "Short by" : "Over by"} {etb(Math.abs(cash.difference!))}
+                    {cash.why ? ` · ${cash.why}` : ""}
+                </p>
+            ) : cash.final && cash.difference !== null ? (
+                <p className="mt-1 font-semibold text-on-success-container">The till matched.</p>
+            ) : null}
         </div>
     );
 }
@@ -116,6 +162,8 @@ export default function SiteDayCard({ day, app, children }: { day: SiteDayView; 
                     </>
                 ) : null}
             </dl>
+
+            {day.cash ? <CashLines cash={day.cash} /> : null}
 
             {day.closed_late ? <p className="mt-2 text-[11px] font-semibold text-on-warning-container">Closed afterwards by a manager.</p> : null}
 

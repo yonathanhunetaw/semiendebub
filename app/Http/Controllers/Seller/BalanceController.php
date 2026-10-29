@@ -49,7 +49,49 @@ class BalanceController extends Controller
                 ->map(fn (Remittance $remittance): array => $board->remittance($remittance))
                 ->values(),
             'entries' => $ledger->entries($userId),
+            'store_cash' => $this->storeCash($request->user()),
         ]);
+    }
+
+    /**
+     * The cash at this seller's store for the day that is open now (else the one
+     * that closed last today): what was taken, what is still unconfirmed, what
+     * was handed over, and what the till should hold.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function storeCash(\App\Models\Auth\User $user): ?array
+    {
+        if ($user->store_id === null) {
+            return null;
+        }
+
+        $shopDay = app(\App\Services\Workforce\ShopDay::class);
+        $site = $shopDay->siteOf((int) $user->store_id);
+        if ($site === null) {
+            return null;
+        }
+
+        $day = $shopDay->current($site) ?? \App\Models\Workforce\SiteDay::query()
+            ->where('stock_location_id', $site->id)
+            ->whereDate('date', \App\Services\Workforce\LocalTime::dateOf())
+            ->whereNotNull('opened_at')
+            ->first();
+
+        if ($day === null) {
+            return null;
+        }
+
+        $cash = app(\App\Services\Finance\DayCash::class)->figures($site, $day);
+
+        return [
+            'store' => (string) $site->name,
+            'open' => $day->status === \App\Models\Workforce\SiteDay::STATUS_OPEN,
+            'collected' => $cash['collected'],
+            'unconfirmed' => $cash['unconfirmed'],
+            'handed_over' => $cash['handed_over'],
+            'expected' => $cash['expected'],
+        ];
     }
 
     public function remit(StoreRemittanceRequest $request, RemittanceService $remittances): RedirectResponse

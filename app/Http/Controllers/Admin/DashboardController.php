@@ -378,6 +378,9 @@ class DashboardController extends Controller
                     $day,
                 )->sum('payments.amount'), 2),
                 'late_close' => (bool) $day->closed_late,
+                // The till against the day's cash, frozen at closing (null while open or when no cash moved).
+                'till_difference' => $day->till_difference !== null ? (float) $day->till_difference : null,
+                'cash_unconfirmed' => $day->cash_unconfirmed !== null ? (float) $day->cash_unconfirmed : null,
             ];
         };
 

@@ -31,6 +31,7 @@ class SiteDay extends Model
         'stock_location_id', 'date', 'status', 'opener_id', 'closer_id', 'driver_id',
         'opened_at', 'opened_by', 'opened_without_key', 'no_driver', 'open_checklist', 'float_amount', 'open_note',
         'closed_at', 'closed_by', 'closed_late', 'close_checklist', 'till_count', 'close_note', 'missed_at',
+        'cash_collected', 'cash_unconfirmed', 'cash_handed_over', 'cash_expected', 'till_difference', 'till_difference_note',
     ];
 
     protected $casts = [
@@ -51,6 +52,11 @@ class SiteDay extends Model
         'close_checklist' => 'array',
         'float_amount' => 'decimal:2',
         'till_count' => 'decimal:2',
+        'cash_collected' => 'decimal:2',
+        'cash_unconfirmed' => 'decimal:2',
+        'cash_handed_over' => 'decimal:2',
+        'cash_expected' => 'decimal:2',
+        'till_difference' => 'decimal:2',
     ];
 
     public function site(): BelongsTo

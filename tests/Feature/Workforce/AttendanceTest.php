@@ -279,7 +279,7 @@ class AttendanceTest extends TestCase
 
         $this->travelTo(CarbonImmutable::parse('2026-10-19 19:00:00'));
         $as($this->second)->post(route('seller.work.sites.close', $this->site), ['token' => 'not-a-code'])->assertSessionHas('error');
-        $as($this->second)->post(route('seller.work.sites.close', $this->site), ['token' => $this->live(), 'ticked' => [], 'till_count' => 1200])
+        $as($this->second)->post(route('seller.work.sites.close', $this->site), ['token' => $this->live(), 'ticked' => [], 'till_count' => 1200, 'difference_note' => 'No float was recorded'])
             ->assertSessionHas('success', "{$this->site->name} is closed.");
         $this->assertSame(0, TimeEntry::query()->open()->count());
     }

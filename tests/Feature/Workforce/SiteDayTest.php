@@ -149,7 +149,8 @@ class SiteDayTest extends TestCase
     public function closing_hands_the_key_to_the_next_opener(): void
     {
         $this->days->plan($this->site, CarbonImmutable::parse('2026-10-20'), $this->manager, $this->keeper->id, null);
-        $this->days->open($this->site, $this->seller, $this->printed());
+        // Opened with a float of 12,000, so a count of 12,000 matches the day's cash.
+        $this->days->open($this->site, $this->seller, $this->printed(), [], 12000.0);
 
         $this->travelTo(CarbonImmutable::parse('2026-10-19 19:05:00'));
         $day = $this->days->close($this->site, $this->seller, $this->qr->liveToken($this->site), ['Till counted'], 12000.0, null, $this->keeper);

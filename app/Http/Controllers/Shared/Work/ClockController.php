@@ -123,6 +123,7 @@ class ClockController extends Controller
             $request->validated('note'),
             $keyTo,
             (bool) $request->validated('clock_out_others'),
+            $request->validated('difference_note'),
         ), $keyTo ? sprintf('%s is closed. The key waits for %s to accept it.', $site->name, $keyTo->first_name) : sprintf('%s is closed.', $site->name));
     }
 
@@ -137,6 +138,7 @@ class ClockController extends Controller
             LocalTime::parse($request->validated('closed_at')),
             $request->validated('till_count') !== null ? (float) $request->validated('till_count') : null,
             (string) $request->validated('note'),
+            $request->validated('difference_note'),
         ), sprintf('%s is closed for that day.', $site->name));
     }
 

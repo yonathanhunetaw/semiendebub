@@ -11,6 +11,7 @@ use App\Models\Workforce\CustodyKey;
 use App\Models\Workforce\Shift;
 use App\Models\Workforce\SiteDay;
 use App\Models\Workforce\StaffRide;
+use App\Services\Finance\DayCash;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -205,9 +206,9 @@ class SiteDayService
      *
      * @throws WorkforceException
      */
-    public function close(StockLocation $site, User $by, ?string $token, array $ticked = [], ?float $till = null, ?string $note = null, ?User $keyTo = null, bool $clockOutOthers = false): SiteDay
+    public function close(StockLocation $site, User $by, ?string $token, array $ticked = [], ?float $till = null, ?string $note = null, ?User $keyTo = null, bool $clockOutOthers = false, ?string $differenceNote = null): SiteDay
     {
-        return DB::transaction(function () use ($site, $by, $token, $ticked, $till, $note, $keyTo, $clockOutOthers): SiteDay {
+        return DB::transaction(function () use ($site, $by, $token, $ticked, $till, $note, $keyTo, $clockOutOthers, $differenceNote): SiteDay {
             $this->atCounter($site, $token);
 
             if (! $this->sites->worksAt($by, $site)) {
@@ -228,6 +229,11 @@ class SiteDayService
                 ));
             }
 
+            // The day's cash is settled before anything changes: a till that does not
+            // match, with no reason given, stops the closing (nothing is half-closed).
+            $money = app(DayCash::class);
+            $settled = $money->settle($money->figures($site, $day, now()), $till, $differenceNote);
+
             $day->update([
                 'status' => SiteDay::STATUS_CLOSED,
                 'closed_at' => now(),
@@ -236,7 +242,7 @@ class SiteDayService
                 'no_driver' => $day->no_driver || $day->driver_id === null,
                 'till_count' => $till,
                 'close_note' => $note !== null && trim($note) !== '' ? trim($note) : null,
-            ]);
+            ] + $settled);
 
             $this->attendance->clockOutAtClosing($site, $by);
 
@@ -256,7 +262,7 @@ class SiteDayService
      *
      * @throws WorkforceException
      */
-    public function closeLate(StockLocation $site, User $by, CarbonInterface $closedAt, ?float $till, string $note): SiteDay
+    public function closeLate(StockLocation $site, User $by, CarbonInterface $closedAt, ?float $till, string $note, ?string $differenceNote = null): SiteDay
     {
         if (! $this->sites->canManage($by, $site)) {
             throw new WorkforceException('Only a manager of this site closes a day afterwards.', 403);
@@ -267,7 +273,7 @@ class SiteDayService
             throw new WorkforceException('Say why it was not closed at the counter.');
         }
 
-        return DB::transaction(function () use ($site, $by, $closedAt, $till, $note): SiteDay {
+        return DB::transaction(function () use ($site, $by, $closedAt, $till, $note, $differenceNote): SiteDay {
             $open = app(ShopDay::class)->current($site);
             $open = $open === null ? null : SiteDay::query()->lockForUpdate()->find($open->id);
 
@@ -280,6 +286,10 @@ class SiteDayService
                 throw new WorkforceException('The closing time has to be after it opened and not in the future.');
             }
 
+            // Its cash is the cash up to the moment the shop really closed.
+            $money = app(DayCash::class);
+            $settled = $money->settle($money->figures($site, $open, $closedAt), $till, $differenceNote);
+
             $open->update([
                 'status' => SiteDay::STATUS_CLOSED,
                 'closed_at' => $closedAt,
@@ -288,7 +298,7 @@ class SiteDayService
                 'no_driver' => $open->no_driver || $open->driver_id === null,
                 'till_count' => $till,
                 'close_note' => $note,
-            ]);
+            ] + $settled);
 
             $this->attendance->clockOutAtClosing($site, $by, $closedAt);
 
@@ -392,6 +402,21 @@ class SiteDayService
             'overdue_close' => $day->status === SiteDay::STATUS_OPEN && $day->date->toDateString() < LocalTime::dateOf(),
             'closed_by' => $name($day->closedBy),
             'till_count' => $day->till_count !== null ? (float) $day->till_count : null,
+            // A closed day's cash as it was frozen at closing; for managers, an open day's cash so far.
+            'cash' => match (true) {
+                $day->status === SiteDay::STATUS_CLOSED && $day->cash_collected !== null => [
+                    'final' => true,
+                    'collected' => (float) $day->cash_collected,
+                    'unconfirmed' => (float) $day->cash_unconfirmed,
+                    'handed_over' => (float) $day->cash_handed_over,
+                    'expected' => (float) $day->cash_expected,
+                    'counted' => $day->till_count !== null ? (float) $day->till_count : null,
+                    'difference' => $day->till_difference !== null ? (float) $day->till_difference : null,
+                    'why' => $day->till_difference_note,
+                ],
+                $day->status === SiteDay::STATUS_OPEN && $manages => $this->cashSoFar($site, $day),
+                default => null,
+            },
             'close_note' => $day->close_note,
             'open_checklist' => $day->open_checklist ?? [],
             'close_checklist' => $day->close_checklist ?? [],
@@ -400,6 +425,23 @@ class SiteDayService
             'key_holder' => $key?->holder ? ['id' => (int) $key->holder->id, 'name' => $name($key->holder)] : null,
             'i_hold_key' => $key !== null && (int) $key->holder_id === (int) $viewer->id,
             'manages' => $manages,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function cashSoFar(StockLocation $site, SiteDay $day): array
+    {
+        $cash = app(DayCash::class)->figures($site, $day, now());
+
+        return [
+            'final' => false,
+            'collected' => $cash['collected'],
+            'unconfirmed' => $cash['unconfirmed'],
+            'handed_over' => $cash['handed_over'],
+            'expected' => $cash['expected'],
+            'counted' => null,
+            'difference' => null,
+            'why' => null,
         ];
     }
 

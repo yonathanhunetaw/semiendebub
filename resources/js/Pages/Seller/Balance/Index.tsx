@@ -29,6 +29,15 @@ interface Props {
     settlement_accounts?: PaymentAccountOption[];
     remittances?: RemittanceRow[];
     entries?: BalanceEntryRow[];
+    /** The cash at the seller's store for today's business day. */
+    store_cash?: {
+        store: string;
+        open: boolean;
+        collected: number;
+        unconfirmed: number;
+        handed_over: number;
+        expected: number;
+    } | null;
 }
 
 const HANDOVER_CHIP: Record<RemittanceRow["status"], { label: string; className: string }> = {
@@ -49,6 +58,7 @@ export default function BalanceIndex({
     settlement_accounts = [],
     remittances = [],
     entries = [],
+    store_cash = null,
 }: Props): React.ReactElement {
     const [open, setOpen] = useState<string | null>(null);
 
@@ -63,6 +73,29 @@ export default function BalanceIndex({
                 </header>
 
                 <div className="space-y-3 px-3.5 pt-3">
+                    {/* ── The store's cash for today's business day ── */}
+                    {store_cash ? (
+                        <section className="rounded-[16px] border border-outline-variant/60 bg-surface-container-lowest p-3.5 shadow-sm">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
+                                {store_cash.store} · {store_cash.open ? "today's cash so far" : "today's cash (closed)"}
+                            </p>
+                            <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
+                                <dt className="text-on-surface-variant">Taken</dt>
+                                <dd className="text-right font-bold text-on-surface">{birr(store_cash.collected)}</dd>
+                                {store_cash.unconfirmed > 0 ? (
+                                    <>
+                                        <dt className="text-on-surface-variant">Waiting to be confirmed</dt>
+                                        <dd className="text-right font-bold text-on-warning-container">{birr(store_cash.unconfirmed)}</dd>
+                                    </>
+                                ) : null}
+                                <dt className="text-on-surface-variant">Handed over</dt>
+                                <dd className="text-right font-bold text-on-surface">{birr(store_cash.handed_over)}</dd>
+                                <dt className="text-on-surface-variant">Should be in the till</dt>
+                                <dd className="text-right font-bold text-on-surface">{birr(store_cash.expected)}</dd>
+                            </dl>
+                        </section>
+                    ) : null}
+
                     {/* ── Total ── */}
                     <section className="rounded-[16px] border border-success/30 bg-gradient-to-br from-success-container/60 to-surface-container-lowest p-4 shadow-sm">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">You hold</p>

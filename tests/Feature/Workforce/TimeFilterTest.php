@@ -75,7 +75,7 @@ class TimeFilterTest extends TestCase
         $this->at($open);
         app(SiteDayService::class)->open($this->site, $this->seller, $token);
         $this->at($close);
-        app(SiteDayService::class)->close($this->site, $this->seller, $token, [], 100.0);
+        app(SiteDayService::class)->close($this->site, $this->seller, $token, [], null);
     }
 
     private function sale(string $wallClock, string $stage = Sale::STAGE_DELIVERED): Sale

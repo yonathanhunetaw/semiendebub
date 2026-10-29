@@ -12,6 +12,9 @@ export interface ShopDayFigures {
     orders: number;
     takings: number;
     late_close: boolean;
+    /** Counted till minus what it should hold; null while open or when no cash moved. */
+    till_difference: number | null;
+    cash_unconfirmed: number | null;
 }
 
 export interface ShopDayRow {
@@ -44,6 +47,16 @@ function Figures({ title, day, empty }: { title: string; day: ShopDayFigures | n
                         {clock(day.opened_at)} – {day.closed_at ? clock(day.closed_at) : "open now"}
                         {day.late_close ? " · closed afterwards" : ""}
                     </Typography>
+                    {day.till_difference !== null && Math.abs(day.till_difference) >= 0.01 ? (
+                        <Typography variant="caption" color="error" component="div" sx={{ fontWeight: 700 }}>
+                            Till {day.till_difference < 0 ? "short" : "over"} {money(Math.abs(day.till_difference))}
+                        </Typography>
+                    ) : null}
+                    {(day.cash_unconfirmed ?? 0) > 0 ? (
+                        <Typography variant="caption" color="warning.main" component="div">
+                            {money(day.cash_unconfirmed ?? 0)} cash not confirmed at close
+                        </Typography>
+                    ) : null}
                 </>
             ) : (
                 <Typography variant="body2" color="text.secondary">

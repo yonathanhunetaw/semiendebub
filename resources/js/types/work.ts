@@ -63,6 +63,21 @@ export type SiteKind = "store" | "remote_hub" | "main_hub";
 
 export type SiteDayStatus = "planned" | "open" | "closed" | "missed" | "closed_day";
 
+/** SiteDayService::present: the day's cash. */
+export interface DayCashView {
+    /** True once the day is closed: the figures no longer change. */
+    final: boolean;
+    collected: number;
+    /** Taken but not yet confirmed by a second person. */
+    unconfirmed: number;
+    handed_over: number;
+    /** Opening float + cash taken - cash handed over. */
+    expected: number;
+    counted: number | null;
+    difference: number | null;
+    why: string | null;
+}
+
 /** SiteDayService::present */
 export interface SiteDayView {
     site: { id: number; name: string; kind: SiteKind; kind_label: string };
@@ -91,6 +106,8 @@ export interface SiteDayView {
     /** Still open from an earlier date: nobody closed it. */
     overdue_close: boolean;
     till_count: number | null;
+    /** A closed day's cash as frozen at closing; an open day's so far (managers only). */
+    cash: DayCashView | null;
     close_note: string | null;
     open_checklist: { item: string; done: boolean }[];
     close_checklist: { item: string; done: boolean }[];

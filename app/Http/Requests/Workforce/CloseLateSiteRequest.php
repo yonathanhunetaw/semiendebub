@@ -21,6 +21,7 @@ class CloseLateSiteRequest extends FormRequest
             // When the shop really closed, on the shops' clock: "2026-10-19T19:30".
             'closed_at' => ['required', 'date_format:Y-m-d\TH:i'],
             'till_count' => ['nullable', 'numeric', 'min:0'],
+            'difference_note' => ['nullable', 'string', 'max:500'],
             'note' => ['required', 'string', 'max:500'],
         ];
     }

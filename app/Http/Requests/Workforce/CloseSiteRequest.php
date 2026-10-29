@@ -22,6 +22,8 @@ class CloseSiteRequest extends FormRequest
             'ticked' => ['array'],
             'ticked.*' => ['string', 'max:120'],
             'till_count' => ['nullable', 'numeric', 'min:0'],
+            // Why the count differs from the day's cash; required by the service when it does.
+            'difference_note' => ['nullable', 'string', 'max:500'],
             'note' => ['nullable', 'string', 'max:500'],
             'key_to_id' => ['nullable', 'integer', 'exists:users,id'],
             'clock_out_others' => ['boolean'],

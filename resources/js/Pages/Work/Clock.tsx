@@ -50,6 +50,7 @@ export default function Clock({ app, token, code, works_here, site, day, key_rec
     const [ticked, setTicked] = useState<string[]>([]);
     const [amount, setAmount] = useState("");
     const [note, setNote] = useState("");
+    const [why, setWhy] = useState("");
     const [keyTo, setKeyTo] = useState<string>(next_opener ? String(next_opener.id) : "");
     const [busy, setBusy] = useState(false);
     const [clockOthers, setClockOthers] = useState(false);
@@ -167,6 +168,12 @@ export default function Clock({ app, token, code, works_here, site, day, key_rec
                                     value={amount}
                                     onChange={(e) => setAmount(e.target.value)}
                                 />
+                                <input
+                                    className={inputCls}
+                                    placeholder="If the count is not what it should be, say why"
+                                    value={why}
+                                    onChange={(e) => setWhy(e.target.value)}
+                                />
                                 {day.i_hold_key ? (
                                     <select className={inputCls} value={keyTo} onChange={(e) => setKeyTo(e.target.value)}>
                                         <option value="">I keep the key</option>
@@ -193,6 +200,7 @@ export default function Clock({ app, token, code, works_here, site, day, key_rec
                                         send("work.sites.close", {
                                             till_count: amount === "" ? null : Number(amount),
                                             note: note || null,
+                                            difference_note: why || null,
                                             key_to_id: keyTo ? Number(keyTo) : null,
                                             clock_out_others: clockOthers,
                                         })

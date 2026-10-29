@@ -92,11 +92,11 @@ class ShopDayTest extends TestCase
         return app(SiteDayService::class)->open($this->site, $this->seller, app(CounterQr::class)->printedToken($this->site));
     }
 
-    private function close(string $wallClock, float $till = 500.0): SiteDay
+    private function close(string $wallClock, ?float $till = null, ?string $why = null): SiteDay
     {
         $this->at($wallClock);
 
-        return app(SiteDayService::class)->close($this->site, $this->seller, app(CounterQr::class)->printedToken($this->site), [], $till);
+        return app(SiteDayService::class)->close($this->site, $this->seller, app(CounterQr::class)->printedToken($this->site), [], $till, null, null, false, $why);
     }
 
     /** A sale at a wall-clock moment, in the given store. */
@@ -224,7 +224,7 @@ class ShopDayTest extends TestCase
 
         // Only a manager does it, and has to say why.
         try {
-            $svc->closeLate($this->site, $this->seller, LocalTime::parse('2026-10-19T19:00'), 400.0, 'Forgot');
+            $svc->closeLate($this->site, $this->seller, LocalTime::parse('2026-10-19T19:00'), null, 'Forgot');
             $this->fail('A seller cannot close a day afterwards.');
         } catch (WorkforceException $e) {
             $this->assertSame(403, $e->getCode());
@@ -233,18 +233,17 @@ class ShopDayTest extends TestCase
 
         // Not before it opened, not in the future.
         try {
-            $svc->closeLate($this->site, $this->manager, LocalTime::parse('2026-10-19T07:00'), 400.0, 'Forgot');
+            $svc->closeLate($this->site, $this->manager, LocalTime::parse('2026-10-19T07:00'), null, 'Forgot');
             $this->fail('Before opening.');
         } catch (WorkforceException) {
             $this->assertSame(SiteDay::STATUS_OPEN, $day->fresh()->status);
         }
 
-        $closed = $svc->closeLate($this->site, $this->manager, LocalTime::parse('2026-10-19T19:00'), 400.0, 'Closed in a hurry, forgot the QR');
+        $closed = $svc->closeLate($this->site, $this->manager, LocalTime::parse('2026-10-19T19:00'), null, 'Closed in a hurry, forgot the QR');
 
         $this->assertSame(SiteDay::STATUS_CLOSED, $closed->status);
         $this->assertTrue($closed->closed_late);
         $this->assertSame('2026-10-19 16:00:00', $closed->fresh()->getRawOriginal('closed_at'));
-        $this->assertSame(400.0, (float) $closed->till_count);
 
         // The 21:00 sale is now outside open hours, and the new day can open.
         $outside = app(ShopDay::class)->outsideHours(Sale::query(), 'sales.created_at', 'sales.store_id')->pluck('id')->all();
@@ -256,7 +255,7 @@ class ShopDayTest extends TestCase
     private function expectNoteRequired(SiteDayService $svc): void
     {
         try {
-            $svc->closeLate($this->site, $this->manager, LocalTime::parse('2026-10-19T19:00'), 400.0, '  ');
+            $svc->closeLate($this->site, $this->manager, LocalTime::parse('2026-10-19T19:00'), null, '  ');
             $this->fail('A reason is required.');
         } catch (WorkforceException $e) {
             $this->assertStringContainsString('why', $e->getMessage());
