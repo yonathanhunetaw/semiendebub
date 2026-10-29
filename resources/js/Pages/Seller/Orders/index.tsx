@@ -193,7 +193,7 @@ export default function OrdersIndex({ orders: loaded = [], time, limit = 0, plan
                 />
 
                 <div className="mx-2.5 mt-2">
-                    <TimeFilterChips filter={time} hide={["all"]} />
+                    <TimeFilterChips filter={time} />
                     <p className="mt-1 text-[10px] text-outline">Orders still on their way are always here; the day narrows the finished ones.</p>
                 </div>
 

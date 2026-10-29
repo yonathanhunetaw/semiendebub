@@ -20,7 +20,11 @@ use Illuminate\Http\Request;
  *   today, yesterday, day   each store's own business day (opening to closing), side by side
  *   week, month             the shops' calendar days, everything that happened in them
  *   outside                 what happened while its store was not open (last 30 days)
- *   all                     no limit
+ *   all                     "Recent": everything except the archive (the default)
+ *   archive                 finished work older than app.archive_after_days (90)
+ *
+ * Nothing is ever deleted. Finished records older than the cut-off leave the
+ * everyday lists and are kept under Archive; work still open is never archived.
  *
  * It narrows FINISHED records and totals. Work still open (carts, unpaid
  * orders, unconfirmed payments, deliveries on the road) is never filtered
@@ -28,7 +32,7 @@ use Illuminate\Http\Request;
  */
 final class TimeFilter
 {
-    public const WHEN = ['today', 'yesterday', 'week', 'month', 'outside', 'all'];
+    public const WHEN = ['today', 'yesterday', 'week', 'month', 'outside', 'all', 'archive'];
 
     public const LABELS = [
         'today' => 'Today',
@@ -36,8 +40,15 @@ final class TimeFilter
         'week' => 'Last 7 days',
         'month' => 'This month',
         'outside' => 'Outside open hours',
-        'all' => 'All',
+        'all' => 'Recent',
+        'archive' => 'Archive',
     ];
+
+    /** The moment before which finished records are in the archive. */
+    public static function archiveCutoff(): CarbonImmutable
+    {
+        return LocalTime::startOf(LocalTime::today()->subDays(max(1, (int) config('app.archive_after_days', 90))));
+    }
 
     public function __construct(private readonly ShopDay $shopDay)
     {
@@ -72,7 +83,10 @@ final class TimeFilter
     {
         switch ($period['when']) {
             case 'all':
-                return $query;
+                return $query->where($timeColumn, '>=', self::archiveCutoff());
+
+            case 'archive':
+                return $query->where($timeColumn, '<', self::archiveCutoff());
 
             case 'week':
                 return $query->where($timeColumn, '>=', LocalTime::startOf(LocalTime::today()->subDays(6)));
@@ -131,6 +145,13 @@ final class TimeFilter
             default => [null, null],
         };
 
+        if ($period['when'] === 'all') {
+            return $query->where($timeColumn, '>=', self::archiveCutoff());
+        }
+        if ($period['when'] === 'archive') {
+            return $query->where($timeColumn, '<', self::archiveCutoff());
+        }
+
         return $from === null ? $query : $query->where($timeColumn, '>=', $from->utc())->where($timeColumn, '<', $to->utc());
     }
 
@@ -149,8 +170,13 @@ final class TimeFilter
      */
     public function applyKeepingOpen($query, string|Expression $timeColumn, string|Expression $storeColumn, ?array $storeIds, array $period, Closure $open)
     {
-        if ($period['when'] === 'all' || $period['when'] === 'outside') {
+        if ($period['when'] === 'outside') {
             return $this->apply($query, $timeColumn, $storeColumn, $storeIds, $period);
+        }
+
+        // The archive holds finished work only: open work is never archived, however old.
+        if ($period['when'] === 'archive') {
+            return $this->apply($query->whereNot(fn ($group) => $open($group)), $timeColumn, $storeColumn, $storeIds, $period);
         }
 
         return $query->where(function ($group) use ($open, $timeColumn, $storeColumn, $storeIds, $period): void {
@@ -164,13 +190,14 @@ final class TimeFilter
      * day it means (stores that did not open that day simply show nothing).
      *
      * @param  array{when: string, date: string|null}  $period
-     * @return array{when: string, date: string|null, options: list<array{key: string, label: string}>}
+     * @return array{when: string, date: string|null, archive_after_days: int, options: list<array{key: string, label: string}>}
      */
     public function describe(array $period): array
     {
         return [
             'when' => $period['when'],
             'date' => $period['date'],
+            'archive_after_days' => max(1, (int) config('app.archive_after_days', 90)),
             'options' => collect(self::LABELS)->map(fn (string $label, string $key): array => ['key' => $key, 'label' => $label])->values()->all(),
         ];
     }

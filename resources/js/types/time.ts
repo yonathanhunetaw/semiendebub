@@ -2,6 +2,8 @@
 export interface TimeFilterView {
     when: string;
     date: string | null;
+    /** Finished records older than this leave "Recent" for "Archive". */
+    archive_after_days?: number;
     options: { key: string; label: string }[];
 }
 

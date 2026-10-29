@@ -93,9 +93,13 @@ class SellerOrderBoard
         $finished = $this->withCardRelations($this->scoped($storeId))->whereIn('sales.fulfillment_stage', self::FINISHED);
 
         // "Outside open hours" is a review of those orders alone; any other period narrows only the finished ones.
+        // The archive holds finished orders only: open ones are never archived.
         $finished = $narrow($finished);
         if ($period['when'] === 'outside') {
             $open = $narrow($open);
+        }
+        if ($period['when'] === 'archive') {
+            $open = $open->whereRaw('1 = 0');
         }
 
         return $open->latest('id')->limit(self::OPEN_LIMIT)->get()

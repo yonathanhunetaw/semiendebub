@@ -200,4 +200,24 @@ class TimeFilterTest extends TestCase
         $this->assertSame(1, $facts('?when=week')['Delivered · last 7 days']);
         $this->assertArrayHasKey('Delivered · today', $facts('?when=outside'), 'No business-day view across stores: back to today.');
     }
+
+    #[Test]
+    public function finished_work_older_than_the_cutoff_moves_to_the_archive_and_open_work_never_does(): void
+    {
+        config(['app.archive_after_days' => 90]);
+        $oldDone = $this->sale('2026-06-01 10:00');
+        $oldOpen = $this->sale('2026-06-02 10:00', Sale::STAGE_AWAITING_PAYMENT);
+        $recent = $this->sale('2026-10-15 10:00');
+        $this->at('2026-10-20 12:00');
+
+        $this->assertSame([$oldOpen->reference_number, $recent->reference_number], $this->listed('when=all'), 'Recent: the archive is out, open work stays.');
+        $this->assertSame([$oldDone->reference_number], $this->listed('when=archive'));
+        $this->assertSame(3, Sale::query()->count(), 'Nothing deleted.');
+
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        $this->assertSame(
+            [$oldDone->reference_number, $oldOpen->reference_number],
+            $time->applyCalendar(Sale::query()->orderBy('id'), 'sales.created_at', ['when' => 'archive', 'date' => null])->pluck('reference_number')->all(),
+        );
+    }
 }

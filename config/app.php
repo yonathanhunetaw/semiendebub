@@ -76,6 +76,10 @@ return [
 
     'business_timezone' => env('BUSINESS_TIMEZONE', 'Africa/Addis_Ababa'),
 
+    // Finished records older than this many days leave the everyday lists and
+    // are kept under "Archive" (App\Services\Workforce\TimeFilter). Nothing is deleted.
+    'archive_after_days' => (int) env('ARCHIVE_AFTER_DAYS', 90),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

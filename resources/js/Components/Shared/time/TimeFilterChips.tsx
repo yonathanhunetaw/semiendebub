@@ -1,5 +1,5 @@
 import { router } from "@inertiajs/react";
-import { Chip, Stack } from "@mui/material";
+import { Chip, Stack, Typography } from "@mui/material";
 import React from "react";
 import type { TimeFilterView } from "@/types/time";
 
@@ -27,6 +27,7 @@ export default function TimeFilterChips({
     };
 
     return (
+        <>
         <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" aria-label="Time">
             {filter.options
                 .filter((option) => !hide.includes(option.key))
@@ -45,5 +46,11 @@ export default function TimeFilterChips({
                     );
                 })}
         </Stack>
+        {filter.when === "archive" ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                Finished more than {filter.archive_after_days ?? 90} days ago. Nothing is deleted; work still open is never archived.
+            </Typography>
+        ) : null}
+        </>
     );
 }

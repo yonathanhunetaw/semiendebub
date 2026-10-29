@@ -529,7 +529,7 @@ export default function Dashboard({
 
                     {areaTime ? (
                         <Box>
-                            <TimeFilterChips filter={areaTime} hide={["outside", "all"]} only={["areas", "areaTime"]} />
+                            <TimeFilterChips filter={areaTime} hide={["outside", "all", "archive"]} only={["areas", "areaTime"]} />
                             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
                                 The big figures are open work right now; "new", "opened", "taken", "delivered" and "confirmed" cover the chosen period.
                             </Typography>
