@@ -21,6 +21,7 @@ import {
     formatMoment,
 } from "@/Components/Delivery/deliveryUi";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
 import type { DeliveryShipmentsProps } from "@/types/delivery";
 
 const SEARCH_DEBOUNCE_MS = 350;
@@ -32,6 +33,7 @@ export default function DeliveryHistory({
     shipments,
     metrics,
     filters,
+    time,
     pagination,
 }: DeliveryShipmentsProps): React.ReactElement {
     const [search, setSearch] = React.useState<string>(filters.search);
@@ -48,7 +50,7 @@ export default function DeliveryHistory({
         const timer = window.setTimeout(() => {
             router.get(
                 route("delivery.history.index"),
-                search ? { search } : {},
+                { ...(search ? { search } : {}), ...(filters.when && filters.when !== "all" ? { when: filters.when } : {}) },
                 { preserveState: true, preserveScroll: true, replace: true },
             );
         }, SEARCH_DEBOUNCE_MS);
@@ -90,6 +92,12 @@ export default function DeliveryHistory({
                     }}
                 />
             </DeliveryHero>
+
+            {time ? (
+                <Container maxWidth="sm" sx={{ pt: 1.5 }}>
+                    <TimeFilterChips filter={time} hide={["outside"]} />
+                </Container>
+            ) : null}
 
             <Container maxWidth="sm" sx={{ pt: 2.5, pb: 4 }}>
                 <Stack spacing={1.5}>

@@ -71,7 +71,9 @@ export interface DayCashView {
     /** Taken but not yet confirmed by a second person. */
     unconfirmed: number;
     handed_over: number;
-    /** Opening float + cash taken - cash handed over. */
+    /** Expenses paid in cash out of the till. */
+    paid_out: number;
+    /** Opening float + cash taken - cash handed over - cash paid out. */
     expected: number;
     counted: number | null;
     difference: number | null;

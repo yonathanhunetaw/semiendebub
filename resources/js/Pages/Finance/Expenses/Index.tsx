@@ -3,7 +3,7 @@ import FlashToast from "@/Components/Shared/FlashToast";
 import { cardCls, ghostBtn, inputCls, primaryBtn, sectionTitle } from "@/Components/Work/workUi";
 import AdminLayout from "@/Layouts/AdminLayout";
 import FinanceLayout from "@/Layouts/FinanceLayout";
-import { dayDate } from "@/utils/dates";
+import { dayDate, shopToday } from "@/utils/dates";
 import { Head, router, useForm } from "@inertiajs/react";
 import React, { useState } from "react";
 
@@ -133,10 +133,11 @@ export default function ExpensesIndex({
         spent_on: string;
         description: string;
         store_id: string;
+        paid_from_till: boolean;
         vehicle_id: string;
         litres: string;
         receipt: File | null;
-    }>({ category: "fuel", amount: "", spent_on: new Date().toISOString().slice(0, 10), description: "", store_id: "", vehicle_id: "", litres: "", receipt: null });
+    }>({ category: "fuel", amount: "", spent_on: shopToday(), description: "", store_id: "", paid_from_till: false, vehicle_id: "", litres: "", receipt: null });
 
     return (
         <>
@@ -203,6 +204,12 @@ export default function ExpensesIndex({
                             </option>
                         ))}
                     </select>
+                    {form.data.store_id !== "" ? (
+                        <label className="flex items-start gap-2 text-[12px] text-on-surface-variant">
+                            <input type="checkbox" className="mt-0.5" checked={form.data.paid_from_till} onChange={(e) => form.setData("paid_from_till", e.target.checked)} />
+                            Paid in cash from this store&apos;s till today (it comes off what the till should hold at closing)
+                        </label>
+                    ) : null}
                     {form.data.category === "fuel" || form.data.category === "maintenance" ? (
                         <>
                             <select className={inputCls} value={form.data.vehicle_id} onChange={(e) => form.setData("vehicle_id", e.target.value)}>

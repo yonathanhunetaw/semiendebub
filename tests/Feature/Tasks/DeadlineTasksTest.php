@@ -123,4 +123,22 @@ class DeadlineTasksTest extends TestCase
         $this->assertArrayHasKey("close-site-{$site->id}", $this->tasks($seller));
         $this->assertArrayHasKey('sites-not-closed', $this->tasks($manager));
     }
+
+    #[Test]
+    public function carts_left_open_reach_their_seller_and_the_manager_but_close_nothing(): void
+    {
+        $seller = $this->user('seller', $this->store->id);
+        $other = $this->user('seller', $this->store->id);
+
+        $this->at('2026-10-15 10:00');
+        $old = \App\Models\Seller\Cart::query()->create(['store_id' => $this->store->id, 'seller_id' => $seller->id, 'status' => 'open', 'session_id' => '111111']);
+        $this->at('2026-10-19 10:00');
+        \App\Models\Seller\Cart::query()->create(['store_id' => $this->store->id, 'seller_id' => $seller->id, 'status' => 'open', 'session_id' => '222222']);
+        $this->at('2026-10-20 12:00');
+
+        $this->assertSame(1, $this->tasks($seller)['carts-idle']['count']);
+        $this->assertArrayNotHasKey('carts-idle', $this->tasks($other), 'Not their cart.');
+        $this->assertSame(1, $this->tasks($this->user('store_manager', $this->store->id))['carts-idle']['count']);
+        $this->assertSame('open', $old->fresh()->status);
+    }
 }

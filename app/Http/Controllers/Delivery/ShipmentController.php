@@ -27,10 +27,14 @@ class ShipmentController extends Controller
     {
         $courier = Auth::user();
         $search = $request->filled('search') ? trim((string) $request->string('search')) : '';
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        $period = $time->fromRequest($request);
 
         $paginator = $this->deliveries->paginateHistory(
             $courier,
             $search !== '' ? $search : null,
+            null,
+            $period,
         );
 
         return Inertia::render('Delivery/History/index', [
@@ -39,7 +43,8 @@ class ShipmentController extends Controller
                 ->values()
                 ->all(),
             'metrics' => $this->deliveries->metrics($courier),
-            'filters' => ['search' => $search],
+            'time' => $time->describe($period),
+            'filters' => ['search' => $search, 'when' => $period['when']],
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),

@@ -29,6 +29,9 @@ final class DeadlineTasks
     /** Picking started this long ago and the order is still not packed. */
     public const PICKING_STALLED_HOURS = 2;
 
+    /** An open cart nobody touched for this long. Shown, never closed by itself: someone decides. */
+    public const CART_IDLE_DAYS = 3;
+
     public function __construct(private readonly PayablesLedger $payables)
     {
     }
@@ -70,6 +73,18 @@ final class DeadlineTasks
             $this->push($tasks, 'picking-stalled', 'parcel', 'Picking stalled', sprintf(
                 '%d order(s) started picking over %d hours ago and are not packed.', $count, self::PICKING_STALLED_HOURS,
             ), $count, $this->url('seller.orders.index', ['tab' => 'paid']), true);
+        }
+
+        // ── Carts left open: the seller's own, and a manager's whole store ──
+        if ($sells && $storeId !== null) {
+            $count = \App\Models\Seller\Cart::query()->open()
+                ->where('store_id', $storeId)
+                ->where('updated_at', '<', now()->subDays(self::CART_IDLE_DAYS))
+                ->when($role === 'seller', fn ($q) => $q->where(fn ($mine) => $mine->where('seller_id', $user->id)->orWhere('user_id', $user->id)))
+                ->count();
+            $this->push($tasks, 'carts-idle', 'cart', 'Carts left open', sprintf(
+                '%d open cart(s) nobody touched for %d days or more. Check with the customer, then finish or remove them.', $count, self::CART_IDLE_DAYS,
+            ), $count, $this->url('seller.carts.index'));
         }
 
         // ── Price checks past their due date ──

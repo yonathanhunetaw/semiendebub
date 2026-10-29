@@ -129,7 +129,9 @@ export interface DeliveryRunsProps extends SharedProps {
 export interface DeliveryShipmentsProps extends SharedProps {
     shipments: DeliveryRun[];
     metrics: DeliveryMetrics;
-    filters: { search: string };
+    filters: { search: string; when?: string };
+    /** The day filter (calendar dates: a courier has no store day). */
+    time?: import("./time").TimeFilterView;
     pagination: Pagination;
 }
 

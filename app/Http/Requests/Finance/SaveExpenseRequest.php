@@ -25,6 +25,8 @@ class SaveExpenseRequest extends FormRequest
             'spent_on' => ['required', 'date_format:Y-m-d'],
             'description' => ['nullable', 'string', 'max:255'],
             'store_id' => ['nullable', 'integer', 'exists:stores,id'],
+            // Cash taken out of that store's till: it comes off what the till should hold today.
+            'paid_from_till' => ['boolean'],
             'vehicle_id' => ['nullable', 'integer', 'exists:vehicles,id'],
             'litres' => ['nullable', 'numeric', 'gt:0', 'max:100000'],
             'receipt' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,heic,pdf', 'max:10240'],

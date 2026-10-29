@@ -109,6 +109,32 @@ final class TimeFilter
     }
 
     /**
+     * The same periods on plain Addis calendar dates, midnight to midnight, for
+     * people with no store day of their own (couriers, finance, procurement).
+     * "Outside open hours" means nothing there and narrows nothing.
+     *
+     * @template T of EloquentContract|Builder
+     *
+     * @param  T  $query
+     * @param  array{when: string, date: string|null}  $period
+     * @return T
+     */
+    public function applyCalendar($query, string|Expression $timeColumn, array $period)
+    {
+        $today = LocalTime::today();
+        [$from, $to] = match ($period['when']) {
+            'today' => [$today, $today->addDay()],
+            'yesterday' => [$today->subDay(), $today],
+            'week' => [$today->subDays(6), $today->addDay()],
+            'month' => [$today->startOfMonth(), $today->addDay()],
+            'day' => [LocalTime::day((string) $period['date']), LocalTime::day((string) $period['date'])->addDay()],
+            default => [null, null],
+        };
+
+        return $from === null ? $query : $query->where($timeColumn, '>=', $from->utc())->where($timeColumn, '<', $to->utc());
+    }
+
+    /**
      * The same, but work still open is never hidden: it is listed whatever its
      * day, so a cart from yesterday does not vanish under "Today". (Outside
      * open hours is a review of what happened then, so it stays strict.)

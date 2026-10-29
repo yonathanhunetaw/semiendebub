@@ -95,6 +95,12 @@ function CashLines({ cash }: { cash: NonNullable<SiteDayView["cash"]> }): React.
                 ) : null}
                 <dt className="text-on-surface-variant">Handed over</dt>
                 <dd className="text-on-surface">{etb(cash.handed_over)}</dd>
+                {cash.paid_out > 0 ? (
+                    <>
+                        <dt className="text-on-surface-variant">Paid out of the till</dt>
+                        <dd className="text-on-surface">{etb(cash.paid_out)}</dd>
+                    </>
+                ) : null}
                 <dt className="text-on-surface-variant">Should be in the till</dt>
                 <dd className="text-on-surface">{etb(cash.expected)}</dd>
                 {cash.counted !== null ? (

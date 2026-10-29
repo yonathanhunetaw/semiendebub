@@ -239,4 +239,35 @@ class DayCashTest extends TestCase
         $this->assertSame(300.0, (float) $closed->fresh()->cash_collected, 'The 21:00 cash is outside open hours.');
         $this->assertSame(-50.0, (float) $closed->fresh()->till_difference);
     }
+
+    #[Test]
+    public function cash_paid_out_of_the_till_comes_off_what_it_should_hold(): void
+    {
+        $day = $this->open('2026-10-19 08:30', 1000.0);
+        $this->cashSale('2026-10-19 10:00', 300.0, Payment::STATUS_CONFIRMED);
+
+        $expenses = app(\App\Services\Finance\ExpenseService::class);
+        $this->at('2026-10-19 12:00');
+        $fuel = $expenses->record($this->seller, ['category' => 'fuel', 'amount' => 120, 'spent_on' => '2026-10-19', 'store_id' => $this->store->id, 'paid_from_till' => true]);
+        $rejected = $expenses->record($this->seller, ['category' => 'other', 'amount' => 999, 'spent_on' => '2026-10-19', 'store_id' => $this->store->id, 'paid_from_till' => true]);
+        $rejected->update(['status' => \App\Models\Finance\Expense::STATUS_REJECTED]);
+        // Paid by bank, not from the till: does not touch it.
+        $expenses->record($this->seller, ['category' => 'rent', 'amount' => 5000, 'spent_on' => '2026-10-19', 'store_id' => $this->store->id]);
+
+        $cash = app(DayCash::class)->figures($this->site, $day, now());
+        $this->assertSame(120.0, $cash['paid_out']);
+        $this->assertSame(1180.0, $cash['expected'], '1000 float + 300 taken - 120 paid out.');
+        $this->assertTrue($fuel->paid_from_till);
+
+        $closed = $this->close('2026-10-19 19:00', 1180.0);
+        $this->assertSame(120.0, (float) $closed->fresh()->cash_paid_out);
+        $this->assertSame(0.0, (float) $closed->fresh()->till_difference);
+
+        try {
+            $expenses->record($this->seller, ['category' => 'fuel', 'amount' => 10, 'spent_on' => '2026-10-19', 'paid_from_till' => true]);
+            $this->fail('From the till needs the store whose till it is.');
+        } catch (\App\Exceptions\PaymentException $e) {
+            $this->assertStringContainsString('pick the store', $e->getMessage());
+        }
+    }
 }

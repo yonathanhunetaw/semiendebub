@@ -161,4 +161,20 @@ class TimeFilterTest extends TestCase
         $this->assertSame(1, $row['outside_orders']);
         $this->assertSame(SiteDay::STATUS_CLOSED, $row['yesterday']['status']);
     }
+
+    #[Test]
+    public function people_with_no_store_day_filter_on_addis_calendar_dates(): void
+    {
+        $late = $this->sale('2026-10-19 23:30');
+        $early = $this->sale('2026-10-20 01:00'); // still the 19th in UTC
+        $this->at('2026-10-20 12:00');
+
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        $refs = fn (string $when) => $time->applyCalendar(Sale::query(), 'sales.created_at', ['when' => $when, 'date' => null])->pluck('reference_number')->all();
+
+        $this->assertSame([$early->reference_number], $refs('today'));
+        $this->assertSame([$late->reference_number], $refs('yesterday'));
+        $this->assertCount(2, $refs('week'));
+        $this->assertCount(2, $refs('outside'), 'Means nothing without a store day: narrows nothing.');
+    }
 }

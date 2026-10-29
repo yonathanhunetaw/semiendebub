@@ -61,3 +61,8 @@ export function ageText(value: string | Date | null | undefined): string | null 
 
     return `${Math.floor(minutes / (60 * 24))} d`;
 }
+
+/** Today on the shops' calendar, "YYYY-MM-DD" (not the UTC date: 01:00 in Addis is still the day before in UTC). */
+export function shopToday(): string {
+    return new Date().toLocaleDateString("en-CA", { timeZone: shopTimeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+}

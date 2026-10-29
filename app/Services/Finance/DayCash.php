@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * A business day's cash, and what the till should hold when it closes.
  *
- *   expected till = opening float + cash taken during the day - cash handed over during the day
+ *   expected till = opening float + cash taken during the day
+ *                   - cash handed over during the day - cash paid out of the till (expenses)
  *
  * Cash is "taken" the moment a seller records it (claimed); it is "confirmed"
  * once a second person confirms it. Cash still unconfirmed at closing is not a
@@ -34,7 +35,7 @@ final class DayCash
 
     /**
      * @param  CarbonInterface|null  $until  the end of the span; default is when the day closed, else now
-     * @return array{float: float, collected: float, confirmed: float, unconfirmed: float, handed_over: float, expected: float, has_cash: bool}
+     * @return array{float: float, collected: float, confirmed: float, unconfirmed: float, handed_over: float, paid_out: float, expected: float, has_cash: bool}
      */
     public function figures(StockLocation $site, SiteDay $day, ?CarbonInterface $until = null): array
     {
@@ -69,6 +70,15 @@ final class DayCash
             ->where('created_at', '<=', $to)
             ->sum('amount'));
 
+        // Expenses paid in cash out of this store's till during the day (not rejected).
+        $paidOut = $this->cents(\App\Models\Finance\Expense::query()
+            ->where('paid_from_till', true)
+            ->where('store_id', $site->store_id)
+            ->where('status', '!=', \App\Models\Finance\Expense::STATUS_REJECTED)
+            ->where('created_at', '>=', $from)
+            ->where('created_at', '<=', $to)
+            ->sum('amount'));
+
         $float = $this->cents($day->float_amount ?? 0);
 
         return [
@@ -77,8 +87,9 @@ final class DayCash
             'confirmed' => $confirmed / 100.0,
             'unconfirmed' => ($collected - $confirmed) / 100.0,
             'handed_over' => $handed / 100.0,
-            'expected' => ($float + $collected - $handed) / 100.0,
-            'has_cash' => $float !== 0 || $collected !== 0 || $handed !== 0,
+            'paid_out' => $paidOut / 100.0,
+            'expected' => ($float + $collected - $handed - $paidOut) / 100.0,
+            'has_cash' => $float !== 0 || $collected !== 0 || $handed !== 0 || $paidOut !== 0,
         ];
     }
 
@@ -128,6 +139,7 @@ final class DayCash
             'cash_collected' => $cash['collected'],
             'cash_unconfirmed' => $cash['unconfirmed'],
             'cash_handed_over' => $cash['handed_over'],
+            'cash_paid_out' => $cash['paid_out'],
             'cash_expected' => $cash['expected'],
             'till_difference' => $difference,
             'till_difference_note' => $why,
@@ -139,7 +151,7 @@ final class DayCash
     {
         $float = (float) ($day->float_amount ?? 0);
 
-        return ['float' => $float, 'collected' => 0.0, 'confirmed' => 0.0, 'unconfirmed' => 0.0, 'handed_over' => 0.0, 'expected' => $float, 'has_cash' => $float !== 0.0];
+        return ['float' => $float, 'collected' => 0.0, 'confirmed' => 0.0, 'unconfirmed' => 0.0, 'handed_over' => 0.0, 'paid_out' => 0.0, 'expected' => $float, 'has_cash' => $float !== 0.0];
     }
 
     private function cents(mixed $amount): int

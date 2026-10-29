@@ -179,7 +179,8 @@ class DeliveryService
     public function paginateHistory(
         User $courier,
         ?string $search = null,
-        ?int $perPage = null
+        ?int $perPage = null,
+        ?array $period = null,
     ): LengthAwarePaginator {
         $query = Delivery::query()
             ->with('sale')
@@ -187,6 +188,11 @@ class DeliveryService
             ->whereIn('status', [self::STATUS_DELIVERED, self::STATUS_FAILED, self::STATUS_RETURNED]);
 
         $this->applySearch($query, $search);
+
+        // The courier's period, on calendar dates (a courier has no store day): when the run closed.
+        if ($period !== null) {
+            app(\App\Services\Workforce\TimeFilter::class)->applyCalendar($query, \Illuminate\Support\Facades\DB::raw('COALESCE(deliveries.delivered_at, deliveries.failed_at, deliveries.updated_at)'), $period);
+        }
 
         // Latest closed first, whichever way it closed: a failed or returned run has no
         // delivered_at, and sorting on that alone sank it below every delivered run.

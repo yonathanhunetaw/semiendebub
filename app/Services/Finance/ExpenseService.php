@@ -54,6 +54,7 @@ class ExpenseService
 
             return Expense::create([
                 'store_id' => $data['store_id'] ?? null,
+                'paid_from_till' => (bool) ($data['paid_from_till'] ?? false),
                 'category' => $data['category'],
                 'amount' => $amount,
                 'currency' => 'ETB',
@@ -84,6 +85,10 @@ class ExpenseService
 
         if (! in_array($data['category'] ?? null, Expense::CATEGORIES, true)) {
             return 'Pick a kind of expense.';
+        }
+
+        if (! empty($data['paid_from_till']) && empty($data['store_id'])) {
+            return 'Paid from the till: pick the store whose till it came from.';
         }
 
         try {

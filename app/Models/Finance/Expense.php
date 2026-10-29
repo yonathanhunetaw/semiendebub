@@ -28,12 +28,13 @@ class Expense extends Model
     public const CATEGORIES = ['fuel', 'rent', 'salaries', 'utilities', 'maintenance', 'tax', 'other'];
 
     protected $fillable = [
-        'store_id', 'category', 'amount', 'currency', 'spent_on', 'description', 'vehicle_id', 'litres',
+        'store_id', 'paid_from_till', 'category', 'amount', 'currency', 'spent_on', 'description', 'vehicle_id', 'litres',
         'source_type', 'source_id', 'document_id', 'status', 'recorded_by', 'decided_by', 'decided_at', 'reject_reason',
     ];
 
     protected $casts = [
         'store_id' => 'integer',
+        'paid_from_till' => 'boolean',
         'amount' => 'decimal:2',
         'litres' => 'decimal:2',
         'spent_on' => 'date',
