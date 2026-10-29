@@ -20,8 +20,10 @@ use Inertia\Response;
  */
 class VendorApplicationController extends Controller
 {
-    public function __construct(private readonly VendorOnboarding $onboarding)
-    {
+    public function __construct(
+        private readonly VendorOnboarding $onboarding,
+        private readonly \App\Services\Vendor\VendorMoney $money,
+    ) {
     }
 
     public function index(Request $request): Response
@@ -60,12 +62,36 @@ class VendorApplicationController extends Controller
                 'slug' => $s->slug,
                 'status' => $s->status,
                 'public_url' => $s->slug ? route('storefront.store', $s->slug) : null,
+                'uses_main_hubs' => $s->mayUseMainHubs(),
+                'balance' => $s->isVendorStore() ? $this->money->balance($s) : null,
                 'owner' => $s->owner ? ['id' => (int) $s->owner->id, 'name' => trim($s->owner->first_name.' '.$s->owner->last_name), 'email' => $s->owner->email] : null,
+            ]);
+
+        $payouts = \App\Models\Vendor\VendorPayout::query()
+            ->with(['store:id,name', 'recorder:id,first_name,last_name', 'confirmer:id,first_name,last_name'])
+            ->orderByRaw("CASE WHEN status = 'recorded' THEN 0 ELSE 1 END")
+            ->orderByDesc('id')
+            ->limit(100)
+            ->get()
+            ->map(fn (\App\Models\Vendor\VendorPayout $p): array => [
+                'id' => (int) $p->id,
+                'store' => $p->store?->name,
+                'amount' => (float) $p->amount,
+                'method' => $p->method,
+                'reference' => $p->reference,
+                'status' => $p->status,
+                'reject_reason' => $p->reject_reason,
+                'recorded_by' => $p->recorder ? trim($p->recorder->first_name.' '.$p->recorder->last_name) : null,
+                'recorded_by_me' => (int) $p->recorded_by === (int) $request->user()->id,
+                'confirmed_by' => $p->confirmer ? trim($p->confirmer->first_name.' '.$p->confirmer->last_name) : null,
+                'created_at' => $p->created_at?->toIso8601String(),
             ]);
 
         return Inertia::render('Admin/Vendors/Index', [
             'applications' => $applications,
             'stores' => $stores,
+            'payouts' => $payouts,
+            'commission_pct' => \App\Models\Vendor\MarketplaceSetting::commissionPct(),
             // Shown once, right after an approval: the owner's set-password link.
             'handover' => $request->session()->get('vendor_handover'),
         ]);
@@ -115,5 +141,17 @@ class VendorApplicationController extends Controller
             'email' => $store->owner->email,
             'url' => $this->onboarding->setPasswordUrl($store->owner),
         ]);
+    }
+
+    /** A vendor's hub contract: may their store ship to and from Hub A / Hub B (vendor V2)? */
+    public function hubs(Request $request, Store $store): RedirectResponse
+    {
+        abort_unless($store->isVendorStore(), 404);
+
+        $store->forceFill(['uses_main_hubs' => $request->boolean('on')])->save();
+
+        return back()->with('success', $store->uses_main_hubs
+            ? "{$store->name} may now use Duka's main hubs."
+            : "{$store->name} no longer uses Duka's main hubs.");
     }
 }

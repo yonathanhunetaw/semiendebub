@@ -213,6 +213,111 @@ class VendorAppTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('store', null));
     }
 
+    // ---- V2: Duka's main hubs only under contract ----
+
+    #[Test]
+    public function a_vendor_store_reaches_the_main_hubs_only_under_contract(): void
+    {
+        $store = $this->approved();
+        Store::factory()->create(['name' => 'Hub A', 'type' => Store::TYPE_CENTRAL_WAREHOUSE]);
+        $hub = StockLocation::query()->where('kind', StockLocation::KIND_MAIN_HUB)->firstOrFail();
+        $floor = StockLocation::query()->where('store_id', $store->id)->where('kind', StockLocation::KIND_BACKROOM)->firstOrFail();
+        $domain = app(\App\Services\Fulfillment\MovementDomainService::class);
+        $hubIn = fn (Store $s): bool => collect($domain->hierarchyFor($s->fresh()))->contains(fn (array $n): bool => $n['kind'] === \App\Services\Fulfillment\MovementDomainService::NODE_MAIN_WAREHOUSE);
+
+        // No contract: checkout and pick & pack never look at the hubs, and no shipment comes from one.
+        $this->assertFalse($store->mayUseMainHubs());
+        $this->assertFalse($hubIn($store));
+        $this->assertTrue($hubIn($this->main));
+        try {
+            app(\App\Services\ShipmentWorkflowService::class)->createBetween($hub, $floor, [], $this->admin->id);
+            $this->fail('A hub shipment to a vendor store without a contract went through.');
+        } catch (\App\Exceptions\MovementDomainException $e) {
+            $this->assertStringContainsString('hub contract', $e->getMessage());
+        }
+
+        // A global admin signs the contract on the Vendors page; a store admin cannot.
+        $storeAdmin = User::factory()->create(['role' => 'admin', 'store_id' => $this->main->id]);
+        $storeAdmin->assignRole('admin');
+        $this->on('admin')->actingAs($storeAdmin)->post(route('admin.vendors.hubs', $store), ['on' => true])->assertForbidden();
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.hubs', $store), ['on' => true])->assertSessionHas('success');
+
+        $this->assertTrue($store->fresh()->mayUseMainHubs());
+        $this->assertTrue($hubIn($store));
+        $this->assertNotNull(app(\App\Services\ShipmentWorkflowService::class)->createBetween($hub, $floor, [], $this->admin->id)->id);
+    }
+
+    // ---- V3: commission and payouts ----
+
+    #[Test]
+    public function a_paid_vendor_order_earns_its_share_once_and_a_cancelled_one_gives_it_back(): void
+    {
+        $store = $this->approved();
+        $sale = Sale::query()->create(['store_id' => $store->id, 'total_amount' => 1000, 'reference_number' => 'SALE-V1']);
+        $duka = Sale::query()->create(['store_id' => $this->main->id, 'total_amount' => 500, 'reference_number' => 'SALE-D1']);
+        $money = app(\App\Services\Vendor\VendorMoney::class);
+
+        $sale->update(['payment_status' => 'paid']);
+        $duka->update(['payment_status' => 'paid']);
+
+        // The default 10%: 1000 earns 900; Duka's own store keeps no ledger.
+        $earning = \App\Models\Vendor\VendorLedgerEntry::query()->where('sale_id', $sale->id)->sole();
+        $this->assertSame([1000.0, 100.0, 900.0], [$earning->gross, $earning->commission, $earning->amount]);
+        $this->assertSame(0, \App\Models\Vendor\VendorLedgerEntry::query()->where('sale_id', $duka->id)->count());
+        $this->assertSame(900.0, $money->balance($store));
+
+        // Paid again (a status written twice) earns nothing more.
+        $sale->update(['payment_status' => 'partially_paid']);
+        $sale->update(['payment_status' => 'paid']);
+        $this->assertSame(900.0, $money->balance($store));
+
+        $sale->update(['fulfillment_stage' => Sale::STAGE_CANCELLED]);
+        $this->assertSame(0.0, $money->balance($store));
+    }
+
+    #[Test]
+    public function a_payout_needs_two_people_and_never_more_than_is_owed(): void
+    {
+        $store = $this->approved();
+        Sale::query()->create(['store_id' => $store->id, 'total_amount' => 1000, 'reference_number' => 'SALE-V2'])->update(['payment_status' => 'paid']);
+        $second = User::factory()->create(['role' => 'admin', 'store_id' => null]);
+        $second->assignRole('admin');
+        $money = app(\App\Services\Vendor\VendorMoney::class);
+
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.payouts.store', $store), ['amount' => 950, 'method' => 'bank_transfer'])->assertSessionHas('error');
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.payouts.store', $store), ['amount' => 600, 'method' => 'bank_transfer', 'reference' => 'TX-1'])->assertSessionHas('success');
+        $payout = \App\Models\Vendor\VendorPayout::query()->sole();
+
+        // Waiting payouts count against what is left to pay out.
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.payouts.store', $store), ['amount' => 400, 'method' => 'cash'])->assertSessionHas('error');
+
+        // The recorder cannot confirm; a second global admin can.
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.payouts.confirm', $payout))->assertSessionHas('error');
+        $this->assertSame(900.0, $money->balance($store));
+        $this->on('admin')->actingAs($second)->post(route('admin.vendors.payouts.confirm', $payout))->assertSessionHas('success');
+        $this->assertSame(300.0, $money->balance($store));
+
+        // The vendor sees it.
+        $this->on('vendor')->actingAs($store->owner)->get(route('vendor.money.index'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Vendor/Money/index')->where('balance', 300)->has('payouts', 1));
+
+        // A store admin never reaches vendors' money.
+        $storeAdmin = User::factory()->create(['role' => 'admin', 'store_id' => $this->main->id]);
+        $storeAdmin->assignRole('admin');
+        $this->on('admin')->actingAs($storeAdmin)->post(route('admin.vendors.commission'), ['commission_pct' => 0])->assertForbidden();
+    }
+
+    #[Test]
+    public function the_commission_set_now_applies_to_orders_paid_from_now_on(): void
+    {
+        $store = $this->approved();
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.commission'), ['commission_pct' => 15])->assertSessionHas('success');
+
+        Sale::query()->create(['store_id' => $store->id, 'total_amount' => 200, 'reference_number' => 'SALE-V3'])->update(['payment_status' => 'paid']);
+
+        $this->assertSame(170.0, app(\App\Services\Vendor\VendorMoney::class)->balance($store));
+    }
+
     // ---- The shop: one page per store ----
 
     #[Test]

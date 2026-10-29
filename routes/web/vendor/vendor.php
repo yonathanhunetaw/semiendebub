@@ -40,6 +40,9 @@ Route::domain("vendor.$baseDomain")
             Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
             Route::get('/orders/{sale}', [OrderController::class, 'show'])->name('orders.show');
 
+            // What the store earned after Duka's commission, and what was paid out.
+            Route::get('/money', [\App\Http\Controllers\Vendor\MoneyController::class, 'index'])->name('money.index');
+
             // The store's public face, and the person's own details.
             Route::get('/store', [StoreProfileController::class, 'index'])->name('store.edit');
             Route::patch('/store', [StoreProfileController::class, 'update'])->name('store.update');

@@ -2010,6 +2010,22 @@ class ShipmentWorkflowService
             $this->domain->describe(StockLocation::class, (int) $origin->id),
             $this->domain->describe(StockLocation::class, (int) $destination->id),
         );
+
+        // A main hub serves a vendor's store only under contract (Store::mayUseMainHubs).
+        foreach ([[$origin, $destination], [$destination, $origin]] as [$hub, $other]) {
+            if ($hub->kind !== StockLocation::KIND_MAIN_HUB || $other->store_id === null) {
+                continue;
+            }
+
+            $store = \App\Models\Store\Store::query()->find($other->store_id);
+
+            if ($store !== null && ! $store->mayUseMainHubs()) {
+                throw new \App\Exceptions\MovementDomainException(
+                    "{$store->name} is a vendor's store without a hub contract: Duka's main hubs do not ship to or from it.",
+                    \App\Services\Fulfillment\MovementDomainService::DOMAIN_SHIPMENT,
+                );
+            }
+        }
     }
 
     /** Has the load already been deducted from the origin? */

@@ -39,6 +39,7 @@ class Store extends Model
         'contact_phone',
         'contact_email',
         'owner_id',
+        'uses_main_hubs',
     ];
 
     /*
@@ -222,6 +223,21 @@ class Store extends Model
     public function warehouse()
     {
         return $this->hasOne(\App\Models\Inventory\Warehouse::class, 'store_id');
+    }
+
+    /** A store a vendor runs (owned by someone), not one of Duka's own. */
+    public function isVendorStore(): bool
+    {
+        return $this->owner_id !== null;
+    }
+
+    /**
+     * May this store draw on, or ship to, Duka's main hubs (Hub A / Hub B)? Duka's
+     * own stores always; a vendor's store only under contract (`uses_main_hubs`).
+     */
+    public function mayUseMainHubs(): bool
+    {
+        return ! $this->isVendorStore() || (bool) $this->uses_main_hubs;
     }
 
     /** The person who owns this store (a vendor); the store's admin. */

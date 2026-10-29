@@ -52,6 +52,26 @@ class Sale extends Model
         ];
     }
 
+    /**
+     * A vendor's store earns its share when an order turns paid, and gives it back
+     * when a paid order is cancelled (App\Services\Vendor\VendorMoney; both once).
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (self $sale): void {
+            if ($sale->wasChanged('payment_status') && $sale->payment_status === 'paid') {
+                app(\App\Services\Vendor\VendorMoney::class)->earn($sale);
+            }
+
+            $cancelled = ($sale->wasChanged('fulfillment_stage') && $sale->fulfillment_stage === self::STAGE_CANCELLED)
+                || ($sale->wasChanged('status') && in_array($sale->status, ['canceled', 'cancelled'], true));
+
+            if ($cancelled) {
+                app(\App\Services\Vendor\VendorMoney::class)->reverse($sale);
+            }
+        });
+    }
+
     protected $table = 'sales';
 
     protected $fillable = [

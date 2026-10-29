@@ -392,10 +392,10 @@ class MovementDomainService
             ->ofKind(StockLocation::KIND_REMOTE_HUB)
             ->get();
 
-        $mainHubs = StockLocation::query()
-            ->ofKind(StockLocation::KIND_MAIN_HUB)
-            ->orderBy('name')
-            ->get();
+        // A vendor's store reaches the main hubs only under contract (Store::mayUseMainHubs).
+        $mainHubs = $store->mayUseMainHubs()
+            ? StockLocation::query()->ofKind(StockLocation::KIND_MAIN_HUB)->orderBy('name')->get()
+            : collect();
 
         foreach ($remoteHubs->concat($mainHubs) as $hub) {
             $nodes[] = $hub->legacy_type !== null && $hub->legacy_id !== null

@@ -1,3 +1,4 @@
+import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
 import StorefrontRoundedIcon from "@mui/icons-material/StorefrontRounded";
 import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
@@ -52,6 +53,11 @@ export default function VendorSidebar({
             label: "Orders",
             icon: <ReceiptLongRoundedIcon />,
             href: "/orders",
+        },
+        {
+            label: "Money",
+            icon: <PaymentsRoundedIcon />,
+            href: "/money",
         },
         {
             label: "Store profile",

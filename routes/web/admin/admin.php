@@ -205,6 +205,14 @@ Route::domain("admin.{$baseDomain}")
                     Route::post('/{application}/approve', 'approve')->name('approve');
                     Route::post('/{application}/reject', 'reject')->name('reject');
                     Route::post('/stores/{store}/link', 'link')->name('link');
+                    Route::post('/stores/{store}/hubs', 'hubs')->name('hubs');
+                });
+                // Vendors' money: the commission, and payouts recorded by one person and confirmed by another.
+                Route::controller(\App\Http\Controllers\Admin\VendorMoneyController::class)->prefix('vendors')->name('vendors.')->group(function () {
+                    Route::post('/commission', 'commission')->name('commission');
+                    Route::post('/stores/{store}/payouts', 'record')->name('payouts.store');
+                    Route::post('/payouts/{payout}/confirm', 'confirm')->name('payouts.confirm');
+                    Route::post('/payouts/{payout}/reject', 'reject')->name('payouts.reject');
                 });
                 $sessionController = SessionController::class;
                 require __DIR__ . '/../sessions.php';
