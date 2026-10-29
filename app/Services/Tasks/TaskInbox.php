@@ -32,8 +32,11 @@ use Throwable;
  */
 class TaskInbox
 {
-    public function __construct(private readonly PaymentBoard $payments, private readonly WorkTasks $work)
-    {
+    public function __construct(
+        private readonly PaymentBoard $payments,
+        private readonly WorkTasks $work,
+        private readonly DeadlineTasks $deadlines,
+    ) {
     }
 
     /**
@@ -130,6 +133,11 @@ class TaskInbox
 
         // ── Keys, opening and closing, shifts, clock-in (WorkTasks) ──
         foreach ($this->work->for($user) as $task) {
+            $this->push($tasks, $task['id'], $task['kind'], $task['title'], $task['detail'], $task['count'], $task['href'], $task['urgent']);
+        }
+
+        // ── Dates that passed with nothing done (DeadlineTasks) ──
+        foreach ($this->deadlines->for($user) as $task) {
             $this->push($tasks, $task['id'], $task['kind'], $task['title'], $task['detail'], $task['count'], $task['href'], $task['urgent']);
         }
 

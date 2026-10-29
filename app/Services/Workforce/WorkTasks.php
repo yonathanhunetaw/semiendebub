@@ -176,7 +176,13 @@ class WorkTasks
         }
 
         // Read-only: the bell runs on every page, so it never creates site days.
-        $today = SiteDay::query()->with('site')->whereDate('date', LocalTime::dateOf())->get();
+        // Today's rows, and any day still open from an earlier date: a shop open
+        // past midnight is still that day's, and its closer still has to close it.
+        $today = SiteDay::query()->with('site')
+            ->where(fn ($q) => $q->whereDate('date', LocalTime::dateOf())->orWhere('status', SiteDay::STATUS_OPEN))
+            ->get();
+        $forgotten = $today->where('status', SiteDay::STATUS_OPEN)
+            ->filter(fn (SiteDay $day): bool => $day->date->toDateString() < LocalTime::dateOf());
 
         foreach ($today->where('opener_id', $user->id)->whereIn('status', [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED]) as $day) {
             $opens = $day->site ? $this->sites->opensAt($day->site, now()) : null;
@@ -188,8 +194,9 @@ class WorkTasks
         }
 
         foreach ($today->where('closer_id', $user->id)->where('status', SiteDay::STATUS_OPEN) as $day) {
-            $closes = $day->site ? $this->sites->closesAt($day->site, now()) : null;
-            if ($closes !== null && now()->lessThan($closes->subMinutes(30))) {
+            $closes = $day->site ? $this->sites->closesAt($day->site, $day->date) : null;
+            // Shown from half an hour before closing time; a day open past midnight always shows.
+            if ($closes !== null && ! $forgotten->contains($day) && now()->lessThan($closes->subMinutes(30))) {
                 continue;
             }
             $tasks[] = $this->task("close-site-{$day->stock_location_id}", 'site', 'You close today', sprintf(
@@ -210,8 +217,20 @@ class WorkTasks
             ), $missed->count(), $this->sitesUrl($user), true);
         }
 
+        // Managers: a day still open from an earlier date that nobody closed.
+        // The next day cannot open until it is closed (a manager can set when it really closed).
+        $unclosed = $forgotten->filter(fn (SiteDay $day): bool => $day->site !== null && $this->sites->canManage($user, $day->site));
+        if ($unclosed->isNotEmpty()) {
+            $tasks[] = $this->task('sites-not-closed', 'warning', 'A day nobody closed', sprintf(
+                '%s %s still open from an earlier day. Close it with the real closing time and the till count.',
+                $unclosed->map(fn (SiteDay $day): string => $day->site->name)->join(', ', ' and '),
+                $unclosed->count() === 1 ? 'is' : 'are',
+            ), $unclosed->count(), $this->sitesUrl($user), true);
+        }
+
         // Managers: today's opening or closing with no driver (it goes ahead, but nobody brings or takes them).
         $driverless = $today->whereNull('driver_id')
+            ->filter(fn (SiteDay $day): bool => $day->date->toDateString() === LocalTime::dateOf())
             ->whereIn('status', [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED, SiteDay::STATUS_OPEN])
             ->filter(fn (SiteDay $day): bool => $day->site !== null && $this->sites->canManage($user, $day->site));
         if ($driverless->isNotEmpty()) {

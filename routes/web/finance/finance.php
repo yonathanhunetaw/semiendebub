@@ -23,14 +23,10 @@ Route::domain("finance.{$baseDomain}")
         });
 
         Route::middleware(['auth', 'verified', 'role.subdomain:finance'])->group(function () {
-            Route::get('/dashboard', function () {
-                return Inertia::render('Finance/Dashboard/index');
-            })->name('dashboard');
+            Route::get('/dashboard', [\App\Http\Controllers\Finance\DashboardController::class, 'index'])->name('dashboard');
 
-            // Example future route
-            Route::get('/reports', function () {
-                return Inertia::render('Finance/Reports/index');
-            })->name('reports.index');
+            // Sales and takings per business day, outside open hours, payment methods.
+            Route::get('/reports', [\App\Http\Controllers\Finance\ReportController::class, 'index'])->name('reports.index');
 
             // Expenses: fuel for staff rides, rent, salaries (second person confirms).
             require base_path('routes/web/partials/expenses.php');
