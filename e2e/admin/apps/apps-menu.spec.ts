@@ -38,7 +38,8 @@ test('a global admin sees every app A to Z, then Me first and the people A to Z;
     const rows = admin.getByRole('presentation').getByRole('button').filter({ hasNotText: /^$/ });
     await expect(admin.getByRole('presentation').getByText(`Me · ${people.admin.name}`)).toBeVisible();
 
-    const names = await admin.getByRole('presentation').locator('li, [role="button"]').allInnerTexts();
+    // The name in each row, without the initials avatar beside it.
+    const names = await admin.getByRole('presentation').locator('.MuiListItemText-primary').allInnerTexts();
     const list = names.map((text) => text.trim()).filter((text) => text.startsWith('E2E') || text.startsWith('Me ·'));
     expect(list[0]).toBe(`Me · ${people.admin.name}`);
     const others = list.slice(1);

@@ -5,56 +5,27 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Models\Item\ItemVariant;
-use App\Models\Procurement\Purchase;
-use App\Services\VendorService;
-use Illuminate\Support\Facades\Auth;
+use App\Services\Vendor\VendorStore;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/**
- * Supplier overview: what they supply, and what has been ordered from them.
- */
+/** A vendor's first screen: their store, its figures and its latest orders. */
 class DashboardController extends Controller
 {
-    public function __construct(private readonly VendorService $vendors)
+    public function __construct(private readonly VendorStore $vendors)
     {
     }
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        $vendor = Auth::user();
-
-        $recentOrders = $this->vendors->visibleOrders($vendor)
-            ->with(['store', 'warehouse', 'user'])
-            ->orderByDesc('id')
-            ->limit(6)
-            ->get()
-            ->map(fn (Purchase $purchase) => $this->vendors->presentOrder($purchase))
-            ->values()
-            ->all();
-
-        $topVariants = ItemVariant::query()
-            ->where('owner_id', $vendor->id)
-            ->with(['item.category', 'itemColor', 'itemSize', 'itemPackagingType'])
-            ->orderByDesc('id')
-            ->limit(6)
-            ->get();
-
-        $stock = $this->vendors->stockForVariants($topVariants->pluck('id')->all());
+        $store = $this->vendors->storeFor($request->user(), $request->integer('store') ?: null);
 
         return Inertia::render('Vendor/Dashboard/index', [
-            'metrics' => $this->vendors->metrics($vendor),
-            'recent_orders' => $recentOrders,
-            'catalogue_preview' => $topVariants
-                ->map(fn (ItemVariant $variant) => $this->vendors->presentVariant($variant, $stock))
-                ->values()
-                ->all(),
-            'vendor' => [
-                'id' => (int) $vendor->id,
-                'name' => trim($vendor->first_name . ' ' . $vendor->last_name),
-                'email' => $vendor->email,
-            ],
+            'store' => $store ? $this->vendors->profile($store) : null,
+            'metrics' => $store ? $this->vendors->metrics($store) : null,
+            'recent_orders' => $store ? $this->vendors->orders($store, null, 6)->items() : [],
+            'choices' => $this->vendors->choices($request->user()),
         ]);
     }
 }

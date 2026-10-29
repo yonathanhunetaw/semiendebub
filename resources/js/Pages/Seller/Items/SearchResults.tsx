@@ -164,7 +164,7 @@ export default function SearchResults({
                 )}
 
                 {items.length > 0 ? (
-                    <section aria-label="Search results" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
+                    <section aria-label="Search results" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                         {items.map((item) => (
                             <ProductCard key={item.id} item={item} hasTinCart={has_tin_cart} topCartIsIndividual={top_cart_is_individual} />
                         ))}

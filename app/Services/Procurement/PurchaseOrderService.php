@@ -189,6 +189,18 @@ class PurchaseOrderService
                 throw new PurchaseOrderException('Goods already arrived on this order: close it instead.');
             }
 
+            // Goods on a consignment are booked as stock once it leaves forming;
+            // cancelling under them would leave stock at sea for no order.
+            $travelling = \App\Models\Procurement\ConsignmentLine::query()
+                ->whereIn('purchase_line_id', $purchase->lines()->pluck('id'))
+                ->whereHas('consignment', fn ($q) => $q->where('stage', '!=', \App\Models\Procurement\Consignment::CANCELLED))
+                ->with('consignment:id,reference')
+                ->first();
+
+            if ($travelling !== null) {
+                throw new PurchaseOrderException("Goods of this order are on consignment {$travelling->consignment?->reference}: take them off it (or cancel it) first.");
+            }
+
             $payable = $purchase->payable()->first();
 
             if ($payable !== null && $payable->payments()->where('status', SupplierPayment::STATUS_CLAIMED)->exists()) {

@@ -115,10 +115,20 @@ class AdminCartCapacityTest extends TestCase
         $cart = Cart::query()->create(['store_id' => $this->store->id, 'user_id' => $this->admin->id, 'status' => 'open', 'session_id' => '123456']);
         $cart->variants()->attach($variant->id, ['store_id' => $this->store->id, 'quantity' => 1, 'price' => 5]);
 
-        $this->delete(route('admin.carts.destroy', $cart->id))->assertSessionHas('message');
+        $this->delete(route('admin.carts.destroy', $cart->id))->assertSessionHas('success');
 
         $this->assertNull(Cart::query()->find($cart->id));
         $this->assertSame(0, DB::table($cart->variants()->getTable())->where($cart->variants()->getForeignPivotKeyName(), $cart->id)->count());
+    }
+
+    #[Test]
+    public function a_sold_cart_is_kept_so_its_order_keeps_its_story(): void
+    {
+        $cart = Cart::query()->create(['store_id' => $this->store->id, 'user_id' => $this->admin->id, 'status' => 'completed', 'session_id' => '123456']);
+
+        $this->delete(route('admin.carts.destroy', $cart->id))->assertSessionHas('error');
+
+        $this->assertNotNull(Cart::query()->find($cart->id));
     }
 
     #[Test]

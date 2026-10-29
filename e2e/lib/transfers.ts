@@ -52,6 +52,8 @@ export async function raiseTransfer(keeper: Page, from: RegExp, to: RegExp, unit
 export async function claim(courier: Page, reference: string): Promise<void> {
     await courier.goto(app('delivery', '/transfers'));
     await cardOf(courier, reference).getByRole('button', { name: 'Claim' }).click();
+    // Wait for the claim to be saved: leaving at once can load "Mine" before it lands.
+    await expect(courier.getByText(`You are carrying ${reference}`).first()).toBeVisible();
     await courier.goto(app('delivery', '/transfers?tab=mine'));
     await expect(courier.getByText(reference)).toBeVisible();
 }

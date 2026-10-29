@@ -13,6 +13,7 @@ import {
     STOREFRONT_BRAND_SOFT,
     STOREFRONT_SHELL,
 } from "./storefrontConstants";
+import useShopLinks from "@/Components/Storefront/useShopLinks";
 
 export interface StorefrontHeaderProps {
     store: StorefrontStore | null;
@@ -72,6 +73,7 @@ export default function StorefrontHeader({
     searchPlaceholder = "Search notebooks, pens, art supplies…",
     onOpenMenu,
 }: StorefrontHeaderProps): React.ReactElement {
+    const shop = useShopLinks();
     const isAuthenticated = user !== null;
     const canSearchInPlace = search !== undefined && onSearchChange !== undefined;
 
@@ -84,7 +86,7 @@ export default function StorefrontHeader({
         }
 
         router.get(
-            route("storefront.index"),
+            shop.index(),
             categoryId === null ? {} : { category_id: categoryId },
         );
     };
@@ -101,7 +103,7 @@ export default function StorefrontHeader({
                 <div className="flex h-16 items-center justify-between gap-3 md:gap-6">
                     {/* ── Brand ── */}
                     <Link
-                        href={route("storefront.index")}
+                        href={shop.index()}
                         className="flex min-w-0 items-center gap-2.5 md:shrink-0"
                         aria-label="Storefront home"
                     >

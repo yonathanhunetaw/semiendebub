@@ -1,3 +1,4 @@
+import StorefrontRoundedIcon from "@mui/icons-material/StorefrontRounded";
 import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import ReceiptLongRoundedIcon from "@mui/icons-material/ReceiptLongRounded";
@@ -25,7 +26,7 @@ export interface VendorSidebarProps {
 }
 
 /**
- * Supplier navigation, mirroring the old stock keeper sidebar so the two consoles share
+ * Vendor (store owner) navigation, mirroring the old stock keeper sidebar so the two consoles share
  * one structure.
  */
 export default function VendorSidebar({
@@ -38,22 +39,27 @@ export default function VendorSidebar({
 
     const menuItems = [
         {
-            label: "Dashboard",
+            label: "My store",
             icon: <SpaceDashboardRoundedIcon />,
             href: "/dashboard",
         },
         {
-            label: "My Catalogue",
+            label: "Catalogue",
             icon: <Inventory2RoundedIcon />,
             href: "/catalogue",
         },
         {
-            label: "Purchase Orders",
+            label: "Orders",
             icon: <ReceiptLongRoundedIcon />,
             href: "/orders",
         },
         {
-            label: "Profile",
+            label: "Store profile",
+            icon: <StorefrontRoundedIcon />,
+            href: "/store",
+        },
+        {
+            label: "My account",
             icon: <PersonRoundedIcon />,
             href: "/profile",
         },

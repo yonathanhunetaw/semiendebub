@@ -237,6 +237,20 @@ class ConsignmentTest extends TestCase
         $this->putOn($c, $this->drives, 1)->assertSessionHas('error');
     }
 
+    #[Test]
+    public function an_order_whose_goods_are_on_a_consignment_cannot_be_cancelled_under_them(): void
+    {
+        $this->atSea();
+
+        $this->expectException(\App\Exceptions\PurchaseOrderException::class);
+
+        try {
+            app(\App\Services\Procurement\PurchaseOrderService::class)->cancel($this->order, $this->buyer, 'Supplier gone');
+        } finally {
+            $this->assertSame(Purchase::STATUS_ORDERED, $this->order->fresh()->status);
+        }
+    }
+
     // ---- Costs, two people ----
 
     #[Test]

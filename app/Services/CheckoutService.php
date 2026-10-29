@@ -75,6 +75,11 @@ class CheckoutService
                 throw new CartCheckoutException("Cart #{$cart->id} has already been completed.", $cart->id);
             }
 
+            // A cancelled cart is closed for good; it is never sold.
+            if (in_array($currentStatus, ['canceled', 'cancelled'], true)) {
+                throw new CartCheckoutException("Cart #{$cart->id} was cancelled.", $cart->id);
+            }
+
             if ($cart->variants->isEmpty()) {
                 throw new CartCheckoutException("Cannot checkout an empty cart.", $cart->id);
             }

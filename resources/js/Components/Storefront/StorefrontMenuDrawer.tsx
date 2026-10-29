@@ -4,6 +4,7 @@ import React from "react";
 
 import type { StorefrontAuthUser, StorefrontCategory } from "@/types/storefront";
 import { STOREFRONT_BRAND, STOREFRONT_BRAND_SOFT } from "./storefrontConstants";
+import useShopLinks from "@/Components/Storefront/useShopLinks";
 
 export interface StorefrontMenuDrawerProps {
     open: boolean;
@@ -35,6 +36,7 @@ export default function StorefrontMenuDrawer({
     onOpenCart,
     user,
 }: StorefrontMenuDrawerProps): React.ReactElement {
+    const shop = useShopLinks();
     const isAuthenticated = user !== null;
 
     const pick = (categoryId: number | null): void => {
@@ -99,13 +101,13 @@ export default function StorefrontMenuDrawer({
                         <DrawerRow
                             label="Home"
                             icon="home"
-                            href={route("storefront.index")}
+                            href={shop.index()}
                             onClick={onClose}
                         />
                         <DrawerRow
                             label="Discover deals"
                             icon="local_offer"
-                            href={route("storefront.index", { on_sale: 1 })}
+                            href={shop.index({ on_sale: 1 })}
                             onClick={onClose}
                         />
                         <DrawerRow

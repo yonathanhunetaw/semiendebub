@@ -1,4 +1,6 @@
 import React from "react";
+import { PageBand } from "@/Components/Admin/adminUi";
+import SellOutlined from "@mui/icons-material/SellOutlined";
 import AdminLayout from "@/Layouts/AdminLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import {
@@ -78,13 +80,13 @@ export default function CustomerDiscounts({ discounts = [], counts = { active: 0
         <Box sx={ROOT}>
             <Head title="Customer prices & discounts" />
 
-            <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                Customer prices &amp; discounts
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Prices set for one customer on a store item, and when each discount ends. Change them on the item&apos;s page under
-                &ldquo;Edit price &amp; rule&rdquo;.
-            </Typography>
+            <Box sx={{ mb: 1.5 }}>
+                <PageBand
+                    icon={<SellOutlined />}
+                    title="Customer prices & discounts"
+                    subtitle="Prices set for one customer on a store item, and when each discount ends. Change them on the item's page."
+                />
+            </Box>
 
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
                 {FILTERS.map((filter) => (

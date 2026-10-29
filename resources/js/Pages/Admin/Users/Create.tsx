@@ -1,4 +1,6 @@
 import AdminLayout from "@/Layouts/AppLayout";
+import { PageBand } from "@/Components/Admin/adminUi";
+import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
 import { Head, useForm, Link } from "@inertiajs/react";
 import UserAccessFields from "@/Components/Admin/UserAccessFields";
 import AdminAreaTicks, { type AdminAreaOption } from "@/Components/Admin/AdminAreaTicks";
@@ -50,14 +52,16 @@ export default function CreateUser({ roles = [], also_role_options = [], can_dev
         <Box sx={{ maxWidth: 800, mx: "auto" }}>
             <Head title="Create User" />
 
-            <Stack direction="row" spacing={2} alignItems="center" mb={4}>
-                <Button component={Link} href={route('admin.users.index')} startIcon={<ArrowBackIcon />}>
-                    Back
-                </Button>
-                <Typography variant="h4" fontWeight="bold">Create New User</Typography>
-            </Stack>
+            <Box sx={{ mb: 1.5 }}>
+                <PageBand
+                    icon={<PeopleAltOutlined />}
+                    title="New user"
+                    subtitle="Add someone and choose what they can open"
+                    actions={<Button component={Link} href={route('admin.users.index')} size="small" variant="contained" disableElevation startIcon={<ArrowBackIcon />} sx={{ bgcolor: "background.paper", color: "primary.main", fontWeight: 800, "&:hover": { bgcolor: "background.paper" } }}>All users</Button>}
+                />
+            </Box>
 
-            <Paper sx={{ p: 4, maxWidth: 800, mx: 'auto', boxShadow: 3 }}>
+            <Paper elevation={0} variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 800, mx: 'auto' }}>
                 <form onSubmit={handleSubmit}>
                     <Grid container spacing={3}>
                         <Grid size={{ xs: 12 }}>

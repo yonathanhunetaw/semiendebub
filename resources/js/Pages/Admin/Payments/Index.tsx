@@ -1,4 +1,6 @@
 import AdminLayout from "@/Layouts/AppLayout";
+import { PageBand } from "@/Components/Admin/adminUi";
+import PaymentsOutlined from "@mui/icons-material/PaymentsOutlined";
 import { Head, router } from "@inertiajs/react";
 import {
     Alert,
@@ -96,13 +98,13 @@ export default function PaymentsIndex({ to_confirm = [], payments = [], today = 
         <>
             <Head title="Payments" />
             <Box sx={ROOT}>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                    Payments
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Received ({summary_label.toLowerCase()}): {money(todayTotal)}
-                    {today.length > 0 ? ` — ${today.map((row) => `${label(row.method)} ${money(row.total)} (${row.count})`).join(" · ")}` : ""}
-                </Typography>
+                <Box sx={{ mb: 1.5 }}>
+                    <PageBand
+                        icon={<PaymentsOutlined />}
+                        title="Payments"
+                        subtitle={`Received (${summary_label.toLowerCase()}): ${money(todayTotal)}${today.length > 0 ? ` — ${today.map((row) => `${label(row.method)} ${money(row.total)} (${row.count})`).join(" · ")}` : ""}`}
+                    />
+                </Box>
 
                 <ConfirmInbox parts={to_confirm} />
 

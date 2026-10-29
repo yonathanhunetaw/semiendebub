@@ -24,6 +24,8 @@ export interface RoleWelcomeProps {
     loginRoute: string;
     /** What lives behind the login — three cards reads best. */
     capabilities: RoleWelcomeCapability[];
+    /** Anything a portal offers before login (the vendor site's application form). */
+    children?: React.ReactNode;
 }
 
 /** APP_NAME from .env, exposed to the client as VITE_APP_NAME. */
@@ -47,6 +49,7 @@ export default function RoleWelcome({
     description,
     loginRoute,
     capabilities,
+    children,
 }: RoleWelcomeProps): React.ReactElement {
     const user = usePage<SharedAuthProps>().props.auth?.user ?? null;
 
@@ -125,6 +128,8 @@ export default function RoleWelcome({
                             </Paper>
                         ))}
                     </Box>
+
+                    {children}
 
                     <Typography
                         variant="caption"

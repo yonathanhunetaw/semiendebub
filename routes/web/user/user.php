@@ -94,6 +94,17 @@ Route::get('/shop', [StorefrontController::class, 'index'])
 Route::get('/shop/items/{item}', [StorefrontController::class, 'show'])
     ->name('storefront.items.show');
 
+// A store's own shop (vendor V0: a vendor is a store). Same pages as /shop,
+// for the store whose public slug is in the address; /shop stays the default.
+Route::get('/s/{store}', [StorefrontController::class, 'index'])
+    ->where('store', '[a-z0-9]+(?:-[a-z0-9]+)*')
+    ->middleware('throttle:120,1')
+    ->name('storefront.store');
+
+Route::get('/s/{store}/items/{item}', [StorefrontController::class, 'show'])
+    ->where('store', '[a-z0-9]+(?:-[a-z0-9]+)*')
+    ->name('storefront.store.items.show');
+
 Route::prefix('shop/cart')->middleware('throttle:60,1')->name('storefront.cart.')->group(function (): void {
     Route::post('/items', [CartController::class, 'store'])->name('items.store');
     Route::patch('/items/{variant}', [CartController::class, 'update'])->name('items.update');

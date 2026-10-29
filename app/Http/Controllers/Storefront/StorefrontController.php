@@ -35,7 +35,10 @@ class StorefrontController extends Controller
      */
     public function index(Request $request): Response
     {
-        $store = $this->catalog->resolveStore();
+        $store = $this->catalog->storeForRequest($request);
+
+        // /s/{slug} for a store that is not open is not there.
+        abort_if($store === null && $request->route('store') !== null, 404);
 
         if (! $store) {
             return Inertia::render('User/Dashboard/index', $this->emptyProps(
@@ -109,9 +112,9 @@ class StorefrontController extends Controller
      * Product detail — the shopper picks a colour / size / packaging
      * combination here and adds that variant to their cart.
      */
-    public function show(Item $item): Response
+    public function show(Request $request, Item $item): Response
     {
-        $store = $this->catalog->resolveStore();
+        $store = $this->catalog->storeForRequest($request);
 
         abort_if($store === null, 404);
         abort_if($item->status !== 'active', 404);
@@ -218,6 +221,10 @@ class StorefrontController extends Controller
             'id' => (int) $store->id,
             'name' => (string) $store->name,
             'location' => $store->location,
+            'slug' => $store->slug,
+            'description' => $store->description,
+            // On /s/{slug} the cart and checkout must name the store; on /shop they do not.
+            'explicit' => request()->route('store') !== null,
         ];
     }
 

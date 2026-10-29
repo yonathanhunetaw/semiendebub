@@ -1,4 +1,4 @@
-import { Head, router, useForm } from "@inertiajs/react";
+import { Head, Link, router, useForm } from "@inertiajs/react";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import {
     Alert,
@@ -14,21 +14,20 @@ import React from "react";
 
 import {
     PageHeader,
-    StatCard,
     VendorCard,
-    formatMoney,
 } from "@/Components/Vendor/vendorUi";
 import VendorLayout from "@/Layouts/VendorLayout";
-import type { VendorProfileProps } from "@/types/vendor";
 
 /**
  * The vendor's own account details and trading summary.
  */
-export default function Profile({
-    vendor,
-    metrics,
-    flash,
-}: VendorProfileProps): React.ReactElement {
+interface Props {
+    vendor: { id: number; first_name: string | null; last_name: string | null; email: string; phone_number: string | null; role: string | null };
+    flash?: { success?: string | null; error?: string | null };
+}
+
+/** The vendor's own account details (the store's profile is /store). */
+export default function Profile({ vendor, flash }: Props): React.ReactElement {
     const [notice, setNotice] = React.useState<string | null>(null);
 
     React.useEffect(() => {
@@ -148,31 +147,14 @@ export default function Profile({
                 </Grid>
 
                 <Grid size={{ xs: 12, md: 5 }}>
-                    <Grid container spacing={2.5}>
-                        <Grid size={{ xs: 6, md: 12 }}>
-                            <StatCard
-                                label="SKUs supplied"
-                                value={metrics.catalogue_skus}
-                                hint={`${metrics.units_in_network.toLocaleString()} units in network`}
-                            />
-                        </Grid>
-                        <Grid size={{ xs: 6, md: 12 }}>
-                            <StatCard
-                                label="Received value"
-                                value={formatMoney(metrics.revenue_received)}
-                                tone="success"
-                                hint={`${metrics.orders_received} order${metrics.orders_received === 1 ? "" : "s"}`}
-                            />
-                        </Grid>
-                        <Grid size={{ xs: 6, md: 12 }}>
-                            <StatCard
-                                label="Open value"
-                                value={formatMoney(metrics.revenue_pending)}
-                                tone={metrics.orders_pending > 0 ? "warning" : "default"}
-                                hint={`${metrics.orders_pending} pending`}
-                            />
-                        </Grid>
-                    </Grid>
+                    {/* The store's public face is its own page (a vendor is a store). */}
+                    <VendorCard>
+                        <Typography sx={{ fontWeight: 700, mb: 0.5 }}>Your store&apos;s profile</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                            Its address on the shop, what it says about itself and how customers reach it.
+                        </Typography>
+                        <Button component={Link} href={route("vendor.store.edit")} variant="outlined">Open store profile</Button>
+                    </VendorCard>
                 </Grid>
             </Grid>
 

@@ -23,6 +23,11 @@ export interface StorefrontStore {
     id: number;
     name: string;
     location: string | null;
+    /** Public address, /s/{slug} (a vendor is a store). */
+    slug?: string | null;
+    description?: string | null;
+    /** True on /s/{slug}: cart and checkout calls then name the store. */
+    explicit?: boolean;
 }
 
 /** A category facet; `count` is scoped to the sellable catalogue of this store. */

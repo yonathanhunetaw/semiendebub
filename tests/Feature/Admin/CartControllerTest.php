@@ -70,4 +70,24 @@ class CartControllerTest extends TestCase
             // Remove the 'sellers.0.role' line entirely
         );
     }
+
+    #[Test]
+    public function the_cart_pages_say_who_opened_the_cart_and_list_its_history()
+    {
+        $store = Store::create(['name' => 'Main Store', 'location' => 'Addis Ababa', 'status' => 'active']);
+        $opener = User::factory()->create(['role' => 'seller', 'first_name' => 'Sara', 'last_name' => 'Bekele']);
+        $cart = \App\Models\Seller\Cart::create(['store_id' => $store->id, 'user_id' => $opener->id, 'seller_id' => $opener->id, 'status' => 'open', 'session_id' => '123456']);
+
+        $this->get(route('admin.carts.index'))->assertOk()->assertInertia(
+            fn (Assert $page) => $page->component('Admin/Carts/Index')->where('carts.data.0.creator', 'Sara Bekele')
+        );
+
+        $this->get(route('admin.carts.show', $cart))->assertOk()->assertInertia(
+            fn (Assert $page) => $page
+                ->component('Admin/Carts/Show')
+                ->where('cart.created_by', 'Sara Bekele')
+                ->where('history.0.kind', 'created')
+                ->where('history.0.by', 'Sara Bekele')
+        );
+    }
 }

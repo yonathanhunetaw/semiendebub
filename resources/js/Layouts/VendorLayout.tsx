@@ -6,7 +6,7 @@ import { Box, CssBaseline, Toolbar } from "@mui/material";
 import React, { useState } from "react";
 
 /**
- * Shell for the supplier console.
+ * Shell for the vendor app: a vendor is a store, and this is its owner's console.
  *
  * Mirrors StockKeeperLayout — the Vendor module previously had no layout at
  * all and its one page borrowed AdminLayout, which showed admin navigation to

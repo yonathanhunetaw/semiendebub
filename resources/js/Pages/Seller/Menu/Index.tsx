@@ -119,8 +119,8 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
         label: tile.label,
         caption: tile.alert > 0 ? `${tile.alert} to refill` : tile.caption,
         icon: tile.key === "hub_B" ? "domain" : tile.icon,
-        count: tile.pieces,
-        badge: tile.location_id && tile.pieces > 0 ? compact(tile.pieces) : undefined,
+        count: tile.count,
+        badge: tile.location_id && tile.count > 0 ? compact(tile.count) : undefined,
         tone: LOCATION_TONES[tile.key] ?? "neutral",
         alert: tile.alert > 0,
         disabled: !tile.location_id,
@@ -242,7 +242,8 @@ export default function Index({ locations = [], stats, seller }: Props): React.R
         <>
             <Head title="More" />
 
-            <div className="min-h-screen bg-background pb-28">
+            {/* Kept at phone width on a wide screen: one column, centred. */}
+            <div className="mx-auto min-h-screen max-w-[480px] bg-background pb-28">
                 {/* ── Identity header ── */}
                 <PageHeader
                     icon="warehouse"

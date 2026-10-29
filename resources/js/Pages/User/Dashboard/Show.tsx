@@ -34,6 +34,7 @@ import {
     classifyPackagingTier,
 } from "@/Components/Seller/itemShowHelpers";
 import type { StorefrontShowPageProps } from "@/types/storefront";
+import useShopLinks from "@/Components/Storefront/useShopLinks";
 
 /**
  * Product detail page.
@@ -51,6 +52,7 @@ export default function StorefrontItemShow({
     auth,
     flash,
 }: StorefrontShowPageProps): React.ReactElement {
+    const shop = useShopLinks();
     const {
         cartOpen,
         openCart,
@@ -87,7 +89,7 @@ export default function StorefrontItemShow({
 
     const submitSearch = (): void => {
         router.get(
-            route("storefront.index"),
+            shop.index(),
             search.trim() === "" ? {} : { search: search.trim() },
         );
     };
@@ -196,7 +198,7 @@ export default function StorefrontItemShow({
                         aria-label="Breadcrumb"
                     >
                         <Link
-                            href={route("storefront.index")}
+                            href={shop.index()}
                             className="shrink-0 transition-colors hover:text-on-surface-variant"
                         >
                             Shop
@@ -207,7 +209,7 @@ export default function StorefrontItemShow({
                                     chevron_right
                                 </span>
                                 <Link
-                                    href={route("storefront.index", {
+                                    href={shop.index({
                                         category_id: item.category.id,
                                     })}
                                     className="max-w-[40%] shrink-0 truncate transition-colors hover:text-on-surface-variant"
@@ -369,7 +371,7 @@ export default function StorefrontItemShow({
                                 </h2>
                                 {item.category ? (
                                     <Link
-                                        href={route("storefront.index", {
+                                        href={shop.index({
                                             category_id: item.category.id,
                                         })}
                                         className="shrink-0 text-[11px] font-bold text-primary transition-colors hover:text-primary/80"
@@ -460,7 +462,7 @@ export default function StorefrontItemShow({
                 activeCategoryId={item.category?.id ?? null}
                 onSelectCategory={(categoryId) =>
                     router.get(
-                        route("storefront.index"),
+                        shop.index(),
                         categoryId === null ? {} : { category_id: categoryId },
                     )
                 }

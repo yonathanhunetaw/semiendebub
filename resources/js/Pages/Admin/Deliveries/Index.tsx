@@ -17,6 +17,8 @@ import {
 } from "@mui/material";
 import React, { useState } from "react";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
+import { FigureRow, FigureTile, PageBand, Pill, adminTableSx, densePanelSx } from "@/Components/Admin/adminUi";
+import LocalShippingOutlined from "@mui/icons-material/LocalShippingOutlined";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
 import DayTag from "@/Components/Shared/time/DayTag";
 import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
@@ -57,7 +59,7 @@ const TABS = [
     { value: "all", label: "All" },
 ];
 
-const STATUS_COLOR: Record<string, "default" | "warning" | "info" | "primary" | "success" | "error"> = {
+const STATUS_TONE: Record<string, "default" | "warning" | "info" | "primary" | "success" | "error"> = {
     pending: "warning",
     dispatched: "info",
     in_transit: "primary",
@@ -81,15 +83,21 @@ export default function DeliveriesIndex({
     return (
         <>
             <Head title="Deliveries" />
-            <Box sx={ROOT}>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                    Deliveries
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Customer orders with Delivery. A run can be given a courier once its order is picked.
-                </Typography>
+            <Box sx={{ ...ROOT, display: "flex", flexDirection: "column", gap: 1 }}>
+                <PageBand
+                    icon={<LocalShippingOutlined />}
+                    title="Deliveries"
+                    subtitle="Customer orders with Delivery. A run can be given a courier once its order is picked."
+                />
 
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+                <FigureRow>
+                    <FigureTile label="Open" value={counts.open} tone="info" />
+                    <FigureTile label="Needs a courier" value={counts.unassigned} tone={counts.unassigned > 0 ? "warning" : "default"} />
+                    <FigureTile label="Failed attempts" value={counts.failed} tone={counts.failed > 0 ? "error" : "default"} />
+                    <FigureTile label="Delivered" value={counts.delivered} tone="success" />
+                </FigureRow>
+
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     {TABS.map((tab) => {
                         const count = tab.value in counts ? counts[tab.value as keyof typeof counts] : null;
                         return (
@@ -105,12 +113,12 @@ export default function DeliveriesIndex({
                     })}
                 </Stack>
 
-                <Box sx={{ mb: 2 }}>
+                <Box>
                     <TimeFilterChips filter={time} />
                 </Box>
 
-                <Paper variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
-                    <Table size="small">
+                <Paper elevation={0} sx={{ ...densePanelSx, p: 0, overflowX: "auto" }}>
+                    <Table size="small" sx={adminTableSx}>
                         <TableHead>
                             <TableRow>
                                 <TableCell>Tracking</TableCell>
@@ -143,7 +151,7 @@ export default function DeliveriesIndex({
                                         </Typography>
                                     </TableCell>
                                     <TableCell>
-                                        <Chip size="small" label={d.status.replace("_", " ")} color={STATUS_COLOR[d.status] ?? "default"} />
+                                        <Pill tone={STATUS_TONE[d.status] ?? "default"} label={d.status.replace("_", " ")} />
                                         {d.failure_reason ? (
                                             <Typography variant="caption" color="error" component="div">
                                                 {d.failure_reason}
@@ -176,7 +184,7 @@ export default function DeliveriesIndex({
                 </Paper>
 
                 {pagination.last_page > 1 ? (
-                    <Stack direction="row" spacing={2} alignItems="center" justifyContent="center" sx={{ mt: 2 }}>
+                    <Stack direction="row" spacing={2} alignItems="center" justifyContent="center">
                         <Button disabled={pagination.current_page <= 1} onClick={() => go({ page: pagination.current_page - 1 })}>
                             Previous
                         </Button>

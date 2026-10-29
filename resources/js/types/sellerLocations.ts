@@ -11,6 +11,9 @@ export interface LocationTile {
     alert: number;
     /** Stock held there, in the smallest unit (pieces). */
     pieces: number;
+    /** The badge figure: the shelf in each item's smallest packaging, other places in its biggest. */
+    count: number;
+    unit: "smallest" | "largest";
 }
 
 /** One line of the shelf replenishment row (SellerLocationBoard::shelfLines). */

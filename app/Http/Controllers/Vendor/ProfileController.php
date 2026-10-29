@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Services\VendorService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,14 +13,10 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The vendor's own account details and trading summary.
+ * The vendor's own account details. The store they run has its own profile (StoreProfileController).
  */
 class ProfileController extends Controller
 {
-    public function __construct(private readonly VendorService $vendors)
-    {
-    }
-
     public function index(): Response
     {
         $vendor = Auth::user();
@@ -35,7 +30,6 @@ class ProfileController extends Controller
                 'phone_number' => $vendor->phone_number,
                 'role' => $vendor->role,
             ],
-            'metrics' => $this->vendors->metrics($vendor),
         ]);
     }
 

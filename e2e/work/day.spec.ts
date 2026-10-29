@@ -107,6 +107,8 @@ test('a day: key, rota, open with the QR, clock in, break, close and hand the ke
     // ── The seller closes: clocks Seller Two out, hands them the key ──
     await first.goto(siteOf(fixture.store.id).live);
     await first.getByLabel(/Clock them out as I close/).check();
+    // The till is counted at closing: the 500 float, no cash sold today.
+    await first.getByRole('textbox', { name: 'Cash in the till at closing (ETB)' }).fill('500');
     await first.locator('select').filter({ hasText: 'I keep the key' }).selectOption({ label: `Hand the key to ${two.name}` });
     await first.getByRole('button', { name: /^Close / }).click();
     await expect(flash(first, /is closed\. The key waits for/)).toBeVisible();

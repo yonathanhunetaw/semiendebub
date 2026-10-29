@@ -32,6 +32,13 @@ class Store extends Model
         'location',
         'manager',
         'status',
+        // Vendor profile (a vendor is a store): public address and face.
+        'slug',
+        'description',
+        'logo_path',
+        'contact_phone',
+        'contact_email',
+        'owner_id',
     ];
 
     /*
@@ -109,6 +116,13 @@ class Store extends Model
      */
     protected static function booted(): void
     {
+        // Every store has a public address (/s/{slug}), unique, from its name.
+        static::creating(function (self $store): void {
+            if (blank($store->slug)) {
+                $store->slug = self::freeSlug((string) $store->name);
+            }
+        });
+
         static::created(function (self $store): void {
             foreach ([
                 ['Shop Floor', ItemInventoryLocation::KIND_SHELF],
@@ -208,5 +222,24 @@ class Store extends Model
     public function warehouse()
     {
         return $this->hasOne(\App\Models\Inventory\Warehouse::class, 'store_id');
+    }
+
+    /** The person who owns this store (a vendor); the store's admin. */
+    public function owner(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Auth\User::class, 'owner_id');
+    }
+
+    /** A slug from a name that no store uses yet: "Bole Shop", then "bole-shop-2". */
+    public static function freeSlug(string $name, ?int $ignoreId = null): string
+    {
+        $base = \Illuminate\Support\Str::slug($name) ?: 'store';
+        $slug = $base;
+
+        for ($n = 2; self::query()->where('slug', $slug)->when($ignoreId, fn ($q) => $q->whereKeyNot($ignoreId))->exists(); $n++) {
+            $slug = "{$base}-{$n}";
+        }
+
+        return $slug;
     }
 }

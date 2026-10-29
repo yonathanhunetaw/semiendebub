@@ -199,6 +199,13 @@ Route::domain("admin.{$baseDomain}")
                     Route::post('/{dataset}/import', 'import')->name('import');
                 });
                 Route::resource('users', UserController::class);
+                // Vendors: businesses asking to open their own store (a vendor is a store).
+                Route::controller(\App\Http\Controllers\Admin\VendorApplicationController::class)->prefix('vendors')->name('vendors.')->group(function () {
+                    Route::get('/', 'index')->name('index');
+                    Route::post('/{application}/approve', 'approve')->name('approve');
+                    Route::post('/{application}/reject', 'reject')->name('reject');
+                    Route::post('/stores/{store}/link', 'link')->name('link');
+                });
                 $sessionController = SessionController::class;
                 require __DIR__ . '/../sessions.php';
             });

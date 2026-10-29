@@ -1,4 +1,6 @@
 import * as React from "react";
+import { PageBand } from "@/Components/Admin/adminUi";
+import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
 import AdminLayout from "@/Layouts/AdminLayout";
 import { Head, Link } from "@inertiajs/react";
 import {
@@ -124,14 +126,9 @@ export default function SettingsIndex() {
         <Box sx={{ maxWidth: 1100, mx: "auto" }}>
             <Head title="Settings" />
 
-            <Stack spacing={0.5} sx={{ mb: 3 }}>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                    Settings
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                    Appearance, your access, and the screens that configure Mezgebe Dirijit.
-                </Typography>
-            </Stack>
+            <Box sx={{ mb: 1.5 }}>
+                <PageBand icon={<SettingsOutlined />} title="Settings" subtitle="Appearance, your access, and the screens that configure Mezgebe Dirijit." />
+            </Box>
 
             <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(2, minmax(0, 1fr))" } }}>
                 <Card sx={{ ...cardSx, p: 2, display: "flex", flexDirection: "column", gap: 1 }}>

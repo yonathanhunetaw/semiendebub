@@ -105,9 +105,9 @@ export default function Inbox({ payments = [], expected = [], handovers = [], wa
                                 {handover.reference ? `Reference ${handover.reference} · ` : ""}
                                 {dayDateTime(handover.at, "")}
                             </p>
-                            <p className="mt-1">
+                            <div className="mt-1">
                                 <AgeBadge since={handover.at} warnHours={12} lateHours={48} prefix="waiting " />
-                            </p>
+                            </div>
                             <div className="mt-3 flex gap-2 border-t border-outline-variant/60 pt-3">
                                 <button
                                     type="button"
@@ -161,9 +161,9 @@ export default function Inbox({ payments = [], expected = [], handovers = [], wa
                                     {payment.account ? "Marked paid by" : "Cash taken by"} {payment.claimed_by ?? "a seller"}
                                     {payment.claimed_at ? ` · ${dayDateTime(payment.claimed_at)}` : ""}
                                 </p>
-                                <p>
+                                <div>
                                     <AgeBadge since={payment.claimed_at ?? payment.created_at} warnHours={12} lateHours={48} prefix="waiting " />
-                                </p>
+                                </div>
                                 <p>
                                     Order total {birr(payment.order_total)}
                                     {payment.store ? ` · ${payment.store}` : ""}

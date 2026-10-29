@@ -1,4 +1,6 @@
 import { Head, router } from "@inertiajs/react";
+import { PageBand } from "@/Components/Admin/adminUi";
+import CreditScoreOutlined from "@mui/icons-material/CreditScoreOutlined";
 import {
     Alert,
     Box,
@@ -59,12 +61,12 @@ export default function CustomerCredit({ customers = [], flash }: Props): React.
         <>
             <Head title="Customer credit" />
 
-            <Box mb={2}>
-                <Typography variant="h5" fontWeight={800}>Customer credit</Typography>
-                <Typography variant="body2" color="text.secondary">
-                    {money(owed)} owed in all{overdue > 0 ? `, ${money(overdue)} of it overdue` : ""}. Set a customer&apos;s
-                    limit and days to pay under Customers.
-                </Typography>
+            <Box mb={1.5}>
+                <PageBand
+                    icon={<CreditScoreOutlined />}
+                    title="Customer credit"
+                    subtitle={`${money(owed)} owed in all${overdue > 0 ? `, ${money(overdue)} of it overdue` : ""}. Set a limit and days to pay under Customers.`}
+                />
             </Box>
 
             <TableContainer component={Paper} variant="outlined">

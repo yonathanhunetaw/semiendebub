@@ -60,7 +60,7 @@ export default function Show({ category, subcategories = [], items = [], has_tin
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, px: 0.5, mt: subcategories.length ? 2 : 0, mb: 1, color: "text.primary" }}>
                             Items
                         </Typography>
-                        <section aria-label="Products" className="grid grid-cols-2 gap-2.5 pb-28 sm:grid-cols-3 md:grid-cols-4">
+                        <section aria-label="Products" className="grid grid-cols-2 gap-2.5 pb-28 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                             {items.map((item) => (
                                 <ProductCard key={item.id} item={item} hasTinCart={has_tin_cart} topCartIsIndividual={top_cart_is_individual} />
                             ))}

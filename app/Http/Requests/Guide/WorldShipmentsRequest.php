@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Guide;
 
+use App\Services\Workforce\LocalTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -28,16 +29,19 @@ class WorldShipmentsRequest extends FormRequest
         ];
     }
 
+    /** The start of the first shops' day asked for (local midnight, as a UTC instant). */
     public function from(): CarbonImmutable
     {
-        return $this->filled('from') ? CarbonImmutable::parse((string) $this->input('from'))->startOfDay() : CarbonImmutable::now()->startOfDay();
+        return LocalTime::startOf($this->filled('from') ? (string) $this->input('from') : LocalTime::today());
     }
 
+    /** The end of the last shops' day asked for, at most a month on. */
     public function to(): CarbonImmutable
     {
-        $to = $this->filled('to') ? CarbonImmutable::parse((string) $this->input('to')) : $this->from();
+        $end = $this->filled('to')
+            ? LocalTime::startOf((string) $this->input('to'))->addDay()->subSecond()
+            : $this->from()->addDay()->subSecond();
 
-        // At most a month at a time.
-        return CarbonImmutable::createFromTimestamp(min($to->endOfDay()->getTimestamp(), $this->from()->addDays(31)->getTimestamp()));
+        return CarbonImmutable::createFromTimestamp(min($end->getTimestamp(), $this->from()->addDays(31)->getTimestamp()));
     }
 }

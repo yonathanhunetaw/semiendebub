@@ -1,6 +1,28 @@
 import * as React from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { useTheme } from '@mui/material';
+import {
+    Box,
+    Button,
+    Checkbox,
+    FormControlLabel,
+    IconButton,
+    InputAdornment,
+    MenuItem,
+    Paper,
+    Stack,
+    TextField,
+    Tooltip,
+    Typography,
+} from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import Block from '@mui/icons-material/Block';
+import DevicesOutlined from '@mui/icons-material/DevicesOutlined';
+import Logout from '@mui/icons-material/Logout';
+import SearchRounded from '@mui/icons-material/SearchRounded';
+import Timer from '@mui/icons-material/TimerOutlined';
+import WifiTethering from '@mui/icons-material/WifiTethering';
+import UserAvatar from '@/Components/Visual/UserAvatar';
+import { FigureRow, FigureTile, PageBand, Pill, densePanelSx, tinySx, type PillTone } from '@/Components/Admin/adminUi';
 
 import {
     DURATION_PRESETS,
@@ -25,13 +47,6 @@ type StateFilter = 'all' | 'live' | 'idle' | 'expiring' | 'expired';
 const CUSTOM = 'custom';
 const REFRESH_MS = 30000;
 const TOAST_MS = 4000;
-const pill = (active: boolean): string =>
-    `px-3 py-1 rounded-full text-[12px] font-medium uppercase tracking-wider transition-all border ${
-        active
-            ? 'bg-primary/20 border-primary/50 text-primary'
-            : 'glass-panel border-outline-variant/40 text-on-surface-variant hover:border-primary/30 hover:text-on-surface'
-    }`;
-
 /**
  * Session list shared by the admin and dev subdomains. Only the route-name
  * prefix differs; the layout is attached by each page.
@@ -39,7 +54,6 @@ const pill = (active: boolean): string =>
 export default function SessionsBoard({ sessions, lifetimes, routePrefix }: SessionsBoardProps): React.ReactElement {
     const { flash } = usePage().props as { flash?: { success?: string | null; error?: string | null } };
     const [toast, setToast] = React.useState<{ kind: 'success' | 'error'; text: string } | null>(null);
-    const isDark = useTheme().palette.mode === 'dark';
     const r = (name: string): string => `${routePrefix}.sessions.${name}`;
 
     const [query, setQuery] = React.useState('');
@@ -190,345 +204,225 @@ export default function SessionsBoard({ sessions, lifetimes, routePrefix }: Sess
         );
     };
 
-    const btn =
-        'px-3 py-1.5 border border-outline-variant/50 bg-surface-container-high/50 text-on-surface rounded font-medium text-[12px] uppercase tracking-wider hover:bg-surface-container-highest transition-colors disabled:opacity-50';
-    const dangerBtn =
-        'px-3 py-1.5 bg-error/20 border border-error/50 text-error rounded font-medium text-[12px] uppercase tracking-wider hover:bg-error/30 transition-colors flex items-center justify-center gap-xs disabled:opacity-50';
+    const chip = (active: boolean) =>
+        ({
+            px: 1.25,
+            py: 0.25,
+            border: '1px solid',
+            borderColor: active ? 'primary.main' : 'divider',
+            borderRadius: 999,
+            font: 'inherit',
+            fontSize: '0.6875rem',
+            fontWeight: active ? 800 : 600,
+            textTransform: 'capitalize',
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+            color: active ? 'primary.main' : 'text.secondary',
+            bgcolor: active ? (t: { palette: { primary: { main: string } } }) => alpha(t.palette.primary.main, 0.1) : 'background.paper',
+            '&:hover': { borderColor: 'primary.main' },
+        }) as const;
+
+    const actionSx = { fontSize: '0.6875rem', fontWeight: 700, textTransform: 'none', minWidth: 0, px: 1, py: 0.25 } as const;
+    const stateTone: Record<Exclude<StateFilter, 'all'>, PillTone> = { live: 'success', idle: 'default', expiring: 'warning', expired: 'error' };
 
     return (
-        <div className="w-full text-on-background font-body-md pb-24 md:pb-0 relative min-h-screen">
-            <style
-                dangerouslySetInnerHTML={{
-                    __html: `
-        .animate-pulse-fast { animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        .glass-panel {
-            background: rgb(var(--surface-container-low) / 0.6);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgb(var(--outline) / 0.2);
-            box-shadow: ${isDark ? 'inset 0 1px 0 rgb(var(--on-surface) / 0.05)' : '0px 2px 1px -1px rgb(var(--on-surface) / 0.1), 0px 1px 3px 0px rgb(var(--on-surface) / 0.05)'};
-        }
-`,
-                }}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 1600, mx: 'auto', width: '100%' }}>
+            {toast && (
+                <Paper
+                    role="status"
+                    elevation={0}
+                    sx={{ ...densePanelSx, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, color: toast.kind === 'success' ? 'success.main' : 'error.main', borderColor: toast.kind === 'success' ? 'success.main' : 'error.main' }}
+                >
+                    <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{toast.text}</Typography>
+                    <Button size="small" onClick={() => setToast(null)} sx={actionSx}>Dismiss</Button>
+                </Paper>
+            )}
+
+            <PageBand
+                icon={<WifiTethering />}
+                title="Active sessions"
+                subtitle={`Default lifetime ${formatMinutes(lifetimes.default)}, remember-me ${formatMinutes(lifetimes.remember)}`}
+                actions={
+                    <FormControlLabel
+                        sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: '0.75rem', fontWeight: 600 } }}
+                        control={<Checkbox size="small" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} sx={{ color: 'inherit', '&.Mui-checked': { color: 'inherit' }, p: 0.5 }} />}
+                        label="Auto-refresh"
+                    />
+                }
             />
 
-            <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[120px] pointer-events-none z-0" />
-            <div className="fixed bottom-[-20%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-[100px] pointer-events-none z-0" />
+            <FigureRow>
+                <FigureTile label="Connections" value={sessions.length} tone="primary" />
+                <FigureTile label="Active now" value={stateCounts.live} tone="success" />
+                <FigureTile label={`Expiring < ${EXPIRING_SOON_MINUTES}m`} value={stateCounts.expiring} tone={stateCounts.expiring > 0 ? 'warning' : 'default'} />
+                <FigureTile label="Expired" value={stateCounts.expired} tone={stateCounts.expired > 0 ? 'error' : 'default'} />
+            </FigureRow>
 
-            <div className="relative z-10 w-full max-w-[1600px] mx-auto p-margin-mobile md:p-margin-desktop">
-                {toast && (
-                    <div
-                        role="status"
-                        className={`p-4 mb-6 border rounded-lg glass-panel flex items-start justify-between gap-sm ${
-                            toast.kind === 'success'
-                                ? 'text-success border-success/20'
-                                : 'text-error border-error/20'
-                        }`}
-                    >
-                        <span>{toast.text}</span>
-                        <button
-                            type="button"
-                            aria-label="Dismiss"
-                            onClick={() => setToast(null)}
-                            className="opacity-70 hover:opacity-100"
-                        >
-                            <span className="material-symbols-outlined text-[18px]">close</span>
-                        </button>
-                    </div>
-                )}
-
-                {/* Header + duration + global actions */}
-                <div className="mb-lg flex flex-col md:flex-row md:items-end justify-between gap-md">
-                    <div>
-                        <h1 className="font-display-lg text-display-lg text-on-surface drop-shadow-md">Active Sessions</h1>
-                        <p className="font-body-sm text-body-sm text-on-surface-variant mt-xs">
-                            Managing {sessions.length} connection{sessions.length === 1 ? '' : 's'} · default lifetime{' '}
-                            {formatMinutes(lifetimes.default)}, remember-me {formatMinutes(lifetimes.remember)}.
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-sm items-center">
-                        <label className="flex items-center gap-xs text-[12px] text-on-surface-variant uppercase tracking-wider">
-                            <input
-                                type="checkbox"
-                                checked={autoRefresh}
-                                onChange={(e) => setAutoRefresh(e.target.checked)}
-                                className="rounded border-outline-variant text-primary w-4 h-4"
-                            />
-                            Auto-refresh
-                        </label>
-                        <select
-                            aria-label="Session duration"
-                            value={preset}
-                            onChange={(e) => setPreset(e.target.value)}
-                            className="glass-panel text-on-surface px-3 py-[6px] rounded font-medium text-[13px] tracking-wider focus:outline-none focus:ring-1 focus:ring-primary/50"
-                        >
-                            {DURATION_PRESETS.map((d) => (
-                                <option key={d.minutes} value={d.minutes}>
-                                    {d.label}
-                                </option>
-                            ))}
-                            <option value={CUSTOM}>Custom…</option>
-                        </select>
+            {/* Lifetime to apply, and the actions on everyone */}
+            <Paper elevation={0} sx={{ ...densePanelSx, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} justifyContent="space-between" alignItems={{ xs: 'stretch', md: 'center' }}>
+                    <TextField
+                        size="small"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search by name, email, or IP"
+                        sx={{ maxWidth: { md: 360 }, width: '100%' }}
+                        slotProps={{ input: { startAdornment: (<InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment>) } }}
+                    />
+                    <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 0.75 }}>
+                        <TextField select size="small" aria-label="Session duration" value={preset} onChange={(e) => setPreset(e.target.value)} sx={{ minWidth: 130 }}>
+                            {DURATION_PRESETS.map((d) => (<MenuItem key={d.minutes} value={String(d.minutes)}>{d.label}</MenuItem>))}
+                            <MenuItem value={CUSTOM}>Custom…</MenuItem>
+                        </TextField>
                         {preset === CUSTOM && (
-                            <input
-                                type="number"
-                                min={1}
-                                aria-label="Custom duration in minutes"
-                                value={customMinutes}
-                                onChange={(e) => setCustomMinutes(Number(e.target.value))}
-                                className="glass-panel text-on-surface w-24 px-3 py-[6px] rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/50"
-                            />
+                            <TextField size="small" type="number" aria-label="Custom duration in minutes" value={customMinutes} onChange={(e) => setCustomMinutes(Number(e.target.value))} sx={{ width: 90 }} slotProps={{ htmlInput: { min: 1 }, input: { endAdornment: <InputAdornment position="end">min</InputAdornment> } }} />
                         )}
-                        {preset === CUSTOM && <span className="text-[12px] text-on-surface-variant">min</span>}
-                        <button onClick={handleExtendAll} disabled={bulkPending} className={btn}>
-                            Extend All
-                        </button>
-                        <button onClick={handleTerminateAll} disabled={bulkPending} className={dangerBtn}>
-                            <span className="material-symbols-outlined text-[18px]">block</span>
-                            Terminate All
-                        </button>
-                    </div>
-                </div>
+                        <Button size="small" variant="outlined" onClick={handleExtendAll} disabled={bulkPending} sx={actionSx}>Extend all</Button>
+                        <Button size="small" variant="outlined" color="error" onClick={handleTerminateAll} disabled={bulkPending} startIcon={<Block sx={{ fontSize: '14px !important' }} />} sx={actionSx}>Terminate all</Button>
+                    </Stack>
+                </Stack>
 
-                {/* Search + filters */}
-                <div className="mb-md flex flex-col gap-sm">
-                    <div className="relative max-w-sm">
-                        <span className="material-symbols-outlined text-[18px] text-on-surface-variant absolute left-[14px] top-1/2 -translate-y-1/2">
-                            search
-                        </span>
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search by name, email, or IP"
-                            className="w-full pl-[42px] pr-sm py-2 glass-panel rounded-lg text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder-outline text-[14px]"
-                        />
-                    </div>
+                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                    {(['all', 'live', 'idle', 'expiring', 'expired'] as StateFilter[]).map((state) => (
+                        <Box key={state} component="button" type="button" onClick={() => setStateFilter(state)} sx={chip(stateFilter === state)}>
+                            {state === 'expiring' ? `Expiring < ${EXPIRING_SOON_MINUTES}m` : state} ({stateCounts[state]})
+                        </Box>
+                    ))}
+                </Box>
 
-                    <div className="flex flex-wrap gap-xs">
-                        {(['all', 'live', 'idle', 'expiring', 'expired'] as StateFilter[]).map((state) => (
-                            <button key={state} onClick={() => setStateFilter(state)} className={pill(stateFilter === state)}>
-                                {state === 'expiring' ? `Expiring < ${EXPIRING_SOON_MINUTES}m` : state}
-                                <span className="ml-1 opacity-60 text-[10px]">({stateCounts[state]})</span>
-                            </button>
+                {uniqueRoles.length > 1 && (
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        <Box component="button" type="button" onClick={() => setRoleFilter('all')} sx={chip(roleFilter === 'all')}>All roles</Box>
+                        {uniqueRoles.map((role) => (
+                            <Box key={role} component="button" type="button" onClick={() => setRoleFilter(roleFilter === role ? 'all' : role)} sx={chip(roleFilter === role)}>
+                                {role} ({sessions.filter((s) => roleOf(s) === role).length})
+                            </Box>
                         ))}
-                    </div>
+                    </Box>
+                )}
 
-                    {uniqueRoles.length > 1 && (
-                        <div className="flex flex-wrap gap-xs">
-                            <button onClick={() => setRoleFilter('all')} className={pill(roleFilter === 'all')}>
-                                All roles
-                            </button>
-                            {uniqueRoles.map((role) => (
-                                <button
-                                    key={role}
-                                    onClick={() => setRoleFilter(roleFilter === role ? 'all' : role)}
-                                    className={pill(roleFilter === role)}
-                                >
-                                    {role}
-                                    <span className="ml-1 opacity-60 text-[10px]">
-                                        ({sessions.filter((s) => roleOf(s) === role).length})
-                                    </span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Select-all + bulk bar */}
                 {selectableIds.length > 0 && (
-                    <div className="mb-md flex flex-wrap items-center justify-between gap-sm p-sm rounded-xl glass-panel">
-                        <label className="flex items-center gap-sm text-[12px] uppercase tracking-widest text-on-surface-variant">
-                            <input
-                                type="checkbox"
-                                checked={allSelected}
-                                onChange={() => setSelectedIds(allSelected ? [] : selectableIds)}
-                                className="rounded border-outline-variant text-primary w-4 h-4"
-                            />
-                            {selectedIds.length > 0 ? `${selectedIds.length} selected` : `Select all ${selectableIds.length} shown`}
-                        </label>
+                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ flexWrap: 'wrap', rowGap: 0.75, pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
+                        <FormControlLabel
+                            sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: '0.75rem', color: 'text.secondary', fontWeight: 600 } }}
+                            control={<Checkbox size="small" checked={allSelected} onChange={() => setSelectedIds(allSelected ? [] : selectableIds)} sx={{ p: 0.5 }} />}
+                            label={selectedIds.length > 0 ? `${selectedIds.length} selected` : `Select all ${selectableIds.length} shown`}
+                        />
                         {selectedIds.length > 0 && (
-                            <div className="flex gap-sm">
-                                <button onClick={handleExtendSelected} disabled={bulkPending} className={btn}>
-                                    Extend Selected ({formatMinutes(duration)})
-                                </button>
-                                <button onClick={handleDestroySelected} disabled={bulkPending} className={dangerBtn}>
-                                    <span className="material-symbols-outlined text-[14px]">block</span> Terminate
-                                </button>
-                                <button
-                                    onClick={() => setSelectedIds([])}
-                                    className="px-3 py-1.5 text-on-surface-variant font-medium text-[12px] uppercase tracking-wider hover:text-on-surface"
-                                >
-                                    Clear
-                                </button>
-                            </div>
+                            <Stack direction="row" spacing={0.75}>
+                                <Button size="small" variant="outlined" onClick={handleExtendSelected} disabled={bulkPending} sx={actionSx}>Extend selected ({formatMinutes(duration)})</Button>
+                                <Button size="small" variant="outlined" color="error" onClick={handleDestroySelected} disabled={bulkPending} sx={actionSx}>Terminate</Button>
+                                <Button size="small" onClick={() => setSelectedIds([])} sx={actionSx}>Clear</Button>
+                            </Stack>
                         )}
-                    </div>
+                    </Stack>
                 )}
+            </Paper>
 
-                {filtered.length === 0 && (
-                    <div className="flex flex-col items-center justify-center gap-xs py-2xl text-center glass-panel rounded-xl mt-4">
-                        <span className="material-symbols-outlined text-[48px] text-on-surface-variant mb-2 opacity-50">
-                            {sessions.length === 0 ? 'wifi_off' : 'search_off'}
-                        </span>
-                        <p className="font-body-md text-body-md text-on-surface">
-                            {sessions.length === 0 ? 'No active sessions right now.' : 'No sessions match your filters.'}
-                        </p>
-                    </div>
-                )}
+            {filtered.length === 0 && (
+                <Paper elevation={0} sx={{ ...densePanelSx, py: 4, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 700 }}>
+                        {sessions.length === 0 ? 'No active sessions right now.' : 'No sessions match your filters.'}
+                    </Typography>
+                </Paper>
+            )}
 
-                {/* Session list */}
-                <div className="flex flex-col gap-md">
-                    {filtered.map((s) => {
-                        const { label: timeLeft, expired } = formatTimeLeft(s.expires_at, now);
-                        const left = minutesLeft(s.expires_at, now);
-                        const critical = !expired && left < EXPIRING_SOON_MINUTES;
-                        const isPending = pendingIds.includes(s.id);
-                        const fullName = s.user?.first_name ? `${s.user.first_name} ${s.user.last_name || ''}` : 'Guest';
+            {/* One row per connection */}
+            <Stack spacing={0.75}>
+                {filtered.map((s) => {
+                    const { label: timeLeft, expired } = formatTimeLeft(s.expires_at, now);
+                    const left = minutesLeft(s.expires_at, now);
+                    const critical = !expired && left < EXPIRING_SOON_MINUTES;
+                    const isPending = pendingIds.includes(s.id);
+                    const fullName = s.user?.first_name ? `${s.user.first_name} ${s.user.last_name || ''}`.trim() : 'Guest';
+                    const state = stateOf(s);
 
-                        return (
-                            <div
-                                key={s.id}
-                                className={`glass-panel rounded-xl p-md flex flex-col md:grid md:grid-cols-12 md:gap-sm hover:bg-surface-container-high/60 transition-all relative overflow-hidden ${
-                                    s.is_live ? '' : 'opacity-80'
-                                }`}
-                            >
-                                {s.is_current && <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/80" />}
-                                {critical && !s.is_current && (
-                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-error/80 animate-pulse-fast" />
+                    return (
+                        <Paper
+                            key={s.id}
+                            elevation={0}
+                            sx={{
+                                ...densePanelSx,
+                                p: 1,
+                                display: 'grid',
+                                alignItems: 'center',
+                                columnGap: 1.5,
+                                rowGap: 1,
+                                gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: '28px minmax(0, 3fr) minmax(0, 1.4fr) minmax(0, 2fr) minmax(0, 1.4fr) auto' },
+                                opacity: s.is_live || state !== 'idle' ? 1 : 0.85,
+                                borderLeft: '3px solid',
+                                borderLeftColor: s.is_current ? 'primary.main' : critical ? 'error.main' : 'divider',
+                            }}
+                        >
+                            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+                                <Checkbox
+                                    size="small"
+                                    sx={{ p: 0 }}
+                                    inputProps={{ 'aria-label': `Select session for ${s.user?.email ?? 'guest'}` }}
+                                    checked={selectedIds.includes(s.id)}
+                                    onChange={() => toggleOne(s.id)}
+                                    disabled={s.is_current}
+                                />
+                            </Box>
+
+                            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
+                                <UserAvatar name={s.user?.first_name ? fullName : null} role={s.user?.role || 'guest'} size={36} />
+                                <Box sx={{ minWidth: 0 }}>
+                                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 0.25 }}>
+                                        <Typography noWrap sx={{ fontWeight: 800, fontSize: '0.8125rem' }}>{fullName}</Typography>
+                                        {s.is_current && <Pill tone="primary" label="You" />}
+                                        <Pill label={s.user?.role || 'Guest'} />
+                                    </Stack>
+                                    <Typography noWrap sx={tinySx}>{s.user?.email || 'N/A'}</Typography>
+                                </Box>
+                            </Stack>
+
+                            <Box>
+                                {expired ? (
+                                    <Pill tone="error" label="Expired" />
+                                ) : (
+                                    <Pill tone={stateTone[state]} label={s.is_live ? 'Active now' : `Idle ${s.last_active_human}`} />
                                 )}
+                            </Box>
 
-                                <div className="hidden md:flex col-span-1 items-center justify-center">
-                                    <input
-                                        type="checkbox"
-                                        aria-label={`Select session for ${s.user?.email ?? 'guest'}`}
-                                        checked={selectedIds.includes(s.id)}
-                                        onChange={() => toggleOne(s.id)}
-                                        disabled={s.is_current}
-                                        className="rounded border-outline-variant text-primary w-4 h-4 bg-surface-container-low disabled:opacity-30"
-                                    />
-                                </div>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography noWrap sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 600 }}>{s.ip_address || 'Unknown'}</Typography>
+                                <Stack direction="row" spacing={0.5} alignItems="center" title={s.user_agent ?? undefined} sx={{ minWidth: 0, color: 'text.secondary' }}>
+                                    <DevicesOutlined sx={{ fontSize: 14 }} />
+                                    <Typography noWrap sx={tinySx}>{describeDevice(s.user_agent)}</Typography>
+                                </Stack>
+                            </Box>
 
-                                {/* User + role */}
-                                <div className="md:col-span-3 flex items-start md:items-center gap-sm mb-md md:mb-0">
-                                    <div className="w-10 h-10 rounded-full bg-surface-container-high border border-outline-variant/30 flex items-center justify-center text-primary overflow-hidden shrink-0 uppercase">
-                                        {s.user?.first_name ? (
-                                            s.user.first_name[0]
-                                        ) : (
-                                            <span className="material-symbols-outlined text-primary/70">person</span>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <div className="font-headline-sm text-headline-sm text-on-surface flex items-center gap-xs flex-wrap">
-                                            {fullName}
-                                            {s.is_current && (
-                                                <span className="bg-primary/20 border border-primary/30 text-primary px-2 py-0.5 rounded-full font-medium text-[10px] uppercase">
-                                                    You
-                                                </span>
-                                            )}
-                                            <span className="bg-surface-container-highest border border-outline-variant/50 text-on-surface-variant px-2 py-0.5 rounded-full font-medium text-[10px] uppercase">
-                                                {s.user?.role || 'Guest'}
-                                            </span>
-                                        </div>
-                                        <div className="font-mono-data text-mono-data text-on-surface-variant mt-xs truncate max-w-[200px]">
-                                            {s.user?.email || 'N/A'}
-                                        </div>
-                                    </div>
-                                </div>
+                            <Box sx={{ textAlign: { md: 'right' } }}>
+                                <Stack direction="row" spacing={0.5} alignItems="center" justifyContent={{ xs: 'flex-start', md: 'flex-end' }} sx={{ color: expired || critical ? 'error.main' : 'warning.main' }}>
+                                    <Timer sx={{ fontSize: 15 }} />
+                                    <Typography sx={{ fontWeight: 800, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>{timeLeft}</Typography>
+                                </Stack>
+                                <Typography sx={{ ...tinySx, fontSize: '0.625rem' }}>
+                                    of {formatMinutes(s.lifetime_minutes)}{s.has_custom_lifetime ? ' · custom' : s.remember_me ? ' · remembered' : ''}
+                                </Typography>
+                            </Box>
 
-                                {/* State */}
-                                <div className="md:col-span-2 flex items-center mb-sm md:mb-0">
-                                    {expired ? (
-                                        <div className="flex items-center gap-xs border border-error/50 px-3 py-1 rounded-full text-error text-[12px]">
-                                            Expired
-                                        </div>
-                                    ) : s.is_live ? (
-                                        <div className="flex items-center gap-xs bg-success/10 border border-success/30 px-3 py-1 rounded-full">
-                                            <div className="w-2 h-2 rounded-full bg-success animate-pulse-fast" />
-                                            <span className="font-medium text-[12px] text-success">Active Now</span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-xs bg-surface-container-highest/50 border border-outline-variant/30 px-3 py-1 rounded-full">
-                                            <div className="w-2 h-2 rounded-full bg-outline" />
-                                            <span className="font-medium text-[12px] text-on-surface-variant">Idle {s.last_active_human}</span>
-                                        </div>
-                                    )}
-                                </div>
+                            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end" sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
+                                <Button size="small" variant="outlined" onClick={() => handleExtend(s)} disabled={isPending} title={`Set lifetime to ${formatMinutes(duration)} from now`} sx={actionSx}>Extend</Button>
+                                {s.has_custom_lifetime && (
+                                    <Button size="small" variant="outlined" onClick={() => handleReset(s)} disabled={isPending} title="Back to the default lifetime" sx={actionSx}>Reset</Button>
+                                )}
+                                {s.user.id !== null && !s.is_current && (
+                                    <Tooltip title="Sign this user out everywhere">
+                                        <span><IconButton size="small" onClick={() => handleDeleteUser(s)} disabled={isPending}><Logout sx={{ fontSize: 16 }} /></IconButton></span>
+                                    </Tooltip>
+                                )}
+                                <Button size="small" variant="outlined" color="error" onClick={() => handleDelete(s)} disabled={isPending} sx={actionSx}>Terminate</Button>
+                            </Stack>
+                        </Paper>
+                    );
+                })}
+            </Stack>
 
-                                {/* IP + device */}
-                                <div className="md:col-span-2 flex flex-col justify-center mb-sm md:mb-0">
-                                    <div className="font-mono-data text-mono-data text-on-surface truncate">{s.ip_address || 'Unknown'}</div>
-                                    <div
-                                        className="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-xs mt-xs truncate max-w-[200px]"
-                                        title={s.user_agent ?? undefined}
-                                    >
-                                        <span className="material-symbols-outlined text-[14px] text-primary/70">devices</span>
-                                        {describeDevice(s.user_agent)}
-                                    </div>
-                                </div>
-
-                                {/* Time left + total lifetime */}
-                                <div className="md:col-span-2 flex md:justify-end items-center mb-md md:mb-0">
-                                    <div className="text-right flex items-center md:items-end flex-row md:flex-col gap-sm md:gap-0">
-                                        <div
-                                            className={`font-mono-data text-mono-data font-bold flex items-center gap-xs ${
-                                                expired || critical ? 'text-error' : 'text-warning'
-                                            }`}
-                                        >
-                                            <span className="material-symbols-outlined text-[16px]">timer</span> {timeLeft}
-                                        </div>
-                                        <div className="font-medium text-[11px] uppercase text-on-surface-variant mt-xs">
-                                            of {formatMinutes(s.lifetime_minutes)}
-                                            {s.has_custom_lifetime ? ' · custom' : s.remember_me ? ' · remembered' : ''}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Actions */}
-                                <div className="md:col-span-2 flex flex-wrap justify-between md:justify-end items-center gap-xs mt-auto">
-                                    <button
-                                        onClick={() => handleExtend(s)}
-                                        disabled={isPending}
-                                        title={`Set lifetime to ${formatMinutes(duration)} from now`}
-                                        className={btn}
-                                    >
-                                        Extend
-                                    </button>
-                                    {s.has_custom_lifetime && (
-                                        <button
-                                            onClick={() => handleReset(s)}
-                                            disabled={isPending}
-                                            title="Back to the default lifetime"
-                                            className={btn}
-                                        >
-                                            Reset
-                                        </button>
-                                    )}
-                                    {s.user.id !== null && !s.is_current && (
-                                        <button
-                                            onClick={() => handleDeleteUser(s)}
-                                            disabled={isPending}
-                                            title="Sign this user out everywhere"
-                                            className={btn}
-                                        >
-                                            <span className="material-symbols-outlined text-[14px] align-middle">logout</span>
-                                        </button>
-                                    )}
-                                    <button onClick={() => handleDelete(s)} disabled={isPending} className={dangerBtn}>
-                                        <span className="material-symbols-outlined text-[16px]">block</span> Term
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {sessions.length > 0 && (
-                    <div className="mt-lg border-t border-outline-variant/30 pt-md font-body-sm text-body-sm text-on-surface-variant">
-                        Showing {filtered.length} of {sessions.length}
-                    </div>
-                )}
-            </div>
-        </div>
+            {sessions.length > 0 && (
+                <Typography sx={{ ...tinySx, pt: 0.5 }}>Showing {filtered.length} of {sessions.length}</Typography>
+            )}
+        </Box>
     );
 }

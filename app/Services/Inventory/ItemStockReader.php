@@ -286,6 +286,22 @@ class ItemStockReader
     }
 
     /**
+     * Pieces of every item at one location, for totals counted in each item's
+     * own packaging (see SellerLocationBoard::tile()).
+     *
+     * @return array<int, int>  item id => pieces
+     */
+    public function piecesPerItem(string $locationType, int $locationId): array
+    {
+        return $this->baseQuery($locationType, $locationId)
+            ->groupBy('iv.item_id')
+            ->selectRaw('iv.item_id, COALESCE(SUM(s.quantity * ' . $this->piecesExpression() . '), 0) as pieces')
+            ->pluck('pieces', 'item_id')
+            ->map(fn ($pieces): int => (int) $pieces)
+            ->all();
+    }
+
+    /**
      * Pieces of a set of variants at one location — the figure capacity bands
      * and the sourcing hierarchy compare against.
      *

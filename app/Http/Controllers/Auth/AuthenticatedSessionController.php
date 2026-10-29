@@ -90,6 +90,13 @@ class AuthenticatedSessionController extends Controller
         $currentHost = $request->getHost();
         $targetHost = $this->getHostForRole($role);
 
+        // Someone who also holds this app's role (a store owner: admin + vendor; a seller
+        // who also works as a stock keeper) stays in the app they signed in to.
+        $hostRole = $this->expectedRoleForHost($currentHost);
+        if ($hostRole !== null && $user->hasRole($hostRole)) {
+            $targetHost = $currentHost;
+        }
+
         // --- CRITICAL DIAGNOSTIC LOG ---
         \Log::debug('ROUTING DIAGNOSIS', [
             'detected_role' => $role,

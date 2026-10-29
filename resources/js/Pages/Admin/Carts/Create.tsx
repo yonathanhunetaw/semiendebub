@@ -1,4 +1,6 @@
 import AdminLayout from "@/Layouts/AppLayout";
+import { PageBand } from "@/Components/Admin/adminUi";
+import ShoppingCartOutlined from "@mui/icons-material/ShoppingCartOutlined";
 import { Head, useForm, Link } from "@inertiajs/react";
 import {
     Box,
@@ -85,24 +87,20 @@ export default function Create({ customers = [], sellers = [], stores = [], defa
         <Box sx={ROOT}>
             <Head title="Create New Cart" />
 
-            <Stack direction="row" alignItems="center" spacing={2} mb={4}>
-                <Button
-                    component={Link}
-                    href={route(
-                        isAdmin ? "admin.carts.index" : "seller.carts.index",
-                    )}
-                    startIcon={<ArrowBackIcon />}
-                    variant="text"
-                    color="inherit"
-                >
-                    Back to Carts
-                </Button>
-                <Typography variant="h4" fontWeight="bold">
-                    Create New Cart
-                </Typography>
-            </Stack>
+            <Box sx={{ mb: 1.5 }}>
+                <PageBand
+                    icon={<ShoppingCartOutlined />}
+                    title="New cart"
+                    subtitle="Open a cart for a customer; you are recorded as its creator"
+                    actions={
+                        <Button component={Link} href={route(isAdmin ? "admin.carts.index" : "seller.carts.index")} size="small" variant="contained" disableElevation startIcon={<ArrowBackIcon />} sx={{ bgcolor: "background.paper", color: "primary.main", fontWeight: 800, "&:hover": { bgcolor: "background.paper" } }}>
+                            All carts
+                        </Button>
+                    }
+                />
+            </Box>
 
-            <Paper sx={{ p: 4, maxWidth: 600, mx: "auto", boxShadow: 3 }}>
+            <Paper elevation={0} variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 600, mx: "auto" }}>
                 <form onSubmit={handleSubmit}>
                     <Stack spacing={3}>
                         {/* STORE SELECTION: Visible only to Admin */}

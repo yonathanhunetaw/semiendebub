@@ -1,4 +1,6 @@
 import { Head } from "@inertiajs/react";
+import { PageBand } from "@/Components/Admin/adminUi";
+import AccountBalanceWalletOutlined from "@mui/icons-material/AccountBalanceWalletOutlined";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import {
     Box,
@@ -60,12 +62,12 @@ export default function SellerBalances({ sellers = [], remittances = [], cash_fl
         <>
             <Head title="Seller balances" />
 
-            <Box mb={2}>
-                <Typography variant="h5" fontWeight={800}>Seller balances</Typography>
-                <Typography variant="body2" color="text.secondary">
-                    Money sellers hold until they hand it over: {money(total)} in all. Cash held more than {cash_flag_days}{" "}
-                    days is flagged.
-                </Typography>
+            <Box mb={1.5}>
+                <PageBand
+                    icon={<AccountBalanceWalletOutlined />}
+                    title="Seller balances"
+                    subtitle={`Money sellers hold until they hand it over: ${money(total)} in all. Cash held more than ${cash_flag_days} days is flagged.`}
+                />
             </Box>
 
             <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>

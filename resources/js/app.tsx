@@ -11,6 +11,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
+import NavProgress from './Components/Shared/NavProgress';
 import ImpersonationBanner from './Components/Shared/ImpersonationBanner';
 import { installStockKeepingRoutes } from './utils/stockKeepingRoutes';
 import { setShopTimeZone } from './utils/dates';
@@ -119,6 +120,7 @@ createInertiaApp({
                         <ThemeProvider theme={theme}>
                             <CssBaseline />
                             <RoleFavicon />
+                            <NavProgress />
                             <App {...props} />
                             <ImpersonationBanner initial={props.initialPage.props as unknown as React.ComponentProps<typeof ImpersonationBanner>['initial']} />
                         </ThemeProvider>
@@ -129,11 +131,6 @@ createInertiaApp({
 
         createRoot(el).render(<Root />);
     },
-    progress: {
-        // Injected into a <style> as plain CSS, so the theme variable resolves:
-        // the page-load bar follows the role accent.
-        color: 'rgb(var(--primary))',
-        // Show the bar on the first frame of a visit, not after the default 250 ms.
-        delay: 0,
-    },
+    // The page-load indicator is NavProgress (a corner ring), not Inertia's top bar.
+    progress: false,
 });

@@ -48,6 +48,8 @@ import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
 import Sell from "@mui/icons-material/Sell";
 import { useState, useEffect } from "react";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
+import { FigureRow, FigureTile, PageBand, adminTableSx, densePanelSx } from "@/Components/Admin/adminUi";
+import { dayDate } from "@/utils/dates";
 
 const getInitials = (first: string, last: string) => {
     const a = (first || "").trim().charAt(0);
@@ -189,37 +191,26 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
     );
 
     return (
-        <Box sx={{ ...ROOT, pb: { xs: 10, sm: 0 } }}>
-            <Box
-                sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: { xs: "flex-start", sm: "center" },
-                    flexDirection: { xs: "column", sm: "row" },
-                    gap: 1.5,
-                    mb: 1.5,
-                }}
-            >
-                <Box>
-                    <Typography variant="h4">
-                        Customers
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        {customers.length} {customers.length === 1 ? "customer" : "customers"} on file
-                    </Typography>
-                </Box>
-                {!isMobile && (
-                    <Button
-                        variant="contained"
-                        startIcon={<Add />}
-                        onClick={handleOpen}
-                        disableElevation
-                        sx={{ borderRadius: 2, textTransform: "none", fontWeight: 600, px: 2.5, py: 1 }}
-                    >
-                        Add Customer
-                    </Button>
-                )}
-            </Box>
+        <Box sx={{ ...ROOT, pb: { xs: 10, sm: 0 }, display: "flex", flexDirection: "column", gap: 1 }}>
+            <PageBand
+                icon={<PeopleAltOutlined />}
+                title="Customers"
+                subtitle={`${customers.length} ${customers.length === 1 ? "customer" : "customers"} on file`}
+                actions={
+                    !isMobile ? (
+                        <Button size="small" variant="contained" disableElevation startIcon={<Add />} onClick={handleOpen} sx={{ bgcolor: "background.paper", color: "primary.main", fontWeight: 800, "&:hover": { bgcolor: "background.paper" } }}>
+                            Add customer
+                        </Button>
+                    ) : undefined
+                }
+            />
+
+            <FigureRow>
+                <FigureTile label="Customers" value={customers.length} tone="primary" />
+                <FigureTile label="Individuals" value={customers.filter((c) => c.tin_number).length} hint="priced with VAT" />
+                <FigureTile label="Businesses" value={customers.filter((c) => !c.tin_number).length} />
+                <FigureTile label="With credit" value={customers.filter((c) => Number(c.credit_limit) > 0).length} tone="info" />
+            </FigureRow>
 
             {customers.length === 0 ? (
                 <EmptyState />
@@ -227,17 +218,18 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                 // Desktop View: refined table
                 <TableContainer
                     component={Paper}
-                    variant="outlined"
-                    sx={{ borderRadius: 2, overflow: "hidden" }}
+                    elevation={0}
+                    sx={{ ...densePanelSx, p: 0, overflow: "hidden" }}
                 >
-                    <Table>
+                    <Table size="small" sx={adminTableSx}>
                         <TableHead>
-                            <TableRow sx={{ "& th": { bgcolor: "rgb(var(--surface-container-low))", fontWeight: 700, color: "text.secondary", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "2px solid", borderColor: "divider" } }}>
+                            <TableRow>
                                 <TableCell>Customer</TableCell>
                                 <TableCell>Type</TableCell>
                                 <TableCell>Contact</TableCell>
                                 <TableCell>City</TableCell>
                                 <TableCell>Delivery locations</TableCell>
+                                <TableCell>Created by</TableCell>
                                 <TableCell align="right">Actions</TableCell>
                             </TableRow>
                         </TableHead>
@@ -251,7 +243,7 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                                         transition: "background-color 0.15s ease",
                                     }}
                                 >
-                                    <TableCell sx={{ py: 1.75 }}>
+                                    <TableCell>
                                         <Stack direction="row" spacing={1.5} alignItems="center">
                                             <Avatar
                                                 sx={{
@@ -299,6 +291,12 @@ export default function Customers({ customers = [], stores = [] }: { customers?:
                                     </TableCell>
                                     <TableCell sx={{ maxWidth: 280 }}>
                                         <DeliveryLocations addresses={customer.addresses} />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {customer.creator ? `${customer.creator.first_name ?? ""} ${customer.creator.last_name ?? ""}`.trim() : "—"}
+                                        </Typography>
+                                        {customer.created_at && <Typography variant="caption" color="text.disabled">{dayDate(customer.created_at)}</Typography>}
                                     </TableCell>
                                     <TableCell align="right">
                                         <Tooltip title="Their own prices">

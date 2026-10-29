@@ -18,6 +18,8 @@ import {
 import React, { useState } from "react";
 import { dayDateTime } from "@/utils/dates";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
+import { FigureRow, FigureTile, PageBand, Pill, adminTableSx, densePanelSx } from "@/Components/Admin/adminUi";
+import ReceiptLongOutlined from "@mui/icons-material/ReceiptLongOutlined";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
 import DayTag from "@/Components/Shared/time/DayTag";
 import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
@@ -92,15 +94,26 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, time, s
     return (
         <>
             <Head title="Orders" />
-            <Box sx={ROOT}>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                    Orders
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Every store&apos;s orders. Open one to see its chain of custody.
-                </Typography>
+            <Box sx={{ ...ROOT, display: "flex", flexDirection: "column", gap: 1 }}>
+                <PageBand
+                    icon={<ReceiptLongOutlined />}
+                    title="Orders"
+                    subtitle="Every store's orders. Open one to see its chain of custody."
+                    actions={
+                        <Button component={Link} href={route("admin.carts.index")} size="small" variant="contained" disableElevation sx={{ bgcolor: "background.paper", color: "primary.main", fontWeight: 800, "&:hover": { bgcolor: "background.paper" } }}>
+                            Open carts
+                        </Button>
+                    }
+                />
 
-                <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 2 }} alignItems={{ md: "center" }}>
+                <FigureRow>
+                    <FigureTile label="To pay" value={counts.to_pay ?? 0} tone={(counts.to_pay ?? 0) > 0 ? "warning" : "default"} />
+                    <FigureTile label="Pick & Pack" value={(counts.paid ?? 0) + (counts.packing ?? 0)} tone="info" />
+                    <FigureTile label="With Delivery" value={counts.to_deliver ?? 0} tone="primary" />
+                    <FigureTile label="Delivered" value={counts.delivered ?? 0} tone="success" />
+                </FigureRow>
+
+                <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }}>
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                         {STAGES.map((stage) => {
                             const count = stage.value === "all" ? total : (counts[stage.value as Stage] ?? 0) + (stage.value === "paid" ? counts.packing ?? 0 : 0);
@@ -143,15 +156,15 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, time, s
                     />
                 </Stack>
 
-                <Box sx={{ mb: 2 }}>
+                <Box>
                     <TimeFilterChips filter={time} />
                     <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
                         Orders still on their way are always listed; the day narrows the finished ones.
                     </Typography>
                 </Box>
 
-                <Paper variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
-                    <Table size="small">
+                <Paper elevation={0} sx={{ ...densePanelSx, p: 0, overflowX: "auto" }}>
+                    <Table size="small" sx={adminTableSx}>
                         <TableHead>
                             <TableRow>
                                 <TableCell>Reference</TableCell>
@@ -177,7 +190,7 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, time, s
                                         <TableCell>{order.store ?? "—"}</TableCell>
                                         <TableCell>{order.customer}</TableCell>
                                         <TableCell>
-                                            <Chip size="small" label={stage?.label ?? order.stage} color={stage?.color ?? "default"} />
+                                            <Pill tone={stage?.color ?? "default"} label={stage?.label ?? order.stage} />
                                         </TableCell>
                                         <TableCell>
                                             {order.delivery_status ? `${order.delivery_status.replace("_", " ")}${order.courier ? ` · ${order.courier}` : ""}` : "—"}
@@ -205,7 +218,7 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, time, s
                 </Paper>
 
                 {pagination.last_page > 1 ? (
-                    <Stack direction="row" spacing={2} alignItems="center" justifyContent="center" sx={{ mt: 2 }}>
+                    <Stack direction="row" spacing={2} alignItems="center" justifyContent="center">
                         <Button disabled={pagination.current_page <= 1} onClick={() => go({ page: pagination.current_page - 1 })}>
                             Previous
                         </Button>
@@ -218,11 +231,6 @@ export default function OrdersIndex({ orders = [], counts = {}, filters, time, s
                     </Stack>
                 ) : null}
 
-                <Stack direction="row" justifyContent="flex-end" sx={{ mt: 2 }}>
-                    <Button component={Link} href={route("admin.carts.index")}>
-                        Open carts
-                    </Button>
-                </Stack>
             </Box>
         </>
     );

@@ -16,6 +16,7 @@ import {
 } from "@/Components/Storefront/storefrontConstants";
 import { useStorefrontCart } from "@/Components/Storefront/useStorefrontCart";
 import type { StorefrontPageProps, StorefrontSort } from "@/types/storefront";
+import useShopLinks from "@/Components/Storefront/useShopLinks";
 
 /** Debounce for the search box before a server round trip. */
 const SEARCH_DEBOUNCE_MS = 350;
@@ -42,6 +43,7 @@ export default function StorefrontDashboard({
     flash,
     error,
 }: StorefrontPageProps): React.ReactElement {
+    const shop = useShopLinks();
     const [search, setSearch] = React.useState<string>(filters.search);
     const [isFiltering, setIsFiltering] = React.useState<boolean>(false);
     // Desktop stand-in for the phone bottom bar; see StorefrontMenuDrawer.
@@ -116,7 +118,7 @@ export default function StorefrontDashboard({
                 query.on_sale = 1;
             }
 
-            router.get(route("storefront.index"), query, {
+            router.get(shop.index(), query, {
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
@@ -152,7 +154,7 @@ export default function StorefrontDashboard({
 
     const handleResetFilters = (): void => {
         setSearch("");
-        router.get(route("storefront.index"), {}, {
+        router.get(shop.index(), {}, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -185,7 +187,7 @@ export default function StorefrontDashboard({
             query.on_sale = 1;
         }
 
-        router.get(route("storefront.index"), query, { preserveState: false });
+        router.get(shop.index(), query, { preserveState: false });
     };
 
     const hasItems = items.length > 0;

@@ -63,7 +63,7 @@ class DocumentService
         }
 
         try {
-            $reading = $this->reader->read($this->contents($document), $document->mime_type, now()->toDateString());
+            $reading = $this->reader->read($this->contents($document), $document->mime_type, \App\Services\Workforce\LocalTime::dateOf());
             $document->update(['status' => Document::STATUS_READ, 'reading' => $reading->toArray(), 'read_error' => null]);
         } catch (ReceiptReaderException $e) {
             $document->update(['status' => Document::STATUS_FAILED, 'read_error' => mb_substr($e->getMessage(), 0, 255)]);

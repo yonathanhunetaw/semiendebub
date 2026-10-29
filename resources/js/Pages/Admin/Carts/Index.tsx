@@ -1,25 +1,13 @@
-import AdminLayout from "@/Layouts/AppLayout";
+import React from "react";
+import AppLayout from "@/Layouts/AppLayout";
 import { Head, Link, router } from "@inertiajs/react";
-import {
-    Box,
-    Button,
-    Chip,
-    Paper,
-    Stack,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Typography,
-    IconButton,
-    Tooltip,
-} from "@mui/material";
+import { Box, Button, IconButton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import ShoppingCartOutlined from "@mui/icons-material/ShoppingCartOutlined";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
+import { FigureRow, FigureTile, PageBand, Pager, Pill, TablePanel, adminTableSx, tinySx, type PillTone } from "@/Components/Admin/adminUi";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
 import DayTag from "@/Components/Shared/time/DayTag";
 import type { DayTagView } from "@/types/time";
@@ -33,241 +21,134 @@ interface Cart {
     updated_at: string;
     /** The business day it was started in. */
     day?: DayTagView | null;
-    customer?: {
-        id: number;
-        name: string;
-    };
-    store?: {
-        id: number;
-        name: string;
-    };
-    seller?: {
-        id: number;
-        first_name: string;
-        last_name: string | null;
-    };
+    variants_count?: number;
+    /** Who opened the cart. */
+    creator?: string | null;
+    customer?: { id: number; name: string } | null;
+    store?: { id: number; name: string } | null;
+    seller?: { id: number; first_name: string; last_name: string | null } | null;
+}
+
+interface Paginator {
+    data: Cart[];
+    total?: number;
+    from?: number | null;
+    to?: number | null;
+    links?: Array<{ url: string | null; label: string; active: boolean }>;
 }
 
 interface Props {
-    carts: {
-        data: Cart[];
-    };
+    carts: Paginator | Cart[];
 }
 
+const STATUS_TONE: Record<string, PillTone> = { open: "success", processing: "warning", completed: "info", canceled: "error" };
+
 export default function CartsIndex({ carts }: Props) {
-    const cartList = Array.isArray(carts) ? carts : carts.data || [];
+    const page = Array.isArray(carts) ? null : carts;
+    const list = Array.isArray(carts) ? carts : carts.data ?? [];
+    const open = list.filter((cart) => cart.status === "open").length;
+    const empty = list.filter((cart) => (cart.variants_count ?? 0) === 0).length;
 
     const handleDelete = (cartId: number) => {
-        if (
-            confirm(
-                "Are you sure you want to delete this cart? This will remove all items associated with it.",
-            )
-        ) {
-            router.delete(route("admin.carts.destroy", cartId), {
-                preserveScroll: true,
-            });
-        }
-    };
-
-    const getStatusColor = (
-        status: string | null,
-    ):
-        | "default"
-        | "primary"
-        | "secondary"
-        | "error"
-        | "info"
-        | "success"
-        | "warning" => {
-        switch (status?.toLowerCase()) {
-            case "open":
-                return "success";
-            case "processing":
-                return "warning";
-            case "completed":
-                return "info";
-            case "canceled":
-                return "error";
-            default:
-                return "default";
+        if (confirm("Are you sure you want to delete this cart? This will remove all items associated with it.")) {
+            router.delete(route("admin.carts.destroy", cartId), { preserveScroll: true });
         }
     };
 
     return (
-        <Box sx={ROOT}>
-            <Head title="Carts Management" />
+        <Box sx={{ ...ROOT, display: "flex", flexDirection: "column", gap: 1 }}>
+            <Head title="Carts" />
 
-            <Stack
-                direction="row"
-                justifyContent="space-between"
-                alignItems="center"
-                mb={4}
-            >
-                <Typography variant="h4" fontWeight="bold">
-                    Carts
-                </Typography>
-                <Button
-                    component={Link}
-                    href={route("admin.carts.create")} // Ensure this matches your route name
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                >
-                    New Cart
-                </Button>
-            </Stack>
+            <PageBand
+                icon={<ShoppingCartOutlined />}
+                title="Carts"
+                subtitle="Every cart a seller or admin has opened, and who opened it"
+                actions={
+                    <Button component={Link} href={route("admin.carts.create")} size="small" variant="contained" disableElevation startIcon={<AddIcon />} sx={{ bgcolor: "background.paper", color: "primary.main", fontWeight: 800, "&:hover": { bgcolor: "background.paper" } }}>
+                        New cart
+                    </Button>
+                }
+            />
 
-            {/* Carts Table */}
-            <TableContainer component={Paper} sx={{ boxShadow: 3 }}>
-                <Table>
-                    <TableHead sx={{ bgcolor: "background.default" }}>
-                        <TableRow>
-                            <TableCell sx={{ fontWeight: "bold" }}>
-                                Cart Info
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: "bold" }}>
-                                Store
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: "bold" }}>
-                                Customer
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: "bold" }}>
-                                Seller/Staff
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: "bold" }}>
-                                Status
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: "bold" }}>
-                                Started
-                            </TableCell>
-                            <TableCell
-                                align="right"
-                                sx={{ fontWeight: "bold" }}
-                            >
-                                Actions
-                            </TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {cartList.length > 0 ? (
-                            cartList.map((cart) => (
-                                <TableRow key={cart.id} hover>
-                                    <TableCell>
-                                        <Typography
-                                            variant="body1"
-                                            fontWeight="medium"
-                                        >
-                                            ID: {cart.id}
-                                        </Typography>
-                                        <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                            sx={{ fontFamily: "monospace" }}
-                                        >
-                                            SES:{" "}
-                                            {cart.session_id?.substring(0, 8) ||
-                                                "N/A"}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2">
-                                            {cart.store?.name || "Main Branch"}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography
-                                            variant="body2"
-                                            fontWeight="medium"
-                                        >
-                                            {cart.customer?.name || "Guest"}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                        >
-                                            {cart.seller
-                                                ? `${cart.seller.first_name} ${cart.seller.last_name || ""}`
-                                                : "Unassigned"}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            // Change .items to .variants to match the Controller's 'with' call
-                                            label={`${cart.variants?.length ?? 0} items`}
-                                            size="small"
-                                            sx={{
-                                                bgcolor: "rgb(var(--on-surface) / 0.1)",
-                                                color: "text.primary",
-                                                fontWeight: 800,
-                                                fontSize: "0.7rem",
-                                            }}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        {dayDateTime(cart.created_at)}
-                                        <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
-                                            <DayTag tag={cart.day} />
-                                            {cart.status === "open" ? <AgeBadge since={cart.updated_at} warnHours={24} lateHours={72} prefix="idle " /> : null}
-                                        </Stack>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <Stack
-                                            direction="row"
-                                            spacing={1}
-                                            justifyContent="flex-end"
-                                        >
-                                            <Tooltip title="View Items">
-                                                <IconButton
-                                                    component={Link}
-                                                    href={route(
-                                                        "admin.carts.show",
-                                                        cart.id,
-                                                    )}
-                                                    size="small"
-                                                    color="info"
-                                                >
-                                                    <VisibilityIcon fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Delete">
-                                                <IconButton
-                                                    onClick={() =>
-                                                        handleDelete(cart.id)
-                                                    }
-                                                    size="small"
-                                                    color="error"
-                                                >
-                                                    <DeleteIcon fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </Stack>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        ) : (
+            <FigureRow>
+                <FigureTile label="Carts" value={(page?.total ?? list.length).toLocaleString()} tone="primary" />
+                <FigureTile label="Open on this page" value={open} tone="success" />
+                <FigureTile label="Empty on this page" value={empty} tone={empty > 0 ? "warning" : "default"} />
+                <FigureTile label="On this page" value={list.length} />
+            </FigureRow>
+
+            <TablePanel>
+                <TableContainer>
+                    <Table size="small" sx={adminTableSx}>
+                        <TableHead>
                             <TableRow>
-                                <TableCell
-                                    colSpan={7}
-                                    align="center"
-                                    sx={{ py: 5 }}
-                                >
-                                    <Typography
-                                        variant="body1"
-                                        color="text.secondary"
-                                    >
-                                        No active carts found.
-                                    </Typography>
-                                </TableCell>
+                                <TableCell>Cart</TableCell>
+                                <TableCell>Store</TableCell>
+                                <TableCell>Customer</TableCell>
+                                <TableCell>Created by</TableCell>
+                                <TableCell>Seller</TableCell>
+                                <TableCell>Status</TableCell>
+                                <TableCell>Started</TableCell>
+                                <TableCell align="right">Actions</TableCell>
                             </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                        </TableHead>
+                        <TableBody>
+                            {list.length > 0 ? (
+                                list.map((cart) => (
+                                    <TableRow key={cart.id}>
+                                        <TableCell>
+                                            <Typography component={Link} href={route("admin.carts.show", cart.id)} sx={{ fontWeight: 800, fontSize: "0.8125rem", color: "primary.main", textDecoration: "none" }}>
+                                                #{cart.id}
+                                            </Typography>
+                                            <Typography sx={{ ...tinySx, fontFamily: "monospace" }}>{cart.session_id?.substring(0, 8) || "no session"}</Typography>
+                                        </TableCell>
+                                        <TableCell>{cart.store?.name || "Main Branch"}</TableCell>
+                                        <TableCell sx={{ fontWeight: 600 }}>{cart.customer?.name || "Guest"}</TableCell>
+                                        <TableCell>{cart.creator || <Box component="span" sx={{ color: "text.disabled" }}>Unknown</Box>}</TableCell>
+                                        <TableCell sx={{ color: "text.secondary" }}>
+                                            {cart.seller ? `${cart.seller.first_name} ${cart.seller.last_name || ""}`.trim() : "Unassigned"}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                                <Pill tone={STATUS_TONE[cart.status?.toLowerCase() ?? ""] ?? "default"} label={cart.status ?? "unknown"} />
+                                                <Pill label={`${cart.variants_count ?? 0} items`} />
+                                            </Stack>
+                                        </TableCell>
+                                        <TableCell>
+                                            {dayDateTime(cart.created_at)}
+                                            <Stack direction="row" spacing={0.5} sx={{ mt: 0.25 }}>
+                                                <DayTag tag={cart.day} />
+                                                {cart.status === "open" ? <AgeBadge since={cart.updated_at} warnHours={24} lateHours={72} prefix="idle " /> : null}
+                                            </Stack>
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                                <Tooltip title="Open: items and history">
+                                                    <IconButton component={Link} href={route("admin.carts.show", cart.id)} size="small" color="info"><VisibilityIcon fontSize="small" /></IconButton>
+                                                </Tooltip>
+                                                {/* A cart that became an order is kept (CartController::destroy). */}
+                                                {cart.status !== "completed" && (
+                                                    <Tooltip title="Delete">
+                                                        <IconButton onClick={() => handleDelete(cart.id)} size="small" color="error"><DeleteIcon fontSize="small" /></IconButton>
+                                                    </Tooltip>
+                                                )}
+                                            </Stack>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={8} align="center" sx={{ py: 5, color: "text.secondary" }}>No carts yet.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </TablePanel>
+
+            <Pager links={page?.links} from={page?.from} to={page?.to} total={page?.total} />
         </Box>
     );
 }
 
-CartsIndex.layout = (page: React.ReactNode) => (
-    <AdminLayout>{page}</AdminLayout>
-);
+CartsIndex.layout = (page: React.ReactNode) => <AppLayout>{page}</AppLayout>;

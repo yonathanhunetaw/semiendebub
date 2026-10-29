@@ -1,4 +1,6 @@
 import { Head, router, useForm } from "@inertiajs/react";
+import { PageBand } from "@/Components/Admin/adminUi";
+import AccountBalanceOutlined from "@mui/icons-material/AccountBalanceOutlined";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
@@ -95,13 +97,13 @@ export default function PaymentAccounts({
         <>
             <Head title="Payment accounts" />
 
-            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} gap={1.5} mb={2}>
-                <Box>
-                    <Typography variant="h5" fontWeight={800}>Payment accounts</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Accounts customers pay into. Sellers see a store&apos;s active collection accounts at checkout;
-                        each account&apos;s owner confirms the deposits.
-                    </Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} gap={1.5} mb={1.5}>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                    <PageBand
+                        icon={<AccountBalanceOutlined />}
+                        title="Payment accounts"
+                        subtitle="Where customers pay in; each account's owner confirms the deposits"
+                    />
                 </Box>
                 <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setEditing("new")} sx={{ flexShrink: 0 }}>
                     Add account

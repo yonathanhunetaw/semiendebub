@@ -27,7 +27,11 @@ test('a ride home: asked for, taken with a free car, driven and done', async ({ 
     const manager = await signIn(browser, 'seller', fixture.manager.email);
     await manager.goto('/work/rides');
     await manager.locator('input[type="datetime-local"]').fill(departs);
-    await manager.getByRole('checkbox', { name: `${fixture.seller.name} · E2E Bole Bulbula` }).check();
+    // Whoever is still clocked in comes pre-ticked; this ride is for the seller alone.
+    const rider = `${fixture.seller.name} · E2E Bole Bulbula`;
+    const riders = manager.locator('form, section').filter({ hasText: 'Who rides' }).last().getByRole('checkbox', { checked: true });
+    while ((await riders.count()) > 0) await riders.first().uncheck();
+    await manager.getByRole('checkbox', { name: rider }).check();
     await manager.getByRole('button', { name: 'Ask for the ride' }).click();
     await expect(flash(manager, /Ride asked for/)).toBeVisible();
 

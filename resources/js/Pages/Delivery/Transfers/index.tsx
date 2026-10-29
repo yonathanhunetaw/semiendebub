@@ -1,6 +1,7 @@
 import React from "react";
 import DeliveryLayout from "@/Layouts/DeliveryLayout";
 import { DeliveryHero } from "@/Components/Delivery/deliveryUi";
+import FlashToast from "@/Components/Shared/FlashToast";
 import { Head, router, usePage } from "@inertiajs/react";
 
 type Tab = "all" | "available" | "mine";
@@ -60,6 +61,8 @@ export default function DeliveryTransfersIndex({ transfers = [], tab = "all", co
     return (
         <>
             <Head title="Transfers" />
+            {/* Claimed, handed over, or refused: the courier hears back (the layout shows no flash). */}
+            <FlashToast />
 
             <DeliveryHero eyebrow="Site to site" title="Transfers" subtitle="Collect at one site, hand over at the next.">
                 <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white/15 p-1">

@@ -13,7 +13,7 @@ import { AppBar, Box, ButtonBase, Dialog, Divider, IconButton, ListItemIcon, Men
 import SearchRounded from "@mui/icons-material/SearchRounded";
 import { ThemeContext } from '@/theme/ThemeContext';
 import type { RoleKey } from "@/theme";
-import RoleAvatar from "@/Components/Visual/RoleAvatar";
+import UserAvatar from "@/Components/Visual/UserAvatar";
 import NotificationsBell from "./NotificationsBell";
 import QuickSearch from "./QuickSearch";
 import RoleSwitcher from "./RoleSwitcher";
@@ -136,8 +136,8 @@ export default function AdminTopBar({ onMenuClick, current }: { onMenuClick: () 
                     aria-expanded={anchor ? "true" : undefined}
                     sx={{ borderRadius: 999, pl: 0.5, pr: { xs: 0.5, lg: 1 }, py: 0.5, gap: 1, flexShrink: 0 }}
                 >
-                    {/* The role's character (see Components/Visual/identities.ts). */}
-                    <RoleAvatar role={roleKey} size={36} title={`${label}: ${name}`} />
+                    {/* Initials in the app's colour (Components/Visual/UserAvatar.tsx). */}
+                    <UserAvatar name={name} role={roleKey} size={36} title={`${label}: ${name}`} />
                     <Box sx={{ display: { xs: "none", lg: "block" }, textAlign: "left", minWidth: 0 }}>
                         <Typography noWrap sx={{ fontSize: "0.6875rem", fontWeight: 700, color: "primary.main", textTransform: "uppercase", letterSpacing: 0.6, lineHeight: 1.3 }}>
                             {label}

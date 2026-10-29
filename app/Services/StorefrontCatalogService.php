@@ -31,6 +31,27 @@ class StorefrontCatalogService
      * The store the public storefront sells from: STOREFRONT_STORE_ID, else
      * the Online Store, else the first active store.
      */
+    /**
+     * The store a storefront request is for (vendor V0: a vendor is a store).
+     * `/s/{slug}` and a `store` field name one by its public slug; without
+     * either it is the default store below, so /shop is unchanged. A slug that
+     * names no open retail store is null, never silently another store.
+     */
+    public function storeForRequest(\Illuminate\Http\Request $request): ?Store
+    {
+        $slug = $request->route('store') ?? $request->input('store');
+
+        if (! is_string($slug) || $slug === '') {
+            return $this->resolveStore();
+        }
+
+        return Store::query()
+            ->where('slug', $slug)
+            ->where('type', Store::TYPE_RETAIL)
+            ->where('status', 'active')
+            ->first();
+    }
+
     public function resolveStore(): ?Store
     {
         $configured = config('storefront.store_id');

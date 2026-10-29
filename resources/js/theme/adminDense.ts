@@ -38,7 +38,7 @@ export function adminDenseTheme(outer: Theme): Theme {
             MuiPaper: {
                 styleOverrides: {
                     rounded: { borderRadius: radius },
-                    outlined: { borderColor: outer.palette.divider },
+                    outlined: { borderColor: outer.palette.divider, backgroundColor: outer.palette.background.paper },
                 },
             },
             MuiCard: {
@@ -65,10 +65,17 @@ export function adminDenseTheme(outer: Theme): Theme {
                     head: {
                         fontSize: '0.6875rem',
                         fontWeight: 700,
+                        letterSpacing: 0.4,
+                        textTransform: 'uppercase',
                         color: outer.palette.text.secondary,
+                        backgroundColor: outer.palette.action.hover,
                         whiteSpace: 'nowrap',
                     },
                 },
+            },
+            // Rows light up under the pointer, as the dashboard's lists do.
+            MuiTableRow: {
+                styleOverrides: { root: { '&.MuiTableRow-hover:hover, tbody &:hover': { backgroundColor: outer.palette.action.hover } } },
             },
             MuiTablePagination: {
                 styleOverrides: {

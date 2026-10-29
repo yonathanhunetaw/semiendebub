@@ -28,6 +28,7 @@ class SellerLocationBoard
         private readonly ItemStockReader $reader,
         private readonly LocationCapacityService $capacity,
         private readonly StockLocationTree $tree,
+        private readonly PackagingLadder $ladder,
     ) {
     }
 
@@ -35,7 +36,7 @@ class SellerLocationBoard
      * One tile per tier, in ladder order. A tier the store does not have (only
      * Main Store has a Remote Hub) comes back with a null id.
      *
-     * @return array<int, array{key: string, label: string, caption: string, icon: string, location_id: int|null, alert: int, pieces: int}>
+     * @return array<int, array{key: string, label: string, caption: string, icon: string, location_id: int|null, alert: int, pieces: int, count: int, unit: string}>
      */
     public function strip(?int $storeId): array
     {
@@ -169,7 +170,33 @@ class SellerLocationBoard
             'alert' => $alert,
             // Smallest-unit total: the one figure that adds up across variants.
             'pieces' => $pair ? $this->reader->metrics($pair[0], $pair[1])['pieces_on_hand'] : 0,
+            // The badge: the shelf counts in each item's smallest packaging, every
+            // other place in its biggest (the same rule as ItemStockReader::displayModeFor).
+            'count' => $pair ? $this->countFor($pair, $key === 'shelf') : 0,
+            'unit' => $key === 'shelf' ? 'smallest' : 'largest',
         ];
+    }
+
+    /**
+     * Stock at a place counted in each item's smallest (shelf) or biggest
+     * packaging, added up across items.
+     *
+     * @param  array{0: string, 1: int}  $pair
+     */
+    private function countFor(array $pair, bool $smallest): int
+    {
+        $perItem = $this->reader->piecesPerItem($pair[0], $pair[1]);
+        $ladders = $this->ladder->forItems(array_keys($perItem));
+        $total = 0.0;
+
+        foreach ($perItem as $itemId => $pieces) {
+            $tiers = $ladders[$itemId] ?? [];
+            $tier = $smallest ? end($tiers) : ($tiers[0] ?? null);
+            $size = max(1, (int) ($tier['pieces'] ?? 1));
+            $total += $pieces / $size;
+        }
+
+        return (int) round($total);
     }
 
     private function belowFloorCount(StockLocation $shelf): int

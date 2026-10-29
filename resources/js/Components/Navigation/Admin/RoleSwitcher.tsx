@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
-import { Box, Button, ButtonBase, Divider, Fab, IconButton, List, ListItemButton, ListItemText, Popover, Tooltip, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, CircularProgress, Divider, Fab, IconButton, List, ListItemButton, ListItemText, Popover, Tooltip, Typography } from "@mui/material";
 import { router, usePage } from "@inertiajs/react";
 import AppIcon from "@/Components/Visual/AppIcon";
 import NineDots from "@/Components/Visual/NineDots";
+import { markAppSwitch } from "@/Components/Shared/NavProgress";
+import UserAvatar from "@/Components/Visual/UserAvatar";
 import { ROLES, getRole, roleUrl, type RoleKey } from "@/theme";
 
 interface OpenableUser {
@@ -69,17 +71,20 @@ export function AppsMenu({ roleKey, current, meHere = true, variant = "pill", he
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [openable, setOpenable] = useState<Openable | null>(null);
     const [app, setApp] = useState<RoleKey | null>(null);
+    const [loading, setLoading] = useState(false);
     const isAdmin = roleKey === "admin";
     const open = Boolean(anchor);
 
     // Fetched when the window opens, so it reflects the user's current roles.
     useEffect(() => {
         if (!open || !isAdmin) return;
+        setLoading(true);
         window
             .fetch("/impersonate/users", { headers: { Accept: "application/json" }, credentials: "same-origin" })
             .then((response) => (response.ok ? response.json() : null))
             .then((data) => setOpenable(data ? { me: data.me ?? "", mine: data.mine ?? [], people: data.people ?? [] } : null))
-            .catch(() => setOpenable(null));
+            .catch(() => setOpenable(null))
+            .finally(() => setLoading(false));
     }, [open, isAdmin]);
 
     const close = () => {
@@ -88,6 +93,8 @@ export function AppsMenu({ roleKey, current, meHere = true, variant = "pill", he
     };
 
     const go = (body: { role: string } | { user_id: number }) => {
+        // The dim keeps this button lit and spinning until the other app opens.
+        markAppSwitch(anchor);
         close();
         router.post("/impersonate", body);
     };
@@ -172,7 +179,7 @@ export function AppsMenu({ roleKey, current, meHere = true, variant = "pill", he
             >
                 {/* Who this is right now, and in which app. */}
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 0.5, pb: 1 }}>
-                    <AppIcon role={current} size={36} />
+                    <UserAvatar name={accountName} role={current} size={36} />
                     <Box sx={{ minWidth: 0 }}>
                         <Typography noWrap sx={{ fontWeight: 800, fontSize: "0.875rem", lineHeight: 1.2 }}>
                             {accountName || "Signed in"}
@@ -195,7 +202,8 @@ export function AppsMenu({ roleKey, current, meHere = true, variant = "pill", he
                             <Typography sx={{ fontWeight: 800, fontSize: "0.9rem" }}>{chosen.label}</Typography>
                         </Box>
                         <List dense disablePadding>
-                            <ListItemButton disabled={meDisabled(chosen.key)} onClick={() => go({ role: chosen.key })} sx={{ borderRadius: 2 }}>
+                            <ListItemButton disabled={meDisabled(chosen.key)} onClick={() => go({ role: chosen.key })} sx={{ borderRadius: 2, gap: 1.25 }}>
+                                <UserAvatar name={openable?.me || accountName} role={chosen.key} size={28} />
                                 <ListItemText
                                     primary={openable?.me ? `Me · ${openable.me}` : "Me"}
                                     secondary={meDisabled(chosen.key) ? "You are here" : undefined}
@@ -203,7 +211,8 @@ export function AppsMenu({ roleKey, current, meHere = true, variant = "pill", he
                                 />
                             </ListItemButton>
                             {peopleOf(chosen.key).map((user) => (
-                                <ListItemButton key={user.id} onClick={() => go({ user_id: user.id })} sx={{ borderRadius: 2 }}>
+                                <ListItemButton key={user.id} onClick={() => go({ user_id: user.id })} sx={{ borderRadius: 2, gap: 1.25 }}>
+                                    <UserAvatar name={user.name} role={user.role_key} size={28} />
                                     <ListItemText primary={user.name} />
                                 </ListItemButton>
                             ))}
@@ -212,9 +221,14 @@ export function AppsMenu({ roleKey, current, meHere = true, variant = "pill", he
                 ) : (
                     /* Step one: only the apps. */
                     <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 0.5 }}>
-                        {openable === null && (
+                        {openable === null && loading && (
+                            <Box role="status" aria-label="Loading apps" sx={{ gridColumn: "1 / -1", display: "grid", placeItems: "center", py: 3 }}>
+                                <CircularProgress size={32} thickness={4.5} />
+                            </Box>
+                        )}
+                        {openable === null && !loading && (
                             <Typography variant="body2" sx={{ gridColumn: "1 / -1", p: 1, color: "text.secondary" }}>
-                                Loading...
+                                Couldn't load the apps. Close this and try again.
                             </Typography>
                         )}
                         {apps.map((role) => {

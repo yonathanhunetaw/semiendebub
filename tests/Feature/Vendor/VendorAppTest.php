@@ -5,214 +5,251 @@ declare(strict_types=1);
 namespace Tests\Feature\Vendor;
 
 use App\Models\Auth\User;
+use App\Models\Finance\Sale;
+use App\Models\Inventory\StockLocation;
 use App\Models\Item\Item;
 use App\Models\Item\ItemVariant;
-use App\Models\Procurement\Purchase;
+use App\Models\Seller\Cart;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
+use App\Models\Store\StoreVariant;
+use App\Models\Vendor\VendorApplication;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * The Vendor app: a supplier sees only the SKUs they own and the purchase
- * orders placed with them, and can edit their own profile.
+ * A vendor is a store (docs/plans/missing-areas-prompt.md §6): a business
+ * applies, a global admin approves (the store and its owner are created) or
+ * rejects; the owner sees their own store in the vendor app; the shop has a
+ * page per store at /s/{slug} while /shop stays the default store.
  */
 class VendorAppTest extends TestCase
 {
     use RefreshDatabase;
 
-    private User $vendor;
+    private User $admin;
 
-    private Store $store;
+    private Store $main;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        foreach (['vendor', 'admin'] as $role) {
+        foreach (['vendor', 'admin', 'user'] as $role) {
             Role::firstOrCreate(['name' => $role]);
         }
 
-        $this->store = Store::factory()->create(['name' => 'Main Store']);
-        $this->vendor = $this->user('vendor');
+        $this->main = Store::factory()->create(['name' => 'Main Store', 'status' => 'active']);
+        config(['storefront.store_id' => $this->main->id]);
 
-        $this->withServerVariables(['HTTP_HOST' => 'vendor.'.config('app.system_domain')]);
-        $this->actingAs($this->vendor);
+        $this->admin = User::factory()->create(['role' => 'admin', 'store_id' => null]);
+        $this->admin->assignRole('admin');
     }
 
-    private function user(string $role, array $overrides = []): User
+    private function on(string $app): self
     {
-        $user = User::factory()->create(['role' => $role] + $overrides);
-        $user->assignRole($role);
-
-        return $user->refresh();
+        return $this->withServerVariables(['HTTP_HOST' => "{$app}.".config('app.system_domain')]);
     }
 
-    private function variantFor(User $owner, string $name = 'Bic Pen'): ItemVariant
+    /** @return array<string, string> */
+    private function application(array $overrides = []): array
     {
-        $item = Item::factory()->create(['product_name' => $name, 'status' => 'active']);
-
-        return ItemVariant::factory()->create(['item_id' => $item->id, 'owner_id' => $owner->id]);
+        return $overrides + [
+            'business_name' => 'Bole Electronics',
+            'contact_first_name' => 'Hanna',
+            'contact_last_name' => 'Tesfaye',
+            'email' => 'hanna@bole.test',
+            'phone_number' => '0911000001',
+            'city' => 'Addis Ababa',
+            'description' => 'Phones and chargers.',
+        ];
     }
 
-    private function purchase(User $vendor, string $status = 'ordered', float $total = 100, array $overrides = []): Purchase
+    private function approved(): Store
     {
-        static $n = 0;
+        $this->on('vendor')->post(route('vendor.apply'), $this->application())->assertSessionHas('success');
+        $this->on('admin')->actingAs($this->admin)
+            ->post(route('admin.vendors.approve', VendorApplication::query()->firstOrFail()))
+            ->assertSessionHas('vendor_handover');
 
-        return Purchase::query()->create($overrides + [
-            'reference_number' => 'PO-'.str_pad((string) ++$n, 4, '0', STR_PAD_LEFT),
-            'store_id' => $this->store->id,
-            'vendor_id' => $vendor->id,
-            'total_amount' => $total,
-            'status' => $status,
-            'user_id' => $this->user('admin')->id,
+        return Store::query()->where('name', 'Bole Electronics')->firstOrFail();
+    }
+
+    // ---- Onboarding ----
+
+    #[Test]
+    public function a_business_applies_and_an_approval_opens_its_store_with_an_owner(): void
+    {
+        $store = $this->approved();
+        $owner = $store->owner;
+
+        $this->assertSame('bole-electronics', $store->slug);
+        $this->assertSame('hanna@bole.test', $store->contact_email);
+        // The owner is that one store's admin, and a vendor.
+        $this->assertSame('admin', $owner->roleKey());
+        $this->assertSame($store->id, (int) $owner->store_id);
+        $this->assertTrue($owner->hasRole('vendor'));
+        // The store has its locations like any store.
+        $this->assertTrue(StockLocation::query()->where('store_id', $store->id)->exists());
+        $this->assertSame(VendorApplication::STATUS_APPROVED, VendorApplication::query()->first()->status);
+    }
+
+    #[Test]
+    public function the_set_password_link_is_shown_once_on_the_vendors_page(): void
+    {
+        $this->approved();
+
+        // The visit right after approving carries the owner's link; the next one does not.
+        $this->on('admin')->actingAs($this->admin)->get(route('admin.vendors.index'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Admin/Vendors/Index')
+                ->where('handover.email', 'hanna@bole.test')
+                ->where('handover.url', fn ($url) => str_contains((string) $url, '/reset-password/'))
+                ->has('applications', 1));
+
+        $this->on('admin')->actingAs($this->admin)->get(route('admin.vendors.index'))
+            ->assertInertia(fn ($page) => $page->where('handover', null));
+    }
+
+    #[Test]
+    public function an_application_needs_a_free_email_and_phone(): void
+    {
+        $taken = User::factory()->create(['email' => 'taken@x.test', 'phone_number' => '0911999999']);
+
+        $this->on('vendor')->post(route('vendor.apply'), $this->application(['email' => $taken->email, 'phone_number' => $taken->phone_number]))
+            ->assertSessionHasErrors(['email', 'phone_number']);
+        $this->assertSame(0, VendorApplication::query()->count());
+    }
+
+    #[Test]
+    public function a_rejection_keeps_the_reason_and_nothing_is_created(): void
+    {
+        $this->on('vendor')->post(route('vendor.apply'), $this->application());
+        $application = VendorApplication::query()->firstOrFail();
+
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.reject', $application), [])->assertSessionHasErrors('reason');
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.reject', $application), ['reason' => 'No trade licence'])->assertSessionHas('success');
+
+        $this->assertSame('No trade licence', $application->fresh()->reject_reason);
+        $this->assertFalse(Store::query()->where('name', 'Bole Electronics')->exists());
+        // Reviewed once: it cannot be approved afterwards.
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.approve', $application))->assertSessionHas('error');
+    }
+
+    #[Test]
+    public function only_a_global_admin_reviews_applications(): void
+    {
+        $this->on('vendor')->post(route('vendor.apply'), $this->application());
+        $storeAdmin = User::factory()->create(['role' => 'admin', 'store_id' => $this->main->id]);
+        $storeAdmin->assignRole('admin');
+
+        $this->on('admin')->actingAs($storeAdmin)->get(route('admin.vendors.index'))->assertForbidden();
+        $this->on('admin')->actingAs($storeAdmin)->post(route('admin.vendors.approve', VendorApplication::query()->first()))->assertForbidden();
+        $this->assertSame(VendorApplication::STATUS_PENDING, VendorApplication::query()->first()->status);
+    }
+
+    #[Test]
+    public function the_owner_signing_in_on_the_vendor_site_stays_there(): void
+    {
+        $store = $this->approved();
+        $store->owner->forceFill(['password' => \Illuminate\Support\Facades\Hash::make('secret-pass')])->save();
+        auth()->logout();
+
+        $location = (string) $this->post('http://vendor.'.config('app.system_domain').'/login', ['email' => $store->owner->email, 'password' => 'secret-pass'])
+            ->assertRedirect()->headers->get('Location');
+
+        // Not sent over to admin.<domain>, although their main role is admin.
+        $this->assertStringNotContainsString('admin.', $location);
+        $this->assertStringContainsString('/dashboard', $location);
+    }
+
+    // ---- The vendor app: their own store only ----
+
+    #[Test]
+    public function the_owner_sees_their_store_and_its_orders_but_not_another_stores(): void
+    {
+        $store = $this->approved();
+        $mine = Sale::query()->create(['store_id' => $store->id, 'total_amount' => 300, 'reference_number' => 'SALE-MINE']);
+        $theirs = Sale::query()->create(['store_id' => $this->main->id, 'total_amount' => 900, 'reference_number' => 'SALE-THEIRS']);
+
+        $this->on('vendor')->actingAs($store->owner)->get(route('vendor.dashboard'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Vendor/Dashboard/index')
+                ->where('store.slug', 'bole-electronics')
+                ->has('recent_orders', 1)
+                ->where('recent_orders.0.reference', 'SALE-MINE'));
+
+        $this->on('vendor')->actingAs($store->owner)->get(route('vendor.orders.show', $mine))->assertOk();
+        $this->on('vendor')->actingAs($store->owner)->get(route('vendor.orders.show', $theirs))->assertNotFound();
+    }
+
+    #[Test]
+    public function the_owner_edits_the_store_profile_but_never_another_store(): void
+    {
+        $store = $this->approved();
+
+        $this->on('vendor')->actingAs($store->owner)->patch(route('vendor.store.update'), [
+            'store_id' => $store->id, 'slug' => 'bole-phones', 'description' => 'Phones.', 'contact_phone' => '0911', 'contact_email' => 'shop@bole.test',
+        ])->assertSessionHas('success');
+        $this->assertSame('bole-phones', $store->fresh()->slug);
+
+        $this->on('vendor')->actingAs($store->owner)->patch(route('vendor.store.update'), [
+            'store_id' => $this->main->id, 'slug' => 'taken-over',
+        ])->assertForbidden();
+        $this->assertNotSame('taken-over', $this->main->fresh()->slug);
+
+        $this->on('vendor')->actingAs($store->owner)->patch(route('vendor.store.update'), [
+            'store_id' => $store->id, 'slug' => 'Not A Slug!',
+        ])->assertSessionHasErrors('slug');
+    }
+
+    #[Test]
+    public function a_vendor_login_with_no_store_sees_that_instead_of_someone_elses(): void
+    {
+        $old = User::factory()->create(['role' => 'vendor']);
+        $old->assignRole('vendor');
+
+        $this->on('vendor')->actingAs($old)->get(route('vendor.dashboard'))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('store', null));
+    }
+
+    // ---- The shop: one page per store ----
+
+    #[Test]
+    public function each_store_has_its_own_shop_page_and_cart_while_shop_stays_the_default(): void
+    {
+        $store = $this->approved();
+        $item = Item::factory()->create(['status' => 'active', 'product_name' => 'USB charger']);
+        $variant = ItemVariant::factory()->create(['item_id' => $item->id]);
+        StoreVariant::factory()->create([
+            'store_id' => $store->id, 'item_id' => $item->id, 'item_variant_id' => $variant->id, 'active' => true,
+            'pricing_matrix' => ['price' => 150.0, 'discount_price' => null, 'discount_ends_at' => null],
         ]);
-    }
+        ItemStock::updateOrCreate(
+            ['item_variant_id' => $variant->id, 'location_type' => Store::class, 'location_id' => $store->id],
+            ['quantity' => 10, 'min_stock_level' => 0],
+        );
 
-    #[Test]
-    public function the_dashboard_shows_my_metrics_orders_and_catalogue(): void
-    {
-        $mine = $this->variantFor($this->vendor);
-        $this->variantFor($this->user('vendor'), 'Not mine');
-        ItemStock::query()->create(['item_variant_id' => $mine->id, 'location_type' => Store::class, 'location_id' => $this->store->id, 'quantity' => 12, 'min_stock_level' => 0]);
-        $this->purchase($this->vendor, 'ordered', 100);
-        $this->purchase($this->vendor, 'received', 250);
-        $this->purchase($this->user('vendor'), 'received', 999);
+        $this->get(route('storefront.store', $store->slug))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('store.id', $store->id)->where('store.explicit', true));
+        $this->get(route('storefront.index'))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('store.id', $this->main->id)->where('store.explicit', false));
+        $this->get(route('storefront.store', 'no-such-store'))->assertNotFound();
 
-        $this->get(route('vendor.dashboard'))->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Vendor/Dashboard/index')
-                ->where('metrics.catalogue_skus', 1)
-                ->where('metrics.units_in_network', 12)
-                ->where('metrics.orders_total', 2)
-                ->where('metrics.orders_pending', 1)
-                ->where('metrics.orders_received', 1)
-                ->where('metrics.revenue_received', fn ($v) => (float) $v === 250.0)
-                ->where('metrics.revenue_pending', fn ($v) => (float) $v === 100.0)
-                ->where('recent_orders', fn ($rows) => count($rows) === 2)
-                ->where('catalogue_preview', fn ($rows) => count($rows) === 1 && $rows[0]['units_in_network'] === 12)
-                ->where('vendor.id', $this->vendor->id));
-    }
-
-    #[Test]
-    public function the_dashboard_opens_for_a_vendor_with_nothing_yet(): void
-    {
-        $this->get(route('vendor.dashboard'))->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->where('metrics.catalogue_skus', 0)
-                ->where('metrics.orders_total', 0)
-                ->where('recent_orders', [])
-                ->where('catalogue_preview', []));
-    }
-
-    #[Test]
-    public function the_catalogue_lists_only_my_skus_and_can_be_searched(): void
-    {
-        $pen = $this->variantFor($this->vendor, 'Bic Pen');
-        $this->variantFor($this->vendor, 'Notebook');
-        $this->variantFor($this->user('vendor'), 'Stapler');
-
-        $this->get(route('vendor.catalogue.index'))->assertOk()
-            ->assertInertia(fn ($page) => $page->component('Vendor/Catalogue/index')->where('pagination.total', 2));
-
-        $this->get(route('vendor.catalogue.index', ['search' => 'Bic']))
-            ->assertInertia(fn ($page) => $page->where('pagination.total', 1)->where('variants.0.id', $pen->id));
-        $this->get(route('vendor.catalogue.index', ['search' => $pen->sku]))
-            ->assertInertia(fn ($page) => $page->where('pagination.total', 1));
-        $this->get(route('vendor.catalogue.index', ['search' => 'Stapler']))
-            ->assertInertia(fn ($page) => $page->where('pagination.total', 0));
-    }
-
-    #[Test]
-    public function the_order_list_shows_only_my_orders_with_counts_filters_and_search(): void
-    {
-        $a = $this->purchase($this->vendor, 'ordered', 100, ['notes' => 'urgent restock']);
-        $this->purchase($this->vendor, 'received', 50);
-        $this->purchase($this->vendor, 'cancelled', 10);
-        $this->purchase($this->user('vendor'), 'ordered', 999);
-        // Internal until approved: a vendor never sees drafts or orders awaiting approval.
-        $this->purchase($this->vendor, 'draft', 70);
-        $this->purchase($this->vendor, 'submitted', 80);
-
-        $this->get(route('vendor.orders.index'))->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Vendor/Orders/index')
-                ->where('counts', ['all' => 3, 'pending' => 1, 'received' => 1, 'canceled' => 1])
-                ->where('pagination.total', 3));
-
-        $this->get(route('vendor.orders.index', ['status' => 'received']))
-            ->assertInertia(fn ($page) => $page->where('pagination.total', 1)->where('orders.0.status', 'received'));
-        $this->get(route('vendor.orders.index', ['search' => $a->reference_number]))
-            ->assertInertia(fn ($page) => $page->where('pagination.total', 1)->where('orders.0.id', $a->id));
-        $this->get(route('vendor.orders.index', ['search' => 'urgent']))
-            ->assertInertia(fn ($page) => $page->where('pagination.total', 1));
-    }
-
-    #[Test]
-    public function a_vendor_opens_their_own_order_but_not_another_vendors(): void
-    {
-        $mine = $this->purchase($this->vendor, 'ordered', 120);
-        $theirs = $this->purchase($this->user('vendor'), 'ordered', 80);
-
-        $this->get(route('vendor.orders.show', $mine))->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Vendor/Orders/Show')
-                ->where('order.reference_number', $mine->reference_number)
-                ->where('order.store', 'Main Store'));
-
-        $this->get(route('vendor.orders.show', $theirs))->assertForbidden();
-    }
-
-    #[Test]
-    public function the_profile_page_shows_the_vendor_and_their_numbers(): void
-    {
-        $this->get(route('vendor.profile.index'))->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Vendor/Profile/index')
-                ->where('vendor.id', $this->vendor->id)
-                ->has('metrics'));
-    }
-
-    #[Test]
-    public function a_vendor_updates_their_profile_and_may_keep_their_own_email_and_phone(): void
-    {
-        $this->vendor->update(['phone_number' => '0911222333']);
-
-        $this->patch(route('vendor.profile.update'), [
-            'first_name' => 'Almaz', 'last_name' => 'T', 'email' => $this->vendor->email, 'phone_number' => '0911222333',
-        ])->assertSessionHasNoErrors()->assertSessionHas('success');
-
-        $this->assertSame('Almaz', $this->vendor->fresh()->first_name);
-    }
-
-    #[Test]
-    public function a_profile_needs_a_name_and_email_and_cannot_take_anothers_email_or_phone(): void
-    {
-        $this->user('vendor', ['email' => 'taken@example.com', 'phone_number' => '0911999888']);
-
-        $this->patch(route('vendor.profile.update'), [])->assertSessionHasErrors(['first_name', 'email']);
-        $this->patch(route('vendor.profile.update'), [
-            'first_name' => 'X', 'email' => 'taken@example.com', 'phone_number' => '0911999888',
-        ])->assertSessionHasErrors(['email', 'phone_number']);
-        $this->patch(route('vendor.profile.update'), [
-            'first_name' => 'X', 'email' => $this->vendor->email, 'phone_number' => str_repeat('1', 16),
-        ])->assertSessionHasErrors('phone_number');
+        // A line added on the store's page lands in that store's cart.
+        $this->post(route('storefront.cart.items.store'), ['store' => $store->slug, 'variant_id' => $variant->id, 'quantity' => 1]);
+        $this->assertTrue(Cart::query()->where('store_id', $store->id)->exists());
+        $this->assertFalse(Cart::query()->where('store_id', $this->main->id)->exists());
     }
 
     #[Test]
     public function a_guest_sees_the_welcome_page_but_not_the_app(): void
     {
-        auth()->logout();
-        $this->app['auth']->forgetGuards();
-
-        $this->get(route('vendor.welcome'))->assertOk()
+        $this->on('vendor')->get(route('vendor.welcome'))->assertOk()
             ->assertInertia(fn ($page) => $page->component('Vendor/Welcome/index'));
 
-        foreach (['vendor.dashboard', 'vendor.catalogue.index', 'vendor.orders.index', 'vendor.profile.index'] as $name) {
-            $this->get(route($name))->assertRedirect(route('vendor.login'));
+        foreach (['vendor.dashboard', 'vendor.catalogue.index', 'vendor.orders.index', 'vendor.store.edit', 'vendor.profile.index'] as $name) {
+            $this->on('vendor')->get(route($name))->assertRedirect(route('vendor.login'));
         }
-        $this->patch(route('vendor.profile.update'), [])->assertRedirect(route('vendor.login'));
     }
 }

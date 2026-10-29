@@ -2,7 +2,7 @@ import React from "react";
 import { Link, usePage } from "@inertiajs/react";
 import { Box, Button, Fab, Tooltip } from "@mui/material";
 import HelpOutlineRounded from "@mui/icons-material/HelpOutlineRounded";
-import RoleAvatar from "@/Components/Visual/RoleAvatar";
+import AppIcon from "@/Components/Visual/AppIcon";
 import type { GuideApp } from "./chapters";
 import { guideHrefFor } from "./guideLinks";
 
@@ -33,7 +33,7 @@ export default function GuideButton({ app, variant = "chip" }: { app: GuideApp; 
 
     return (
         <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1, mt: { xs: -0.5, sm: -1 } }}>
-            <Button component={Link} href={href} size="small" variant="text" startIcon={<RoleAvatar role={app} size={22} />} endIcon={<HelpOutlineRounded fontSize="small" />}
+            <Button component={Link} href={href} size="small" variant="text" startIcon={<AppIcon role={app} size={22} />} endIcon={<HelpOutlineRounded fontSize="small" />}
                 sx={{ borderRadius: 999, fontWeight: 700, px: 1.25, color: "text.secondary", "& .MuiButton-startIcon": { mr: 1 } }}>
                 How this works
             </Button>

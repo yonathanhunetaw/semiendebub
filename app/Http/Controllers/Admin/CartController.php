@@ -39,7 +39,7 @@ class CartController extends Controller
     public function index(ActiveStore $activeStore)
     {
         $carts = $activeStore->apply(Cart::query())
-            ->with(['customer', 'seller', 'store'])
+            ->with(['customer', 'seller', 'store', 'user'])
             ->withCount('variants')
             ->latest()
             ->paginate(15)
@@ -48,6 +48,9 @@ class CartController extends Controller
         // Which business day each cart was started in.
         $days = app(\App\Services\Workforce\DayBook::class);
         $carts->getCollection()->each(fn (Cart $cart) => $cart->setAttribute('day', $days->tag($cart->store_id !== null ? (int) $cart->store_id : null, $cart->created_at)));
+
+        // Who opened each cart (the seller field is who it is handed to).
+        $carts->getCollection()->each(fn (Cart $cart) => $cart->setAttribute('creator', $cart->user ? trim($cart->user->first_name.' '.$cart->user->last_name) : null));
 
         return Inertia::render('Admin/Carts/Index', [
             'carts' => $carts,
@@ -110,7 +113,7 @@ class CartController extends Controller
             'session_id' => (string) mt_rand(100000, 999999),
         ]);
 
-        return redirect()->route('admin.carts.index')->with('message', 'Global cart created.');
+        return redirect()->route('admin.carts.index')->with('success', 'Cart created.');
     }
 
     /**
@@ -118,11 +121,11 @@ class CartController extends Controller
      */
 
 
-    public function show(Cart $cart, ActiveStore $activeStore)
+    public function show(Cart $cart, ActiveStore $activeStore, \App\Services\Admin\CartHistory $history)
     {
         abort_unless($activeStore->allows($cart->store_id !== null ? (int) $cart->store_id : null), 404);
 
-        $cart->load(['customer', 'store', 'seller', 'variants.item', 'variants.itemPackagingType']);
+        $cart->load(['customer', 'store', 'seller', 'user', 'variants.item', 'variants.itemPackagingType']);
 
         $lines = $cart->variants->map(fn ($variant): array => [
             'id' => (int) $variant->id,
@@ -142,10 +145,13 @@ class CartController extends Controller
                 'store' => $cart->store?->name,
                 'seller' => $cart->seller ? trim($cart->seller->first_name.' '.$cart->seller->last_name) : null,
                 'customer' => $cart->customer?->name,
+                'created_by' => $cart->user ? trim($cart->user->first_name.' '.$cart->user->last_name) : null,
                 'created_at' => $cart->created_at?->toIso8601String(),
+                'updated_at' => $cart->updated_at?->toIso8601String(),
                 'items' => $lines,
                 'total' => round($lines->sum(fn (array $l): float => $l['price'] * $l['quantity'] + ($l['extra_piece_price'] ?? 0) * $l['extra_pieces']), 2),
             ],
+            'history' => $history->for($cart),
         ]);
     }
 
@@ -205,6 +211,12 @@ class CartController extends Controller
         $existing = Cart::find($id);
         abort_if($existing !== null && ! $activeStore->allows($existing->store_id !== null ? (int) $existing->store_id : null), 404);
 
+        // As for a seller (CartPolicy::delete): a cart that became an order is
+        // kept, or the order would lose its cart and the cart's history.
+        if ($existing !== null && $existing->status === 'completed') {
+            return redirect()->back()->with('error', 'This cart became an order, so it is kept.');
+        }
+
         try {
             DB::transaction(function () use ($id) {
                 $cart = Cart::findOrFail($id);
@@ -219,7 +231,7 @@ class CartController extends Controller
                 $cart->delete();
             });
 
-            return redirect()->back()->with('message', 'Cart and its items were successfully removed.');
+            return redirect()->back()->with('success', 'Cart and its items were removed.');
 
         } catch (\Exception $e) {
             Log::error("Failed to delete cart {$id}: " . $e->getMessage());

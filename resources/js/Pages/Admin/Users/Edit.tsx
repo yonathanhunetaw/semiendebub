@@ -1,4 +1,6 @@
 import AdminLayout from "@/Layouts/AppLayout";
+import { PageBand } from "@/Components/Admin/adminUi";
+import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
 import { Head, useForm, Link } from "@inertiajs/react";
 import { Box, Button, Paper, Stack, TextField, Typography, MenuItem, Alert, Checkbox, FormControlLabel } from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -65,14 +67,16 @@ export default function EditUser({ user, roles = [], also_role_options = [], can
         <Box sx={{ maxWidth: 800, mx: "auto" }}>
             <Head title={`Edit ${user.first_name}`} />
 
-            <Stack direction="row" spacing={2} alignItems="center" mb={4}>
-                <Button component={Link} href={route('admin.users.index')} startIcon={<ArrowBackIcon />}>
-                    Back
-                </Button>
-                <Typography variant="h4" fontWeight="bold">Edit User: {user.first_name}</Typography>
-            </Stack>
+            <Box sx={{ mb: 1.5 }}>
+                <PageBand
+                    icon={<PeopleAltOutlined />}
+                    title={`Edit ${user.first_name}`}
+                    subtitle="Change their details, roles and password"
+                    actions={<Button component={Link} href={route('admin.users.index')} size="small" variant="contained" disableElevation startIcon={<ArrowBackIcon />} sx={{ bgcolor: "background.paper", color: "primary.main", fontWeight: 800, "&:hover": { bgcolor: "background.paper" } }}>All users</Button>}
+                />
+            </Box>
 
-            <Paper sx={{ p: 4, maxWidth: 800, mx: 'auto', boxShadow: 3 }}>
+            <Paper elevation={0} variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 800, mx: 'auto' }}>
                 <Alert severity="info" sx={{ mb: 3 }}>Leave password blank to keep current password.</Alert>
                 <form onSubmit={handleSubmit}>
                     <Grid container spacing={3}>

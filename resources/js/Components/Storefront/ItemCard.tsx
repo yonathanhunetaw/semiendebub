@@ -10,6 +10,7 @@ import {
     hasImage,
     resolveImage,
 } from "./storefrontConstants";
+import useShopLinks from "@/Components/Storefront/useShopLinks";
 
 export interface ItemCardProps {
     item: StorefrontItemCard;
@@ -28,13 +29,14 @@ export default function ItemCard({
     item,
     quantityInCart = 0,
 }: ItemCardProps): React.ReactElement {
+    const shop = useShopLinks();
     const tone = STOCK_TONES[item.stock_status];
     const isOutOfStock = item.stock_status === "out_of_stock";
     const hasChoices = item.variant_count > 1;
 
     return (
         <Link
-            href={route("storefront.items.show", item.id)}
+            href={shop.item(item.id)}
             className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-outline-variant/80 bg-surface-container-lowest shadow-sm transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40"
             aria-label={`View options for ${item.title}`}
         >

@@ -176,4 +176,36 @@ class ShopClockTest extends TestCase
         $this->travelToLocal('2026-10-20 01:00');
         $this->assertSame('overdue', app(PayablesLedger::class)->installment($installment)['state']);
     }
+
+    #[Test]
+    public function the_guide_world_window_is_the_shops_day_not_the_utc_day(): void
+    {
+        // 01:00 on the 20th at the shops is 22:00 on the 19th in UTC.
+        $this->travelToLocal('2026-10-20 01:00');
+
+        $request = \App\Http\Requests\Guide\WorldShipmentsRequest::create('/guide/world', 'GET');
+        $this->assertSame('2026-10-19 21:00:00', $request->from()->utc()->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-10-20 20:59:59', $request->to()->utc()->format('Y-m-d H:i:s'));
+
+        $asked = \App\Http\Requests\Guide\WorldShipmentsRequest::create('/guide/world', 'GET', ['from' => '2026-10-18', 'to' => '2026-10-19']);
+        $this->assertSame('2026-10-17 21:00:00', $asked->from()->utc()->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-10-19 20:59:59', $asked->to()->utc()->format('Y-m-d H:i:s'));
+    }
+
+    #[Test]
+    public function a_discount_runs_through_the_shops_day_it_ends_on(): void
+    {
+        $sv = \App\Models\Store\StoreVariant::factory()->create([
+            'pricing_matrix' => ['price' => 100, 'discount_price' => 80, 'discount_ends_at' => '2026-10-20'],
+        ]);
+        $price = fn (): ?float => \App\Services\PriceProvider::getFinalPrice(\App\Services\PriceProvider::getPriceLadder((int) $sv->id, (int) $sv->store_id));
+
+        // 23:00 on the 20th at the shops (20:00 UTC): still the last day of the discount.
+        $this->travelToLocal('2026-10-20 23:00');
+        $this->assertSame(80.0, $price());
+
+        // The next shops' morning it is over.
+        $this->travelToLocal('2026-10-21 00:30');
+        $this->assertSame(100.0, $price());
+    }
 }

@@ -84,25 +84,38 @@ class SellerWritePathsTest extends TestCase
         $this->get(route('seller.carts.edit', $cart))->assertOk()
             ->assertInertia(fn ($page) => $page->component('Seller/Carts/Edit')->where('cart.id', $cart->id));
 
+        // What the Edit page sends: the customer and seller, never a status.
         $customer = $this->customer();
-        $this->put(route('seller.carts.update', $cart), ['customer_id' => $customer->id, 'status' => 'processing'])
+        $this->put(route('seller.carts.update', $cart), ['customer_id' => $customer->id])
             ->assertRedirect(route('seller.carts.show', $cart->id));
 
         $cart->refresh();
         $this->assertSame($customer->id, (int) $cart->customer_id);
-        $this->assertSame('processing', $cart->status);
+        $this->assertSame('open', $cart->status);
     }
 
     #[Test]
-    public function a_cart_update_needs_a_real_customer_and_a_known_status(): void
+    public function a_cart_update_needs_a_real_customer_and_never_moves_the_status(): void
     {
         $cart = $this->cart($this->store);
 
-        $this->put(route('seller.carts.update', $cart), [])->assertSessionHasErrors(['customer_id', 'status']);
-        $this->put(route('seller.carts.update', $cart), ['customer_id' => $this->customer()->id, 'status' => 'shipped'])
-            ->assertSessionHasErrors('status');
+        $this->put(route('seller.carts.update', $cart), [])->assertSessionHasErrors(['customer_id']);
+        // A status sent anyway is ignored: only checkout completes a cart.
+        $this->put(route('seller.carts.update', $cart), ['customer_id' => $this->customer()->id, 'status' => 'completed']);
 
         $this->assertSame('open', $cart->fresh()->status);
+    }
+
+    #[Test]
+    public function a_sold_cart_cannot_be_edited_or_reopened(): void
+    {
+        $cart = $this->cart($this->store);
+        $cart->update(['status' => 'completed']);
+
+        $this->put(route('seller.carts.update', $cart), ['customer_id' => $this->customer()->id, 'status' => 'open'])
+            ->assertSessionHas('error');
+
+        $this->assertSame('completed', $cart->fresh()->status);
     }
 
     #[Test]

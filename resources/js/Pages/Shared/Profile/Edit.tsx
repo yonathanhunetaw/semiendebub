@@ -11,7 +11,7 @@ import FinanceLayout from "@/Layouts/FinanceLayout";
 import SharedLayout from "@/Layouts/SharedLayout";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import VendorLayout from "@/Layouts/VendorLayout";
-import RoleAvatar from "@/Components/Visual/RoleAvatar";
+import UserAvatar from "@/Components/Visual/UserAvatar";
 import { identityFor } from "@/Components/Visual/identities";
 import { SUBDOMAIN_TO_ROLE, type RoleKey } from "@/theme";
 import DeleteUserForm from "./Partials/DeleteUserForm";
@@ -59,7 +59,7 @@ export default function Edit({ mustVerifyEmail, status }: { mustVerifyEmail?: bo
             {/* Who you are, in the app's own colours */}
             <Paper elevation={0} sx={{ ...cardSx, mb: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap",
                 background: `linear-gradient(135deg, ${alpha(theme.palette[identity.color].main, 0.14)} 0%, transparent 70%)` }}>
-                <RoleAvatar role={roleKey} size={64} />
+                <UserAvatar name={name} role={roleKey} size={64} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="overline" sx={{ color: `${identity.color}.main`, fontWeight: 800, lineHeight: 1.4 }}>{identity.label}</Typography>
                     <Typography sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" }, fontWeight: 900, lineHeight: 1.2 }} noWrap>{name}</Typography>

@@ -1,124 +1,64 @@
 /**
- * Centralized TypeScript contracts for the Vendor module
- * (resources/js/Pages/Vendor/**).
- *
- * Mirrors App\Services\VendorService. A vendor is a User with role `vendor`,
- * linked to the business by `item_variants.owner_id` (SKUs they supply) and
- * `purchases.vendor_id` (orders placed with them).
+ * The vendor app's shapes. A vendor is a store (docs/plans/missing-areas-prompt.md §6):
+ * App\Services\Vendor\VendorStore presents it.
  */
 
-/** Mirrors the `purchases.status` ENUM — note the single-l "canceled". */
+/** Old purchase-order buckets, still drawn by OrderStatusChip / StatusPill. */
 export type PurchaseOrderStatus = "pending" | "received" | "canceled";
 
-export interface VendorMetrics {
-    catalogue_skus: number;
-    /** Units of this vendor's SKUs held anywhere in the network. */
-    units_in_network: number;
-    orders_total: number;
-    orders_pending: number;
-    orders_received: number;
-    orders_canceled: number;
-    revenue_received: number;
-    revenue_pending: number;
-}
-
-export interface VendorVariant {
-    id: number;
-    sku: string | null;
-    barcode: string | null;
-    product_name: string;
-    category: string | null;
-    color: string | null;
-    size: string | null;
-    packaging: string | null;
-    pieces_per_unit: number;
-    image_url: string | null;
-    status: string | null;
-    units_in_network: number;
-}
-
-export interface PurchaseOrder {
-    id: number;
-    reference_number: string;
-    status: PurchaseOrderStatus;
-    total_amount: number;
-    store: string | null;
-    warehouse: string | null;
-    raised_by: string | null;
-    notes: string | null;
-    purchased_at: string | null;
-    expected_at: string | null;
-    created_at: string | null;
-}
-
-export interface OrderStatusCounts {
-    all: number;
-    pending: number;
-    received: number;
-    canceled: number;
-}
-
-export interface VendorIdentity {
+export interface VendorStoreProfile {
     id: number;
     name: string;
-    email: string;
+    slug: string | null;
+    description: string | null;
+    contact_phone: string | null;
+    contact_email: string | null;
+    location: string | null;
+    status: string | null;
+    /** /s/{slug} on the shop. */
+    public_url: string | null;
+    owner: string | null;
 }
 
-export interface VendorProfileDetails {
+export interface VendorStoreMetrics {
+    listed_items: number;
+    orders_30d: number;
+    revenue_30d: number;
+    to_pay: number;
+    to_pack: number;
+    to_deliver: number;
+}
+
+export interface VendorOrderRow {
     id: number;
-    first_name: string | null;
-    last_name: string | null;
-    email: string;
-    phone_number: string | null;
-    role: string | null;
+    reference: string;
+    customer: string;
+    total: number;
+    payment_status: string;
+    stage: string;
+    stage_label: string;
+    lines: number;
+    placed_at: string | null;
 }
 
-export interface Pagination {
+export interface VendorOrderDetail extends VendorOrderRow {
+    items: Array<{ id: number; item: string; sku: string | null; quantity: number; unit_price: number; subtotal: number }>;
+}
+
+export interface VendorCatalogueRow {
+    id: number;
+    item: string;
+    sku: string | null;
+    price: number | null;
+    active: boolean;
+}
+
+export interface Paginated<T> {
+    data: T[];
     current_page: number;
     last_page: number;
     total: number;
-}
-
-export interface Flash {
-    success?: string | null;
-    error?: string | null;
-}
-
-export interface SharedProps {
-    flash?: Flash;
-}
-
-/* ----------------------------------------------------------
- | Page props
- |----------------------------------------------------------*/
-
-export interface VendorDashboardProps extends SharedProps {
-    metrics: VendorMetrics;
-    recent_orders: PurchaseOrder[];
-    catalogue_preview: VendorVariant[];
-    vendor: VendorIdentity;
-}
-
-export interface VendorCatalogueProps extends SharedProps {
-    variants: VendorVariant[];
-    metrics: VendorMetrics;
-    filters: { search: string };
-    pagination: Pagination;
-}
-
-export interface VendorOrdersProps extends SharedProps {
-    orders: PurchaseOrder[];
-    counts: OrderStatusCounts;
-    metrics: VendorMetrics;
-    filters: { status: string; search: string };
-    pagination: Pagination;
-}
-
-export interface VendorOrderShowProps extends SharedProps {
-    order: PurchaseOrder;
-}
-
-export interface VendorProfileProps extends SharedProps {
-    vendor: VendorProfileDetails;
-    metrics: VendorMetrics;
+    from: number | null;
+    to: number | null;
+    links: Array<{ url: string | null; label: string; active: boolean }>;
 }

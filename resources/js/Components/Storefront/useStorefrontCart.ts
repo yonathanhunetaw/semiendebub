@@ -1,4 +1,4 @@
-import { router } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import React from "react";
 
 import type {
@@ -64,6 +64,10 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
         only: ["cart", "flash"],
     };
 
+    // On a store's own page (/s/{slug}) every cart call names that store.
+    const storeProp = (usePage().props as { store?: { slug?: string | null; explicit?: boolean } | null }).store;
+    const storeField: Record<string, string> = storeProp?.explicit && storeProp.slug ? { store: storeProp.slug } : {};
+
     const addVariant = (
         variant: StorefrontVariantOption,
         quantity: number,
@@ -74,6 +78,7 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
         router.post(
             route("storefront.cart.items.store"),
             {
+                ...storeField,
                 variant_id: variant.id,
                 quantity,
                 // Counts only. The rate for each is prorated from the chosen
@@ -97,7 +102,7 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
 
         router.patch(
             route("storefront.cart.items.update", line.variant_id),
-            { quantity: Math.max(0, quantity) },
+            { ...storeField, quantity: Math.max(0, quantity) },
             { ...cartVisitOptions, onFinish: () => setIsMutating(false) },
         );
     };
@@ -106,6 +111,7 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
         setIsMutating(true);
 
         router.delete(route("storefront.cart.items.destroy", line.variant_id), {
+            data: storeField,
             ...cartVisitOptions,
             onFinish: () => setIsMutating(false),
         });
@@ -120,7 +126,7 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
 
         router.post(
             route("storefront.checkout"),
-            { accept_delayed_items: acceptDelay },
+            { ...storeField, accept_delayed_items: acceptDelay },
             { preserveScroll: true, onFinish: () => setIsMutating(false) },
         );
     };

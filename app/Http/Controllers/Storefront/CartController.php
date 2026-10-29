@@ -32,7 +32,7 @@ class CartController extends Controller
 
     public function store(StoreCartItemRequest $request): RedirectResponse
     {
-        $store = $this->catalog->resolveStore();
+        $store = $this->catalog->storeForRequest($request);
 
         if (! $store) {
             return back()->with('error', 'The storefront is currently unavailable.');
@@ -93,7 +93,7 @@ class CartController extends Controller
 
     public function update(UpdateCartItemRequest $request, ItemVariant $variant): RedirectResponse
     {
-        $store = $this->catalog->resolveStore();
+        $store = $this->catalog->storeForRequest($request);
         $cart = $store ? $this->cartService->currentBuyerCart($store) : null;
 
         if (! $store || ! $cart) {
@@ -112,9 +112,9 @@ class CartController extends Controller
         return back();
     }
 
-    public function destroy(ItemVariant $variant): RedirectResponse
+    public function destroy(\Illuminate\Http\Request $request, ItemVariant $variant): RedirectResponse
     {
-        $store = $this->catalog->resolveStore();
+        $store = $this->catalog->storeForRequest($request);
         $cart = $store ? $this->cartService->currentBuyerCart($store) : null;
 
         if ($store && $cart) {
@@ -141,7 +141,7 @@ class CartController extends Controller
      */
     public function checkout(CheckoutRequest $request): RedirectResponse
     {
-        $store = $this->catalog->resolveStore();
+        $store = $this->catalog->storeForRequest($request);
         $cart = $store ? $this->cartService->currentBuyerCart($store) : null;
 
         if (! $store || ! $cart || $cart->variants()->count() === 0) {

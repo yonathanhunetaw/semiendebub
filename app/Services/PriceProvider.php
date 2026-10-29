@@ -4,7 +4,6 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Carbon\Carbon;
 
 class PriceProvider
 {
@@ -157,15 +156,15 @@ class PriceProvider
 
     protected static function formatMatrixPrice(string $level, array $row): array
     {
-        $now = Carbon::now();
-
         $price = $row['price'] ?? 0.00;
         $discount = $row['discount_price'] ?? null;
         $endsAt = $row['discount_ends_at'] ?? null;
 
-        $final = ($discount && (!$endsAt || $now->lt(Carbon::parse($endsAt))))
-            ? $discount
-            : $price;
+        // A discount runs through the shops' day it ends on (the date pickers
+        // send a bare date), the same rule ItemReadiness and the Customers page
+        // use. Read as a UTC instant it stopped at 03:00 on its last morning.
+        $running = ! $endsAt || \App\Services\Workforce\LocalTime::dateOf() <= \App\Services\Workforce\LocalTime::dateText((string) $endsAt);
+        $final = ($discount && $running) ? $discount : $price;
 
         return [
             'level' => $level,

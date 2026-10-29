@@ -287,14 +287,25 @@ class CartController extends Controller
                     $fail('That customer is not one of this store\'s customers.');
                 }
             }],
-            'seller_id' => 'nullable|exists:users,id',
-            'status' => 'required|in:open,processing,completed,canceled',
+            // Another seller of the same store, never someone elsewhere.
+            'seller_id' => ['nullable', function ($attribute, $value, $fail) use ($cart) {
+                $seller = User::query()->whereKey($value)->first(['id', 'role', 'store_id']);
+                if ($seller === null || $seller->role !== 'seller' || (int) $seller->store_id !== (int) $cart->store_id) {
+                    $fail('Pick a seller of this store.');
+                }
+            }],
         ]);
+
+        // Only an open cart changes hands. Its status moves through checkout
+        // alone: a form that could set it would complete a cart with no sale,
+        // or reopen a sold one and sell it twice.
+        if ($cart->status !== 'open') {
+            return back()->with('error', 'This cart is no longer open, so it cannot be changed.');
+        }
 
         $cart->update([
             'customer_id' => $request->customer_id,
             'seller_id' => $request->seller_id,
-            'status' => $request->status,
         ]);
 
         return redirect()->route('seller.carts.show', $cart->id)
