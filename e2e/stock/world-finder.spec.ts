@@ -56,8 +56,9 @@ test('Director faces the door, the hub item finder marks an item, and the contro
     await test.step('the finder lists what the hub holds, and choosing an item marks it', async () => {
         await expect(page.getByTestId('item-finder')).toBeVisible();
         // A small search button until tapped (it once was a bar across the screen).
+        // Opening it focuses the box with the list already showing (another tap on the box would close the list).
         await page.getByTestId('item-finder-open').click();
-        await page.getByTestId('item-finder-input').click();
+        await expect(page.getByTestId('item-finder-input')).toBeFocused();
         const first = page.getByRole('option').first();
         await expect(first).toBeVisible();
         const name = (await first.locator('p, span').first().innerText()).trim();
@@ -98,8 +99,9 @@ test('Director faces the door, the hub item finder marks an item, and the contro
         await page.screenshot({ path: 'test-results/finder-6b-phone.png' });
         await page.setViewportSize({ width: 1180, height: 700 });
         await page.waitForTimeout(800);
+        // Opening it focuses the box with the list already showing (another tap on the box would close the list).
         await page.getByTestId('item-finder-open').click();
-        await page.getByTestId('item-finder-input').click();
+        await expect(page.getByTestId('item-finder-input')).toBeFocused();
         await page.getByRole('option').first().click();
         await expect(page.getByRole('button', { name: 'Walk there' })).toBeVisible();
         await page.waitForTimeout(1800);
