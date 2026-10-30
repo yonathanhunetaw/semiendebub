@@ -24,6 +24,8 @@ class AppServiceProvider extends ServiceProvider
         // One answer per request (or queued job) to "which store is the admin
         // app looking at"; see ActiveStore.
         $this->app->scoped(\App\Services\Admin\ActiveStore::class);
+        // Remembers the stores it has read (with their managers) for the rest of the request.
+        $this->app->scoped(\App\Services\Inventory\StockPermissions::class);
 
         // The calendar's receipt reader (Claude; off until ANTHROPIC_API_KEY is set).
         $this->app->bind(\App\Services\Documents\ReceiptReader::class, \App\Services\Documents\ClaudeReceiptReader::class);

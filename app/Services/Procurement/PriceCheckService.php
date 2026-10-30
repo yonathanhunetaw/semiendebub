@@ -278,7 +278,7 @@ class PriceCheckService
      */
     public function nameableStaff(?User $admin): array
     {
-        if ($admin === null || ! in_array($admin->roleKey(), ['admin', 'dev'], true)) {
+        if ($admin === null || (! in_array($admin->roleKey(), ['admin', 'dev'], true) && ! $admin->isGlobalAdmin())) {
             return [];
         }
 

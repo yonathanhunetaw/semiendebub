@@ -111,7 +111,7 @@ class Cart extends Model
         // roleKey(), not `role`: the latter is the display form. A global
         // admin (no store) sees every cart; a store admin and everyone else,
         // their own store's. Admin screens scope through ActiveStore instead.
-        if ($user->isRole('admin') && $user->store_id === null) {
+        if ($user->isGlobalAdmin()) {
             return $query;
         }
 

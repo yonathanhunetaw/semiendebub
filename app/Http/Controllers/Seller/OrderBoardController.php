@@ -26,6 +26,7 @@ use App\Services\Fulfillment\SellerOrderBoard;
 use App\Services\Fulfillment\SellerOrderService;
 use App\Services\Inventory\StockPools;
 use App\Services\StockService;
+use App\Services\Workforce\LocalTime;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -305,7 +306,7 @@ class OrderBoardController extends Controller
             'reference' => 'CART-'.$cart->id,
             'customer' => $cart->customer?->name ?? 'Walk-in customer',
             'stage' => 'to_pay',
-            'placed' => now()->format('l, M j · H:i'),
+            'placed' => LocalTime::now()->format('l, M j · H:i'),
             'lines' => $lines,
             'destination' => [
                 'name' => $cart->customer?->name ?? $storeName,

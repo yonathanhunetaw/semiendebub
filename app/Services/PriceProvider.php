@@ -7,6 +7,15 @@ use Illuminate\Support\Facades\Schema;
 
 class PriceProvider
 {
+    /** @var array<string, true> Tables already found, so a list of 80 variants does not ask information_schema 160 times. */
+    private static array $tables = [];
+
+    /** Schema::hasTable, remembered once true (a missing table is asked again, so a later migration is seen). */
+    private static function hasTable(string $table): bool
+    {
+        return isset(self::$tables[$table]) || (Schema::hasTable($table) && (self::$tables[$table] = true));
+    }
+
     /**
      * Get the full price ladder for a store variant
      *
@@ -57,7 +66,7 @@ class PriceProvider
             }
         }
 
-        if ($isIndividual && Schema::hasTable('store_variants_individual_prices')) {
+        if ($isIndividual && self::hasTable('store_variants_individual_prices')) {
             $individual = DB::table('store_variants_individual_prices')
                 ->where('store_variant_id', $storeVariantId)
                 ->where('active', 1)
@@ -70,7 +79,7 @@ class PriceProvider
         }
 
         // 3️⃣ Seller override
-        if ($sellerId && Schema::hasTable('store_variants_seller_prices')) {
+        if ($sellerId && self::hasTable('store_variants_seller_prices')) {
             $seller = DB::table('store_variants_seller_prices')
                 ->where('store_variant_id', $storeVariantId)
                 ->where('seller_id', $sellerId)
@@ -87,7 +96,7 @@ class PriceProvider
         }
 
         // 4️⃣ Customer override
-        if ($customerId && Schema::hasTable('store_variants_customer_prices')) {
+        if ($customerId && self::hasTable('store_variants_customer_prices')) {
             $customer = DB::table('store_variants_customer_prices')
                 ->where('store_variant_id', $storeVariantId)
                 ->where('customer_id', $customerId)

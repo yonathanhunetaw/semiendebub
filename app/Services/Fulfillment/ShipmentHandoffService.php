@@ -163,7 +163,7 @@ class ShipmentHandoffService
     /** May this user perform this step on this shipment at all? */
     public function mayAct(Shipment $shipment, string $step, User $user): bool
     {
-        if (in_array($user->roleKey(), ['admin', 'dev'], true)) {
+        if (in_array($user->roleKey(), ['admin', 'dev'], true) || $user->isGlobalAdmin()) {
             return true;
         }
 

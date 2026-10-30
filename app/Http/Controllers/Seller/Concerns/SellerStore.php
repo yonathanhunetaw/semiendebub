@@ -27,7 +27,7 @@ trait SellerStore
             return (int) $user->store_id;
         }
 
-        $global = $user->roleKey() === 'dev' || $user->roleKey() === 'admin';
+        $global = $user->roleKey() === 'dev' || $user->isGlobalAdmin();
 
         return $global ? null : 0;
     }

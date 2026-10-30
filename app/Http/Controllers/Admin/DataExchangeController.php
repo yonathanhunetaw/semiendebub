@@ -86,7 +86,7 @@ class DataExchangeController extends Controller
     /** One zip with a CSV per dataset and a README.csv that lists them. Each file goes through a temp file, so a big ledger is never held in memory. */
     public function everything(): BinaryFileResponse
     {
-        set_time_limit(300);
+        $this->allowLongRun();
         $path = tempnam(sys_get_temp_dir(), 'duka-data-');
         $zip = new ZipArchive();
         $zip->open($path, ZipArchive::OVERWRITE);
@@ -114,7 +114,7 @@ class DataExchangeController extends Controller
 
     public function import(ImportCsvRequest $request, string $dataset): RedirectResponse
     {
-        set_time_limit(300);
+        $this->allowLongRun();
         $set = $this->find($dataset);
         abort_unless($set->importable(), 404);
 
@@ -156,7 +156,7 @@ class DataExchangeController extends Controller
     /** Puts items in a store (switched off, no price). Same two steps as an import: check, then apply. */
     public function deploy(DeployItemsRequest $request): RedirectResponse
     {
-        set_time_limit(300);
+        $this->allowLongRun();
         $store = Store::query()->findOrFail((int) $request->validated('store_id'));
         [$plan, $errors] = $this->deployer->plan($store, (string) $request->validated('scope'), $request->validated('csv'));
 
@@ -174,6 +174,17 @@ class DataExchangeController extends Controller
         $this->audit('deploy', $request->user()->id, $plan, $log, (string) $request->validated('csv'));
 
         return redirect()->route('admin.data.index')->with('success', "{$plan->created} items put in {$store->name}, switched off. Set their prices to put them on sale.");
+    }
+
+    /**
+     * Gives a big export or import five minutes. Web requests only: the console has no limit, and setting one
+     * there caps the whole process, so a PHPUnit run died 300 s after the first DataExchange test.
+     */
+    private function allowLongRun(): void
+    {
+        if (! app()->runningInConsole()) {
+            set_time_limit(300);
+        }
     }
 
     private function find(string $key): Dataset

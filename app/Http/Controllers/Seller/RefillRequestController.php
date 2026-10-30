@@ -14,6 +14,7 @@ use App\Http\Requests\Inventory\UpdateRefillQuantityRequest;
 use App\Models\Fulfillment\Shipment;
 use App\Models\Inventory\RefillRequest;
 use App\Models\Inventory\StockLocation;
+use App\Services\Admin\ActiveStore;
 use App\Services\Inventory\RefillBoard;
 use App\Services\Inventory\RefillWorkflow;
 use App\Services\Inventory\StockPermissions;
@@ -39,15 +40,20 @@ class RefillRequestController extends Controller
      * The store's waiting list. Everyone in the store sees it; only its
      * managers act on it (each row carries what the viewer may do).
      */
-    public function index(Request $request, RefillBoard $board, StockPermissions $permissions): Response
+    public function index(Request $request, RefillBoard $board, StockPermissions $permissions, ActiveStore $activeStore): Response
     {
         $user = $request->user();
         $storeId = $user?->store_id !== null ? (int) $user->store_id : null;
 
         // An admin looks at a store by ?store=, if it is one they run.
-        if (in_array($user?->roleKey(), ['admin', 'dev'], true) && $request->filled('store')) {
+        if ((in_array($user?->roleKey(), ['admin', 'dev'], true) || $user?->isGlobalAdmin()) && $request->filled('store')) {
             $storeId = $request->integer('store');
             abort_unless($permissions->isAdminOf($user, $storeId), 403, 'That store is not yours to look at.');
+        }
+
+        // A global admin who names no store sees the one picked in the admin app, else the first shop.
+        if ($storeId === null && $activeStore->isGlobal()) {
+            $storeId = $activeStore->store()?->id ?? $activeStore->accessibleStores()->first()?->id;
         }
 
         abort_if($storeId === null, 404, 'You are not assigned to a store.');

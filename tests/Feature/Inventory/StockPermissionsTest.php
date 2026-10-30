@@ -301,6 +301,21 @@ class StockPermissionsTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('storeId', $this->store->id));
     }
 
+    #[Test]
+    public function a_global_admin_who_names_no_store_lands_on_a_store_instead_of_a_404(): void
+    {
+        $globalAdmin = $this->user('admin', null);
+
+        $this->actingAs($globalAdmin)
+            ->get(route('seller.refills.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('storeId', $this->store->id));
+        $this->actingAs($globalAdmin)
+            ->get(route('stock_keeper.shelving.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('storeId', $this->store->id));
+    }
+
     private function at(string $kind, ?int $storeId = null): StockLocation
     {
         return StockLocation::query()->where('store_id', $storeId ?? $this->store->id)->where('kind', $kind)->sole();

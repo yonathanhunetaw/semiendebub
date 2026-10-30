@@ -29,7 +29,7 @@ class TransferPolicy
 
     public function view(User $user, Transfer $transfer): bool
     {
-        if ($user->isRole('admin')) {
+        if ($this->isAdmin($user)) {
             return $this->adminReaches($user, $transfer);
         }
 
@@ -49,7 +49,7 @@ class TransferPolicy
             return false;
         }
 
-        if ($user->isRole('admin')) {
+        if ($this->isAdmin($user)) {
             return $this->adminReaches($user, $transfer);
         }
 
@@ -86,14 +86,14 @@ class TransferPolicy
             return false;
         }
 
-        return ($user->isRole('admin') && $this->adminReaches($user, $transfer))
+        return ($this->isAdmin($user) && $this->adminReaches($user, $transfer))
             || $user->isRole('stock_keeper')
             || $this->belongsToUsersStore($user, $transfer);
     }
 
     public function cancel(User $user, Transfer $transfer): bool
     {
-        return ($user->isRole('admin') && $this->adminReaches($user, $transfer))
+        return ($this->isAdmin($user) && $this->adminReaches($user, $transfer))
             || $user->isRole('stock_keeper')
             || $this->belongsToUsersStore($user, $transfer);
     }
@@ -122,5 +122,11 @@ class TransferPolicy
 
         return (int) $transfer->to_store_id === $storeId
             || (int) $transfer->from_store_id === $storeId;
+    }
+
+    /** An admin here, or a global admin standing in another app (isRole follows the host). */
+    private function isAdmin(User $user): bool
+    {
+        return $user->isRole('admin') || $user->isGlobalAdmin();
     }
 }

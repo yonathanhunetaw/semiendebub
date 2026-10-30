@@ -25,7 +25,7 @@ class WarehousePolicy
     /** Admins see the whole network; everyone else sees what they manage. */
     public function viewAny(User $user): bool
     {
-        return $user->isRole('admin')
+        return $this->isAdmin($user)
             || $user->can('oversee warehouse')
             || $user->managedFacilityCount() > 0;
     }
@@ -40,7 +40,7 @@ class WarehousePolicy
      */
     public function oversee(User $user, Warehouse $warehouse): bool
     {
-        if ($user->isRole('admin')) {
+        if ($this->isAdmin($user)) {
             return true;
         }
 
@@ -54,12 +54,12 @@ class WarehousePolicy
 
     public function create(User $user): bool
     {
-        return $user->isRole('admin');
+        return $this->isAdmin($user);
     }
 
     public function delete(User $user, Warehouse $warehouse): bool
     {
-        return $user->isRole('admin');
+        return $this->isAdmin($user);
     }
 
     /**
@@ -70,6 +70,12 @@ class WarehousePolicy
      */
     public function assignManagers(User $user, Warehouse $warehouse): bool
     {
-        return $user->isRole('admin');
+        return $this->isAdmin($user);
+    }
+
+    /** An admin here, or a global admin standing in another app (isRole follows the host). */
+    private function isAdmin(User $user): bool
+    {
+        return $user->isRole('admin') || $user->isGlobalAdmin();
     }
 }

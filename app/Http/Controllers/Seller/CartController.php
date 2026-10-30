@@ -224,7 +224,7 @@ class CartController extends Controller
         // roleKey(), not `role` (a display string, "Admin"). A global admin has
         // no store of their own, so they must name one; a store admin's cart
         // is their store's, like a seller's.
-        $isAdmin = auth()->user()->roleKey() === 'admin' && auth()->user()->store_id === null;
+        $isAdmin = auth()->user()->isGlobalAdmin();
 
         $request->validate([
             'customer_id' => ['nullable', function ($attribute, $value, $fail) use ($request) {

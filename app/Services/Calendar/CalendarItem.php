@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Calendar;
 
+use App\Services\Workforce\LocalTime;
 use Carbon\CarbonImmutable;
 
 /**
@@ -63,7 +64,8 @@ final class CalendarItem
     /** Upcoming or late by the clock, for a record that is not finished. */
     public static function openState(CarbonImmutable $when, bool $knowsLate = true): string
     {
-        if ($when->isFuture() || $when->isToday()) {
+        // Today is the shops' day: isToday() would read the UTC date, three hours behind Addis.
+        if ($when->isFuture() || LocalTime::dateOf($when) === LocalTime::dateOf()) {
             return self::UPCOMING;
         }
 

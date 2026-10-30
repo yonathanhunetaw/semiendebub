@@ -152,7 +152,7 @@ class StockPermissions
     public function isGlobalAdmin(?User $user): bool
     {
         return $user !== null
-            && ($user->roleKey() === 'dev' || ($user->roleKey() === 'admin' && $user->store_id === null));
+            && ($user->roleKey() === 'dev' || $user->isGlobalAdmin());
     }
 
     /**
@@ -439,13 +439,29 @@ class StockPermissions
      */
     private function legacyStoreManager(User $user, int $storeId, ?string $ability = null): bool
     {
-        $assignment = Store::query()->find($storeId)?->managerAssignmentFor($user);
+        $assignment = $this->storeWithManagers($storeId)?->managerAssignmentFor($user);
 
         if ($assignment !== null && ($ability === null || $assignment->allows($ability))) {
             return true;
         }
 
         return $user->isRole('store_manager') && $this->belongsToStore($user, $storeId);
+    }
+
+    /** @var array<int, Store|null> */
+    private array $stores = [];
+
+    /**
+     * The store with its manager assignments, once per store for this instance (scoped: one per request
+     * or job). Every site check on a page asks the same few stores; this was two queries each time.
+     */
+    private function storeWithManagers(int $storeId): ?Store
+    {
+        if (! array_key_exists($storeId, $this->stores)) {
+            $this->stores[$storeId] = Store::query()->with('managerAssignments')->find($storeId);
+        }
+
+        return $this->stores[$storeId];
     }
 
     private function belongsToStore(User $user, ?int $storeId): bool

@@ -93,12 +93,16 @@ class SystemStatusR2ListingTest extends TestCase
         // Newest first by the UTC stamp the key starts with.
         $this->assertSame(['lease_renewed', 'backup_pushed', 'sync_done'], array_column($events, 'type'));
 
-        $listings = array_values(array_filter($this->calls, fn ($c) => $c[0] === 'ListObjectsV2'));
-        $this->assertSame('duka-backups', $listings[0][1]['Bucket']);
-        $this->assertSame($today, $listings[0][1]['Prefix']);
-        $this->assertArrayNotHasKey('ContinuationToken', $listings[0][1]);
-        $this->assertSame('page-2', $listings[1][1]['ContinuationToken'], 'the second page is asked for by its token');
-        $this->assertSame($yesterday, $listings[2][1]['Prefix']);
+        // The days are listed all at once, so only what was asked matters, not the order.
+        $listings = array_column(array_values(array_filter($this->calls, fn ($c) => $c[0] === 'ListObjectsV2')), 1);
+        $this->assertSame(['duka-backups'], array_values(array_unique(array_column($listings, 'Bucket'))));
+        $first = array_values(array_filter($listings, fn ($l) => ! isset($l['ContinuationToken'])));
+        $pages = array_values(array_filter($listings, fn ($l) => isset($l['ContinuationToken'])));
+        $this->assertSame($today, $first[0]['Prefix']);
+        $this->assertSame($yesterday, $first[1]['Prefix']);
+        $this->assertCount(1, $pages);
+        $this->assertSame([$today, 'page-2'], [$pages[0]['Prefix'], $pages[0]['ContinuationToken']], 'the second page is asked for by its token');
+        $this->assertCount(count(array_unique(array_column($first, 'Prefix'))), $first, 'each day is listed once, though two reads want it');
 
         $fetched = array_column(array_values(array_filter($this->calls, fn ($c) => $c[0] === 'GetObject')), 1);
         $this->assertNotContains("{$yesterday}T230000Z_notes.txt", array_column($fetched, 'Key'), 'only .json keys are fetched');

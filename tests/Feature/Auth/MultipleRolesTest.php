@@ -114,4 +114,32 @@ class MultipleRolesTest extends TestCase
 
         $this->assertEqualsCanonicalizing(['seller', 'stock_keeper'], $user->fresh()->roles->pluck('name')->all());
     }
+
+    #[Test]
+    public function a_ticked_global_admin_keeps_every_store_in_the_seller_app(): void
+    {
+        $base = config('app.system_domain');
+        $store = Store::factory()->create();
+        $plain = $this->user('admin');
+        $ticked = $this->user('admin', ['seller', 'stock_keeper']);
+        $customer = \App\Models\Auth\Customer::factory()->create(['store_id' => $store->id, 'created_by' => $plain->id]);
+
+        // A tick adds an app; it never takes a global admin's stores away.
+        foreach ([$plain, $ticked] as $admin) {
+            $this->assertTrue($admin->isGlobalAdmin());
+            $this->actingAs($admin)->get("http://seller.{$base}/customers/{$customer->id}")->assertOk();
+            $this->actingAs($admin)->get("http://seller.{$base}/refills?store={$store->id}")
+                ->assertOk()
+                ->assertInertia(fn ($page) => $page->where('storeId', $store->id));
+        }
+
+        // Standing in the seller app the ticked admin is a "seller", yet still reaches every store and may
+        // confirm cash at any of them, as a plain global admin there may.
+        $this->assertSame('seller', $this->keyOn($ticked, 'seller'));
+        $this->assertNull(\App\Services\Admin\ActiveStore::accessibleIdsFor($ticked));
+        $this->assertTrue(\App\Services\Finance\PaymentService::managesStore($ticked, $store->id));
+
+        $this->assertFalse($this->user('admin', ['seller'], $store->id)->isGlobalAdmin(), 'a store admin is not global');
+        $this->assertFalse($this->user('seller')->isGlobalAdmin());
+    }
 }

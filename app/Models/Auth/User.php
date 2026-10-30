@@ -306,6 +306,15 @@ class User extends Authenticatable
     }
 
     /**
+     * An admin with no store: every store, in whichever app they stand. Not isRole('admin'), which follows
+     * the host, so a global admin ticked as seller would be a store-less seller in the seller app.
+     */
+    public function isGlobalAdmin(): bool
+    {
+        return $this->store_id === null && ($this->hasRole('admin') || $this->isRole('admin'));
+    }
+
+    /**
      * Define the relationship to carts.
      * A user can create multiple carts.
      */

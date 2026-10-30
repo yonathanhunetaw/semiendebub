@@ -258,7 +258,7 @@ class PaymentBoard
      */
     public function awaiting(User $user): Builder
     {
-        $manager = $user->isRole('admin', 'store_manager');
+        $manager = $user->isRole('admin', 'store_manager') || $user->isGlobalAdmin();
         // Null is every store (a global admin).
         $managed = $manager ? ActiveStore::accessibleIdsFor($user) : [];
 

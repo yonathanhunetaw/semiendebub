@@ -31,7 +31,7 @@ class StorePolicy
     {
         // A global admin oversees every facility; a store admin, their own
         // stores (and the ones they manage, through ActiveStore's rule).
-        if ($user->isRole('admin')) {
+        if ($this->isAdmin($user)) {
             $reach = ActiveStore::accessibleIdsFor($user);
 
             return $reach === null || in_array((int) $store->id, $reach, true);
@@ -57,7 +57,7 @@ class StorePolicy
 
     public function assignManagers(User $user, Store $store): bool
     {
-        return $user->isRole('admin');
+        return $this->isAdmin($user);
     }
 
     /**
@@ -69,5 +69,11 @@ class StorePolicy
     public function manageCapacity(User $user, Store $store): bool
     {
         return $this->oversee($user, $store) && $user->canApproveReplenishment();
+    }
+
+    /** An admin here, or a global admin standing in another app (isRole follows the host). */
+    private function isAdmin(User $user): bool
+    {
+        return $user->isRole('admin') || $user->isGlobalAdmin();
     }
 }

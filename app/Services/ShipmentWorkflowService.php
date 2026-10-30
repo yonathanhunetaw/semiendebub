@@ -12,6 +12,7 @@ use App\Models\Inventory\StockLocation;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemStock;
 use App\Models\Store\Store;
+use App\Services\Workforce\LocalTime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -1145,8 +1146,8 @@ class ShipmentWorkflowService
         $role = $user->roleKey();
         $storeId = $user->store_id ? (int) $user->store_id : null;
 
-        // Admin and dev oversee the whole board.
-        if (in_array($role, ['admin', 'dev'], true)) {
+        // Admin and dev oversee the whole board (a global admin from any app).
+        if (in_array($role, ['admin', 'dev'], true) || $user->isGlobalAdmin()) {
             return $query;
         }
 
@@ -1824,9 +1825,10 @@ class ShipmentWorkflowService
     private function cutoffLabel(Shipment $shipment): string
     {
         return match ((string) $shipment->status) {
-            self::DELIVERED => 'Delivered ' . ($shipment->delivered_at?->format('h:i A') ?? ''),
-            self::RECEIVED => 'Received ' . ($shipment->received_at?->format('h:i A') ?? ''),
-            self::IN_TRANSIT => 'Departed ' . ($shipment->dispatched_at?->format('h:i A') ?? ''),
+            // The stamps are UTC instants (now()); the caption is the shops' clock.
+            self::DELIVERED => 'Delivered ' . (LocalTime::wall($shipment->delivered_at, 'h:i A') ?? ''),
+            self::RECEIVED => 'Received ' . (LocalTime::wall($shipment->received_at, 'h:i A') ?? ''),
+            self::IN_TRANSIT => 'Departed ' . (LocalTime::wall($shipment->dispatched_at, 'h:i A') ?? ''),
             self::DISPATCHED => 'Awaiting pickup',
             self::CANCELLED => 'Cancelled',
             default => $shipment->scheduled_for
@@ -1927,7 +1929,7 @@ class ShipmentWorkflowService
     {
         $user = auth()->user();
 
-        if (! $user instanceof User || in_array($user->roleKey(), ['admin', 'dev', 'delivery'], true)) {
+        if (! $user instanceof User || in_array($user->roleKey(), ['admin', 'dev', 'delivery'], true) || $user->isGlobalAdmin()) {
             return;
         }
 

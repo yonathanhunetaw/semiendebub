@@ -152,7 +152,7 @@ class SupplierPaymentService
 
     private static function isGlobalAdmin(User $user): bool
     {
-        return $user->isRole('admin') && $user->store_id === null;
+        return $user->isGlobalAdmin();
     }
 
     private function claimedFor(SupplierPayment $payment, User $by): SupplierPayment

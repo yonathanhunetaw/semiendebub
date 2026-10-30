@@ -208,4 +208,15 @@ class ShopClockTest extends TestCase
         $this->travelToLocal('2026-10-21 00:30');
         $this->assertSame(100.0, $price());
     }
+
+    #[Test]
+    public function the_calendar_calls_yesterdays_open_item_late_after_addis_midnight(): void
+    {
+        $calendar = \App\Services\Calendar\CalendarItem::class;
+
+        // 01:00 on the 21st in Addis is still the 20th in UTC; the records come from the database in UTC.
+        $this->travelToLocal('2026-10-21 01:00');
+        $this->assertSame($calendar::LATE, $calendar::openState(CarbonImmutable::parse('2026-10-20 10:00', 'Africa/Addis_Ababa')->utc()));
+        $this->assertSame($calendar::UPCOMING, $calendar::openState(CarbonImmutable::parse('2026-10-21 00:30', 'Africa/Addis_Ababa')->utc()), 'earlier today is still today');
+    }
 }

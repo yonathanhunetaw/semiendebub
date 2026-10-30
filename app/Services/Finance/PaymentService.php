@@ -619,7 +619,7 @@ class PaymentService
     /** A store manager or admin of $storeId (a global admin of any store). */
     public static function managesStore(User $user, ?int $storeId): bool
     {
-        if (! $user->isRole('admin', 'store_manager')) {
+        if (! $user->isRole('admin', 'store_manager') && ! $user->isGlobalAdmin()) {
             return false;
         }
 

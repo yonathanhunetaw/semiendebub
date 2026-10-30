@@ -54,7 +54,7 @@ final class ActiveStore
     {
         $user = $this->user();
 
-        return $user !== null && $user->store_id === null && ($user->hasRole('admin') || $user->isRole('admin'));
+        return $user !== null && $user->isGlobalAdmin();
     }
 
     /**
@@ -178,7 +178,7 @@ final class ActiveStore
             return [];
         }
 
-        if ($user->store_id === null && $user->isRole('admin')) {
+        if ($user->isGlobalAdmin()) {
             return null;
         }
 

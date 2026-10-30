@@ -38,6 +38,9 @@ class SystemStatus
 
     private const DAYS_LISTED = 3;
 
+    /** @var array<string, list<string>> Event keys per day prefix already listed, so the 3-day and 30-day reads share one listing. */
+    private array $listedDays = [];
+
     public function __construct(private readonly Filesystem $disk)
     {
     }
@@ -358,27 +361,44 @@ class SystemStatus
             return $this->keys('events/');
         }
 
-        $keys = [];
+        $prefixes = [];
 
         for ($i = 0; $i < $days; $i++) {
-            $prefix = 'events/'.gmdate('Ymd', time() - $i * 86400);
-            $token = null;
+            $prefixes[] = 'events/'.gmdate('Ymd', time() - $i * 86400);
+        }
 
-            do {
-                $params = ['Bucket' => $this->bucket(), 'Prefix' => $prefix] + ($token === null ? [] : ['ContinuationToken' => $token]);
-                $result = $client->listObjectsV2($params);
+        // One listing per day, all sent at once: one after another, 30 days took 17-29 s against R2.
+        $pending = [];
 
+        foreach (array_diff($prefixes, array_keys($this->listedDays)) as $prefix) {
+            $pending[$prefix] = $client->listObjectsV2Async(['Bucket' => $this->bucket(), 'Prefix' => $prefix]);
+        }
+
+        foreach ($pending as $prefix => $promise) {
+            $keys = [];
+            $result = $promise->wait();
+
+            while (true) {
                 foreach ($result['Contents'] ?? [] as $object) {
                     if (is_string($object['Key'] ?? null) && str_ends_with($object['Key'], '.json')) {
                         $keys[] = $object['Key'];
                     }
                 }
 
+                // Over 1,000 events in a day: follow the rest of that day's pages.
                 $token = ($result['IsTruncated'] ?? false) ? ($result['NextContinuationToken'] ?? null) : null;
-            } while ($token !== null);
+
+                if ($token === null) {
+                    break;
+                }
+
+                $result = $client->listObjectsV2(['Bucket' => $this->bucket(), 'Prefix' => $prefix, 'ContinuationToken' => $token]);
+            }
+
+            $this->listedDays[$prefix] = $keys;
         }
 
-        return $keys;
+        return array_merge(...array_map(fn (string $prefix): array => $this->listedDays[$prefix], $prefixes));
     }
 
     /**
