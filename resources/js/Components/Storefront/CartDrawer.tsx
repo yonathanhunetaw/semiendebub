@@ -4,6 +4,7 @@ import React from "react";
 import PackagingPlaceholder from "@/Components/Shared/PackagingPlaceholder";
 
 import type {
+    StorefrontBasket,
     StorefrontCart,
     StorefrontCartLine,
     StorefrontSourcingGroup,
@@ -32,6 +33,12 @@ export interface CartDrawerProps {
     isBusy?: boolean;
     /** Drives the checkout copy: guests are told they will sign in first. */
     isAuthenticated: boolean;
+    /** The shopper's carts in every store (one order per store at checkout). */
+    basket?: StorefrontBasket;
+    /** The store this drawer's own cart belongs to, to tell the others apart. */
+    storeId?: number | null;
+    /** Check out every store's cart at once. */
+    onCheckoutAll?: (acceptDelay: boolean) => void;
 }
 
 /** Icon per node kind, nearest to furthest. */
@@ -65,7 +72,13 @@ export default function CartDrawer({
     onCheckout,
     isBusy = false,
     isAuthenticated,
+    basket,
+    storeId = null,
+    onCheckoutAll,
 }: CartDrawerProps): React.ReactElement {
+    const others = (basket?.stores ?? []).filter((entry) => entry.store.id !== storeId);
+    const basketNeedsAgreement = (basket?.stores ?? []).some((entry) => entry.requires_delay_agreement);
+    const [acceptedBasketDelay, setAcceptedBasketDelay] = React.useState(false);
     const isEmpty = cart.lines.length === 0;
 
     const groups: StorefrontSourcingGroup[] = cart.sourcing_groups ?? [];
@@ -299,6 +312,45 @@ export default function CartDrawer({
                     ) : null}
                 </div>
             )}
+
+            {/* The rest of the basket: carts in other stores, each its own order at checkout. */}
+            {others.length > 0 && basket ? (
+                <div className="border-t border-outline-variant bg-surface-container-low px-4 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Also in your basket</p>
+                    <ul className="mt-2 space-y-1.5">
+                        {others.map((entry) => (
+                            <li key={entry.store.id} className="flex items-center justify-between gap-2 text-[12px]">
+                                {entry.store.slug ? (
+                                    <a href={route("storefront.store", entry.store.slug)} className="truncate font-bold text-on-surface underline-offset-2 hover:underline">{entry.store.name}</a>
+                                ) : (
+                                    <span className="truncate font-bold text-on-surface">{entry.store.name}</span>
+                                )}
+                                <span className="shrink-0 text-on-surface-variant">
+                                    {entry.item_count} item{entry.item_count === 1 ? "" : "s"} · ETB {entry.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                    {onCheckoutAll ? (
+                        <>
+                            {basketNeedsAgreement ? (
+                                <label className="mt-2 flex items-start gap-2 text-[11px] text-on-surface-variant">
+                                    <input type="checkbox" checked={acceptedBasketDelay} onChange={(e) => setAcceptedBasketDelay(e.target.checked)} className="mt-0.5" />
+                                    <span>Some items come from our main warehouse and arrive later. I agree to wait for them.</span>
+                                </label>
+                            ) : null}
+                            <button
+                                type="button"
+                                onClick={() => onCheckoutAll(acceptedBasketDelay)}
+                                disabled={isBusy || (basketNeedsAgreement && !acceptedBasketDelay)}
+                                className="mt-2 w-full rounded-xl border border-outline-variant bg-surface-container-lowest py-2.5 text-[12px] font-bold text-on-surface disabled:opacity-40"
+                            >
+                                Check out everything · {basket.stores.length} stores, {basket.stores.length} orders
+                            </button>
+                        </>
+                    ) : null}
+                </div>
+            ) : null}
         </Drawer>
     );
 }

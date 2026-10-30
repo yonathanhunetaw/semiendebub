@@ -94,12 +94,23 @@ Route::get('/shop', [StorefrontController::class, 'index'])
 Route::get('/shop/items/{item}', [StorefrontController::class, 'show'])
     ->name('storefront.items.show');
 
+// Every store on Duka, and one search across all of them (the marketplace).
+Route::get('/stores', [\App\Http\Controllers\Storefront\MarketplaceController::class, 'index'])
+    ->middleware('throttle:60,1')
+    ->name('storefront.stores');
+
 // A store's own shop (vendor V0: a vendor is a store). Same pages as /shop,
 // for the store whose public slug is in the address; /shop stays the default.
 Route::get('/s/{store}', [StorefrontController::class, 'index'])
     ->where('store', '[a-z0-9]+(?:-[a-z0-9]+)*')
     ->middleware('throttle:120,1')
     ->name('storefront.store');
+
+// A shopper who received an order from the store rates it (StoreReviews).
+Route::post('/s/{store}/reviews', [\App\Http\Controllers\Storefront\StoreReviewController::class, 'store'])
+    ->where('store', '[a-z0-9]+(?:-[a-z0-9]+)*')
+    ->middleware(['auth', 'throttle:10,1'])
+    ->name('storefront.store.reviews.store');
 
 Route::get('/s/{store}/items/{item}', [StorefrontController::class, 'show'])
     ->where('store', '[a-z0-9]+(?:-[a-z0-9]+)*')
@@ -110,6 +121,11 @@ Route::prefix('shop/cart')->middleware('throttle:60,1')->name('storefront.cart.'
     Route::patch('/items/{variant}', [CartController::class, 'update'])->name('items.update');
     Route::delete('/items/{variant}', [CartController::class, 'destroy'])->name('items.destroy');
 });
+
+// Every store's cart in the basket at once: one order per store.
+Route::post('/shop/checkout-all', [CartController::class, 'checkoutAll'])
+    ->middleware('throttle:20,1')
+    ->name('storefront.checkout.all');
 
 Route::post('/shop/checkout', [CartController::class, 'checkout'])
     ->middleware('throttle:20,1')

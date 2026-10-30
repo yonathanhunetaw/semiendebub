@@ -214,6 +214,7 @@ Route::domain("admin.{$baseDomain}")
                     Route::post('/payouts/{payout}/confirm', 'confirm')->name('payouts.confirm');
                     Route::post('/payouts/{payout}/reject', 'reject')->name('payouts.reject');
                 });
+                Route::post('vendors/reviews/{review}/hide', [\App\Http\Controllers\Storefront\StoreReviewController::class, 'hide'])->name('vendors.reviews.hide');
                 $sessionController = SessionController::class;
                 require __DIR__ . '/../sessions.php';
             });

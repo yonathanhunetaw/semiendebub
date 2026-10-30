@@ -110,6 +110,13 @@ export default function StorefrontMenuDrawer({
                             href={shop.index({ on_sale: 1 })}
                             onClick={onClose}
                         />
+                        {/* Every store on Duka, and one search across them. */}
+                        <DrawerRow
+                            label="All stores"
+                            icon="storefront"
+                            href={route("storefront.stores")}
+                            onClick={onClose}
+                        />
                         <DrawerRow
                             label="Cart"
                             icon="shopping_cart"

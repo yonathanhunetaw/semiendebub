@@ -91,6 +91,8 @@ class HandleInertiaRequests extends Middleware
             ],
             // Set while an admin is "opened as" someone else (ImpersonationController).
             'impersonating' => fn () => $request->session()->get('impersonator'),
+            // Whether the floating Apps button shows (ImpersonationController::offered).
+            'appSwitcher' => fn () => app(\App\Http\Controllers\Admin\ImpersonationController::class)->offered($request),
             // The seller bottom nav badges its Carts tab with how many items
             // sit in the seller's open carts (not how many carts there are).
             // Lazy, and null for every other role, so nobody else pays the query.

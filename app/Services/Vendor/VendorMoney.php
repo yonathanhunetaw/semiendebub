@@ -153,6 +153,41 @@ class VendorMoney
         });
     }
 
+    /**
+     * What the payout screens show (Settings → Vendors and the finance app): each
+     * vendor's store with what is owed, and the payouts, waiting ones first.
+     *
+     * @return array{stores: array<int, array<string, mixed>>, payouts: array<int, array<string, mixed>>}
+     */
+    public function board(User $viewer): array
+    {
+        $stores = Store::query()->whereNotNull('owner_id')->orderBy('name')->get(['id', 'name', 'owner_id'])
+            ->map(fn (Store $s): array => ['id' => (int) $s->id, 'name' => (string) $s->name, 'balance' => $this->balance($s)])
+            ->values()->all();
+
+        $payouts = VendorPayout::query()
+            ->with(['store:id,name', 'recorder:id,first_name,last_name', 'confirmer:id,first_name,last_name'])
+            ->orderByRaw("CASE WHEN status = 'recorded' THEN 0 ELSE 1 END")
+            ->orderByDesc('id')
+            ->limit(100)
+            ->get()
+            ->map(fn (VendorPayout $p): array => [
+                'id' => (int) $p->id,
+                'store' => $p->store?->name,
+                'amount' => (float) $p->amount,
+                'method' => $p->method,
+                'reference' => $p->reference,
+                'status' => $p->status,
+                'reject_reason' => $p->reject_reason,
+                'recorded_by' => $p->recorder ? trim($p->recorder->first_name.' '.$p->recorder->last_name) : null,
+                'recorded_by_me' => (int) $p->recorded_by === (int) $viewer->id,
+                'confirmed_by' => $p->confirmer ? trim($p->confirmer->first_name.' '.$p->confirmer->last_name) : null,
+                'created_at' => $p->created_at?->toIso8601String(),
+            ])->values()->all();
+
+        return ['stores' => $stores, 'payouts' => $payouts];
+    }
+
     public function mayHandleMoney(?User $user): bool
     {
         return $user !== null && ($this->permissions->isGlobalAdmin($user) || $user->roleKey() === 'finance' || $user->hasRole('finance'));

@@ -15,6 +15,7 @@ export default function FinanceSidebar({ variant, open, onClose, sx }: any) {
         { label: 'Ledger Home', icon: <AccountBalanceIcon />, href: '/dashboard' },
         { label: 'Reports', icon: <AssessmentIcon />, href: '/reports' },
         { label: 'Supplier payments', icon: <PendingActionsIcon />, href: '/supplier-payments' },
+        { label: 'Vendor payouts', icon: <PendingActionsIcon />, href: '/vendor-payouts' },
         { label: 'Import costs', icon: <PendingActionsIcon />, href: '/import-costs' },
         { label: 'Expenses', icon: <ReceiptLongIcon />, href: '/expenses' },
     ];

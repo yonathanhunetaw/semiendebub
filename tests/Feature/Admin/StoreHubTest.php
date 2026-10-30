@@ -14,7 +14,7 @@ use Tests\TestCase;
 /**
  * The Store page is a hub of grouped cards; the screens under it carry a back
  * link. It opens for a global admin on any store, for a store admin on their
- * own store only, and hands the page the two approval counts.
+ * own store only, and hands the page its figures and the two approval counts.
  */
 class StoreHubTest extends TestCase
 {
@@ -43,6 +43,9 @@ class StoreHubTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/Stores/Hub')
                 ->where('store.id', $store->id)
+                ->has('stats.items')
+                ->has('stats.shipments')
+                ->has('stats.transfers')
                 ->has('counts.refills')
                 ->has('counts.counts'));
     }

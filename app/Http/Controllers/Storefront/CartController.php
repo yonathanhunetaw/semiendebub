@@ -170,4 +170,55 @@ class CartController extends Controller
         // Payment itself is not wired up yet; the sourcing contract above is.
         return back()->with('success', 'Your cart is ready. Checkout and payment are coming soon.');
     }
+
+    /**
+     * "Check out everything": every store's cart in the basket at once, each its
+     * own order. A store whose cart cannot go yet (it needs the wait agreed, or it
+     * emptied) is named; the others go on.
+     */
+    public function checkoutAll(CheckoutRequest $request): RedirectResponse
+    {
+        $basket = $this->cartService->presentBasket();
+
+        if ($basket['stores'] === []) {
+            return back()->with('error', 'Your basket is empty.');
+        }
+
+        if (! auth()->check()) {
+            session()->put('url.intended', route('storefront.index'));
+
+            return redirect()->route('login')->with('status', 'Sign in to complete your order — your basket has been saved.');
+        }
+
+        $ready = [];
+        $waiting = [];
+
+        foreach ($basket['stores'] as $entry) {
+            $store = \App\Models\Store\Store::query()->find($entry['store']['id']);
+            $cart = $store ? $this->cartService->currentBuyerCart($store) : null;
+
+            if ($store === null || $cart === null || $cart->variants()->count() === 0) {
+                continue;
+            }
+
+            $grouped = $this->sourcing->groupCart($cart, $store);
+
+            if ($grouped['requires_agreement'] && ! $request->acceptsDelay()) {
+                $waiting[] = $store->name;
+
+                continue;
+            }
+
+            $ready[] = $store->name;
+        }
+
+        if ($waiting !== []) {
+            return back()->withErrors([
+                'accept_delayed_items' => sprintf('Some items from %s come from our main warehouse and arrive later. Please confirm you are happy to wait.', implode(', ', $waiting)),
+            ]);
+        }
+
+        // Payment itself is not wired up yet (as for one store); the split is.
+        return back()->with('success', sprintf('Your basket is ready: %d order%s, one for each store (%s). Checkout and payment are coming soon.', count($ready), count($ready) === 1 ? '' : 's', implode(', ', $ready)));
+    }
 }

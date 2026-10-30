@@ -13,17 +13,21 @@ interface Impersonator {
 
 interface PageProps {
     impersonating?: Impersonator | null;
+    /** The server says this admin has another app to open (ImpersonationController::offered). */
+    appSwitcher?: boolean;
     auth?: { user?: { first_name?: string; last_name?: string | null } | null };
 }
 
 const nameOf = (props: PageProps): string => `${props.auth?.user?.first_name ?? ""} ${props.auth?.user?.last_name ?? ""}`.trim();
 
 /**
- * The Apps menu inside an app an admin has switched into
- * (ImpersonationController): a small round button above the guide's, shown
- * only while switched in, so it never appears for normal staff. Its menu says
- * who you are right now and who opened this app, lets the admin move on to another app without going back
- * first, and has Back to admin. Mounted once in app.tsx, outside the page
+ * The Apps menu (ImpersonationController): the one way to switch apps, a small
+ * round button floating above the nav on every screen size. It shows for an
+ * admin who can open more than the admin app (a store admin with no "also
+ * works as" ticks gets none) and always inside an app an admin switched into,
+ * so it never appears for normal staff. Its menu says who you are right now
+ * and who opened this app, lets the admin move on to another app without going
+ * back first, and, inside an opened app, has Back to admin. Mounted once in app.tsx, outside the page
  * layouts, so it follows the shared `impersonating` prop by listening to
  * Inertia navigations.
  */
@@ -35,7 +39,7 @@ export default function ImpersonationBanner({ initial }: { initial: PageProps })
 
     useEffect(() => router.on("navigate", (event) => setProps(event.detail.page.props as PageProps)), []);
 
-    if (!impersonator) {
+    if (!impersonator && !props.appSwitcher) {
         return null;
     }
 
@@ -45,9 +49,9 @@ export default function ImpersonationBanner({ initial }: { initial: PageProps })
             accountName={nameOf(props)}
             current={role}
             variant="fab"
-            meHere={Boolean(impersonator.self)}
-            header={impersonator.self ? "You" : `Opened by ${impersonator.name}`}
-            footer={(close) => (
+            meHere={impersonator ? Boolean(impersonator.self) : true}
+            header={!impersonator || impersonator.self ? "You" : `Opened by ${impersonator.name}`}
+            footer={impersonator ? (close) => (
                 <ListItemButton
                     onClick={() => {
                         close();
@@ -57,7 +61,7 @@ export default function ImpersonationBanner({ initial }: { initial: PageProps })
                 >
                     <ListItemText primary="Back to admin" slotProps={{ primary: { sx: { fontWeight: 700, fontSize: "0.875rem" } } }} />
                 </ListItemButton>
-            )}
+            ) : undefined}
         />
     );
 }

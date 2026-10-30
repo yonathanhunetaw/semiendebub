@@ -8,6 +8,7 @@ import StorefrontOutlined from "@mui/icons-material/StorefrontOutlined";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 import { FigureRow, FigureTile, PageBand, PanelHead, Pill, adminTableSx, densePanelSx, tinySx, type PillTone } from "@/Components/Admin/adminUi";
 import { dayDateTime } from "@/utils/dates";
+import VendorPayoutsPanel, { etb, type VendorPayoutRow } from "@/Components/Vendor/VendorPayoutsPanel";
 
 interface Application {
     id: number;
@@ -39,28 +40,12 @@ interface VendorStoreRow {
     owner: { id: number; name: string; email: string } | null;
 }
 
-interface Payout {
-    id: number;
-    store: string | null;
-    amount: number;
-    method: string;
-    reference: string | null;
-    status: "recorded" | "confirmed" | "rejected";
-    reject_reason: string | null;
-    recorded_by: string | null;
-    recorded_by_me: boolean;
-    confirmed_by: string | null;
-    created_at: string | null;
-}
-
-const PAYOUT_TONE: Record<Payout["status"], PillTone> = { recorded: "warning", confirmed: "success", rejected: "error" };
-const METHODS: Array<[string, string]> = [["bank_transfer", "Bank transfer"], ["telebirr", "Telebirr"], ["cash", "Cash"]];
-const etb = (n: number) => `ETB ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 interface Props {
     applications?: Application[];
     stores?: VendorStoreRow[];
-    payouts?: Payout[];
+    payouts?: VendorPayoutRow[];
+    reviews?: Array<{ id: number; store: string | null; rating: number; comment: string | null; by: string | null; hidden: boolean; at: string | null }>;
     /** Duka's share of each paid vendor order. */
     commission_pct?: number;
     /** Right after an approval (or a new link): the owner's one-time set-password link. */
@@ -73,14 +58,10 @@ const STATUS_TONE: Record<Application["status"], PillTone> = { pending: "warning
  * Settings → Vendors (global admins). A vendor is a store: businesses apply on
  * vendor.<domain>; approving opens their store with its owner as its admin.
  */
-export default function VendorsIndex({ applications = [], stores = [], payouts = [], commission_pct = 10, handover = null }: Props) {
+export default function VendorsIndex({ applications = [], stores = [], payouts = [], reviews = [], commission_pct = 10, handover = null }: Props) {
     const [rejecting, setRejecting] = React.useState<Application | null>(null);
     const [reason, setReason] = React.useState("");
     const [commission, setCommission] = React.useState(String(commission_pct));
-    const [paying, setPaying] = React.useState<VendorStoreRow | null>(null);
-    const [payout, setPayout] = React.useState({ amount: "", method: "bank_transfer", reference: "" });
-    const [refusing, setRefusing] = React.useState<Payout | null>(null);
-    const [refuseReason, setRefuseReason] = React.useState("");
     const waiting = payouts.filter((p) => p.status === "recorded");
     const owed = stores.reduce((sum, s) => sum + (s.balance ?? 0), 0);
     const pending = applications.filter((a) => a.status === "pending");
@@ -227,9 +208,6 @@ export default function VendorsIndex({ applications = [], stores = [], payouts =
                                     <TableCell align="right" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{s.balance === null ? "—" : etb(s.balance)}</TableCell>
                                     <TableCell align="right">
                                         <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                                            {s.owner && (s.balance ?? 0) > 0 && (
-                                                <Button size="small" variant="outlined" onClick={() => { setPaying(s); setPayout({ amount: String(s.balance ?? ""), method: "bank_transfer", reference: "" }); }}>Pay out</Button>
-                                            )}
                                             {s.owner && (
                                                 <Button size="small" onClick={() => router.post(route("admin.vendors.link", s.id), {}, { preserveScroll: true })}>New password link</Button>
                                             )}
@@ -247,44 +225,29 @@ export default function VendorsIndex({ applications = [], stores = [], payouts =
                 </TableContainer>
             </Paper>
 
+            <VendorPayoutsPanel
+                stores={stores.filter((s) => s.owner && s.balance !== null).map((s) => ({ id: s.id, name: s.name, balance: s.balance ?? 0 }))}
+                payouts={payouts}
+                routes={{ record: "admin.vendors.payouts.store", confirm: "admin.vendors.payouts.confirm", reject: "admin.vendors.payouts.reject" }}
+            />
+
             <Paper elevation={0} sx={{ ...densePanelSx, p: 0, overflow: "hidden" }}>
-                <Box sx={{ p: 1.25, pb: 0.5 }}><PanelHead icon={<StorefrontOutlined sx={{ fontSize: 16, color: "primary.main" }} />} title="Payouts" right={<Typography sx={tinySx}>One person records, another confirms</Typography>} /></Box>
+                <Box sx={{ p: 1.25, pb: 0.5 }}><PanelHead icon={<StorefrontOutlined sx={{ fontSize: 16, color: "warning.main" }} />} title="Store reviews" right={<Typography sx={tinySx}>From shoppers who received an order</Typography>} /></Box>
                 <TableContainer>
                     <Table size="small" sx={adminTableSx}>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Store</TableCell>
-                                <TableCell align="right">Amount</TableCell>
-                                <TableCell>How</TableCell>
-                                <TableCell>Status</TableCell>
-                                <TableCell>Recorded</TableCell>
-                                <TableCell align="right">Decision</TableCell>
-                            </TableRow>
-                        </TableHead>
                         <TableBody>
-                            {payouts.length === 0 && (
-                                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 3, color: "text.secondary" }}>No payouts yet.</TableCell></TableRow>
+                            {reviews.length === 0 && (
+                                <TableRow><TableCell align="center" sx={{ py: 3, color: "text.secondary" }}>No reviews yet.</TableCell></TableRow>
                             )}
-                            {payouts.map((p) => (
-                                <TableRow key={p.id}>
-                                    <TableCell sx={{ fontWeight: 700 }}>{p.store ?? "—"}</TableCell>
-                                    <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{etb(p.amount)}</TableCell>
-                                    <TableCell>{METHODS.find(([k]) => k === p.method)?.[1] ?? p.method}{p.reference ? <Typography sx={tinySx}>{p.reference}</Typography> : null}</TableCell>
-                                    <TableCell>
-                                        <Pill tone={PAYOUT_TONE[p.status]} label={p.status} />
-                                        {p.reject_reason && <Typography sx={{ ...tinySx, color: "error.main" }}>{p.reject_reason}</Typography>}
-                                        {p.confirmed_by && <Typography sx={tinySx}>by {p.confirmed_by}</Typography>}
-                                    </TableCell>
-                                    <TableCell sx={{ whiteSpace: "nowrap" }}>{p.recorded_by}<Typography sx={tinySx}>{dayDateTime(p.created_at)}</Typography></TableCell>
+                            {reviews.map((r) => (
+                                <TableRow key={r.id} sx={{ opacity: r.hidden ? 0.5 : 1 }}>
+                                    <TableCell sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{r.store}</TableCell>
+                                    <TableCell sx={{ whiteSpace: "nowrap" }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</TableCell>
+                                    <TableCell>{r.comment ?? <Box component="span" sx={{ color: "text.disabled" }}>No words</Box>}<Typography sx={tinySx}>{r.by} · {dayDateTime(r.at)}</Typography></TableCell>
                                     <TableCell align="right">
-                                        {p.status === "recorded" && (p.recorded_by_me ? (
-                                            <Typography sx={tinySx}>Waiting for a second person</Typography>
-                                        ) : (
-                                            <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                                                <Button size="small" variant="contained" onClick={() => router.post(route("admin.vendors.payouts.confirm", p.id), {}, { preserveScroll: true })}>Confirm</Button>
-                                                <Button size="small" variant="outlined" color="error" onClick={() => setRefusing(p)}>Reject</Button>
-                                            </Stack>
-                                        ))}
+                                        {r.hidden ? <Pill label="hidden" /> : (
+                                            <Button size="small" color="error" onClick={() => confirm("Hide this review from the store's page?") && router.post(route("admin.vendors.reviews.hide", r.id), {}, { preserveScroll: true })}>Hide</Button>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -292,35 +255,6 @@ export default function VendorsIndex({ applications = [], stores = [], payouts =
                     </Table>
                 </TableContainer>
             </Paper>
-
-            <Dialog open={paying !== null} onClose={() => setPaying(null)} fullWidth maxWidth="xs">
-                <DialogTitle>Pay out {paying?.name}</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={1.5} sx={{ mt: 1 }}>
-                        <Typography sx={tinySx}>Owed: {etb(paying?.balance ?? 0)}. It leaves the balance once a second person confirms it.</Typography>
-                        <TextField label="Amount (ETB)" type="number" value={payout.amount} onChange={(e) => setPayout({ ...payout, amount: e.target.value })} />
-                        <TextField select label="How" value={payout.method} onChange={(e) => setPayout({ ...payout, method: e.target.value })} SelectProps={{ native: true }}>
-                            {METHODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-                        </TextField>
-                        <TextField label="Reference (optional)" value={payout.reference} onChange={(e) => setPayout({ ...payout, reference: e.target.value })} />
-                    </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setPaying(null)}>Back</Button>
-                    <Button variant="contained" disabled={!(Number(payout.amount) > 0)} onClick={() => paying && router.post(route("admin.vendors.payouts.store", paying.id), payout, { preserveScroll: true, onSuccess: () => setPaying(null) })}>Record payout</Button>
-                </DialogActions>
-            </Dialog>
-
-            <Dialog open={refusing !== null} onClose={() => setRefusing(null)} fullWidth maxWidth="xs">
-                <DialogTitle>Reject this payout</DialogTitle>
-                <DialogContent>
-                    <TextField autoFocus fullWidth multiline minRows={2} label="Reason" value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)} sx={{ mt: 1 }} />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setRefusing(null)}>Back</Button>
-                    <Button color="error" variant="contained" disabled={refuseReason.trim().length < 3} onClick={() => refusing && router.post(route("admin.vendors.payouts.reject", refusing.id), { reason: refuseReason }, { preserveScroll: true, onSuccess: () => { setRefusing(null); setRefuseReason(""); } })}>Reject</Button>
-                </DialogActions>
-            </Dialog>
 
             <Dialog open={rejecting !== null} onClose={() => setRejecting(null)} fullWidth maxWidth="xs">
                 <DialogTitle>Reject {rejecting?.business_name}</DialogTitle>

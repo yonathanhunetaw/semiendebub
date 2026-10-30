@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { app, fixture, signIn } from '../../lib/support';
 
 /**
- * The Store page is a hub of grouped cards (Stock, Movement, Approvals) like the seller's More page. Each tile
+ * The Store page is a hub of grouped cards (Stock, Movement, Approvals, Setup) under a banner of the store's figures like the seller's More page. Each tile
  * opens a screen that carries a back link, and an item opens as three stacked cards: where it is and how it is
  * packed, the refill levels, then the variants.
  */
@@ -10,15 +10,15 @@ test.use({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: fa
 
 const hub = `/stores/${fixture.store.id}/hub`;
 
-test('the sidebar Store entry opens the hub: three cards of icon tiles, no tab bars', async ({ browser }) => {
+test('the sidebar Store card opens the hub: four cards of icon tiles, no tab bars', async ({ browser }) => {
     const admin = await signIn(browser, 'admin', fixture.people.admin.email);
     await admin.goto(app('admin', '/dashboard'));
     await admin.goto(app('admin', `/dashboard?store=${fixture.store.id}`));
     await admin.getByRole('link', { name: /^Store/ }).first().click();
     await expect(admin).toHaveURL(new RegExp(`/stores/${fixture.store.id}/hub`));
 
-    for (const card of ['Stock', 'Movement', 'Approvals']) await expect(admin.getByText(card, { exact: true }).first()).toBeVisible();
-    for (const tile of ['Items', 'Replenish', 'Price deviations', 'Capacity', 'Transfers', 'Shipments', 'Refills', 'Stock counts']) {
+    for (const card of ['Stock', 'Movement', 'Approvals', 'Setup']) await expect(admin.getByText(card, { exact: true }).first()).toBeVisible();
+    for (const tile of ['Items', 'Replenish', 'Price deviations', 'Capacity', 'Transfers', 'Shipments', 'Refills', 'Stock counts', 'Locations', 'Payment accounts']) {
         await expect(admin.getByText(tile, { exact: true }).first()).toBeVisible();
     }
     // The old two rows of tabs are gone, and so is Places.
@@ -38,6 +38,7 @@ test('every tile opens its screen, with a back link to the hub', async ({ browse
         ['Shipments', /\/inventory\/shipments/],
         ['Refills', /\/inventory\/replenishment/],
         ['Stock counts', /\/inventory\/counts/],
+        ['Locations', /\/inventory\/locations/],
     ];
 
     for (const [tile, url] of tiles) {

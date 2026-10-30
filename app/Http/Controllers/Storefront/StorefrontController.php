@@ -84,12 +84,16 @@ class StorefrontController extends Controller
 
         return Inertia::render('User/Dashboard/index', [
             'store' => $this->presentStore($store),
+            // The store's reviews, and whether this shopper may write one.
+            'reviews' => app(\App\Services\Storefront\StoreReviews::class)->forStorePage($store, $request->user()),
             'items' => $items,
             'categories' => $this->catalog->categories($store),
             'cart' => $this->cartService->presentBuyerCart(
                 $this->cartService->currentBuyerCart($store),
                 $store
             ),
+            // Everything the shopper has in other stores too: one basket, one order per store.
+            'basket' => $this->cartService->presentBasket(),
             'filters' => [
                 'search' => $search,
                 'category_id' => $categoryId,
@@ -136,6 +140,8 @@ class StorefrontController extends Controller
                 $this->cartService->currentBuyerCart($store),
                 $store
             ),
+            // Everything the shopper has in other stores too: one basket, one order per store.
+            'basket' => $this->cartService->presentBasket(),
             // Same shelf, same store — a shopper who has ruled this one out has
             // somewhere to go that is not the back button.
             'related' => $this->catalog->relatedItems($item, $store),

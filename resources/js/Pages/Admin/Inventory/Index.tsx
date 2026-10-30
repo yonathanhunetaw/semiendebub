@@ -200,6 +200,12 @@ export default function InventoryHub({
         })),
     ];
 
+    const setupRows: Row[] = [
+        { label: "Locations", caption: "Shelf, floor and Remote Hub, and who manages each", icon: "account_tree", route: "admin.inventory.stock-locations.index", tone: "primary" },
+        { label: "Capacity", caption: "Min and max levels that drive replenishment", icon: "tune", route: "admin.inventory.capacity.index", tone: "success" },
+        { label: "Payment accounts", caption: "Where customers pay in, and who confirms each", icon: "account_balance", route: "admin.payment-accounts.index", tone: "info" },
+    ];
+
     /* ── Item picker ───────────────────────────────────────────────────── */
     const visibleItems = useMemo(() => {
         const needle = itemSearch.trim().toLowerCase();
@@ -290,6 +296,9 @@ export default function InventoryHub({
                     <OpsCard title="Stores" note="Retail" rows={storeRows} wide />
 
                     <OpsCard title="Warehouses & Hubs" note="Facilities" rows={facilityRows} wide />
+
+                    {/* A store's setup is on its Store page; on "All stores" it opens here. */}
+                    <OpsCard title="Setup" note="How the stores run" rows={setupRows} wide />
 
                     {/* ── Item picker → per-location stock tool ── */}
                     <Card

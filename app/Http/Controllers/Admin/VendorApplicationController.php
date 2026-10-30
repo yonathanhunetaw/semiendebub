@@ -67,30 +67,21 @@ class VendorApplicationController extends Controller
                 'owner' => $s->owner ? ['id' => (int) $s->owner->id, 'name' => trim($s->owner->first_name.' '.$s->owner->last_name), 'email' => $s->owner->email] : null,
             ]);
 
-        $payouts = \App\Models\Vendor\VendorPayout::query()
-            ->with(['store:id,name', 'recorder:id,first_name,last_name', 'confirmer:id,first_name,last_name'])
-            ->orderByRaw("CASE WHEN status = 'recorded' THEN 0 ELSE 1 END")
-            ->orderByDesc('id')
-            ->limit(100)
-            ->get()
-            ->map(fn (\App\Models\Vendor\VendorPayout $p): array => [
-                'id' => (int) $p->id,
-                'store' => $p->store?->name,
-                'amount' => (float) $p->amount,
-                'method' => $p->method,
-                'reference' => $p->reference,
-                'status' => $p->status,
-                'reject_reason' => $p->reject_reason,
-                'recorded_by' => $p->recorder ? trim($p->recorder->first_name.' '.$p->recorder->last_name) : null,
-                'recorded_by_me' => (int) $p->recorded_by === (int) $request->user()->id,
-                'confirmed_by' => $p->confirmer ? trim($p->confirmer->first_name.' '.$p->confirmer->last_name) : null,
-                'created_at' => $p->created_at?->toIso8601String(),
-            ]);
-
         return Inertia::render('Admin/Vendors/Index', [
             'applications' => $applications,
             'stores' => $stores,
-            'payouts' => $payouts,
+            'payouts' => $this->money->board($request->user())['payouts'],
+            // The latest store reviews, to hide an abusive one.
+            'reviews' => \App\Models\Store\StoreReview::query()->with(['store:id,name', 'user:id,first_name,last_name'])->latest('updated_at')->limit(50)->get()
+                ->map(fn (\App\Models\Store\StoreReview $r): array => [
+                    'id' => (int) $r->id,
+                    'store' => $r->store?->name,
+                    'rating' => $r->rating,
+                    'comment' => $r->comment,
+                    'by' => $r->user ? trim($r->user->first_name.' '.$r->user->last_name) : null,
+                    'hidden' => $r->hidden_at !== null,
+                    'at' => $r->updated_at?->toIso8601String(),
+                ]),
             'commission_pct' => \App\Models\Vendor\MarketplaceSetting::commissionPct(),
             // Shown once, right after an approval: the owner's set-password link.
             'handover' => $request->session()->get('vendor_handover'),

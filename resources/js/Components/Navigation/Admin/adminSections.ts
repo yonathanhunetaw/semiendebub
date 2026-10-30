@@ -7,7 +7,8 @@
  *   Settings   → general, users, vendors, sessions and system status (all but general: global admins only)
  *   Store      → a hub of grouped cards (Pages/Admin/Stores/Hub): the active store's
  *                items, replenishment, price deviations and capacity, transfers and
- *                shipments, and the approvals (locations live in Settings). On "All stores" the first tab is the
+ *                shipments, the approvals, and its setup (locations; payment accounts, seller balances
+ *                and customer prices are tabs of Payments / Customers). On "All stores" the first tab is the
  *                cross-store inventory overview and the per-store tabs hide.
  */
 export interface AdminSectionTab {
@@ -74,6 +75,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
             { key: "stock", label: "Stock" },
             { key: "movement", label: "Movement" },
             { key: "approvals", label: "Approvals" },
+            { key: "setup", label: "Setup" },
         ],
         tabs: [
             { label: "Items", route: "store.show", group: "stock", match: [/^\/stores\/\d+$/, /^\/stores\/\d+\/inventory\/items\//], storeParam: true },
@@ -85,6 +87,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
             { label: "Approvals", route: "admin.inventory.replenishment.index", group: "approvals", match: ["/inventory/replenishment"], roles: ["admin", "store_manager"] },
             { label: "Counts", route: "admin.inventory.counts.index", group: "approvals", match: ["/inventory/counts"], roles: ["admin", "store_manager"] },
             { label: "Shipments", route: "admin.inventory.shipments.index", group: "movement", match: ["/inventory/shipments"] },
+            { label: "Locations", route: "admin.inventory.stock-locations.index", group: "setup", match: ["/inventory/locations"] },
         ],
     },
     {

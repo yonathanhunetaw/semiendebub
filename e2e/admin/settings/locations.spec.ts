@@ -2,18 +2,20 @@ import { expect, test } from '@playwright/test';
 import { app, fixture, signIn } from '../../lib/support';
 
 /**
- * Locations (who runs each place) live in Settings > Store setup. A global admin assigns managers and stock
+ * Locations (who runs each place) live on the Store page, under Setup. A global admin assigns managers and stock
  * keepers; a store admin only sees who they are.
  */
 test.use({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false });
 
-test('Locations is a Settings link, not a Store tab', async ({ browser }) => {
+test('Locations is a Store page tile, no longer in Settings', async ({ browser }) => {
     const admin = await signIn(browser, 'admin', fixture.people.admin.email);
-    await admin.goto(app('admin', '/settings'));
-    await expect(admin.getByRole('link', { name: /Locations/ }).first()).toBeVisible();
-
     await admin.goto(app('admin', `/stores/${fixture.store.id}/hub`));
-    await expect(admin.getByText('Locations', { exact: true })).toHaveCount(0);
+    await admin.locator('main').getByRole('link', { name: /Locations/ }).first().click();
+    await expect(admin).toHaveURL(/\/inventory\/locations/);
+
+    await admin.goto(app('admin', '/settings'));
+    await expect(admin.getByText('Store setup', { exact: true })).toHaveCount(0);
+    await expect(admin.locator('main').getByRole('link', { name: /Locations/ })).toHaveCount(0);
 });
 
 test('a global admin can assign managers and stock keepers', async ({ browser }) => {

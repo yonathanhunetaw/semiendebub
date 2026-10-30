@@ -137,6 +137,30 @@ class ImpersonationTest extends TestCase
     }
 
     #[Test]
+    public function the_floating_apps_button_is_offered_only_to_an_admin_with_another_app_or_inside_an_opened_app(): void
+    {
+        $store = $this->storeId();
+        $offered = function (?User $user, ?array $impersonator = null): bool {
+            $request = \Illuminate\Http\Request::create('/');
+            $request->setLaravelSession(app('session.store'));
+            $request->session()->forget('impersonator');
+            if ($impersonator) {
+                $request->session()->put('impersonator', $impersonator);
+            }
+            $request->setUserResolver(fn () => $user);
+
+            return app(\App\Http\Controllers\Admin\ImpersonationController::class)->offered($request);
+        };
+
+        $this->assertTrue($offered($this->user('admin')));
+        $this->assertTrue($offered($this->user('admin', ['seller'], $store)));
+        $this->assertFalse($offered($this->user('admin', [], $store)));
+        $this->assertFalse($offered($this->user('seller', [], $store)));
+        $this->assertFalse($offered(null));
+        $this->assertTrue($offered($this->user('seller', [], $store), ['id' => 1, 'name' => 'A', 'self' => false]));
+    }
+
+    #[Test]
     public function the_listing_for_a_global_admin_has_every_app_and_the_people_but_no_admins(): void
     {
         $base = config('app.system_domain');

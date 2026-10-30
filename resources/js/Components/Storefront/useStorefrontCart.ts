@@ -28,6 +28,8 @@ export interface UseStorefrontCart {
      * the cart holds any, so it is a value rather than a dismissed notice.
      */
     checkout: (acceptDelay?: boolean) => void;
+    /** Every store's cart in the basket at once: one order per store. */
+    checkoutAll: (acceptDelay?: boolean) => void;
     notice: string | null;
     dismissNotice: () => void;
 }
@@ -61,7 +63,7 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
     } = {
         preserveScroll: true,
         preserveState: true,
-        only: ["cart", "flash"],
+        only: ["cart", "basket", "flash"],
     };
 
     // On a store's own page (/s/{slug}) every cart call names that store.
@@ -131,6 +133,16 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
         );
     };
 
+    const checkoutAll = (acceptDelay: boolean = false): void => {
+        setIsMutating(true);
+
+        router.post(
+            route("storefront.checkout.all"),
+            { accept_delayed_items: acceptDelay },
+            { preserveScroll: true, onFinish: () => setIsMutating(false) },
+        );
+    };
+
     return {
         cartOpen,
         openCart: () => setCartOpen(true),
@@ -141,6 +153,7 @@ export function useStorefrontCart(flash?: StorefrontFlash): UseStorefrontCart {
         updateQuantity,
         removeLine,
         checkout,
+        checkoutAll,
         notice,
         dismissNotice: () => setNotice(null),
     };

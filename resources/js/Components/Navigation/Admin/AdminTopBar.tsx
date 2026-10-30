@@ -106,9 +106,12 @@ export default function AdminTopBar({ onMenuClick, current }: { onMenuClick: () 
                     </IconButton>
                 </Tooltip>
 
-                <Box sx={{ display: { xs: "none", sm: "block" } }}>
-                    <RoleSwitcher roleKey={roleKey} current={current} />
-                </Box>
+                {/* An admin switches apps with the floating Apps button (ImpersonationBanner); a store manager keeps a link to the seller app here. */}
+                {roleKey !== "admin" && (
+                    <Box sx={{ display: { xs: "none", sm: "block" } }}>
+                        <RoleSwitcher roleKey={roleKey} current={current} />
+                    </Box>
+                )}
 
                 <Box
                     sx={{

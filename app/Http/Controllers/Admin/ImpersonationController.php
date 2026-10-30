@@ -58,6 +58,26 @@ class ImpersonationController extends Controller
         ]);
     }
 
+    /**
+     * Whether the floating Apps button shows: always inside an opened app (it
+     * carries Back to admin), otherwise only for an admin who can open more
+     * than the admin app. A store admin with no "also works as" ticks has nothing to switch to.
+     */
+    public function offered(Request $request): bool
+    {
+        if ($request->session()->has('impersonator')) {
+            return true;
+        }
+
+        $user = $request->user()?->loadMissing('roles');
+
+        if (! $user instanceof User || ! $user->hasRole('admin')) {
+            return false;
+        }
+
+        return array_diff($this->ownApps($user), ['admin']) !== [];
+    }
+
     /** Current host: issue a token and send the browser to the target app. */
     public function start(Request $request): Response
     {

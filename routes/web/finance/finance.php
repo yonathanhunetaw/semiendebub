@@ -39,6 +39,16 @@ Route::domain("finance.{$baseDomain}")
                     Route::post('/{payment}/reject', 'reject')->name('reject');
                 });
 
+            // What Duka owes vendors' stores, and payouts: one person records, another confirms.
+            Route::prefix('vendor-payouts')->name('vendor_payouts.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Finance\VendorPayoutController::class, 'index'])->name('index');
+                Route::controller(\App\Http\Controllers\Admin\VendorMoneyController::class)->group(function () {
+                    Route::post('/stores/{store}', 'record')->name('store');
+                    Route::post('/{payout}/confirm', 'confirm')->name('confirm');
+                    Route::post('/{payout}/reject', 'reject')->name('reject');
+                });
+            });
+
             // Import costs (freight, customs, port fees) waiting for their second person.
             require base_path('routes/web/partials/import-costs.php');
 

@@ -17,6 +17,7 @@ import {
 import { useStorefrontCart } from "@/Components/Storefront/useStorefrontCart";
 import type { StorefrontPageProps, StorefrontSort } from "@/types/storefront";
 import useShopLinks from "@/Components/Storefront/useShopLinks";
+import StoreReviewsSection from "@/Components/Storefront/StoreReviewsSection";
 
 /** Debounce for the search box before a server round trip. */
 const SEARCH_DEBOUNCE_MS = 350;
@@ -42,6 +43,8 @@ export default function StorefrontDashboard({
     auth,
     flash,
     error,
+    reviews,
+    basket,
 }: StorefrontPageProps): React.ReactElement {
     const shop = useShopLinks();
     const [search, setSearch] = React.useState<string>(filters.search);
@@ -57,6 +60,7 @@ export default function StorefrontDashboard({
         updateQuantity,
         removeLine,
         checkout,
+        checkoutAll,
         notice,
         dismissNotice,
     } = useStorefrontCart(flash);
@@ -351,6 +355,9 @@ export default function StorefrontDashboard({
                             ) : null}
                         </div>
                     ) : null}
+
+                    {/* What shoppers who received an order say about the store. */}
+                    {store?.slug && reviews ? <StoreReviewsSection slug={store.slug} reviews={reviews} /> : null}
                 </main>
             </div>
 
@@ -378,6 +385,9 @@ export default function StorefrontDashboard({
                 onUpdateQuantity={updateQuantity}
                 onRemove={removeLine}
                 onCheckout={checkout}
+                basket={basket}
+                storeId={store?.id ?? null}
+                onCheckoutAll={checkoutAll}
                 isBusy={isMutating}
                 isAuthenticated={Boolean(auth?.user)}
             />

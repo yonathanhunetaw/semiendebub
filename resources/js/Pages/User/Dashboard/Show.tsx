@@ -51,6 +51,7 @@ export default function StorefrontItemShow({
     related,
     auth,
     flash,
+    basket,
 }: StorefrontShowPageProps): React.ReactElement {
     const shop = useShopLinks();
     const {
@@ -63,6 +64,7 @@ export default function StorefrontItemShow({
         updateQuantity,
         removeLine,
         checkout,
+        checkoutAll,
         notice,
         dismissNotice,
     } = useStorefrontCart(flash);
@@ -478,6 +480,9 @@ export default function StorefrontItemShow({
                 onUpdateQuantity={updateQuantity}
                 onRemove={removeLine}
                 onCheckout={checkout}
+                basket={basket}
+                storeId={store?.id ?? null}
+                onCheckoutAll={checkoutAll}
                 isBusy={isMutating}
                 isAuthenticated={Boolean(auth?.user)}
             />

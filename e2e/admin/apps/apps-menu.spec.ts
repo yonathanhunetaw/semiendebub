@@ -111,14 +111,15 @@ test('a store admin sees only the apps they are ticked for, and only themself in
     await expect(ticked.getByRole('presentation').getByText('Seller app · You')).toBeVisible();
 });
 
-test('a store admin with no ticks has only the admin app, and nothing to open', async ({ browser }) => {
+test('a store admin with no ticks has nothing to open, so gets no Apps button', async ({ browser }) => {
     const plain = await signIn(browser, 'admin', people.storeAdmin.email);
     await plain.goto(app('admin', '/dashboard'));
+    await expect(plain.getByText('Mezgebe Dirijit').first()).toBeVisible();
 
-    expect(await openApps(plain)).toEqual(['Admin']);
+    await expect(plain.getByRole('button', { name: 'Apps' })).toHaveCount(0);
 });
 
-test('the round button never shows for someone who was not switched in', async ({ browser }) => {
+test('the round button never shows for staff who were not switched in', async ({ browser }) => {
     const seller = await signIn(browser, 'seller', fixture.seller.email);
     await seller.goto(app('seller', '/dashboard'));
     await expect(seller.getByRole('button', { name: 'Apps' })).toHaveCount(0);
@@ -127,13 +128,12 @@ test('the round button never shows for someone who was not switched in', async (
 test.describe('phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-    test('the Apps menu lives in Settings on a phone, not in the top bar', async ({ browser }) => {
+    test('on a phone the Apps menu is the same floating button, and Settings has no copy of it', async ({ browser }) => {
         const admin = await signIn(browser, 'admin', people.admin.email);
-        await admin.goto(app('admin', '/dashboard'));
-        await expect(admin.getByRole('button', { name: 'Apps' })).toHaveCount(0);
-
         await admin.goto(app('admin', '/settings'));
-        await expect(admin.getByText('Apps', { exact: true }).locator('visible=true').first()).toBeVisible();
+        await expect(admin.getByText('Open another app, as yourself or as someone else')).toHaveCount(0);
+
+        await admin.goto(app('admin', '/dashboard'));
         await admin.getByRole('button', { name: 'Apps' }).click();
         await expect(admin.getByRole('presentation').locator('button[aria-label="Seller"]')).toBeVisible();
     });

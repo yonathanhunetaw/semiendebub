@@ -355,6 +355,50 @@ class CartService
     }
 
     /**
+     * The shopper's basket across stores (the marketplace): their open cart in every
+     * open store that has something in it. Each store's cart becomes its own order,
+     * so the basket is kept as one cart per store and shown together.
+     *
+     * @return array{stores: array<int, array<string, mixed>>, item_count: int, subtotal: float}
+     */
+    public function presentBasket(): array
+    {
+        $status = (string) config('storefront.cart_status', 'pending');
+        $carts = Cart::query()
+            ->where('status', $status)
+            ->when(auth()->check(), fn ($q) => $q->where('user_id', auth()->id()), fn ($q) => $q->whereNull('user_id')->where('session_id', session()->getId()))
+            ->whereHas('variants')
+            ->whereHas('store', fn ($q) => $q->where('status', 'active'))
+            ->with('store')
+            ->orderBy('id')
+            ->get()
+            // The newest cart per store is the one the shop works with (currentBuyerCart).
+            ->groupBy('store_id')
+            ->map(fn ($group) => $group->last());
+
+        $stores = $carts->map(function (Cart $cart): array {
+            $presented = $this->presentBuyerCart($cart, $cart->store);
+
+            return [
+                'store' => [
+                    'id' => (int) $cart->store->id,
+                    'name' => (string) $cart->store->name,
+                    'slug' => $cart->store->slug,
+                ],
+                'item_count' => (int) $presented['item_count'],
+                'subtotal' => (float) $presented['subtotal'],
+                'requires_delay_agreement' => (bool) $presented['requires_delay_agreement'],
+            ];
+        })->values();
+
+        return [
+            'stores' => $stores->all(),
+            'item_count' => (int) $stores->sum('item_count'),
+            'subtotal' => round((float) $stores->sum('subtotal'), 2),
+        ];
+    }
+
+    /**
      * Shape a cart for the storefront drawer, matching the StorefrontCart
      * contract in resources/js/types/storefront.ts.
      *

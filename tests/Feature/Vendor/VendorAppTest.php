@@ -308,6 +308,32 @@ class VendorAppTest extends TestCase
     }
 
     #[Test]
+    public function finance_is_the_second_person_for_a_payout_an_admin_recorded(): void
+    {
+        Role::firstOrCreate(['name' => 'finance']);
+        $store = $this->approved();
+        Sale::query()->create(['store_id' => $store->id, 'total_amount' => 1000, 'reference_number' => 'SALE-F1'])->update(['payment_status' => 'paid']);
+        $finance = User::factory()->create(['role' => 'finance']);
+        $finance->assignRole('finance');
+
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.payouts.store', $store), ['amount' => 500, 'method' => 'telebirr'])->assertSessionHas('success');
+        $payout = \App\Models\Vendor\VendorPayout::query()->sole();
+
+        $this->on('finance')->actingAs($finance)->get(route('finance.vendor_payouts.index'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Finance/VendorPayouts/Index')
+                ->where('stores.0.balance', 900)
+                ->where('payouts.0.recorded_by_me', false));
+        $this->on('finance')->actingAs($finance)->post(route('finance.vendor_payouts.confirm', $payout))->assertSessionHas('success');
+        $this->assertSame(400.0, app(\App\Services\Vendor\VendorMoney::class)->balance($store));
+
+        // A store admin passes the finance app's gate, but not the money.
+        $storeAdmin = User::factory()->create(['role' => 'admin', 'store_id' => $this->main->id]);
+        $storeAdmin->assignRole('admin');
+        $this->on('finance')->actingAs($storeAdmin)->get(route('finance.vendor_payouts.index'))->assertForbidden();
+        $this->on('finance')->actingAs($storeAdmin)->post(route('finance.vendor_payouts.store', $store), ['amount' => 10, 'method' => 'cash'])->assertForbidden();
+    }
+
+    #[Test]
     public function the_commission_set_now_applies_to_orders_paid_from_now_on(): void
     {
         $store = $this->approved();
@@ -345,6 +371,109 @@ class VendorAppTest extends TestCase
         $this->post(route('storefront.cart.items.store'), ['store' => $store->slug, 'variant_id' => $variant->id, 'quantity' => 1]);
         $this->assertTrue(Cart::query()->where('store_id', $store->id)->exists());
         $this->assertFalse(Cart::query()->where('store_id', $this->main->id)->exists());
+    }
+
+    #[Test]
+    public function one_search_finds_items_in_every_store_grouped_by_store(): void
+    {
+        $store = $this->approved();
+        foreach ([[$store, 'USB charger fast'], [$this->main, 'USB cable'], [$this->main, 'Notebook']] as [$where, $name]) {
+            $item = Item::factory()->create(['status' => 'active', 'product_name' => $name]);
+            $variant = ItemVariant::factory()->create(['item_id' => $item->id]);
+            StoreVariant::factory()->create([
+                'store_id' => $where->id, 'item_id' => $item->id, 'item_variant_id' => $variant->id, 'active' => true,
+                'pricing_matrix' => ['price' => 100.0, 'discount_price' => null, 'discount_ends_at' => null],
+            ]);
+        }
+
+        // The shop's own domain: admin.<domain> has a /stores of its own.
+        $market = 'http://'.config('app.system_domain').'/stores';
+        $this->get($market)->assertOk()
+            ->assertInertia(fn ($page) => $page->component('User/Stores/Index')->has('stores', 2)->where('results', []));
+
+        $this->get("{$market}?q=usb")->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('results', 2)
+                ->where('results', fn ($results) => collect($results)->pluck('total')->sort()->values()->all() === [1, 1]
+                    && collect($results)->flatMap(fn ($r) => collect($r['items'])->pluck('title'))->sort()->values()->all() === ['USB cable', 'USB charger fast']));
+
+        // A closed store is not on the marketplace.
+        $store->update(['status' => 'inactive']);
+        $this->get("{$market}?q=usb")->assertInertia(fn ($page) => $page->has('results', 1));
+    }
+
+    #[Test]
+    public function a_shopper_reviews_a_store_only_after_an_order_reached_them_and_once(): void
+    {
+        $store = $this->approved();
+        $shopper = User::factory()->create(['role' => 'user', 'first_name' => 'Abel', 'last_name' => 'Girma']);
+        $shop = 'http://'.config('app.system_domain');
+        $review = fn (array $data) => $this->actingAs($shopper)->post("{$shop}/s/{$store->slug}/reviews", $data);
+
+        // No delivered order from this store yet: refused, and the page offers no form.
+        $review(['rating' => 5])->assertSessionHasErrors('rating');
+        $this->actingAs($shopper)->get("{$shop}/s/{$store->slug}")->assertInertia(fn ($page) => $page->where('reviews.can_review', false));
+
+        // The store's seller rang it up (sales.user_id); the buyer is its customer, by email.
+        $seller = User::factory()->create(['role' => 'seller', 'store_id' => $store->id]);
+        $customer = \App\Models\Auth\Customer::factory()->create(['email' => $shopper->email, 'store_id' => $store->id]);
+        $sale = Sale::query()->create(['store_id' => $store->id, 'user_id' => $seller->id, 'customer_id' => $customer->id, 'total_amount' => 100, 'reference_number' => 'SALE-R1']);
+        $sale->forceFill(['fulfillment_stage' => Sale::STAGE_DELIVERED])->save();
+
+        // The seller who sold it never reviews their own store.
+        $this->actingAs($seller)->post("{$shop}/s/{$store->slug}/reviews", ['rating' => 5])->assertSessionHasErrors('rating');
+
+        $review(['rating' => 4, 'comment' => 'Quick and kind.'])->assertSessionHas('success');
+        $review(['rating' => 2, 'comment' => 'Changed my mind.'])->assertSessionHas('success');
+        $this->assertSame(1, \App\Models\Store\StoreReview::query()->count());
+
+        $this->actingAs($shopper)->get("{$shop}/s/{$store->slug}")->assertInertia(fn ($page) => $page
+            ->where('reviews.average', 2)
+            ->where('reviews.count', 1)
+            ->where('reviews.latest.0.by', 'Abel G')
+            ->where('reviews.mine.rating', 2));
+
+        // A global admin hides it; it leaves the page and the average. A store admin cannot.
+        $hidden = \App\Models\Store\StoreReview::query()->sole();
+        $storeAdmin = User::factory()->create(['role' => 'admin', 'store_id' => $this->main->id]);
+        $storeAdmin->assignRole('admin');
+        $this->on('admin')->actingAs($storeAdmin)->post(route('admin.vendors.reviews.hide', $hidden))->assertForbidden();
+        $this->on('admin')->actingAs($this->admin)->post(route('admin.vendors.reviews.hide', $hidden))->assertSessionHas('success');
+        $this->get("{$shop}/s/{$store->slug}")->assertInertia(fn ($page) => $page->where('reviews.count', 0)->where('reviews.average', null));
+    }
+
+    #[Test]
+    public function one_basket_holds_carts_from_several_stores_and_checks_out_one_order_per_store(): void
+    {
+        $store = $this->approved();
+        $shopper = User::factory()->create(['role' => 'user']);
+        $shop = 'http://'.config('app.system_domain');
+        $variants = [];
+        foreach ([$store, $this->main] as $where) {
+            $item = Item::factory()->create(['status' => 'active']);
+            $variant = ItemVariant::factory()->create(['item_id' => $item->id]);
+            StoreVariant::factory()->create([
+                'store_id' => $where->id, 'item_id' => $item->id, 'item_variant_id' => $variant->id, 'active' => true,
+                'pricing_matrix' => ['price' => 50.0, 'discount_price' => null, 'discount_ends_at' => null],
+            ]);
+            ItemStock::updateOrCreate(
+                ['item_variant_id' => $variant->id, 'location_type' => Store::class, 'location_id' => $where->id],
+                ['quantity' => 10, 'min_stock_level' => 0],
+            );
+            $variants[$where->id] = $variant;
+        }
+
+        $this->actingAs($shopper)->post("{$shop}/shop/cart/items", ['store' => $store->slug, 'variant_id' => $variants[$store->id]->id, 'quantity' => 2]);
+        $this->actingAs($shopper)->post("{$shop}/shop/cart/items", ['variant_id' => $variants[$this->main->id]->id, 'quantity' => 1]);
+
+        // Either store's page shows the whole basket: two stores, three items.
+        $this->actingAs($shopper)->get("{$shop}/s/{$store->slug}")->assertInertia(fn ($page) => $page
+            ->has('basket.stores', 2)
+            ->where('basket.item_count', 3)
+            ->where('cart.item_count', 2));
+
+        $this->actingAs($shopper)->post("{$shop}/shop/checkout-all", [])
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, '2 orders') && str_contains($message, $store->name) && str_contains($message, 'Main Store'));
     }
 
     #[Test]

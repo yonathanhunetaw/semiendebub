@@ -16,9 +16,6 @@ import {
     Typography,
 } from "@mui/material";
 import type { SvgIconComponent } from "@mui/icons-material";
-import AccountBalance from "@mui/icons-material/AccountBalance";
-import AccountBalanceWallet from "@mui/icons-material/AccountBalanceWallet";
-import AccountTree from "@mui/icons-material/AccountTree";
 import AutoStories from "@mui/icons-material/AutoStories";
 import AirportShuttle from "@mui/icons-material/AirportShuttle";
 import ChevronRight from "@mui/icons-material/ChevronRight";
@@ -28,18 +25,14 @@ import Dns from "@mui/icons-material/Dns";
 import ImportExport from "@mui/icons-material/ImportExport";
 import Layers from "@mui/icons-material/Layers";
 import LightModeRounded from "@mui/icons-material/LightModeRounded";
-import LocalOffer from "@mui/icons-material/LocalOffer";
 import ManageAccounts from "@mui/icons-material/ManageAccounts";
 import PersonOutline from "@mui/icons-material/PersonOutline";
 import SettingsBrightness from "@mui/icons-material/SettingsBrightness";
 import Store from "@mui/icons-material/Store";
-import Storefront from "@mui/icons-material/Storefront";
-import Tune from "@mui/icons-material/Tune";
 import Warehouse from "@mui/icons-material/Warehouse";
 import { ThemeContext } from '@/theme/ThemeContext';
 import { useAdminScope } from "@/Components/Navigation/Admin/useAdminScope";
 import StoreScopeSelect from "@/Components/Navigation/Admin/StoreScopeSelect";
-import RoleSwitcher from "@/Components/Navigation/Admin/RoleSwitcher";
 import { useRole } from "@/theme";
 
 type ThemeSetting = "light" | "dark" | "system";
@@ -90,7 +83,8 @@ function SettingsCard({ title, caption, links }: { title: string; caption?: stri
 /**
  * Settings: appearance, who you are in the admin app, and the screens that
  * configure the system. Users, sessions and the network-wide screens are a
- * global admin's only; a store admin sees what applies to their store.
+ * global admin's only. A store's own setup (locations, payment accounts,
+ * seller balances, customer prices) lives on its Store page, under Setup.
  */
 export default function SettingsIndex() {
     const { toggleTheme, currentSetting } = React.useContext(ThemeContext) as {
@@ -99,17 +93,6 @@ export default function SettingsIndex() {
     };
     const { isGlobalAdmin, activeStore, accessibleStores, canSwitch, roleKey } = useAdminScope();
     const role = useRole();
-
-    const storeLinks: SettingLink[] = [
-        ...(activeStore.id !== "all"
-            ? [{ icon: Storefront, title: "Store page", desc: `${activeStore.name}: items, prices and replenishment`, href: route("store.show", activeStore.id) }]
-            : []),
-        { icon: AccountTree, title: "Locations", desc: "Shelf, floor and Remote Hub, and who manages each", href: route("admin.inventory.stock-locations.index") },
-        { icon: Tune, title: "Capacity", desc: "Min and max levels that drive replenishment", href: route("admin.inventory.capacity.index") },
-        { icon: AccountBalance, title: "Payment accounts", desc: "Where customers pay in, and who confirms each", href: route("admin.payment-accounts.index") },
-        { icon: AccountBalanceWallet, title: "Seller balances", desc: "What each seller holds and has handed over", href: route("admin.balances.index") },
-        { icon: LocalOffer, title: "Customer prices & discounts", desc: "Per-customer prices and when discounts end", href: route("admin.customers.discounts") },
-    ];
 
     const adminLinks: SettingLink[] = [
         { icon: ManageAccounts, title: "Users", desc: "Staff, roles and which store each works at", href: route("admin.users.index") },
@@ -163,19 +146,6 @@ export default function SettingsIndex() {
                     </Box>
                 </Card>
 
-                {/* On a phone the top bar has no room for the switcher, so it lives here; tablet and desktop keep it in the bar. */}
-                {roleKey === "admin" && (
-                    <Card sx={{ ...cardSx, p: 2, display: { xs: "flex", sm: "none" }, flexDirection: "column", gap: 1 }}>
-                        <Typography sx={{ fontWeight: 800 }}>Apps</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            Open another app, as yourself or as someone else, without signing in again.
-                        </Typography>
-                        <Box>
-                            <RoleSwitcher roleKey={roleKey} current={role} />
-                        </Box>
-                    </Card>
-                )}
-
                 <Card sx={{ ...cardSx, p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
                     <Box>
                         <Typography sx={{ fontWeight: 800 }}>Appearance</Typography>
@@ -197,7 +167,6 @@ export default function SettingsIndex() {
                     </ToggleButtonGroup>
                 </Card>
 
-                <SettingsCard title="Store setup" caption={activeStore.id === "all" ? "Every store" : activeStore.name} links={storeLinks} />
                 {isGlobalAdmin && <SettingsCard title="Administration" caption="Global admins only" links={adminLinks} />}
             </Box>
         </Box>

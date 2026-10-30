@@ -244,14 +244,32 @@ export interface StorefrontPageProps extends StorefrontSharedProps {
     sorts: StorefrontSortOption[];
     pagination: StorefrontPagination;
     error?: string | null;
+    /** The shopper's carts in every store. */
+    basket?: StorefrontBasket;
+    /** The store's reviews (StoreReviews::forStorePage). */
+    reviews?: import("@/Components/Storefront/StoreReviewsSection").StoreReviewsProps;
 }
 
 /** Inertia page props for User/Dashboard/Show. */
 export interface StorefrontShowPageProps extends StorefrontSharedProps {
+    /** The shopper's carts in every store. */
+    basket?: StorefrontBasket;
     store: StorefrontStore | null;
     item: StorefrontItemDetail;
     categories: StorefrontCategory[];
     cart: StorefrontCart;
     /** Same category, same store — the rail at the foot of the page. */
     related: StorefrontItemCard[];
+}
+
+/** The shopper's carts across stores (CartService::presentBasket): one order per store at checkout. */
+export interface StorefrontBasket {
+    stores: Array<{
+        store: { id: number; name: string; slug: string | null };
+        item_count: number;
+        subtotal: number;
+        requires_delay_agreement: boolean;
+    }>;
+    item_count: number;
+    subtotal: number;
 }

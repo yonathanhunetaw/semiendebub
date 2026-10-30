@@ -16,6 +16,8 @@ export interface ItemCardProps {
     item: StorefrontItemCard;
     /** Units of this product already in the cart, across all its variants. */
     quantityInCart?: number;
+    /** Where the card opens; by default the item in the store being browsed (the marketplace names the store). */
+    href?: string;
 }
 
 /**
@@ -28,6 +30,7 @@ export interface ItemCardProps {
 export default function ItemCard({
     item,
     quantityInCart = 0,
+    href,
 }: ItemCardProps): React.ReactElement {
     const shop = useShopLinks();
     const tone = STOCK_TONES[item.stock_status];
@@ -36,7 +39,7 @@ export default function ItemCard({
 
     return (
         <Link
-            href={shop.item(item.id)}
+            href={href ?? shop.item(item.id)}
             className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-outline-variant/80 bg-surface-container-lowest shadow-sm transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40"
             aria-label={`View options for ${item.title}`}
         >

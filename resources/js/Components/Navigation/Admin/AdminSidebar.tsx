@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import ChevronRightRounded from "@mui/icons-material/ChevronRightRounded";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import Hub from "@mui/icons-material/Hub";
 import ExpandLess from "@mui/icons-material/ExpandLess";
@@ -19,6 +20,7 @@ import {
     ListSubheader,
     Toolbar,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import {
     ADMIN_NAV,
     navItemActive,
@@ -158,7 +160,7 @@ export default function AdminSidebar({
                 <ListItemIcon>
                     <Icon fontSize={child ? "small" : "medium"} />
                 </ListItemIcon>
-                <ListItemText primary={item.label} secondary={item.storeSection && roleKey === "admin" ? activeStore.name : undefined} secondaryTypographyProps={{ noWrap: true, sx: { color: "inherit", opacity: 0.75, fontSize: "0.75rem" } }} />
+                <ListItemText primary={item.label} />
                 {badge > 0 && (
                     <Chip
                         label={badge > 999 ? "999+" : badge}
@@ -169,6 +171,67 @@ export default function AdminSidebar({
                     />
                 )}
                 {item.external && item.newTab && <OpenInNew sx={{ fontSize: 14, opacity: 0.6 }} />}
+            </ListItemButton>
+        );
+    };
+
+    /*
+     * The Store entry is the door to the store's own page, so it reads as one:
+     * a card with the store's picture, its name and a chevron, above the list.
+     */
+    const renderStoreCard = (item: AdminNavItem): React.ReactNode => {
+        const Icon = item.icon;
+        const selected = navItemActive(item, path, activeStore.id);
+        const allStores = roleKey === "admin" && activeStore.id === "all";
+        const title = roleKey === "admin" ? (allStores ? "All stores" : activeStore.name) : "Approvals";
+        const caption = roleKey !== "admin" ? "Refills and counts to rule on" : allStores ? "Inventory overview" : "Open store page";
+
+        return (
+            <ListItemButton
+                key={item.key}
+                component={Link}
+                href={navItemHref(item, activeStore.id, roleKey)}
+                selected={selected}
+                onClick={closeIfTemporary}
+                aria-label={`Store: ${title}`}
+                sx={{
+                    mx: 1.5,
+                    mt: 0.5,
+                    mb: 1,
+                    px: 1.25,
+                    py: 1,
+                    gap: 1.25,
+                    borderRadius: 3,
+                    border: "1px solid",
+                    borderColor: "primary.main",
+                    bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                    color: "text.primary",
+                    transition: "background-color 120ms, box-shadow 120ms",
+                    "&:hover": { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.16), boxShadow: 2 },
+                    "& .store-card-icon": { bgcolor: "primary.main", color: "primary.contrastText" },
+                    "&.Mui-selected, &.Mui-selected:hover": {
+                        bgcolor: "primary.main",
+                        color: "primary.contrastText",
+                        boxShadow: 3,
+                        "& .store-card-icon": { bgcolor: "background.paper", color: "primary.main" },
+                    },
+                }}
+            >
+                <Box className="store-card-icon" sx={{ width: 40, height: 40, borderRadius: 2.5, display: "grid", placeItems: "center", flexShrink: 0, boxShadow: 1 }}>
+                    <Icon />
+                </Box>
+                <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+                    <Box component="span" sx={{ display: "block", fontSize: "0.625rem", fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", opacity: 0.75 }}>
+                        Store
+                    </Box>
+                    <Box component="span" sx={{ display: "block", fontSize: "0.95rem", fontWeight: 800, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {title}
+                    </Box>
+                    <Box component="span" sx={{ display: "block", fontSize: "0.7rem", opacity: 0.75, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {caption}
+                    </Box>
+                </Box>
+                <ChevronRightRounded sx={{ flexShrink: 0, opacity: 0.8 }} />
             </ListItemButton>
         );
     };
@@ -210,7 +273,7 @@ export default function AdminSidebar({
         <Box sx={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
             <Box ref={listRef} onScroll={(event) => writeScroll(event.currentTarget.scrollTop)} sx={{ flexGrow: 1, overflowY: "auto", pb: 2 }}>
                 <List dense disablePadding subheader={<ListSubheader disableSticky sx={zoneHeaderSx}>Store operations</ListSubheader>}>
-                    {storeZone.map((item) => (item.children ? renderGroup(item) : renderItem(item)))}
+                    {storeZone.map((item) => (item.storeSection ? renderStoreCard(item) : item.children ? renderGroup(item) : renderItem(item)))}
                 </List>
 
                 {globalZone.length > 0 && (
