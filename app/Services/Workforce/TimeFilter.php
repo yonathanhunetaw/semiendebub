@@ -7,6 +7,7 @@ namespace App\Services\Workforce;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\SiteDay;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Contracts\Database\Eloquent\Builder as EloquentContract;
 use Illuminate\Contracts\Database\Query\Expression;
@@ -186,19 +187,86 @@ final class TimeFilter
     }
 
     /**
+     * For lists of work still open (carts, payments to confirm, orders to
+     * pick): narrows by when each item started. "All" (the default) shows
+     * everything, and open work has no archive.
+     *
+     * @template T of EloquentContract|Builder
+     *
+     * @param  T  $query
+     * @param  array<int, int>|null  $storeIds
+     * @param  array{when: string, date: string|null}  $period
+     * @return T
+     */
+    public function applyToOpen($query, string|Expression $timeColumn, string|Expression $storeColumn, ?array $storeIds, array $period)
+    {
+        return in_array($period['when'], ['all', 'archive'], true)
+            ? $query
+            : $this->apply($query, $timeColumn, $storeColumn, $storeIds, $period);
+    }
+
+    /**
+     * The same rule for rows already built (arrays): a test that says whether
+     * a row of a store, started at a moment, belongs in the period. "All"
+     * keeps every row; open work has no archive.
+     *
+     * @param  array{when: string, date: string|null}  $period
+     * @return Closure(int|null, CarbonInterface|string|null): bool
+     */
+    public function matcher(array $period, ?array $storeIds = null): Closure
+    {
+        $when = $period['when'];
+
+        if (in_array($when, ['all', 'archive'], true)) {
+            return fn (): bool => true;
+        }
+
+        $instant = fn (CarbonInterface|string|null $at): ?CarbonImmutable => $at === null ? null : CarbonImmutable::parse($at)->utc();
+
+        if ($when === 'week' || $when === 'month') {
+            $from = LocalTime::startOf($when === 'week' ? LocalTime::today()->subDays(6) : LocalTime::today()->startOfMonth());
+
+            return fn (?int $storeId, CarbonInterface|string|null $at): bool => ($moment = $instant($at)) !== null && $moment->gte($from);
+        }
+
+        if ($when === 'outside') {
+            $book = app(DayBook::class);
+            $from = LocalTime::startOf(LocalTime::today()->subDays(29));
+
+            return fn (?int $storeId, CarbonInterface|string|null $at): bool => ($moment = $instant($at)) !== null && $moment->gte($from)
+                && $storeId !== null && ($book->tag($storeId, $moment)['outside'] ?? false);
+        }
+
+        $spans = collect($this->spans($storeIds, $period))->keyBy(0);
+
+        return function (?int $storeId, CarbonInterface|string|null $at) use ($spans, $instant): bool {
+            $moment = $instant($at);
+            $span = $storeId !== null ? $spans->get($storeId) : null;
+
+            return $moment !== null && $span !== null && $moment->gte($span[1]) && ($span[2] === null || $moment->lte($span[2]));
+        };
+    }
+
+    /**
      * What the filter shows, for the chips: the options, the choice, and the
      * day it means (stores that did not open that day simply show nothing).
      *
      * @param  array{when: string, date: string|null}  $period
+     * @param  bool  $openWork  a list of work still open (no archive; the default is "All")
      * @return array{when: string, date: string|null, archive_after_days: int, options: list<array{key: string, label: string}>}
      */
-    public function describe(array $period): array
+    public function describe(array $period, bool $openWork = false): array
     {
+        // Open work has no archive, and its default shows everything: "All", not "Recent".
+        $labels = $openWork
+            ? array_merge(array_diff_key(self::LABELS, ['all' => true, 'archive' => true]), ['all' => 'All'])
+            : self::LABELS;
+
         return [
             'when' => $period['when'],
             'date' => $period['date'],
             'archive_after_days' => max(1, (int) config('app.archive_after_days', 90)),
-            'options' => collect(self::LABELS)->map(fn (string $label, string $key): array => ['key' => $key, 'label' => $label])->values()->all(),
+            'options' => collect($labels)->map(fn (string $label, string $key): array => ['key' => $key, 'label' => $label])->values()->all(),
         ];
     }
 

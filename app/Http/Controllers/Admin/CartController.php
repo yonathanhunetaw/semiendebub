@@ -36,11 +36,16 @@ class CartController extends Controller
     /**
      * Display all carts globally for the admin index.
      */
-    public function index(ActiveStore $activeStore)
+    public function index(Request $request, ActiveStore $activeStore)
     {
+        // When each cart was started: Today / Yesterday are each store's business day. "All" is the default.
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        $period = $time->fromRequest($request);
+
         $carts = $activeStore->apply(Cart::query())
             ->with(['customer', 'seller', 'store', 'user'])
             ->withCount('variants')
+            ->tap(fn ($q) => $time->applyToOpen($q, 'carts.created_at', 'carts.store_id', $activeStore->scopeIds(), $period))
             ->latest()
             ->paginate(15)
             ->withQueryString();
@@ -54,6 +59,7 @@ class CartController extends Controller
 
         return Inertia::render('Admin/Carts/Index', [
             'carts' => $carts,
+            'time' => $time->describe($period, openWork: true),
         ]);
     }
 

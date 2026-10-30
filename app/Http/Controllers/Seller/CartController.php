@@ -62,6 +62,8 @@ class CartController extends Controller
     {
         $user = auth()->user();
         $homeStoreId = (int) ($user->store_id ?? 0);
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        $period = $time->fromRequest($request);
 
         $carts = Cart::with([
             'customer',
@@ -76,6 +78,8 @@ class CartController extends Controller
             // `completed` and lives on the Orders board, and add-to-cart only
             // ever offers open carts.
             ->open()
+            // When each was started (Today = the store's business day); "All" by default.
+            ->tap(fn ($q) => $time->applyToOpen($q, 'carts.created_at', 'carts.store_id', $homeStoreId > 0 ? [$homeStoreId] : null, $period))
             ->orderedByPriority()
             ->get();
 
@@ -84,6 +88,7 @@ class CartController extends Controller
         return Inertia::render('Seller/Carts/Index', [
             'carts' => $carts->map(fn (Cart $cart) => $this->presentCart($cart, $homeStoreId))->values()->all(),
             'home_store' => $user->store?->name,
+            'time' => $time->describe($period, openWork: true),
             // Ignored unless it is one of the carts this seller can see.
             'focus_cart' => $focusId && $carts->contains('id', $focusId) ? $focusId : null,
         ]);

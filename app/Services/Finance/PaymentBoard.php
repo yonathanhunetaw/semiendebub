@@ -103,6 +103,7 @@ class PaymentBoard
                 'order_total' => (float) ($payment->sale?->total_amount ?? $payment->amount),
                 'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? 'Walk-in customer',
                 'store' => $payment->sale?->store?->name ?? $payment->account?->store?->name,
+                'store_id' => ($payment->sale?->store_id ?? $payment->account?->store_id) !== null ? (int) ($payment->sale?->store_id ?? $payment->account?->store_id) : null,
                 'claimed_by' => $payment->claimer
                     ? trim($payment->claimer->first_name.' '.$payment->claimer->last_name)
                     : ($payment->claimed_via === Payment::CLAIMED_VIA_CUSTOMER ? 'The customer (shared cart)' : null),
@@ -129,6 +130,7 @@ class PaymentBoard
                 'order_total' => (float) ($payment->sale?->total_amount ?? $payment->amount),
                 'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? 'Walk-in customer',
                 'store' => $payment->sale?->store?->name ?? $payment->account?->store?->name,
+                'store_id' => ($payment->sale?->store_id ?? $payment->account?->store_id) !== null ? (int) ($payment->sale?->store_id ?? $payment->account?->store_id) : null,
                 'claimed_by' => null,
                 'recorded_by' => $payment->user ? trim($payment->user->first_name.' '.$payment->user->last_name) : null,
                 'expected' => true,
@@ -195,6 +197,7 @@ class PaymentBoard
                 'order_total' => (float) ($payment->sale?->total_amount ?? $payment->amount),
                 'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? 'Walk-in customer',
                 'store' => $payment->sale?->store?->name ?? $payment->account?->store?->name,
+                'store_id' => ($payment->sale?->store_id ?? $payment->account?->store_id) !== null ? (int) ($payment->sale?->store_id ?? $payment->account?->store_id) : null,
                 // Store admins and managers by name; a global admin can always.
                 'confirmers' => $standIns->get($storeId, []),
             ];
@@ -229,6 +232,8 @@ class PaymentBoard
             'reference' => $remittance->reference,
             'status' => (string) $remittance->status,
             'by' => $remittance->user ? trim($remittance->user->first_name.' '.$remittance->user->last_name) : null,
+            // The store of the person handing over, for the day filter.
+            'store_id' => $remittance->user?->store_id !== null ? (int) $remittance->user->store_id : null,
             'at' => $remittance->created_at?->toIso8601String(),
             'settled_at' => ($remittance->confirmed_at ?? $remittance->rejected_at)?->toIso8601String(),
         ];

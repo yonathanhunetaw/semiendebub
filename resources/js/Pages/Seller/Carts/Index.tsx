@@ -1,6 +1,8 @@
 import NotificationsBell from "@/Components/Navigation/Admin/NotificationsBell";
 import ShareCartPanel, { type CartShareInfo } from "@/Components/Seller/ShareCartPanel";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
+import type { TimeFilterView } from "@/types/time";
 import DayTag from "@/Components/Shared/time/DayTag";
 import type { DayTagView } from "@/types/time";
 import SellerLayout from "@/Layouts/SellerLayout";
@@ -61,6 +63,8 @@ interface Props {
     home_store?: string | null;
     /** `?cart={id}`: open this cart on screen without saving a new priority. */
     focus_cart?: number | null;
+    /** When each cart was started (Today = the store's business day). */
+    time?: TimeFilterView;
 }
 
 /** Saved priority order, with the focused cart (if any) moved to the front. */
@@ -187,7 +191,7 @@ function SelectDot({ checked, onClick, className = "" }: {
     );
 }
 
-export default function CartsIndex({ carts = [], home_store, focus_cart = null }: Props): React.ReactElement {
+export default function CartsIndex({ carts = [], home_store, focus_cart = null, time }: Props): React.ReactElement {
     // Local ordering so promoting a cart is instant; the server is told after.
     const [order, setOrder] = useState<number[]>(() => initialOrder(carts, focus_cart));
 
@@ -479,6 +483,11 @@ export default function CartsIndex({ carts = [], home_store, focus_cart = null }
                                 </div>
                             </div>
                         </>
+                    ) : null}
+                    {time ? (
+                        <div className="mt-2">
+                            <TimeFilterChips filter={time} />
+                        </div>
                     ) : null}
                 </header>
 

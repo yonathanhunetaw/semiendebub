@@ -27,16 +27,23 @@ class PaymentInboxController extends Controller
 {
     public function index(Request $request, PaymentBoard $board): Response
     {
+        // When each was recorded: Today / Yesterday are its store's business day. "All" is the default.
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        $period = $time->fromRequest($request);
+        $keeps = $time->matcher($period);
+        $only = fn (array $rows, string $at): array => array_values(array_filter($rows, fn (array $row): bool => $keeps($row['store_id'] ?? null, $row[$at] ?? null)));
+
         return Inertia::render('Seller/Payments/Inbox', [
-            'payments' => $board->inbox($request->user()),
+            'payments' => $only($board->inbox($request->user()), 'created_at'),
             // Deposits into this owner's accounts not marked paid yet: they
             // may confirm one the moment it shows in the account.
-            'expected' => $board->expectedInbox($request->user()),
-            'handovers' => $board->handoverInbox((int) $request->user()->id),
+            'expected' => $only($board->expectedInbox($request->user()), 'created_at'),
+            'handovers' => $only($board->handoverInbox((int) $request->user()->id), 'at'),
             // Deposits into this owner's accounts that they recorded or claimed
             // themselves: someone else confirms those (two people), shown so
             // the owner knows where they are.
-            'waiting_on_others' => $board->waitingOnOthers($request->user()),
+            'waiting_on_others' => $only($board->waitingOnOthers($request->user()), 'created_at'),
+            'time' => $time->describe($period, openWork: true),
         ]);
     }
 

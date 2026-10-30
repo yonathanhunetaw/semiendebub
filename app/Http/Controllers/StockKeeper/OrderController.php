@@ -42,8 +42,14 @@ class OrderController extends Controller
     {
         $tab = $request->string('tab')->toString() ?: 'to_pick';
         $storeId = $request->user()?->store_id;
+        // When each order was placed: Today / Yesterday are the store's business day. "All" is the default.
+        $time = app(\App\Services\Workforce\TimeFilter::class);
+        $period = $time->fromRequest($request);
 
-        $base = fn () => Sale::query()->when($storeId !== null, fn ($query) => $query->forStore((int) $storeId));
+        $base = fn () => $time->applyToOpen(
+            Sale::query()->when($storeId !== null, fn ($query) => $query->forStore((int) $storeId)),
+            'sales.created_at', 'sales.store_id', $storeId !== null ? [(int) $storeId] : null, $period,
+        );
 
         $query = $tab === 'with_delivery'
             ? $base()->where('fulfillment_stage', Sale::STAGE_TO_DELIVER)
@@ -65,6 +71,7 @@ class OrderController extends Controller
                 ->values()
                 ->all(),
             'tab' => $tab,
+            'time' => $time->describe($period, openWork: true),
             'counts' => [
                 'to_pick' => $base()->awaitingSourcing()->count(),
                 'with_delivery' => $base()->where('fulfillment_stage', Sale::STAGE_TO_DELIVER)->count(),

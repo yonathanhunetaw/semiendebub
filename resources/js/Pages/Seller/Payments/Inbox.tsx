@@ -5,6 +5,8 @@ import { Head, router } from "@inertiajs/react";
 import React, { useState } from "react";
 import { dayDateTime } from "@/utils/dates";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
+import type { TimeFilterView } from "@/types/time";
 
 /**
  * Payments to confirm.
@@ -34,6 +36,8 @@ interface Props {
     expected?: InboxPayment[];
     handovers?: RemittanceRow[];
     waiting_on_others?: WaitingPayment[];
+    /** When each was recorded (Today = its store's business day). */
+    time?: TimeFilterView;
 }
 
 /** What the "are you sure?" sheet is about to confirm. */
@@ -44,7 +48,7 @@ type PendingConfirm =
 const accountName = (payment: Pick<InboxPayment, "account">): string =>
     payment.account ? `${payment.account.provider_name} · ${payment.account.account_number}` : "Cash in hand";
 
-export default function Inbox({ payments = [], expected = [], handovers = [], waiting_on_others: waiting = [] }: Props): React.ReactElement {
+export default function Inbox({ payments = [], expected = [], handovers = [], waiting_on_others: waiting = [], time }: Props): React.ReactElement {
     const [busy, setBusy] = useState<number | null>(null);
     const [busyHandover, setBusyHandover] = useState<number | null>(null);
     const [asking, setAsking] = useState<PendingConfirm | null>(null);
@@ -77,6 +81,11 @@ export default function Inbox({ payments = [], expected = [], handovers = [], wa
                     <p className="text-[11px] text-outline">
                         Check each account, then confirm what arrived.
                     </p>
+                    {time ? (
+                        <div className="mt-2">
+                            <TimeFilterChips filter={time} />
+                        </div>
+                    ) : null}
                 </header>
 
                 <div className="space-y-3 px-3.5 pt-3">

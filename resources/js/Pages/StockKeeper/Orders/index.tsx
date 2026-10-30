@@ -1,4 +1,6 @@
 import { Head, router } from "@inertiajs/react";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
+import type { TimeFilterView } from "@/types/time";
 import React, { useState } from "react";
 import StockKeeperLayout from "@/Layouts/StockKeeperLayout";
 import { EmptyState, StatusPill } from "@/Components/Shared/ui";
@@ -59,6 +61,8 @@ interface OrdersProps extends SharedProps {
     orders?: PickOrder[];
     tab?: "to_pick" | "with_delivery";
     counts?: { to_pick: number; with_delivery: number };
+    /** When each order was placed (Today = the store's business day). */
+    time?: TimeFilterView;
     pagination: Pagination;
 }
 
@@ -76,7 +80,7 @@ const key = (source: { location_type: string; location_id: number } | null): str
  * picking, tick each line in hand, mark the parcel packed, hand it over. An
  * order whose payment is not all confirmed cannot be handed over.
  */
-export default function Orders({ orders = [], tab = "to_pick", counts = { to_pick: 0, with_delivery: 0 }, pagination }: OrdersProps): React.ReactElement {
+export default function Orders({ orders = [], tab = "to_pick", counts = { to_pick: 0, with_delivery: 0 }, time, pagination }: OrdersProps): React.ReactElement {
     const pickable = orders.filter((o) => o.lines.every((l) => l.options.some((opt) => opt.sufficient))).length;
 
     const go = (next: { tab?: Tab; page?: number }) => {
@@ -108,6 +112,11 @@ export default function Orders({ orders = [], tab = "to_pick", counts = { to_pic
                         { value: "with_delivery", label: "With Delivery", count: counts.with_delivery },
                     ]}
                 />
+                {time ? (
+                    <div className="mt-2">
+                        <TimeFilterChips filter={time} />
+                    </div>
+                ) : null}
             </div>
 
             {orders.length === 0 ? (

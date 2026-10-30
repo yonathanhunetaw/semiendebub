@@ -220,4 +220,39 @@ class TimeFilterTest extends TestCase
             $time->applyCalendar(Sale::query()->orderBy('id'), 'sales.created_at', ['when' => 'archive', 'date' => null])->pluck('reference_number')->all(),
         );
     }
+
+    #[Test]
+    public function open_work_lists_filter_by_when_each_item_started_and_show_everything_by_default(): void
+    {
+        $this->openDay('2026-10-19 08:30', '2026-10-19 19:00');
+        $this->at('2026-10-19 10:00');
+        $old = \App\Models\Seller\Cart::query()->create(['store_id' => $this->store->id, 'seller_id' => $this->seller->id, 'status' => 'open', 'session_id' => '111111']);
+        $this->openDay('2026-10-20 08:30', '2026-10-20 19:00');
+        $this->at('2026-10-20 10:00');
+        $new = \App\Models\Seller\Cart::query()->create(['store_id' => $this->store->id, 'seller_id' => $this->seller->id, 'status' => 'open', 'session_id' => '222222']);
+        $this->at('2026-10-20 20:00');
+
+        $ids = function (string $query): array {
+            $ids = [];
+            $this->get(route('admin.carts.index').$query)->assertOk()->assertInertia(function (Assert $page) use (&$ids): void {
+                $carts = $page->toArray()['props']['carts'];
+                $ids = collect($carts['data'] ?? $carts)->pluck('id')->sort()->values()->all();
+                $labels = collect($page->toArray()['props']['time']['options'])->pluck('label', 'key')->all();
+                $this->assertSame('All', $labels['all']);
+                $this->assertArrayNotHasKey('archive', $labels, 'Open work has no archive.');
+            });
+
+            return $ids;
+        };
+
+        $this->assertSame([$old->id, $new->id], $ids(''), 'All by default.');
+        $this->assertSame([$new->id], $ids('?when=today'));
+        $this->assertSame([$old->id], $ids('?when=yesterday'));
+
+        // The same rule for rows built as arrays (the payment inbox).
+        $keeps = app(\App\Services\Workforce\TimeFilter::class)->matcher(['when' => 'today', 'date' => null]);
+        $this->assertTrue($keeps($this->store->id, $new->created_at));
+        $this->assertFalse($keeps($this->store->id, $old->created_at));
+        $this->assertTrue(app(\App\Services\Workforce\TimeFilter::class)->matcher(['when' => 'all', 'date' => null])($this->store->id, $old->created_at));
+    }
 }

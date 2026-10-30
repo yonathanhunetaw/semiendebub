@@ -9,6 +9,8 @@ import ShoppingCartOutlined from "@mui/icons-material/ShoppingCartOutlined";
 import { ADMIN_PAGE_SX as ROOT } from "@/Components/Admin/adminPage";
 import { FigureRow, FigureTile, PageBand, Pager, Pill, TablePanel, adminTableSx, tinySx, type PillTone } from "@/Components/Admin/adminUi";
 import AgeBadge from "@/Components/Shared/time/AgeBadge";
+import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
+import type { TimeFilterView } from "@/types/time";
 import DayTag from "@/Components/Shared/time/DayTag";
 import type { DayTagView } from "@/types/time";
 import { dayDateTime } from "@/utils/dates";
@@ -39,11 +41,13 @@ interface Paginator {
 
 interface Props {
     carts: Paginator | Cart[];
+    /** When each cart was started (Today = its store's business day). */
+    time?: TimeFilterView;
 }
 
 const STATUS_TONE: Record<string, PillTone> = { open: "success", processing: "warning", completed: "info", canceled: "error" };
 
-export default function CartsIndex({ carts }: Props) {
+export default function CartsIndex({ carts, time }: Props) {
     const page = Array.isArray(carts) ? null : carts;
     const list = Array.isArray(carts) ? carts : carts.data ?? [];
     const open = list.filter((cart) => cart.status === "open").length;
@@ -76,6 +80,8 @@ export default function CartsIndex({ carts }: Props) {
                 <FigureTile label="Empty on this page" value={empty} tone={empty > 0 ? "warning" : "default"} />
                 <FigureTile label="On this page" value={list.length} />
             </FigureRow>
+
+            {time ? <TimeFilterChips filter={time} /> : null}
 
             <TablePanel>
                 <TableContainer>
