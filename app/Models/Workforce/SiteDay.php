@@ -8,6 +8,7 @@ use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * One site on one date: who is to open and close it (and drive them), who did, and when.
@@ -89,6 +90,12 @@ class SiteDay extends Model
     public function closedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'closed_by');
+    }
+
+    /** What the opener, closer and driver said: will they do it. */
+    public function answers(): HasMany
+    {
+        return $this->hasMany(SiteDayAnswer::class);
     }
 
     public function isOpen(): bool

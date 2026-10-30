@@ -93,6 +93,8 @@ export interface SiteDayView {
     driver: Person | null;
     /** Opened or closed with no driver planned (or the opener's pick-up never set off). */
     no_driver: boolean;
+    /** Will they do it: each duty's answer from whoever holds it now, null while unanswered. */
+    answers: Record<DutyKind, DutyAnswer | null>;
     /** The driver's two runs from the plan; times are wall-clock "YYYY-MM-DDTHH:mm". */
     rides: { id: number; purpose: RidePurpose; departs_at: string; status: RideView["status"] }[];
     opened_at: string | null;
@@ -118,6 +120,40 @@ export interface SiteDayView {
     key_holder: Person | null;
     i_hold_key: boolean;
     manages: boolean;
+}
+
+export type DutyKind = "opener" | "closer" | "driver";
+
+export interface DutyAnswer {
+    answer: "yes" | "no";
+    /** Why not (a "no" always has one). */
+    note: string | null;
+    at: string | null;
+}
+
+/** SiteDayService::dutiesFor: a day this person opens, closes or drives, still to do. */
+export interface DutyView extends SiteDayView {
+    /** What is left for me on that day ("opener" goes once the day is open). */
+    my_roles: ("opener" | "closer" | "driver")[];
+    /** Today, or a day opened earlier that is still open. */
+    is_today: boolean;
+}
+
+/** SiteDayService::weekPlan: one site's week, for a manager's glance. */
+export interface WeekPlanRow {
+    site: { id: number; name: string; kind: SiteKind; kind_label: string };
+    days: {
+        date: string;
+        status: SiteDayStatus;
+        opens_at: string | null;
+        closes_at: string | null;
+        /** Nobody set hours for that weekday. */
+        no_hours: boolean;
+        opener: string | null;
+        closer: string | null;
+        driver: string | null;
+        answers: Record<DutyKind, "yes" | "no" | null>;
+    }[];
 }
 
 export type ShiftStatus = "draft" | "published" | "accepted" | "change_requested" | "cancelled";

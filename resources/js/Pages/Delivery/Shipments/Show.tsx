@@ -74,7 +74,7 @@ export default function DeliveryShipmentShow({ shipment, is_mine: isMine, flash 
                         <IconButton
                             component={Link}
                             href={route("delivery.shipments.index")}
-                            sx={{ color: "inherit", bgcolor: alpha("#fff", 0.14) }}
+                            sx={{ color: "inherit", bgcolor: (t) => alpha(t.palette.primary.contrastText, 0.14) }}
                             aria-label="All runs"
                         >
                             <ArrowBackRoundedIcon />
@@ -90,7 +90,7 @@ export default function DeliveryShipmentShow({ shipment, is_mine: isMine, flash 
                         <ShipmentStatusChip status={shipment.status} />
                     </Stack>
 
-                    <Paper elevation={0} sx={{ p: 2, borderRadius: 4, bgcolor: alpha("#fff", 0.12), color: "inherit" }}>
+                    <Paper elevation={0} sx={{ p: 2, borderRadius: 4, bgcolor: (t) => alpha(t.palette.primary.contrastText, 0.12), color: "inherit" }}>
                         <Stack direction="row" spacing={1.5} alignItems="center">
                             <WarehouseRoundedIcon />
                             <Box sx={{ minWidth: 0 }}>
@@ -112,12 +112,12 @@ export default function DeliveryShipmentShow({ shipment, is_mine: isMine, flash 
                         <Chip
                             icon={<DirectionsCarRoundedIcon />}
                             label={shipment.vehicle_name ? `${shipment.vehicle_name} · ${shipment.vehicle_plate ?? ""}` : "Car not set"}
-                            sx={{ bgcolor: alpha("#fff", 0.16), color: "inherit", fontWeight: 700, "& .MuiChip-icon": { color: "inherit" } }}
+                            sx={{ bgcolor: (t) => alpha(t.palette.primary.contrastText, 0.16), color: "inherit", fontWeight: 700, "& .MuiChip-icon": { color: "inherit" } }}
                         />
                         <Chip
                             icon={<Inventory2RoundedIcon />}
                             label={`${shipment.sku_count} lines · ${shipment.total_units} units`}
-                            sx={{ bgcolor: alpha("#fff", 0.16), color: "inherit", fontWeight: 700, "& .MuiChip-icon": { color: "inherit" } }}
+                            sx={{ bgcolor: (t) => alpha(t.palette.primary.contrastText, 0.16), color: "inherit", fontWeight: 700, "& .MuiChip-icon": { color: "inherit" } }}
                         />
                     </Stack>
                 </Container>

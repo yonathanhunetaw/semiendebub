@@ -113,8 +113,11 @@ class RotaController extends Controller
     public function copy(RotaWeekRequest $request, StockLocation $site): RedirectResponse
     {
         return $this->attempt(
-            fn () => $this->rota->copyWeek($site, $request->user(), $request->weekStart()),
-            fn (int $count): string => "{$count} shift(s) copied from last week as drafts.",
+            // Shifts as drafts, and who opens, closes and drives into the days nobody planned yet.
+            fn () => [$this->rota->copyWeek($site, $request->user(), $request->weekStart()), $this->days->copyWeekPlan($site, $request->user(), $request->weekStart())],
+            fn (array $counts): string => $this->sites->hasShifts($site)
+                ? sprintf('%d shift(s) copied from last week as drafts; who opens, closes and drives copied into %d day(s).', ...$counts)
+                : sprintf('Who opens, closes and drives copied into %d day(s).', $counts[1]),
         );
     }
 

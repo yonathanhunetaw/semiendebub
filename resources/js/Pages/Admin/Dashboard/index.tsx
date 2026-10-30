@@ -22,6 +22,8 @@ import { motionSafe, pulse } from "@/Components/Visual/motion";
 import { AreaTiles, AttentionPanel, GoToBar, NetworkStrip, PanelHead, densePanelSx, type DashboardArea } from "@/Components/Visual/DashboardAreas";
 import type { AdminScopeProps } from "@/types/adminScope";
 import ShopDaysPanel, { type ShopDayRow } from "@/Components/Admin/Dashboard/ShopDaysPanel";
+import WeekPlanPanel from "@/Components/Admin/Dashboard/WeekPlanPanel";
+import type { WeekPlanRow } from "@/types/work";
 import TimeFilterChips from "@/Components/Shared/time/TimeFilterChips";
 import type { TimeFilterView } from "@/types/time";
 
@@ -92,6 +94,8 @@ interface Props {
     pipeline?: Partial<Record<JourneyStage, number>>;
     areas?: DashboardArea[];
     shopDays?: ShopDayRow[];
+    /** The week ahead at the sites in scope (SiteDayService::weekPlan). */
+    weekPlan?: WeekPlanRow[];
     /** The period the cards' counted-over-time facts cover. */
     areaTime?: TimeFilterView;
 }
@@ -491,12 +495,13 @@ export default function Dashboard({
     pipeline = {},
     areas = [],
     shopDays = [],
+    weekPlan = [],
     areaTime,
 }: Props) {
     // Live: the figures refresh every 30 seconds without reloading the page.
     const [updatedAt, setUpdatedAt] = React.useState(() => Date.now());
     usePoll(30_000, {
-        only: ["areas", "pipeline", "shopDays", "trend", "activeDeliveries", "activity", "lowStockItems", "adminNav"],
+        only: ["areas", "pipeline", "shopDays", "weekPlan", "trend", "activeDeliveries", "activity", "lowStockItems", "adminNav"],
         onSuccess: () => setUpdatedAt(Date.now()),
     });
 
@@ -511,7 +516,7 @@ export default function Dashboard({
 
             {/* What is waiting on someone, then a way into every list. */}
             <Deferred
-                data={["areas", "pipeline", "shopDays"]}
+                data={["areas", "pipeline", "shopDays", "weekPlan"]}
                 fallback={
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                         <StatTilesSkeleton count={4} />
@@ -526,6 +531,8 @@ export default function Dashboard({
                     <PipelineStrip pipeline={pipeline} />
 
                     <ShopDaysPanel rows={shopDays} />
+
+                    <WeekPlanPanel rows={weekPlan} />
 
                     {areaTime ? (
                         <Box>

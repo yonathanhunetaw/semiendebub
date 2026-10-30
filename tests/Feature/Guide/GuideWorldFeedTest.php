@@ -286,6 +286,71 @@ class GuideWorldFeedTest extends TestCase
     }
 
     /** @param array<string, mixed> $attributes */
+    #[Test]
+    public function a_shipment_says_how_full_its_vehicle_is(): void
+    {
+        $packet = ItemPackagingType::factory()->create(['name' => 'Packet']);
+        $sized = ItemVariant::factory()->create(['item_packaging_type_id' => $packet->id]);
+        $sized->packagingQuantities()->attach($packet->id, ['quantity' => 1, 'cbm' => 0.2]);
+        $shipment = $this->shipment(['created_at' => CarbonImmutable::parse('2026-10-14 08:00'), 'vehicle_max_cbm' => 6]);
+        // A recorded size wins; else quantity × the unit's size.
+        $shipment->items()->create(['item_variant_id' => ItemVariant::factory()->create()->id, 'quantity' => 3, 'cbm' => 1.5]);
+        $shipment->items()->create(['item_variant_id' => $sized->id, 'quantity' => 10]);
+
+        $world = fn () => $this->asRole($this->user('admin', null), 'admin')
+            ->getJson(route('admin.guide.world', ['from' => '2026-10-14', 'to' => '2026-10-14']))
+            ->assertOk();
+
+        $world()->assertJsonPath('shipments.0.load_cbm', 3.5)
+            ->assertJsonPath('shipments.0.capacity', 6)
+            ->assertJsonPath('shipments.0.load_guessed', false);
+
+        // A line with no size anywhere: the figure is short, and says so. No vehicle yet: no capacity.
+        $shipment->items()->create(['item_variant_id' => ItemVariant::factory()->create()->id, 'quantity' => 2]);
+        $shipment->update(['vehicle_max_cbm' => null]);
+        $world()->assertJsonPath('shipments.0.load_cbm', 3.5)
+            ->assertJsonPath('shipments.0.capacity', null)
+            ->assertJsonPath('shipments.0.load_guessed', true);
+    }
+
+    #[Test]
+    public function the_containers_being_filled_at_the_storage_hub_show_how_full_they_are(): void
+    {
+        $supplier = \App\Models\Procurement\Supplier::factory()->create();
+        $order = \App\Models\Procurement\Purchase::query()->create([
+            'reference_number' => 'PO-W-1', 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name,
+            'currency' => 'USD', 'exchange_rate' => 150, 'status' => \App\Models\Procurement\Purchase::STATUS_ORDERED,
+        ]);
+        // A variant is bought once per order and a purchase line goes on a consignment once: each line is its own.
+        $line = function (\App\Models\Procurement\Consignment $c, ?float $cbm) use ($order): void {
+            $variant = ItemVariant::factory()->create();
+            $c->lines()->create([
+                'purchase_line_id' => $order->lines()->create(['item_variant_id' => $variant->id, 'quantity' => 100, 'unit_price' => 2, 'line_total' => 200, 'cbm' => 30])->id,
+                'item_variant_id' => $variant->id, 'quantity' => 10, 'cbm' => $cbm, 'goods_value_etb' => 3000,
+            ]);
+        };
+        $forming = \App\Models\Procurement\Consignment::query()->create(['reference' => 'CN-FORM', 'stage' => 'forming']);
+        $line($forming, 20.5);
+        $line($forming, 13);
+        $atSea = \App\Models\Procurement\Consignment::query()->create(['reference' => 'CN-SEA', 'stage' => 'at_sea']);
+        $line($atSea, 50);
+
+        $this->asRole($this->user('admin', null), 'admin')
+            ->getJson(route('admin.guide.world', ['from' => '2026-10-14']))
+            ->assertOk()
+            ->assertJsonCount(1, 'containers')
+            ->assertJsonPath('containers.0.reference', 'CN-FORM')
+            ->assertJsonPath('containers.0.cbm', 33.5)
+            ->assertJsonPath('containers.0.capacity', (int) \App\Services\Guide\WorldFeed::CONTAINER_CBM)
+            ->assertJsonPath('containers.0.guessed', false);
+
+        // Buying is not a seller's business: the truck stays empty for them.
+        $this->asRole($this->user('seller', $this->mainStore->id), 'seller')
+            ->getJson(route('seller.guide.world', ['from' => '2026-10-14']))
+            ->assertOk()
+            ->assertJsonCount(0, 'containers');
+    }
+
     private function shipment(array $attributes): Shipment
     {
         $shipment = new Shipment(array_merge([

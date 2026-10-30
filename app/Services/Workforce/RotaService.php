@@ -291,7 +291,9 @@ class RotaService
                     'user_id' => (int) $shift->user_id,
                     'starts_at' => LocalTime::wall($shift->starts_at->copy()->addWeek(), 'Y-m-d H:i'),
                     'ends_at' => LocalTime::wall($shift->ends_at->copy()->addWeek(), 'Y-m-d H:i'),
-                    'duty' => $shift->duty,
+                    // The day's plan names opener and closer (copied by SiteDayService::copyWeekPlan):
+                    // an old duty carried over would overwrite it once the copy is published.
+                    'duty' => Shift::DUTY_NONE,
                 ]);
                 $copied++;
             } catch (WorkforceException) {
@@ -416,8 +418,9 @@ class RotaService
         $user = $shift->user;
 
         return $user !== null && match ($role) {
-            StaffingRule::ROLE_SELLER => $user->isRole('seller', 'store_manager'),
-            StaffingRule::ROLE_STOCK_KEEPER => $user->isRole('stock_keeper'),
+            // As held, not as the host reads it: coverage must not change with the app the manager looks from.
+            StaffingRule::ROLE_SELLER => $user->hasAnyRole(['seller', 'store_manager']),
+            StaffingRule::ROLE_STOCK_KEEPER => $user->hasRole('stock_keeper'),
             default => false,
         };
     }

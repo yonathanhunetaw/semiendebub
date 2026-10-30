@@ -14,6 +14,7 @@ use App\Models\Inventory\RefillRequest;
 use App\Models\Inventory\StockLocation;
 use App\Models\Inventory\Stocktake;
 use App\Models\Item\ItemVariant;
+use App\Models\Procurement\Consignment;
 use App\Models\StockKeeper\Transfer;
 use App\Models\Workforce\KeyHandover;
 use App\Models\Workforce\LeaveRequest;
@@ -48,6 +49,9 @@ use Illuminate\Support\Collection;
 class WorldFeed
 {
     private const MAIN_STORE = 'Main Store';
+
+    /** What the world's 40 ft container (places.ts CONTAINER) holds, in m³: 12.03 × 2.35 × 2.39 m inside. */
+    public const CONTAINER_CBM = 67.0;
 
     /** The physical steps, in order: the column, and what the world calls it. */
     private const STEPS = [
@@ -484,7 +488,8 @@ class WorldFeed
     public function between(CarbonImmutable $from, CarbonImmutable $to, User $viewer): array
     {
         $query = Shipment::query()
-            ->with(['originLocation', 'destinationLocation', 'courier:id,first_name,last_name', 'creator:id,first_name,last_name', 'preparer:id,first_name', 'receiver:id,first_name'])
+            ->with(['originLocation', 'destinationLocation', 'courier:id,first_name,last_name', 'creator:id,first_name,last_name', 'preparer:id,first_name', 'receiver:id,first_name',
+                'vehicle:id,max_cbm', 'items.itemVariant.packagingQuantities'])
             ->withCount('items')
             ->withSum('items', 'cbm')
             ->where('created_at', '<=', $to)
@@ -1069,6 +1074,8 @@ class WorldFeed
             'receiver' => $shipment->receiver?->first_name,
             'items' => (int) ($shipment->items_count ?? 0),
             'cbm' => round((float) ($shipment->items_sum_cbm ?? 0), 2),
+            // How full its vehicle is: the manifest's volume against what the vehicle takes (null: no vehicle yet).
+            ...$this->load($shipment),
             'created_at' => $shipment->created_at?->toIso8601String(),
             'scheduled_for' => ($shipment->agreed_scheduled_for ?? $shipment->scheduled_for)?->toIso8601String(),
             'eta' => $shipment->eta?->toIso8601String(),
@@ -1076,6 +1083,60 @@ class WorldFeed
             'parties' => $parties,
             'steps' => $steps,
         ];
+    }
+
+    /**
+     * The manifest's volume in m³: each line's recorded cbm, else its quantity times its unit's size
+     * (item_variant_packaging_quantity.cbm). `load_guessed` when a line has neither, so the figure is short.
+     *
+     * @return array{load_cbm: float, load_guessed: bool, capacity: float|null}
+     */
+    private function load(Shipment $shipment): array
+    {
+        $cbm = 0.0;
+        $guessed = false;
+
+        foreach ($shipment->items as $line) {
+            $unit = $this->ownUnitCbm($line->itemVariant);
+            $size = $line->cbm !== null && (float) $line->cbm > 0 ? (float) $line->cbm : ($unit !== null ? $unit * (int) $line->quantity : null);
+            $guessed = $guessed || $size === null;
+            $cbm += $size ?? 0.0;
+        }
+
+        $capacity = (float) ($shipment->vehicle_max_cbm ?? $shipment->vehicle?->max_cbm ?? 0);
+
+        return ['load_cbm' => round($cbm, 2), 'load_guessed' => $guessed, 'capacity' => $capacity > 0 ? round($capacity, 2) : null];
+    }
+
+    /**
+     * The containers being filled at the Storage hub: consignments still forming or at the overseas warehouse, with
+     * their lines' volume against a 40 ft container. For admins, procurement and stock keepers (they receive them).
+     *
+     * @return array<int, array{id: int, reference: string, stage: string, container_number: string|null, lines: int, cbm: float, guessed: bool, capacity: float}>
+     */
+    public function containers(User $viewer): array
+    {
+        if (! $viewer->hasAnyRole(['admin', 'procurement', 'stock_keeper'])) {
+            return [];
+        }
+
+        return Consignment::query()
+            ->whereIn('stage', [Consignment::FORMING, 'overseas_warehouse'])
+            ->with('lines:id,consignment_id,cbm')
+            ->orderBy('id')
+            ->get(['id', 'reference', 'stage', 'container_number'])
+            ->map(fn (Consignment $c): array => [
+                'id' => (int) $c->id,
+                'reference' => (string) $c->reference,
+                'stage' => (string) $c->stage,
+                'container_number' => $c->container_number,
+                'lines' => $c->lines->count(),
+                'cbm' => round((float) $c->lines->sum('cbm'), 2),
+                'guessed' => $c->lines->contains(fn ($line): bool => $line->cbm === null),
+                'capacity' => self::CONTAINER_CBM,
+            ])
+            ->values()
+            ->all();
     }
 
     private function placeKey(?StockLocation $location, ?int $mainStoreId): ?string

@@ -212,7 +212,8 @@ class ConsignmentTest extends TestCase
         $this->assertSame(1000, (int) ItemStock::query()->where('item_variant_id', $this->drives->item_variant_id)->sum('quantity'));
 
         $c->refresh();
-        $this->assertSame(['forming', 'overseas_warehouse', 'sea_port', 'dry_port'], array_keys($c->stage_dates));
+        // A date per stage reached; MySQL's JSON column does not keep key order, and nothing reads it in order.
+        $this->assertEqualsCanonicalizing(['forming', 'overseas_warehouse', 'sea_port', 'dry_port'], array_keys($c->stage_dates));
 
         $dryPort = StockLocation::query()->where('code', 'INBOUND-DRY-PORT')->sole();
         $this->assertSame([StockLocation::KIND_INBOUND, null], [$dryPort->kind, $dryPort->store_id]);

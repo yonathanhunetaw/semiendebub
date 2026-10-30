@@ -272,7 +272,7 @@ export default function PlayLayer({ app, scene, barSlot = null, topExtra = null 
         handoff.take(key);
     };
 
-    // E (or Space) does what the button says: open the list on the floor or in a hub, put up at the shelf, load at the car.
+    // E does what the button says (Space jumps, in PlayerController, as in Roblox): open the list on the floor or in a hub, put up at the shelf, load at the car.
     const cardsAtRef = useRef(cardsAt);
     cardsAtRef.current = cardsAt;
     const putUpRef = useRef(putUp);
@@ -289,7 +289,7 @@ export default function PlayLayer({ app, scene, barSlot = null, topExtra = null 
         const onKey = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
             if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable || target.closest("[role=dialog]"))) return;
-            if (event.code !== "KeyE" && event.code !== "Space") return;
+            if (event.code !== "KeyE") return;
             event.preventDefault();
             const here = getGame().zone;
             const waiting = (ZONES_OF_RUNS.includes(here as ZoneKey) || ZONES_OF_LEGS.includes(here as ZoneKey) || here?.startsWith("desk_") === true) && cardsAtRef.current(here) > 0;
@@ -350,14 +350,18 @@ export default function PlayLayer({ app, scene, barSlot = null, topExtra = null 
                             Desks
                         </Button>
                     )}
+                    {/* One line each (the full text on hover / long-press): a goal never takes two rows of the view. */}
                     {goals.map((goal) => (
-                        <Button key={goal.text} onClick={goal.go ? () => walkTo(goal.go!) : undefined} disabled={!goal.go} variant="contained" color={goal.tone} size="small"
-                            sx={{ pointerEvents: "auto", flexShrink: 0, borderRadius: 999, fontWeight: 800, textTransform: "none", maxWidth: { xs: "85vw", sm: "100%" }, boxShadow: 3, "&.Mui-disabled": { bgcolor: glass, color: "text.secondary" } }}>
-                            {goal.text}
-                        </Button>
+                        <Box key={goal.text} component="span" title={goal.text} sx={{ flexShrink: 0, maxWidth: { xs: "78vw", sm: 520 }, display: "inline-flex" }}>
+                            <Button onClick={goal.go ? () => walkTo(goal.go!) : undefined} disabled={!goal.go} variant="contained" color={goal.tone} size="small"
+                                sx={{ pointerEvents: "auto", width: "100%", borderRadius: 999, fontWeight: 800, textTransform: "none", boxShadow: 3, py: 0.4, "&.Mui-disabled": { bgcolor: glass, color: "text.secondary" } }}>
+                                <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{goal.text}</Box>
+                            </Button>
+                        </Box>
                     ))}
                 </Stack>
-                {topExtra}
+                {/* The item finder: a small button at the right edge, under the bars (it opens to a search box when tapped). */}
+                {topExtra && <Box sx={{ alignSelf: "stretch", display: "flex", flexDirection: "column", alignItems: "flex-end", px: 1, pointerEvents: "none" }}>{topExtra}</Box>}
             </Stack>
 
             <Box sx={{ flex: 1 }} />

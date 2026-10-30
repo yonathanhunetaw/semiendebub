@@ -92,6 +92,8 @@ class DashboardController extends Controller
             'pipeline' => Inertia::defer(fn () => $this->pipeline($activeStore), 'tiles'),
             // Each store's business day: open or not, today's orders and takings, yesterday's, and what came outside open hours.
             'shopDays' => Inertia::defer(fn () => $this->shopDays($activeStore), 'tiles'),
+            // The week ahead at the sites in scope: who opens, closes and drives, and whether they said yes.
+            'weekPlan' => Inertia::defer(fn () => $this->weekPlan($request, $activeStore), 'tiles'),
             // The 7-day trend, open deliveries and a feed, all from real rows in scope.
             'trend' => Inertia::defer(fn () => $this->trend($activeStore), 'panels'),
             'activeDeliveries' => Inertia::defer(fn () => $this->activeDeliveries($activeStore), 'panels'),
@@ -358,6 +360,17 @@ class DashboardController extends Controller
      *
      * @return array<int, array<string, mixed>>
      */
+    private function weekPlan(Request $request, ActiveStore $activeStore): array
+    {
+        $scopeIds = $activeStore->scopeIds();
+        $sites = app(\App\Services\Workforce\Sites::class)->managedBy($request->user())
+            // A store scope shows its own sites; the Main Hubs (no store) only on "All stores".
+            ->filter(fn (\App\Models\Inventory\StockLocation $site): bool => $scopeIds === null || ($site->store_id !== null && in_array((int) $site->store_id, $scopeIds, true)))
+            ->values();
+
+        return app(\App\Services\Workforce\SiteDayService::class)->weekPlan($sites);
+    }
+
     private function shopDays(ActiveStore $activeStore): array
     {
         $shopDay = app(\App\Services\Workforce\ShopDay::class);

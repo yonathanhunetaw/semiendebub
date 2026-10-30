@@ -6,17 +6,21 @@ namespace App\Http\Controllers\Shared\Work;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Shared\Work\Concerns\ReadsWorkApp;
+use App\Http\Requests\Workforce\AnswerDutyRequest;
 use App\Http\Requests\Workforce\ForceKeyRequest;
 use App\Http\Requests\Workforce\HandOverKeyRequest;
 use App\Http\Requests\Workforce\HomeAreaRequest;
 use App\Http\Requests\Workforce\RejectKeyRequest;
 use App\Models\Auth\User;
+use App\Models\Fulfillment\Vehicle;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\CustodyKey;
 use App\Models\Workforce\KeyHandover;
 use App\Models\Workforce\LeaveRequest;
 use App\Models\Workforce\Shift;
 use App\Models\Workforce\ShiftSwap;
+use App\Models\Workforce\SiteDay;
+use App\Models\Workforce\SiteDayAnswer;
 use App\Models\Workforce\StaffRide;
 use App\Services\Workforce\AttendanceService;
 use App\Services\Workforce\KeyCustodyService;
@@ -66,6 +70,8 @@ class WorkController extends Controller
             'waiting' => $this->keys->waitingFor($user)->map(fn (KeyHandover $handover): array => $this->keys->presentHandover($handover))->values()->all(),
             // Today at each site: who opens / closes, open or not.
             'days' => $this->days->todayFor($user)->all(),
+            // What I open, close or drive, today and the week ahead: each one a step to do.
+            'duties' => $this->days->dutiesFor($user)->all(),
             // My shifts for the next two weeks: accept, or ask for a change.
             'shifts' => $this->rota->upcomingFor($user)->map(fn (Shift $shift): array => $this->rota->present($shift))->values()->all(),
             // Where I am clocked in now, if anywhere.
@@ -90,8 +96,18 @@ class WorkController extends Controller
             'driving' => $user->is_driver ? $this->rides->forDriver($user)
                 ->filter(fn (StaffRide $ride): bool => $ride->purpose !== null && (int) $ride->driver_id === (int) $user->id)
                 ->map(fn (StaffRide $ride): array => $this->rides->present($ride, $user))->values()->all() : [],
+            // The cars a driver can take a run with, from any app (not only delivery).
+            'vehicles' => $user->is_driver ? Vehicle::query()->active()->orderBy('name')->get()->map(fn (Vehicle $car): array => [
+                'id' => (int) $car->id,
+                'name' => $car->name,
+                'plate' => $car->plate,
+                'key_holder_id' => $car->custodyKey?->holder_id,
+            ])->values()->all() : [],
+            'meId' => (int) $user->id,
             'homeArea' => $user->home_area,
             'managesSites' => ($managed = $this->sites->managedBy($user))->isNotEmpty(),
+            // A week of who opens, closes and drives at each site I manage, to spot the gaps.
+            'weekPlan' => $this->days->weekPlan($managed),
             'sites' => $managed->map(fn (StockLocation $site): array => [
                 'id' => (int) $site->id,
                 'name' => $site->name,
@@ -106,6 +122,17 @@ class WorkController extends Controller
                 ->values()->all(),
             'reasons' => KeyHandover::REASONS,
         ]);
+    }
+
+    /** Yes or no to opening, closing or driving on a site day (a "no" needs a reason). */
+    public function answer(AnswerDutyRequest $request, SiteDay $day): RedirectResponse
+    {
+        $yes = $request->validated('answer') === SiteDayAnswer::YES;
+
+        return $this->attempt(
+            fn () => $this->days->answer($day, $request->user(), (string) $request->validated('duty'), $yes, $request->validated('note')),
+            $yes ? 'Thanks: the manager sees you will do it.' : 'Noted: the manager is told to pick someone else.',
+        );
     }
 
     public function startBreak(Request $request): RedirectResponse

@@ -56,7 +56,7 @@ class KeyCustodyService
         $keyable = $key->keyable;
 
         if ($keyable instanceof Vehicle) {
-            return (bool) $user->is_driver || $user->isRole('admin', 'dev', 'store_manager');
+            return (bool) $user->is_driver || $user->hasAnyRole(['admin', 'dev', 'store_manager']);
         }
 
         return $keyable instanceof StockLocation && $this->sites->worksAt($user, $keyable);
@@ -72,7 +72,7 @@ class KeyCustodyService
         $keyable = $key->keyable;
 
         if ($keyable instanceof Vehicle) {
-            return $user->isRole('admin', 'dev');
+            return $user->hasAnyRole(['admin', 'dev']);
         }
 
         return $keyable instanceof StockLocation && $this->sites->canManage($user, $keyable);

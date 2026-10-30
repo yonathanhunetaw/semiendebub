@@ -11,6 +11,7 @@ use App\Http\Requests\Workforce\ManagerClockRequest;
 use App\Http\Requests\Workforce\RotaWeekRequest;
 use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
+use App\Models\Workforce\Shift;
 use App\Models\Workforce\TimeEntry;
 use App\Services\Workforce\AttendanceService;
 use App\Services\Workforce\LocalTime;
@@ -46,6 +47,14 @@ class AttendanceController extends Controller
             'here' => $this->attendance->stillIn($site)->map(fn (TimeEntry $entry): array => $this->attendance->present($entry))->values()->all(),
             'entries' => $this->attendance->between($site, $start, $start->addWeek())
                 ->map(fn (TimeEntry $entry): array => $this->attendance->present($entry))->values()->all(),
+            // Shifts that started with nobody clocked in for them: didn't come, or never scanned.
+            'noShows' => $this->attendance->noShows($site, $start, $start->addWeek())
+                ->map(fn (Shift $shift): array => [
+                    'id' => (int) $shift->id,
+                    'user' => $shift->user ? ['id' => (int) $shift->user->id, 'name' => trim($shift->user->first_name.' '.$shift->user->last_name)] : null,
+                    'starts_at' => LocalTime::wall($shift->starts_at),
+                    'ends_at' => LocalTime::wall($shift->ends_at),
+                ])->values()->all(),
             // Overtime of the people who worked here this week, with the manager's decision.
             'overtime' => collect($this->overtime->forSites(collect([$site]), $start, $start->addDays(6)))
                 ->map(fn (array $day): array => $day + ['can_decide' => $this->overtime->mayDecide($request->user(), (int) $day['user_id'], (string) $day['date'])])

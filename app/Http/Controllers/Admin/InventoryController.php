@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin; // Moved from Admin\Inventory
 
 use App\Http\Controllers\Controller;
 use App\Models\Fulfillment\Shipment;
+use App\Models\Inventory\Stocktake;
 use App\Models\Inventory\Warehouse;
 use App\Models\Item\Item;
 use App\Models\StockKeeper\Transfer;
@@ -78,11 +79,25 @@ class InventoryController extends Controller
                 ])
                 ->values()
                 ->all(),
-            // Real orders per stage across every store — the same mapping
-            // the seller's board uses, so a tile matches the list it opens.
-            'orderStages' => app(\App\Services\Fulfillment\SellerOrderBoard::class)->counts($activeStore->id()),
             'shipmentCounts' => $this->shipmentCounts($scopeIds),
             'transferCounts' => $this->transferCounts($scopeIds),
+            // The banner's "Items carried", as on one store's page, across every store in scope.
+            'itemsCarried' => StoreVariant::query()
+                ->when($scopeIds !== null, fn ($query) => $query->whereIn('store_id', $scopeIds ?: [0]))
+                ->distinct()
+                ->count('item_id'),
+            // The Approvals card, as on one store's page, across every store in scope.
+            'counts' => [
+                // Refills the planner proposes, waiting for a manager's ruling.
+                'refills' => Transfer::query()->awaitingApproval()
+                    ->when($scopeIds !== null, fn ($query) => $query->whereIn('to_store_id', $scopeIds ?: [0]))
+                    ->count(),
+                // Stocktakes a keeper submitted, waiting for someone else to approve.
+                'counts' => Stocktake::query()
+                    ->where('status', Stocktake::SUBMITTED)
+                    ->when($scopeIds !== null, fn ($query) => $activeStore->applyThrough($query, 'location'))
+                    ->count(),
+            ],
             'catalogue' => [
                 'items' => Item::query()->count(),
                 'deployed_variants' => StoreVariant::query()->count(),

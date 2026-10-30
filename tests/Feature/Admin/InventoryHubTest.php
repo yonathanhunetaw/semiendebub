@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Tests\Feature\Admin;
 
 use App\Models\Auth\User;
+use App\Models\Inventory\StockLocation;
+use App\Models\Inventory\Stocktake;
 use App\Models\Inventory\Warehouse;
 use App\Models\Item\Item;
 use App\Models\Item\ItemVariant;
 use App\Models\StockKeeper\ItemStock;
+use App\Models\StockKeeper\Transfer;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -92,7 +95,10 @@ class InventoryHubTest extends TestCase
                 ->has('shipmentCounts')
                 ->has('transferCounts')
                 ->has('catalogue')
-                ->has('deployedItems'),
+                ->has('deployedItems')
+                ->has('itemsCarried')
+                ->has('counts.refills')
+                ->has('counts.counts'),
         );
     }
 
@@ -198,5 +204,103 @@ class InventoryHubTest extends TestCase
                 ->has('deployedItems', 0)
                 ->where('catalogue.items', 1),
         );
+    }
+
+    /** A refill the planner proposed for `$store`, in `$state` and `$status`. */
+    private function refill(Store $store, string $state = Transfer::APPROVAL_PENDING, string $status = 'pending'): Transfer
+    {
+        $variant = ItemVariant::factory()->create(['item_id' => Item::factory()->create()->id]);
+
+        return Transfer::query()->create([
+            'reference' => 'TR-'.uniqid(),
+            'item_variant_id' => $variant->id, 'from_store_id' => $store->id, 'to_store_id' => $store->id,
+            'quantity' => 4, 'status' => $status, 'origin' => Transfer::ORIGIN_MANUAL, 'approval_state' => $state,
+        ]);
+    }
+
+    /** A stocktake at `$store`'s own location node. */
+    private function stocktake(Store $store, string $status): Stocktake
+    {
+        $node = StockLocation::query()->where('store_id', $store->id)->where('kind', StockLocation::KIND_STORE)->firstOrFail();
+
+        return Stocktake::query()->create([
+            'reference' => 'ST-'.uniqid(), 'stock_location_id' => $node->id, 'status' => $status,
+            'started_by' => auth()->id(), 'submitted_by' => auth()->id(),
+        ]);
+    }
+
+    #[Test]
+    public function the_approvals_count_only_refills_awaiting_a_ruling_and_submitted_counts(): void
+    {
+        /*
+         * "All stores" carries the same Approvals card as one store's page, so
+         * its figures must mean the same: a refill still waiting for a ruling,
+         * and a count submitted but not yet approved.
+         */
+        $store = Store::factory()->create(['type' => 'retail']);
+
+        $this->refill($store);
+        $this->refill($store, Transfer::APPROVAL_PENDING, 'cancelled');
+        $this->refill($store, Transfer::APPROVAL_NOT_REQUIRED);
+        $this->stocktake($store, Stocktake::SUBMITTED);
+        $this->stocktake($store, Stocktake::COUNTING);
+
+        $this->get(route('inventory.index'))->assertInertia(
+            fn (Assert $page) => $page
+                ->where('counts.refills', 1)
+                ->where('counts.counts', 1),
+        );
+    }
+
+    #[Test]
+    public function items_carried_counts_each_deployed_item_once_across_the_stores(): void
+    {
+        $first = Store::factory()->create(['type' => 'retail']);
+        $second = Store::factory()->create(['type' => 'retail']);
+
+        // At both stores, and two variants at the first: still one item.
+        $shared = Item::factory()->create();
+        $this->position($shared, $first, 3);
+        $this->position($shared, $first, 3);
+        $this->position($shared, $second, 3);
+        $this->position(Item::factory()->create(), $second, 3);
+
+        $this->get(route('inventory.index'))->assertInertia(fn (Assert $page) => $page->where('itemsCarried', 2));
+    }
+
+    #[Test]
+    public function a_store_admin_sees_only_their_own_stores_figures(): void
+    {
+        $own = Store::factory()->create(['name' => 'Own Store', 'type' => 'retail']);
+        $other = Store::factory()->create(['name' => 'Other Store', 'type' => 'retail']);
+
+        $this->position(Item::factory()->create(), $own, 5);
+        $this->position(Item::factory()->create(), $other, 5);
+        $this->position(Item::factory()->create(), $other, 5);
+        $this->refill($own);
+        $this->refill($other);
+        $this->refill($other);
+        $this->stocktake($own, Stocktake::SUBMITTED);
+        $this->stocktake($other, Stocktake::SUBMITTED);
+        $this->stocktake($other, Stocktake::SUBMITTED);
+
+        $storeAdmin = User::factory()->create(['role' => 'admin', 'store_id' => $own->id]);
+        $storeAdmin->assignRole('admin');
+
+        $this->actingAs($storeAdmin->refresh(), 'web')->get(route('inventory.index'))->assertInertia(
+            fn (Assert $page) => $page
+                ->has('stores', 1)
+                ->where('stores.0.name', 'Own Store')
+                ->where('itemsCarried', 1)
+                ->where('counts.refills', 1)
+                ->where('counts.counts', 1),
+        );
+    }
+
+    #[Test]
+    public function orders_are_left_to_the_orders_screen(): void
+    {
+        // The page is laid out like one store's page now; the order pipeline lives under Orders.
+        $this->get(route('inventory.index'))->assertInertia(fn (Assert $page) => $page->missing('orderStages'));
     }
 }

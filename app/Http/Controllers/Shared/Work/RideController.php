@@ -49,12 +49,17 @@ class RideController extends Controller
         $driver = $app === 'delivery';
 
         $list = $driver ? $this->rides->forDriver($user) : $this->rides->forStaff($user);
+        // A driver who also works in a shop (an admin, a seller) takes their runs from this app too.
+        $drives = $driver || (bool) $user->is_driver;
+        if (! $driver && $drives) {
+            $list = $list->merge($this->rides->forDriver($user))->unique('id')->sortBy('departs_at')->values();
+        }
 
         return Inertia::render('Work/Rides', [
             'app' => $app,
             'driver' => $driver,
             'rides' => $list->map(fn (StaffRide $ride): array => $this->rides->present($ride, $user))->values()->all(),
-            'vehicles' => $driver ? Vehicle::query()->active()->orderBy('name')->get()->map(fn (Vehicle $car): array => [
+            'vehicles' => $drives ? Vehicle::query()->active()->orderBy('name')->get()->map(fn (Vehicle $car): array => [
                 'id' => (int) $car->id,
                 'name' => $car->name,
                 'plate' => $car->plate,

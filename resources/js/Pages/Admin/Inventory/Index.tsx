@@ -1,26 +1,17 @@
-import AdminLayout from "@/Layouts/AppLayout";
-import {
-    OpsCard,
-    PipelineCard,
-    type Row,
-    type Tile,
-    href,
-} from "@/Components/Shared/OpsHub";
+import AdminLayout from "@/Layouts/AdminLayout";
+import StoreBanner, { type BannerFigureData } from "@/Components/Admin/StoreBanner";
+import { OpsCard, type Row, href } from "@/Components/Shared/OpsHub";
 import { Card } from "@/Components/Shared/ui";
 import { Head, Link } from "@inertiajs/react";
 import { useAdminScope } from "@/Components/Navigation/Admin/useAdminScope";
 import React, { useMemo, useState } from "react";
 
 /**
- * Admin inventory operations hub.
- *
- * One overview of everything the inventory domain holds — stores, warehouses,
- * transfers and shipments — built from the same card set as the seller "More"
- * hub (Components/Shared/OpsHub), and ending in an item picker that opens the
- * per-location stock tool at Admin/Inventory/Stores/ItemVariants.
- *
- * Every count comes from the database, the order pipeline included (the same
- * stage mapping as the seller's order board).
+ * The Store page on "All stores": laid out like one store's page
+ * (Admin/Stores/Hub, same banner and cards) across every store in scope, with
+ * the stores and facilities to open, and ending in an item picker that opens
+ * the per-location stock tool at Admin/Inventory/Stores/ItemVariants.
+ * Orders live under Orders in the sidebar, not here.
  */
 
 interface StoreSummary {
@@ -75,8 +66,14 @@ interface Props {
     transferCounts: Record<string, number>;
     catalogue: { items: number; deployed_variants: number };
     deployedItems: DeployedItem[];
-    /** Real order counts per stage, across every store (SellerOrderBoard::counts). */
-    orderStages?: Record<string, number>;
+    /** Distinct items deployed at the stores in scope. */
+    itemsCarried?: number;
+    counts?: {
+        /** Refills the planner proposes, waiting for a ruling. */
+        refills?: number;
+        /** Stocktakes submitted, waiting for someone else to approve. */
+        counts?: number;
+    };
 }
 
 /** Store `type` values, as written by StoreSeeder / FacilitySeeder. */
@@ -102,55 +99,30 @@ export default function InventoryHub({
     transferCounts,
     catalogue,
     deployedItems,
-    orderStages = {},
+    itemsCarried = 0,
+    counts,
 }: Props): React.ReactElement {
     const { isGlobalAdmin } = useAdminScope();
     const [itemSearch, setItemSearch] = useState("");
 
     const retail = stores.filter((store) => store.type === "retail");
     const facilities = stores.filter((store) => store.type !== "retail");
+    const refills = counts?.refills ?? 0;
+    const takes = counts?.counts ?? 0;
+    // The all-stock list is a global admin's; a store admin would get a 403.
+    const allStock = isGlobalAdmin ? "admin.inventory.stores" : null;
 
-    /* ── Orders: real counts per stage, across every store ─────────────── */
-    const stageCount = (stage: string): number => orderStages[stage] ?? 0;
-
-    const orderTiles: Tile[] = [
-        { label: "To Pay", caption: "Awaiting payment", icon: "payments", count: stageCount("to_pay"), tone: "warning" },
-        { label: "Paid", caption: "Payment confirmed", icon: "verified", count: stageCount("paid"), tone: "tertiary" },
-        { label: "Pick & Pack", caption: "Being packed", icon: "inventory_2", count: stageCount("packing"), tone: "info" },
-        { label: "To Deliver", caption: "Ready to ship", icon: "local_shipping", count: stageCount("to_deliver"), tone: "primary" },
-        { label: "Delivered", caption: "Completed", icon: "task_alt", count: stageCount("delivered"), tone: "success" },
-        { label: "Canceled", caption: "Voided", icon: "assignment_return", count: stageCount("canceled"), tone: "error" },
-    ];
-
-    const orderFooter: Row[] = [
-        { label: "Store Orders", caption: "", icon: "receipt_long", route: "admin.carts.index", tone: "neutral" },
-        { label: "Transfers", caption: "", icon: "rv_hookup", route: "admin.inventory.transfers", tone: "neutral" },
-    ];
-
-    /* ── Shipments: every tile opens the filter it counts ─────────────── */
-    const shipmentTiles: Tile[] = [
-        { label: "Manifest", caption: "Awaiting agreement", icon: "fact_check", count: shipmentCounts.pending_agreement ?? 0, tone: "info", tab: "status=pending_agreement" },
-        { label: "Scheduled", caption: "Booked & picking", icon: "schedule", count: shipmentCounts.scheduled ?? 0, tone: "warning", tab: "status=scheduled" },
-        { label: "En Route", caption: "In transit", icon: "local_shipping", count: shipmentCounts.in_transit ?? 0, tone: "primary", tab: "status=in_transit" },
-        { label: "Shipped", caption: "Arrived", icon: "check_circle", count: shipmentCounts.delivered ?? 0, tone: "success", tab: "status=delivered" },
-        // Past ETA and still moving. No single status matches it, so the tile
-        // opens the open-runs board rather than a filter that would show a
-        // different number than the badge.
-        { label: "Overdue", caption: "Past ETA", icon: "warning", count: shipmentCounts.overdue ?? 0, tone: "error", alert: true, tab: "status=open" },
-    ];
-
-    /* ── Transfers ─────────────────────────────────────────────────────── */
-    const transferTiles: Tile[] = [
-        { label: "Pending", caption: "Awaiting pick", icon: "pending_actions", count: transferCounts.pending ?? 0, tone: "warning" },
-        { label: "In Transit", caption: "On the move", icon: "swap_horiz", count: transferCounts.in_transit ?? 0, tone: "primary" },
-        { label: "Completed", caption: "Stock moved", icon: "task_alt", count: transferCounts.completed ?? 0, tone: "success" },
-        { label: "Cancelled", caption: "Voided", icon: "block", count: transferCounts.cancelled ?? 0, tone: "error" },
-        { label: "Shipments", caption: "From Hub A/B", icon: "autorenew", count: shipmentCounts.open ?? 0, tone: "tertiary", routeName: "admin.inventory.shipments.index" },
+    /* ── The banner: the same four figures as one store's page ─────────── */
+    const figures: BannerFigureData[] = [
+        { label: "Items carried", value: itemsCarried, icon: "inventory_2", route: allStock },
+        { label: "Shipments moving", value: shipmentCounts.open ?? 0, icon: "local_shipping", route: "admin.inventory.shipments.index" },
+        { label: "Transfers under way", value: (transferCounts.pending ?? 0) + (transferCounts.in_transit ?? 0), icon: "swap_horiz", route: "admin.inventory.transfers" },
+        { label: "Waiting for you", value: refills + takes, icon: "pending_actions", route: "admin.inventory.replenishment.index", alert: true },
     ];
 
     /* ── Locations ─────────────────────────────────────────────────────── */
     /*
-     * The trailing figure is the deployed-variant count, not `items_count`.
+     * The trailing figure is the live-item count, not `items_count`.
      * The item_store pivot attaches all 182 catalogue items to every store, so
      * showing that number put "182" beside a store reading "0 variants" — the
      * pivot says the store may carry the item, store_variants says whether it
@@ -176,7 +148,6 @@ export default function InventoryHub({
         route: "store.show",
         routeParams: { store: store.id },
         tone: "primary",
-        // The trailing figure counts live items, not variants.
         count: store.live_items,
     }));
 
@@ -200,10 +171,27 @@ export default function InventoryHub({
         })),
     ];
 
-    const setupRows: Row[] = [
+    /* ── The same groups as one store's page; the per-store screens are behind each store ── */
+    const stock: Row[] = [
+        ...(allStock ? [{ label: "All stock", caption: "Every store's items and deployed variants", icon: "grid_view", route: allStock, tone: "primary" as const }] : []),
+        { label: "Capacity", caption: "Min and max levels for every variant", icon: "tune", route: "admin.inventory.capacity.index", tone: "success" },
+    ];
+
+    const movement: Row[] = [
+        { label: "Transfers", caption: "One item between two places", icon: "swap_horiz", route: "admin.inventory.transfers", tone: "primary" },
+        { label: "Shipments", caption: "Hub runs: pick, send, receive", icon: "local_shipping", route: "admin.inventory.shipments.index", tone: "info" },
+    ];
+
+    const approvals: Row[] = [
+        { label: "Refills", caption: "Proposed moves waiting for a ruling", icon: "rule", route: "admin.inventory.replenishment.index", tone: refills > 0 ? "warning" : "success", count: refills },
+        { label: "Stock counts", caption: "Submitted counts to approve", icon: "fact_check", route: "admin.inventory.counts.index", tone: takes > 0 ? "warning" : "success", count: takes },
+    ];
+
+    const setup: Row[] = [
         { label: "Locations", caption: "Shelf, floor and Remote Hub, and who manages each", icon: "account_tree", route: "admin.inventory.stock-locations.index", tone: "primary" },
-        { label: "Capacity", caption: "Min and max levels that drive replenishment", icon: "tune", route: "admin.inventory.capacity.index", tone: "success" },
         { label: "Payment accounts", caption: "Where customers pay in, and who confirms each", icon: "account_balance", route: "admin.payment-accounts.index", tone: "info" },
+        { label: "Seller balances", caption: "What each seller holds and has handed over", icon: "account_balance_wallet", route: "admin.balances.index", tone: "success" },
+        { label: "Customer prices & discounts", caption: "Per-customer prices and when discounts end", icon: "sell", route: "admin.customers.discounts", tone: "warning" },
     ];
 
     /* ── Item picker ───────────────────────────────────────────────────── */
@@ -230,75 +218,28 @@ export default function InventoryHub({
         [visibleItems],
     );
 
+    const facilityCount = facilities.length + warehouses.length;
+
     return (
         <>
-            <Head title="Inventory" />
+            <Head title="All stores" />
 
-            <div className="min-h-screen bg-background">
-                <div className="mx-auto w-full max-w-[1600px] pb-12">
-                    {/* ── Identity header ── */}
-                    <section className="pb-3 pt-4">
-                        <div className="flex items-center justify-between gap-3">
-                            <div className="flex min-w-0 items-center space-x-3">
-                                <div
-                                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-primary-container bg-primary text-on-primary shadow-sm"
-                                >
-                                    <span className="material-symbols-outlined text-2xl">warehouse</span>
-                                </div>
-                                <div className="min-w-0">
-                                    <h1 className="truncate text-[17px] font-bold tracking-tight text-on-surface">
-                                        Inventory
-                                    </h1>
-                                    <p className="mt-0.5 truncate text-[11px] text-on-surface-variant">
-                                        {retail.length} store{retail.length === 1 ? "" : "s"} ·{" "}
-                                        {facilities.length + warehouses.length} facilit
-                                        {facilities.length + warehouses.length === 1 ? "y" : "ies"} ·{" "}
-                                        {catalogue.deployed_variants} deployed variants
-                                    </p>
-                                </div>
-                            </div>
+            <div className="mx-auto w-full max-w-[1100px] pb-12">
+                <StoreBanner
+                    eyebrow="Every store"
+                    title="All stores"
+                    subtitle={`${retail.length} store${retail.length === 1 ? "" : "s"} · ${facilityCount} facilit${facilityCount === 1 ? "y" : "ies"} · ${catalogue.deployed_variants.toLocaleString()} deployed variants`}
+                    figures={figures}
+                />
 
-                            {/* The all-stock list is a global admin's; a store admin would get a 403. */}
-                            {isGlobalAdmin && (
-                                <Link
-                                    href={route("admin.inventory.stores")}
-                                    className="flex shrink-0 items-center gap-1 rounded-[999px] border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-[11px] font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low"
-                                >
-                                    <span className="material-symbols-outlined text-[16px]">grid_view</span>
-                                    All stock
-                                </Link>
-                            )}
-                        </div>
-                    </section>
-
-                    <PipelineCard
-                        title="Orders"
-                        actionLabel="Order list"
-                        actionRoute="admin.orders.index"
-                        tiles={orderTiles}
-                        footer={orderFooter}
-                    />
-
-                    <PipelineCard
-                        title="Shipments"
-                        actionLabel="Console"
-                        actionRoute="admin.inventory.shipments.index"
-                        tiles={shipmentTiles}
-                    />
-
-                    <PipelineCard
-                        title="Transfers"
-                        actionLabel="Ledger"
-                        actionRoute="admin.inventory.transfers"
-                        tiles={transferTiles}
-                    />
-
-                    <OpsCard title="Stores" note="Retail" rows={storeRows} wide />
-
-                    <OpsCard title="Warehouses & Hubs" note="Facilities" rows={facilityRows} wide />
-
-                    {/* A store's setup is on its Store page; on "All stores" it opens here. */}
-                    <OpsCard title="Setup" note="How the stores run" rows={setupRows} wide />
+                <div className="flex flex-col gap-3">
+                    {/* Each store opens its own Items; its replenish and price deviations sit on its page. */}
+                    <OpsCard title="Stores" note="Open one" rows={storeRows} wide />
+                    {facilityRows.length > 0 && <OpsCard title="Warehouses & hubs" note="Facilities" rows={facilityRows} wide />}
+                    <OpsCard title="Stock" note="What is here" rows={stock} wide />
+                    <OpsCard title="Movement" note="What is on the way" rows={movement} wide />
+                    <OpsCard title="Approvals" note="What waits for a ruling" rows={approvals} wide />
+                    <OpsCard title="Setup" note="How the stores run" rows={setup} wide />
 
                     {/* ── Item picker → per-location stock tool ── */}
                     <Card

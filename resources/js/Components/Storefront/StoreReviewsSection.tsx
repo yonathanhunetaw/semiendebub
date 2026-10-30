@@ -16,7 +16,7 @@ function Stars({ value, size = 16 }: { value: number; size?: number }) {
     return (
         <span aria-label={`${value} out of 5`} className="inline-flex">
             {[1, 2, 3, 4, 5].map((n) => (
-                <span key={n} className="material-symbols-outlined" style={{ fontSize: size, color: n <= Math.round(value) ? "#f59e0b" : "#d1d5db", fontVariationSettings: "'FILL' 1" }}>
+                <span key={n} className={`material-symbols-outlined ${n <= Math.round(value) ? "text-warning" : "text-outline-variant"}`} style={{ fontSize: size, fontVariationSettings: "'FILL' 1" }}>
                     star
                 </span>
             ))}
@@ -52,7 +52,7 @@ export default function StoreReviewsSection({ slug, reviews }: { slug: string; r
                     <div className="flex gap-1" role="radiogroup" aria-label="Your rating">
                         {[1, 2, 3, 4, 5].map((n) => (
                             <button key={n} type="button" role="radio" aria-checked={data.rating === n} aria-label={`${n} star${n === 1 ? "" : "s"}`} onClick={() => setData("rating", n)}>
-                                <span className="material-symbols-outlined" style={{ fontSize: 26, color: n <= data.rating ? "#f59e0b" : "#d1d5db", fontVariationSettings: "'FILL' 1" }}>star</span>
+                                <span className={`material-symbols-outlined ${n <= data.rating ? "text-warning" : "text-outline-variant"}`} style={{ fontSize: 26, fontVariationSettings: "'FILL' 1" }}>star</span>
                             </button>
                         ))}
                     </div>

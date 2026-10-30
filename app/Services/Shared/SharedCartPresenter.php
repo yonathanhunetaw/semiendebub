@@ -137,7 +137,7 @@ class SharedCartPresenter
         /** @var Sale $sale */
         $sale = $share->sale()->with(['store', 'delivery', 'payments.account', 'items.storeVariant.itemVariant.item', 'items.storeVariant.itemVariant.itemPackagingType'])->firstOrFail();
         $log = app(CustodyLog::class)->forSale($sale);
-        $stage = app(SellerOrderBoard::class)->stageFor($sale->fulfillment_stage, $sale->payment_status, (bool) $sale->items->contains(fn ($i) => (int) $i->picked_quantity > 0));
+        $stage = app(SellerOrderBoard::class)->stageOf($sale);
 
         // The customer's view of the trail: what happened and when, no places or people.
         $shown = ['order', 'payment', 'pick', 'custody_in', 'deliver', 'delivery'];

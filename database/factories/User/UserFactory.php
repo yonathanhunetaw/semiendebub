@@ -48,8 +48,8 @@ class UserFactory extends Factory
             'role' => 'user',
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
-            'created_by' => 1, // Assuming a user with ID 1 is creating the user
-
+            // No creator: a hard-coded 1 broke the foreign key on MySQL, where ids keep counting across tests.
+            'created_by' => null,
         ];
     }
 

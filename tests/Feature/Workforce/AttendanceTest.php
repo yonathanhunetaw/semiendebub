@@ -321,4 +321,27 @@ class AttendanceTest extends TestCase
         $as($this->manager)->post(route('seller.work.time-entries.review', $entry))->assertSessionHas('success', 'Marked as looked at.');
         $this->assertSame($this->manager->id, (int) $entry->fresh()->reviewed_by);
     }
+
+    #[Test]
+    public function a_shift_with_no_clock_in_shows_as_didnt_come_once_it_is_half_an_hour_old(): void
+    {
+        $week = [CarbonImmutable::parse('2026-10-19'), CarbonImmutable::parse('2026-10-26')];
+
+        // The seller opens (clocked in by opening); the closer's shift starts at 10:00.
+        $this->open();
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 10:20:00'));
+        $this->assertCount(0, $this->attendance->noShows($this->site, ...$week), 'Not yet half an hour.');
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 10:31:00'));
+        $missing = $this->attendance->noShows($this->site, ...$week);
+        $this->assertSame([$this->second->id], $missing->pluck('user_id')->map(fn ($id): int => (int) $id)->all());
+
+        // They come and scan: off the list. The page carries it for the manager.
+        $this->attendance->clockIn($this->second, $this->site, $this->live());
+        $this->assertCount(0, $this->attendance->noShows($this->site, ...$week));
+
+        $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
+        $this->actingAs($this->manager)->get(route('seller.work.attendance', ['site' => $this->site, 'week' => '2026-10-19']))
+            ->assertOk()->assertInertia(fn ($page) => $page->where('noShows', []));
+    }
 }

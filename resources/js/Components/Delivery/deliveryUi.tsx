@@ -136,8 +136,8 @@ export function DeliveryHero({
                                 width: 40,
                                 height: 40,
                                 color: "primary.contrastText",
-                                bgcolor: "rgb(255 255 255 / 0.14)",
-                                "&:hover": { bgcolor: "rgb(255 255 255 / 0.22)" },
+                                bgcolor: alpha(theme.palette.primary.contrastText, 0.14),
+                                "&:hover": { bgcolor: alpha(theme.palette.primary.contrastText, 0.22) },
                             }}
                         />
                         {action}
@@ -178,7 +178,7 @@ export function StatTile({ label, value, tone = "default", icon, onHero = false 
                 borderRadius: 3,
                 backgroundImage: "none",
                 ...(onHero
-                    ? { bgcolor: alpha("#fff", 0.14), color: "inherit", border: `1px solid ${alpha("#fff", 0.18)}` }
+                    ? { bgcolor: alpha(theme.palette.primary.contrastText, 0.14), color: "inherit", border: `1px solid ${alpha(theme.palette.primary.contrastText, 0.18)}` }
                     : { border: 1, borderColor: "divider" }),
             }}
         >
@@ -186,7 +186,7 @@ export function StatTile({ label, value, tone = "default", icon, onHero = false 
                 {icon ? (
                     <Box sx={{ display: "flex", color: onHero ? "inherit" : toneColor, "& svg": { fontSize: 16 } }}>{icon}</Box>
                 ) : (
-                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: onHero ? alpha("#fff", 0.8) : toneColor, flexShrink: 0 }} />
+                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: onHero ? alpha(theme.palette.primary.contrastText, 0.8) : toneColor, flexShrink: 0 }} />
                 )}
                 <Typography
                     variant="caption"

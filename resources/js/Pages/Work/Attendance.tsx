@@ -1,5 +1,5 @@
-import { cardCls, clockTime, duration, FLAG_CHIP, ghostBtn, inputCls, primaryBtn, workLayout, wr } from "@/Components/Work/workUi";
-import { dayDate } from "@/utils/dates";
+import { cardCls, clockTime, duration, FLAG_CHIP, ghostBtn, hm, inputCls, primaryBtn, workLayout, wr } from "@/Components/Work/workUi";
+import { dayDate, shopZone } from "@/utils/dates";
 import type { OvertimeDay, Person, TimeEntryView, WorkApp } from "@/types/work";
 import { Head, Link, router } from "@inertiajs/react";
 import React, { useState } from "react";
@@ -9,7 +9,17 @@ import React, { useState } from "react";
  * and early flags, the clock-ins the sweep had to close, and fixing them.
  */
 
+/** A sent shift that started with no clock-in for it (AttendanceService::noShows). Times are wall-clock. */
+interface NoShow {
+    id: number;
+    user: { id: number; name: string } | null;
+    starts_at: string;
+    ends_at: string;
+}
+
 interface Props {
+    /** Shifts that started this week with nobody clocked in for them. */
+    noShows?: NoShow[];
     app: WorkApp;
     site: { id: number; name: string; kind_label: string };
     week: string;
@@ -78,18 +88,23 @@ function OvertimeRow({ app, day }: { app: WorkApp; day: OvertimeDay }): React.Re
     );
 }
 
-/** An ISO instant → the value of a datetime-local input, in the browser's time. */
+/**
+ * An ISO instant → the value of a datetime-local input, on the shops' clock:
+ * the server reads a fixed time as Addis wall-clock (LocalTime::parse), so the
+ * form must show it that way too, whatever zone the manager's device is in.
+ */
 const local = (iso: string | null): string => {
     if (!iso) return "";
-    const d = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: shopZone(), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(iso));
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "00";
+    return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 };
 
 const addDays = (date: string, days: number): string => {
     const d = new Date(`${date}T12:00:00`);
     d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
+    // The local date, not toISOString (UTC), which moves a day for browsers far from UTC.
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
 function EntryRow({ app, entry }: { app: WorkApp; entry: TimeEntryView }): React.ReactElement {
@@ -167,7 +182,7 @@ function EntryRow({ app, entry }: { app: WorkApp; entry: TimeEntryView }): React
     );
 }
 
-export default function Attendance({ app, site, week, here = [], entries = [], people = [], overtime = [], needsApproval = true }: Props): React.ReactElement {
+export default function Attendance({ app, site, week, here = [], entries = [], people = [], overtime = [], needsApproval = true, noShows = [] }: Props): React.ReactElement {
     const [who, setWho] = useState("");
     const [note, setNote] = useState("");
     const go = (date: string) => router.get(wr(app, "work.attendance", { site: site.id, week: date }), {}, { preserveScroll: true });
@@ -272,6 +287,35 @@ export default function Attendance({ app, site, week, here = [], entries = [], p
                             ) : null}
                         </div>
                     </section>
+
+                    {noShows.length > 0 ? (
+                        <section className={`${cardCls} border-warning/40`}>
+                            <h2 className="text-[13px] font-bold text-on-surface">Had a shift, didn’t clock in</h2>
+                            <p className="text-[11px] text-on-surface-variant">Didn’t come, or came and never scanned. Still on now: clock them in by hand.</p>
+                            <ul className="mt-1 divide-y divide-outline-variant/40">
+                                {noShows.map((shift) => {
+                                    // Still running on the shops' clock: the wall-clock strings compare as text.
+                                    const now = local(new Date().toISOString());
+                                    const running = shift.starts_at <= now && shift.ends_at > now;
+
+                                    return (
+                                        <li key={shift.id} className="flex items-center justify-between gap-2 py-1.5 text-[12px]">
+                                            <span className="text-on-surface">
+                                                {shift.user?.name ?? "Someone"} · {dayDate(shift.starts_at.slice(0, 10))} {hm(shift.starts_at)}–{hm(shift.ends_at)}
+                                            </span>
+                                            {running && shift.user ? (
+                                                <button type="button" className="shrink-0 text-[11px] font-bold text-primary" onClick={() => setWho(String(shift.user!.id))}>
+                                                    Clock in now…
+                                                </button>
+                                            ) : (
+                                                <span className="shrink-0 text-[11px] font-semibold text-on-warning-container">No clock-in</span>
+                                            )}
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </section>
+                    ) : null}
 
                     {Object.keys(totals).length > 0 ? (
                         <section className={cardCls}>

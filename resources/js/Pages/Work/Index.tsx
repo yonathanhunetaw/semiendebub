@@ -1,20 +1,25 @@
+import CounterScan from "@/Components/Work/CounterScan";
+import DutyCard from "@/Components/Work/DutyCard";
 import KeyCard from "@/Components/Work/KeyCard";
 import LeavePanel from "@/Components/Work/LeavePanel";
 import OffersPanel from "@/Components/Work/OffersPanel";
 import RideCard from "@/Components/Work/RideCard";
 import MyShifts from "@/Components/Work/MyShifts";
 import SiteDayCard from "@/Components/Work/SiteDayCard";
+import WeekPlan from "@/Components/Work/WeekPlan";
 import { cardCls, clockTime, ghostBtn, inputCls, KIND_ICON, primaryBtn, sectionTitle, workLayout, wr } from "@/Components/Work/workUi";
-import type { CustodyKeyView, KeyHandoverRow, LeaveView, Person, RideView, ShiftView, SiteDayView, SiteKind, SwapView, TimeEntryView, WorkApp } from "@/types/work";
+import type { CustodyKeyView, DutyView, KeyHandoverRow, LeaveView, Person, RideView, ShiftView, SiteDayView, SiteKind, SwapView, TimeEntryView, WeekPlanRow, WorkApp } from "@/types/work";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import React, { useState } from "react";
 
 /**
  * My work, in five tabs:
- *   Today   clocked in or not, keys waiting for me, and each site I work at today:
- *           who opens, closes and drives, open or not. A driver sees their runs.
- *   Shifts  mine (accept, ask for a change, give to a colleague); a manager plans
- *           each site's shifts and who opens, closes and drives from here.
+ *   Today   clocked in or not, keys waiting for me, my jobs today as steps (open:
+ *           the key, then scan the counter QR; close; drive: take the car), and
+ *           each site I work at today: who opens, closes and drives, open or not.
+ *   Shifts  what I open, close or drive in the week ahead; mine (accept, ask for
+ *           a change, give to a colleague); a manager sees the week's plan at
+ *           every site, gaps in red, and plans shifts and opening from here.
  *   Keys    the ones I hold (hand them on); a manager also sees their sites' keys.
  *   Leave   ask for it.
  *   Rides   staff transport I'm on, and where it drops me.
@@ -52,6 +57,13 @@ interface Props {
     rides?: RideView[];
     /** A driver's runs from the days' plans. */
     driving?: RideView[];
+    /** Days I open, close or drive, today and the week ahead (SiteDayService::dutiesFor). */
+    duties?: DutyView[];
+    /** Cars a driver can take a run with. */
+    vehicles?: { id: number; name: string; plate: string; key_holder_id: number | null }[];
+    meId?: number;
+    /** The week ahead at each site I manage (SiteDayService::weekPlan). */
+    weekPlan?: WeekPlanRow[];
     homeArea?: string | null;
 }
 
@@ -78,11 +90,23 @@ export default function WorkIndex({
     colleagues = {},
     rides = [],
     driving = [],
+    duties = [],
+    vehicles = [],
+    meId,
+    weekPlan = [],
     homeArea = null,
 }: Props): React.ReactElement {
+    const todayDuties = duties.filter((duty) => duty.is_today);
+    // A site with no hours today where nothing happened or is planned: one line for all of them, not a card each.
+    const idle = (day: SiteDayView) => day.hours === null && day.status === "planned" && !day.opener && !day.closer && !day.driver && !day.i_hold_key;
+    const activeDays = days.filter((day) => !idle(day));
+    const idleDays = days.filter(idle);
+    const laterDuties = duties.filter((duty) => !duty.is_today);
+    // Runs not tied to one of my duty days (the plan moved on): still shown, so nothing is lost.
+    const looseRuns = driving.filter((ride) => !duties.some((duty) => duty.rides.some((planned) => planned.id === ride.id)));
     const tabs: { id: Tab; label: string; count: number }[] = [
-        { id: "today", label: "Today", count: waiting.length },
-        { id: "shifts", label: "Shifts", count: shifts.filter((s) => s.status === "published" || s.status === "change_requested").length + offers.length },
+        { id: "today", label: "Today", count: waiting.length + todayDuties.length },
+        { id: "shifts", label: "Shifts", count: shifts.filter((s) => s.status === "published" || s.status === "change_requested").length + offers.length + laterDuties.filter((duty) => duty.my_roles.some((kind) => duty.answers[kind] === null)).length },
         { id: "keys", label: "Keys", count: waiting.length },
         ...(app !== "delivery" ? [{ id: "leave" as Tab, label: "Leave", count: 0 }] : []),
         { id: "rides", label: "Rides", count: 0 },
@@ -182,28 +206,42 @@ export default function WorkIndex({
 
                             {waitingKeys}
 
-                            {driving.length > 0 ? (
+                            {todayDuties.length > 0 ? (
                                 <>
-                                    <h2 className={sectionTitle}>You drive</h2>
-                                    {driving.map((ride) => (
-                                        <RideCard key={ride.id} app={app} ride={ride} />
+                                    <h2 className={sectionTitle}>Your jobs today</h2>
+                                    {todayDuties.map((duty) => (
+                                        <DutyCard key={duty.id} app={app} duty={duty} driving={driving} vehicles={vehicles} meId={meId} />
+                                    ))}
+                                </>
+                            ) : null}
+
+                            {looseRuns.length > 0 ? (
+                                <>
+                                    <h2 className={sectionTitle}>Other runs you drive</h2>
+                                    {looseRuns.map((ride) => (
+                                        <RideCard key={ride.id} app={app} ride={ride} vehicles={vehicles} meId={meId} />
                                     ))}
                                     <Link href={wr(app, "work.rides")} className={`block text-center ${cardCls} py-2 text-[12px] font-bold text-primary`}>
-                                        Pick the car and drive them on Staff rides
+                                        All staff rides
                                     </Link>
                                 </>
                             ) : null}
 
-                            <h2 className={sectionTitle}>Opening and closing today</h2>
-                            {days.length === 0 ? <p className={`${cardCls} text-[12px] text-on-surface-variant`}>You do not work at any site.</p> : null}
-                            {days.map((day) => (
+                            {/* A driver who works at no site has only their jobs above. */}
+                            {days.length > 0 || duties.length === 0 ? <h2 className={sectionTitle}>Opening and closing today</h2> : null}
+                            {days.length === 0 && duties.length === 0 ? <p className={`${cardCls} text-[12px] text-on-surface-variant`}>You do not work at any site.</p> : null}
+                            {activeDays.map((day) => (
                                 <SiteDayCard key={day.id} day={day} app={app}>
                                     {day.status === "open" && (day.i_opened || day.manages) ? (
                                         <Link href={wr(app, "work.sites.counter", day.site.id)} className={`mt-3 inline-block ${ghostBtn}`}>
                                             Counter screen
                                         </Link>
-                                    ) : day.status !== "open" && day.status !== "closed" && (day.i_hold_key || day.manages) ? (
-                                        <p className="mt-2.5 text-[11px] text-on-surface-variant">To open, scan the printed QR at the counter with your phone camera.</p>
+                                    ) : null}
+                                    {/* Anyone who could open or close it gets the scanner; the counter page says what is allowed. */}
+                                    {day.status !== "closed" && day.status !== "closed_day" && (day.i_hold_key || day.manages || day.opener?.id === meId || day.closer?.id === meId) ? (
+                                        <div className="mt-2.5">
+                                            <CounterScan app={app} label={day.status === "open" ? "Scan to clock in or close" : "Scan to open"} className={ghostBtn} />
+                                        </div>
                                     ) : null}
                                     {day.manages ? (
                                         <Link href={wr(app, "work.rota", { site: day.site.id })} className="mt-2 block text-[12px] font-bold text-primary">
@@ -212,22 +250,51 @@ export default function WorkIndex({
                                     ) : null}
                                 </SiteDayCard>
                             ))}
+                            {idleDays.length > 0 ? (
+                                <p className={`${cardCls} text-[12px] text-on-surface-variant`}>
+                                    No opening hours and nobody planned today: {idleDays.map((day) => day.site.name).join(", ")}.
+                                    {managesSites ? (
+                                        <>
+                                            {" "}
+                                            <Link href={wr(app, "work.sites.index")} className="font-bold text-primary">
+                                                Set hours on Site setup
+                                            </Link>
+                                        </>
+                                    ) : null}
+                                </p>
+                            ) : null}
                         </>
                     ) : null}
 
                     {tab === "shifts" ? (
                         <>
                             <OffersPanel app={app} offers={offers} />
+                            {laterDuties.length > 0 ? (
+                                <>
+                                    <h2 className={sectionTitle}>Coming up: you open, close or drive</h2>
+                                    {laterDuties.map((duty) => (
+                                        <DutyCard key={duty.id} app={app} duty={duty} driving={driving} vehicles={vehicles} meId={meId} />
+                                    ))}
+                                </>
+                            ) : null}
                             <h2 className={sectionTitle}>Your shifts</h2>
                             <MyShifts app={app} shifts={shifts} offered={offered} colleagues={colleagues} />
+
+                            {weekPlan.length > 0 ? (
+                                <>
+                                    <h2 className={sectionTitle}>The week ahead: who opens, closes and drives</h2>
+                                    <WeekPlan app={app} rows={weekPlan} />
+                                </>
+                            ) : null}
 
                             {sites.length > 0 ? (
                                 <>
                                     <h2 className={sectionTitle}>Sites you manage</h2>
                                     {sites.map((site) => (
-                                        <section key={site.id} className={`flex items-center gap-3 ${cardCls}`}>
+                                        <section key={site.id} className={`flex flex-wrap items-center gap-3 ${cardCls}`}>
                                             <span className="material-symbols-outlined text-[24px] text-primary">{KIND_ICON[site.kind]}</span>
-                                            <div className="min-w-0 flex-1">
+                                            {/* The name keeps its room; on a phone the buttons go under it. */}
+                                            <div className="min-w-[9rem] flex-1">
                                                 <p className="truncate text-[14px] font-bold text-on-surface">{site.name}</p>
                                                 <p className="text-[11px] text-on-surface-variant">{site.kind_label}</p>
                                             </div>

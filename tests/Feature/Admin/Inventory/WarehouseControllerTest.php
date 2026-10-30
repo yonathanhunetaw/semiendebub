@@ -80,7 +80,7 @@ class WarehouseControllerTest extends TestCase
         ]);
 
         \App\Models\StockKeeper\ItemStock::create([
-            'item_variant_id' => $storeVariant->id,
+            'item_variant_id' => $variant->id,
             'location_id' => $warehouse->id,
             'location_type' => Warehouse::class,
             'quantity' => 100,

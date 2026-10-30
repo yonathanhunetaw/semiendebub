@@ -52,7 +52,7 @@ export interface AdminNavItem {
     /** Paths that must not light it up even when a prefix matches. */
     exclude?: string[];
     excludePattern?: RegExp;
-    /** The Store entry: the active store's page, or the overview on "All stores". */
+    /** The Store entry: the active store's page, or every store's on "All stores". */
     storeSection?: boolean;
     /** Route names that only need to match exactly (e.g. the dashboard). */
     exact?: boolean;
@@ -73,7 +73,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     /*
      * The active store: its items, replenishment and price deviations, and the
      * inventory screens, as tabs (adminSections.ts). On "All stores" it opens
-     * the cross-store inventory overview. A store manager lands on Approvals.
+     * the same hub across every store. A store manager lands on Approvals.
      */
     {
         key: "store",

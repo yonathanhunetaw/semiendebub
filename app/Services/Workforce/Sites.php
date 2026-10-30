@@ -41,6 +41,17 @@ class Sites
     /** Roles that work at a store's sites. */
     public const STAFF_ROLES = ['seller', 'store_manager', 'stock_keeper', 'admin'];
 
+    /**
+     * Answers already worked out by this instance (one request in the app): a
+     * page asks "does X manage site Y?" for every site, several times over.
+     *
+     * @var array<string, bool>
+     */
+    private array $manages = [];
+
+    /** @var array<int, array<int, int>> a store admin's stores, by user id */
+    private array $storesOf = [];
+
     public function __construct(private readonly StockPermissions $permissions)
     {
     }
@@ -55,17 +66,28 @@ class Sites
         return in_array($site->kind, self::SHIFT_KINDS, true);
     }
 
-    /** @return Builder<StockLocation> */
+    /**
+     * Every site, with what canManage / worksAt read (its managers, its store
+     * node's managers, its staff) loaded up front: checking a list of sites then
+     * costs no query per site.
+     *
+     * @return Builder<StockLocation>
+     */
     public function query(): Builder
     {
-        return StockLocation::query()->whereIn('kind', self::KINDS)->orderByRaw(
+        return StockLocation::query()->with(['managerAssignments', 'parent.managerAssignments', 'staffAssignments'])->whereIn('kind', self::KINDS)->orderByRaw(
             "case kind when 'store' then 0 when 'remote_hub' then 1 else 2 end"
         )->orderBy('store_id')->orderBy('name');
     }
 
+    /**
+     * Roles are read as held (hasRole), not through isRole, which follows the
+     * host: a global admin ticked as seller is a seller on the seller app, but
+     * still manages every site from there.
+     */
     public function isGlobalAdmin(?User $user): bool
     {
-        return $user !== null && ($user->isRole('dev') || ($user->isRole('admin') && $user->store_id === null));
+        return $user !== null && ($user->hasRole('dev') || ($user->hasRole('admin') && $user->store_id === null));
     }
 
     public function canManage(?User $user, StockLocation $site): bool
@@ -78,8 +100,13 @@ class Sites
             return true;
         }
 
-        if ($user->isRole('admin') && $site->store_id !== null
-            && in_array((int) $site->store_id, ActiveStore::accessibleIdsFor($user) ?? [], true)) {
+        return $this->manages[$user->id.':'.$site->id] ??= $this->managesSite($user, $site);
+    }
+
+    private function managesSite(User $user, StockLocation $site): bool
+    {
+        if ($user->hasRole('admin') && $site->store_id !== null
+            && in_array((int) $site->store_id, $this->storesOf[$user->id] ??= (ActiveStore::accessibleIdsFor($user) ?? []), true)) {
             return true;
         }
 
@@ -92,13 +119,25 @@ class Sites
             return false;
         }
 
-        if ($this->canManage($user, $site) || $site->isStaffedBy($user) || $site->isManagedBy($user)) {
+        if ($this->canManage($user, $site) || $this->isStaffedBy($user, $site) || $site->isManagedBy($user)) {
             return true;
         }
 
-        return $site->store_id !== null
-            && (int) $user->store_id === (int) $site->store_id
-            && $user->isRole(...self::STAFF_ROLES);
+        // A Main Hub belongs to no store: its stock keepers are the ones with no store either.
+        if ($site->store_id === null) {
+            return $user->store_id === null && $user->hasRole('stock_keeper');
+        }
+
+        return (int) $user->store_id === (int) $site->store_id
+            && $user->hasAnyRole(self::STAFF_ROLES);
+    }
+
+    /** Assigned to work at the site; reads the loaded staff when query() loaded them. */
+    private function isStaffedBy(User $user, StockLocation $site): bool
+    {
+        return $site->relationLoaded('staffAssignments')
+            ? $site->staffAssignments->contains('user_id', $user->id)
+            : $site->isStaffedBy($user);
     }
 
     /**

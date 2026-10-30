@@ -14,6 +14,7 @@ use App\Models\Workforce\ShiftSwap;
 use App\Models\Workforce\StaffRide;
 use App\Models\Workforce\StaffRideRider;
 use App\Models\Workforce\SiteDay;
+use App\Models\Workforce\SiteDayAnswer;
 use App\Models\Workforce\TimeEntry;
 use App\Services\Finance\ExpenseService;
 use Illuminate\Support\Facades\Route;
@@ -83,8 +84,8 @@ class WorkTasks
             ), 1, $this->workRoute($user, 'work.rides'));
         }
 
-        // Drivers: rides nobody has taken in the next day.
-        if ($user->isRole('delivery') && $user->is_driver) {
+        // Drivers: rides nobody has taken in the next day (a driver takes them from any app).
+        if ($user->is_driver) {
             $pool = StaffRide::query()->where('status', StaffRide::STATUS_REQUESTED)
                 ->whereBetween('departs_at', [now()->subHours(3), now()->addDay()]);
             $count = (clone $pool)->count();
@@ -95,7 +96,7 @@ class WorkTasks
         }
 
         // Managers: change requests, unaccepted shifts and coverage gaps in the next 7 days.
-        $managed = $user->isRole('admin', 'dev', 'store_manager') || $user->facilityAssignments()->exists()
+        $managed = $user->hasAnyRole(['admin', 'dev', 'store_manager']) || $user->facilityAssignments()->exists()
             ? $this->sites->managedBy($user)->filter(fn (StockLocation $site): bool => $this->sites->hasShifts($site))
             : collect();
 
@@ -256,6 +257,8 @@ class WorkTasks
             }
         }
 
+        array_push($tasks, ...$this->dutyAnswers($user, $href));
+
         // Site keys I hold whose next opener is someone else.
         $held = CustodyKey::query()->with('keyable')->where('holder_id', $user->id)->where('keyable_type', StockLocation::class)->get();
         foreach ($held as $key) {
@@ -293,6 +296,99 @@ class WorkTasks
         return $tasks;
     }
 
+    /** From this hour (shops' clock) the day before, an accepted job tomorrow is a reminder in the bell. */
+    private const EVENING_HOUR = 17;
+
+    /**
+     * Saying yes or no to a duty, and what follows from it:
+     *   - my jobs today and tomorrow I have not answered: confirm them;
+     *   - from the evening before, tomorrow's jobs I said yes to (an opener is told where the key is);
+     *   - managers: someone said they can't, in the week ahead: pick someone else.
+     *
+     * @return array<int, array{id: string, kind: string, title: string, detail: string, count: int, href: string|null, urgent: bool}>
+     */
+    private function dutyAnswers(User $user, ?string $href): array
+    {
+        $tasks = [];
+        $today = LocalTime::dateOf();
+        $tomorrow = LocalTime::day($today)->addDay()->toDateString();
+        $evening = (int) LocalTime::wall(now(), 'H') >= self::EVENING_HOUR;
+        $verb = ['opener' => 'open', 'closer' => 'close', 'driver' => 'drive for'];
+
+        $mine = SiteDay::query()->with(['site', 'answers'])
+            ->whereDate('date', '>=', $today)->whereDate('date', '<=', $tomorrow)
+            ->whereIn('status', [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED, SiteDay::STATUS_OPEN])
+            ->where(fn ($q) => $q->where('opener_id', $user->id)->orWhere('closer_id', $user->id)->orWhere('driver_id', $user->id))
+            ->get();
+
+        foreach ($mine as $day) {
+            if ($day->site === null) {
+                continue;
+            }
+            $isToday = $day->date->toDateString() === $today;
+            $answers = $this->days->answersOf($day);
+
+            foreach (SiteDayAnswer::DUTIES as $duty) {
+                if ((int) $day->{$duty.'_id'} !== (int) $user->id || ($duty === 'opener' && $day->status === SiteDay::STATUS_OPEN)) {
+                    continue;
+                }
+                $at = $duty === 'closer' ? $this->sites->closesAt($day->site, $day->date) : $this->sites->opensAt($day->site, $day->date);
+                $when = ($isToday ? 'today' : 'tomorrow').($at ? ' at '.LocalTime::wall($at, 'H:i') : '');
+
+                // Today's opener already has "You open today"; one task is enough.
+                if ($answers[$duty] === null && ! ($isToday && $duty === 'opener')) {
+                    $tasks[] = $this->task("answer-{$day->id}-{$duty}", 'shift', $isToday ? "Will you {$verb[$duty]} today?" : 'Confirm tomorrow’s job', sprintf(
+                        'You %s %s %s. Say yes in My work, or tell the manager you can’t.',
+                        $verb[$duty], $day->site->name, $when,
+                    ), 1, $href, $isToday);
+
+                    continue;
+                }
+
+                if ($answers[$duty] === null) {
+                    continue;
+                }
+
+                if (! $isToday && $evening && $answers[$duty]['answer'] === SiteDayAnswer::YES) {
+                    $tasks[] = $this->task("tomorrow-{$day->id}-{$duty}", 'site', 'Tomorrow', sprintf(
+                        'You %s %s %s.%s',
+                        $verb[$duty], $day->site->name, $when,
+                        $duty === 'opener' ? $this->keyHint($day->site, $user) : '',
+                    ), 1, $href);
+                }
+            }
+        }
+
+        // Managers: a "no" in the week ahead, from whoever still holds that duty.
+        $noes = $this->days->cantDo($user);
+
+        foreach ($noes as $answer) {
+            $day = $answer->siteDay;
+            $tasks[] = $this->task("cant-{$answer->id}", 'warning', 'Pick someone else', sprintf(
+                '%s can’t %s %s on %s: “%s”.',
+                $answer->user?->first_name ?? 'Someone',
+                $verb[$answer->duty],
+                $day->site->name,
+                $day->date->format('D j M'),
+                $answer->note,
+            ), 1, $this->workRoute($user, 'work.rota', ['site' => $day->site->id, 'week' => $day->date->toDateString()]), true);
+        }
+
+        return $tasks;
+    }
+
+    /** For tomorrow's opener: where the site's key is, if not with them. */
+    private function keyHint(StockLocation $site, User $user): string
+    {
+        $key = CustodyKey::query()->with('holder')->where('keyable_type', StockLocation::class)->where('keyable_id', $site->id)->first();
+
+        return match (true) {
+            $key === null || $key->holder === null => ' Nobody holds the key: ask a manager for it today.',
+            (int) $key->holder_id === (int) $user->id => ' You have the key.',
+            default => sprintf(' The key is with %s: get it from them today.', trim($key->holder->first_name.' '.$key->holder->last_name)),
+        };
+    }
+
     private function sitesUrl(User $user): ?string
     {
         return $this->workRoute($user, 'work.sites.index');
@@ -305,7 +401,7 @@ class WorkTasks
     }
 
     /** A work route in the user's own app, e.g. work.team. */
-    private function workRoute(User $user, string $name): ?string
+    private function workRoute(User $user, string $name, array $params = []): ?string
     {
         $app = match (true) {
             $user->isRole('seller', 'store_manager') => 'seller',
@@ -315,7 +411,7 @@ class WorkTasks
             default => null,
         };
 
-        return $app !== null && Route::has("{$app}.{$name}") ? route("{$app}.{$name}") : null;
+        return $app !== null && Route::has("{$app}.{$name}") ? route("{$app}.{$name}", $params) : null;
     }
 
     /** @return array{id: string, kind: string, title: string, detail: string, count: int, href: string|null, urgent: bool} */

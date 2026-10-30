@@ -10,8 +10,22 @@ import React, { useState } from "react";
  * in sick). Approving leave cancels the person's shifts on those days.
  */
 
+/** Someone said they can't do their duty on a day ahead (SiteDayService::cantDo). */
+interface CantDo {
+    id: number;
+    duty: "opener" | "closer" | "driver";
+    note: string | null;
+    who: string | null;
+    date: string;
+    site: { id: number; name: string };
+}
+
+const DUTY_VERB: Record<CantDo["duty"], string> = { opener: "open", closer: "close", driver: "drive for" };
+
 interface Props {
     app: WorkApp;
+    /** "I can't" answers in the week ahead: pick someone else on the Rota. */
+    cantDo?: CantDo[];
     leave?: LeaveView[];
     swaps?: SwapView[];
     upcoming?: LeaveView[];
@@ -38,7 +52,7 @@ function Decide({ onYes, onNo, noNeedsNote }: { onYes: (note: string) => void; o
     );
 }
 
-export default function Team({ app, leave = [], swaps = [], upcoming = [], people = [], types = [] }: Props): React.ReactElement {
+export default function Team({ app, leave = [], swaps = [], upcoming = [], people = [], types = [], cantDo = [] }: Props): React.ReactElement {
     const record = useForm({ user_id: "", type: "sick", starts_on: "", ends_on: "", note: "" });
     const post = (name: string, id: number, note: string) => router.post(wr(app, name, id), { note: note || null }, { preserveScroll: true });
 
@@ -58,6 +72,25 @@ export default function Team({ app, leave = [], swaps = [], upcoming = [], peopl
                 </header>
 
                 <div className="mx-auto max-w-2xl space-y-3 px-3.5 pt-3">
+                    {cantDo.length > 0 ? (
+                        <>
+                            <h2 className={sectionTitle}>Said they can’t: pick someone else</h2>
+                            {cantDo.map((row) => (
+                                <section key={row.id} className={`${cardCls} border-error/40`}>
+                                    <p className="text-[13px] font-bold text-on-surface">
+                                        {row.who ?? "Someone"} can’t {DUTY_VERB[row.duty]} {row.site.name}
+                                    </p>
+                                    <p className="text-[11px] text-on-surface-variant">
+                                        {dayDate(row.date)}
+                                        {row.note ? ` · “${row.note}”` : ""}
+                                    </p>
+                                    <Link href={wr(app, "work.rota", { site: row.site.id, week: row.date })} className={`mt-2 inline-block ${primaryBtn}`}>
+                                        Plan that day
+                                    </Link>
+                                </section>
+                            ))}
+                        </>
+                    ) : null}
                     <h2 className={sectionTitle}>Leave to decide</h2>
                     {leave.length === 0 ? <p className={`${cardCls} text-[12px] text-on-surface-variant`}>Nothing waiting.</p> : null}
                     {leave.map((row) => (

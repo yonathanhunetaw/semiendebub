@@ -42,6 +42,8 @@ class GuideWorldController extends Controller
         $payload['refills'] = $feed->refills($request->from(), $request->to(), $request->user());
         $payload['orders'] = $feed->orders($request->from(), $request->to(), $request->user());
         $payload['events'] = $feed->events($request->from(), $request->to(), $request->user());
+        // The containers being filled at the Storage hub, as they stand now (the truck on its apron shows how full).
+        $payload['containers'] = $feed->containers($request->user());
 
         // The shelf is always as it stands now; only fetched when asked for.
         if ($request->boolean('shelf')) {

@@ -65,6 +65,16 @@ class TeamController extends Controller
                 ->map(fn (LeaveRequest $leave): array => $this->leave->present($leave))->values()->all(),
             'people' => $people->map(fn (User $person): array => ['id' => (int) $person->id, 'name' => trim($person->first_name.' '.$person->last_name)])->all(),
             'types' => LeaveRequest::TYPES,
+            // Who said they can't open, close or drive in the week ahead: pick someone else on the Rota.
+            'cantDo' => app(\App\Services\Workforce\SiteDayService::class)->cantDo($user)
+                ->map(fn (\App\Models\Workforce\SiteDayAnswer $answer): array => [
+                    'id' => (int) $answer->id,
+                    'duty' => $answer->duty,
+                    'note' => $answer->note,
+                    'who' => $answer->user ? trim($answer->user->first_name.' '.$answer->user->last_name) : null,
+                    'date' => $answer->siteDay->date->toDateString(),
+                    'site' => ['id' => (int) $answer->siteDay->site->id, 'name' => $answer->siteDay->site->name],
+                ])->values()->all(),
         ]);
     }
 

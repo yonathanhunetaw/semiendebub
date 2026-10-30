@@ -8,8 +8,8 @@
  *   Store      → a hub of grouped cards (Pages/Admin/Stores/Hub): the active store's
  *                items, replenishment, price deviations and capacity, transfers and
  *                shipments, the approvals, and its setup (locations; payment accounts, seller balances
- *                and customer prices are tabs of Payments / Customers). On "All stores" the first tab is the
- *                cross-store inventory overview and the per-store tabs hide.
+ *                and customer prices are tabs of Payments / Customers). On "All stores" the same hub runs
+ *                across every store (Pages/Admin/Inventory/Index) and the per-store tabs hide.
  */
 export interface AdminSectionTab {
     label: string;
@@ -79,7 +79,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
         ],
         tabs: [
             { label: "Items", route: "store.show", group: "stock", match: [/^\/stores\/\d+$/, /^\/stores\/\d+\/inventory\/items\//], storeParam: true },
-            { label: "Overview", route: "inventory.index", group: "stock", match: [/^\/inventory$/], allStoresOnly: true },
+            { label: "All stores", route: "inventory.index", group: "stock", match: [/^\/inventory$/], allStoresOnly: true },
             { label: "Replenish", route: "store.replenish", group: "stock", match: [/^\/stores\/\d+\/inventory\/replenish$/], storeParam: true },
             { label: "Price deviations", route: "store.deviations", group: "stock", match: [/^\/stores\/\d+\/inventory\/deviations$/], storeParam: true },
             { label: "Transfers", route: "admin.inventory.transfers", group: "movement", match: ["/inventory/transfers"] },

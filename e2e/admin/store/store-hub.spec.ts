@@ -98,3 +98,56 @@ test('refill levels link to the real capacity editor', async ({ browser }) => {
     await expect(admin).toHaveURL(/\/inventory\/capacity\/\d+/);
     await expect(admin.getByText(/Server Error|SQLSTATE/)).toHaveCount(0);
 });
+
+test('"All stores" reads like one store\'s page: the same banner and cards, no order pipeline', async ({ browser }) => {
+    const admin = await signIn(browser, 'admin', fixture.people.admin.email);
+    await admin.goto(app('admin', '/inventory?store=all'));
+    const main = admin.locator('main');
+
+    await expect(main.getByRole('heading', { name: 'All stores' })).toBeVisible();
+    for (const figure of ['Items carried', 'Shipments moving', 'Transfers under way', 'Waiting for you']) await expect(main.getByText(figure, { exact: true })).toBeVisible();
+    for (const card of ['Stores', 'Stock', 'Movement', 'Approvals', 'Setup']) await expect(main.getByText(card, { exact: true }).first()).toBeVisible();
+
+    // The order, shipment and transfer pipelines are gone; Orders has its own screen.
+    for (const gone of ['Order list', 'Pick & Pack', 'Manifest', 'Ledger', 'Console']) await expect(main.getByText(gone, { exact: true })).toHaveCount(0);
+    await expect(admin.getByText(/Server Error|SQLSTATE/)).toHaveCount(0);
+});
+
+test('every "All stores" tile opens its screen, and the store screens lead back to "All stores"', async ({ browser }) => {
+    const admin = await signIn(browser, 'admin', fixture.people.admin.email);
+    const tiles: Array<[string, RegExp, boolean]> = [
+        [fixture.store.name, /\/stores\/\d+$/, false],
+        ['All stock', /\/inventory\/stores$/, false],
+        ['Capacity', /\/inventory\/capacity/, true],
+        ['Transfers', /\/inventory\/transfers/, true],
+        ['Shipments', /\/inventory\/shipments/, true],
+        ['Refills', /\/inventory\/replenishment/, true],
+        ['Stock counts', /\/inventory\/counts/, true],
+        ['Locations', /\/inventory\/locations/, true],
+        ['Payment accounts', /\/payment-accounts/, false],
+        ['Seller balances', /\/balances/, false],
+        ['Customer prices & discounts', /\/customers\/discounts/, false],
+    ];
+
+    for (const [tile, url, backToAllStores] of tiles) {
+        await admin.goto(app('admin', '/inventory?store=all'));
+        await admin.locator('main').getByRole('link', { name: new RegExp(`\\b${tile.replace(/[&]/g, '\\$&')}\\b`) }).first().click();
+        await expect(admin, tile).toHaveURL(url);
+        await expect(admin.getByText(/Server Error|SQLSTATE/), tile).toHaveCount(0);
+
+        if (backToAllStores) {
+            const back = admin.locator('main').getByRole('link', { name: /^All stores$/ }).first();
+            await expect(back, `${tile}: back link`).toBeVisible();
+            await back.click();
+            await expect(admin, `${tile}: back`).toHaveURL(/\/inventory(\?|$)/);
+        }
+    }
+});
+
+test('a store admin\'s "All stores" page has no All stock tile (that list is a global admin\'s)', async ({ browser }) => {
+    const storeAdmin = await signIn(browser, 'admin', fixture.people.storeAdmin.email);
+    await storeAdmin.goto(app('admin', '/inventory'));
+
+    await expect(storeAdmin.locator('main').getByText('Stock counts', { exact: true })).toBeVisible();
+    await expect(storeAdmin.locator('main').getByText('All stock', { exact: true })).toHaveCount(0);
+});

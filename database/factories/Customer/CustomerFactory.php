@@ -46,7 +46,8 @@ class CustomerFactory extends Factory
                 'Mekele',
                 'Shashamanea',
             ]),
-            'created_by' => User::all()->random()->id, // Random user creator
+            // Any existing user; a new one only when there are none (random() threw on an empty table).
+            'created_by' => fn () => User::query()->inRandomOrder()->value('id') ?? User::factory(),
             'store_id' => $stores->isNotEmpty() ? $stores->random()->id : null, // Random store if exists
             'tin_number' => sprintf('%010d', rand(1000000000, 9999999999)), // 10-digit TIN
         ];

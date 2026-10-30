@@ -55,7 +55,8 @@ const TABS: Array<{ id: string; label: string; stage: OrderStage | null }> = [
  */
 function initialTab(orders: SellerOrder[], open: string | null): string {
     const opened = open ? orders.find((order) => order.reference === open) : undefined;
-    if (opened) return TABS.find((tab) => tab.stage === opened.stage)?.id ?? "all";
+    // Its pick panel opens, which starts picking: a paid order lands in Pick & pack.
+    if (opened) return TABS.find((tab) => tab.stage === (opened.stage === "paid" ? "packing" : opened.stage))?.id ?? "all";
     if (typeof window === "undefined") return "all";
 
     const requested = new URLSearchParams(window.location.search).get("tab");
@@ -91,9 +92,15 @@ export default function OrdersIndex({ orders: loaded = [], time, limit = 0, plan
         return opened ? [opened.id] : [];
     });
     const togglePick = (id: number) => setPicking((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+    // Opening a paid order's pick panel starts picking, which moves it to Pick & pack: picking never happens under Paid.
+    const startPicking = (order: SellerOrder) => {
+        if (order.stage !== "paid") return;
+        router.post(route("seller.orders.picking.start", order.id), {}, { preserveScroll: true, preserveState: true });
+    };
     const openPick = (order: SellerOrder) => {
+        startPicking(order);
         setPicking((current) => (current.includes(order.id) ? current : [...current, order.id]));
-        setTab(TABS.find((entry) => entry.stage === order.stage)?.id ?? "all");
+        setTab(TABS.find((entry) => entry.stage === (order.stage === "paid" ? "packing" : order.stage))?.id ?? "all");
         window.setTimeout(() => document.getElementById(`order-${order.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     };
 
@@ -109,7 +116,7 @@ export default function OrdersIndex({ orders: loaded = [], time, limit = 0, plan
         const opened = open ? loaded.find((order) => order.reference === open) : undefined;
         if (!opened) return;
 
-        const wanted = TABS.find((entry) => entry.stage === opened.stage)?.id ?? "all";
+        const wanted = TABS.find((entry) => entry.stage === (opened.stage === "paid" ? "packing" : opened.stage))?.id ?? "all";
         setTab((current) => (current === "all" || current === wanted ? current : wanted));
     }, [loaded, open]);
     const [search, setSearch] = useState("");
@@ -440,9 +447,8 @@ export default function OrdersIndex({ orders: loaded = [], time, limit = 0, plan
                                                 <button
                                                     type="button"
                                                     onClick={() => {
-                                                        // Opening a paid order's panel the first time starts picking.
-                                                        if (order.stage === "paid" && !picking.includes(order.id)) {
-                                                            router.post(route("seller.orders.picking.start", order.id), {}, { preserveScroll: true, preserveState: true });
+                                                        if (!picking.includes(order.id)) {
+                                                            startPicking(order);
                                                             // It moves to Pick & pack: follow it there.
                                                             if (tab === "paid") setTab("packing");
                                                         }

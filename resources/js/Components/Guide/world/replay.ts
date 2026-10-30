@@ -31,12 +31,28 @@ export interface WorldShipment {
     receiver?: string | null;
     items: number;
     cbm: number;
+    /** The manifest's volume in m³ (recorded, else quantity × unit size) and what its vehicle takes (null: none chosen yet). */
+    load_cbm?: number;
+    load_guessed?: boolean;
+    capacity?: number | null;
     created_at: string | null;
     scheduled_for: string | null;
     eta: string | null;
     cancelled_at: string | null;
     parties: Array<{ party: PartyKey; status: string; at: string | null }>;
     steps: Record<"picked" | "prepared" | "loading" | "signed" | "in_transit" | "delivered" | "received", string | null>;
+}
+
+/** A container being filled at the Storage hub (a consignment forming or at the overseas warehouse); WorldFeed::containers. */
+export interface WorldContainer {
+    id: number;
+    reference: string;
+    stage: string;
+    container_number: string | null;
+    lines: number;
+    cbm: number;
+    guessed: boolean;
+    capacity: number;
 }
 
 export type Phase = "before" | "ticking" | "picking" | "prepared" | "loading" | "driving" | "arrived" | "done";

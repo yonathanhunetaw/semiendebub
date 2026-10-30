@@ -2,6 +2,7 @@ import { cardCls, ghostBtn, hoursText, inputCls, KIND_ICON, workLayout, wr } fro
 import type { DayHours, SiteKind, WorkApp } from "@/types/work";
 import { Head, Link } from "@inertiajs/react";
 import React, { useState } from "react";
+import { shopToday } from "@/utils/dates";
 
 /**
  * Site setup: the sites this user manages, each to its hours, checklists and
@@ -24,14 +25,14 @@ interface Props {
 }
 
 const monthStart = (): string => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    // The 1st of this month on the shops' calendar.
+    return `${shopToday().slice(0, 8)}01`;
 };
 
 /** Every managed site's hours for a period, as one CSV (for salaries). */
 function HoursDownload({ app }: { app: WorkApp }): React.ReactElement {
     const [from, setFrom] = useState(monthStart());
-    const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
+    const [to, setTo] = useState(shopToday());
 
     return (
         <div className="mt-2 flex flex-wrap items-center gap-2">

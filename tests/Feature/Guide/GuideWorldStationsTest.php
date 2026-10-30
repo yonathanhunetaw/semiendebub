@@ -268,6 +268,42 @@ class GuideWorldStationsTest extends TestCase
     }
 
     #[Test]
+    public function the_staff_board_shows_who_opens_closes_and_drives_and_their_answers(): void
+    {
+        $manager = $this->user('store_manager');
+        $opener = $this->user('stock_keeper');
+        $closer = $this->user('seller');
+        $driver = $this->user('delivery', null);
+        $driver->update(['is_driver' => true]);
+        $site = StockLocation::query()->where('store_id', $this->store->id)->where('kind', StockLocation::KIND_STORE)->first();
+        $site->managerAssignments()->create(['user_id' => $manager->id]);
+        app(\App\Services\Workforce\Sites::class)->saveWeek($site, collect(range(0, 6))->map(fn (int $d): array => [
+            'weekday' => $d, 'closed' => false, 'opens_at' => '08:30', 'closes_at' => '19:00',
+        ])->all());
+
+        $days = app(\App\Services\Workforce\SiteDayService::class);
+        $today = \App\Services\Workforce\LocalTime::today();
+        $day = $days->plan($site, $today, $manager, $opener->id, $closer->id, $driver->fresh()->id);
+        $days->answer($day, $opener, 'opener', true);
+        $days->answer($day->fresh(), $driver->fresh(), 'driver', false, 'Car at the garage');
+
+        // The manager's board, and the driver's from the delivery app (they work at no site; they drive for it).
+        foreach ([[$manager, 'seller'], [$driver->fresh(), 'delivery']] as [$viewer, $app]) {
+            $board = $this->station($this->stations($viewer, $app), 'board');
+            $siteItem = collect($board['items'])->firstWhere('id', 'site-'.$site->id);
+            $this->assertNotNull($siteItem, "{$app}: the site is on the board");
+
+            $line = collect($siteItem['lines'])->first(fn (string $l): bool => str_starts_with($l, 'Opens '));
+            $this->assertSame(
+                'Opens '.$opener->first_name.' ✓ · Closes '.$closer->first_name.' ? · Drives '.$driver->first_name.' ✗ (Car at the garage)',
+                $line,
+            );
+            $this->assertSame('— '.$today->format('D j M'), $siteItem['lines'][0]);
+            $this->assertContains('Someone can’t', array_column($siteItem['chips'], 'label'));
+        }
+    }
+
+    #[Test]
     public function the_work_desk_offers_shift_swaps_leave_breaks_and_a_drivers_rides(): void
     {
         $worker = $this->user('stock_keeper');

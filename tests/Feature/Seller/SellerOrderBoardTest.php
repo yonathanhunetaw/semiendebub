@@ -92,7 +92,7 @@ class SellerOrderBoardTest extends TestCase
     #[Test]
     public function it_maps_every_sale_stage_onto_the_six_seller_tabs(): void
     {
-        $this->sale('S-PAY', Sale::STAGE_AWAITING_PAYMENT, 'pending');
+        $this->sale('S-PAY', Sale::STAGE_AWAITING_PAYMENT, 'unpaid');
         $this->sale('S-PAID', Sale::STAGE_PICK_PACK);
         $this->sale('S-PACK', Sale::STAGE_PICK_PACK, 'paid', 1);
         $this->sale('S-SHIP', Sale::STAGE_TO_DELIVER);
@@ -140,7 +140,7 @@ class SellerOrderBoardTest extends TestCase
     #[Test]
     public function the_pay_screen_gets_the_real_order(): void
     {
-        $this->sale('S-PAY', Sale::STAGE_AWAITING_PAYMENT, 'pending');
+        $this->sale('S-PAY', Sale::STAGE_AWAITING_PAYMENT, 'unpaid');
 
         $this->onSellerHost()->get(route('seller.orders.pay', ['reference' => 'S-PAY']))
             ->assertOk()

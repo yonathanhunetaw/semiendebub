@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { animateAvatar, limbsOf } from "./avatar";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { blockedAt, move, pushOut, type Box } from "./collision";
 import { getGame, setGame, type GameView, type PlayerPose } from "./gameStore";
@@ -18,6 +19,8 @@ import { WORKER_RADIUS, siteMap } from "./siteBlockers";
  *   stick   on a touch screen in Follow, press and drag anywhere: a stick
  *           appears under the thumb; how far you drag is how fast they go
  *   pinch   two fingers zoom the follow camera; on a mouse, the wheel
+ *   jump    Space, or the round button bottom-right on a touch screen (held: keeps hopping);
+ *           E does the action, as in Roblox (PlayLayer)
  * Every step goes through collision.ts, so walls, racks and the counter stop
  * them and they slide along.
  *
@@ -72,6 +75,10 @@ export interface Player {
 
 const WALK = 3.4;
 const RUN = 7;
+/** A jump as in Roblox: about a metre up, snappy (strong gravity), steerable in the air; held, it keeps hopping. */
+const JUMP_HEIGHT = 1.1;
+const GRAVITY = 26;
+const JUMP_SPEED = Math.sqrt(2 * GRAVITY * JUMP_HEIGHT);
 /** Follow camera: distance from the worker and how steeply it looks down. */
 const PITCH = (55 * Math.PI) / 180;
 const DISTANCE = { min: 2.5, start: 14, max: 32 };
@@ -126,11 +133,15 @@ export function createPlayer(options: PlayerOptions): Player {
     const root = new THREE.Group();
     const body = new THREE.Group();
     body.add(options.figure);
+    // The avatar's arms and legs (avatar.ts), swung as they walk; a figure without them just bobs.
+    const limbs = limbsOf(options.figure);
     // A hi-vis band round the middle, and a ring at their feet to find them by.
     const HI_VIS = new THREE.Color(0xf5c400);
     const bandMaterial = new THREE.MeshStandardMaterial({ color: HI_VIS, emissive: HI_VIS.clone().multiplyScalar(0.45), roughness: 0.5, side: THREE.DoubleSide });
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.16, 16, 1, true), bandMaterial);
-    band.position.y = 0.8;
+    // On the blocky avatar it is a stripe across the chest, hugging the torso; on the old capsule, a ring round the middle.
+    const blocky = Object.keys(limbs).length > 0;
+    const band = new THREE.Mesh(blocky ? new THREE.BoxGeometry(0.5, 0.12, 0.28) : new THREE.CylinderGeometry(0.33, 0.33, 0.16, 16, 1, true), bandMaterial);
+    band.position.y = blocky ? 1.22 : 0.8;
     body.add(band);
     // The back faces -z (the worker faces +z): boxes stack up from just above the waist.
     const back = new THREE.Object3D();
@@ -183,6 +194,35 @@ export function createPlayer(options: PlayerOptions): Player {
     let replanned = false;
     /** The stick's push, -1..1 on each axis (x right, y forward), or null when not held. */
     let stick: { x: number; y: number } | null = null;
+    /** Jumping: Space or the jump button held; how high the feet are and how fast they rise (m, m/s); the landing squash, 1 → 0. */
+    let jumpHeld = false;
+    let lift = 0;
+    let rise = 0;
+    let squash = 0;
+
+    // The jump button, bottom-right on a touch screen (as in Roblox), across from the stick. Styled by DukaWorld's .world-jump.
+    const jumpButton = document.createElement("button");
+    jumpButton.type = "button";
+    jumpButton.className = "world-jump";
+    jumpButton.setAttribute("aria-label", "Jump");
+    jumpButton.innerHTML = '<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M12 5.5 4.5 13l1.6 1.6L12 8.7l5.9 5.9 1.6-1.6z"/><path fill="currentColor" d="M12 11.5 4.5 19l1.6 1.6 5.9-5.9 5.9 5.9 1.6-1.6z" opacity=".55"/></svg>';
+    const pressJump = (event: PointerEvent) => {
+        // Not a look or a tap on the ground underneath.
+        event.preventDefault();
+        event.stopPropagation();
+        jumpHeld = true;
+        jumpButton.classList.add("is-on");
+    };
+    const releaseJump = () => {
+        jumpHeld = false;
+        jumpButton.classList.remove("is-on");
+    };
+    jumpButton.addEventListener("pointerdown", pressJump);
+    jumpButton.addEventListener("pointerup", releaseJump);
+    jumpButton.addEventListener("pointercancel", releaseJump);
+    jumpButton.addEventListener("pointerleave", releaseJump);
+    jumpButton.addEventListener("contextmenu", (event) => event.preventDefault());
+    overlay.appendChild(jumpButton);
 
     // Reused every frame: no allocation in the loop.
     const pose: PlayerPose = { x: 0, z: 0, yaw: 0 };
@@ -226,17 +266,24 @@ export function createPlayer(options: PlayerOptions): Player {
             stopWalkingTo();
         }
         if (event.key === "Shift") shiftHeld = true;
+        // Space jumps (E does the action, in PlayLayer).
+        if (event.code === "Space") {
+            event.preventDefault();
+            if (view !== "director") jumpHeld = true;
+        }
         if (event.code === "KeyV" && !event.repeat && !event.metaKey && !event.ctrlKey && view !== "director") setGame({ view: view === "first" ? "follow" : "first" });
         if (event.code === "KeyR" && !event.repeat && !event.metaKey && !event.ctrlKey) setGame({ run: !getGame().run });
     };
     const onKeyUp = (event: KeyboardEvent) => {
         held.delete(event.code);
         if (event.key === "Shift") shiftHeld = false;
+        if (event.code === "Space") jumpHeld = false;
     };
     // Letting go of the window (alt-tab) must not leave a key held down.
     const onBlur = () => {
         held.clear();
         shiftHeld = false;
+        releaseJump();
         pointers.clear();
         pinchFrom = null;
         stick = null;
@@ -426,7 +473,8 @@ export function createPlayer(options: PlayerOptions): Player {
 
     const placeCamera = (k: number) => {
         frame(true);
-        wantTarget.set(root.position.x, 1, root.position.z).add(ahead);
+        // Up with a jump, a little: the camera follows without bouncing the whole view.
+        wantTarget.set(root.position.x, 1 + lift * 0.4, root.position.z).add(ahead);
         wantCamera.set(
             distance * Math.sin(camYaw) * Math.cos(elevation),
             distance * Math.sin(elevation),
@@ -442,7 +490,7 @@ export function createPlayer(options: PlayerOptions): Player {
 
     /** First person: the camera is the worker's eyes, looking where the drag has turned it. */
     const placeEyes = () => {
-        camera.position.set(root.position.x, EYE, root.position.z);
+        camera.position.set(root.position.x, EYE + lift, root.position.z);
         camera.rotation.set(lookPitch, camYaw, 0, "YXZ");
         // For the browser tests, in a dev build only.
         if (import.meta.env.DEV) (window as unknown as { __dukaCamera?: unknown }).__dukaCamera = { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: camYaw, pitch: lookPitch, fov: camera.fov, near: camera.near };
@@ -467,6 +515,9 @@ export function createPlayer(options: PlayerOptions): Player {
         }
         stick = null;
         stickBase.classList.remove("is-on");
+        // The Director's camera flies free: no jumping there.
+        jumpButton.hidden = next === "director";
+        if (next === "director") releaseJump();
         if (next === "director") {
             // Orbit round the worker, from where the camera already is.
             controls.target.set(root.position.x, 1, root.position.z);
@@ -551,15 +602,44 @@ export function createPlayer(options: PlayerOptions): Player {
             }
         }
 
-        // Bob and lean with the pace.
+        // Jump from the ground only; in the air, fall (the keys and stick still steer, as in Roblox).
+        if (jumpHeld && lift === 0 && rise === 0) {
+            rise = JUMP_SPEED;
+            // For the browser tests, in a dev build only: how many jumps have started.
+            if (import.meta.env.DEV) {
+                const w = window as unknown as { __dukaJumps?: number };
+                w.__dukaJumps = (w.__dukaJumps ?? 0) + 1;
+            }
+        }
+        if (lift > 0 || rise > 0) {
+            rise -= GRAVITY * dt;
+            lift += rise * dt;
+            if (lift <= 0) {
+                lift = 0;
+                rise = 0;
+                squash = 1;
+            }
+        }
+
+        // Bob and lean with the pace (not in the air); squash a little on landing.
         const pace = speed / RUN;
+        let bob = 0;
         if (!reducedMotion) {
             phase += dt * (6 + speed * 2);
-            body.position.y = pace > 0.05 ? Math.abs(Math.sin(phase)) * 0.07 * Math.min(1, pace * 2) : 0;
-            body.rotation.x = 0.18 * pace;
+            bob = lift === 0 && pace > 0.05 ? Math.abs(Math.sin(phase)) * 0.07 * Math.min(1, pace * 2) : 0;
+            body.rotation.x = lift > 0 ? 0.08 : 0.18 * pace;
+            squash = Math.max(0, squash - dt * 6);
+            const s = Math.sin(squash * Math.PI) * 0.1;
+            body.scale.set(1 + s * 0.6, 1 - s, 1 + s * 0.6);
+            animateAvatar(limbs, phase, pace, lift > 0 ? 1 : 0, catchUp(lift > 0 ? 10 : 16, dt));
             ring.scale.setScalar(1 + 0.06 * Math.sin(phase * 0.5));
             if (goal.visible) goal.scale.setScalar(1 + 0.2 * Math.sin(phase));
         }
+        body.position.y = bob + lift;
+        // For the browser tests, in a dev build only.
+        if (import.meta.env.DEV) (window as unknown as { __dukaJump?: number }).__dukaJump = lift;
+        // The ring stays on the ground and shrinks under a jump, like a shadow.
+        ring.scale.multiplyScalar(1 - Math.min(0.35, lift * 0.3));
 
         // The camera leads a little in the direction of travel.
         if (moving) ahead.lerp(lead.copy(heading).multiplyScalar(LOOK_AHEAD * Math.min(1, pace * 2)), catchUp(3, dt));
@@ -600,6 +680,7 @@ export function createPlayer(options: PlayerOptions): Player {
         window.removeEventListener("pointercancel", onPointerCancel);
         dom.removeEventListener("wheel", onWheel);
         stickBase.remove();
+        jumpButton.remove();
         controls.enabled = true;
         scene.remove(root, goal);
         // Labels riding on the figure (its name tag) are page elements: take them off the page too.

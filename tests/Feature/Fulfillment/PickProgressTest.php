@@ -15,6 +15,7 @@ use App\Models\Seller\Cart;
 use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Services\CheckoutService;
+use App\Services\Fulfillment\SellerOrderBoard;
 use App\Services\StockService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -166,6 +167,22 @@ class PickProgressTest extends TestCase
                 ->where('being_packed.0.mine', true)
                 ->where('being_packed.0.address', 'Bole, house 12')
                 ->where('being_packed.0.in_hand', 0));
+    }
+
+    #[Test]
+    public function starting_to_pick_moves_the_order_from_paid_to_pick_and_pack(): void
+    {
+        $sale = $this->creditOrder();
+        $board = app(SellerOrderBoard::class);
+
+        $this->assertSame('paid', $board->find($sale->reference_number, $this->store->id)['stage']);
+        $this->assertSame([1, 0], [$board->counts($this->store->id)['paid'], $board->counts($this->store->id)['packing']]);
+
+        // Started, nothing in hand yet: the card and the tab count agree it is in Pick & pack.
+        $this->as($this->seller)->post(route('seller.orders.picking.start', $sale))->assertSessionHas('success');
+
+        $this->assertSame('packing', $board->find($sale->reference_number, $this->store->id)['stage']);
+        $this->assertSame([0, 1], [$board->counts($this->store->id)['paid'], $board->counts($this->store->id)['packing']]);
     }
 
     #[Test]

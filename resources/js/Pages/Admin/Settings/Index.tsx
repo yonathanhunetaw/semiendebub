@@ -6,7 +6,6 @@ import { Head, Link } from "@inertiajs/react";
 import {
     Box,
     Card,
-    List,
     ListItemButton,
     ListItemIcon,
     ListItemText,
@@ -15,21 +14,12 @@ import {
     ToggleButtonGroup,
     Typography,
 } from "@mui/material";
-import type { SvgIconComponent } from "@mui/icons-material";
 import AutoStories from "@mui/icons-material/AutoStories";
-import AirportShuttle from "@mui/icons-material/AirportShuttle";
 import ChevronRight from "@mui/icons-material/ChevronRight";
 import DarkModeRounded from "@mui/icons-material/DarkModeRounded";
-import Devices from "@mui/icons-material/Devices";
-import Dns from "@mui/icons-material/Dns";
-import ImportExport from "@mui/icons-material/ImportExport";
-import Layers from "@mui/icons-material/Layers";
 import LightModeRounded from "@mui/icons-material/LightModeRounded";
-import ManageAccounts from "@mui/icons-material/ManageAccounts";
 import PersonOutline from "@mui/icons-material/PersonOutline";
 import SettingsBrightness from "@mui/icons-material/SettingsBrightness";
-import Store from "@mui/icons-material/Store";
-import Warehouse from "@mui/icons-material/Warehouse";
 import { ThemeContext } from '@/theme/ThemeContext';
 import { useAdminScope } from "@/Components/Navigation/Admin/useAdminScope";
 import StoreScopeSelect from "@/Components/Navigation/Admin/StoreScopeSelect";
@@ -37,54 +27,13 @@ import { useRole } from "@/theme";
 
 type ThemeSetting = "light" | "dark" | "system";
 
-interface SettingLink {
-    icon: SvgIconComponent;
-    title: string;
-    desc: string;
-    href: string;
-}
-
 const cardSx = { borderRadius: 2, border: "1px solid", borderColor: "divider", boxShadow: "none" } as const;
 
-function SettingsCard({ title, caption, links }: { title: string; caption?: string; links: SettingLink[] }) {
-    return (
-        <Card sx={cardSx}>
-            <Box sx={{ px: 2, pt: 2 }}>
-                <Typography sx={{ fontWeight: 800 }}>{title}</Typography>
-                {caption && (
-                    <Typography variant="caption" color="text.secondary">
-                        {caption}
-                    </Typography>
-                )}
-            </Box>
-            <List sx={{ py: 1 }}>
-                {links.map((link) => {
-                    const Icon = link.icon;
-
-                    return (
-                        <ListItemButton key={link.title} component={Link} href={link.href} sx={{ mx: 1, borderRadius: 2 }}>
-                            <ListItemIcon sx={{ minWidth: 40 }}>
-                                <Icon sx={{ color: "primary.main" }} />
-                            </ListItemIcon>
-                            <ListItemText
-                                primary={link.title}
-                                secondary={link.desc}
-                                slotProps={{ primary: { sx: { fontWeight: 700, fontSize: "0.9rem" } }, secondary: { sx: { fontSize: "0.8rem" } } }}
-                            />
-                            <ChevronRight sx={{ color: "text.disabled" }} />
-                        </ListItemButton>
-                    );
-                })}
-            </List>
-        </Card>
-    );
-}
-
 /**
- * Settings: appearance, who you are in the admin app, and the screens that
- * configure the system. Users, sessions and the network-wide screens are a
- * global admin's only. A store's own setup (locations, payment accounts,
- * seller balances, customer prices) lives on its Store page, under Setup.
+ * Settings: appearance and who you are in the admin app. Users, vendors,
+ * sessions, system status and Import / Export are the tabs above (global
+ * admins only); stores, warehouses, fleet and items are in the sidebar's
+ * global zone. A store's own setup lives on its Store page, under Setup.
  */
 export default function SettingsIndex() {
     const { toggleTheme, currentSetting } = React.useContext(ThemeContext) as {
@@ -93,17 +42,6 @@ export default function SettingsIndex() {
     };
     const { isGlobalAdmin, activeStore, accessibleStores, canSwitch, roleKey } = useAdminScope();
     const role = useRole();
-
-    const adminLinks: SettingLink[] = [
-        { icon: ManageAccounts, title: "Users", desc: "Staff, roles and which store each works at", href: route("admin.users.index") },
-        { icon: Devices, title: "Sessions", desc: "Who is signed in, and ending sessions", href: route("admin.sessions.index") },
-        { icon: Dns, title: "System status", desc: "Which server is live, what happened, possible data loss", href: route("admin.system.index") },
-        { icon: ImportExport, title: "Import / Export", desc: "Every module as a spreadsheet, and setup data back in", href: route("admin.data.index") },
-        { icon: Store, title: "All stores", desc: "Add, rename or close stores", href: route("admin.inventory.stores") },
-        { icon: Warehouse, title: "Warehouses", desc: "Main hubs and the stores each serves", href: route("admin.inventory.warehouse.index") },
-        { icon: AirportShuttle, title: "Fleet", desc: "Vehicles shared by every store", href: route("admin.inventory.fleet.index") },
-        { icon: Layers, title: "Items", desc: "The catalogue every store sells from", href: route("admin.items.index") },
-    ];
 
     return (
         <Box sx={{ maxWidth: 1100, mx: "auto" }}>
@@ -167,7 +105,6 @@ export default function SettingsIndex() {
                     </ToggleButtonGroup>
                 </Card>
 
-                {isGlobalAdmin && <SettingsCard title="Administration" caption="Global admins only" links={adminLinks} />}
             </Box>
         </Box>
     );

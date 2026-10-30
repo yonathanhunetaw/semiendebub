@@ -119,6 +119,49 @@ test('Live: a job cancelled behind the worker\'s back is refused, and its boxes 
     expect(transferOf(reference).status).toBe('cancelled');
 });
 
+test('Roblox-style keys: Space jumps (held, it keeps hopping) and lands; E still does the action', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const keeper = await signIn(browser, 'stockkeeper', fixture.keeper.email);
+    const errors: string[] = [];
+    keeper.on('pageerror', (error) => errors.push(error.message));
+    await play(keeper, 'stockkeeper');
+    const lift = () => keeper.evaluate(() => (window as unknown as { __dukaJump?: number }).__dukaJump ?? -1);
+    await expect.poll(lift).toBe(0);
+
+    // A tap of Space: up about a metre, then back down.
+    await keeper.keyboard.down('Space');
+    await expect.poll(lift, { timeout: 2_000, intervals: [30] }).toBeGreaterThan(0.4);
+    await keeper.screenshot({ path: 'test-results/play-jump.png' });
+    await keeper.keyboard.up('Space');
+    await expect.poll(lift, { timeout: 3_000 }).toBe(0);
+
+    // Held: it hops again each time it lands.
+    const jumps = () => keeper.evaluate(() => (window as unknown as { __dukaJumps?: number }).__dukaJumps ?? 0);
+    const before = await jumps();
+    await keeper.keyboard.down('Space');
+    await expect.poll(jumps, { timeout: 5_000 }).toBeGreaterThanOrEqual(before + 3);
+    await keeper.keyboard.up('Space');
+    await expect.poll(lift, { timeout: 3_000 }).toBe(0);
+
+    // At the floor (its list opens on arrival): Space only jumps now, E still toggles the list.
+    await raise(keeper, /Store Floor/, /Store Shelf/, 1);
+    await play(keeper, 'stockkeeper');
+    // On the way: arms and legs swing (seen in the screenshot).
+    await walkByObjective(keeper, /to shelve from the Store Floor/, async () => {
+        await keeper.waitForTimeout(1200);
+        await keeper.screenshot({ path: 'test-results/play-walk.png' });
+        await pickerOpen(keeper);
+    });
+    await keeper.keyboard.press('Space');
+    await keeper.waitForTimeout(400);
+    await expect(keeper.getByText('Store Floor: to shelve')).toBeVisible();
+    await keeper.keyboard.press('KeyE');
+    await expect(keeper.getByText('Store Floor: to shelve')).toBeHidden();
+    await keeper.keyboard.press('KeyE');
+    await pickerOpen(keeper);
+    expect(errors).toEqual([]);
+});
+
 test('Practice: a scheduled shipment is fetched from the hub and loaded into the freight car, and the gauge counts it', async ({ browser }) => {
     test.setTimeout(240_000);
     const load = fixture.playLoad;

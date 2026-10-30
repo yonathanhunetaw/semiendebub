@@ -1,4 +1,4 @@
-import { dayDate } from "@/utils/dates";
+import { dayDate, shopToday } from "@/utils/dates";
 import { calendarPrefill } from "@/Components/Calendar/calendarPrefill";
 import type { LeaveView, WorkApp } from "@/types/work";
 import { router, useForm } from "@inertiajs/react";
@@ -34,7 +34,7 @@ export default function LeavePanel({ app, leave, types }: { app: WorkApp; leave:
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                             <Chip status={row.status} />
-                            {row.status === "requested" || (row.status === "approved" && row.starts_on > new Date().toISOString().slice(0, 10)) ? (
+                            {row.status === "requested" || (row.status === "approved" && row.starts_on > shopToday()) ? (
                                 <button
                                     type="button"
                                     className="text-[11px] font-bold text-error"

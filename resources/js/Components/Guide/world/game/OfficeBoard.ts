@@ -4,8 +4,9 @@ import type { Station } from "./stations";
 
 /**
  * The staff board on the office's west wall: a whiteboard that shows the
- * server's "board" station (BoardStations): each site's shifts for the next
- * three days and who holds its key, and each car's key. It is a picture drawn
+ * server's "board" station (BoardStations): for each site, the next three days'
+ * opener, closer and driver with their answers, the shifts, and who holds its
+ * key; and each car's key. It is a picture drawn
  * on a canvas, repainted whenever the list changes; there is nothing to tap
  * (the Staff & keys desk takes the actions).
  */
@@ -13,6 +14,17 @@ import type { Station } from "./stations";
 const W = 1920;
 const H = 960;
 const COLUMNS = 3;
+
+/**
+ * A day's duty line ("Opens Abel ✓ · Closes Sara ✗ (…)") reads red when
+ * someone can't, amber while someone has not answered; every other line ink.
+ */
+function lineColour(line: string): string {
+    if (!/^(Opens|Closes|Drives) /.test(line)) return "#1f2a44";
+    if (line.includes("✗")) return "#b91c1c";
+    if (/ \?( ·|$)/.test(line)) return "#b45309";
+    return "#15803d";
+}
 
 export interface OfficeBoard {
     set: (station: Station | null) => void;
@@ -55,7 +67,7 @@ export function createOfficeBoard(scene: THREE.Scene): OfficeBoard {
         ctx.fillText("STAFF BOARD", 48, 30);
         ctx.font = "600 28px system-ui, sans-serif";
         ctx.fillStyle = "#5b6475";
-        ctx.fillText("Who works when, and who holds each key", 48, 104);
+        ctx.fillText("Who opens, closes and drives (✓ yes · ✗ can’t · ? no answer), who works when, who holds each key", 48, 104);
         ctx.fillStyle = "#c9c2b0";
         ctx.fillRect(48, 150, W - 96, 4);
 
@@ -79,7 +91,7 @@ export function createOfficeBoard(scene: THREE.Scene): OfficeBoard {
             return t === text ? t : `${t.trimEnd()}…`;
         };
         for (const item of items) {
-            const lines = (item.lines ?? []).slice(0, 12);
+            const lines = (item.lines ?? []).slice(0, 14);
             const needed = 40 + 34 + lines.length * 30 + 24;
             if (y + needed > bottom && y > 176) {
                 col += 1;
@@ -98,7 +110,7 @@ export function createOfficeBoard(scene: THREE.Scene): OfficeBoard {
             y += 34;
             ctx.font = "500 24px system-ui, sans-serif";
             for (const line of lines) {
-                ctx.fillStyle = line.startsWith("—") ? "#5b6475" : "#1f2a44";
+                ctx.fillStyle = line.startsWith("—") ? "#5b6475" : lineColour(line);
                 if (line.startsWith("—")) ctx.font = "800 22px system-ui, sans-serif";
                 ctx.fillText(clip(line, max), x, y);
                 if (line.startsWith("—")) ctx.font = "500 24px system-ui, sans-serif";

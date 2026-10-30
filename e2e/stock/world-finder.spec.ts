@@ -8,7 +8,8 @@ import { playIn } from '../lib/world';
  *   - the camera / Practice-Live controls ride in the top bar beside the title when the screen is wider than tall,
  *     and drop back under it on a narrow one;
  *   - pressing a building in Director flies the camera round to face its door;
- *   - while a hub is open an item selector lists what it holds, and choosing one marks its boxes.
+ *   - while a hub is open a small search button opens an item selector of what it holds; choosing one marks its boxes
+ *     and folds the selector back to a chip (walk there, clear).
  * Screenshots are kept in test-results/ for the owner to look at.
  */
 test.afterEach(async () => closeWindows());
@@ -54,6 +55,8 @@ test('Director faces the door, the hub item finder marks an item, and the contro
 
     await test.step('the finder lists what the hub holds, and choosing an item marks it', async () => {
         await expect(page.getByTestId('item-finder')).toBeVisible();
+        // A small search button until tapped (it once was a bar across the screen).
+        await page.getByTestId('item-finder-open').click();
         await page.getByTestId('item-finder-input').click();
         const first = page.getByRole('option').first();
         await expect(first).toBeVisible();
@@ -88,9 +91,14 @@ test('Director faces the door, the hub item finder marks an item, and the contro
         await page.setViewportSize({ width: 393, height: 852 });
         await page.waitForTimeout(800);
         await clearOfGoals();
+        // On a phone in a hub it is only a small round button at the right, not a bar over the view.
+        const button = (await page.getByTestId('item-finder-open').boundingBox())!;
+        expect(button.width).toBeLessThan(60);
+        expect(button.x).toBeGreaterThan(393 / 2);
         await page.screenshot({ path: 'test-results/finder-6b-phone.png' });
         await page.setViewportSize({ width: 1180, height: 700 });
         await page.waitForTimeout(800);
+        await page.getByTestId('item-finder-open').click();
         await page.getByTestId('item-finder-input').click();
         await page.getByRole('option').first().click();
         await expect(page.getByRole('button', { name: 'Walk there' })).toBeVisible();

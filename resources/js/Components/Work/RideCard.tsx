@@ -1,4 +1,5 @@
 import type { RideView, WorkApp } from "@/types/work";
+import { shopToday } from "@/utils/dates";
 import { router, useForm } from "@inertiajs/react";
 import React, { useState } from "react";
 import { cardCls, Chip, ghostBtn, hm, inputCls, primaryBtn, wr } from "./workUi";
@@ -30,7 +31,7 @@ export default function RideCard({ app, ride, vehicles = [], meId }: Props): Rea
             <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                     <p className="text-[14px] font-bold text-on-surface">
-                        {ride.departs_at.slice(0, 10) === new Date().toISOString().slice(0, 10) ? "Today" : ride.departs_at.slice(0, 10)} {hm(ride.departs_at)} · {pickup ? `to ${ride.site?.name}` : `from ${ride.site?.name}`}
+                        {ride.departs_at.slice(0, 10) === shopToday() ? "Today" : ride.departs_at.slice(0, 10)} {hm(ride.departs_at)} · {pickup ? `to ${ride.site?.name}` : `from ${ride.site?.name}`}
                     </p>
                     {ride.purpose ? (
                         <p className="text-[11px] font-semibold text-primary">{pickup ? "Opening: bring the opener in" : "Closing: take the closer home"}</p>

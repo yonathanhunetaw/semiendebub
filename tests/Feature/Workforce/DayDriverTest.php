@@ -273,4 +273,182 @@ class DayDriverTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where('site.has_shifts', false)->where('shifts', [])->has('days', 7));
     }
+
+    #[Test]
+    public function giving_back_a_planned_run_keeps_it_with_the_planned_driver(): void
+    {
+        $day = $this->plan($this->seller->id, $this->second->id, $this->driver->id);
+        $pickup = $this->runOf($day, StaffRide::PURPOSE_OPENING);
+
+        $this->rides->claim($pickup, $this->driver, $this->car);
+        $this->rides->release($pickup->fresh(), $this->driver);
+
+        $pickup->refresh();
+        $this->assertSame(StaffRide::STATUS_REQUESTED, $pickup->status);
+        $this->assertSame($this->driver->id, (int) $pickup->driver_id);
+        $this->assertNull($pickup->vehicle_id);
+
+        // Still not in another driver's pool.
+        $this->assertFalse($this->rides->forDriver($this->otherDriver)->contains('id', $pickup->id));
+    }
+
+    #[Test]
+    public function my_work_turns_each_persons_part_of_the_plan_into_jobs_and_drops_opening_once_open(): void
+    {
+        $this->plan($this->seller->id, $this->second->id, $this->driver->id);
+        $this->plan($this->second->id, null, null, '2026-10-21');
+        $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
+
+        $this->actingAs($this->seller)->get(route('seller.work'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Work/Index')
+                ->has('duties', 1)
+                ->where('duties.0.my_roles', ['opener'])
+                ->where('duties.0.is_today', true)
+                ->where('duties.0.i_hold_key', true)
+                ->where('vehicles', []));
+
+        // The closer: today's closing, and the opening two days later (not today's).
+        $this->actingAs($this->second)->get(route('seller.work'))->assertOk()
+            ->assertInertia(fn ($page) => $page->has('duties', 2)
+                ->where('duties.0.my_roles', ['closer'])
+                ->where('duties.1.my_roles', ['opener'])
+                ->where('duties.1.is_today', false));
+
+        // Opening done: the opener has nothing left that day, the closer still closes.
+        $token = app(CounterQr::class)->printedToken($this->site);
+        $this->days->open($this->site, $this->seller, $token);
+        $this->assertSame([], app(SiteDayService::class)->dutiesFor($this->seller)->all());
+        $this->assertSame(['closer'], app(SiteDayService::class)->dutiesFor($this->second)->first()['my_roles']);
+    }
+
+    #[Test]
+    public function a_driver_takes_their_runs_from_any_app_with_the_cars_listed(): void
+    {
+        // A seller who also drives: the cars come with My work and Staff rides on the seller app.
+        $this->seller->update(['is_driver' => true]);
+        $this->plan($this->second->id, $this->second->id, $this->seller->id);
+        $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
+
+        $this->actingAs($this->seller)->get(route('seller.work'))->assertOk()
+            ->assertInertia(fn ($page) => $page->has('vehicles', 1)
+                ->where('duties.0.my_roles', ['driver'])
+                ->has('driving', 2));
+
+        $this->actingAs($this->seller)->get(route('seller.work.rides'))->assertOk()
+            ->assertInertia(fn ($page) => $page->has('vehicles', 1)
+                ->where('rides', fn ($rides) => collect($rides)->where('can.claim', true)->count() === 2));
+    }
+
+    #[Test]
+    public function a_manager_sees_the_week_ahead_with_who_opens_closes_and_drives(): void
+    {
+        $this->plan($this->seller->id, $this->second->id, $this->driver->id);
+        $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
+
+        $this->actingAs($this->manager)->get(route('seller.work'))->assertOk()
+            ->assertInertia(fn ($page) => $page->has('weekPlan', 1)
+                ->has('weekPlan.0.days', 7)
+                ->where('weekPlan.0.days.0.date', $this->today)
+                ->where('weekPlan.0.days.0.opener', trim($this->seller->first_name.' '.$this->seller->last_name))
+                ->where('weekPlan.0.days.1.opener', null)
+                // Sunday the 25th is a closed day.
+                ->where('weekPlan.0.days.6.status', SiteDay::STATUS_CLOSED_DAY));
+
+        $this->actingAs($this->seller)->get(route('seller.work'))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('weekPlan', []));
+    }
+
+    #[Test]
+    public function a_main_hubs_own_stock_keepers_work_there_and_can_be_planned(): void
+    {
+        $hub = StockLocation::factory()->mainHub()->create();
+        $keeper = $this->user('stock_keeper', null);
+        $storeKeeper = $this->user('stock_keeper', $this->site->store_id);
+        $admin = $this->user('admin', null);
+        $sites = app(Sites::class);
+
+        $this->assertTrue($sites->worksAt($keeper, $hub));
+        $this->assertFalse($sites->worksAt($storeKeeper, $hub));
+        $this->assertTrue($sites->people($hub)->contains('id', $keeper->id));
+
+        $day = $this->days->plan($hub, LocalTime::day($this->today), $admin, $keeper->id, $keeper->id, null);
+        $this->assertSame($keeper->id, (int) $day->opener_id);
+    }
+
+    #[Test]
+    public function copying_last_week_copies_who_opens_closes_and_drives_into_days_nobody_planned(): void
+    {
+        // Last week: Monday the 12th planned in full, Tuesday the 13th an opener only.
+        $this->travelTo(CarbonImmutable::parse('2026-10-12 05:00:00'));
+        $this->plan($this->seller->id, $this->second->id, $this->driver->id, '2026-10-12');
+        $this->plan($this->second->id, null, null, '2026-10-13');
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 06:00:00'));
+
+        // This Tuesday already has a closer: it keeps it, and only gains the opener.
+        $this->plan(null, $this->seller->id, null, '2026-10-20');
+        $this->withServerVariables(['HTTP_HOST' => 'seller.'.config('app.system_domain')]);
+
+        $this->actingAs($this->manager)->post(route('seller.work.rota.copy', ['site' => $this->site, 'week' => $this->today]))
+            ->assertSessionHas('success', fn (string $message): bool => str_contains($message, 'copied into 2 day(s)'));
+
+        $monday = SiteDay::query()->where('stock_location_id', $this->site->id)->whereDate('date', '2026-10-19')->first();
+        $tuesday = SiteDay::query()->where('stock_location_id', $this->site->id)->whereDate('date', '2026-10-20')->first();
+        $this->assertSame([$this->seller->id, $this->second->id, $this->driver->id], [(int) $monday->opener_id, (int) $monday->closer_id, (int) $monday->driver_id]);
+        $this->assertSame([$this->second->id, $this->seller->id, null], [(int) $tuesday->opener_id, (int) $tuesday->closer_id, $tuesday->driver_id]);
+        // The plan made Monday's runs.
+        $this->assertNotNull($this->runOf($monday, StaffRide::PURPOSE_OPENING));
+
+        // A driver who no longer drives is not copied.
+        $this->driver->update(['is_driver' => false]);
+        $this->travelTo(CarbonImmutable::parse('2026-10-26 05:00:00'));
+        $this->actingAs($this->manager)->post(route('seller.work.rota.copy', ['site' => $this->site, 'week' => '2026-10-26']));
+        $next = SiteDay::query()->where('stock_location_id', $this->site->id)->whereDate('date', '2026-10-26')->first();
+        $this->assertSame($this->seller->id, (int) $next->opener_id);
+        $this->assertNull($next->driver_id);
+    }
+
+    #[Test]
+    public function copied_shifts_carry_no_old_duty_that_would_overwrite_the_plan(): void
+    {
+        $rota = app(RotaService::class);
+        $this->travelTo(CarbonImmutable::parse('2026-10-12 05:00:00'));
+        $old = $rota->save($this->site, $this->manager, ['user_id' => $this->second->id, 'starts_at' => '2026-10-12T08:00', 'ends_at' => '2026-10-12T16:00', 'duty' => Shift::DUTY_OPENER]);
+        $this->assertSame(Shift::DUTY_OPENER, $old->duty);
+        $this->travelTo(CarbonImmutable::parse('2026-10-19 06:00:00'));
+
+        $this->plan($this->seller->id, null, null);
+        $rota->copyWeek($this->site, $this->manager, LocalTime::day($this->today));
+        $copy = Shift::query()->where('user_id', $this->second->id)->where('starts_at', '>=', LocalTime::startOf($this->today))->sole();
+        $this->assertSame(Shift::DUTY_NONE, $copy->duty);
+
+        $rota->publish($this->site, $this->manager, LocalTime::day($this->today), LocalTime::day($this->today)->addDays(6));
+        $this->assertSame($this->seller->id, (int) SiteDay::query()->where('stock_location_id', $this->site->id)->whereDate('date', $this->today)->value('opener_id'));
+    }
+
+    #[Test]
+    public function approved_leave_takes_the_person_off_the_plan_even_with_no_shift_and_they_cannot_be_planned_while_away(): void
+    {
+        $leave = app(\App\Services\Workforce\LeaveService::class);
+        // Tomorrow: the seller opens and the driver drives, neither has a shift.
+        $day = $this->plan($this->seller->id, $this->second->id, $this->driver->id, '2026-10-20');
+        $this->assertNotNull($this->runOf($day, StaffRide::PURPOSE_OPENING));
+
+        // A global admin records the driver's leave (the driver works at no site of the store manager's);
+        // the manager records the seller's.
+        $leave->record($this->user('admin', null), $this->driver, 'annual', LocalTime::day('2026-10-20'), LocalTime::day('2026-10-20'));
+        $leave->record($this->manager, $this->seller, 'sick', LocalTime::day('2026-10-20'), LocalTime::day('2026-10-21'));
+
+        $day->refresh();
+        $this->assertNull($day->opener_id);
+        $this->assertSame($this->second->id, (int) $day->closer_id);
+        $this->assertNull($day->driver_id);
+        $this->assertNull($this->runOf($day, StaffRide::PURPOSE_OPENING), 'No driver: the runs are called off.');
+
+        try {
+            $this->plan($this->seller->id, null, null, '2026-10-21');
+            $this->fail('Planned someone on leave.');
+        } catch (WorkforceException $e) {
+            $this->assertStringContainsString('on leave that day', $e->getMessage());
+        }
+    }
 }

@@ -38,6 +38,9 @@ class AttendanceService
     /** Minutes either side of a shift's times before late / early counts. */
     public const GRACE_MINUTES = 5;
 
+    /** A shift this long past its start with no clock-in shows as "didn't come" on Attendance. */
+    public const NO_SHOW_MINUTES = 30;
+
     /** How long after the site's closing time an open clock-in is closed. */
     public const AUTO_CLOSE_AFTER_HOURS = 2;
 
@@ -258,6 +261,34 @@ class AttendanceService
             ->where('clock_in_at', '<', CarbonImmutable::instance($to)->utc())
             ->orderBy('clock_in_at')
             ->get();
+    }
+
+    /**
+     * Sent shifts at the site that started over NO_SHOW_MINUTES ago with
+     * no clock-in by their person here on that shops' day: who did not come,
+     * or came and never scanned. For the manager's Attendance page.
+     *
+     * @return Collection<int, Shift>
+     */
+    public function noShows(StockLocation $site, CarbonInterface $from, CarbonInterface $to): Collection
+    {
+        $shifts = Shift::query()->sent()->with('user')
+            ->where('stock_location_id', $site->id)
+            ->where('starts_at', '>=', CarbonImmutable::instance($from)->utc())
+            ->where('starts_at', '<', CarbonImmutable::instance($to)->utc())
+            ->where('starts_at', '<', now()->subMinutes(self::NO_SHOW_MINUTES))
+            ->orderBy('starts_at')
+            ->get();
+
+        if ($shifts->isEmpty()) {
+            return $shifts;
+        }
+
+        $came = $this->between($site, $from, $to)
+            ->map(fn (TimeEntry $entry): string => $entry->user_id.'@'.LocalTime::dateOf($entry->clock_in_at))
+            ->flip();
+
+        return $shifts->reject(fn (Shift $shift): bool => $came->has($shift->user_id.'@'.LocalTime::dateOf($shift->starts_at)))->values();
     }
 
     /** @return array<string, mixed> */

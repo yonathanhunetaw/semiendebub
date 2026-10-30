@@ -280,7 +280,7 @@ class RotaTest extends TestCase
         $this->assertSame(Shift::STATUS_CANCELLED, $second->fresh()->status);
 
         $as($this->manager)->post(route('seller.work.rota.copy', $this->site), ['week' => '2026-10-26'])
-            ->assertSessionHas('success', '1 shift(s) copied from last week as drafts.');
+            ->assertSessionHas('success', '1 shift(s) copied from last week as drafts; who opens, closes and drives copied into 0 day(s).');
         $as($this->seller)->post(route('seller.work.rota.copy', $this->site), ['week' => '2026-10-26'])->assertForbidden();
     }
 

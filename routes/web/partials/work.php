@@ -31,6 +31,8 @@ Route::put('/work/sites/{site}/hours', [SiteController::class, 'saveHours'])->na
 Route::post('/work/sites/{site}/exceptions', [SiteController::class, 'storeException'])->name('work.sites.exceptions.store');
 Route::delete('/work/sites/{site}/exceptions/{exception}', [SiteController::class, 'destroyException'])->name('work.sites.exceptions.destroy');
 Route::put('/work/sites/{site}/plan', [SiteController::class, 'plan'])->name('work.sites.plan');
+// The opener, closer or driver says whether they will do it.
+Route::post('/work/site-days/{day}/answer', [WorkController::class, 'answer'])->name('work.site-days.answer');
 Route::put('/work/sites/{site}/settings', [SiteController::class, 'saveSettings'])->name('work.sites.settings');
 Route::get('/work/sites/{site}/printed-qr', [SiteController::class, 'printedQr'])->name('work.sites.printed-qr');
 Route::post('/work/sites/{site}/printed-qr', [SiteController::class, 'reprint'])->name('work.sites.reprint');

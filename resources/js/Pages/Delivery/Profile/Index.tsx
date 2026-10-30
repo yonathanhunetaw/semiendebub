@@ -1,9 +1,12 @@
 import { Head, Link, router, useForm } from "@inertiajs/react";
+import AirportShuttleRoundedIcon from "@mui/icons-material/AirportShuttleRounded";
 import AutoStoriesRoundedIcon from "@mui/icons-material/AutoStoriesRounded";
 import DevicesRoundedIcon from "@mui/icons-material/DevicesRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
+import WorkRoundedIcon from "@mui/icons-material/WorkRounded";
 import {
     Alert,
+    alpha,
     Avatar,
     Button,
     Container,
@@ -56,14 +59,14 @@ export default function Profile({
 
     return (
         <>
-            <Head title="Profile" />
+            <Head title="More" />
 
             <DeliveryHero
-                eyebrow="Profile"
+                eyebrow="More"
                 title={`${courier.first_name ?? ""} ${courier.last_name ?? ""}`.trim() || "Courier"}
                 subtitle={courier.email ?? undefined}
                 action={
-                    <Avatar sx={{ width: 56, height: 56, bgcolor: "rgba(255,255,255,0.2)", color: "inherit", fontWeight: 800 }}>
+                    <Avatar sx={{ width: 56, height: 56, bgcolor: (t) => alpha(t.palette.primary.contrastText, 0.2), color: "inherit", fontWeight: 800 }}>
                         {initials || "?"}
                     </Avatar>
                 }
@@ -82,6 +85,39 @@ export default function Profile({
             </DeliveryHero>
 
             <Container maxWidth="sm" sx={{ pt: 2.5, pb: 4 }}>
+                {/* ── Work: today's runs, keys and staff rides ── */}
+                <Paper
+                    elevation={0}
+                    sx={{
+                        borderRadius: 3,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        backgroundImage: "none",
+                        overflow: "hidden",
+                        mb: 2.5,
+                    }}
+                >
+                    <Button
+                        component={Link}
+                        href={route("delivery.work")}
+                        startIcon={<WorkRoundedIcon />}
+                        fullWidth
+                        sx={{ justifyContent: "flex-start", py: 1.5, px: 2.5 }}
+                    >
+                        My work: today's runs, keys and rides
+                    </Button>
+                    <Divider />
+                    <Button
+                        component={Link}
+                        href={route("delivery.work.rides")}
+                        startIcon={<AirportShuttleRoundedIcon />}
+                        fullWidth
+                        sx={{ justifyContent: "flex-start", py: 1.5, px: 2.5 }}
+                    >
+                        Staff rides
+                    </Button>
+                </Paper>
+
                 {/* ── Editable details ── */}
                 <Paper
                     elevation={0}

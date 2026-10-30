@@ -14,10 +14,15 @@ export default function BarcodeScannerDialog({
     open,
     onClose,
     onScan,
+    title = "Scan barcode",
+    children,
 }: {
     open: boolean;
     onClose: () => void;
     onScan: (text: string) => void;
+    title?: string;
+    /** Shown under the camera (a hint, or why the last scan was refused). */
+    children?: React.ReactNode;
 }): React.ReactElement {
     const onScanRef = React.useRef(onScan);
     onScanRef.current = onScan;
@@ -49,9 +54,10 @@ export default function BarcodeScannerDialog({
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-            <DialogTitle>Scan barcode</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             <DialogContent>
                 <div id={READER_ID} className="min-h-[300px] w-full" />
+                {children}
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose}>Cancel</Button>

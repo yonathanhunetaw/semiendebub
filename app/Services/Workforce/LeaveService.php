@@ -33,7 +33,7 @@ class LeaveService
 {
     public const MAX_DAYS = 60;
 
-    public function __construct(private readonly Sites $sites, private readonly RotaService $rota)
+    public function __construct(private readonly Sites $sites, private readonly RotaService $rota, private readonly SiteDayService $days)
     {
     }
 
@@ -278,6 +278,10 @@ class LeaveService
         foreach ($shifts as $shift) {
             $this->rota->cancelForLeave($shift);
         }
+
+        // Also off the days' plans (opener, closer, driver) where no shift named them: a
+        // Main Hub has no shifts, and a driver often has none.
+        $this->days->releasePerson((int) $leave->user_id, $leave->starts_on, $leave->ends_on);
 
         return $shifts->count();
     }

@@ -8,8 +8,10 @@ use App\Exceptions\WorkforceException;
 use App\Models\Auth\User;
 use App\Models\Inventory\StockLocation;
 use App\Models\Workforce\CustodyKey;
+use App\Models\Workforce\LeaveRequest;
 use App\Models\Workforce\Shift;
 use App\Models\Workforce\SiteDay;
+use App\Models\Workforce\SiteDayAnswer;
 use App\Models\Workforce\StaffRide;
 use App\Services\Finance\DayCash;
 use Carbon\CarbonImmutable;
@@ -102,6 +104,15 @@ class SiteDayService
             throw new WorkforceException('Pick a driver (someone marked as a driver in Users).');
         }
 
+        // Nobody is planned on a day they are away (as with shifts: RotaService::assertFree).
+        foreach (array_unique(array_filter([$openerId, $closerId, $driverId])) as $id) {
+            if (LeaveRequest::query()->where('user_id', $id)->where('status', LeaveRequest::STATUS_APPROVED)
+                ->overlapping(LocalTime::dateText($date), LocalTime::dateText($date))->exists()) {
+                $away = User::query()->find($id);
+                throw new WorkforceException(sprintf('%s is on leave that day.', $away ? trim($away->first_name.' '.$away->last_name) : 'That person'));
+            }
+        }
+
         return DB::transaction(function () use ($site, $date, $openerId, $closerId, $driverId): SiteDay {
             $day = $this->day($site, $date);
             $day->update(['opener_id' => $openerId, 'closer_id' => $closerId, 'driver_id' => $driverId]);
@@ -116,6 +127,163 @@ class SiteDayService
 
             return $day;
         });
+    }
+
+    /**
+     * The opener, closer or driver says whether they will do it: yes, or no with
+     * a reason (the manager's bell then asks them to pick someone else). They can
+     * change their mind until the duty is done.
+     *
+     * @throws WorkforceException
+     */
+    public function answer(SiteDay $day, User $by, string $duty, bool $yes, ?string $note = null): SiteDayAnswer
+    {
+        if (! in_array($duty, SiteDayAnswer::DUTIES, true)) {
+            throw new WorkforceException('Say which job: opening, closing or driving.');
+        }
+
+        if ((int) $day->{$duty.'_id'} !== (int) $by->id) {
+            throw new WorkforceException('That job is planned for someone else.', 403);
+        }
+
+        $done = match ($duty) {
+            'opener' => ! in_array($day->status, [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED], true),
+            default => ! in_array($day->status, [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED, SiteDay::STATUS_OPEN], true),
+        };
+        if ($done || ($day->date->toDateString() < LocalTime::dateOf() && $day->status !== SiteDay::STATUS_OPEN)) {
+            throw new WorkforceException('That day is done: nothing to answer.');
+        }
+
+        $note = $note !== null ? trim($note) : '';
+        if (! $yes && $note === '') {
+            throw new WorkforceException('Say why you cannot, so the manager can plan around it.');
+        }
+
+        return SiteDayAnswer::query()->updateOrCreate(
+            ['site_day_id' => $day->id, 'duty' => $duty],
+            ['user_id' => $by->id, 'answer' => $yes ? SiteDayAnswer::YES : SiteDayAnswer::NO, 'note' => $yes ? null : $note],
+        );
+    }
+
+    /**
+     * "I can't" answers in the next week at the sites this manager runs, from
+     * whoever still holds that duty (nobody else picked yet): for the bell and
+     * the Team page. Never their own.
+     *
+     * @return Collection<int, SiteDayAnswer>
+     */
+    public function cantDo(User $manager, int $days = 7): Collection
+    {
+        $today = LocalTime::dateOf();
+
+        return SiteDayAnswer::query()->with(['siteDay.site', 'user'])
+            ->where('answer', SiteDayAnswer::NO)
+            ->where('user_id', '!=', $manager->id)
+            ->whereHas('siteDay', fn ($q) => $q->whereDate('date', '>=', $today)->whereDate('date', '<=', LocalTime::day($today)->addDays($days)->toDateString())
+                ->whereIn('status', [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED, SiteDay::STATUS_OPEN]))
+            ->get()
+            ->filter(fn (SiteDayAnswer $answer): bool => $answer->siteDay?->site !== null
+                && (int) $answer->siteDay->{$answer->duty.'_id'} === (int) $answer->user_id
+                && $this->sites->canManage($manager, $answer->siteDay->site))
+            ->sortBy(fn (SiteDayAnswer $answer): string => $answer->siteDay->date->toDateString())
+            ->values()
+            ->toBase();
+    }
+
+    /**
+     * The day's answers that still count: only from whoever holds that duty now
+     * (a swap, leave or a new plan leaves the old person's answer behind).
+     *
+     * @return array<string, array{answer: string, note: string|null, at: string|null}|null>
+     */
+    public function answersOf(SiteDay $day): array
+    {
+        $rows = $day->relationLoaded('answers') ? $day->answers : $day->answers()->get();
+
+        return collect(SiteDayAnswer::DUTIES)->mapWithKeys(function (string $duty) use ($day, $rows): array {
+            $row = $rows->first(fn (SiteDayAnswer $answer): bool => $answer->duty === $duty && (int) $answer->user_id === (int) $day->{$duty.'_id'});
+
+            return [$duty => $row ? ['answer' => $row->answer, 'note' => $row->note, 'at' => $row->updated_at?->toIso8601String()] : null];
+        })->all();
+    }
+
+    /**
+     * Someone is away (approved leave) between two shops' dates: take them off
+     * those days' plans as opener, closer or driver, for days not opened yet.
+     * The days' rides follow, and the manager's bell shows what is now missing.
+     * Returns how many days changed.
+     */
+    public function releasePerson(int $userId, CarbonInterface $from, CarbonInterface $to): int
+    {
+        $days = SiteDay::query()
+            ->whereDate('date', '>=', LocalTime::dateText($from))
+            ->whereDate('date', '<=', LocalTime::dateText($to))
+            ->whereIn('status', [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED])
+            ->where(fn ($q) => $q->where('opener_id', $userId)->orWhere('closer_id', $userId)->orWhere('driver_id', $userId))
+            ->get();
+
+        foreach ($days as $day) {
+            $day->update(collect(['opener_id', 'closer_id', 'driver_id'])
+                ->filter(fn (string $column): bool => (int) $day->{$column} === $userId)
+                ->mapWithKeys(fn (string $column): array => [$column => null])
+                ->all());
+            $this->planChanged($day);
+        }
+
+        return $days->count();
+    }
+
+    /**
+     * "Copy last week" for the plan: each day of this week still ahead, with
+     * nobody named for a duty, takes last week's same weekday's person for it.
+     * Someone who no longer works at the site (or drives), or is on leave that day, is left out; what a
+     * manager already named this week is never overwritten. Returns the days changed.
+     *
+     * @throws WorkforceException
+     */
+    public function copyWeekPlan(StockLocation $site, User $by, CarbonInterface $weekStart): int
+    {
+        if (! $this->sites->canManage($by, $site)) {
+            throw new WorkforceException('Only a manager of this site plans who opens and closes it.', 403);
+        }
+
+        $today = LocalTime::dateOf();
+        $start = LocalTime::day($weekStart);
+        $copied = 0;
+
+        foreach (range(0, 6) as $i) {
+            $date = $start->addDays($i);
+            if ($date->toDateString() < $today || ($this->sites->hoursOn($site, $date)['closed'] ?? false)) {
+                continue;
+            }
+
+            $source = SiteDay::query()->where('stock_location_id', $site->id)->whereDate('date', $date->subWeek()->toDateString())->first();
+            if ($source === null || ($source->opener_id === null && $source->closer_id === null && $source->driver_id === null)) {
+                continue;
+            }
+
+            $day = $this->day($site, $date);
+            if (! in_array($day->status, [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED], true)) {
+                continue;
+            }
+
+            // Still with us that day: works at the site (or still drives), and not on leave.
+            $away = fn (int $id): bool => LeaveRequest::query()->where('user_id', $id)->where('status', LeaveRequest::STATUS_APPROVED)
+                ->overlapping($date->toDateString(), $date->toDateString())->exists();
+            $still = fn (?int $id): ?int => $id !== null && ($person = User::query()->find($id)) !== null && $this->sites->worksAt($person, $site) && ! $away($id) ? $id : null;
+            $opener = $day->opener_id ?? $still($source->opener_id);
+            $closer = $day->closer_id ?? $still($source->closer_id);
+            $driver = $day->driver_id ?? ($source->driver_id !== null && User::query()->whereKey($source->driver_id)->where('is_driver', true)->exists() && ! $away($source->driver_id) ? $source->driver_id : null);
+
+            if ([$opener, $closer, $driver] === [$day->opener_id, $day->closer_id, $day->driver_id]) {
+                continue;
+            }
+
+            $this->plan($site, $date, $by, $opener, $closer, $driver);
+            $copied++;
+        }
+
+        return $copied;
     }
 
     /** Keep the day's opening and closing rides in step after its opener, closer or driver changed. */
@@ -363,10 +531,96 @@ class SiteDayService
             ->toBase();
     }
 
+    /**
+     * The days this person opens, closes or drives, from today (or the day still
+     * open) for a week: what My work turns into steps. Only days still to do.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function dutiesFor(User $user, int $days = 7): Collection
+    {
+        $today = LocalTime::dateOf();
+
+        return SiteDay::query()->with('site')
+            ->where(fn ($query) => $query->where('opener_id', $user->id)->orWhere('closer_id', $user->id)->orWhere('driver_id', $user->id))
+            ->where(fn ($query) => $query
+                ->where(fn ($ahead) => $ahead->whereDate('date', '>=', $today)->whereDate('date', '<=', LocalTime::day($today)->addDays($days)->toDateString())
+                    ->whereIn('status', [SiteDay::STATUS_PLANNED, SiteDay::STATUS_MISSED, SiteDay::STATUS_OPEN]))
+                // A day opened earlier and not closed yet still has its closing to do.
+                ->orWhere(fn ($open) => $open->where('status', SiteDay::STATUS_OPEN)->whereDate('date', '<', $today)))
+            ->orderBy('date')
+            ->get()
+            ->filter(fn (SiteDay $day): bool => $day->site !== null)
+            ->map(function (SiteDay $day) use ($user, $today): array {
+                $mine = fn (string $column): bool => (int) $day->{$column} === (int) $user->id;
+                $roles = array_values(array_filter([
+                    // Opening is done once the day is open; closing and driving are not.
+                    $mine('opener_id') && $day->status !== SiteDay::STATUS_OPEN ? 'opener' : null,
+                    $mine('closer_id') ? 'closer' : null,
+                    $mine('driver_id') ? 'driver' : null,
+                ]));
+
+                return $this->present($day->site, $day, $user) + [
+                    'my_roles' => $roles,
+                    'is_today' => $day->date->toDateString() <= $today,
+                ];
+            })
+            ->filter(fn (array $duty): bool => $duty['my_roles'] !== [])
+            ->values()
+            ->toBase();
+    }
+
+    /**
+     * A week of plans for these sites, for one glance: who opens, closes and
+     * drives each day, whether they said yes, and what is missing. Read-only
+     * (it runs on My work and the dashboard): a day with no row yet shows as
+     * its hours say, nobody named.
+     *
+     * @param  Collection<int, StockLocation>  $sites
+     * @return array<int, array<string, mixed>>
+     */
+    public function weekPlan(Collection $sites, int $days = 7): array
+    {
+        if ($sites->isEmpty()) {
+            return [];
+        }
+
+        $start = LocalTime::day(LocalTime::dateOf());
+        $rows = SiteDay::query()->with(['opener', 'closer', 'driver', 'answers'])
+            ->whereIn('stock_location_id', $sites->pluck('id'))
+            ->whereDate('date', '>=', $start->toDateString())
+            ->whereDate('date', '<', $start->addDays($days)->toDateString())
+            ->get()
+            ->keyBy(fn (SiteDay $day): string => $day->stock_location_id.'@'.$day->date->toDateString());
+        $name = fn (?User $user): ?string => $user ? trim($user->first_name.' '.$user->last_name) : null;
+
+        return $sites->map(fn (StockLocation $site): array => [
+            'site' => ['id' => (int) $site->id, 'name' => $site->name, 'kind' => $site->kind, 'kind_label' => $site->kind_label],
+            'days' => collect(range(0, $days - 1))->map(function (int $i) use ($site, $start, $name, $rows): array {
+                $date = $start->addDays($i)->toDateString();
+                $day = $rows->get($site->id.'@'.$date);
+                $hours = $this->sites->hoursOn($site, $date);
+                $answers = $day ? $this->answersOf($day) : ['opener' => null, 'closer' => null, 'driver' => null];
+
+                return [
+                    'date' => $date,
+                    'status' => $day?->status ?? (($hours['closed'] ?? false) ? SiteDay::STATUS_CLOSED_DAY : SiteDay::STATUS_PLANNED),
+                    'opens_at' => $hours['opens_at'] ?? null,
+                    'closes_at' => $hours['closes_at'] ?? null,
+                    'no_hours' => $hours === null,
+                    'opener' => $name($day?->opener),
+                    'closer' => $name($day?->closer),
+                    'driver' => $name($day?->driver),
+                    'answers' => array_map(fn (?array $answer): ?string => $answer['answer'] ?? null, $answers),
+                ];
+            })->all(),
+        ])->values()->all();
+    }
+
     /** @return array<string, mixed> */
     public function present(StockLocation $site, SiteDay $day, User $viewer): array
     {
-        $day->loadMissing(['opener', 'closer', 'driver', 'openedBy', 'closedBy']);
+        $day->loadMissing(['opener', 'closer', 'driver', 'openedBy', 'closedBy', 'answers']);
         $settings = $this->qr->settings($site);
         $key = CustodyKey::query()->with('holder')->where('keyable_type', StockLocation::class)->where('keyable_id', $site->id)->first();
         $manages = $this->sites->canManage($viewer, $site);
@@ -383,6 +637,8 @@ class SiteDayService
             'closer' => $day->closer ? ['id' => (int) $day->closer->id, 'name' => $name($day->closer)] : null,
             'driver' => $day->driver ? ['id' => (int) $day->driver->id, 'name' => $name($day->driver)] : null,
             'no_driver' => (bool) $day->no_driver,
+            // Will they do it: each duty's yes / no (with why), or null while unanswered.
+            'answers' => $this->answersOf($day),
             // The driver's two runs: the opener's pick-up and the closer's ride home.
             'rides' => $this->rides->plannedFor($day)->map(fn (StaffRide $ride): array => [
                 'id' => (int) $ride->id,

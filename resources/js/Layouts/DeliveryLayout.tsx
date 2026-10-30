@@ -4,7 +4,7 @@ import SpaceDashboardRoundedIcon from "@mui/icons-material/SpaceDashboardRounded
 import LocalShippingRoundedIcon from "@mui/icons-material/LocalShippingRounded";
 import WarehouseRoundedIcon from "@mui/icons-material/WarehouseRounded";
 import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
-import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
+import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import { Link, usePage, Head } from "@inertiajs/react";
 import { getRole, useRole } from "@/theme";
 import useBottomNav from "@/hooks/useBottomNav";
@@ -54,7 +54,8 @@ export default function DeliveryLayout({ children }: { children: React.ReactNode
         if (url.includes("/dashboard")) return 0;
         if (url.includes("/shipments")) return 2;
         if (url.includes("/transfers")) return 3;
-        if (url.includes("/profile") || url.includes("/sessions")) return 4;
+        // More: the profile page, which also leads to My work (runs, keys, rides).
+        if (url.includes("/profile") || url.includes("/sessions") || url.startsWith("/work")) return 4;
         if (url.includes("/delivery") || url.includes("/history")) return 1;
         return 0;
     };
@@ -133,9 +134,10 @@ export default function DeliveryLayout({ children }: { children: React.ReactNode
                         href={route("delivery.transfers.index")}
                         sx={actionSx}
                     />
+                    {/* My work, staff rides, the guide and the profile. */}
                     <BottomNavigationAction
-                        label="Profile"
-                        icon={<AccountCircleRoundedIcon />}
+                        label="More"
+                        icon={<MoreHorizRoundedIcon />}
                         component={Link}
                         href={route("delivery.profile.index")}
                         sx={actionSx}

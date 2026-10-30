@@ -52,7 +52,8 @@ class SellerOrderBoard
 
         $rows = $this->scoped($storeId)
             ->selectRaw('fulfillment_stage, payment_status')
-            ->selectRaw('EXISTS (SELECT 1 FROM sale_items si WHERE si.sale_id = sales.id AND si.picked_quantity > 0) as picked')
+            // Started picking (or a line in hand) is Pick & pack, as on the cards.
+            ->selectRaw('(sales.picking_started_at IS NOT NULL OR EXISTS (SELECT 1 FROM sale_items si WHERE si.sale_id = sales.id AND si.picked_quantity > 0)) as picked')
             ->selectRaw('COUNT(*) as total')
             ->groupBy('fulfillment_stage', 'payment_status', 'picked')
             ->toBase()
@@ -132,6 +133,15 @@ class SellerOrderBoard
         };
     }
 
+    /** One order's stage: started picking (or a line in hand) is Pick & pack. Needs `items` loaded. */
+    public function stageOf(Sale $sale): string
+    {
+        $picked = $sale->picking_started_at !== null
+            || $sale->items->contains(fn (SaleItem $line): bool => (int) $line->picked_quantity > 0);
+
+        return $this->stageFor($sale->fulfillment_stage, $sale->payment_status, $picked);
+    }
+
     /** @return Builder<Sale> */
     private function scoped(?int $storeId): Builder
     {
@@ -161,7 +171,6 @@ class SellerOrderBoard
     /** @return array<string, mixed> */
     private function present(Sale $sale): array
     {
-        $anyPicked = $sale->items->contains(fn (SaleItem $line): bool => (int) $line->picked_quantity > 0);
         $storeName = $sale->store?->name ?? 'Store';
 
         $lines = $sale->items->map(function (SaleItem $line) use ($storeName): array {
@@ -202,7 +211,7 @@ class SellerOrderBoard
             'id' => $sale->id,
             'reference' => (string) $sale->reference_number,
             'customer' => $this->customerName($sale),
-            'stage' => $this->stageFor($sale->fulfillment_stage, $sale->payment_status, $anyPicked || $sale->picking_started_at !== null),
+            'stage' => $this->stageOf($sale),
             // The payment split; voided parts of a cancelled order are left out.
             'payments' => $sale->payments
                 ->where('status', '!=', Payment::STATUS_VOID)

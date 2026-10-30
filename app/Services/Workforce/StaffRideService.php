@@ -153,7 +153,10 @@ class StaffRideService
     public function release(StaffRide $ride, User $driver): StaffRide
     {
         $this->mustDrive($ride, $driver, [StaffRide::STATUS_CLAIMED]);
-        $ride->update(['status' => StaffRide::STATUS_REQUESTED, 'driver_id' => null, 'vehicle_id' => null, 'claimed_at' => null]);
+        // A run from the day's plan stays with the planned driver (only the car is given back);
+        // otherwise it would drop into the pool while the day still names them.
+        $planned = $ride->site_day_id !== null ? SiteDay::query()->whereKey($ride->site_day_id)->value('driver_id') : null;
+        $ride->update(['status' => StaffRide::STATUS_REQUESTED, 'driver_id' => $planned, 'vehicle_id' => null, 'claimed_at' => null]);
 
         return $ride;
     }

@@ -1,5 +1,5 @@
 import { cardCls, ghostBtn, hm, inputCls, LEAVE_LABEL, primaryBtn, ROLE_LABEL, SHIFT_CHIP, WEEKDAYS, workLayout, wr } from "@/Components/Work/workUi";
-import { dayDate } from "@/utils/dates";
+import { dayDate, shopToday } from "@/utils/dates";
 import type { CoverageGap, DayHours, LeaveView, Person, ShiftView, SiteDayView, StaffingRuleRow, WorkApp } from "@/types/work";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import { calendarPrefill } from "@/Components/Calendar/calendarPrefill";
@@ -34,7 +34,8 @@ interface Props {
 const addDays = (date: string, days: number): string => {
     const d = new Date(`${date}T12:00:00`);
     d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
+    // The local date, not toISOString (UTC), which moves a day for browsers far from UTC.
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
 interface Draft {
@@ -94,6 +95,9 @@ function ShiftForm({ app, siteId, draft, people, onDone }: { app: WorkApp; siteI
     );
 }
 
+/** Shown after a name in the pickers: several people can share a first name. */
+const ROLE_NAME: Record<string, string> = { admin: "admin", seller: "seller", store_manager: "store manager", stock_keeper: "stock keeper", delivery: "driver" };
+
 /** Who opens, closes and drives that day: saved on its own, at once. */
 function DayPlan({ app, siteId, date, plan, people, drivers }: { app: WorkApp; siteId: number; date: string; plan: SiteDayView & { editable: boolean }; people: Props["people"]; drivers: Person[] }): React.ReactElement {
     type Field = "opener_id" | "closer_id" | "driver_id";
@@ -120,6 +124,7 @@ function DayPlan({ app, siteId, date, plan, people, drivers }: { app: WorkApp; s
                 {options.map((p) => (
                     <option key={p.id} value={p.id}>
                         {p.name}
+                        {"role" in p && typeof p.role === "string" ? ` · ${ROLE_NAME[p.role] ?? p.role}` : ""}
                     </option>
                 ))}
             </select>
@@ -140,7 +145,121 @@ function DayPlan({ app, siteId, date, plan, people, drivers }: { app: WorkApp; s
                         : "The driver's rides appear once the opener or closer is named."
                     : "No driver: the opener comes on their own and the closer goes home on their own. Opening and closing go ahead, flagged."}
             </p>
+            {/* Will they do it: what each named person answered in My work. */}
+            {(["opener", "closer", "driver"] as const).some((duty) => plan[duty]) ? (
+                <ul className="mt-1.5 space-y-0.5 text-[11px]">
+                    {(["opener", "closer", "driver"] as const).map((duty) => {
+                        const person = plan[duty];
+                        const answer = plan.answers?.[duty] ?? null;
+                        if (!person) return null;
+                        const job = duty === "opener" ? "opens" : duty === "closer" ? "closes" : "drives";
+
+                        return (
+                            <li
+                                key={duty}
+                                className={answer?.answer === "yes" ? "text-on-success-container" : answer?.answer === "no" ? "font-semibold text-on-error-container" : "text-on-surface-variant"}
+                            >
+                                {answer?.answer === "yes"
+                                    ? `✓ ${person.name} ${job}: said yes`
+                                    : answer?.answer === "no"
+                                      ? `✗ ${person.name} can’t ${job.slice(0, -1)}: “${answer.note ?? ""}”. Pick someone else.`
+                                      : `${person.name} ${job}: not answered yet`}
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : null}
+            {plan.opener && plan.editable && plan.status !== "open" ? (
+                <p className={`mt-1 text-[11px] ${plan.key_holder?.id === plan.opener.id ? "text-on-surface-variant" : "font-semibold text-on-warning-container"}`}>
+                    {plan.key_holder?.id === plan.opener.id
+                        ? `${plan.opener.name} holds the key.`
+                        : plan.key_holder
+                          ? `The key is with ${plan.key_holder.name}: they hand it to ${plan.opener.name} before opening.`
+                          : `Nobody holds the key yet: give it to ${plan.opener.name} on My work → Keys.`}
+                </p>
+            ) : null}
+            {plan.opener || plan.closer || plan.driver ? (
+                <p className="mt-1 text-[11px] text-on-surface-variant">Each of them sees their part as steps on My work → Today (and in the week before, under Shifts).</p>
+            ) : null}
         </div>
+    );
+}
+
+/**
+ * The week at a glance: one row per person, one column per day, each cell the
+ * shift's times (dashed while a draft, marked until accepted), who opens (O)
+ * and closes (C), and leave. Tapping a day goes to its card below.
+ */
+function WeekGlance({ days, shifts, leave }: { days: NonNullable<Props["days"]>; shifts: ShiftView[]; leave: LeaveView[] }): React.ReactElement | null {
+    const people = Array.from(new Map(shifts.filter((s) => s.user).map((s) => [s.user!.id, s.user!.name])).entries()).sort((a, b) => a[1].localeCompare(b[1]));
+    if (people.length === 0) return null;
+    const today = shopToday();
+    const jump = (date: string) => document.querySelector(`section[data-date="${date}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    return (
+        <section className={cardCls}>
+            <h2 className="text-[13px] font-bold text-on-surface">The week at a glance</h2>
+            {/* Scrolls inside the card on a phone; the page itself never scrolls sideways. */}
+            <div className="mt-2 overflow-x-auto">
+                <table className="w-full min-w-[560px] border-separate border-spacing-0.5 text-[10px]">
+                    <thead>
+                        <tr>
+                            <th className="w-[96px]" />
+                            {days.map(({ date, hours }) => (
+                                <th key={date} className="p-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => jump(date)}
+                                        className={`w-full rounded-[8px] px-1 py-1 font-bold ${date === today ? "bg-primary text-on-primary" : "text-on-surface"} ${hours?.closed ? "opacity-50" : ""}`}
+                                    >
+                                        {WEEKDAYS[new Date(`${date}T12:00:00`).getDay()].slice(0, 3)} {Number(date.slice(8, 10))}
+                                    </button>
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {people.map(([id, name]) => (
+                            <tr key={id}>
+                                <th scope="row" className="truncate pr-1 text-left text-[11px] font-semibold text-on-surface">
+                                    {name}
+                                </th>
+                                {days.map(({ date, plan }) => {
+                                    const mine = shifts.filter((s) => s.date === date && s.user?.id === id);
+                                    const away = leave.some((l) => l.user?.id === id && l.starts_on <= date && l.ends_on >= date);
+                                    const marks = `${plan?.opener?.id === id ? "O" : ""}${plan?.closer?.id === id ? "C" : ""}`;
+
+                                    return (
+                                        <td key={date} className="p-0 align-top">
+                                            <button type="button" onClick={() => jump(date)} className="block w-full text-left">
+                                                {away ? <span className="block rounded-[6px] bg-surface-container px-1 py-0.5 text-on-surface-variant">Leave</span> : null}
+                                                {mine.map((shift) => (
+                                                    <span
+                                                        key={shift.id}
+                                                        title={SHIFT_CHIP[shift.status].label}
+                                                        className={`mb-0.5 block rounded-[6px] px-1 py-0.5 ${
+                                                            shift.status === "draft"
+                                                                ? "border border-dashed border-outline text-on-surface-variant"
+                                                                : shift.status === "accepted"
+                                                                  ? "bg-primary-container text-on-primary-container"
+                                                                  : "border border-warning/50 bg-warning-container/50 text-on-warning-container"
+                                                        }`}
+                                                    >
+                                                        {hm(shift.starts_at)}–{hm(shift.ends_at)}
+                                                        {marks ? <span className="font-bold"> {marks}</span> : null}
+                                                    </span>
+                                                ))}
+                                            </button>
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <p className="mt-1.5 text-[10px] text-on-surface-variant">Filled: accepted · yellow: not accepted yet · dashed: draft (not sent) · O opens · C closes. Tap a day to edit it.</p>
+        </section>
     );
 }
 
@@ -283,7 +402,14 @@ export default function Rota({ app, site, week, days = [], drivers = [], people 
                         <button type="button" className={ghostBtn} onClick={() => router.post(wr(app, "work.rota.copy", site.id), { week }, { preserveScroll: true })}>
                             Copy last week
                         </button>
-                    </div> : null}
+                    </div> : (
+                        /* A Main Hub has no shifts: copy only who opens, closes and drives. */
+                        <div className="mt-2 flex gap-2">
+                            <button type="button" className={ghostBtn} onClick={() => router.post(wr(app, "work.rota.copy", site.id), { week }, { preserveScroll: true })}>
+                                Copy last week’s plan
+                            </button>
+                        </div>
+                    )}
                 </header>
 
                 <div className="mx-auto max-w-2xl space-y-3 px-3.5 pt-3">
@@ -299,6 +425,8 @@ export default function Rota({ app, site, week, days = [], drivers = [], people 
                             </ul>
                         </section>
                     ) : null}
+
+                    {site.has_shifts ? <WeekGlance days={days} shifts={shifts} leave={leave} /> : null}
 
                     {days.map(({ date, hours, plan }) => {
                         const dayShifts = shifts.filter((s) => s.date === date);

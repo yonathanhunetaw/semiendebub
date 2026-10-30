@@ -184,7 +184,7 @@ export default function AdminSidebar({
         const selected = navItemActive(item, path, activeStore.id);
         const allStores = roleKey === "admin" && activeStore.id === "all";
         const title = roleKey === "admin" ? (allStores ? "All stores" : activeStore.name) : "Approvals";
-        const caption = roleKey !== "admin" ? "Refills and counts to rule on" : allStores ? "Inventory overview" : "Open store page";
+        const caption = roleKey !== "admin" ? "Refills and counts to rule on" : "Open store page";
 
         return (
             <ListItemButton

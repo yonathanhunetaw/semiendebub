@@ -28,9 +28,11 @@ import {
 } from "./places";
 import {
     ORDER_PHASE_LABEL, REFILL_PHASE_LABEL, orderStateAt, refillStateAt, stateAt,
-    type WorldOrder, type WorldRefill, type WorldShipment,
+    type WorldContainer, type WorldOrder, type WorldRefill, type WorldShipment,
 } from "./replay";
+import { fillOf, type Fill } from "./loadFill";
 import { RACKS, SHELF_BOX, SPOT_CAPACITY, rackFace, slotAtU, slotBox, slotCapacity, slotFrame, spotAt, type RackWall } from "./storeLayout";
+import { makeAvatar } from "./game/avatar";
 import { createGameScene, type GameScene } from "./game/GameScene";
 import PlayLayer from "./game/PlayLayer";
 import { player, setGame, useGame, type GameView, type PlayerPose } from "./game/gameStore";
@@ -78,6 +80,8 @@ interface SceneApi {
     focusPlace: (key: PlaceKey) => void;
     home: () => void;
     setShipments: (shipments: WorldShipment[]) => void;
+    /** The containers being filled at the Storage hub: the truck's container shows the first, as full as it is. */
+    setContainers: (containers: WorldContainer[]) => void;
     setOrders: (orders: WorldOrder[]) => void;
     setRefills: (refills: WorldRefill[]) => void;
     /** One box per item in the hubs (catalogue.ts); drawn once. */
@@ -182,6 +186,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const [day, setDay] = useState(() => linked.day ?? isoDay(new Date()));
     const [loadedDay, setLoadedDay] = useState<string | null>(null);
     const [shipments, setShipments] = useState<WorldShipment[]>([]);
+    const [containers, setContainers] = useState<WorldContainer[]>([]);
     const [orders, setOrders] = useState<WorldOrder[]>([]);
     const [refills, setRefills] = useState<WorldRefill[]>([]);
     const [fed, setFed] = useState<FeedEvent[]>([]);
@@ -296,6 +301,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
 
     useEffect(() => apiRef.current?.select(selected), [selected, theme.palette.mode]);
     useEffect(() => apiRef.current?.setShipments(shipments), [shipments, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setContainers(containers), [containers, theme.palette.mode]);
     useEffect(() => apiRef.current?.setOrders(orders), [orders, theme.palette.mode]);
     useEffect(() => apiRef.current?.setRefills(refills), [refills, theme.palette.mode]);
 
@@ -452,8 +458,9 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
             const url = route(`${app}.guide.world`, { from: which, to: which });
             const response = await fetch(url, { headers: { Accept: "application/json" }, credentials: "same-origin" });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = (await response.json()) as { shipments: WorldShipment[]; orders?: WorldOrder[]; refills?: WorldRefill[]; events?: FeedEvent[]; days: string[] };
+            const data = (await response.json()) as { shipments: WorldShipment[]; containers?: WorldContainer[]; orders?: WorldOrder[]; refills?: WorldRefill[]; events?: FeedEvent[]; days: string[] };
             setShipments(data.shipments);
+            setContainers(data.containers ?? []);
             setOrders(data.orders ?? []);
             setRefills(data.refills ?? []);
             setFed(data.events ?? []);
@@ -770,6 +777,14 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     pointerEvents: "none",
                 },
                 "& .world-badge--refill": { bgcolor: "info.main", color: "info.contrastText" },
+                // How full a van or the container is (openHold): the sign takes the load block's colour.
+                "& .world-badge--fill": {
+                    bgcolor: glass, color: "text.primary", border: "2px solid", borderColor: "divider", fontSize: "0.68rem", py: 0.1,
+                    "&.is-ok": { borderColor: "success.main" },
+                    "&.is-high": { bgcolor: "warning.main", color: "warning.contrastText", borderColor: "warning.main" },
+                    "&.is-over": { bgcolor: "error.main", color: "error.contrastText", borderColor: "error.main" },
+                    "&.is-far, &.is-covered": { opacity: 0 },
+                },
                 "& .world-badge--find": { bgcolor: "#ffc21a", color: "#1d1309", border: "2px solid #1d1309", fontWeight: 900, fontSize: "0.78rem", px: 1, py: 0.2, boxShadow: 3 },
                 // A first name over a person's head.
                 "& .world-badge--name": { bgcolor: glass, color: "text.primary", border: "2px solid", borderColor: "divider", fontSize: "0.72rem", px: 1, py: 0.1, transform: "translateY(-4px)" },
@@ -820,6 +835,29 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     bgcolor: "primary.main",
                     boxShadow: 3,
                 },
+                // Play's jump button (game/PlayerController): bottom-right on a touch screen, across from the stick, as in Roblox.
+                "& .world-jump": {
+                    position: "absolute",
+                    right: 28,
+                    bottom: "max(110px, 18%)",
+                    width: 68,
+                    height: 68,
+                    borderRadius: "50%",
+                    border: "3px solid",
+                    borderColor: alpha(theme.palette.text.primary, 0.35),
+                    bgcolor: alpha(theme.palette.background.paper, 0.55),
+                    color: "text.primary",
+                    display: "none",
+                    placeItems: "center",
+                    padding: 0,
+                    pointerEvents: "auto",
+                    touchAction: "none",
+                    userSelect: "none",
+                    WebkitTapHighlightColor: "transparent",
+                    "@media (pointer: coarse)": { display: "grid" },
+                    "&[hidden]": { display: "none" },
+                    "&.is-on": { bgcolor: "primary.main", color: "primary.contrastText", borderColor: "primary.main" },
+                },
                 "@keyframes world-callout-in": { from: { opacity: 0, transform: "translateY(8px) scale(.92)" }, to: { opacity: 1, transform: "none" } },
             }}
         >
@@ -863,11 +901,11 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     </IconButton>}
                 </Stack>
 
-                {/* While a hub is open: pick an item and its boxes light up in the world. In Play it sits in Play's own top column (below
-                    its goals, whatever their height); while watching it floats at the top left. */}
+                {/* While a hub is open: a small search button (top right) picks an item and its boxes light up in the world. In Play it
+                    sits in Play's own top column (below its goals, whatever their height); while watching it floats at the top right. */}
                 {playing3d && <PlayLayer app={app} scene={gameScene} barSlot={landscape ? barSlot : null} topExtra={finder} />}
                 {!playing3d && finder && (
-                    <Box sx={{ position: "absolute", top: { xs: 60, sm: 62 }, left: 8, pointerEvents: "none" }}>{finder}</Box>
+                    <Box sx={{ position: "absolute", top: { xs: 60, sm: 62 }, right: 8, display: "flex", flexDirection: "column", alignItems: "flex-end", pointerEvents: "none" }}>{finder}</Box>
                 )}
 
                 {/* In the shop: look at each wall of racks from where the seller stands. */}
@@ -959,6 +997,8 @@ interface Swing {
 
 interface VanRig {
     van: THREE.Group;
+    /** The open hold's load block and sign (how full the van is). */
+    hold: HoldFill;
     cartons: THREE.Mesh[];
     badge: CSS2DObject;
     badgeEl: HTMLDivElement;
@@ -1065,8 +1105,9 @@ function buildWorld(
     };
     addCompound(sceneryGroup("compound"), wallTone, darkTone, padTone);
     addRoads(sceneryGroup("roads"), asphalt);
-    // The container being loaded beside the Storage hub, for the Main Hub.
-    sceneryGroup("container_truck").add(makeContainerTruck(driverTone, darkTone));
+    // The container being loaded beside the Storage hub, for the Main Hub: its load shows how full the consignment makes it.
+    const containerTruck = makeContainerTruck(driverTone, darkTone);
+    sceneryGroup("container_truck").add(containerTruck.truck);
     const store = addStoreShell(sceneryGroup("store_shell"), wallTone, toneOf("seller"), padTone);
     // The Store Floor as the strip round the foot of the racks (2.2 m wide, the door's gap left open), lit when it is focused.
     const floorRingMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
@@ -1255,7 +1296,7 @@ function buildWorld(
     const rigFor = (s: WorldShipment): VanRig => {
         const existing = rigs.get(s.id);
         if (existing) return existing;
-        const van = makeVan(driverTone, wallTone, darkTone);
+        const { van, hold } = makeVan(driverTone, wallTone, darkTone);
         van.visible = false;
         scene.add(van);
         const cartons: THREE.Mesh[] = [];
@@ -1272,7 +1313,7 @@ function buildWorld(
         const badge = new CSS2DObject(badgeEl);
         badge.visible = false;
         scene.add(badge);
-        const rig = { van, cartons, badge, badgeEl };
+        const rig = { van, hold, cartons, badge, badgeEl };
         [van, ...cartons].forEach((o) => tappable(o, "shipment", s.id));
         rigs.set(s.id, rig);
         return rig;
@@ -1299,6 +1340,8 @@ function buildWorld(
             rig.van.visible = false;
             rig.badge.visible = false;
             rig.cartons.forEach((c) => (c.visible = false));
+            // How full its vehicle is: the load block in the open hold and the sign over it (the feed reloads every 30 s).
+            rig.hold.set(fillOf(s.load_cbm ?? s.cbm, s.capacity, s.load_guessed ?? false));
 
             const origin = s.origin.place;
             const destination = s.destination.place;
@@ -1314,6 +1357,14 @@ function buildWorld(
                 });
             };
 
+            /** While the shipment is being made its van waits in the lane beside the freight car, roof open, so its load shows rising. */
+            const waitAtBerth = () => {
+                const n = slot("berth");
+                rig.van.visible = true;
+                rig.van.position.set(PLATFORM_BERTH[0], 0, PLATFORM_BERTH[1] + 4 + n * 2.6);
+                rig.van.rotation.y = 0;
+            };
+
             switch (st.phase) {
                 case "ticking":
                     if (door) {
@@ -1321,6 +1372,7 @@ function buildWorld(
                         rig.badgeEl.textContent = `${s.reference} · ${st.ticks}/4 ticks`;
                         rig.badge.position.set(door.at[0] + door.out[0] * 2, 4.5 + slot(`badge-${origin}`) * 0.9, door.at[1] + door.out[1] * 2);
                     }
+                    waitAtBerth();
                     break;
                 case "picking":
                     openDoors.add(origin);
@@ -1329,11 +1381,13 @@ function buildWorld(
                         const n = slot(`pick-${origin}`);
                         stack(door.at[0] - door.out[0] * (2 + n * 2), door.at[1] - door.out[1] * (2 + n * 2));
                     }
+                    waitAtBerth();
                     break;
                 case "prepared": {
                     openDoors.add(origin);
                     const n = slot("platform");
                     stack(platformAt[0] - 0.9 + (n % 2) * 1.8, platformAt[1] - 0.9 + (Math.floor(n / 2) % 2) * 1.8);
+                    waitAtBerth();
                     break;
                 }
                 case "loading": {
@@ -1716,6 +1770,22 @@ function buildWorld(
             el.classList.toggle("is-covered", overlaps);
             if (!overlaps) shown.push(r);
         }
+        // How full each vehicle is: the container's sign always, a van's only from close by (from far off its load
+        // block's colour says it), and never one over a name or another sign.
+        const fillSigns = [
+            { el: containerTruck.hold.el, object: containerTruck.truck as THREE.Object3D, near: null as number | null },
+            ...[...rigs.values()].map((rig) => ({ el: rig.hold.el, object: rig.van as THREE.Object3D, near: NEAR_LABEL as number | null })),
+        ];
+        for (const { el, object, near } of fillSigns) {
+            if (el.style.display === "none") continue;
+            const far = near !== null && camera.position.distanceTo(object.getWorldPosition(labelAt)) > near;
+            el.classList.toggle("is-far", far);
+            if (far) continue;
+            const r = el.getBoundingClientRect();
+            const overlaps = shown.some((o) => r.left < o.right + 4 && r.right > o.left - 4 && r.top < o.bottom + 2 && r.bottom > o.top - 2);
+            el.classList.toggle("is-covered", overlaps);
+            if (!overlaps) shown.push(r);
+        }
     };
 
     // Camera flights.
@@ -1920,7 +1990,8 @@ function buildWorld(
             beforePlay = { camera: camera.position.clone(), target: controls.target.clone() };
             game = createGameScene({
                 scene, camera, controls, dom: renderer.domElement, overlay: mount, figure: (() => {
-                    const figure = makePerson(toneOf(roleFor(app)));
+                    // Blocky, with arms and legs that swing (game/avatar.ts); the people standing about keep the simple figure.
+                    const figure = makeAvatar(toneOf(roleFor(app)));
                     nameTag(figure, name);
                     return figure;
                 })(), tone: toneOf(roleFor(app)),
@@ -1989,9 +2060,17 @@ function buildWorld(
                 scene.remove(rig.van, rig.badge, ...rig.cartons);
                 untappable(rig.van, ...rig.cartons);
                 rig.badgeEl.remove();
+                rig.hold.dispose();
                 rigs.delete(id);
             });
             placeShipments();
+        },
+        setContainers: (next) => {
+            const [first, ...more] = next;
+            containerTruck.hold.set(
+                first ? fillOf(first.cbm, first.capacity, first.guessed) : null,
+                first ? `${first.container_number || first.reference}${more.length ? ` (+${more.length} more)` : ""}` : "",
+            );
         },
         setOrders: (next) => {
             orders = next;
@@ -2895,22 +2974,112 @@ function makeBuilding(place: Place, tone: THREE.Color, wall: THREE.Color, dark: 
     return g;
 }
 
-/** The truck with a 40 ft container (places.ts CONTAINER), standing at CONTAINER_TRUCK along the street, cab to the east. */
-function makeContainerTruck(tone: THREE.Color, dark: THREE.Color): THREE.Group {
+/** How full a hold is (loadFill.ts): set a fill (null empties it and hides its sign), with an optional name before the figures. */
+interface HoldFill {
+    set: (fill: Fill | null, title?: string) => void;
+    /** The sign, so the world can hide it from far off or where it would cover another (declutter). */
+    el: HTMLDivElement;
+    dispose: () => void;
+}
+
+/** The load block's colour: green with room, amber near full, red over; grey-blue while no vehicle is chosen. */
+const FILL_COLOUR: Record<Fill["level"], number> = { ok: 0x2e9d5b, high: 0xf2a516, over: 0xd64545, unknown: 0x8aa0b4 };
+
+/**
+ * An open-topped, see-through hold on a vehicle, so from above (or through its sides) you see how full it is: a solid
+ * floor, glassy walls, a rim along the top that keeps its outline from above, and inside a load block packed from the
+ * cab end as far along as the load fills it, with a sign over it. `size` is [x, height, z] inside and `at` the middle of
+ * its floor, in the vehicle's own frame; `solid` is the wall against the cab, drawn opaque, where the load starts.
+ */
+function openHold(vehicle: THREE.Group, size: [number, number, number], at: [number, number, number], shell: THREE.Color, solid: "+x" | "-z"): HoldFill {
+    const [sx, h, sz] = size;
+    const [ax, ay, az] = at;
+    const parts: THREE.Mesh[] = [];
+    const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number, shadow = true) => {
+        const m = new THREE.Mesh(geometry, material);
+        m.position.set(x, y, z);
+        m.castShadow = shadow;
+        m.receiveShadow = true;
+        vehicle.add(m);
+        parts.push(m);
+        return m;
+    };
+    const frame = new THREE.MeshStandardMaterial({ color: shell, roughness: 0.7, flatShading: true });
+    const glassy = new THREE.MeshStandardMaterial({ color: shell.clone().lerp(new THREE.Color(0xffffff), 0.35), roughness: 0.3, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+    add(new THREE.BoxGeometry(sx, 0.08, sz), frame, ax, ay - 0.04, az);
+    const walls: Array<{ key: "+x" | "-x" | "+z" | "-z"; geometry: THREE.BoxGeometry; x: number; z: number }> = [
+        { key: "+x", geometry: new THREE.BoxGeometry(0.05, h, sz), x: ax + sx / 2, z: az },
+        { key: "-x", geometry: new THREE.BoxGeometry(0.05, h, sz), x: ax - sx / 2, z: az },
+        { key: "+z", geometry: new THREE.BoxGeometry(sx, h, 0.05), x: ax, z: az + sz / 2 },
+        { key: "-z", geometry: new THREE.BoxGeometry(sx, h, 0.05), x: ax, z: az - sz / 2 },
+    ];
+    for (const w of walls) add(w.geometry, w.key === solid ? frame : glassy, w.x, ay + h / 2, w.z, w.key === solid);
+    // The rim: the hold's outline, read from above.
+    add(new THREE.BoxGeometry(sx + 0.08, 0.08, 0.08), frame, ax, ay + h, az - sz / 2);
+    add(new THREE.BoxGeometry(sx + 0.08, 0.08, 0.08), frame, ax, ay + h, az + sz / 2);
+    add(new THREE.BoxGeometry(0.08, 0.08, sz), frame, ax - sx / 2, ay + h, az);
+    add(new THREE.BoxGeometry(0.08, 0.08, sz), frame, ax + sx / 2, ay + h, az);
+
+    const loadMaterial = new THREE.MeshStandardMaterial({ roughness: 0.6, flatShading: true, transparent: true, opacity: 0.9 });
+    const load = add(new THREE.BoxGeometry(1, 1, 1), loadMaterial, ax, ay, az);
+    load.visible = false;
+
+    const signEl = document.createElement("div");
+    signEl.className = "world-badge world-badge--fill";
+    const sign = new CSS2DObject(signEl);
+    sign.position.set(ax, ay + h + 0.9, az);
+    sign.visible = false;
+    vehicle.add(sign);
+
+    return {
+        set: (fill, title = "") => {
+            load.visible = !!fill && fill.fraction > 0;
+            sign.visible = !!fill;
+            if (!fill) return;
+            // Packed from the cab end towards the doors, as a hold is loaded: from above, the bare floor left is the room left.
+            const tall = h * 0.92;
+            const along = Math.max(0.05, (solid === "+x" ? sx : sz) * fill.fraction);
+            load.position.y = ay + tall / 2;
+            if (solid === "+x") {
+                load.scale.set(along, tall, sz * 0.94);
+                load.position.x = ax + sx / 2 - along / 2;
+            } else {
+                load.scale.set(sx * 0.94, tall, along);
+                load.position.z = az - sz / 2 + along / 2;
+            }
+            loadMaterial.color.setHex(FILL_COLOUR[fill.level]);
+            signEl.className = `world-badge world-badge--fill is-${fill.level}`;
+            signEl.textContent = title ? `${title} · ${fill.label}` : fill.label;
+        },
+        el: signEl,
+        dispose: () => {
+            parts.forEach((m) => m.geometry.dispose());
+            [frame, glassy, loadMaterial].forEach((m) => m.dispose());
+            vehicle.remove(sign);
+            signEl.remove();
+        },
+    };
+}
+
+/**
+ * The truck with a 40 ft container (places.ts CONTAINER), standing at CONTAINER_TRUCK along the street, cab to the
+ * east. The container is open-topped and see-through, its load reaching from the cab end as far as the consignment fills it.
+ */
+function makeContainerTruck(tone: THREE.Color, dark: THREE.Color): { truck: THREE.Group; hold: HoldFill } {
     const [length, width, height] = CONTAINER;
     const truck = new THREE.Group();
     truck.position.set(CONTAINER_TRUCK[0], 0, CONTAINER_TRUCK[1]);
     // Built cab to the north (-z); it stands along the street, cab to the east.
     truck.rotation.y = -Math.PI / 2;
     truck.add(mesh(new THREE.BoxGeometry(width, 0.3, length + 0.4), dark, 0, 1, 0));
-    truck.add(mesh(new THREE.BoxGeometry(width, height, length), new THREE.Color(0x2e86c1), 0, 1.15 + height / 2, 0));
+    const hold = openHold(truck, [width - 0.1, height - 0.1, length - 0.1], [0, 1.2, 0], new THREE.Color(0x2e86c1), "-z");
     truck.add(mesh(new THREE.BoxGeometry(width, 2.4, 2), tone, 0, 1.6, -length / 2 - 1.4));
     for (const z of [-length / 2 - 1.2, -length / 2 + 2, length / 2 - 2.5, length / 2 - 1]) for (const x of [-width / 2, width / 2]) {
         const wheel = mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.3, 12), dark, x, 0.5, z);
         wheel.rotation.z = Math.PI / 2;
         truck.add(wheel);
     }
-    return truck;
+    return { truck, hold };
 }
 
 /** Packaging tiers' cardboard colours: a carton is kraft brown, a box lighter, a bag sacking, a packet printed blue. */
@@ -3051,10 +3220,14 @@ function makeVehicle(kind: VehicleKind, paint: number, dark: THREE.Color, x: num
     return v;
 }
 
-/** A box van, 5.2 × 2 m, nose along +x: cab in the driver's colour, white body. */
-function makeVan(tone: THREE.Color, body: THREE.Color, dark: THREE.Color): THREE.Group {
+/**
+ * A box van, 5.2 × 2 m, nose along +x: cab in the driver's colour, and a white box body that is open-topped and
+ * see-through, so its load (how full the shipment makes it) shows from above.
+ */
+function makeVan(tone: THREE.Color, body: THREE.Color, dark: THREE.Color): { van: THREE.Group; hold: HoldFill } {
     const van = new THREE.Group();
-    van.add(mesh(new THREE.BoxGeometry(3.6, 2.2, 2), body.clone().lerp(new THREE.Color(0xffffff), 0.6), -0.8, 1.5, 0));
+    // The body: 3.6 × 2.2 × 2 m from x −2.6 to 1.0, its floor 0.4 m up.
+    const hold = openHold(van, [3.5, 2.1, 1.9], [-0.8, 0.44, 0], body.clone().lerp(new THREE.Color(0xffffff), 0.6), "+x");
     van.add(mesh(new THREE.BoxGeometry(1.5, 1.6, 1.9), tone, 1.75, 1.2, 0));
     van.add(mesh(new THREE.BoxGeometry(0.05, 0.7, 1.6), new THREE.Color(0x9fc3d6), 2.5, 1.55, 0));
     for (const x of [-1.8, 1.6]) for (const z of [-0.95, 0.95]) {
@@ -3062,7 +3235,7 @@ function makeVan(tone: THREE.Color, body: THREE.Color, dark: THREE.Color): THREE
         wheel.rotation.x = Math.PI / 2;
         van.add(wheel);
     }
-    return van;
+    return { van, hold };
 }
 
 /** A courier's motorbike, nose along +x, with its rider and the parcel box on the back. */

@@ -46,7 +46,7 @@ export default function SectionTabs() {
                     startIcon={<ArrowBackRounded />}
                     sx={{ borderRadius: 999, fontWeight: 700, flexShrink: 0 }}
                 >
-                    {allStores ? "Inventory" : activeStore.name}
+                    {allStores ? "All stores" : activeStore.name}
                 </Button>
                 <Typography noWrap variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
                     {group ? `${group.label} · ` : ""}

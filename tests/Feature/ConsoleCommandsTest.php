@@ -311,9 +311,12 @@ class ConsoleCommandsTest extends TestCase
         // An empty database: no store can sell anything, so nobody is made.
         $this->artisan('dev:demo-staff')->expectsOutputToContain('No store has enough priced items')->assertFailed();
 
-        config(['database.connections.sqlite.database' => 'duka_e2e']);
+        // The default connection's name, so the guard is tested on MySQL runs too.
+        $key = 'database.connections.'.config('database.default').'.database';
+        $database = config($key);
+        config([$key => 'duka_e2e']);
         $this->artisan('dev:demo-staff')->expectsOutputToContain('dev only')->assertFailed();
-        config(['database.connections.sqlite.database' => ':memory:']);
+        config([$key => $database]);
 
         $this->app['env'] = 'production';
         try {
