@@ -165,6 +165,38 @@ export function createPlayer(options: PlayerOptions): Player {
     goal.visible = false;
     scene.add(goal);
 
+    // The way there: dots on the ground from the worker through every corner to the goal, eaten up as they walk.
+    const TRAIL_STEP = 0.9;
+    const TRAIL_MAX = 400;
+    const trail = new THREE.InstancedMesh(
+        new THREE.CircleGeometry(0.13, 12).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: tone, transparent: true, opacity: 0.85, depthWrite: false }),
+        TRAIL_MAX,
+    );
+    trail.count = 0;
+    trail.frustumCulled = false;
+    scene.add(trail);
+    const dot = new THREE.Matrix4();
+    const drawTrail = () => {
+        let n = 0;
+        let [ax, az] = [root.position.x, root.position.z];
+        // Distance along the route: the first dot a little ahead of the feet, so none sits under the worker.
+        let travelled = 0;
+        let next = 0.6;
+        for (const [bx, bz] of path) {
+            const length = Math.hypot(bx - ax, bz - az);
+            for (; next <= travelled + length && n < TRAIL_MAX; next += TRAIL_STEP) {
+                const t = (next - travelled) / length;
+                dot.makeTranslation(ax + (bx - ax) * t, 0.05, az + (bz - az) * t);
+                trail.setMatrixAt(n++, dot);
+            }
+            travelled += length;
+            [ax, az] = [bx, bz];
+        }
+        trail.count = n;
+        trail.instanceMatrix.needsUpdate = true;
+    };
+
     // The stick, drawn over the canvas while a thumb holds it (styled by DukaWorld's .world-stick).
     const stickBase = document.createElement("div");
     stickBase.className = "world-stick";
@@ -242,6 +274,7 @@ export function createPlayer(options: PlayerOptions): Player {
     const stopWalkingTo = () => {
         path = [];
         goal.visible = false;
+        trail.count = 0;
     };
     const walkTo = (x: number, z: number) => {
         const found = findPath(grid, [root.position.x, root.position.z], [x, z]);
@@ -344,8 +377,8 @@ export function createPlayer(options: PlayerOptions): Player {
         if (view === "director") return;
         if (p.side === "right") {
             if (!p.look && Math.hypot(p.x - p.x0, p.y - p.y0) < TAP_SLOP) return;
+            // Looking round does not stop a walk: they keep going to the desk or spot while you turn the view.
             p.look = true;
-            stopWalkingTo();
             camYaw -= (p.x - lastX) * LOOK_RATE;
             if (view === "first") lookPitch = THREE.MathUtils.clamp(lookPitch - (p.y - lastY) * LOOK_RATE, -LOOK_LIMIT, LOOK_LIMIT);
             else elevation = THREE.MathUtils.clamp(elevation + (p.y - lastY) * LOOK_RATE, ELEVATION.min, ELEVATION.max);
@@ -561,13 +594,18 @@ export function createPlayer(options: PlayerOptions): Player {
             // radius could be overshot every frame, circling the corner for ever.
             if (left < Math.max(path.length === 1 ? 0.08 : 0.3, speed * dt)) {
                 path.shift();
-                if (path.length === 0) goal.visible = false;
+                if (path.length === 0) {
+                    goal.visible = false;
+                    trail.count = 0;
+                }
             } else {
                 heading.set(dx / left, 0, dz / left);
                 // Ease in to the last corner instead of overshooting it.
                 want = (fast() ? RUN : WALK) * (path.length === 1 ? Math.min(1, left / 0.8 + 0.25) : 1);
             }
         }
+
+        if (path.length > 0) drawTrail();
 
         const moving = want > 0;
         speed += (want - speed) * catchUp(10, dt);
@@ -682,7 +720,9 @@ export function createPlayer(options: PlayerOptions): Player {
         stickBase.remove();
         jumpButton.remove();
         controls.enabled = true;
-        scene.remove(root, goal);
+        scene.remove(root, goal, trail);
+        trail.geometry.dispose();
+        (trail.material as THREE.Material).dispose();
         // Labels riding on the figure (its name tag) are page elements: take them off the page too.
         root.traverse((o) => (o as unknown as { element?: HTMLElement }).element?.remove());
         [root, goal].forEach((group) => group.traverse((o) => {

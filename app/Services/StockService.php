@@ -15,6 +15,7 @@ use App\Models\Store\Store;
 use App\Models\Store\StoreVariant;
 use App\Services\Inventory\StockLocationTree;
 use App\Services\Inventory\StockPools;
+use App\Services\Workforce\LocalTime;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -320,7 +321,7 @@ class StockService
             }
 
             // 2. Generate transfer reference
-            $reference = 'TRF-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
+            $reference = 'TRF-' . LocalTime::now()->format('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
 
             // Ensure valid location IDs for legacy schema compatibility
             $fromLocationId = $fromVariant->store_id;

@@ -95,10 +95,8 @@ require __DIR__.'/web/stockkeeper/stockkeeper.php';              // ['auth', 've
 require __DIR__.'/web/vendor/vendor.php';                        // ['auth', 'verified', 'check_role:Vendor']
 
 /*-------------------------------------------------------------------------------------------------------------
-| STOREFRONT -> routes/web/storefront/storefront.php
+| STOREFRONT -> its routes (shop, cart, checkout, My orders) live in routes/web/user/user.php below
 |-------------------------------------------------------------------------------------------------------------*/
-
-// require __DIR__.'/web/storefront/storefront.php';                // public - no auth
 
 /*-------------------------------------------------------------------------------------------------------------
 | USER -> routes/web/user/user.php

@@ -13,7 +13,7 @@
 .DEFAULT_GOAL := help
 ARGS ?=
 
-.PHONY: help setup dev stop status test e2e e2e-ui artisan dev-from-prod compare-prod walkthrough walkthrough-ui walkthrough-report deploy-dev prod restore prod-stop prod-status logs backup sync tunnel env-keys
+.PHONY: help setup dev stop status test e2e e2e-ui sim sim-live sim-export sim-report artisan dev-from-prod compare-prod walkthrough walkthrough-ui walkthrough-report deploy-dev prod restore prod-stop prod-status logs backup sync tunnel env-keys
 
 # --- Deploy options -> flags of deploy/deploy-with-options.sh ---------------------------------
 DEPLOY_FLAGS = $(if $(FORCE_BUILD),-f) $(if $(NO_CACHE),--no-cache) $(if $(OBSERVABILITY),-o) \
@@ -72,6 +72,18 @@ walkthrough-ui: ## The walkthroughs in Playwright's window: numbered steps on th
 walkthrough-report: ## Replay the last walkthrough run: every step, screenshot and trace (kept on this Mac only)
 	npx playwright show-report playwright-report/walkthrough
 
+sim: ## A simulated shop week (~100,000 birr/day) on a copy of dev (duka_sim), served on :8097. Needs `make dev`
+	DAYS=$(DAYS) SEED=$(SEED) KEEP=$(KEEP) ./deploy/dev.sh sim
+
+sim-live: ## One command: build the simulated week if needed, serve it on :8097, open the world and play today live. Needs `make dev`
+	SPEED=$(SPEED) FRESH=$(FRESH) OPEN=$(OPEN) ./deploy/dev.sh sim-live
+
+sim-export: ## Record the simulated week as the world's Demo week (public/demo/world/): commit and deploy, and prod can watch it
+	DAYS=$(DAYS) ./deploy/dev.sh sim-export
+
+sim-report: ## Show the last simulated week's report: checks, and every step the app refused
+	@cat storage/app/sim/report.md
+
 e2e: ## Browser tests (Playwright) on a throwaway copy of the database. Needs `make dev` running
 	./deploy/dev.sh e2e $(if $(T),e2e/$(T)) $(ARGS)
 
@@ -109,6 +121,8 @@ prod-stop: ## Stop production on THIS node cleanly: tunnel off, last backup, han
 #@ RESET_DB=1 | WIPE the database: fresh migrate + seed. On prod also needs CONFIRM_WIPE=yes
 #@ CLEAN=1 | Remove containers AND volumes first (deletes the DB data). On prod also needs CONFIRM_WIPE=yes
 #@ ARGS="..." | Any other flag, passed straight through to the script
+#@ DAYS=7 SEED=1 KEEP=1 | sim: how many days, which week (same seed = same week), KEEP=1 serves the last sim without rebuilding it
+#@ SPEED=60 FRESH=1 OPEN=0 | sim-live: shop minutes per real minute (1 = real time); FRESH=1 builds a new week first; OPEN=0 does not open the browser
 #@ T=seller/checkout | e2e / e2e-ui: only the browser tests in that folder of e2e/ (see e2e/README.md)
 
 ##@ WHAT IS HAPPENING
@@ -138,6 +152,8 @@ tunnel: ## Only the live server keeps its Cloudflare tunnel up: run the guard no
 #> make prod OBSERVABILITY=1                  deploy with the monitoring stack
 #> make deploy-dev RESET_DB=1                 wipe and reseed the Docker DEV database
 #> make test ARGS="--filter SystemStatus"     run just the tests that match
+#> make sim                                   a simulated week on duka_sim; sign in as sim.manager@duka.test
+#> make sim-live                              everything at once: the week, the server, the world, today played live
 #> make e2e T=seller                          only the seller browser tests
 #> make e2e-ui T=seller/payments              one module, in Playwright's window
 #> make prod-status ARGS="--loss"             only the possible-data-loss list

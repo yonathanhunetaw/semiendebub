@@ -177,11 +177,11 @@ class StorefrontCartAndAccountTest extends TestCase
     }
 
     #[Test]
-    public function a_signed_in_shopper_with_stocked_items_gets_the_ready_message(): void
+    public function a_signed_in_shopper_with_stocked_items_goes_on_to_the_checkout_page(): void
     {
         $this->signedIn()->add(2);
 
-        $this->post(route('storefront.checkout'))->assertSessionHas('success');
+        $this->post(route('storefront.checkout'))->assertRedirect(route('storefront.checkout.show', array_filter(['store' => $this->store->slug])));
     }
 
     // ---- Signed-in pages ---------------------------------------------------

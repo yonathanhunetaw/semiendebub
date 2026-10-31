@@ -30,7 +30,7 @@ export function makeAvatar(tone: THREE.Color): THREE.Group {
     avatar.add(
         limb("legL", -0.115, 0.8, 0.21, 0.78, 0.24, TROUSERS),
         limb("legR", 0.115, 0.8, 0.21, 0.78, 0.24, TROUSERS),
-        block(0.48, 0.62, 0.26, tone, 1.11),
+        Object.assign(block(0.48, 0.62, 0.26, tone, 1.11), { name: "torso" }),
         limb("armL", -0.33, 1.4, 0.17, 0.62, 0.2, tone),
         limb("armR", 0.33, 1.4, 0.17, 0.62, 0.2, tone),
     );

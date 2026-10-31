@@ -357,6 +357,9 @@ export default function Show({
                     <Button variant="contained" component={Link} href={route("admin.items.setup", item.id)} sx={{ borderRadius: 2, fontWeight: "bold", textTransform: "none" }}>
                         Set up
                     </Button>
+                    <Button variant="outlined" component={Link} href={route("admin.items.labels", { items: item.id })} sx={{ borderRadius: 2, fontWeight: "bold", textTransform: "none" }}>
+                        Print labels
+                    </Button>
                     <Button
                         variant="contained"
                         startIcon={<AddBusinessIcon />}

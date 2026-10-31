@@ -273,3 +273,44 @@ export interface StorefrontBasket {
     item_count: number;
     subtotal: number;
 }
+
+/* ── Checkout and My orders (OnlineOrderService) ── */
+
+/** A store's collection account the shopper can pay into. */
+export interface CheckoutAccount {
+    id: number;
+    provider: string;
+    type: string;
+    account_name: string;
+    account_number: string;
+    owner: string | null;
+}
+
+/** One store's part of the checkout: it becomes one order. */
+export interface CheckoutStore {
+    store: { id: number; name: string; slug: string | null };
+    lines: Array<{ variant_id: number; title: string; detail: string | null; image_url: string | null; quantity: number; extra_pieces: number; line_total: number }>;
+    total: number;
+    requires_delay_agreement: boolean;
+    delayed_line_count: number;
+    accounts: CheckoutAccount[];
+}
+
+export interface CheckoutPageProps {
+    stores: CheckoutStore[];
+    only: string | null;
+    recipient: { name: string; phone: string; address: string | null };
+    hold_minutes: number;
+    delay_agreed: boolean;
+}
+
+/** A row of My orders. */
+export interface ShopperOrderRow {
+    reference: string;
+    store: string | null;
+    total: number;
+    stage: "to_pay" | "paid" | "packing" | "to_deliver" | "delivered" | "canceled";
+    placed_at: string | null;
+    item_count: number;
+    to_pay: boolean;
+}

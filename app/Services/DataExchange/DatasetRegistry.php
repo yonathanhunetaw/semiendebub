@@ -109,6 +109,7 @@ final class DatasetRegistry
             // Items
             // Store
             ['stores', 'Stores', 'Store', $m('Store\\Store'), 'The shops.', $setup],
+            ['business_settings', 'Business rules', 'Store', $m('Admin\\BusinessSetting'), 'The rules set in Settings → Business rules (empty = the default).', 'Export only: rules are changed on the Business rules screen'],
             ['store_variants', 'Store variants', 'Store', $m('Store\\StoreVariant'), 'What each store sells, and whether it is switched on.', 'Export only: stock and status are worked out by the app'],
             ['store_variant_seller_prices', 'Seller prices (per store)', 'Store', $m('Store\\StoreVariantSellerPrice'), 'Prices sellers charge, per store variant.', self::MONEY],
             ['store_variant_customer_prices', 'Customer prices (per store)', 'Store', $m('Store\\StoreVariantCustomerPrice'), 'Prices customers pay, per store variant.', self::MONEY],

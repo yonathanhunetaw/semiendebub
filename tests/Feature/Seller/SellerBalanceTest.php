@@ -229,7 +229,7 @@ class SellerBalanceTest extends TestCase
     }
 
     #[Test]
-    public function cash_held_past_three_days_is_flagged_oldest_first(): void
+    public function cash_held_past_the_flag_days_is_flagged_oldest_first(): void
     {
         $this->paidOrder(1, [['amount' => 100]]);
         $this->paidOrder(2, [['amount' => 200]]);

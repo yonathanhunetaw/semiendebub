@@ -157,6 +157,7 @@ class SellerOrderBoard
     {
         return $query->with([
             'customer',
+            'shopper',
             'store',
             'delivery.vehicle',
             'payments.account.owner',
@@ -279,7 +280,7 @@ class SellerOrderBoard
         $customer = $sale->customer;
 
         if (! $customer) {
-            return 'Walk-in customer';
+            return $sale->customerLabel();
         }
 
         $full = trim((string) ($customer->first_name . ' ' . $customer->last_name));

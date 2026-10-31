@@ -214,6 +214,8 @@ class StorefrontGuestCartMergeTest extends TestCase
         });
 
         $this->post(route('storefront.checkout'))->assertSessionHasErrors('accept_delayed_items');
-        $this->post(route('storefront.checkout'), ['accept_delayed_items' => true])->assertSessionHas('success');
+        // Agreed: on to the checkout page, which carries the agreement.
+        $this->post(route('storefront.checkout'), ['accept_delayed_items' => true])
+            ->assertRedirect(route('storefront.checkout.show', array_filter(['store' => $this->store->slug, 'agreed' => 1])));
     }
 }

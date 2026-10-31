@@ -13,7 +13,7 @@ import { alpha, useTheme } from "@mui/material/styles";
 import { setGame, useGame, type GameView } from "./gameStore";
 
 /**
- * Play's top bar: Practice or Live, the camera choice, and how to walk.
+ * Play's top bar: the jobs and desks (PlayLayer), Practice or Live, the camera choice, and how to walk.
  * Live shows only to someone who may do the job for real (permissions.ts),
  * and while it is on a red LIVE badge stays up.
  *
@@ -33,7 +33,7 @@ const VIEWS: { value: GameView; label: string; icon: React.ReactNode }[] = [
 
 /** How long the walking hint stays before it folds into the "?" button. */
 const HINT_MS = 8000;
-export default function GameHud({ canGoLive, onLive, inBar = null }: { canGoLive: boolean; onLive: (on: boolean) => void; inBar?: HTMLElement | null }) {
+export default function GameHud({ canGoLive, onLive, inBar = null, extra = null }: { canGoLive: boolean; onLive: (on: boolean) => void; inBar?: HTMLElement | null; /** The jobs and desks, first in the bar: one bar holds everything. */ extra?: React.ReactNode }) {
     const theme = useTheme();
     const game = useGame();
     const glass = alpha(theme.palette.background.paper, 0.92);
@@ -68,6 +68,7 @@ export default function GameHud({ canGoLive, onLive, inBar = null }: { canGoLive
                     ? <Chip size="small" color={live ? "error" : "info"} label={live ? "LIVE" : "Practice"} sx={{ fontWeight: 900, display: canGoLive ? "none" : "inline-flex" }} />
                     : <Chip size="small" color={live ? "error" : "info"} label={live ? "LIVE: drops make real records" : "Practice: nothing is saved"} sx={{ fontWeight: 900, display: { xs: "none", sm: "inline-flex" } }} />}
                 {live && !inBar && <Chip size="small" color="error" label="LIVE" sx={{ fontWeight: 900, display: { xs: "inline-flex", sm: "none" } }} />}
+                {extra}
                 {canGoLive && (
                     <ToggleButtonGroup size="small" exclusive value={live ? "live" : "practice"} disabled={game.saving} onChange={(_, next: string | null) => next && onLive(next === "live")} aria-label="Practice or Live">
                         <ToggleButton value="practice" sx={{ fontWeight: 800, px: compact ? 0.9 : 1.25, py: compact ? 0.4 : undefined, fontSize: compact ? "0.75rem" : undefined, textTransform: "none" }}>Practice</ToggleButton>

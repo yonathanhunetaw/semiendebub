@@ -545,6 +545,15 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
                         >
                             Set status
                         </Button>
+                        <Button
+                            size="small"
+                            color="inherit"
+                            component={Link}
+                            href={route("admin.items.labels", { items: [...selected].join(",") })}
+                            startIcon={<Icon name="qr_code_2" className="text-[18px]" />}
+                        >
+                            Labels
+                        </Button>
                         <Button size="small" color="inherit" onClick={() => setSelected(new Set())}>
                             Clear
                         </Button>
@@ -787,6 +796,12 @@ export default function ItemIndex({ items, counts = {}, categories = [], filters
                             <Icon name="checklist" />
                         </ListItemIcon>
                         <ListItemText>Set up (readiness)</ListItemText>
+                    </MenuItem>,
+                    <MenuItem key="labels" component={Link} href={route("admin.items.labels", { items: rowMenu.item.id })}>
+                        <ListItemIcon>
+                            <Icon name="qr_code_2" />
+                        </ListItemIcon>
+                        <ListItemText>Print labels</ListItemText>
                     </MenuItem>,
                     <Divider key="divider" />,
                     <ListSubheader key="status" sx={{ lineHeight: "32px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>

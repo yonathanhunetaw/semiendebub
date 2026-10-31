@@ -100,14 +100,14 @@ class OrderController extends Controller
             ->forStore($storeId)
             ->awaitingSourcing()
             ->whereKeyNot($exceptId)
-            ->with('customer')
+            ->with(['customer', 'shopper'])
             ->withCount('items')
             ->orderBy('updated_at')
             ->limit(20)
             ->get()
             ->map(fn (Sale $sale): array => [
                 'reference' => (string) $sale->reference_number,
-                'customer' => $sale->customer?->name ?? 'Walk-in',
+                'customer' => $sale->customerLabel('Walk-in'),
                 'lines' => (int) $sale->items_count,
                 'paid_at' => $sale->updated_at?->toIso8601String(),
             ])

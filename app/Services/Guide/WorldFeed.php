@@ -149,7 +149,7 @@ class WorldFeed
         }
 
         return Sale::query()
-            ->with(['payments.claimer:id,first_name', 'payments.confirmer:id,first_name', 'delivery.courier:id,first_name', 'seller:id,first_name', 'pickingStartedBy:id,first_name'])
+            ->with(['payments.claimer:id,first_name', 'payments.confirmer:id,first_name', 'delivery.courier:id,first_name', 'seller:id,first_name', 'pickingStartedBy:id,first_name', 'customer:id,first_name'])
             ->withCount('items')
             ->where('store_id', $storeId)
             ->where('created_at', '<=', $to)
@@ -177,7 +177,7 @@ class WorldFeed
             return [];
         }
 
-        return array_values(array_merge($this->transferEvents($from, $to), $this->countEvents($from, $to), $this->workEvents($from, $to, $viewer)));
+        return array_values(array_merge($this->transferEvents($from, $to), $this->countEvents($from, $to), $this->workEvents($from, $to, $viewer), $this->moneyEvents($from, $to, $viewer)));
     }
 
     /**
@@ -200,6 +200,7 @@ class WorldFeed
             }
         };
         $name = fn (?User $u, string $fallback): string => $u?->first_name ?: $fallback;
+        $person = fn (?User $u): ?array => self::person($u);
 
         // Sites: opened, closed, missed.
         SiteDay::query()
@@ -224,20 +225,22 @@ class WorldFeed
 
         // Clocking in and out.
         TimeEntry::query()
-            ->with(['user:id,first_name,store_id', 'site'])
+            ->with(['user:id,first_name,store_id,role', 'site'])
             ->where(fn ($q) => $q->whereBetween('clock_in_at', [$from, $to])->orWhereBetween('clock_out_at', [$from, $to]))
             ->orderBy('clock_in_at')
             ->limit(300)
             ->get()
-            ->each(function (TimeEntry $t) use ($emit, $name, $mine, $mainStoreId): void {
+            ->each(function (TimeEntry $t) use ($emit, $name, $mine, $mainStoreId, $person): void {
                 if (! $mine($t->user)) {
                     return;
                 }
+                // In the shop they clock in at the counter, where the counter screen's code is.
                 $where = $this->placeKey($t->site, $mainStoreId) ?? 'office';
+                $where = $where === 'store_floor' ? 'store_counter' : $where;
                 $site = (string) ($t->site?->name ?? 'work');
                 $who = $name($t->user, 'Someone');
-                $emit("clock-{$t->id}-in", $t->clock_in_at, "clock-{$t->id}", 'Clock-in', $who.' clocks in', $site, $where, 'seller');
-                $emit("clock-{$t->id}-out", $t->clock_out_at, "clock-{$t->id}", 'Clock-in', $who.' clocks out', $site, $where, 'seller', ['final' => true]);
+                $emit("clock-{$t->id}-in", $t->clock_in_at, "clock-{$t->id}", 'Clock-in', $who.' clocks in', $site, $where, 'seller', ['fx' => 'walk_in', 'actor' => $person($t->user)]);
+                $emit("clock-{$t->id}-out", $t->clock_out_at, "clock-{$t->id}", 'Clock-in', $who.' clocks out', $site, $where, 'seller', ['final' => true, 'fx' => 'walk_out', 'actor' => $person($t->user)]);
             });
 
         // Shift swaps.
@@ -263,23 +266,34 @@ class WorldFeed
 
         // Keys changing hands.
         KeyHandover::query()
-            ->with(['key.keyable', 'from:id,first_name,store_id', 'to:id,first_name,store_id'])
+            ->with(['key.keyable', 'from:id,first_name,store_id,role', 'to:id,first_name,store_id,role'])
             ->where(fn ($q) => $q->whereBetween('created_at', [$from, $to])->orWhereBetween('decided_at', [$from, $to]))
             ->orderBy('created_at')
             ->limit(200)
             ->get()
-            ->each(function (KeyHandover $h) use ($emit, $name, $mine): void {
+            ->each(function (KeyHandover $h) use ($emit, $name, $mine, $mainStoreId, $person): void {
                 if (! $mine($h->from) && ! $mine($h->to)) {
                     return;
                 }
                 $keyable = $h->key?->keyable;
                 $label = (string) ($keyable?->getAttribute('name') ?? $keyable?->getAttribute('plate_number') ?? $keyable?->getAttribute('plate') ?? 'a key');
                 $ref = 'Key · '.$label;
-                $emit("key-{$h->id}-claimed", $h->created_at, "key-{$h->id}", $ref, $name($h->from, 'Someone').' hands the key to '.$name($h->to, 'someone'), $label, 'office', 'seller');
+                // Where the key changes hands: the shop's key at its counter, a van's at the loading platform.
+                $where = match (true) {
+                    $keyable instanceof \App\Models\Fulfillment\Vehicle => 'platform',
+                    $keyable instanceof StockLocation => match ($this->placeKey($keyable, $mainStoreId)) {
+                        'store_floor' => 'store_counter',
+                        null => 'office',
+                        default => $this->placeKey($keyable, $mainStoreId),
+                    },
+                    default => 'office',
+                };
+                $hands = ['fx' => 'key', 'actor' => $person($h->from), 'target' => $person($h->to)];
+                $emit("key-{$h->id}-claimed", $h->created_at, "key-{$h->id}", $ref, $name($h->from, 'Someone').' hands the key to '.$name($h->to, 'someone'), $label, $where, 'seller', $hands);
                 if (in_array($h->status, [KeyHandover::STATUS_ACCEPTED, KeyHandover::STATUS_FORCED], true)) {
-                    $emit("key-{$h->id}-decided", $h->decided_at, "key-{$h->id}", $ref, $name($h->to, 'Someone').' has the key', $label, 'office', 'seller', ['final' => true]);
+                    $emit("key-{$h->id}-decided", $h->decided_at, "key-{$h->id}", $ref, $name($h->to, 'Someone').' has the key', $label, $where, 'seller', ['final' => true, 'fx' => 'confirm', 'actor' => $person($h->to)]);
                 } elseif ($h->status === KeyHandover::STATUS_REJECTED) {
-                    $emit("key-{$h->id}-decided", $h->decided_at, "key-{$h->id}", $ref, $name($h->to, 'Someone').' refuses the key', $label, 'office', 'seller', ['final' => true, 'bad' => true]);
+                    $emit("key-{$h->id}-decided", $h->decided_at, "key-{$h->id}", $ref, $name($h->to, 'Someone').' refuses the key', $label, $where, 'seller', ['final' => true, 'bad' => true]);
                 }
             });
 
@@ -323,6 +337,116 @@ class WorldFeed
             });
 
         return $out;
+    }
+
+    /**
+     * Money changing hands at the Main Store that is not an order's (those replay with the order): a credit
+     * customer paying back and the second person confirming it, a seller handing their cash to the manager,
+     * and money paid out of the till. Each carries who gives and who takes (name and role) and the
+     * amount, so the world can show the notes moving between them.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function moneyEvents(CarbonImmutable $from, CarbonImmutable $to, User $viewer): array
+    {
+        $storeId = $this->mainStoreFor($viewer);
+        if ($storeId === null) {
+            return [];
+        }
+
+        $out = [];
+        $emit = function (string $key, mixed $at, string $what, string $detail, array $extra) use (&$out, $from, $to): void {
+            if ($at !== null && $at >= $from && $at <= $to) {
+                $out[] = ['key' => $key, 'at' => $at->toIso8601String(), 'kind' => 'money', 'subject' => (int) crc32($key) & 0x7fffffff,
+                    'reference' => $extra['reference'] ?? 'Money', 'what' => $what, 'detail' => $detail, 'where' => 'store_counter', 'who' => $extra['who'] ?? 'seller'] + $extra;
+            }
+        };
+        $birr = fn (mixed $amount): string => number_format((float) $amount).' birr';
+        $how = fn (Payment $p): string => match ($p->payment_method) {
+            Payment::METHOD_CASH => 'cash',
+            Payment::METHOD_CREDIT => 'on credit',
+            Payment::METHOD_WALLET => 'by mobile money',
+            default => 'by bank transfer',
+        };
+
+        Payment::query()
+            ->with(['sale:id,reference_number,store_id,customer_id', 'customer:id,first_name,last_name,store_id', 'sale.customer:id,first_name,last_name', 'claimer:id,first_name,store_id,role', 'confirmer:id,first_name,store_id,role', 'user:id,first_name,store_id,role'])
+            ->where('status', '!=', Payment::STATUS_VOID)
+            ->where(fn ($q) => $q->whereBetween('created_at', [$from, $to])->orWhereBetween('claimed_at', [$from, $to])->orWhereBetween('confirmed_at', [$from, $to]))
+            // A sale's parts replay with its order (events.ts); here, credit paid back.
+            ->where('kind', Payment::KIND_REPAYMENT)
+            ->whereHas('customer', fn ($c) => $c->where('store_id', $storeId))
+            ->orderBy('id')
+            ->limit(1200)
+            ->get()
+            ->each(function (Payment $p) use ($emit, $birr, $how): void {
+                $customer = $p->sale?->customer ?? $p->customer;
+                $payer = ['name' => $customer ? trim($customer->first_name) : 'Walk-in', 'role' => 'customer'];
+                $taker = self::person($p->claimer ?? $p->user);
+                $ref = $p->sale?->reference_number ?? 'Repayment';
+                $what = $p->isRepayment() ? 'pays back' : 'pays';
+                $detail = $birr($p->amount).' '.$how($p);
+                $base = ['reference' => $ref, 'amount' => (float) $p->amount, 'method' => $p->payment_method];
+
+                if ($p->payment_method === Payment::METHOD_CREDIT) {
+                    $emit("pay-{$p->id}-credit", $p->created_at, "{$payer['name']} buys on credit: {$birr($p->amount)}", $detail, $base + ['fx' => 'confirm', 'actor' => $payer]);
+
+                    return;
+                }
+
+                // The money reaches the seller: cash over the counter when it is taken, a transfer when they say it arrived.
+                $paidAt = $p->payment_method === Payment::METHOD_CASH ? $p->created_at : $p->claimed_at;
+                $emit("pay-{$p->id}-paid", $paidAt, "{$payer['name']} {$what} ".($taker['name'] ?? 'the seller')." {$detail}", $detail, $base + ['fx' => 'money', 'actor' => $payer, 'target' => $taker, 'who' => 'customer']);
+
+                if ($p->status === Payment::STATUS_CONFIRMED && $p->confirmer !== null) {
+                    $emit("pay-{$p->id}-confirmed", $p->confirmed_at, "{$p->confirmer->first_name} confirms {$birr($p->amount)} {$how($p)}", $detail, $base + ['fx' => 'confirm', 'actor' => self::person($p->confirmer), 'who' => 'store_manager', 'final' => true]);
+                }
+                if ($p->rejected_at !== null) {
+                    $emit("pay-{$p->id}-rejected", $p->rejected_at, "The transfer is not there yet: {$birr($p->amount)} sent back to the seller", $detail, $base + ['bad' => true]);
+                }
+            });
+
+        \App\Models\Finance\Remittance::query()
+            ->with(['user:id,first_name,store_id,role', 'to.owner:id,first_name,store_id,role'])
+            ->whereIn('user_id', User::query()->where('store_id', $storeId)->select('id'))
+            ->where(fn ($q) => $q->whereBetween('created_at', [$from, $to])->orWhereBetween('confirmed_at', [$from, $to]))
+            ->orderBy('id')
+            ->limit(200)
+            ->get()
+            ->each(function (\App\Models\Finance\Remittance $r) use ($emit, $birr): void {
+                $owner = $r->to?->owner;
+                $base = ['reference' => 'Cash hand-over', 'amount' => (float) $r->amount, 'method' => 'cash'];
+                $emit("remit-{$r->id}-handed", $r->created_at, ($r->user?->first_name ?? 'A seller').' hands '.$birr($r->amount).' to '.($owner?->first_name ?? 'the manager'), 'The day\'s cash', $base + ['fx' => 'money', 'actor' => self::person($r->user), 'target' => self::person($owner)]);
+                if ($r->confirmed_at !== null) {
+                    $emit("remit-{$r->id}-confirmed", $r->confirmed_at, ($owner?->first_name ?? 'The manager').' counts it and confirms', $birr($r->amount), $base + ['fx' => 'confirm', 'actor' => self::person($owner), 'who' => 'store_manager', 'final' => true]);
+                }
+            });
+
+        \App\Models\Finance\Expense::query()
+            ->with('recorder:id,first_name,store_id,role')
+            ->where('store_id', $storeId)
+            ->whereBetween('created_at', [$from, $to])
+            ->orderBy('id')
+            ->limit(100)
+            ->get()
+            ->each(function (\App\Models\Finance\Expense $e) use ($emit, $birr): void {
+                $emit("expense-{$e->id}", $e->created_at, ($e->recorder?->first_name ?? 'Someone').' pays '.$birr($e->amount).' for '.$e->category.($e->paid_from_till ? ' from the till' : ''), (string) ($e->description ?? ucfirst((string) $e->category)),
+                    ['reference' => 'Expense', 'amount' => (float) $e->amount, 'fx' => 'money', 'actor' => self::person($e->recorder), 'target' => ['name' => ucfirst((string) $e->category), 'role' => 'supplier']]);
+            });
+
+        return $out;
+    }
+
+    /** A person as the world labels them: first name, and their role key (seller, store_manager, delivery…). */
+    private static function person(?User $user): ?array
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        $role = (string) ($user->getRawOriginal('role') ?? '');
+
+        return ['name' => (string) $user->first_name, 'role' => $role !== '' ? $role : 'staff'];
     }
 
     /**
@@ -451,6 +575,7 @@ class WorldFeed
             'items' => (int) ($sale->items_count ?? 0),
             'created_at' => $sale->created_at?->toIso8601String(),
             'seller' => $sale->seller?->first_name,
+            'customer' => $sale->customer?->first_name,
             'picker' => $sale->pickingStartedBy?->first_name,
             'courier' => $delivery?->courier?->first_name,
             'payments' => $sale->payments

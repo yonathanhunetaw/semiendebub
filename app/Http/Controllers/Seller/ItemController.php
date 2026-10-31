@@ -43,11 +43,8 @@ class ItemController extends Controller
             ]);
         }
 
-        $query = app(SellerCatalog::class)->query((int) $storeId);
-
-        if ($search) {
-            $query->where('product_name', 'LIKE', '%' . $search . '%');
-        }
+        // A name, or a scanned label / barcode.
+        $query = app(SellerCatalog::class)->matching(app(SellerCatalog::class)->query((int) $storeId), $search);
 
         $startTime = microtime(true);
         $perPage = 20;
@@ -111,8 +108,7 @@ class ItemController extends Controller
         // sees VAT-inclusive prices here too.
         $context = $catalog->cartContext($user, $request->integer('cart_id') ?: null);
 
-        $matching = fn () => $catalog->query((int) $storeId)
-            ->when($query !== '', fn ($q) => $q->where('product_name', 'LIKE', "%{$query}%"));
+        $matching = fn () => $catalog->matching($catalog->query((int) $storeId), $query);
 
         $paginator = $matching()
             ->when($selectedCategoryId, fn ($q) => $q->where('item_category_id', $selectedCategoryId))
@@ -153,11 +149,8 @@ class ItemController extends Controller
         $search = $request->filled('search') ? trim($request->search) : null;
         $cartId = $request->integer('cart_id') ?: null;
 
-        $query = app(SellerCatalog::class)->query((int) $storeId);
-
-        if ($search) {
-            $query->where('product_name', 'LIKE', '%' . $search . '%');
-        }
+        // A name, or a scanned label / barcode.
+        $query = app(SellerCatalog::class)->matching(app(SellerCatalog::class)->query((int) $storeId), $search);
 
         $paginator = $query->orderBy('product_name')->paginate($perPage, ['*'], 'page', $page);
 

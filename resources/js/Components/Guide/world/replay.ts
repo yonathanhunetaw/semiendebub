@@ -231,6 +231,7 @@ export interface WorldOrder {
     items: number;
     created_at: string | null;
     seller?: string | null;
+    customer?: string | null;
     picker?: string | null;
     courier?: string | null;
     payments: Array<{ method: string; status: string; amount: number; claimed_at: string | null; confirmed_at: string | null; claimed_by?: string | null; confirmed_by?: string | null }>;

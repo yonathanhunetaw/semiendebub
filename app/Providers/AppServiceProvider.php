@@ -26,6 +26,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(\App\Services\Admin\ActiveStore::class);
         // Remembers the stores it has read (with their managers) for the rest of the request.
         $this->app->scoped(\App\Services\Inventory\StockPermissions::class);
+        // Holds the config defaults the saved business rules replace (Settings → Business rules).
+        $this->app->singleton(\App\Services\Admin\BusinessRules::class);
 
         // The calendar's receipt reader (Claude; off until ANTHROPIC_API_KEY is set).
         $this->app->bind(\App\Services\Documents\ReceiptReader::class, \App\Services\Documents\ClaudeReceiptReader::class);
@@ -40,6 +42,9 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
         Vite::prefetch(concurrency: 3);
+
+        // The rules a global admin saved in Settings replace their config / .env values.
+        $this->app->make(\App\Services\Admin\BusinessRules::class)->apply();
 
         $this->registerPolicies();
         $this->registerObservers();

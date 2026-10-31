@@ -472,8 +472,12 @@ class VendorAppTest extends TestCase
             ->where('basket.item_count', 3)
             ->where('cart.item_count', 2));
 
-        $this->actingAs($shopper)->post("{$shop}/shop/checkout-all", [])
-            ->assertSessionHas('success', fn (string $message) => str_contains($message, '2 orders') && str_contains($message, $store->name) && str_contains($message, 'Main Store'));
+        // "Check out everything" goes on to one checkout page holding both stores: an order each.
+        $this->actingAs($shopper)->post("{$shop}/shop/checkout-all", [])->assertRedirect(route('storefront.checkout.show'));
+        $this->actingAs($shopper)->get("{$shop}/shop/checkout")->assertOk()->assertInertia(fn ($page) => $page
+            ->component('User/Checkout/Index')
+            ->has('stores', 2)
+            ->where('stores', fn ($stores) => collect($stores)->pluck('store.name')->sort()->values()->all() === collect([$store->name, 'Main Store'])->sort()->values()->all()));
     }
 
     #[Test]

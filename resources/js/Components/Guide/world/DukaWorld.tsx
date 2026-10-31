@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePage } from "@inertiajs/react";
-import { Box, Button, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Typography, useMediaQuery } from "@mui/material";
+import { Box, Button, Chip, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useMediaQuery } from "@mui/material";
 import CenterFocusStrongRounded from "@mui/icons-material/CenterFocusStrongRounded";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import SportsEsportsRounded from "@mui/icons-material/SportsEsportsRounded";
+import TheatersRounded from "@mui/icons-material/TheatersRounded";
 import ViewModuleRounded from "@mui/icons-material/ViewModuleRounded";
 import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
 import { alpha, useTheme, type Theme } from "@mui/material/styles";
@@ -20,7 +21,9 @@ import PlaceCard from "./PlaceCard";
 import SpotCard from "./SpotCard";
 import ShipmentCard from "./ShipmentCard";
 import Timeline, { PACE_MS, dayStart, isoDay, type Pace } from "./Timeline";
-import { CARD_KINDS, KIND_COLOR, buildEvents, hhmm, lastBefore, type EventKind, type FeedEvent, type WorldEvent } from "./events";
+import { CARD_KINDS, KIND_COLOR, buildEvents, hhmm, lastBefore, type EventFx, type EventKind, type EventPerson, type FeedEvent, type WorldEvent } from "./events";
+import { createEffects } from "./fx";
+import { SimBar, SimStart, type SimState } from "./SimControls";
 import {
     BAY_SIZE, COMPOUND, fenceRuns, CONTAINER, CONTAINER_TRUCK, CUSTOMER_BAYS, DROP, FLOOR_ZONES, FRONT, PALLET, STREET, VEHICLE, type VehicleKind, SIDE_OUT, PARKING, PLACES, PLATFORM_BERTH, ROADS, STORE, STORE_CORNER, rackSpan,
     palletCentres,
@@ -72,6 +75,11 @@ interface Highlight {
     where: PlaceKey | null;
     text: string;
     tone: string;
+    /** What the world acts out for it (fx.ts), and between whom. */
+    fx?: EventFx;
+    actor?: EventPerson | null;
+    target?: EventPerson | null;
+    amount?: number;
 }
 
 interface SceneApi {
@@ -99,6 +107,8 @@ interface SceneApi {
     viewStore: () => void;
     /** Light up an event; `fly` takes the camera there. */
     highlight: (h: Highlight | null, fly: boolean) => void;
+    /** Who is clocked in at the shop at the moment shown: they stand at their posts, role over the head, name at the feet. */
+    setCrew: (crew: EventPerson[]) => void;
     /** Play: put the worker in the world (game/PlayerController). Leaving puts the camera back. */
     enterPlay: (app: GuideApp, pose: PlayerPose, view: GameView, framing?: { distance: number; elevation: number }, name?: string | null) => void;
     exitPlay: () => void;
@@ -109,7 +119,7 @@ interface SceneApi {
 
 type Subject = { kind: EventKind; id: number };
 
-const ALL_KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order", "work"];
+const ALL_KINDS: EventKind[] = ["shipment", "transfer", "refill", "count", "order", "money", "work"];
 // The street, from the Suppliers at its west end to Admin at its east end, and the places along its north side.
 // Every place and the compound, and the street's ends: the zigzag is about 160 × 90 m.
 const SITE_BOUNDS = (() => {
@@ -191,6 +201,30 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const [refills, setRefills] = useState<WorldRefill[]>([]);
     const [fed, setFed] = useState<FeedEvent[]>([]);
     const [busyDays, setBusyDays] = useState<string[]>([]);
+    /**
+     * The Demo week: a simulated week of the Main Store (made-up people and customers), recorded by `make sim-export`
+     * into public/demo/world/. With it on, the world replays those files instead of the real shop: on prod too,
+     * so anyone can watch a whole week to understand how the business runs. Null until we know whether there is one.
+     */
+    const [demoDays, setDemoDays] = useState<string[] | null>(null);
+    const [demo, setDemo] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo") === "1");
+    /**
+     * A simulation the viewer started (SimControls): one of the demo days unfolding from the moment they pressed
+     * start, at their speed. `simClock` maps the real clock onto the day's clock while it runs (null when paused).
+     */
+    const [sim, setSim] = useState<SimState | null>(null);
+    const simClock = useRef<{ wallStart: number; from: number; speed: number } | null>(null);
+    /** A simulation is on (running, waiting for its day, or paused): the real clock must not drive the world then. */
+    const simOn = useRef(false);
+    simOn.current = sim !== null;
+    useEffect(() => {
+        let gone = false;
+        fetch("/demo/world/index.json", { headers: { Accept: "application/json" } })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((index: { days?: string[] } | null) => !gone && setDemoDays(Array.isArray(index?.days) ? index!.days : []))
+            .catch(() => !gone && setDemoDays([]));
+        return () => { gone = true; };
+    }, []);
     const [loading, setLoading] = useState(false);
 
     // The replay: the moment shown, the event it belongs to, and how we move.
@@ -214,14 +248,15 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const [focused, setFocused] = useState<Subject | null>(null);
     const [logOpen, setLogOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 900);
 
-    const isToday = day === isoDay(new Date());
+    // In the Demo week there is no "today": nothing is live, nothing is fetched again.
+    const isToday = !demo && day === isoDay(new Date());
     const start = dayStart(day);
 
     const allEvents = useMemo(() => buildEvents(shipments, orders, refills, fed), [shipments, orders, refills, fed]);
     const dayEvents = useMemo(() => allEvents.filter((e) => e.at >= start && e.at < start + 86_400_000), [allEvents, start]);
     const events = useMemo(() => dayEvents.filter((e) => kinds.includes(e.kind)), [dayEvents, kinds]);
     const counts = useMemo(() => {
-        const c: Record<EventKind, number> = { shipment: 0, order: 0, refill: 0, transfer: 0, count: 0, work: 0 };
+        const c: Record<EventKind, number> = { shipment: 0, order: 0, refill: 0, transfer: 0, count: 0, work: 0, money: 0 };
         dayEvents.forEach((e) => c[e.kind]++);
         return c;
     }, [dayEvents]);
@@ -234,6 +269,18 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         const sites = dayEvents.filter((e) => e.kind === "work" && e.key.startsWith("site-") && e.where === "store_floor" && e.at <= time);
         const last = sites[sites.length - 1];
         return last ? last.key.endsWith("-opened") : null;
+    }, [dayEvents, time]);
+
+    /** Who is in the shop at the moment shown: clocked in at the counter and not yet out. */
+    const crewKey = useMemo(() => {
+        const inShop = new Map<string, EventPerson>();
+        for (const e of dayEvents) {
+            if (e.at > time) break;
+            if (e.kind !== "work" || !e.actor || e.where !== "store_counter") continue;
+            if (e.fx === "walk_in") inShop.set(e.actor.name, e.actor);
+            else if (e.fx === "walk_out") inShop.delete(e.actor.name);
+        }
+        return JSON.stringify([...inShop.values()]);
     }, [dayEvents, time]);
 
     // Refs for the clock loop and the callbacks it runs.
@@ -304,6 +351,32 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     useEffect(() => apiRef.current?.setContainers(containers), [containers, theme.palette.mode]);
     useEffect(() => apiRef.current?.setOrders(orders), [orders, theme.palette.mode]);
     useEffect(() => apiRef.current?.setRefills(refills), [refills, theme.palette.mode]);
+    useEffect(() => apiRef.current?.setCrew(JSON.parse(crewKey) as EventPerson[]), [crewKey, theme.palette.mode]);
+
+    // The simulation: its clock starts once its day has loaded, a few minutes before the day's first event.
+    useEffect(() => {
+        if (!sim?.running || simClock.current || loadedDay !== sim.day || events.length === 0) return;
+        const from = events[0].at - 3 * 60_000;
+        simClock.current = { wallStart: performance.now(), from, speed: sim.speed };
+        setTime(from);
+    }, [sim, loadedDay, events]);
+    // Stepping to an event yourself pauses it (Resume carries on from there); the day's end stops it.
+    useEffect(() => {
+        if (sim?.running && simClock.current && !live) {
+            simClock.current = null;
+            setSim((s) => (s ? { ...s, running: false } : s));
+        }
+    }, [live, sim?.running]);
+    useEffect(() => {
+        if (!sim?.running || !simClock.current || events.length === 0) return;
+        // Only the simulation's own time counts (the first frame after starting may still hold the real clock's).
+        const c = simClock.current;
+        if (time < c.from || time > c.from + (performance.now() - c.wallStart) * c.speed + 60_000) return;
+        if (time > events[events.length - 1].at + 60_000) {
+            simClock.current = null;
+            setSim((s) => (s ? { ...s, running: false, over: true } : s));
+        }
+    }, [time, sim?.running, events]);
 
     // The catalogue the hubs hold: one box per item, fetched once (it changes only as items are added).
     const [catalogue, setCatalogue] = useState<CatalogueItem[]>([]);
@@ -439,7 +512,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     useEffect(() => {
         const tone = current ? (current.bad ? theme.palette.error.main : theme.palette[KIND_COLOR[current.kind]].main) : "";
         apiRef.current?.highlight(
-            current ? { kind: current.kind, subject: current.subject, where: current.where, text: `${hhmm(current.at)} · ${current.what}`, tone } : null,
+            current ? { kind: current.kind, subject: current.subject, where: current.where, text: `${hhmm(current.at)} · ${current.what}`, tone, fx: current.fx, actor: current.actor, target: current.target, amount: current.amount } : null,
             follow && current !== null,
         );
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -455,7 +528,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     const load = useCallback(async (which: string) => {
         setLoading(true);
         try {
-            const url = route(`${app}.guide.world`, { from: which, to: which });
+            const url = demo ? `/demo/world/${which}.json` : route(`${app}.guide.world`, { from: which, to: which });
             const response = await fetch(url, { headers: { Accept: "application/json" }, credentials: "same-origin" });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = (await response.json()) as { shipments: WorldShipment[]; containers?: WorldContainer[]; orders?: WorldOrder[]; refills?: WorldRefill[]; events?: FeedEvent[]; days: string[] };
@@ -464,18 +537,31 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
             setOrders(data.orders ?? []);
             setRefills(data.refills ?? []);
             setFed(data.events ?? []);
-            setBusyDays(data.days);
+            setBusyDays(demo ? demoDays ?? [] : data.days);
             setLoadedDay(which);
         } catch (error) {
             console.warn("Live Operations: could not load the day.", error);
         } finally {
             setLoading(false);
         }
-    }, [app]);
+    }, [app, demo, demoDays]);
 
     useEffect(() => {
+        // A demo day waits for the list of demo days; a link straight to ?demo=1 picks its first.
+        if (demo && demoDays === null) return;
+        if (demo && demoDays && !demoDays.includes(day)) {
+            if (demoDays.length > 0) {
+                setDay(demoDays[0]);
+                setLive(false);
+                setTime(dayStart(demoDays[0]));
+                setPlaying(true);
+            } else setDemo(false);
+            return;
+        }
+        if (demo && live && !sim) setLive(false);
         void load(day);
-    }, [day, load]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [day, load, demo, demoDays]);
 
     useEffect(() => {
         if (!isToday) return;
@@ -501,6 +587,67 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         tween.current = { from, to, start: performance.now(), ms };
     }, [reducedMotion]);
 
+    /** Into the Demo week at its first day, playing; or back out to the real shop, live. */
+    const toggleDemo = (on: boolean) => {
+        tween.current = null;
+        simClock.current = null;
+        setSim(null);
+        setFocused(null);
+        setCursor(null);
+        setDemo(on);
+        if (on && demoDays && demoDays.length > 0) {
+            setDay(demoDays[0]);
+            setLive(false);
+            setTime(dayStart(demoDays[0]));
+            setPlaying(true);
+        } else if (!on) {
+            setDay(isoDay(new Date()));
+            setLive(true);
+            setPlaying(false);
+            setTime(Date.now());
+        }
+    };
+
+    const startSim = (simDay: string, speed: number) => {
+        tween.current = null;
+        simClock.current = null;
+        setFocused(null);
+        setCursor(null);
+        setLoadedDay(null);
+        setDemo(true);
+        setDay(simDay);
+        setPlaying(false);
+        setLive(true);
+        setSim({ day: simDay, speed, running: true, over: false });
+    };
+    const pauseSim = () => {
+        simClock.current = null;
+        setSim((s) => (s ? { ...s, running: false } : s));
+        setLive(false);
+    };
+    const resumeSim = (speed?: number) => {
+        if (!sim) return;
+        const pace = speed ?? sim.speed;
+        simClock.current = { wallStart: performance.now(), from: timeRef.current, speed: pace };
+        setSim({ ...sim, speed: pace, running: true, over: false });
+        setPlaying(false);
+        setLive(true);
+    };
+    const speedSim = (speed: number) => {
+        if (!sim) return;
+        if (sim.running) resumeSim(speed);
+        else setSim({ ...sim, speed });
+    };
+    const stopSim = () => {
+        simClock.current = null;
+        setSim(null);
+        toggleDemo(false);
+    };
+    const anotherSim = () => {
+        if (!sim || !demoDays?.length) return;
+        startSim(demoDays[(demoDays.indexOf(sim.day) + 1) % demoDays.length], sim.speed);
+    };
+
     const goLive = useCallback(() => {
         tween.current = null;
         setDay(isoDay(new Date()));
@@ -523,7 +670,14 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                     tween.current = null;
                     setArrivals((a) => a + 1);
                 }
-            } else if (liveRef.current && now - lastLive > 500) {
+            } else if (liveRef.current && simClock.current) {
+                // The simulation's clock: the day's time, running at its speed from when it started.
+                if (now - lastLive > 100) {
+                    lastLive = now;
+                    const c = simClock.current;
+                    setTime(c.from + (now - c.wallStart) * c.speed);
+                }
+            } else if (liveRef.current && !simOn.current && now - lastLive > 500) {
                 lastLive = now;
                 setTime(Date.now());
             }
@@ -538,9 +692,11 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
     useEffect(() => {
         const key = pendingEvent.current;
         if (!key || loadedDay !== day) return;
-        pendingEvent.current = null;
+        // Not there yet (part of the day still loading): keep waiting for it.
         const index = events.findIndex((e) => e.key === key);
-        if (index >= 0) goTo(index);
+        if (index < 0) return;
+        pendingEvent.current = null;
+        goTo(index);
     }, [events, loadedDay, day, goTo]);
 
     // The address names the day and event on screen, so it can be shared; live needs neither.
@@ -554,12 +710,15 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
             if (current) url.searchParams.set("event", current.key);
             else url.searchParams.delete("event");
         }
+        if (demo) url.searchParams.set("demo", "1");
+        else url.searchParams.delete("demo");
         window.history.replaceState(window.history.state, "", url.toString());
-    }, [live, isToday, day, current]);
+    }, [live, isToday, day, current, demo]);
     useEffect(() => () => {
         const url = new URL(window.location.href);
         url.searchParams.delete("day");
         url.searchParams.delete("event");
+        url.searchParams.delete("demo");
         window.history.replaceState(window.history.state, "", url.toString());
     }, []);
 
@@ -592,11 +751,15 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
         setPlaying(on);
     };
 
-    const chooseDay = (next: string) => {
+    const chooseDay = (picked: string) => {
+        let next = picked;
         tween.current = null;
         setFocused(null);
         setCursor(null);
-        if (next === isoDay(new Date())) {
+        if (demo && demoDays) {
+            // Only the recorded days: the nearest one at or after the day picked (else the last).
+            next = demoDays.find((d) => d >= next) ?? demoDays[demoDays.length - 1] ?? next;
+        } else if (next === isoDay(new Date())) {
             goLive();
             return;
         }
@@ -788,6 +951,10 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                 "& .world-badge--find": { bgcolor: "#ffc21a", color: "#1d1309", border: "2px solid #1d1309", fontWeight: 900, fontSize: "0.78rem", px: 1, py: 0.2, boxShadow: 3 },
                 // A first name over a person's head.
                 "& .world-badge--name": { bgcolor: glass, color: "text.primary", border: "2px solid", borderColor: "divider", fontSize: "0.72rem", px: 1, py: 0.1, transform: "translateY(-4px)" },
+                // The people of an event and the crew (fx.ts): the role over the head in its colour, the name at the feet.
+                "& .world-badge--role": { bgcolor: "var(--tone)", color: "#fff", fontSize: "0.66rem", px: 0.9, textTransform: "uppercase", letterSpacing: "0.04em", textShadow: "0 1px 1px rgba(0,0,0,.35)" },
+                "& .world-badge--person": { bgcolor: glass, color: "text.primary", border: "2px solid var(--tone, transparent)", fontSize: "0.74rem", fontWeight: 900, px: 1, transform: "translateY(10px)" },
+                "& .world-badge--money": { bgcolor: "#2e9e5b", color: "#fff", fontSize: "0.8rem", fontWeight: 900, px: 1, py: 0.2, boxShadow: 3 },
                 // Play's job zones (game/zones.ts): a sign over each, brighter where the worker stands.
                 "& .world-badge--zone": { bgcolor: glass, color: "text.primary", border: "2px solid", borderColor: "divider", fontSize: "0.7rem", "&.is-active": { bgcolor: "primary.main", color: "primary.contrastText", borderColor: "primary.main" } },
                 // What just happened, floating over where it happened.
@@ -880,11 +1047,30 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                         <CloseRounded />
                     </IconButton>
                     <Typography sx={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: { xs: "1rem", sm: "1.15rem" }, textShadow: `0 1px 0 ${theme.palette.background.paper}` }} noWrap>
-                        Live Operations
+                        {sim ? "Simulation" : demo ? "Demo week" : "Live Operations"}
                     </Typography>
+                    {sim && !playing3d && (
+                        <SimBar sim={sim} clock={hhmm(time)} onSpeed={speedSim} onPause={pauseSim} onResume={() => resumeSim()} onStop={stopSim} onAnother={anotherSim} />
+                    )}
+                    {demo && !sim && (
+                        <Tooltip title="A simulated week of the Main Store: made-up staff and customers, recorded to show how the business runs. Nothing here is real.">
+                            <Chip size="small" color="secondary" label="Demo · made-up shop" sx={{ pointerEvents: "auto", fontWeight: 900, display: { xs: "none", sm: "inline-flex" } }} />
+                        </Tooltip>
+                    )}
                     {/* Wider than tall: Play's camera and Practice/Live controls ride here (PlayLayer fills this slot). */}
                     <Box ref={setBarSlot} sx={{ display: playing3d && landscape ? "flex" : "none", alignItems: "center", minWidth: 0, flexShrink: 1, pointerEvents: "none" }} />
-                    {!failed && (
+                    {/* The simulation: anyone can start one (a recorded day unfolding from now); or browse the whole week. */}
+                    {!playing3d && (demoDays?.length ?? 0) > 0 && !sim && !demo && (
+                        <SimStart days={demoDays!} onStart={startSim} onBrowse={() => toggleDemo(true)} />
+                    )}
+                    {!playing3d && demo && !sim && (
+                        <Button onClick={() => toggleDemo(false)} startIcon={<TheatersRounded />} title="Back to the real shop, live"
+                            sx={{ pointerEvents: "auto", borderRadius: 999, fontWeight: 800, textTransform: "none", boxShadow: 2, minWidth: 0, bgcolor: "secondary.main", color: "secondary.contrastText", "&:hover": { bgcolor: "secondary.dark" }, "& .MuiButton-startIcon": { mr: { xs: 0, sm: 1 } } }}>
+                            <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Leave demo</Box>
+                        </Button>
+                    )}
+                    {/* Play is the real shop's jobs: not in the Demo week. */}
+                    {!failed && !demo && (
                         <Button onClick={() => setGame({ mode: playing3d ? "watch" : "play" })} aria-label={playing3d ? "Back to watching" : "Play as a worker"} startIcon={playing3d ? <VisibilityRounded /> : <SportsEsportsRounded />}
                             sx={{ pointerEvents: "auto", borderRadius: 999, fontWeight: 800, textTransform: "none", bgcolor: glass, boxShadow: 2, color: "text.primary", "&:hover": { bgcolor: "background.paper" } }}>
                             {playing3d ? "Watch" : "Play"}
@@ -962,7 +1148,7 @@ export default function DukaWorld({ app, onOpenChapter, onClose }: { app: GuideA
                         onPace={setPace}
                         live={live && isToday}
                         isToday={isToday}
-                        onLive={goLive}
+                        onLive={demo ? () => toggleDemo(false) : goLive}
                         follow={follow}
                         onFollow={setFollow}
                         logOpen={logOpen}
@@ -1166,6 +1352,8 @@ function buildWorld(
     store.floor.userData.placeKey = "store_floor";
     pickables.push(store.floor);
     const people: Array<{ mesh: THREE.Object3D; phase: number; base: number }> = [];
+    // The standing figures at the shop's own places: they step aside while the real crew is there (fx.ts).
+    const shopFigures: THREE.Object3D[] = [];
 
     for (const place of PLACES) {
         const tone = toneOf(place.roles[0]);
@@ -1236,6 +1424,7 @@ function buildWorld(
             }
             group.add(person);
             people.push({ mesh: person, phase: Math.random() * Math.PI * 2, base: person.position.y });
+            if (place.key === "store_counter" || place.key === "store_floor" || place.key === "store_shelf") shopFigures.push(person);
         });
 
         group.traverse((object) => {
@@ -1614,6 +1803,8 @@ function buildWorld(
     callout.visible = false;
     scene.add(callout);
     let lit: Highlight | null = null;
+    // What the shown event acts out (fx.ts): notes, a key, cartons, a parcel, someone walking in; and who is on duty in the shop.
+    const effects = createEffects(scene, toneOf, reducedMotion);
 
     /** Where an event at a place is shown: in front of a hub's door, on the store floor, at the counter… */
     const placeAnchor = (key: PlaceKey): THREE.Vector3 => {
@@ -1984,8 +2175,13 @@ function buildWorld(
             shelfFaces.forEach((face) => face.setBins(placed));
             paintShelfBoxes(bins, placed);
         },
+        setCrew: (crew) => {
+            effects.setCrew(crew);
+            shopFigures.forEach((f) => (f.visible = crew.length === 0));
+        },
         enterPlay: (app, pose, view, framing, name) => {
             if (game) return;
+            effects.play(null, null);
             flight = null;
             beforePlay = { camera: camera.position.clone(), target: controls.target.clone() };
             game = createGameScene({
@@ -2120,6 +2316,7 @@ function buildWorld(
         },
         highlight: (h, fly) => {
             lit = h;
+            effects.play(h && h.fx && !game ? { fx: h.fx, where: h.where, actor: h.actor, target: h.target, amount: h.amount } : null, h ? anchorOf(h) ?? (h.where ? placeAnchor(h.where) : null) : null);
             marker.visible = callout.visible = h !== null;
             if (!h) return;
             markerMaterial.color.set(h.tone);
@@ -2130,6 +2327,15 @@ function buildWorld(
             calloutText.style.animation = "none";
             void calloutText.offsetWidth;
             calloutText.style.animation = "";
+            // Inside the shop: from above, inside its walls and clear of the racks hanging over the door, looking steeply
+            // down on the counter (and the door too, for someone walking in or out).
+            if (fly && h.where && ["store_counter", "store_floor", "store_shelf"].includes(h.where)) {
+                const at = placeAnchor(h.where);
+                if (h.fx === "walk_in" || h.fx === "walk_out") at.z += 3.5;
+                awayFromHome = true;
+                flyTo(at, new THREE.Vector3(at.x + 0.6, 12.5, at.z + 6.2));
+                return;
+            }
             if (fly) {
                 const at = (h.where ? placeAnchor(h.where) : null) ?? anchorOf(h);
                 if (at) {
@@ -2215,7 +2421,8 @@ function buildWorld(
         const nearStore = Math.hypot(camera.position.x - storeX, camera.position.z - storeZ) < 26 && camera.position.y < 40;
         // Through the worker's eyes the shop is a room: its walls stand solid.
         const inside = game?.isFirstPerson() ?? false;
-        const wantFade = !inside && (eyeLevel || nearStore || selectedKey === "store_shelf" || selectedKey === "store_floor" || selectedKey === "store_counter");
+        // And when the event shown happens inside the shop (a payment, a clock-in, a key at the counter): you see it, not the wall.
+        const wantFade = !inside && (eyeLevel || nearStore || effects.inShop() || (lit?.where != null && ["store_shelf", "store_floor", "store_counter"].includes(lit.where)) || selectedKey === "store_shelf" || selectedKey === "store_floor" || selectedKey === "store_counter");
         wallFade += ((wantFade ? 1 : 0) - wallFade) * (reducedMotion ? 1 : 0.12);
         const faded = wallFade > 0.02;
         if (store.wallMaterial.transparent !== faded) {
@@ -2243,6 +2450,7 @@ function buildWorld(
         }
 
         if (!reducedMotion) for (const p of people) p.mesh.position.y = p.base + Math.max(0, Math.sin(time * 3 + p.phase)) * 0.12;
+        if (!game) effects.update(time, Math.min(0.1, elapsed));
 
         if (!gameCamera) controls.update();
         renderer.render(scene, camera);
@@ -2255,6 +2463,7 @@ function buildWorld(
         disposed = true;
         cancelAnimationFrame(frame);
         game?.dispose();
+        effects.dispose();
         resize.disconnect();
         renderer.domElement.removeEventListener("pointermove", onMove);
         renderer.domElement.removeEventListener("pointerdown", onDown);

@@ -81,6 +81,7 @@ class Sale extends Model
         'customer_id',
         'seller_id',
         'user_id',
+        'shopper_id',
         'subtotal',
         'tax_amount',
         'discount_amount',
@@ -164,6 +165,37 @@ class Sale extends Model
         return $this->belongsTo(Cart::class, 'cart_id');
     }
 
+    /** The signed-in shopper, when the order was placed in the online shop. */
+    public function shopper(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'shopper_id');
+    }
+
+    public function isOnline(): bool
+    {
+        return $this->shopper_id !== null;
+    }
+
+    /**
+     * Who the order is for, as a list shows it: the customer, else the online
+     * shopper ("Online · Abebe Kebede"), else a walk-in. Load `customer` and
+     * `shopper` with the list to avoid a query each.
+     */
+    public function customerLabel(string $walkIn = 'Walk-in customer'): string
+    {
+        if ($this->customer !== null) {
+            return (string) $this->customer->name;
+        }
+
+        if ($this->shopper_id !== null) {
+            $name = trim((string) ($this->shopper?->first_name.' '.$this->shopper?->last_name));
+
+            return 'Online · '.($name !== '' ? $name : 'shopper');
+        }
+
+        return $walkIn;
+    }
+
     /*
     |--------------------------------------------------------------------------
     | Scopes
@@ -183,6 +215,12 @@ class Sale extends Model
     public function scopeForStore(Builder $query, int $storeId): Builder
     {
         return $query->where('store_id', $storeId);
+    }
+
+    /** The online shop's orders of one shopper. */
+    public function scopeForShopper(Builder $query, int $userId): Builder
+    {
+        return $query->where('shopper_id', $userId);
     }
 
     public function scopeForCustomer(Builder $query, int $customerId): Builder

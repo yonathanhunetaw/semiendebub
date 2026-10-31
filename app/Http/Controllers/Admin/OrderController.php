@@ -42,7 +42,7 @@ class OrderController extends Controller
         $search = trim($request->string('search')->toString());
 
         $paginator = $activeStore->apply(Sale::query())
-            ->with(['store', 'customer', 'delivery'])
+            ->with(['store', 'customer', 'shopper', 'delivery'])
             ->when(isset(self::STAGE_FILTER[$stage]), fn ($q) => $q->whereIn('fulfillment_stage', self::STAGE_FILTER[$stage]))
             ->when($search !== '', fn ($q) => $q->where('reference_number', 'like', "%{$search}%"))
             // Orders still on their way are always listed; the period narrows the finished ones.
@@ -59,7 +59,7 @@ class OrderController extends Controller
                 'id' => (int) $sale->id,
                 'reference' => (string) $sale->reference_number,
                 'store' => $sale->store?->name,
-                'customer' => $sale->customer?->name ?? $sale->delivery?->recipient_name ?? 'Walk-in customer',
+                'customer' => $sale->customer?->name ?? ($sale->isOnline() ? $sale->customerLabel() : null) ?? $sale->delivery?->recipient_name ?? 'Walk-in customer',
                 'stage' => $board->stageFor($sale->fulfillment_stage, $sale->payment_status, false),
                 'payment_status' => (string) $sale->payment_status,
                 'total' => (float) $sale->total_amount,

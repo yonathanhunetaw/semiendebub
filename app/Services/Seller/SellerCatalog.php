@@ -106,6 +106,17 @@ class SellerCatalog
     }
 
     /**
+     * Narrow to a search: part of the name, or an exact barcode / SKU (a scanned label).
+     */
+    public function matching(Builder $query, ?string $term): Builder
+    {
+        $term = trim((string) $term);
+
+        return $term === '' ? $query : $query->where(fn ($q) => $q->where('product_name', 'LIKE', '%'.$term.'%')
+            ->orWhereHas('variants', fn ($v) => $v->where('barcode', $term)->orWhere('sku', $term)));
+    }
+
+    /**
      * The cart prices are quoted for, and what it means for VAT. That is the
      * requested cart when the seller can see it and it is still open,
      * otherwise their highest-priority open cart. No cart at all, a cart with

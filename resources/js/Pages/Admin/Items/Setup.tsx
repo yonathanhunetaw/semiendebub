@@ -136,7 +136,7 @@ export default function Setup({ item, options, catalog, readiness, stores, wareh
                 </Section>
 
                 <Typography variant="caption" color="text.secondary">
-                    <Link href={route("admin.items.show", item.id)}>Item details</Link> · {percentOf(readiness.item.checks)}% of the item's own checks done.
+                    <Link href={route("admin.items.show", item.id)}>Item details</Link> · <Link href={route("admin.items.labels", { items: item.id })}>Print labels</Link> · {percentOf(readiness.item.checks)}% of the item's own checks done.
                 </Typography>
             </Stack>
         </>

@@ -126,9 +126,13 @@ export default function StorefrontMenuDrawer({
                                 onOpenCart();
                             }}
                         />
-                        {/* No messaging feature exists yet — present for parity
-                            with the phone bar, but inert rather than a dead link. */}
-                        <DrawerRow label="Messages" icon="chat" disabled />
+                        {/* The shopper's orders, as on the phone bar. */}
+                        <DrawerRow
+                            label="My orders"
+                            icon="receipt_long"
+                            href={isAuthenticated ? route("storefront.orders.index") : route("login")}
+                            onClick={onClose}
+                        />
                         <DrawerRow
                             label={isAuthenticated ? "My account" : "Sign in"}
                             icon="person"

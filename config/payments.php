@@ -56,6 +56,6 @@ return [
     |
     */
 
-    'cash_flag_days' => (int) env('PAYMENTS_CASH_FLAG_DAYS', 3),
+    'cash_flag_days' => (int) env('PAYMENTS_CASH_FLAG_DAYS', 2),
 
 ];

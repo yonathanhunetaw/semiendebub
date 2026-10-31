@@ -141,6 +141,8 @@ Route::domain("admin.{$baseDomain}")
             Route::patch('items/{item}/status', [ItemController::class, 'updateStatus'])->name('items.updateStatus');
             // Before the resource, or PATCH items/{item} would claim it.
             Route::patch('items/bulk-status', [ItemController::class, 'bulkUpdateStatus'])->name('items.bulkStatus');
+            // QR labels to print (?items=1,2,3); before the resource, or GET items/{item} would claim it.
+            Route::get('items/labels', [\App\Http\Controllers\Admin\ItemLabelsController::class, 'show'])->name('items.labels');
             /*
              * `items/{item}/variants/{variant}/status` used to live here,
              * pointing at ItemController::updateVariantStatus(). That method was
@@ -189,6 +191,9 @@ Route::domain("admin.{$baseDomain}")
             // Users, sessions and the system status live under Settings, for global admins only (never a tick).
             Route::middleware('admin.global')->group(function () {
                 Route::get('system', SystemStatusController::class)->name('system.index');
+                // Business rules: the .env-only rules (stock holds, cash flag, archive, the shop) set in the app.
+                Route::get('settings/rules', [\App\Http\Controllers\Admin\BusinessRulesController::class, 'index'])->name('settings.rules');
+                Route::put('settings/rules', [\App\Http\Controllers\Admin\BusinessRulesController::class, 'update'])->name('settings.rules.update');
                 // Import / Export: every module's data as CSV, and the safe ones back in (Settings tab).
                 Route::controller(\App\Http\Controllers\Admin\DataExchangeController::class)->prefix('data')->name('data.')->group(function () {
                     Route::get('/', 'index')->name('index');

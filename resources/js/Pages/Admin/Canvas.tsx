@@ -751,7 +751,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                         const sheets = await readXlsxFile(file);
                         for (const { sheet, data } of sheets) {
                             placeSheetGrid(editor, `${file.name} · ${sheet}`, data, point);
-                            const placed = editor.getSelectedPageBounds();
+                            const placed = editor.getSelectionPageBounds();
                             if (placed) point = { x: point.x, y: placed.maxY + 40 };
                         }
                         continue;
@@ -761,7 +761,7 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
                     continue;
                 }
                 // Stack each next file below the one just placed
-                const placed = editor.getSelectedPageBounds();
+                const placed = editor.getSelectionPageBounds();
                 if (placed) point = { x: point.x, y: placed.maxY + 40 };
             }
 

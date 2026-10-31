@@ -137,7 +137,8 @@ class CartController extends Controller
      * be sent from a main warehouse will arrive later, and the agreement to that
      * is a condition of taking the payment rather than a notice shown alongside
      * it. CheckoutService refuses the same case server-side, so the rule holds
-     * for any caller, not just this button.
+     * for any caller, not just this button. Past both, the shopper goes on to
+     * the checkout page (OnlineOrderController) to choose how to pay and get it.
      */
     public function checkout(CheckoutRequest $request): RedirectResponse
     {
@@ -167,14 +168,17 @@ class CartController extends Controller
             ]);
         }
 
-        // Payment itself is not wired up yet; the sourcing contract above is.
-        return back()->with('success', 'Your cart is ready. Checkout and payment are coming soon.');
+        // On to the checkout page (OnlineOrderController): this store's cart only.
+        return redirect()->route('storefront.checkout.show', array_filter([
+            'store' => $store->slug,
+            'agreed' => $grouped['requires_agreement'] ? 1 : null,
+        ]));
     }
 
     /**
      * "Check out everything": every store's cart in the basket at once, each its
-     * own order. A store whose cart cannot go yet (it needs the wait agreed, or it
-     * emptied) is named; the others go on.
+     * own order. A store whose cart needs the wait agreed is named and nothing
+     * goes on until it is; an emptied cart is skipped.
      */
     public function checkoutAll(CheckoutRequest $request): RedirectResponse
     {
@@ -192,6 +196,7 @@ class CartController extends Controller
 
         $ready = [];
         $waiting = [];
+        $agreed = false;
 
         foreach ($basket['stores'] as $entry) {
             $store = \App\Models\Store\Store::query()->find($entry['store']['id']);
@@ -209,6 +214,7 @@ class CartController extends Controller
                 continue;
             }
 
+            $agreed = $agreed || $grouped['requires_agreement'];
             $ready[] = $store->name;
         }
 
@@ -218,7 +224,11 @@ class CartController extends Controller
             ]);
         }
 
-        // Payment itself is not wired up yet (as for one store); the split is.
-        return back()->with('success', sprintf('Your basket is ready: %d order%s, one for each store (%s). Checkout and payment are coming soon.', count($ready), count($ready) === 1 ? '' : 's', implode(', ', $ready)));
+        if ($ready === []) {
+            return back()->with('error', 'Your basket is empty.');
+        }
+
+        // On to the checkout page with the whole basket: one order per store.
+        return redirect()->route('storefront.checkout.show', array_filter(['agreed' => $agreed ? 1 : null]));
     }
 }

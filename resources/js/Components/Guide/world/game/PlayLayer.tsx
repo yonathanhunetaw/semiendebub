@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Paper, Snackbar, Stack, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Menu, MenuItem, Paper, Snackbar, Stack, Tooltip, Typography } from "@mui/material";
+import ExpandMoreRounded from "@mui/icons-material/ExpandMoreRounded";
 import { alpha, useTheme } from "@mui/material/styles";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import type { GuideApp } from "@/Components/Guide/chapters";
@@ -341,25 +342,18 @@ export default function PlayLayer({ app, scene, barSlot = null, topExtra = null 
     return (
         <>
             <Stack spacing={1} sx={{ alignItems: "center", pointerEvents: "none" }}>
-                <GameHud canGoLive={liveAllowed || game.live} onLive={askLive} inBar={barSlot} />
-                {/* The goals: one row to swipe, so they never bury the world (the site is big, and a desk has its own goal). */}
-                <Stack direction="row" spacing={1} sx={{ alignItems: "center", maxWidth: "calc(100vw - 16px)", overflowX: "auto", px: 0.5, pb: 0.5, scrollbarWidth: "none", pointerEvents: "auto" }}>
-                    {(feed?.stations.length ?? 0) > 0 && (
-                        <Button onClick={() => setDeskMenu((open) => !open)} variant="outlined" size="small" aria-expanded={deskMenu}
-                            sx={{ pointerEvents: "auto", flexShrink: 0, borderRadius: 999, fontWeight: 800, textTransform: "none", bgcolor: glass, boxShadow: 3 }}>
-                            Desks
-                        </Button>
-                    )}
-                    {/* One line each (the full text on hover / long-press): a goal never takes two rows of the view. */}
-                    {goals.map((goal) => (
-                        <Box key={goal.text} component="span" title={goal.text} sx={{ flexShrink: 0, maxWidth: { xs: "78vw", sm: 520 }, display: "inline-flex" }}>
-                            <Button onClick={goal.go ? () => walkTo(goal.go!) : undefined} disabled={!goal.go} variant="contained" color={goal.tone} size="small"
-                                sx={{ pointerEvents: "auto", width: "100%", borderRadius: 999, fontWeight: 800, textTransform: "none", boxShadow: 3, py: 0.4, "&.Mui-disabled": { bgcolor: glass, color: "text.secondary" } }}>
-                                <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{goal.text}</Box>
+                {/* One bar: the jobs and the desks ride in it, beside Practice/Live and the camera. */}
+                <GameHud canGoLive={liveAllowed || game.live} onLive={askLive} inBar={barSlot} extra={(
+                    <>
+                        <JobsButton goals={goals} onGo={walkTo} />
+                        {(feed?.stations.length ?? 0) > 0 && (
+                            <Button onClick={() => setDeskMenu((open) => !open)} size="small" aria-expanded={deskMenu} endIcon={<ExpandMoreRounded sx={{ transform: deskMenu ? "rotate(180deg)" : "none", transition: "transform .2s" }} />}
+                                sx={{ flexShrink: 0, borderRadius: 999, fontWeight: 800, textTransform: "none", px: 1.25 }}>
+                                Desks
                             </Button>
-                        </Box>
-                    ))}
-                </Stack>
+                        )}
+                    </>
+                )} />
                 {/* The item finder: a small button at the right edge, under the bars (it opens to a search box when tapped). */}
                 {topExtra && <Box sx={{ alignSelf: "stretch", display: "flex", flexDirection: "column", alignItems: "flex-end", px: 1, pointerEvents: "none" }}>{topExtra}</Box>}
             </Stack>
@@ -367,7 +361,7 @@ export default function PlayLayer({ app, scene, barSlot = null, topExtra = null 
             <Box sx={{ flex: 1 }} />
 
             {deskMenu && (
-                <Box sx={{ position: "absolute", top: 120, left: 0, right: 0, display: "flex", justifyContent: "center", px: 1, pointerEvents: "none" }}>
+                <Box sx={{ position: "absolute", top: 72, left: 0, right: 0, display: "flex", justifyContent: "center", px: 1, pointerEvents: "none" }}>
                     <DeskMenu stations={feed?.stations ?? null} struck={desks.struck} onClose={() => setDeskMenu(false)} onWalk={(desk) => { setDeskMenu(false); walkTo(desk); }} />
                 </Box>
             )}
@@ -598,5 +592,47 @@ function JobRow({ job, action, carried = false }: { job: ShelveJob; action: Reac
             {job.urgent && !carried && <Chip size="small" color="error" label="Urgent" />}
             {action}
         </Stack>
+    );
+}
+
+/**
+ * The jobs in the top bar: the one job as its own button (tap to walk there); several fold into a "Jobs" drop-down,
+ * so the bar stays one row.
+ */
+function JobsButton({ goals, onGo }: { goals: Goal[]; onGo: (zone: ZoneKey) => void }) {
+    const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+    if (goals.length === 0) return null;
+    const waiting = goals.filter((g) => g.go !== null).length;
+
+    if (goals.length === 1) {
+        const goal = goals[0];
+        return (
+            <Tooltip title={goal.text}>
+                <span style={{ flexShrink: 1, minWidth: 0, display: "inline-flex" }}>
+                    <Button onClick={goal.go ? () => onGo(goal.go!) : undefined} disabled={!goal.go} size="small" variant={goal.go ? "contained" : "text"} color={goal.tone}
+                        sx={{ borderRadius: 999, fontWeight: 800, textTransform: "none", maxWidth: 360, px: 1.25, "&.Mui-disabled": { color: "text.secondary" } }}>
+                        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{goal.text}</Box>
+                    </Button>
+                </span>
+            </Tooltip>
+        );
+    }
+
+    return (
+        <>
+            <Button onClick={(event) => setAnchor(event.currentTarget)} size="small" variant={waiting > 0 ? "contained" : "text"} aria-haspopup="menu" aria-expanded={anchor !== null}
+                endIcon={<ExpandMoreRounded />} sx={{ flexShrink: 0, borderRadius: 999, fontWeight: 800, textTransform: "none", px: 1.25 }}>
+                Jobs{waiting > 0 ? ` · ${waiting}` : ""}
+            </Button>
+            <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)} slotProps={{ paper: { sx: { borderRadius: 3, maxWidth: 440 } } }}>
+                {goals.map((goal) => (
+                    <MenuItem key={goal.text} disabled={!goal.go} onClick={() => { setAnchor(null); if (goal.go) onGo(goal.go); }}
+                        sx={{ whiteSpace: "normal", fontWeight: 700, fontSize: "0.875rem", gap: 1, "&.Mui-disabled": { opacity: 0.75 } }}>
+                        <Box component="span" sx={{ width: 8, height: 8, borderRadius: 999, flexShrink: 0, bgcolor: goal.go ? `${goal.tone}.main` : "text.disabled" }} />
+                        {goal.text}
+                    </MenuItem>
+                ))}
+            </Menu>
+        </>
     );
 }

@@ -134,7 +134,7 @@ class BalanceLedger
      */
     public function overdueCash(int $userId): array
     {
-        $days = (int) config('payments.cash_flag_days', 3);
+        $days = (int) config('payments.cash_flag_days', 2);
         $cutoff = now()->subDays($days);
 
         $entries = BalanceEntry::query()->where('user_id', $userId)->whereNull('payment_account_id')

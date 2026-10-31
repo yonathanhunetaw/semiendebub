@@ -12,6 +12,8 @@
 #   ./deploy/dev.sh stop         stop the MySQL service (frees RAM)
 #   ./deploy/dev.sh artisan ...  run artisan against the native DB (also: composer, npm)
 #   ./deploy/dev.sh e2e [...]    Playwright on a fresh copy of the DB (needs ./deploy/dev.sh up running)
+#   ./deploy/dev.sh sim          a simulated shop week on a copy of the DB (duka_sim), served on :8097
+#   ./deploy/dev.sh sim-live     one command: build the sim week if needed, serve it, open the world, play today live
 #   ./deploy/dev.sh pull-prod    replace the dev DB with prod's newest R2 backup (safety dump first)
 #   ./deploy/dev.sh compare      how dev differs from prod: code, migrations, settings, versions
 #   ./deploy/dev.sh mysql        a mysql shell on the dev DB (also: gzip -dc dump.sql.gz | ./deploy/dev.sh mysql)
@@ -347,6 +349,104 @@ cmd_e2e() {
     npx --no-install playwright test "$@"
 }
 
+# A simulated shop week (make sim): dev copied to duka_sim, sim:week plays the
+# past days through the app's own services, and an app server on :8097 serves
+# it so you can sign in as each person. Nothing leaves the machine, as for e2e.
+SIM_DB="${DB_NAME}_sim"
+SIM_PORT="${SIM_PORT:-8097}"
+
+sim_env() {
+    native_env
+    export DB_DATABASE="$SIM_DB"
+    export APP_URL="http://$(env_value APP_DOMAIN):${SIM_PORT}"
+    export QUEUE_CONNECTION=sync MAIL_MAILER=log SENTRY_LARAVEL_DSN= DEBUGBAR_ENABLED=false
+    export DISCORD_VISIT_WEBHOOK_URL= DISCORD_DAILY_VISIT_WEBHOOK_URL= DISCORD_LOGIN_WEBHOOK_URL=
+    export R2_LOCAL=true
+    # Thousands of steps: keep the debug lines (price ladders…) out of the log.
+    export LOG_LEVEL=warning
+}
+
+# Copy dev into duka_sim and play the past days of the week (sim:week).
+sim_build() {
+    info "Copying ${DB_NAME} → ${SIM_DB}"
+    mysql_root -e "DROP DATABASE IF EXISTS \`${SIM_DB}\`;
+        CREATE DATABASE \`${SIM_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        GRANT ALL PRIVILEGES ON \`${SIM_DB}\`.* TO '${DB_USER}'@'%';"
+    "$MYSQL_BIN/mysqldump" -uroot --socket="$DUKA_MYSQL_SOCK" --single-transaction --routines --triggers "$DB_NAME" \
+        | mysql_root "$SIM_DB"
+    ( sim_env
+      php artisan migrate --force >/dev/null
+      php -d memory_limit=1G artisan sim:week --days="${DAYS:-7}" --seed="${SEED:-1}" ) || die "sim:week failed"
+}
+
+# Is there a simulated week whose today is still to play (today.json holds today's events)?
+sim_ready() {
+    mysql_root -e "USE \`${SIM_DB}\`" 2>/dev/null || return 1
+    [ -s storage/app/sim/today.json ] || return 1
+    # Its first event is on today's date in the shops' time zone (a week built yesterday is stale).
+    php -r 'date_default_timezone_set("Africa/Addis_Ababa"); $e = json_decode(file_get_contents("storage/app/sim/today.json"), true); exit(is_array($e) && $e !== [] && date("Y-m-d", strtotime($e[0]["at"])) === date("Y-m-d") ? 0 : 1);'
+}
+
+# The sim's app server on :8097, in the background; stopped when this script exits.
+sim_serve_background() {
+    lsof -ti "tcp:$SIM_PORT" -sTCP:LISTEN | xargs kill 2>/dev/null || true
+    ( sim_env; PHP_CLI_SERVER_WORKERS=4 exec php artisan serve --no-reload --host=0.0.0.0 --port="$SIM_PORT" ) > storage/logs/sim-server.log 2>&1 &
+    trap 'lsof -ti "tcp:$SIM_PORT" -sTCP:LISTEN | xargs kill 2>/dev/null || true' EXIT
+    local i
+    for i in $(seq 1 30); do
+        curl -s -o /dev/null "http://$(env_value APP_DOMAIN):${SIM_PORT}/login" && return 0
+        sleep 1
+    done
+    die "The sim server did not start (storage/logs/sim-server.log)"
+}
+
+sim_banner() {
+    local domain; domain="$(env_value APP_DOMAIN)"
+    ok "The simulated shop is up. Sign in with password sim-password:"
+    echo "    World (watch it live):  http://admin.${domain}:${SIM_PORT}/guide?view=world   sim.admin@duka.test"
+    echo "    Seller / manager:       http://seller.${domain}:${SIM_PORT}                    sim.manager@duka.test, sim.seller1@duka.test"
+    echo "    Store keeper:           http://stockkeeper.${domain}:${SIM_PORT}               sim.keeper@duka.test"
+    echo "    Driver:                 http://delivery.${domain}:${SIM_PORT}                  sim.driver1@duka.test"
+    echo "    Finance:                http://finance.${domain}:${SIM_PORT}                   sim.finance@duka.test"
+}
+
+# make sim: build the week (unless KEEP=1) and serve it. Ctrl-C stops the server.
+cmd_sim() {
+    [ -f public/hot ] || die "Vite is not running. Start make dev in another terminal first."
+    ensure_mysql
+    [ "${KEEP:-0}" = "1" ] || sim_build
+    sim_serve_background
+    sim_banner
+    info "Play today live: make sim-live. Ctrl-C stops this server."
+    tail -n 0 -f storage/logs/sim-server.log
+}
+
+# make sim-live: one command. Builds the week when there is none for today (or FRESH=1), serves it, opens the
+# world, and plays today live (SPEED=60: a shop hour a minute). Ctrl-C stops the playing and the server.
+cmd_sim_live() {
+    [ -f public/hot ] || die "Vite is not running. Start make dev in another terminal first."
+    ensure_mysql
+    native_env
+    if [ "${FRESH:-0}" = "1" ] || ! sim_ready; then
+        info "No simulated week waiting for today: building one (about a minute)"
+        sim_build
+    fi
+    sim_serve_background
+    sim_banner
+    [ "${OPEN:-1}" = "1" ] && command -v open >/dev/null && open "http://admin.$(env_value APP_DOMAIN):${SIM_PORT}/guide?view=world" || true
+    ( sim_env; php -d memory_limit=1G artisan sim:live --speed="${SPEED:-60}" )
+    info "Today is played. The server stays up until Ctrl-C (make sim-live FRESH=1 builds a new week)."
+    tail -n 0 -f storage/logs/sim-server.log
+}
+
+# make sim-export: the simulated week as the Guide world's Demo week (public/demo/world/*.json), to commit and deploy.
+cmd_sim_export() {
+    ensure_mysql
+    native_env
+    mysql_root -e "USE \`${SIM_DB}\`" 2>/dev/null || die "No ${SIM_DB}: run make sim (or make sim-live) first."
+    ( sim_env; php -d memory_limit=1G artisan sim:export-world --days="${DAYS:-7}" )
+}
+
 # Prod's R2 helpers (deploy/db-lib.sh), read-only here: this never writes the lease,
 # heartbeats or events. R2 settings come from .env.production on this Mac.
 prod_r2() {
@@ -489,9 +589,12 @@ case "${1:-up}" in
     composer)         shift; native_env; exec composer "$@" ;;
     npm)              shift; native_env; exec npm "$@" ;;
     e2e)              shift; cmd_e2e "$@" ;;
+    sim)              cmd_sim ;;
+    sim-live)         cmd_sim_live ;;
+    sim-export)       cmd_sim_export ;;
     pull-prod)        cmd_pull_prod ;;
     compare)          cmd_compare ;;
     mysql)            shift; mysql_root "$DB_NAME" "$@" ;;
-    -h|--help|help)   sed -n '2,17p' "$0" ;;
+    -h|--help|help)   sed -n '2,19p' "$0" ;;
     *)                die "Unknown command: $1 (try ./deploy/dev.sh help)" ;;
 esac

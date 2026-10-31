@@ -4,7 +4,7 @@
  *
  *   Payments   → payments, collection accounts, seller balances
  *   Customers  → customers, who has credit, customer prices & discounts
- *   Settings   → general, users, vendors, sessions and system status (all but general: global admins only)
+ *   Settings   → general, business rules, users, vendors, sessions, system status and import / export (all but general: global admins only)
  *   Store      → a hub of grouped cards (Pages/Admin/Stores/Hub): the active store's
  *                items, replenishment, price deviations and capacity, transfers and
  *                shipments, the approvals, and its setup (locations; payment accounts, seller balances
@@ -94,6 +94,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
         key: "settings",
         tabs: [
             { label: "General", route: "admin.settings", match: ["/settings"] },
+            { label: "Business rules", route: "admin.settings.rules", match: ["/settings/rules"], globalOnly: true },
             { label: "Users", route: "admin.users.index", match: ["/users"], globalOnly: true },
             { label: "Vendors", route: "admin.vendors.index", match: ["/vendors"], globalOnly: true },
             { label: "Sessions", route: "admin.sessions.index", match: ["/sessions"], globalOnly: true },

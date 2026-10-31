@@ -49,3 +49,7 @@ graphify-out/
 # Deployment logs written by deploy/deploy.sh
 /deploy/logs/
 /deploy/backups/
+
+# Laravel Boost (dev-only AI tooling; .mcp.json has Mac-specific paths)
+.mcp.json
+boost.json

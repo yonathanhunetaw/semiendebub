@@ -58,7 +58,7 @@ class BalanceController extends Controller
                 ->get()
                 ->map(fn (Remittance $remittance): array => $board->remittance($remittance))
                 ->values(),
-            'cash_flag_days' => (int) config('payments.cash_flag_days', 3),
+            'cash_flag_days' => (int) config('payments.cash_flag_days', 2),
         ]);
     }
 }

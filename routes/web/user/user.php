@@ -131,6 +131,17 @@ Route::post('/shop/checkout', [CartController::class, 'checkout'])
     ->middleware('throttle:20,1')
     ->name('storefront.checkout');
 
+// After the cart: the checkout page, placing the orders, and the shopper's own orders
+// (pay by transfer, "I've sent it", follow, cancel while unpaid). OnlineOrderService.
+Route::middleware('auth')->controller(\App\Http\Controllers\Storefront\OnlineOrderController::class)->group(function (): void {
+    Route::get('/shop/checkout', 'checkout')->name('storefront.checkout.show');
+    Route::post('/shop/checkout/place', 'place')->middleware('throttle:10,1')->name('storefront.checkout.place');
+    Route::get('/shop/orders', 'index')->name('storefront.orders.index');
+    Route::get('/shop/orders/{sale:reference_number}', 'show')->name('storefront.orders.show');
+    Route::post('/shop/orders/{sale:reference_number}/payments/{payment}/sent', 'claim')->middleware('throttle:20,1')->whereNumber('payment')->name('storefront.orders.claim');
+    Route::post('/shop/orders/{sale:reference_number}/cancel', 'cancel')->middleware('throttle:10,1')->name('storefront.orders.cancel');
+});
+
 
 Route::middleware(['auth', 'verified', 'guest.subdomain'])->group(function () {
 

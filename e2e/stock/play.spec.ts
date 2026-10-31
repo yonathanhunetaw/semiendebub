@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { shipmentOf, transferOf, unitsAt } from '../lib/inspect';
 import { app, closeWindows, fixture, signIn } from '../lib/support';
 import { cardOf, raiseTransfer as raise } from '../lib/transfers';
+import { expectJob, tapJob } from '../lib/world';
 
 /**
  * The Guide world's Play mode, Store Floor → Store Shelf. In Live, putting a job up on the
@@ -30,7 +31,7 @@ async function play(page: Page, subdomain: 'stockkeeper' | 'seller' | 'delivery'
 
 /** Tap the line that says what to do next: the worker walks there (hurrying), and the zone's control shows. */
 async function walkByObjective(page: Page, objective: RegExp, arrived: () => Promise<void>): Promise<void> {
-    await page.getByRole('button', { name: objective }).click();
+    await tapJob(page, objective);
     await arrived();
 }
 
@@ -173,7 +174,7 @@ test('Practice: a scheduled shipment is fetched from the hub and loaded into the
     await play(keeper, 'stockkeeper');
     // The goal line names the shipment and sends the worker to its hub.
     const goal = new RegExp(`${load!.reference}: 0 / ${load!.quantity} in the car, ${load!.quantity} to fetch from Hub`);
-    await expect(keeper.getByRole('button', { name: goal })).toBeVisible({ timeout: 15_000 });
+    await expectJob(keeper, goal);
     await walkByObjective(keeper, goal, () => expect(keeper.getByText(new RegExp(`: for ${load!.reference}$`))).toBeVisible({ timeout: 90_000 }));
     await keeper.screenshot({ path: 'test-results/play-freight-hub.png' });
 
@@ -420,7 +421,7 @@ test('Practice: Remote Hub → store goes hub keeper → courier → store keepe
 test('a seller practises the same job; Live is only for the desks\' real actions, never the Remote Hub', async ({ browser }) => {
     const seller = await signIn(browser, 'seller', fixture.seller.email);
     await play(seller, 'seller');
-    await expect(seller.getByText(/to shelve from the Store Floor|Nothing waiting|All shelved|bins need stock/)).toBeVisible({ timeout: 15_000 });
+    await expectJob(seller, /to shelve from the Store Floor|Nothing waiting|All shelved|bins need stock/);
     // No Remote Hub job for a seller: the Remote Hub is yes/no to them, never quantities.
     await expect(seller.getByText(/waiting in the Remote Hub/)).toHaveCount(0);
     await seller.waitForTimeout(1500);

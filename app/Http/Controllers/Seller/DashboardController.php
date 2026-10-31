@@ -49,9 +49,8 @@ class DashboardController extends Controller
         // 🔹 1. Active items this store carries (shared with ItemController)
         $query = $catalog->query($storeId);
 
-        if ($search) {
-            $query->where('product_name', 'LIKE', '%' . $search . '%');
-        }
+        // A name, or a scanned label / barcode.
+        $query = $catalog->matching($query, $search);
 
         if ($categoryId) {
             $query->where('item_category_id', $categoryId);

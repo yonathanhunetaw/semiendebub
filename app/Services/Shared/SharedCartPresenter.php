@@ -135,7 +135,19 @@ class SharedCartPresenter
     public function order(CartShare $share): array
     {
         /** @var Sale $sale */
-        $sale = $share->sale()->with(['store', 'delivery', 'payments.account', 'items.storeVariant.itemVariant.item', 'items.storeVariant.itemVariant.itemPackagingType'])->firstOrFail();
+        $sale = $share->sale()->firstOrFail();
+
+        return $this->orderOf($sale);
+    }
+
+    /**
+     * Any order as its customer follows it (a shared-cart link, or My orders in the online shop).
+     *
+     * @return array<string, mixed>
+     */
+    public function orderOf(Sale $sale): array
+    {
+        $sale->loadMissing(['store', 'delivery', 'payments.account', 'items.storeVariant.itemVariant.item', 'items.storeVariant.itemVariant.itemPackagingType']);
         $log = app(CustodyLog::class)->forSale($sale);
         $stage = app(SellerOrderBoard::class)->stageOf($sale);
 

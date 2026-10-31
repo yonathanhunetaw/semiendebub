@@ -94,14 +94,14 @@ class PaymentBoard
                 ->whereHas('sale', fn (Builder $sale) => $sale->whereIn('store_id', $storeIds))
                 ->orWhere(fn (Builder $r) => $r->whereNull('sale_id')
                     ->whereHas('claimer', fn (Builder $claimer) => $claimer->whereIn('store_id', $storeIds)))))
-            ->with(['account.owner', 'sale.customer', 'sale.store', 'customer', 'claimer'])
+            ->with(['account.owner', 'sale.customer', 'sale.shopper', 'sale.store', 'customer', 'claimer'])
             ->orderBy('claimed_at')
             ->get()
             ->map(fn (Payment $payment): array => $this->part($payment) + [
                 // A credit repayment has no order of its own.
                 'order' => $payment->isRepayment() ? 'Credit repayment' : (string) ($payment->sale?->reference_number ?? ''),
                 'order_total' => (float) ($payment->sale?->total_amount ?? $payment->amount),
-                'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? 'Walk-in customer',
+                'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? $payment->sale?->customerLabel() ?? 'Walk-in customer',
                 'store' => $payment->sale?->store?->name ?? $payment->account?->store?->name,
                 'store_id' => ($payment->sale?->store_id ?? $payment->account?->store_id) !== null ? (int) ($payment->sale?->store_id ?? $payment->account?->store_id) : null,
                 'claimed_by' => $payment->claimer
@@ -122,13 +122,13 @@ class PaymentBoard
     public function expectedInbox(User $user): array
     {
         return $this->expected($user)
-            ->with(['account.owner', 'sale.customer', 'sale.store', 'customer', 'user'])
+            ->with(['account.owner', 'sale.customer', 'sale.shopper', 'sale.store', 'customer', 'user'])
             ->orderBy('created_at')
             ->get()
             ->map(fn (Payment $payment): array => $this->part($payment) + [
                 'order' => $payment->isRepayment() ? 'Credit repayment' : (string) ($payment->sale?->reference_number ?? ''),
                 'order_total' => (float) ($payment->sale?->total_amount ?? $payment->amount),
-                'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? 'Walk-in customer',
+                'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? $payment->sale?->customerLabel() ?? 'Walk-in customer',
                 'store' => $payment->sale?->store?->name ?? $payment->account?->store?->name,
                 'store_id' => ($payment->sale?->store_id ?? $payment->account?->store_id) !== null ? (int) ($payment->sale?->store_id ?? $payment->account?->store_id) : null,
                 'claimed_by' => null,
@@ -175,7 +175,7 @@ class PaymentBoard
             ->where(fn (Builder $q) => $q
                 ->whereNull('sale_id')
                 ->orWhereHas('sale', fn (Builder $sale) => $sale->whereIn('fulfillment_stage', [Sale::STAGE_AWAITING_PAYMENT, Sale::STAGE_PICK_PACK])))
-            ->with(['account.owner', 'sale.customer', 'sale.store', 'customer'])
+            ->with(['account.owner', 'sale.customer', 'sale.shopper', 'sale.store', 'customer'])
             ->orderBy('created_at')
             ->get();
 
@@ -195,7 +195,7 @@ class PaymentBoard
             return $this->part($payment) + [
                 'order' => $payment->isRepayment() ? 'Credit repayment' : (string) ($payment->sale?->reference_number ?? ''),
                 'order_total' => (float) ($payment->sale?->total_amount ?? $payment->amount),
-                'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? 'Walk-in customer',
+                'customer' => ($payment->sale?->customer ?? $payment->customer)?->name ?? $payment->sale?->customerLabel() ?? 'Walk-in customer',
                 'store' => $payment->sale?->store?->name ?? $payment->account?->store?->name,
                 'store_id' => ($payment->sale?->store_id ?? $payment->account?->store_id) !== null ? (int) ($payment->sale?->store_id ?? $payment->account?->store_id) : null,
                 // Store admins and managers by name; a global admin can always.

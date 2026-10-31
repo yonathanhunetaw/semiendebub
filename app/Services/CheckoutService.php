@@ -11,6 +11,7 @@ use App\Models\Fulfillment\Delivery;
 use App\Models\Seller\Cart;
 use App\Models\Store\StoreVariant;
 use App\Services\Fulfillment\OrderSourcingService;
+use App\Services\Workforce\LocalTime;
 use Illuminate\Support\Facades\DB;
 
 class CheckoutService
@@ -195,7 +196,7 @@ class CheckoutService
             }
 
             // 3. Persist Sale record
-            $referenceNumber = 'SALE-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -6));
+            $referenceNumber = 'SALE-' . LocalTime::now()->format('Ymd') . '-' . strtoupper(substr(uniqid(), -6));
 
             $sale = Sale::create([
                 'reference_number' => $referenceNumber,
@@ -278,7 +279,7 @@ class CheckoutService
             if (!empty($deliveryData)) {
                 Delivery::create([
                     'sale_id' => $sale->id,
-                    'tracking_number' => $deliveryData['tracking_number'] ?? 'DEL-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5)),
+                    'tracking_number' => $deliveryData['tracking_number'] ?? 'DEL-' . LocalTime::now()->format('Ymd') . '-' . strtoupper(substr(uniqid(), -5)),
                     'status' => $deliveryData['status'] ?? 'pending',
                     'delivery_address' => $deliveryData['delivery_address'] ?? null,
                     'recipient_name' => $deliveryData['recipient_name'] ?? $customer?->name,

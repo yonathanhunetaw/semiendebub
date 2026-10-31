@@ -13,7 +13,7 @@ export interface UserBottomNavProps {
     isAuthenticated?: boolean;
 }
 
-type TabKey = "home" | "discover" | "account";
+type TabKey = "home" | "discover" | "orders" | "account";
 
 /**
  * Buyer bottom navigation.
@@ -41,6 +41,7 @@ export default function UserBottomNav({
 
     const active: TabKey = React.useMemo(() => {
         if (path.startsWith("/profile") || path.startsWith("/login")) return "account";
+        if (path.startsWith("/shop/orders") || path.startsWith("/shop/checkout")) return "orders";
         // Discover is the shop filtered to live discounts, so it shares /shop.
         if (query.includes("on_sale=1")) return "discover";
         if (path.startsWith("/shop") || path.startsWith("/dashboard")) return "home";
@@ -71,11 +72,13 @@ export default function UserBottomNav({
                     active={active === "discover"}
                 />
 
-                {/*
-                  This app has no messaging feature yet, so the slot is present
-                  for layout parity but inert rather than a dead link.
-                */}
-                <NavTab label="Messages" icon="chat" disabled />
+                {/* The shopper's orders: pay, follow, cancel. A guest signs in first. */}
+                <NavTab
+                    label="Orders"
+                    icon="receipt_long"
+                    href={isAuthenticated ? route("storefront.orders.index") : route("login")}
+                    active={active === "orders"}
+                />
 
                 {/*
                   An action, not a destination, on pages that mount CartDrawer.

@@ -1,7 +1,7 @@
 import { resetPlayLoad } from '../lib/inspect';
 import { expect, test } from '@playwright/test';
 import { app, closeWindows, fixture, signIn } from '../lib/support';
-import { playIn } from '../lib/world';
+import { playIn, tapJob } from '../lib/world';
 
 /**
  * The world's Director view and the hub item finder, on a wide and on a narrow screen:
@@ -80,9 +80,9 @@ test('Director faces the door, the hub item finder marks an item, and the contro
         await page.getByRole('button', { name: 'Follow', exact: true }).click();
         await page.waitForTimeout(500);
         // The goal line "… to fetch from Hub A" walks the worker there.
-        await page.getByRole('button', { name: /fetch from Hub A/ }).click();
+        await tapJob(page, /fetch from Hub A/);
         await expect(page.getByTestId('item-finder')).toContainText('Main Hub A', { timeout: 120_000 });
-        // The finder flows under Play's goals row: it must never cover the Desks button or the goals (it once did, on a phone).
+        // The finder flows under Play's top bar: it must never cover the Desks button or the jobs (it once did, on a phone).
         const clearOfGoals = async () => {
             const finderBox = (await page.getByTestId('item-finder').boundingBox())!;
             const desksBox = (await page.getByRole('button', { name: 'Desks', exact: true }).boundingBox())!;

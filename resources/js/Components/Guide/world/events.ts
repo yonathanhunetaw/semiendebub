@@ -9,7 +9,19 @@ import type { WorldOrder, WorldRefill, WorldShipment } from "./replay";
  * these one at a time; the world flies to each and lights the spot up.
  */
 
-export type EventKind = "shipment" | "order" | "refill" | "transfer" | "count" | "work";
+export type EventKind = "shipment" | "order" | "refill" | "transfer" | "count" | "work" | "money";
+
+/**
+ * What the world acts out when an event is shown (DukaWorld's effects): notes passing from payer to taker, a
+ * second person's tick, a key passing hands, someone walking in or out, cartons landing, a parcel handed over.
+ */
+export type EventFx = "money" | "confirm" | "key" | "walk_in" | "walk_out" | "boxes" | "handover";
+
+/** A person in an event: first name and role key (seller, store_manager, stock_keeper, delivery, customer…). */
+export interface EventPerson {
+    name: string;
+    role: string;
+}
 
 /** The kinds with a card of their own (the rest are events only). */
 export const CARD_KINDS: EventKind[] = ["shipment", "order", "refill"];
@@ -31,6 +43,11 @@ export interface WorldEvent {
     final?: boolean;
     /** It went wrong: cancelled, failed. */
     bad?: boolean;
+    /** What the world acts out for it, and between whom. */
+    fx?: EventFx;
+    actor?: EventPerson | null;
+    target?: EventPerson | null;
+    amount?: number;
 }
 
 export const KIND_LABEL: Record<EventKind, string> = {
@@ -40,6 +57,7 @@ export const KIND_LABEL: Record<EventKind, string> = {
     transfer: "Transfer",
     count: "Count",
     work: "Work",
+    money: "Money",
 };
 
 export const KIND_PLURAL: Record<EventKind, string> = {
@@ -49,6 +67,7 @@ export const KIND_PLURAL: Record<EventKind, string> = {
     transfer: "Transfers",
     count: "Counts",
     work: "Work",
+    money: "Money",
 };
 
 /** The palette colour each kind of event wears. */
@@ -59,6 +78,7 @@ export const KIND_COLOR: Record<EventKind, "warning" | "success" | "info" | "pri
     transfer: "primary",
     count: "secondary",
     work: "secondary",
+    money: "success",
 };
 
 const ms = (iso: string | null | undefined): number | null => (iso ? Date.parse(iso) : null);
@@ -95,11 +115,11 @@ function shipmentEvents(s: WorldShipment): WorldEvent[] {
     });
 
     push("picked", s.steps.picked, `Picking starts at ${fromName}`, from, "stock_keeper");
-    push("prepared", s.steps.prepared, s.preparer ? `${s.preparer} has the goods out on the platform` : "The goods are out on the platform", "platform", "stock_keeper");
+    push("prepared", s.steps.prepared, s.preparer ? `${s.preparer} has the goods out on the platform` : "The goods are out on the platform", "platform", "stock_keeper", { fx: "boxes", actor: s.preparer ? { name: s.preparer, role: "stock_keeper" } : null });
     push("loading", s.steps.loading, `${s.courier ? s.courier.split(" ")[0] : "The driver"} checks the goods and loads the van`, "platform", "delivery");
     push("signed", s.steps.signed ?? s.steps.in_transit, `${s.courier ? s.courier.split(" ")[0] : "The driver"} signs; the van leaves`, "platform", "delivery");
     push("delivered", s.steps.delivered, `The van arrives at ${toName}`, to, "delivery");
-    push("received", s.steps.received, `Received at ${toName}${s.receiver ? ` by ${s.receiver}` : ""}`, to, "stock_keeper", { final: true });
+    push("received", s.steps.received, `Received at ${toName}${s.receiver ? ` by ${s.receiver}` : ""}`, to, "stock_keeper", { final: true, fx: "boxes", actor: s.receiver ? { name: s.receiver, role: "stock_keeper" } : null });
     push("cancelled", s.cancelled_at, "Shipment cancelled", from, "admin", { final: true, bad: true });
     return out;
 }
@@ -115,14 +135,25 @@ function orderEventsOf(o: WorldOrder): WorldEvent[] {
     };
 
     push("created", o.created_at, `${o.seller ?? "The seller"} checks the cart out at the counter`, "store_counter", "seller");
+    const customer = { name: o.customer ?? "Customer", role: "customer" };
+    const seller = o.seller ? { name: o.seller, role: "seller" } : null;
+    const birr = (amount: number) => `${Math.round(amount).toLocaleString()} birr`;
     o.payments.forEach((p, i) => {
-        push(`claimed-${i}`, p.claimed_at, `${p.claimed_by ? `${p.claimed_by} takes` : "Payment taken ·"} ${p.claimed_by ? "payment · " : ""}${p.method.replace(/_/g, " ")}`.trim(), "store_counter", "seller");
-        push(`confirmed-${i}`, p.confirmed_at, p.confirmed_by ? `${p.confirmed_by} confirms the payment` : "A second person confirms the payment", "store_counter", "store_manager");
+        const taker = p.claimed_by ? { name: p.claimed_by, role: "seller" } : seller;
+        const how = p.method === "cash" ? "cash" : p.method === "credit" ? "on credit" : p.method === "wallet" ? "by mobile money" : "by bank transfer";
+        push(`claimed-${i}`, p.claimed_at, p.method === "credit" ? `${customer.name} buys on credit: ${birr(p.amount)}` : `${customer.name} pays ${taker?.name ?? "the seller"} ${birr(p.amount)} ${how}`, "store_counter", "customer",
+            { fx: p.method === "credit" ? "confirm" : "money", actor: customer, target: taker, amount: p.amount });
+        push(`confirmed-${i}`, p.confirmed_at, p.confirmed_by ? `${p.confirmed_by} confirms ${birr(p.amount)} ${how}` : "A second person confirms the payment", "store_counter", "store_manager",
+            { fx: "confirm", actor: p.confirmed_by ? { name: p.confirmed_by, role: p.method === "wallet" ? "finance" : "store_manager" } : null, amount: p.amount });
     });
     push("picking", o.picking_started_at, `${o.picker ? `${o.picker} starts picking` : "Picking starts"} at ${placeFor(source).label}`, source, "stock_keeper");
     push("packed", o.packed_at, inStore ? "Packed for the customer at the counter" : "Packed for the courier", source, "stock_keeper");
-    push("out", o.delivery?.picked_up_at ?? o.delivery?.shipped_at, inStore ? "Ready at the counter" : `${o.courier ?? "The courier"} collects it`, inStore ? "store_counter" : "loading_bay", inStore ? "seller" : "delivery");
-    push("delivered", o.delivery?.delivered_at, inStore ? "Handed over at the counter" : `${o.courier ? `${o.courier} delivers` : "Delivered"} to the customer`, inStore ? "store_counter" : "customers", inStore ? "customer" : "delivery", { final: true });
+    const courier = { name: o.courier ?? "Courier", role: "delivery" };
+    const packer = o.picker ? { name: o.picker, role: "stock_keeper" } : seller;
+    push("out", o.delivery?.picked_up_at ?? o.delivery?.shipped_at, inStore ? "Ready at the counter" : `${o.courier ?? "The courier"} collects it`, inStore ? "store_counter" : "loading_bay", inStore ? "seller" : "delivery",
+        inStore ? {} : { fx: "handover", actor: packer, target: courier });
+    push("delivered", o.delivery?.delivered_at, inStore ? `Handed over to ${customer.name} at the counter` : `${o.courier ? `${o.courier} delivers` : "Delivered"} to ${customer.name}`, inStore ? "store_counter" : "customers", inStore ? "customer" : "delivery",
+        { final: true, fx: "handover", actor: inStore ? seller : courier, target: customer });
     push("failed", o.delivery?.failed_at, "Delivery failed", "customers", "delivery", { final: true, bad: true });
     push("cancelled", o.cancelled_at, "Order cancelled", "store_counter", "seller", { final: true, bad: true });
     return out;
@@ -141,13 +172,13 @@ function refillEventsOf(r: WorldRefill): WorldEvent[] {
     push("raised", r.raised_at, `The bin hit its refill line: refill ${source} raised${r.raised_by ? ` by ${r.raised_by}` : ""}`, "store_shelf", "store_manager");
     push("accepted", r.accepted_at, r.accepted_by ? `${r.accepted_by} takes the refill` : "A stock keeper takes the refill", from, "stock_keeper");
     push("dispatched", r.transfer?.dispatched_at, "On its way from the Remote Hub", "remote_hub", "stock_keeper");
-    push("handed", r.transfer?.handed_over_at, "Handed over at the store", "store_floor", "stock_keeper");
-    push("shelved", r.transfer?.completed_at ?? r.fulfilled_at, "On the shelf", "store_shelf", "stock_keeper", { final: true });
+    push("handed", r.transfer?.handed_over_at, "Handed over at the store", "store_floor", "stock_keeper", { fx: "boxes" });
+    push("shelved", r.transfer?.completed_at ?? r.fulfilled_at, "On the shelf", "store_shelf", "stock_keeper", { final: true, fx: "boxes" });
     push("cancelled", r.cancelled_at ?? r.transfer?.cancelled_at, r.cancelled_by ? `Refill cancelled by ${r.cancelled_by}` : "Refill cancelled", "store_shelf", "store_manager", { final: true, bad: true });
     return out;
 }
 
-const KIND_ORDER: Record<EventKind, number> = { shipment: 0, transfer: 1, refill: 2, count: 3, order: 4, work: 5 };
+const KIND_ORDER: Record<EventKind, number> = { shipment: 0, transfer: 1, refill: 2, count: 3, order: 4, work: 5, money: 6 };
 
 /** An event the server already built (transfers, counts): `at` arrives as an ISO time. */
 export type FeedEvent = Omit<WorldEvent, "at"> & { at: string };

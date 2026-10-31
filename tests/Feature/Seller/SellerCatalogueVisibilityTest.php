@@ -130,7 +130,7 @@ class SellerCatalogueVisibilityTest extends TestCase
             fn (Assert $page) => $page
                 ->has('items', 1)
                 ->where('items.0.product_name', 'Empty Shelf Oil')
-                // The figure StockCaption renders as "Out of stock".
+                // The figure the item card shows as "Out of stock".
                 ->where('items.0.store_stock', 0),
         );
     }

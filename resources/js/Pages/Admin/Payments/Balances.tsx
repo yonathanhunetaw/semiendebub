@@ -55,7 +55,7 @@ const STATUS: Record<RemittanceRow["status"], { label: string; color: "info" | "
  * less what a settlement account's owner confirmed receiving from them. Cash
  * held past the flag window is marked: it has no bank record to check.
  */
-export default function SellerBalances({ sellers = [], remittances = [], cash_flag_days = 3 }: Props): React.ReactElement {
+export default function SellerBalances({ sellers = [], remittances = [], cash_flag_days = 2 }: Props): React.ReactElement {
     const total = sellers.reduce((sum, seller) => sum + seller.held, 0);
 
     return (
