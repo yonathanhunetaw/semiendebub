@@ -47,6 +47,7 @@
         "date-fns": "^4.4.0",
         "html5-qrcode": "^2.3.8",
         "lucide-react": "^0.563.0",
+        "marked": "18.1.1",
         "material-symbols": "^0.47.6",
         "qrcode": "^1.5.4",
         "react-big-calendar": "^1.20.0",

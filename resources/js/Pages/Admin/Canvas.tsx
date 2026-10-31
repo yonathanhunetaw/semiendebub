@@ -1,6 +1,7 @@
 import React, { useRef, useState, useMemo, useEffect, createContext, useContext } from 'react';
 import { Tldraw, Editor } from 'tldraw';
 import 'tldraw/tldraw.css';
+import { marked } from 'marked';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -680,6 +681,26 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
     const handleMount = (editor: Editor) => {
         editorRef.current = editor;
         (window as any).editor = editor;
+
+        // Markdown files (dropped or pasted) become text shapes; every other file keeps tldraw's own handling
+        const defaultFilesHandler = (editor as any).externalContentHandlers.files;
+        editor.registerExternalContentHandler('files', async (content) => {
+            const isMarkdown = (f: File) => /\.(md|markdown)$/i.test(f.name) || f.type === 'text/markdown';
+            const markdownFiles = content.files.filter(isMarkdown);
+            const otherFiles = content.files.filter(f => !isMarkdown(f));
+
+            let point = content.point ?? editor.getViewportPageBounds().center;
+            for (const file of markdownFiles) {
+                const text = await file.text();
+                const html = await marked.parse(text);
+                await editor.putExternalContent({ type: 'text', text, html, point, sources: content.sources });
+                // Stack each next file below the one just placed
+                const placed = editor.getSelectedPageBounds();
+                if (placed) point = { x: point.x, y: placed.maxY + 40 };
+            }
+
+            if (otherFiles.length) await defaultFilesHandler?.({ ...content, files: otherFiles });
+        });
 
         editor.store.listen((update) => {
             if (update.source !== 'user') return;
