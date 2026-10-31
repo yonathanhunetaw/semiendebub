@@ -1,7 +1,8 @@
 import React, { useRef, useState, useMemo, useEffect, createContext, useContext } from 'react';
-import { Tldraw, Editor } from 'tldraw';
+import { Tldraw, Editor, TLShapeId, createShapeId, toRichText } from 'tldraw';
 import 'tldraw/tldraw.css';
 import { marked } from 'marked';
+import readXlsxFile from 'read-excel-file/browser';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -128,6 +129,54 @@ function describeError(error: any, what: 'upload' | 'save' | 'open'): Problem {
 }
 
 /** "just now", "3 min ago", "2 h ago", then the date. */
+// A dropped spreadsheet sheet is laid out as one grouped grid of rectangles; big sheets are cut so the canvas stays light
+const SHEET_MAX_ROWS = 60;
+const SHEET_MAX_COLS = 15;
+
+function cellText(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) return value.toLocaleDateString();
+    return String(value);
+}
+
+function placeSheetGrid(editor: Editor, title: string, data: unknown[][], at: { x: number; y: number }) {
+    const rows = data.slice(0, SHEET_MAX_ROWS).map(row => row.slice(0, SHEET_MAX_COLS).map(cellText));
+    const cols = Math.max(0, ...rows.map(r => r.length));
+    const cut = data.length > SHEET_MAX_ROWS || data.some(r => r.length > SHEET_MAX_COLS);
+    const rowH = 40;
+    // Each column is as wide as its longest cell, within limits
+    const widths = Array.from({ length: cols }, (_, c) =>
+        Math.min(280, Math.max(70, ...rows.map(r => (r[c] ?? '').length * 9 + 24))));
+
+    const ids: TLShapeId[] = [];
+    const titleId = createShapeId();
+    ids.push(titleId);
+    editor.createShape({
+        id: titleId, type: 'text', x: at.x, y: at.y,
+        props: { richText: toRichText(cut ? `${title} (first ${SHEET_MAX_ROWS} rows, ${SHEET_MAX_COLS} columns)` : title), size: 's', font: 'sans' },
+    });
+
+    const shapes = rows.flatMap((row, r) => {
+        let x = at.x;
+        return widths.map((w, c) => {
+            const id = createShapeId();
+            ids.push(id);
+            const shape = {
+                id, type: 'geo' as const, x, y: at.y + 40 + r * rowH,
+                props: {
+                    geo: 'rectangle' as const, w, h: rowH, richText: toRichText(row[c] ?? ''),
+                    size: 's' as const, font: 'sans' as const, align: 'start' as const,
+                    color: r === 0 ? 'blue' as const : 'grey' as const, fill: r === 0 ? 'semi' as const : 'none' as const,
+                },
+            };
+            x += w;
+            return shape;
+        });
+    });
+    editor.createShapes(shapes);
+    editor.groupShapes(ids, { select: true });
+}
+
 function timeAgo(dateStr: string, now: number): string {
     const seconds = Math.max(0, Math.round((now - new Date(dateStr).getTime()) / 1000));
     if (seconds < 60) return 'just now';
@@ -682,18 +731,35 @@ export default function Canvas({ canvases, activeCanvasId: initialActiveCanvasId
         editorRef.current = editor;
         (window as any).editor = editor;
 
-        // Markdown files (dropped or pasted) become text shapes; every other file keeps tldraw's own handling
+        // Markdown files become text shapes and spreadsheets become grids of cells (dropped or pasted);
+        // every other file keeps tldraw's own handling
         const defaultFilesHandler = (editor as any).externalContentHandlers.files;
         editor.registerExternalContentHandler('files', async (content) => {
             const isMarkdown = (f: File) => /\.(md|markdown)$/i.test(f.name) || f.type === 'text/markdown';
-            const markdownFiles = content.files.filter(isMarkdown);
-            const otherFiles = content.files.filter(f => !isMarkdown(f));
+            const isSpreadsheet = (f: File) => /\.xlsx$/i.test(f.name);
+            const ourFiles = content.files.filter(f => isMarkdown(f) || isSpreadsheet(f));
+            const otherFiles = content.files.filter(f => !ourFiles.includes(f));
 
             let point = content.point ?? editor.getViewportPageBounds().center;
-            for (const file of markdownFiles) {
-                const text = await file.text();
-                const html = await marked.parse(text);
-                await editor.putExternalContent({ type: 'text', text, html, point, sources: content.sources });
+            for (const file of ourFiles) {
+                try {
+                    if (isMarkdown(file)) {
+                        const text = await file.text();
+                        const html = await marked.parse(text);
+                        await editor.putExternalContent({ type: 'text', text, html, point, sources: content.sources });
+                    } else {
+                        const sheets = await readXlsxFile(file);
+                        for (const { sheet, data } of sheets) {
+                            placeSheetGrid(editor, `${file.name} · ${sheet}`, data, point);
+                            const placed = editor.getSelectedPageBounds();
+                            if (placed) point = { x: point.x, y: placed.maxY + 40 };
+                        }
+                        continue;
+                    }
+                } catch {
+                    setSnackbar({ open: true, message: `Could not read ${file.name}`, severity: 'error' });
+                    continue;
+                }
                 // Stack each next file below the one just placed
                 const placed = editor.getSelectedPageBounds();
                 if (placed) point = { x: point.x, y: placed.maxY + 40 };
